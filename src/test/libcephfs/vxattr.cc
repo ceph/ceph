@@ -15,6 +15,7 @@
 #include "include/compat.h"
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
+#include "include/fs_types.h"
 #include "mds/mdstypes.h"
 #include "include/stat.h"
 #include <errno.h>
@@ -25,8 +26,11 @@
 #include <dirent.h>
 #include <sys/uio.h>
 #include <sys/time.h>
-#include <sys/resource.h>
 #include <string.h>
+
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
 
 #include "common/Clock.h"
 #include "common/ceph_json.h"
@@ -42,10 +46,6 @@
 #include <thread>
 #include <regex>
 #include <string>
-
-#ifndef ALLPERMS
-#define ALLPERMS (S_ISUID|S_ISGID|S_ISVTX|S_IRWXU|S_IRWXG|S_IRWXO)
-#endif
 
 using namespace std;
 
@@ -197,7 +197,7 @@ TEST(LibCephFS, LayoutSetBadJSON) {
       "\"pool_name\": \"cephfs.a.data\", "
       "}";
     // try to set a malformed JSON, eg. without an open brace
-    ASSERT_EQ(-EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.json", (void*)new_layout, strlen(new_layout), XATTR_CREATE));
+    ASSERT_EQ(-CEPHFS_EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.json", (void*)new_layout, strlen(new_layout), XATTR_CREATE));
   }
 
   ASSERT_EQ(0, ceph_rmdir(cmount, "test/d0/subdir"));
@@ -219,7 +219,7 @@ TEST(LibCephFS, LayoutSetBadPoolName) {
 
   {
     // try setting a bad pool name
-    ASSERT_EQ(-EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.pool_name", (void*)"UglyPoolName", 12, XATTR_CREATE));
+    ASSERT_EQ(-CEPHFS_EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.pool_name", (void*)"UglyPoolName", 12, XATTR_CREATE));
   }
 
   ASSERT_EQ(0, ceph_rmdir(cmount, "test/d0/subdir"));
@@ -241,7 +241,7 @@ TEST(LibCephFS, LayoutSetBadPoolId) {
 
   {
     // try setting a bad pool id
-    ASSERT_EQ(-EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.pool_id", (void*)"300", 3, XATTR_CREATE));
+    ASSERT_EQ(-CEPHFS_EINVAL, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.pool_id", (void*)"300", 3, XATTR_CREATE));
   }
 
   ASSERT_EQ(0, ceph_rmdir(cmount, "test/d0/subdir"));
@@ -263,7 +263,7 @@ TEST(LibCephFS, LayoutSetInvalidFieldName) {
 
   {
     // try to set in invalid field
-    ASSERT_EQ(-ENODATA, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.bad_field", (void*)"300", 3, XATTR_CREATE));
+    ASSERT_EQ(-CEPHFS_ENODATA, ceph_setxattr(cmount, "test/d0", "ceph.dir.layout.bad_field", (void*)"300", 3, XATTR_CREATE));
   }
 
   ASSERT_EQ(0, ceph_rmdir(cmount, "test/d0/subdir"));

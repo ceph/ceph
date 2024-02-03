@@ -305,7 +305,7 @@ class NodeExtentAccessorT {
       assert(p_recorder->node_type() == NODE_TYPE);
       assert(p_recorder->field_type() == FIELD_TYPE);
       recorder = static_cast<recorder_t*>(p_recorder);
-    } else if (!extent->is_pending() && extent->is_valid()) {
+    } else if (!extent->is_mutable() && extent->is_valid()) {
       state = nextent_state_t::READ_ONLY;
       // mut is empty
       assert(extent->get_recorder() == nullptr ||
@@ -355,7 +355,7 @@ class NodeExtentAccessorT {
   void prepare_mutate(context_t c) {
     assert(!is_retired());
     if (state == nextent_state_t::READ_ONLY) {
-      assert(!extent->is_pending());
+      assert(!extent->is_mutable());
       auto ref_recorder = recorder_t::create_for_encode(c.vb);
       recorder = static_cast<recorder_t*>(ref_recorder.get());
       extent = extent->mutate(c, std::move(ref_recorder));
@@ -366,7 +366,7 @@ class NodeExtentAccessorT {
       assert(recorder == static_cast<recorder_t*>(extent->get_recorder()));
       mut.emplace(extent->get_mutable());
     }
-    assert(extent->is_pending());
+    assert(extent->is_mutable());
   }
 
   template <KeyT KT>
@@ -376,7 +376,7 @@ class NodeExtentAccessorT {
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
-    assert(extent->is_pending());
+    assert(extent->is_mutable());
     assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->template encode_insert<KT>(
@@ -397,7 +397,7 @@ class NodeExtentAccessorT {
   }
 
   void split_replayable(StagedIterator& split_at) {
-    assert(extent->is_pending());
+    assert(extent->is_mutable());
     assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_split(split_at, read().p_start());
@@ -420,7 +420,7 @@ class NodeExtentAccessorT {
       position_t& insert_pos,
       match_stage_t& insert_stage,
       node_offset_t& insert_size) {
-    assert(extent->is_pending());
+    assert(extent->is_mutable());
     assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->template encode_split_insert<KT>(
@@ -444,7 +444,7 @@ class NodeExtentAccessorT {
 
   void update_child_addr_replayable(
       const laddr_t new_addr, laddr_packed_t* p_addr) {
-    assert(extent->is_pending());
+    assert(extent->is_mutable());
     assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_update_child_addr(
@@ -462,7 +462,7 @@ class NodeExtentAccessorT {
   }
 
   std::tuple<match_stage_t, position_t> erase_replayable(const position_t& pos) {
-    assert(extent->is_pending());
+    assert(extent->is_mutable());
     assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_erase(pos);
@@ -479,7 +479,7 @@ class NodeExtentAccessorT {
   }
 
   position_t make_tail_replayable() {
-    assert(extent->is_pending());
+    assert(extent->is_mutable());
     assert(state != nextent_state_t::READ_ONLY);
     if (state == nextent_state_t::MUTATION_PENDING) {
       recorder->encode_make_tail();

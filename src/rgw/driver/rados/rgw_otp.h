@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_OTP_H
-#define CEPH_RGW_OTP_H
+#pragma once
 
 #include "rgw_sal_fwd.h"
 #include "cls/otp/cls_otp_types.h"
@@ -109,6 +108,3 @@ public:
                  const rgw_user& user, optional_yield y,
                  const RemoveParams& params = {});
 };
-
-#endif
-

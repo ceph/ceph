@@ -26,43 +26,74 @@ class PrometheusControllerTest(ControllerTestCase):
         mgr.get_module_option.side_effect = settings.get
         cls.setup_controllers([Prometheus, PrometheusNotifications, PrometheusReceiver])
 
-    def test_rules(self):
-        with patch('requests.request') as mock_request:
-            self._get('/api/prometheus/rules')
-            mock_request.assert_called_with('GET', self.prometheus_host_api + '/rules',
-                                            json=None, params={}, verify=True)
+    @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", return_value='cephadm')
+    @patch("dashboard.controllers.prometheus.mgr.mon_command", return_value=(1, {}, None))
+    @patch('requests.request')
+    def test_rules_cephadm(self, mock_request, mock_mon_command, mock_get_module_option_ex):
+        # in this test we use:
+        # in the first call to get_module_option_ex we return 'cephadm' as backend
+        # in the second call we return 'True' for 'secure_monitoring_stack' option
+        mock_get_module_option_ex.side_effect = lambda module, key, default=None: 'cephadm' \
+            if module == 'orchestrator' else True
+        self._get('/api/prometheus/rules')
+        mock_request.assert_called_with('GET',
+                                        self.prometheus_host_api + '/rules',
+                                        json=None, params={},
+                                        verify=True, auth=None)
+        assert mock_mon_command.called
 
+    @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", return_value='cephadm')
+    @patch("dashboard.controllers.prometheus.mgr.mon_command", return_value=(1, {}, None))
+    @patch('requests.request')
+    def test_rules_rook(self, mock_request, mock_mon_command, mock_get_module_option_ex):
+        # in this test we use:
+        # in the first call to get_module_option_ex we return 'rook' as backend
+        mock_get_module_option_ex.side_effect = lambda module, key, default=None: 'rook' \
+            if module == 'orchestrator' else None
+        self._get('/api/prometheus/rules')
+        mock_request.assert_called_with('GET',
+                                        self.prometheus_host_api + '/rules',
+                                        json=None,
+                                        params={},
+                                        verify=True, auth=None)
+        assert not mock_mon_command.called
+
+    @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", lambda a, b, c=None: None)
     def test_list(self):
         with patch('requests.request') as mock_request:
             self._get('/api/prometheus')
             mock_request.assert_called_with('GET', self.alert_host_api + '/alerts',
-                                            json=None, params={}, verify=True)
+                                            json=None, params={}, verify=True, auth=None)
 
+    @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", lambda a, b, c=None: None)
     def test_get_silences(self):
         with patch('requests.request') as mock_request:
             self._get('/api/prometheus/silences')
             mock_request.assert_called_with('GET', self.alert_host_api + '/silences',
-                                            json=None, params={}, verify=True)
+                                            json=None, params={}, verify=True, auth=None)
 
+    @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", lambda a, b, c=None: None)
     def test_add_silence(self):
         with patch('requests.request') as mock_request:
             self._post('/api/prometheus/silence', {'id': 'new-silence'})
             mock_request.assert_called_with('POST', self.alert_host_api + '/silences',
                                             params=None, json={'id': 'new-silence'},
-                                            verify=True)
+                                            verify=True, auth=None)
 
+    @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", lambda a, b, c=None: None)
     def test_update_silence(self):
         with patch('requests.request') as mock_request:
             self._post('/api/prometheus/silence', {'id': 'update-silence'})
             mock_request.assert_called_with('POST', self.alert_host_api + '/silences',
                                             params=None, json={'id': 'update-silence'},
-                                            verify=True)
+                                            verify=True, auth=None)
 
+    @patch("dashboard.controllers.prometheus.mgr.get_module_option_ex", lambda a, b, c=None: None)
     def test_expire_silence(self):
         with patch('requests.request') as mock_request:
             self._delete('/api/prometheus/silence/0')
             mock_request.assert_called_with('DELETE', self.alert_host_api + '/silence/0',
-                                            json=None, params=None, verify=True)
+                                            json=None, params=None, verify=True, auth=None)
 
     def test_silences_empty_delete(self):
         with patch('requests.request') as mock_request:

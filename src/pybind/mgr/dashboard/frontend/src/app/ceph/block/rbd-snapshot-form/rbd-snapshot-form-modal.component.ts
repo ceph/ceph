@@ -1,8 +1,9 @@
-import { Component } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { Component, OnInit } from '@angular/core';
+import { UntypedFormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import { Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
+import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -17,7 +18,7 @@ import { TaskManagerService } from '~/app/shared/services/task-manager.service';
   templateUrl: './rbd-snapshot-form-modal.component.html',
   styleUrls: ['./rbd-snapshot-form-modal.component.scss']
 })
-export class RbdSnapshotFormModalComponent {
+export class RbdSnapshotFormModalComponent implements OnInit {
   poolName: string;
   namespace: string;
   imageName: string;
@@ -32,12 +33,15 @@ export class RbdSnapshotFormModalComponent {
 
   public onSubmit: Subject<string> = new Subject();
 
+  peerConfigured$: Observable<any>;
+
   constructor(
     public activeModal: NgbActiveModal,
     private rbdService: RbdService,
     private taskManagerService: TaskManagerService,
     private notificationService: NotificationService,
-    private actionLabels: ActionLabelsI18n
+    private actionLabels: ActionLabelsI18n,
+    private rbdMirrorService: RbdMirroringService
   ) {
     this.action = this.actionLabels.CREATE;
     this.resource = $localize`RBD Snapshot`;
@@ -46,18 +50,30 @@ export class RbdSnapshotFormModalComponent {
 
   createForm() {
     this.snapshotForm = new CdFormGroup({
-      snapshotName: new FormControl('', {
+      snapshotName: new UntypedFormControl('', {
         validators: [Validators.required]
-      })
+      }),
+      mirrorImageSnapshot: new UntypedFormControl(false, {})
     });
+  }
+
+  ngOnInit(): void {
+    this.peerConfigured$ = this.rbdMirrorService.getPeerForPool(this.poolName);
   }
 
   setSnapName(snapName: string) {
     this.snapName = snapName;
-    if (this.mirroring !== 'snapshot') {
-      this.snapshotForm.get('snapshotName').setValue(snapName);
-    } else {
+    this.snapshotForm.get('snapshotName').setValue(snapName);
+  }
+
+  onMirrorCheckBoxChange() {
+    if (this.snapshotForm.getValue('mirrorImageSnapshot') === true) {
+      this.snapshotForm.get('snapshotName').setValue('');
       this.snapshotForm.get('snapshotName').clearValidators();
+    } else {
+      this.snapshotForm.get('snapshotName').setValue(this.snapName);
+      this.snapshotForm.get('snapshotName').setValidators([Validators.required]);
+      this.snapshotForm.get('snapshotName').updateValueAndValidity();
     }
   }
 
@@ -101,6 +117,7 @@ export class RbdSnapshotFormModalComponent {
 
   createAction() {
     const snapshotName = this.snapshotForm.getValue('snapshotName');
+    const mirrorImageSnapshot = this.snapshotForm.getValue('mirrorImageSnapshot');
     const imageSpec = new ImageSpec(this.poolName, this.namespace, this.imageName);
     const finishedTask = new FinishedTask();
     finishedTask.name = 'rbd/snap/create';
@@ -109,7 +126,7 @@ export class RbdSnapshotFormModalComponent {
       snapshot_name: snapshotName
     };
     this.rbdService
-      .createSnapshot(imageSpec, snapshotName)
+      .createSnapshot(imageSpec, snapshotName, mirrorImageSnapshot)
       .toPromise()
       .then(() => {
         this.taskManagerService.subscribe(

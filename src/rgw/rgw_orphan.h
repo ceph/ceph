@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
@@ -8,9 +8,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #pragma once
@@ -65,7 +65,7 @@ struct RGWOrphanSearchStage {
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(RGWOrphanSearchStage)
-  
+
 struct RGWOrphanSearchInfo {
   std::string job_name;
   rgw_pool pool;
@@ -262,7 +262,7 @@ class RGWRadosList {
 			 std::string& bucket_name,
 			 rgw_obj_key& obj_key,
 			 std::set<std::string>& obj_oids);
-  int pop_and_handle_stat_op(const DoutPrefixProvider *dpp, 
+  int pop_and_handle_stat_op(const DoutPrefixProvider *dpp,
                              RGWObjectCtx& obj_ctx,
 			     std::deque<RGWRados::Object::Stat>& ops);
 
@@ -279,7 +279,7 @@ public:
     include_rgw_obj_name(false)
   {}
 
-  int process_bucket(const DoutPrefixProvider *dpp, 
+  int process_bucket(const DoutPrefixProvider *dpp,
                      const std::string& bucket_instance_id,
 		     const std::string& prefix,
 		     const std::set<rgw_obj_key>& entries_filter);

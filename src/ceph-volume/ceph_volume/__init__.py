@@ -14,9 +14,10 @@ class UnloadedConfig(object):
     def __getattr__(self, *a):
         raise RuntimeError("No valid ceph configuration file was loaded.")
 
-conf = namedtuple('config', ['ceph', 'cluster', 'verbosity', 'path', 'log_path'])
+conf = namedtuple('config', ['ceph', 'cluster', 'verbosity', 'path', 'log_path', 'dmcrypt_no_workqueue'])
 conf.ceph = UnloadedConfig()
+conf.dmcrypt_no_workqueue = None
 
 __version__ = "1.0.0"
 
-__release__ = "reef"
+__release__ = "squid"

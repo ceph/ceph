@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_AUTH_FILTERS_H
-#define CEPH_RGW_AUTH_FILTERS_H
+#pragma once
 
 #include <type_traits>
 
@@ -301,5 +300,3 @@ SysReqApplier<T> add_sysreq(CephContext* const cct,
 
 } /* namespace auth */
 } /* namespace rgw */
-
-#endif /* CEPH_RGW_AUTH_FILTERS_H */

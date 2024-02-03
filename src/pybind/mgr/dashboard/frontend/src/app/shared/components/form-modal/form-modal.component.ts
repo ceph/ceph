@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, ValidatorFn, Validators } from '@angular/forms';
+import { AsyncValidatorFn, UntypedFormControl, ValidatorFn, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -38,27 +38,31 @@ export class FormModalComponent implements OnInit {
   }
 
   createForm() {
-    const controlsConfig: Record<string, FormControl> = {};
+    const controlsConfig: Record<string, UntypedFormControl> = {};
     this.fields.forEach((field) => {
       controlsConfig[field.name] = this.createFormControl(field);
     });
     this.formGroup = this.formBuilder.group(controlsConfig);
   }
 
-  private createFormControl(field: CdFormModalFieldConfig): FormControl {
+  private createFormControl(field: CdFormModalFieldConfig): UntypedFormControl {
     let validators: ValidatorFn[] = [];
+    let asyncValidators: AsyncValidatorFn[] = [];
     if (_.isBoolean(field.required) && field.required) {
       validators.push(Validators.required);
     }
     if (field.validators) {
       validators = validators.concat(field.validators);
     }
-    return new FormControl(
+    if (field.asyncValidators) {
+      asyncValidators = asyncValidators.concat(field.asyncValidators);
+    }
+    return new UntypedFormControl(
       _.defaultTo(
         field.type === 'binary' ? this.dimlessBinaryPipe.transform(field.value) : field.value,
         null
       ),
-      { validators }
+      { validators, asyncValidators }
     );
   }
 
@@ -88,6 +92,9 @@ export class FormModalComponent implements OnInit {
     }
     if (error === 'required') {
       return $localize`This field is required.`;
+    }
+    if (error === 'pattern') {
+      return $localize`Size must be a number or in a valid format. eg: 5 GiB`;
     }
     return $localize`An error occurred.`;
   }

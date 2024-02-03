@@ -65,7 +65,7 @@ public:
                        param_vec_t *_headers, param_vec_t *_params,
                        std::optional<std::string> _api_name) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params), api_name(_api_name) {}
 
-  int forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service="");
+  int forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service="");
 };
 
 class RGWWriteDrainCB {
@@ -94,7 +94,7 @@ public:
   void set_extra_headers(const std::map<std::string, std::string>& extra_headers);
   int set_obj_attrs(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& rgw_attrs);
   void set_http_attrs(const std::map<std::string, std::string>& http_attrs);
-  void set_policy(RGWAccessControlPolicy& policy);
+  void set_policy(const RGWAccessControlPolicy& policy);
   int sign(const DoutPrefixProvider *dpp, RGWAccessKey& key, const bufferlist *opt_content);
 
   const std::string& get_url() { return url; }
@@ -181,7 +181,7 @@ class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
   std::optional<RGWRESTGenerateHTTPHeaders> headers_gen;
   RGWEnv new_env;
   req_info new_info;
-  
+
 protected:
   std::optional<std::string> api_name;
   HostStyle host_style;
@@ -245,13 +245,13 @@ public:
                 out_cb(NULL), new_info(cct, &new_env), headers_gen(_cct, &new_env, &new_info) {}
   ~RGWRESTStreamS3PutObj() override;
 
-  void send_init(rgw::sal::Object* obj);
+  void send_init(const rgw_obj& obj);
   void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, std::map<std::string, bufferlist>& rgw_attrs);
   void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, const std::map<std::string, std::string>& http_attrs,
                   RGWAccessControlPolicy& policy);
   void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key);
 
-  void put_obj_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, rgw::sal::Object* obj, std::map<std::string, bufferlist>& attrs);
+  void put_obj_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, const rgw_obj& obj, std::map<std::string, bufferlist>& attrs);
 
   RGWGetDataCB *get_out_cb() { return out_cb; }
 };

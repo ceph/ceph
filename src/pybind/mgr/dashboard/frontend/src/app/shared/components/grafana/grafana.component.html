@@ -14,12 +14,13 @@
 
 <ng-container *ngIf="grafanaExist && dashboardExist">
   <div class="row mb-3">
-    <div class="col-lg-4 d-flex">
+    <div class="col-lg-5 d-flex">
       <div class="col-md-3 timepicker">
         <label for="timepicker"
                class="mt-2"
-               i18n>Grafana Time Picker</label></div>
-        <div class="col-md-4">
+               i18n>Grafana Time Picker</label>
+      </div>
+      <div class="col-sm-4">
         <select id="timepicker"
                 name="timepicker"
                 class="form-select"
@@ -28,15 +29,17 @@
           <option *ngFor="let key of grafanaTimes"
                   [ngValue]="key.value">{{ key.name }}
           </option>
-        </select></div>
-        <div class="col-md-3">
-
+        </select>
+      </div>
+      <div class="col-sm-1">
         <button class="btn btn-light ms-3"
                 i18n-title
                 title="Reset Settings"
                 (click)="reset()">
           <i [ngClass]="[icons.undo]"></i>
         </button>
+      </div>
+      <div class="col-sm-1">
         <button class="btn btn-light ms-3"
                 i18n-title
                 title="Show hidden information"

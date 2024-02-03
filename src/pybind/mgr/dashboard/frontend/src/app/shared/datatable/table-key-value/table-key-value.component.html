@@ -1,12 +1,14 @@
-<cd-table #table
-          [data]="tableData"
-          [columns]="columns"
-          columnMode="flex"
-          [toolHeader]="false"
-          [autoReload]="autoReload"
-          [customCss]="customCss"
-          [autoSave]="false"
-          [header]="false"
-          [footer]="false"
-          [limit]="0">
-</cd-table>
+<div class="table-scroller">
+  <cd-table #table
+            [data]="tableData"
+            [columns]="columns"
+            columnMode="flex"
+            [toolHeader]="false"
+            [autoReload]="autoReload"
+            [customCss]="customCss"
+            [autoSave]="false"
+            [header]="false"
+            [footer]="false"
+            [limit]="0">
+  </cd-table>
+</div>

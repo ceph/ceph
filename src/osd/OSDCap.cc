@@ -23,6 +23,11 @@
 #include "common/debug.h"
 #include "include/ipaddr.h"
 
+#define dout_subsys ceph_subsys_osd
+
+#undef dout_prefix
+#define dout_prefix *_dout << "OSDCap "
+
 using std::ostream;
 using std::string;
 using std::vector;
@@ -339,7 +344,8 @@ void OSDCapGrant::expand_profile()
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_CLS_R)));
     profile_grants.emplace_back(OSDCapMatch(string(), "rbd_mirroring"),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_CLS_R)));
-    profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace.pool_name),
+    profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace.pool_name,
+                                            "", "rbd_info"),
                                 OSDCapSpec("rbd", "metadata_list"));
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_R |
@@ -348,6 +354,9 @@ void OSDCapGrant::expand_profile()
   }
   if (profile.name == "rbd-read-only") {
     // RBD read-only grant
+    profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace.pool_name,
+                                            "", "rbd_info"),
+                                OSDCapSpec("rbd", "metadata_list"));
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_R |
                                                       OSD_CAP_CLS_R)));
@@ -529,4 +538,72 @@ bool OSDCap::parse(const string& str, ostream *err)
 	 << "' of '" << str << "'";
 
   return false; 
+}
+
+bool OSDCap::merge(OSDCap newcap)
+{
+  ceph_assert(newcap.grants.size() == 1);
+  auto ng = newcap.grants[0];
+
+  for (auto& g : grants) {
+    /* TODO: check case where cap is "allow rw tag cephfs *". */
+
+    if (g.match.pool_tag.application == ng.match.pool_tag.application and
+	g.match.pool_tag.key == ng.match.pool_tag.key and
+	g.match.pool_tag.value == ng.match.pool_tag.value) {
+      if (g.spec.allow == ng.spec.allow) {
+	// no update required, maintaining idempotency.
+	return false;
+      } else if (g.spec.allow != ng.spec.allow) {
+	// cap for given application is present, let's update it.
+	g.spec.allow = ng.spec.allow;
+	return true;
+      }
+    }
+  }
+
+  // cap for given application is absent, let's add a new cap for it.
+  grants.push_back(OSDCapGrant(
+    OSDCapMatch(OSDCapPoolTag(ng.match.pool_tag.application,
+      ng.match.pool_tag.key, ng.match.pool_tag.value)),
+    OSDCapSpec(ng.spec.allow)));
+  return true;
+}
+
+string OSDCapGrant::to_string() {
+  string str = "allow ";
+
+  if (spec.allow & OSD_CAP_R)
+    str += "r";
+  if (spec.allow & OSD_CAP_W)
+    str += "w";
+
+  if ((spec.allow & OSD_CAP_X) == OSD_CAP_X)
+    str += "x";
+  else {
+    if (spec.allow & OSD_CAP_CLS_R)
+      str += " class-read";
+    else if (spec.allow & OSD_CAP_CLS_W)
+      str += " class-write";
+  }
+
+  if (not (match.pool_tag.application.empty() and match.pool_tag.key.empty()
+	   and match.pool_tag.value.empty()))
+    str += " tag " + match.pool_tag.application + " " + \
+	   match.pool_tag.key + "=" + match.pool_tag.value;
+
+  return str;
+}
+
+string OSDCap::to_string()
+{
+  string str;
+
+  for (size_t i = 0; i < grants.size(); ++i) {
+    str += grants[i].to_string();
+    if (i < grants.size() - 1)
+      str += ", ";
+  }
+
+  return str;
 }

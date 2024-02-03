@@ -7,8 +7,7 @@
 #include "include/buffer.h"
 #include "test/ObjectMap/KeyValueDBMemory.h"
 #include "kv/KeyValueDB.h"
-#include "os/filestore/DBObjectMap.h"
-#include "os/filestore/HashIndex.h"
+#include "os/DBObjectMap.h"
 #include <sys/types.h>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
@@ -642,7 +641,7 @@ public:
     string strpath(path);
 
     cerr << "using path " << strpath << std::endl;
-    KeyValueDB *store = KeyValueDB::create(g_ceph_context, "leveldb", strpath);
+    KeyValueDB *store = KeyValueDB::create(g_ceph_context, "rocksdb", strpath);
     ceph_assert(!store->create_and_open(cerr));
 
     db.reset(new DBObjectMap(g_ceph_context, store));

@@ -44,7 +44,7 @@ bool ImageDispatch<I>::read(
   ldout(cct, 20) << dendl;
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
-  return m_format->read(aio_comp, io_context->read_snap().value_or(CEPH_NOSNAP),
+  return m_format->read(aio_comp, io_context->get_read_snap(),
                         std::move(image_extents), std::move(read_result),
                         op_flags, read_flags, parent_trace);
 }
@@ -52,7 +52,7 @@ bool ImageDispatch<I>::read(
 template <typename I>
 bool ImageDispatch<I>::write(
     io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const ZTracer::Trace &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -66,9 +66,8 @@ bool ImageDispatch<I>::write(
 template <typename I>
 bool ImageDispatch<I>::discard(
     io::AioCompletion* aio_comp, io::Extents &&image_extents,
-    uint32_t discard_granularity_bytes,
-    IOContext io_context, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
+    uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -81,7 +80,7 @@ bool ImageDispatch<I>::discard(
 template <typename I>
 bool ImageDispatch<I>::write_same(
     io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const ZTracer::Trace &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -96,7 +95,7 @@ template <typename I>
 bool ImageDispatch<I>::compare_and_write(
     io::AioCompletion* aio_comp, io::Extents &&image_extents,
     bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const ZTracer::Trace &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {

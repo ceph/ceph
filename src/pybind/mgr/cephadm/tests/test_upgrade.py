@@ -5,7 +5,9 @@ import pytest
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
-from cephadm.upgrade import CephadmUpgrade
+from cephadm.upgrade import CephadmUpgrade, UpgradeState
+from cephadm.ssh import HostConnectionError
+from cephadm.utils import ContainerInspectInfo
 from orchestrator import OrchestratorError, DaemonDescription
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
@@ -35,6 +37,75 @@ def test_upgrade_start(cephadm_module: CephadmOrchestrator):
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_offline_hosts(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            cephadm_module.offline_hosts = set(['test2'])
+            with pytest.raises(OrchestratorError, match=r"Upgrade aborted - Some host\(s\) are currently offline: {'test2'}"):
+                cephadm_module.upgrade_start('image_id', None)
+            cephadm_module.offline_hosts = set([])  # so remove_host doesn't fail when leaving the with_host block
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_daemons_offline_hosts(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0)
+            with mock.patch("cephadm.serve.CephadmServe._run_cephadm", side_effect=HostConnectionError('connection failure reason', 'test2', '192.168.122.1')):
+                _to_upgrade = [(DaemonDescription(daemon_type='crash', daemon_id='test2', hostname='test2'), True)]
+                with pytest.raises(HostConnectionError, match=r"connection failure reason"):
+                    cephadm_module.upgrade._upgrade_daemons(_to_upgrade, 'target_image', ['digest1'])
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_do_upgrade_offline_hosts(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0)
+            cephadm_module.offline_hosts = set(['test2'])
+            with pytest.raises(HostConnectionError, match=r"Host\(s\) were marked offline: {'test2'}"):
+                cephadm_module.upgrade._do_upgrade()
+            cephadm_module.offline_hosts = set([])  # so remove_host doesn't fail when leaving the with_host block
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.CephadmOrchestrator.remove_health_warning")
+def test_upgrade_resume_clear_health_warnings(_rm_health_warning, cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 0, paused=True)
+            _rm_health_warning.return_value = None
+            assert wait(cephadm_module, cephadm_module.upgrade_resume()
+                        ) == 'Resumed upgrade to target_image'
+            calls_list = [mock.call(alert_id) for alert_id in cephadm_module.upgrade.UPGRADE_ERRORS]
+            _rm_health_warning.assert_has_calls(calls_list, any_order=True)
+
+
+@mock.patch('cephadm.upgrade.CephadmUpgrade._get_current_version', lambda _: (17, 2, 6))
+@mock.patch("cephadm.serve.CephadmServe._get_container_image_info")
+def test_upgrade_check_with_ceph_version(_get_img_info, cephadm_module: CephadmOrchestrator):
+    # This test was added to avoid screwing up the image base so that
+    # when the version was added to it it made an incorrect image
+    # The issue caused the image to come out as
+    # quay.io/ceph/ceph:v18:v18.2.0
+    # see https://tracker.ceph.com/issues/63150
+    _img = ''
+
+    def _fake_get_img_info(img_name):
+        nonlocal _img
+        _img = img_name
+        return ContainerInspectInfo(
+            'image_id',
+            '18.2.0',
+            'digest'
+        )
+
+    _get_img_info.side_effect = _fake_get_img_info
+    cephadm_module.upgrade_check('', '18.2.0')
+    assert _img == 'quay.io/ceph/ceph:v18.2.0'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 @pytest.mark.parametrize("use_repo_digest",
                          [
                              False,
@@ -46,11 +117,11 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
             cephadm_module.set_container_image('global', 'from_image')
             cephadm_module.use_repo_digest = use_repo_digest
             with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)),
-                              CephadmOrchestrator.apply_mgr, '', status_running=True),\
+                              CephadmOrchestrator.apply_mgr, '', status_running=True), \
                 mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name",
-                           return_value='foo'),\
+                           return_value='foo'), \
                 mock.patch("cephadm.module.CephadmOrchestrator.version",
-                           new_callable=mock.PropertyMock) as version_mock,\
+                           new_callable=mock.PropertyMock) as version_mock, \
                 mock.patch("cephadm.module.CephadmOrchestrator.get",
                            return_value={
                                # capture fields in both mon and osd maps
@@ -90,6 +161,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                             style='cephadm',
                             fsid='fsid',
                             container_id='container_id',
+                            container_image_name='to_image',
                             container_image_id='image_id',
                             container_image_digests=['to_image@repo_digest'],
                             deployed_by=['to_image@repo_digest'],

@@ -2,9 +2,9 @@
  Monitoring a Cluster
 ======================
 
-Once you have a running cluster, you may use the ``ceph`` tool to monitor your
-cluster. Monitoring a cluster typically involves checking OSD status, monitor 
-status, placement group status and metadata server status.
+After you have a running cluster, you can use the ``ceph`` tool to monitor your
+cluster. Monitoring a cluster typically involves checking OSD status, monitor
+status, placement group status, and metadata server status.
 
 Using the command line
 ======================
@@ -13,11 +13,11 @@ Interactive mode
 ----------------
 
 To run the ``ceph`` tool in interactive mode, type ``ceph`` at the command line
-with no arguments.  For example:
+with no arguments. For example:
 
 .. prompt:: bash $
 
-	ceph
+    ceph
 
 .. prompt:: ceph>
     :prompts: ceph>
@@ -30,8 +30,9 @@ with no arguments.  For example:
 Non-default paths
 -----------------
 
-If you specified non-default locations for your configuration or keyring,
-you may specify their locations:
+If you specified non-default locations for your configuration or keyring when
+you install the cluster, you may specify their locations to the ``ceph`` tool
+by running the following command:
 
 .. prompt:: bash $
 
@@ -40,30 +41,32 @@ you may specify their locations:
 Checking a Cluster's Status
 ===========================
 
-After you start your cluster, and before you start reading and/or
-writing data, check your cluster's status first.
+After you start your cluster, and before you start reading and/or writing data,
+you should check your cluster's status.
 
-To check a cluster's status, execute the following:
+To check a cluster's status, run the following command:
 
 .. prompt:: bash $
 
    ceph status
-	
-Or:
+
+Alternatively, you can run the following command:
 
 .. prompt:: bash $
 
    ceph -s
 
-In interactive mode, type ``status`` and press **Enter**:
+In interactive mode, this operation is performed by typing ``status`` and
+pressing **Enter**:
 
 .. prompt:: ceph>
     :prompts: ceph>
-   
-    ceph> status
 
-Ceph will print the cluster status. For example, a tiny Ceph demonstration
-cluster with one of each service may print the following:
+    status
+
+Ceph will print the cluster status. For example, a tiny Ceph "demonstration
+cluster" that is running one instance of each service (monitor, manager, and
+OSD) might print the following:
 
 ::
 
@@ -84,33 +87,35 @@ cluster with one of each service may print the following:
     pgs:     16 active+clean
 
 
-.. topic:: How Ceph Calculates Data Usage
+How Ceph Calculates Data Usage
+------------------------------
 
-   The ``usage`` value reflects the *actual* amount of raw storage used. The 
-   ``xxx GB / xxx GB`` value means the amount available (the lesser number)
-   of the overall storage capacity of the cluster. The notional number reflects 
-   the size of the stored data before it is replicated, cloned or snapshotted.
-   Therefore, the amount of data actually stored typically exceeds the notional
-   amount stored, because Ceph creates replicas of the data and may also use 
-   storage capacity for cloning and snapshotting.
+The ``usage`` value reflects the *actual* amount of raw storage used. The ``xxx
+GB / xxx GB`` value means the amount available (the lesser number) of the
+overall storage capacity of the cluster. The notional number reflects the size
+of the stored data before it is replicated, cloned or snapshotted.  Therefore,
+the amount of data actually stored typically exceeds the notional amount
+stored, because Ceph creates replicas of the data and may also use storage
+capacity for cloning and snapshotting.
 
 
 Watching a Cluster
 ==================
 
-In addition to local logging by each daemon, Ceph clusters maintain
-a *cluster log* that records high level events about the whole system.
-This is logged to disk on monitor servers (as ``/var/log/ceph/ceph.log`` by
-default), but can also be monitored via the command line.
+Each daemon in the Ceph cluster maintains a log of events, and the Ceph cluster
+itself maintains a *cluster log* that records high-level events about the
+entire Ceph cluster.  These events are logged to disk on monitor servers (in
+the default location ``/var/log/ceph/ceph.log``), and they can be monitored via
+the command line.
 
-To follow the cluster log, use the following command:
+To follow the cluster log, run the following command:
 
 .. prompt:: bash $
 
    ceph -w
 
-Ceph will print the status of the system, followed by each log message as it
-is emitted. For example:
+Ceph will print the status of the system, followed by each log message as it is
+added. For example:
 
 :: 
 
@@ -135,21 +140,20 @@ is emitted. For example:
   2017-07-24 08:15:14.258143 mon.a mon.0 172.21.9.34:6789/0 39 : cluster [INF] Activating manager daemon x
   2017-07-24 08:15:15.446025 mon.a mon.0 172.21.9.34:6789/0 47 : cluster [INF] Manager daemon x is now available
 
-
-In addition to using ``ceph -w`` to print log lines as they are emitted,
-use ``ceph log last [n]`` to see the most recent ``n`` lines from the cluster
-log.
+Instead of printing log lines as they are added, you might want to print only
+the most recent lines. Run ``ceph log last [n]`` to see the most recent ``n``
+lines from the cluster log.
 
 Monitoring Health Checks
 ========================
 
-Ceph continuously runs various *health checks* against its own status.  When
-a health check fails, this is reflected in the output of ``ceph status`` (or
-``ceph health``).  In addition, messages are sent to the cluster log to
-indicate when a check fails, and when the cluster recovers.
+Ceph continuously runs various *health checks*. When
+a health check fails, this failure is reflected in the output of ``ceph status`` and
+``ceph health``. The cluster log receives messages that
+indicate when a check has failed and when the cluster has recovered.
 
 For example, when an OSD goes down, the ``health`` section of the status
-output may be updated as follows:
+output is updated as follows:
 
 ::
 
@@ -157,7 +161,7 @@ output may be updated as follows:
             1 osds down
             Degraded data redundancy: 21/63 objects degraded (33.333%), 16 pgs unclean, 16 pgs degraded
 
-At this time, cluster log messages are also emitted to record the failure of the 
+At the same time, cluster log messages are emitted to record the failure of the 
 health checks:
 
 ::
@@ -166,7 +170,7 @@ health checks:
     2017-07-25 10:09:01.302624 mon.a mon.0 172.21.9.34:6789/0 94 : cluster [WRN] Health check failed: Degraded data redundancy: 21/63 objects degraded (33.333%), 16 pgs unclean, 16 pgs degraded (PG_DEGRADED)
 
 When the OSD comes back online, the cluster log records the cluster's return
-to a health state:
+to a healthy state:
 
 ::
 
@@ -177,21 +181,23 @@ to a health state:
 Network Performance Checks
 --------------------------
 
-Ceph OSDs send heartbeat ping messages amongst themselves to monitor daemon availability.  We
-also use the response times to monitor network performance.
-While it is possible that a busy OSD could delay a ping response, we can assume
-that if a network switch fails multiple delays will be detected between distinct pairs of OSDs.
+Ceph OSDs send heartbeat ping messages to each other in order to monitor daemon
+availability and network performance. If a single delayed response is detected,
+this might indicate nothing more than a busy OSD. But if multiple delays
+between distinct pairs of OSDs are detected, this might indicate a failed
+network switch, a NIC failure, or a layer 1 failure.
 
-By default we will warn about ping times which exceed 1 second (1000 milliseconds).
+By default, a heartbeat time that exceeds 1 second (1000 milliseconds) raises a
+health check (a ``HEALTH_WARN``. For example:
 
 ::
 
     HEALTH_WARN Slow OSD heartbeats on back (longest 1118.001ms)
 
-The health detail will add the combination of OSDs are seeing the delays and by how much.  There is a limit of 10
-detail line items.
-
-::
+In the output of the ``ceph health detail`` command, you can see which OSDs are
+experiencing delays and how long the delays are. The output of ``ceph health
+detail`` is limited to ten lines. Here is an example of the output you can
+expect from the ``ceph health detail`` command::
 
     [WRN] OSD_SLOW_PING_TIME_BACK: Slow OSD heartbeats on back (longest 1118.001ms)
         Slow OSD heartbeats on back from osd.0 [dc1,rack1] to osd.1 [dc1,rack1] 1118.001 msec possibly improving
@@ -199,11 +205,15 @@ detail line items.
         Slow OSD heartbeats on back from osd.2 [dc1,rack2] to osd.1 [dc1,rack1] 1015.321 msec
         Slow OSD heartbeats on back from osd.1 [dc1,rack1] to osd.0 [dc1,rack1] 1010.456 msec
 
-To see even more detail and a complete dump of network performance information the ``dump_osd_network`` command can be used.  Typically, this would be
-sent to a mgr, but it can be limited to a particular OSD's interactions by issuing it to any OSD.  The current threshold which defaults to 1 second
-(1000 milliseconds) can be overridden as an argument in milliseconds.
+To see more detail and to collect a complete dump of network performance
+information, use the ``dump_osd_network`` command. This command is usually sent
+to a Ceph Manager Daemon, but it can be used to collect information about a
+specific OSD's interactions by sending it to that OSD. The default threshold
+for a slow heartbeat is 1 second (1000 milliseconds), but this can be
+overridden by providing a number of milliseconds as an argument.
 
-The following command will show all gathered network performance data by specifying a threshold of 0 and sending to the mgr.
+To show all network performance data with a specified threshold of 0, send the
+following command to the mgr:
 
 .. prompt:: bash $
 
@@ -287,26 +297,26 @@ The following command will show all gathered network performance data by specify
 
 
 
-Muting health checks
+Muting Health Checks
 --------------------
 
-Health checks can be muted so that they do not affect the overall
-reported status of the cluster.  Alerts are specified using the health
-check code (see :ref:`health-checks`):
+Health checks can be muted so that they have no effect on the overall
+reported status of the cluster. For example, if the cluster has raised a
+single health check and then you mute that health check, then the cluster will report a status of ``HEALTH_OK``.
+To mute a specific health check, use the health check code that corresponds to that health check (see :ref:`health-checks`), and 
+run the following command:
 
 .. prompt:: bash $
 
    ceph health mute <code>
 
-For example, if there is a health warning, muting it will make the
-cluster report an overall status of ``HEALTH_OK``.  For example, to
-mute an ``OSD_DOWN`` alert,:
+For example, to mute an ``OSD_DOWN`` health check, run the following command:
 
 .. prompt:: bash $
 
    ceph health mute OSD_DOWN
 
-Mutes are reported as part of the short and long form of the ``ceph health`` command.
+Mutes are reported as part of the short and long form of the ``ceph health`` command's output.
 For example, in the above scenario, the cluster would report:
 
 .. prompt:: bash $
@@ -327,7 +337,7 @@ For example, in the above scenario, the cluster would report:
    (MUTED) OSD_DOWN 1 osds down
        osd.1 is down
 
-A mute can be explicitly removed with:
+A mute can be removed by running the following command:
 
 .. prompt:: bash $
 
@@ -339,56 +349,44 @@ For example:
 
    ceph health unmute OSD_DOWN
 
-A health check mute may optionally have a TTL (time to live)
-associated with it, such that the mute will automatically expire
-after the specified period of time has elapsed.  The TTL is specified as an optional
-duration argument, e.g.:
+A "health mute" can have a TTL (**T**\ime **T**\o **L**\ive)
+associated with it: this means that the mute will automatically expire
+after a specified period of time. The TTL is specified as an optional
+duration argument, as seen in the following examples:
 
 .. prompt:: bash $
 
    ceph health mute OSD_DOWN 4h    # mute for 4 hours
-   ceph health mute MON_DOWN 15m   # mute for 15  minutes
+   ceph health mute MON_DOWN 15m   # mute for 15 minutes
 
-Normally, if a muted health alert is resolved (e.g., in the example
-above, the OSD comes back up), the mute goes away.  If the alert comes
+Normally, if a muted health check is resolved (for example, if the OSD that raised the ``OSD_DOWN`` health check 
+in the example above has come back up), the mute goes away. If the health check comes
 back later, it will be reported in the usual way.
 
-It is possible to make a mute "sticky" such that the mute will remain even if the
-alert clears.  For example:
+It is possible to make a health mute "sticky": this means that the mute will remain even if the
+health check clears. For example, to make a health mute "sticky", you might run the following command:
 
 .. prompt:: bash $
 
    ceph health mute OSD_DOWN 1h --sticky   # ignore any/all down OSDs for next hour
 
-Most health mutes also disappear if the extent of an alert gets worse.  For example,
-if there is one OSD down, and the alert is muted, the mute will disappear if one
-or more additional OSDs go down.  This is true for any health alert that involves
-a count indicating how much or how many of something is triggering the warning or
-error.
+Most health mutes disappear if the unhealthy condition that triggered the health check gets worse.
+For example, suppose that there is one OSD down and the health check is muted. In that case, if
+one or more additional OSDs go down, then the health mute disappears. This behavior occurs in any health check with a threshold value.
 
-
-Detecting configuration issues
-==============================
-
-In addition to the health checks that Ceph continuously runs on its
-own status, there are some configuration issues that may only be detected
-by an external tool.
-
-Use the `ceph-medic`_ tool to run these additional checks on your Ceph
-cluster's configuration.
 
 Checking a Cluster's Usage Stats
 ================================
 
-To check a cluster's data usage and data distribution among pools, you can
-use the ``df`` option. It is similar to Linux ``df``. Execute 
-the following:
+To check a cluster's data usage and data distribution among pools, use the
+``df`` command. This option is similar to Linux's ``df`` command. Run the
+following command:
 
 .. prompt:: bash $
 
    ceph df
 
-The output of ``ceph df`` looks like this::
+The output of ``ceph df`` resembles the following::
 
    CLASS     SIZE    AVAIL     USED  RAW USED  %RAW USED
    ssd    202 GiB  200 GiB  2.0 GiB   2.0 GiB       1.00
@@ -400,52 +398,49 @@ The output of ``ceph df`` looks like this::
    cephfs.a.meta           2   32  6.8 KiB  6.8 KiB      0 B        22   96 KiB  96 KiB      0 B       0    297 GiB            N/A          N/A     22         0 B          0 B
    cephfs.a.data           3   32      0 B      0 B      0 B         0      0 B     0 B      0 B       0     99 GiB            N/A          N/A      0         0 B          0 B
    test                    4   32   22 MiB   22 MiB   50 KiB       248   19 MiB  19 MiB   50 KiB       0    297 GiB            N/A          N/A    248         0 B          0 B
-
-
-
-
-
-- **CLASS:** for example, "ssd" or "hdd"
+   
+- **CLASS:** For example, "ssd" or "hdd".
 - **SIZE:** The amount of storage capacity managed by the cluster.
 - **AVAIL:** The amount of free space available in the cluster.
 - **USED:** The amount of raw storage consumed by user data (excluding
-  BlueStore's database)
+  BlueStore's database).
 - **RAW USED:** The amount of raw storage consumed by user data, internal
-  overhead, or reserved capacity.
-- **%RAW USED:** The percentage of raw storage used. Use this number in
-  conjunction with the ``full ratio`` and ``near full ratio`` to ensure that 
-  you are not reaching your cluster's capacity. See `Storage Capacity`_ for 
-  additional details.
+  overhead, and reserved capacity.
+- **%RAW USED:** The percentage of raw storage used. Watch this number in
+  conjunction with ``full ratio`` and ``near full ratio`` to be forewarned when
+  your cluster approaches the fullness thresholds. See `Storage Capacity`_.
 
 
-**POOLS:**  
+**POOLS:**
 
-The **POOLS** section of the output provides a list of pools and the notional 
-usage of each pool. The output from this section **DOES NOT** reflect replicas,
-clones or snapshots. For example, if you store an object with 1MB of data, the 
-notional usage will be 1MB, but the actual usage may be 2MB or more depending 
-on the number of replicas, clones and snapshots.  
+The POOLS section of the output provides a list of pools and the *notional*
+usage of each pool. This section of the output **DOES NOT** reflect replicas,
+clones, or snapshots. For example, if you store an object with 1MB of data,
+then the notional usage will be 1MB, but the actual usage might be 2MB or more
+depending on the number of replicas, clones, and snapshots.
 
-- **ID:** The number of the node within the pool.
-- **STORED:** actual amount of data user/Ceph has stored in a pool. This is
-  similar to the USED column in earlier versions of Ceph but the calculations
-  (for BlueStore!) are more precise (gaps are properly handled).
+- **ID:** The number of the specific node within the pool.
+- **STORED:** The actual amount of data that the user has stored in a pool.
+  This is similar to the USED column in earlier versions of Ceph, but the
+  calculations (for BlueStore!) are more precise (in that gaps are properly
+  handled).
 
-  - **(DATA):** usage for RBD (RADOS Block Device), CephFS file data, and RGW
+  - **(DATA):** Usage for RBD (RADOS Block Device), CephFS file data, and RGW
     (RADOS Gateway) object data.
-  - **(OMAP):** key-value pairs. Used primarily by CephFS and RGW (RADOS
+  - **(OMAP):** Key-value pairs. Used primarily by CephFS and RGW (RADOS
     Gateway) for metadata storage.
 
-- **OBJECTS:** The notional number of objects stored per pool. "Notional" is
-  defined above in the paragraph immediately under "POOLS".
-- **USED:** The space allocated for a pool over all OSDs. This includes
-  replication, allocation granularity, and erasure-coding overhead. Compression
-  savings and object content gaps are also taken into account. BlueStore's
-  database is not included in this amount.
+- **OBJECTS:** The notional number of objects stored per pool (that is, the
+  number of objects other than replicas, clones, or snapshots). 
+- **USED:** The space allocated for a pool over all OSDs. This includes space
+  for replication, space for allocation granularity, and space for the overhead
+  associated with erasure-coding. Compression savings and object-content gaps
+  are also taken into account. However, BlueStore's database is not included in
+  the amount reported under USED.
 
-  - **(DATA):** object usage for RBD (RADOS Block Device), CephFS file data, and RGW
-    (RADOS Gateway) object data.
-  - **(OMAP):** object key-value pairs. Used primarily by CephFS and RGW (RADOS
+  - **(DATA):** Object usage for RBD (RADOS Block Device), CephFS file data,
+    and RGW (RADOS Gateway) object data.
+  - **(OMAP):** Object key-value pairs. Used primarily by CephFS and RGW (RADOS
     Gateway) for metadata storage.
 
 - **%USED:** The notional percentage of storage used per pool.
@@ -454,50 +449,51 @@ on the number of replicas, clones and snapshots.
 - **QUOTA OBJECTS:** The number of quota objects.
 - **QUOTA BYTES:** The number of bytes in the quota objects.
 - **DIRTY:** The number of objects in the cache pool that have been written to
-  the cache pool but have not been flushed yet to the base pool. This field is
-  only available when cache tiering is in use.
-- **USED COMPR:** amount of space allocated for compressed data (i.e. this
-  includes compressed data plus all the allocation, replication and erasure
-  coding overhead).
-- **UNDER COMPR:** amount of data passed through compression (summed over all
-  replicas) and beneficial enough to be stored in a compressed form.
+  the cache pool but have not yet been flushed to the base pool. This field is
+  available only when cache tiering is in use.
+- **USED COMPR:** The amount of space allocated for compressed data. This
+  includes compressed data in addition to all of the space required for
+  replication, allocation granularity, and erasure- coding overhead.
+- **UNDER COMPR:** The amount of data that has passed through compression
+  (summed over all replicas) and that is worth storing in a compressed form.
 
 
-.. note:: The numbers in the POOLS section are notional. They are not
-   inclusive of the number of replicas, snapshots or clones. As a result, the
-   sum of the USED and %USED amounts will not add up to the USED and %USED
-   amounts in the RAW section of the output.
+.. note:: The numbers in the POOLS section are notional. They do not include
+   the number of replicas, clones, or snapshots. As a result, the sum of the
+   USED and %USED amounts in the POOLS section of the output will not be equal
+   to the sum of the USED and %USED amounts in the RAW section of the output.
 
-.. note:: The MAX AVAIL value is a complicated function of the replication
-   or erasure code used, the CRUSH rule that maps storage to devices, the
-   utilization of those devices, and the configured ``mon_osd_full_ratio``.
+.. note:: The MAX AVAIL value is a complicated function of the replication or
+   the kind of erasure coding used, the CRUSH rule that maps storage to
+   devices, the utilization of those devices, and the configured
+   ``mon_osd_full_ratio`` setting.
 
 
 Checking OSD Status
 ===================
 
-You can check OSDs to ensure they are ``up`` and ``in`` by executing the
+To check if OSDs are ``up`` and ``in``, run the
 following command:
 
 .. prompt:: bash #
 
   ceph osd stat
-	
-Or: 
+
+Alternatively, you can run the following command:
 
 .. prompt:: bash #
 
   ceph osd dump
-	
-You can also check view OSDs according to their position in the CRUSH map by
-using the following command:
+
+To view OSDs according to their position in the CRUSH map, run the following
+command:
 
 .. prompt:: bash #
 
    ceph osd tree
 
-Ceph will print out a CRUSH tree with a host, its OSDs, whether they are up
-and their weight:
+To print out a CRUSH tree that displays a host, its OSDs, whether the OSDs are
+``up``, and the weight of the OSDs, run the following command:
 
 .. code-block:: bash
 
@@ -509,88 +505,90 @@ and their weight:
      1   ssd 1.00000         osd.1             up  1.00000 1.00000
      2   ssd 1.00000         osd.2             up  1.00000 1.00000
 
-For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
+See `Monitoring OSDs and Placement Groups`_.
 
 Checking Monitor Status
 =======================
 
-If your cluster has multiple monitors (likely), you should check the monitor
-quorum status after you start the cluster and before reading and/or writing data. A
-quorum must be present when multiple monitors are running. You should also check
-monitor status periodically to ensure that they are running.
+If your cluster has multiple monitors, then you need to perform certain
+"monitor status" checks.  After starting the cluster and before reading or
+writing data, you should check quorum status. A quorum must be present when
+multiple monitors are running to ensure proper functioning of your Ceph
+cluster. Check monitor status regularly in order to ensure that all of the
+monitors are running.
 
-To see display the monitor map, execute the following:
+To display the monitor map, run the following command:
 
 .. prompt:: bash $
 
    ceph mon stat
-	
-Or:
+
+Alternatively, you can run the following command:
 
 .. prompt:: bash $
 
    ceph mon dump
-	
-To check the quorum status for the monitor cluster, execute the following:
-	
+
+To check the quorum status for the monitor cluster, run the following command:
+
 .. prompt:: bash $
 
    ceph quorum_status
 
-Ceph will return the quorum status. For example, a Ceph  cluster consisting of
-three monitors may return the following:
+Ceph returns the quorum status. For example, a Ceph cluster that consists of
+three monitors might return the following:
 
 .. code-block:: javascript
 
-	{ "election_epoch": 10,
-	  "quorum": [
-	        0,
-	        1,
-	        2],
-	  "quorum_names": [
-		"a",
-		"b",
-		"c"],
-	  "quorum_leader_name": "a",
-	  "monmap": { "epoch": 1,
-	      "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
-	      "modified": "2011-12-12 13:28:27.505520",
-	      "created": "2011-12-12 13:28:27.505520",
-	      "features": {"persistent": [
-				"kraken",
-				"luminous",
-				"mimic"],
-		"optional": []
-	      },
-	      "mons": [
-	            { "rank": 0,
-	              "name": "a",
-	              "addr": "127.0.0.1:6789/0",
-		      "public_addr": "127.0.0.1:6789/0"},
-	            { "rank": 1,
-	              "name": "b",
-	              "addr": "127.0.0.1:6790/0",
-		      "public_addr": "127.0.0.1:6790/0"},
-	            { "rank": 2,
-	              "name": "c",
-	              "addr": "127.0.0.1:6791/0",
-		      "public_addr": "127.0.0.1:6791/0"}
-	           ]
-	  }
-	}
+    { "election_epoch": 10,
+      "quorum": [
+            0,
+            1,
+            2],
+      "quorum_names": [
+        "a",
+        "b",
+        "c"],
+      "quorum_leader_name": "a",
+      "monmap": { "epoch": 1,
+          "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
+          "modified": "2011-12-12 13:28:27.505520",
+          "created": "2011-12-12 13:28:27.505520",
+          "features": {"persistent": [
+                "kraken",
+                "luminous",
+                "mimic"],
+        "optional": []
+          },
+          "mons": [
+                { "rank": 0,
+                  "name": "a",
+                  "addr": "127.0.0.1:6789/0",
+              "public_addr": "127.0.0.1:6789/0"},
+                { "rank": 1,
+                  "name": "b",
+                  "addr": "127.0.0.1:6790/0",
+              "public_addr": "127.0.0.1:6790/0"},
+                { "rank": 2,
+                  "name": "c",
+                  "addr": "127.0.0.1:6791/0",
+              "public_addr": "127.0.0.1:6791/0"}
+               ]
+      }
+    }
 
 Checking MDS Status
 ===================
 
-Metadata servers provide metadata services for  CephFS. Metadata servers have
-two sets of states: ``up | down`` and ``active | inactive``. To ensure your
-metadata servers are ``up`` and ``active``,  execute the following:
+Metadata servers provide metadata services for CephFS. Metadata servers have
+two sets of states: ``up | down`` and ``active | inactive``. To check if your
+metadata servers are ``up`` and ``active``, run the following command:
 
 .. prompt:: bash $
 
    ceph mds stat
-	
-To display details of the metadata cluster, execute the following:
+
+To display details of the metadata servers, run the following command:
 
 .. prompt:: bash $
 
@@ -600,9 +598,9 @@ To display details of the metadata cluster, execute the following:
 Checking Placement Group States
 ===============================
 
-Placement groups map objects to OSDs. When you monitor your
-placement groups,  you will want them to be ``active`` and ``clean``. 
-For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
+Placement groups (PGs) map objects to OSDs. PGs are monitored in order to
+ensure that they are ``active`` and ``clean``.  See `Monitoring OSDs and
+Placement Groups`_.
 
 .. _Monitoring OSDs and Placement Groups: ../monitoring-osd-pg
 
@@ -611,37 +609,47 @@ For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
 Using the Admin Socket
 ======================
 
-The Ceph admin socket allows you to query a daemon via a socket interface. 
-By default, Ceph sockets reside under ``/var/run/ceph``. To access a daemon
-via the admin socket, login to the host running the daemon and use the 
-following command:
+The Ceph admin socket allows you to query a daemon via a socket interface.  By
+default, Ceph sockets reside under ``/var/run/ceph``. To access a daemon via
+the admin socket, log in to the host that is running the daemon and run one of
+the two following commands:
 
 .. prompt:: bash $
 
    ceph daemon {daemon-name}
    ceph daemon {path-to-socket-file}
 
-For example, the following are equivalent:
+For example, the following commands are equivalent to each other:
 
 .. prompt:: bash $
 
    ceph daemon osd.0 foo
    ceph daemon /var/run/ceph/ceph-osd.0.asok foo
 
-To view the available admin socket commands, execute the following command:
+There are two methods of running admin socket commands: (1)
+using ``ceph daemon`` as described above, which bypasses
+the monitor and assumes a direct login to the daemon's host,
+and (2) using the ``ceph tell {daemon-type}.{id}`` command,
+which is relayed by monitors and does not require access
+to the daemon's host.
+
+Use the ``raise`` command to send a signal to a daemon, as if by running ``kill -X {daemon.pid}``.
+When run via ``ceph tell`` it allows signalling a daemon without access to its host:
+
+.. prompt:: bash $
+
+   ceph daemon {daemon-name} raise HUP
+   ceph tell {daemon-type}.{id} raise -9
+
+To view the available admin-socket commands, run the following command:
 
 .. prompt:: bash $
 
    ceph daemon {daemon-name} help
 
-The admin socket command enables you to show and set your configuration at
-runtime. See `Viewing a Configuration at Runtime`_ for details.
-
-Additionally, you can set configuration values at runtime directly (i.e., the
-admin socket bypasses the monitor, unlike ``ceph tell {daemon-type}.{id}
-config set``, which relies on the monitor but doesn't require you to login
-directly to the host in question ).
+Admin-socket commands enable you to view and set your configuration at runtime.
+For more on viewing your configuration, see `Viewing a Configuration at
+Runtime`_.
 
 .. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#viewing-a-configuration-at-runtime
 .. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity
-.. _ceph-medic: http://docs.ceph.com/ceph-medic/master/

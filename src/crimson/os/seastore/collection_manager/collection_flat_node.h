@@ -94,18 +94,18 @@ struct CollectionNode
   : LogicalCachedExtent {
   using CollectionNodeRef = TCachedExtentRef<CollectionNode>;
 
-  bool loaded = false;
-
-  template <typename... T>
-  CollectionNode(T&&... t)
-    : LogicalCachedExtent(std::forward<T>(t)...) {}
+  explicit CollectionNode(ceph::bufferptr &&ptr)
+    : LogicalCachedExtent(std::move(ptr)) {}
+  explicit CollectionNode(const CollectionNode &other)
+    : LogicalCachedExtent(other),
+      decoded(other.decoded) {}
 
   static constexpr extent_types_t type = extent_types_t::COLL_BLOCK;
 
   coll_map_t decoded;
   delta_buffer_t delta_buffer;
 
-  CachedExtentRef duplicate_for_write() final {
+  CachedExtentRef duplicate_for_write(Transaction&) final {
     assert(delta_buffer.empty());
     return CachedExtentRef(new CollectionNode(*this));
   }
@@ -134,13 +134,11 @@ struct CollectionNode
   using update_ret = CollectionManager::update_ret;
   update_ret update(coll_context_t cc, coll_t coll, unsigned bits);
 
-  void read_to_local() {
-    if (loaded) return;
+  void on_clean_read() final {
     bufferlist bl;
     bl.append(get_bptr());
     auto iter = bl.cbegin();
     decode((base_coll_map_t&)decoded, iter);
-    loaded = true;
   }
 
   void copy_to_node() {

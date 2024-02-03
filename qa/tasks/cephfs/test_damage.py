@@ -3,6 +3,7 @@ import json
 import logging
 import errno
 import re
+import time
 from teuthology.contextutil import MaxWhileTries
 from teuthology.exceptions import CommandFailedError
 from teuthology.orchestra.run import wait
@@ -243,7 +244,7 @@ class TestDamage(CephFSTestCase):
             # Reset MDS state
             self.mount_a.umount_wait(force=True)
             self.fs.fail()
-            self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
+            self.run_ceph_cmd('mds', 'repaired', '0')
 
             # Reset RADOS pool state
             self.fs.radosm(['import', '-'], stdin=BytesIO(serialized))
@@ -354,8 +355,9 @@ class TestDamage(CephFSTestCase):
                 # EIOs mean something handled by DamageTable: assert that it has
                 # been populated
                 damage = json.loads(
-                    self.fs.mon_manager.raw_cluster_cmd(
-                        'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]), "damage", "ls", '--format=json-pretty'))
+                    self.get_ceph_cmd_stdout(
+                        'tell', f'mds.{self.fs.get_active_names()[0]}',
+                        "damage", "ls", '--format=json-pretty'))
                 if len(damage) == 0:
                     results[mutation] = EIO_NO_DAMAGE
 
@@ -415,8 +417,8 @@ class TestDamage(CephFSTestCase):
 
         # The fact that there is damaged should have bee recorded
         damage = json.loads(
-            self.fs.mon_manager.raw_cluster_cmd(
-                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+            self.get_ceph_cmd_stdout(
+                'tell', f'mds.{self.fs.get_active_names()[0]}',
                 "damage", "ls", '--format=json-pretty'))
         self.assertEqual(len(damage), 1)
         damage_id = damage[0]['id']
@@ -465,9 +467,9 @@ class TestDamage(CephFSTestCase):
         self.fs.radosm(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
 
         # Clean up the damagetable entry
-        self.fs.mon_manager.raw_cluster_cmd(
-            'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
-            "damage", "rm", "{did}".format(did=damage_id))
+        self.run_ceph_cmd(
+            'tell', f'mds.{self.fs.get_active_names()[0]}',
+            "damage", "rm", f"{damage_id}")
 
         # Now I should be able to create a file with the same name as the
         # damaged guy if I want.
@@ -519,14 +521,14 @@ class TestDamage(CephFSTestCase):
 
         # Check that an entry is created in the damage table
         damage = json.loads(
-            self.fs.mon_manager.raw_cluster_cmd(
+            self.get_ceph_cmd_stdout(
                 'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
                 "damage", "ls", '--format=json-pretty'))
         self.assertEqual(len(damage), 1)
         self.assertEqual(damage[0]['damage_type'], "backtrace")
         self.assertEqual(damage[0]['ino'], file1_ino)
 
-        self.fs.mon_manager.raw_cluster_cmd(
+        self.run_ceph_cmd(
             'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
             "damage", "rm", str(damage[0]['id']))
 
@@ -544,7 +546,7 @@ class TestDamage(CephFSTestCase):
 
         # Check that an entry is created in the damage table
         damage = json.loads(
-            self.fs.mon_manager.raw_cluster_cmd(
+            self.get_ceph_cmd_stdout(
                 'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
                 "damage", "ls", '--format=json-pretty'))
         self.assertEqual(len(damage), 2)
@@ -559,6 +561,104 @@ class TestDamage(CephFSTestCase):
             self.assertEqual(damage[1]['ino'], file2_ino)
 
         for entry in damage:
-            self.fs.mon_manager.raw_cluster_cmd(
+            self.run_ceph_cmd(
                 'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
                 "damage", "rm", str(entry['id']))
+
+    def test_dentry_first_existing(self):
+        """
+        That the MDS won't abort when the dentry is already known to be damaged.
+        """
+
+        def verify_corrupt():
+            info = self.fs.read_cache("/a", 0)
+            log.debug('%s', info)
+            self.assertEqual(len(info), 1)
+            dirfrags = info[0]['dirfrags']
+            self.assertEqual(len(dirfrags), 1)
+            dentries = dirfrags[0]['dentries']
+            self.assertEqual([dn['path'] for dn in dentries if dn['is_primary']], ['a/c'])
+            self.assertEqual(dentries[0]['snap_first'], 18446744073709551606) # SNAP_HEAD
+
+        self.mount_a.run_shell_payload("mkdir -p a/b")
+        self.fs.flush()
+        self.config_set("mds", "mds_abort_on_newly_corrupt_dentry", False)
+        self.config_set("mds", "mds_inject_rename_corrupt_dentry_first", "1.0")
+        time.sleep(5) # for conf to percolate
+        self.mount_a.run_shell_payload("mv a/b a/c; sync .")
+        self.mount_a.umount()
+        verify_corrupt()
+        self.fs.fail()
+        self.config_rm("mds", "mds_inject_rename_corrupt_dentry_first")
+        self.config_set("mds", "mds_abort_on_newly_corrupt_dentry", False)
+        self.fs.set_joinable()
+        status = self.fs.status()
+        self.fs.flush()
+        self.assertFalse(self.fs.status().hadfailover(status))
+        verify_corrupt()
+
+    def test_dentry_first_preflush(self):
+        """
+        That the MDS won't write a dentry with new damage to CDentry::first
+        to the journal.
+        """
+
+        rank0 = self.fs.get_rank()
+        self.fs.rank_freeze(True, rank=0)
+        self.mount_a.run_shell_payload("mkdir -p a/{b,c}/d")
+        self.fs.flush()
+        self.config_set("mds", "mds_inject_rename_corrupt_dentry_first", "1.0")
+        time.sleep(5) # for conf to percolate
+        with self.assert_cluster_log("MDS abort because newly corrupt dentry"):
+            p = self.mount_a.run_shell_payload("timeout 60 mv a/b a/z", wait=False)
+            self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(), timeout=self.fs.beacon_timeout)
+        self.config_rm("mds", "mds_inject_rename_corrupt_dentry_first")
+        self.fs.rank_freeze(False, rank=0)
+        self.delete_mds_coredump(rank0['name'])
+        self.fs.mds_restart(rank0['name'])
+        self.fs.wait_for_daemons()
+        p.wait()
+        self.mount_a.run_shell_payload("stat a/ && find a/")
+        self.fs.flush()
+
+    def test_dentry_first_precommit(self):
+        """
+        That the MDS won't write a dentry with new damage to CDentry::first
+        to the directory object.
+        """
+
+        fscid = self.fs.id
+        self.mount_a.run_shell_payload("mkdir -p a/{b,c}/d; sync .")
+        self.mount_a.umount() # allow immediate scatter write back
+        self.fs.flush()
+        # now just twiddle some inode metadata on a regular file
+        self.mount_a.mount_wait()
+        self.mount_a.run_shell_payload("chmod 711 a/b/d; sync .")
+        self.mount_a.umount() # avoid journaling session related things
+        # okay, now cause the dentry to get damaged after loading from the journal
+        self.fs.fail()
+        self.config_set("mds", "mds_inject_journal_corrupt_dentry_first", "1.0")
+        time.sleep(5) # for conf to percolate
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        rank0 = self.fs.get_rank()
+        self.fs.rank_freeze(True, rank=0)
+        # so now we want to trigger commit but this will crash, so:
+        with self.assert_cluster_log("MDS abort because newly corrupt dentry"):
+            c = ['--connect-timeout=60', 'tell', f"mds.{fscid}:0", "flush", "journal"]
+            p = self.run_ceph_cmd(args=c, wait=False, timeoutcmd=30)
+            self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(), timeout=self.fs.beacon_timeout)
+        self.config_rm("mds", "mds_inject_journal_corrupt_dentry_first")
+        self.fs.rank_freeze(False, rank=0)
+        self.delete_mds_coredump(rank0['name'])
+        self.fs.mds_restart(rank0['name'])
+        self.fs.wait_for_daemons()
+        try:
+            p.wait()
+        except CommandFailedError as e:
+            print(e)
+        else:
+            self.fail("flush journal should fail!")
+        self.mount_a.mount_wait()
+        self.mount_a.run_shell_payload("stat a/ && find a/")
+        self.fs.flush()

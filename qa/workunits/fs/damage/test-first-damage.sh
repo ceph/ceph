@@ -6,6 +6,7 @@ FIRST_DAMAGE="first-damage.py"
 FS=cephfs
 METADATA_POOL=cephfs_meta
 MOUNT=~/mnt/mnt.0
+PYTHON=python3
 
 function usage {
   printf '%s: [--fs=<fs_name>] [--metadata-pool=<pool>] [--first-damage=</path/to/first-damage.py>]\n'
@@ -14,10 +15,12 @@ function usage {
 
 
 function create {
+  ceph config set mds mds_bal_fragment_dirs 0
   mkdir dir
   DIR_INODE=$(stat -c '%i' dir)
   touch dir/a
   touch dir/"a space"
+  touch -- $(printf 'dir/\xff')
   mkdir dir/.snap/1
   mkdir dir/.snap/2
   # two snaps
@@ -35,6 +38,11 @@ function create {
   touch dir/a
   # unlink then create, HEAD not snapped
   ls dir/.snap/*/
+  mkdir big
+  BIG_DIR_INODE=$(stat -c '%i' big)
+  for i in `seq 1 15000`; do
+    touch $(printf 'big/%08d' $i)
+  done
 }
 
 function flush {
@@ -62,6 +70,12 @@ function damage {
   printf '\xfe\xff\xff\xff' | dd of="$T" count=4 bs=1 conv=notrunc,nocreat
   rados --pool="$METADATA_POOL" setomapval "$IS" a_head --input-file="$T"
 
+  # screw up HEAD on what dentry in big
+  IS=$(printf '%llx.%08llx' "$BIG_DIR_INODE" 0)
+  rados --pool="$METADATA_POOL" getomapval "$IS" 00009999_head "$T"
+  printf '\xfe\xff\xff\xff' | dd of="$T" count=4 bs=1 conv=notrunc,nocreat
+  rados --pool="$METADATA_POOL" setomapval "$IS" 00009999_head --input-file="$T"
+
   rm -f "$T"
 }
 
@@ -71,9 +85,9 @@ function recover {
   sleep 5
   cephfs-journal-tool --rank="$FS":0 event recover_dentries summary
   cephfs-journal-tool --rank="$FS":0 journal reset
-  python3 $FIRST_DAMAGE --debug /tmp/debug1 --memo /tmp/memo1 "$METADATA_POOL"
-  python3 $FIRST_DAMAGE --debug /tmp/debug2 --memo /tmp/memo2 --repair-nosnap  "$METADATA_POOL"
-  python3 $FIRST_DAMAGE --debug /tmp/debug3 --memo /tmp/memo3 --remove "$METADATA_POOL"
+  "$PYTHON" $FIRST_DAMAGE --debug /tmp/debug1 --memo /tmp/memo1 "$METADATA_POOL"
+  "$PYTHON" $FIRST_DAMAGE --debug /tmp/debug2 --memo /tmp/memo2 --repair-nosnap  "$METADATA_POOL"
+  "$PYTHON" $FIRST_DAMAGE --debug /tmp/debug3 --memo /tmp/memo3 --remove "$METADATA_POOL"
   ceph fs set "$FS" joinable true
 }
 
@@ -111,7 +125,7 @@ function mount {
 }
 
 function main {
-  eval set -- $(getopt --name "$0" --options '' --longoptions 'help,fs:,metadata-pool:,first-damage:,mount:' -- "$@")
+  eval set -- $(getopt --name "$0" --options '' --longoptions 'help,fs:,metadata-pool:,first-damage:,mount:,python:' -- "$@")
 
   while [ "$#" -gt 0 ]; do
       echo "$*"
@@ -134,6 +148,10 @@ function main {
               ;;
           --first-damage)
               FIRST_DAMAGE="$2"
+              shift 2
+              ;;
+          --python)
+              PYTHON="$2"
               shift 2
               ;;
           --)

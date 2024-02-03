@@ -57,7 +57,7 @@ class MessengerClient {
     bool ms_handle_reset(Connection *con) override { return true; }
     void ms_handle_remote_reset(Connection *con) override {}
     bool ms_handle_refused(Connection *con) override { return false; }
-    int ms_handle_authentication(Connection *con) override {
+    int ms_handle_fast_authentication(Connection *con) override {
       return 1;
     }
   };

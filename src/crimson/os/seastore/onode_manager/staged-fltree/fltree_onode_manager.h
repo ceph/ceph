@@ -25,10 +25,9 @@ struct FLTreeOnode final : Onode, Value {
   };
 
   enum class status_t {
-    STABLE,
-    MUTATED,
+    ALIVE,
     DELETED
-  } status = status_t::STABLE;
+  } status = status_t::ALIVE;
 
   FLTreeOnode(FLTreeOnode&&) = default;
   FLTreeOnode& operator=(FLTreeOnode&&) = delete;
@@ -47,6 +46,17 @@ struct FLTreeOnode final : Onode, Value {
       Value(std::forward<T>(args)...) {}
 
   struct Recorder : public ValueDeltaRecorder {
+    enum class delta_op_t : uint8_t {
+      UPDATE_ONODE_SIZE,
+      UPDATE_OMAP_ROOT,
+      UPDATE_XATTR_ROOT,
+      UPDATE_OBJECT_DATA,
+      UPDATE_OBJECT_INFO,
+      UPDATE_SNAPSET,
+      CLEAR_OBJECT_INFO,
+      CLEAR_SNAPSET,
+      CREATE_DEFAULT
+    };
     Recorder(bufferlist &bl) : ValueDeltaRecorder(bl) {}
 
     value_magic_t get_header_magic() const final {
@@ -56,44 +66,165 @@ struct FLTreeOnode final : Onode, Value {
     void apply_value_delta(
       ceph::bufferlist::const_iterator &bliter,
       NodeExtentMutable &value,
-      laddr_t) final {
-      assert(value.get_length() == sizeof(onode_layout_t));
-      bliter.copy(value.get_length(), value.get_write());
-    }
+      laddr_t value_addr) final;
 
-    void record_delta(NodeExtentMutable &value) {
-      // TODO: probably could use versioning, etc
-      assert(value.get_length() == sizeof(onode_layout_t));
-      ceph::buffer::ptr bptr(value.get_length());
-      memcpy(bptr.c_str(), value.get_read(), value.get_length());
-      get_encoded(value).append(bptr);
-    }
+    void encode_update(NodeExtentMutable &payload_mut, delta_op_t op);
   };
 
+  bool is_alive() const {
+    return status != status_t::DELETED;
+  }
   const onode_layout_t &get_layout() const final {
     assert(status != status_t::DELETED);
     return *read_payload<onode_layout_t>();
   }
 
-  onode_layout_t &get_mutable_layout(Transaction &t) final {
+  template <typename layout_func_t>
+  void with_mutable_layout(
+    Transaction &t,
+    layout_func_t &&layout_func) {
     assert(status != status_t::DELETED);
     auto p = prepare_mutate_payload<
       onode_layout_t,
       Recorder>(t);
-    status = status_t::MUTATED;
-    return *reinterpret_cast<onode_layout_t*>(p.first.get_write());
-  };
+    layout_func(p.first, p.second);
+  }
 
-  void populate_recorder(Transaction &t) {
-    assert(status == status_t::MUTATED);
-    auto p = prepare_mutate_payload<
-      onode_layout_t,
-      Recorder>(t);
-    if (p.second) {
-      p.second->record_delta(
-        p.first);
-    }
-    status = status_t::STABLE;
+  void create_default_layout(Transaction &t) {
+    with_mutable_layout(
+      t,
+      [](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+	  payload_mut.get_write());
+	mlayout = onode_layout_t{};
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::CREATE_DEFAULT);
+	}
+    });
+  }
+
+  void update_onode_size(Transaction &t, uint32_t size) final {
+    with_mutable_layout(
+      t,
+      [size](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+	mlayout.size = size;
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::UPDATE_ONODE_SIZE);
+	}
+    });
+  }
+
+  void update_omap_root(Transaction &t, omap_root_t &oroot) final {
+    with_mutable_layout(
+      t,
+      [&oroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+	mlayout.omap_root.update(oroot);
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::UPDATE_OMAP_ROOT);
+	}
+    });
+  }
+
+  void update_xattr_root(Transaction &t, omap_root_t &xroot) final {
+    with_mutable_layout(
+      t,
+      [&xroot](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+	  payload_mut.get_write());
+	mlayout.xattr_root.update(xroot);
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::UPDATE_XATTR_ROOT);
+	}
+    });
+  }
+
+  void update_object_data(Transaction &t, object_data_t &odata) final {
+    with_mutable_layout(
+      t,
+      [&odata](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+	mlayout.object_data.update(odata);
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::UPDATE_OBJECT_DATA);
+	}
+    });
+  }
+
+  void update_object_info(Transaction &t, ceph::bufferlist &oi_bl) final {
+    with_mutable_layout(
+      t,
+      [&oi_bl](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+	maybe_inline_memcpy(
+	  &mlayout.oi[0],
+	  oi_bl.c_str(),
+	  oi_bl.length(),
+	  onode_layout_t::MAX_OI_LENGTH);
+	mlayout.oi_size = oi_bl.length();
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::UPDATE_OBJECT_INFO);
+	}
+    });
+  }
+
+  void clear_object_info(Transaction &t) final {
+    with_mutable_layout(
+      t, [](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+	memset(&mlayout.oi[0], 0, mlayout.oi_size);
+	mlayout.oi_size = 0;
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::CLEAR_OBJECT_INFO);
+	}
+    });
+  }
+
+  void update_snapset(Transaction &t, ceph::bufferlist &ss_bl) final {
+    with_mutable_layout(
+      t,
+      [&ss_bl](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+	maybe_inline_memcpy(
+	  &mlayout.ss[0],
+	  ss_bl.c_str(),
+	  ss_bl.length(),
+	  onode_layout_t::MAX_OI_LENGTH);
+	mlayout.ss_size = ss_bl.length();
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::UPDATE_SNAPSET);
+	}
+    });
+  }
+
+  void clear_snapset(Transaction &t) final {
+    with_mutable_layout(
+      t,
+      [](NodeExtentMutable &payload_mut, Recorder *recorder) {
+	auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+	memset(&mlayout.ss[0], 0, mlayout.ss_size);
+	mlayout.ss_size = 0;
+	if (recorder) {
+	  recorder->encode_update(
+	    payload_mut, Recorder::delta_op_t::CLEAR_SNAPSET);
+	}
+    });
   }
 
   void mark_delete() {
@@ -146,10 +277,6 @@ public:
   get_or_create_onodes_ret get_or_create_onodes(
     Transaction &trans,
     const std::vector<ghobject_t> &hoids) final;
-
-  write_dirty_ret write_dirty(
-    Transaction &trans,
-    const std::vector<OnodeRef> &onodes) final;
 
   erase_onode_ret erase_onode(
     Transaction &trans,

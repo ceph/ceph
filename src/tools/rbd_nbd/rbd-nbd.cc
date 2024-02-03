@@ -106,7 +106,6 @@ struct Config {
   bool quiesce = false;
   bool readonly = false;
   bool set_max_part = false;
-  bool try_netlink = false;
   bool show_cookie = false;
 
   std::string poolname;
@@ -166,7 +165,6 @@ static void usage()
             << "  --read-only                   Map read-only\n"
             << "  --reattach-timeout <sec>      Set nbd re-attach timeout\n"
             << "                                (default: " << Config().reattach_timeout << ")\n"
-            << "  --try-netlink                 Use the nbd netlink interface\n"
             << "  --show-cookie                 Show device cookie\n"
             << "  --cookie                      Specify device cookie\n"
             << "  --snap-id <snap-id>           Specify snapshot by ID instead of by name\n"
@@ -194,7 +192,8 @@ static EventSocket terminate_event_sock;
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Config *cfg);
 static int netlink_disconnect(int index);
-static int netlink_resize(int nbd_index, uint64_t size);
+static int netlink_resize(int nbd_index, const std::string& cookie,
+                          uint64_t size);
 
 static int run_quiesce_hook(const std::string &quiesce_hook,
                             const std::string &devpath,
@@ -738,55 +737,108 @@ private:
   bool use_netlink;
   librados::IoCtx &io_ctx;
   librbd::Image &image;
-  unsigned long size;
+  uint64_t size;
+  std::thread handle_notify_thread;
+  ceph::condition_variable cond;
+  ceph::mutex lock = ceph::make_mutex("NBDWatchCtx::Locker");
+  bool notify = false;
+  bool terminated = false;
+  std::string cookie;
+
+  bool wait_notify() {
+    dout(10) << __func__ << dendl;
+
+    std::unique_lock locker{lock};
+    cond.wait(locker, [this] { return notify || terminated; });
+
+    if (terminated) {
+      return false;
+    }
+
+    dout(10) << __func__ << ": got notify request" << dendl;
+    notify = false;
+    return true;
+  }
+
+  void handle_notify_entry() {
+    dout(10) << __func__ << dendl;
+
+    while (wait_notify()) {
+      uint64_t new_size;
+      int ret = image.size(&new_size);
+      if (ret < 0) {
+        derr << "getting image size failed: " << cpp_strerror(ret) << dendl;
+        continue;
+      }
+      if (new_size == size) {
+        continue;
+      }
+      dout(5) << "resize detected" << dendl;
+      if (ioctl(fd, BLKFLSBUF, NULL) < 0) {
+        derr << "invalidate page cache failed: " << cpp_strerror(errno)
+             << dendl;
+      }
+      if (use_netlink) {
+        ret = netlink_resize(nbd_index, cookie, new_size);
+      } else {
+        ret = ioctl(fd, NBD_SET_SIZE, new_size);
+        if (ret < 0) {
+          derr << "ioctl resize failed: " << cpp_strerror(errno) << dendl;
+        }
+      }
+      if (!ret) {
+        size = new_size;
+      }
+      if (ioctl(fd, BLKRRPART, NULL) < 0) {
+        derr << "rescan of partition table failed: " << cpp_strerror(errno)
+             << dendl;
+      }
+      if (image.invalidate_cache() < 0) {
+        derr << "invalidate rbd cache failed" << dendl;
+      }
+    }
+  }
+
 public:
   NBDWatchCtx(int _fd,
               int _nbd_index,
               bool _use_netlink,
               librados::IoCtx &_io_ctx,
               librbd::Image &_image,
-              unsigned long _size)
+              unsigned long _size,
+              std::string _cookie)
     : fd(_fd)
     , nbd_index(_nbd_index)
     , use_netlink(_use_netlink)
     , io_ctx(_io_ctx)
     , image(_image)
     , size(_size)
-  { }
+    , cookie(std::move(_cookie))
+  {
+    handle_notify_thread = make_named_thread("rbd_handle_notify",
+                                             &NBDWatchCtx::handle_notify_entry,
+                                             this);
+  }
 
-  ~NBDWatchCtx() override {}
+  ~NBDWatchCtx() override
+  {
+    dout(10) << __func__ << ": terminating" << dendl;
+    std::unique_lock locker{lock};
+    terminated = true;
+    cond.notify_all();
+    locker.unlock();
+
+    handle_notify_thread.join();
+    dout(10) << __func__ << ": finish" << dendl;
+  }
 
   void handle_notify() override
   {
-    librbd::image_info_t info;
-    if (image.stat(info, sizeof(info)) == 0) {
-      unsigned long new_size = info.size;
-      int ret;
+    dout(10) << __func__ << dendl;
 
-      if (new_size != size) {
-        dout(5) << "resize detected" << dendl;
-        if (ioctl(fd, BLKFLSBUF, NULL) < 0)
-          derr << "invalidate page cache failed: " << cpp_strerror(errno)
-               << dendl;
-	if (use_netlink) {
-	  ret = netlink_resize(nbd_index, new_size);
-	} else {
-          ret = ioctl(fd, NBD_SET_SIZE, new_size);
-          if (ret < 0)
-            derr << "resize failed: " << cpp_strerror(errno) << dendl;
-	}
-
-        if (!ret)
-          size = new_size;
-
-        if (ioctl(fd, BLKRRPART, NULL) < 0) {
-          derr << "rescan of partition table failed: " << cpp_strerror(errno)
-               << dendl;
-        }
-        if (image.invalidate_cache() < 0)
-          derr << "invalidate rbd cache failed" << dendl;
-      }
-    }
+    std::unique_lock locker{lock};
+    notify = true;
+    cond.notify_all();
   }
 };
 
@@ -1269,7 +1321,8 @@ static int netlink_disconnect_by_path(const std::string& devpath)
   return netlink_disconnect(index);
 }
 
-static int netlink_resize(int nbd_index, uint64_t size)
+static int netlink_resize(int nbd_index, const std::string& cookie,
+                          uint64_t size)
 {
   struct nl_sock *sock;
   struct nl_msg *msg;
@@ -1277,30 +1330,33 @@ static int netlink_resize(int nbd_index, uint64_t size)
 
   sock = netlink_init(&nl_id);
   if (!sock) {
-    cerr << "rbd-nbd: Netlink interface not supported." << std::endl;
-    return 1;
+    derr << __func__ << ": netlink interface not supported" << dendl;
+    return -EINVAL;
   }
 
   nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, genl_handle_msg, NULL);
 
   msg = nlmsg_alloc();
   if (!msg) {
-    cerr << "rbd-nbd: Could not allocate netlink message." << std::endl;
+    derr << __func__ << ": could not allocate netlink message" << dendl;
     goto free_sock;
   }
 
   if (!genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, nl_id, 0, 0,
                    NBD_CMD_RECONFIGURE, 0)) {
-    cerr << "rbd-nbd: Could not setup message." << std::endl;
+    derr << __func__ << ": could not setup netlink message" << dendl;
     goto free_msg;
   }
 
   NLA_PUT_U32(msg, NBD_ATTR_INDEX, nbd_index);
   NLA_PUT_U64(msg, NBD_ATTR_SIZE_BYTES, size);
+  if (!cookie.empty())
+    NLA_PUT_STRING(msg, NBD_ATTR_BACKEND_IDENTIFIER, cookie.c_str());
 
   ret = nl_send_sync(sock, msg);
   if (ret < 0) {
-    cerr << "rbd-nbd: netlink resize failed: " << nl_geterror(ret) << std::endl;
+    derr << __func__ << ": netlink resize failed: " << nl_geterror(ret)
+         << dendl;
     goto free_sock;
   }
 
@@ -1624,7 +1680,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   unsigned long flags;
   unsigned long size;
   unsigned long blksize = RBD_NBD_BLKSIZE;
-  bool use_netlink;
+  bool use_netlink = true;
 
   int fd[2];
 
@@ -1801,20 +1857,17 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
 
   server = start_server(fd[1], image, cfg);
 
-  use_netlink = cfg->try_netlink || reconnect;
-  if (use_netlink) {
-    // generate when the cookie is not supplied at CLI
-    if (!reconnect && cfg->cookie.empty()) {
-      uuid_d uuid_gen;
-      uuid_gen.generate_random();
-      cfg->cookie = uuid_gen.to_string();
-    }
-    r = try_netlink_setup(cfg, fd[0], size, flags, reconnect);
-    if (r < 0) {
-      goto free_server;
-    } else if (r == 1) {
-      use_netlink = false;
-    }
+  // generate when the cookie is not supplied at CLI
+  if (!reconnect && cfg->cookie.empty()) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    cfg->cookie = uuid_gen.to_string();
+  }
+  r = try_netlink_setup(cfg, fd[0], size, flags, reconnect);
+  if (r < 0) {
+    goto free_server;
+  } else if (r == 1) {
+    use_netlink = false;
   }
 
   if (!use_netlink) {
@@ -1846,7 +1899,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
     uint64_t handle;
 
     NBDWatchCtx watch_ctx(nbd, nbd_index, use_netlink, io_ctx, image,
-                          info.size);
+                          info.size, cfg->cookie);
     r = image.update_watch(&watch_ctx, &handle);
     if (r < 0)
       goto close_nbd;
@@ -2158,7 +2211,8 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
       cfg->pretty_format = true;
     } else if (ceph_argparse_flag(args, i, "--try-netlink", (char *)NULL)) {
-      cfg->try_netlink = true;
+      // netlink used by default. option not required anymore.
+      // accept for compatibility.
     } else if (ceph_argparse_flag(args, i, "--show-cookie", (char *)NULL)) {
       cfg->show_cookie = true;
     } else if (ceph_argparse_witharg(args, i, &cfg->cookie, "--cookie", (char *)NULL)) {

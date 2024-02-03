@@ -1,6 +1,6 @@
 import { Location } from '@angular/common';
-import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
-import { FormGroup, NgForm } from '@angular/forms';
+import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
+import { UntypedFormGroup, NgForm } from '@angular/forms';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -11,7 +11,7 @@ import { SubmitButtonComponent } from '../submit-button/submit-button.component'
   templateUrl: './form-button-panel.component.html',
   styleUrls: ['./form-button-panel.component.scss']
 })
-export class FormButtonPanelComponent {
+export class FormButtonPanelComponent implements OnInit {
   @ViewChild(SubmitButtonComponent)
   submitButton: SubmitButtonComponent;
 
@@ -21,17 +21,19 @@ export class FormButtonPanelComponent {
   backActionEvent = new EventEmitter();
 
   @Input()
-  form: FormGroup | NgForm;
+  form: UntypedFormGroup | NgForm;
   @Input()
   showSubmit = true;
+  @Input()
+  showCancel = true;
   @Input()
   wrappingClass = '';
   @Input()
   btnClass = '';
   @Input()
-  submitText: string = this.actionLabels.CREATE;
+  submitText?: string;
   @Input()
-  cancelText: string = this.actionLabels.CANCEL;
+  cancelText?: string;
   @Input()
   disabled = false;
 
@@ -40,6 +42,11 @@ export class FormButtonPanelComponent {
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService
   ) {}
+
+  ngOnInit() {
+    this.submitText = this.submitText || this.actionLabels.CREATE;
+    this.cancelText = this.cancelText || this.actionLabels.CANCEL;
+  }
 
   submitAction() {
     this.submitActionEvent.emit();

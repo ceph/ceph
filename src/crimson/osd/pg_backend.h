@@ -31,6 +31,7 @@ namespace ceph::os {
 namespace crimson::osd {
   class ShardServices;
   class PG;
+  class ObjectContextLoader;
 }
 
 class PGBackend
@@ -39,7 +40,7 @@ protected:
   using CollectionRef = crimson::os::CollectionRef;
   using ec_profile_t = std::map<std::string, std::string>;
   // low-level read errorator
-  using ll_read_errorator = crimson::os::FuturizedStore::read_errorator;
+  using ll_read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
   using ll_read_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -63,14 +64,16 @@ public:
     std::tuple<interruptible_future<>,
 	       interruptible_future<crimson::osd::acked_peers_t>>;
   PGBackend(shard_id_t shard, CollectionRef coll,
-            crimson::osd::ShardServices &shard_services);
+            crimson::osd::ShardServices &shard_services,
+            DoutPrefixProvider &dpp);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
 					   const pg_shard_t pg_shard,
 					   const pg_pool_t& pool,
 					   crimson::os::CollectionRef coll,
 					   crimson::osd::ShardServices& shard_services,
-					   const ec_profile_t& ec_profile);
+					   const ec_profile_t& ec_profile,
+					   DoutPrefixProvider &dpp);
   using attrs_t =
     std::map<std::string, ceph::bufferptr, std::less<>>;
   using read_errorator = ll_read_errorator::extend<
@@ -146,8 +149,10 @@ public:
   remove_iertr::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats,
-    bool whiteout);
+    bool whiteout,
+    int num_bytes);
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
@@ -193,12 +198,15 @@ public:
       ::crimson::osd::IOInterruptCondition,
       rollback_ertr>;
   rollback_iertr::future<> rollback(
-    const SnapSet &ss,
     ObjectState& os,
+    const SnapSet &ss,
     const OSDOp& osd_op,
     ceph::os::Transaction& txn,
     osd_op_params_t& osd_op_params,
-    object_stat_sum_t& delta_stats);
+    object_stat_sum_t& delta_stats,
+    crimson::osd::ObjectContextRef head,
+    crimson::osd::ObjectContextLoader& obc_loader,
+    const SnapContext &snapc);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -234,7 +242,7 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     object_stat_sum_t& delta_stats);
-  using get_attr_errorator = crimson::os::FuturizedStore::get_attr_errorator;
+  using get_attr_errorator = crimson::os::FuturizedStore::Shard::get_attr_errorator;
   using get_attr_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -318,7 +326,7 @@ public:
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
   using omap_cmp_ertr =
-    crimson::os::FuturizedStore::read_errorator::extend<
+    crimson::os::FuturizedStore::Shard::read_errorator::extend<
       crimson::ct_error::ecanceled,
       crimson::ct_error::invarg>;
   using omap_cmp_iertr =
@@ -379,18 +387,13 @@ public:
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
   virtual seastar::future<> stop() = 0;
-  struct peering_info_t {
-    bool is_primary;
-  };
-  virtual void on_actingset_changed(peering_info_t pi) = 0;
-  virtual void on_activate_complete();
+  virtual void on_actingset_changed(bool same_primary) = 0;
 protected:
   const shard_id_t shard;
   CollectionRef coll;
   crimson::osd::ShardServices &shard_services;
-  crimson::os::FuturizedStore* store;
-  bool stopping = false;
-  std::optional<peering_info_t> peering;
+  DoutPrefixProvider &dpp; ///< provides log prefix context
+  crimson::os::FuturizedStore::Shard* store;
   virtual seastar::future<> request_committed(
     const osd_reqid_t& reqid,
     const eversion_t& at_version) = 0;
@@ -431,6 +434,7 @@ private:
     ceph::os::Transaction& txn,
     object_stat_sum_t& delta_stats);
   void update_size_and_usage(object_stat_sum_t& delta_stats,
+    interval_set<uint64_t>& modified,
     object_info_t& oi, uint64_t offset,
     uint64_t length, bool write_full = false);
   void truncate_update_size_and_usage(

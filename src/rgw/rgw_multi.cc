@@ -98,5 +98,6 @@ void RGWUploadPartInfo::dump(Formatter *f) const
   encode_json("etag", etag, f);
   utime_t ut(modified);
   encode_json("modified", ut, f);
+  encode_json("past_prefixes", past_prefixes, f);
 }
 

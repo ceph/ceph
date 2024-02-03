@@ -13,6 +13,8 @@
 // Those definitions allow handling information coming from Ceph and should
 // not be passed to Windows functions.
 
+#pragma once
+
 #define S_IFLNK   0120000
 
 #define S_ISTYPE(m, TYPE) ((m & S_IFMT) == TYPE)
@@ -34,3 +36,12 @@
 #define AT_REMOVEDIR        0x200
 
 #define MAXSYMLINKS  65000
+
+#define O_DIRECTORY 0200000
+#define O_NOFOLLOW  0400000
+
+#define XATTR_CREATE  1
+#define XATTR_REPLACE 2
+
+typedef unsigned int uid_t;
+typedef unsigned int gid_t;

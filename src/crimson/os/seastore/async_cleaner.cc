@@ -388,7 +388,7 @@ JournalTrimmerImpl::config_t::get_test(
     max_journal_bytes = 4 * roll_size;
   } else {
     assert(type == journal_type_t::RANDOM_BLOCK);
-    target_dirty_bytes = roll_size / 4;
+    target_dirty_bytes = roll_size / 36;
     target_alloc_bytes = roll_size / 4;
     max_journal_bytes = roll_size / 2;
   }
@@ -830,13 +830,15 @@ SegmentCleaner::SegmentCleaner(
   config_t config,
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
-  bool detailed)
+  SegmentSeqAllocator &segment_seq_allocator,
+  bool detailed,
+  bool is_cold)
   : detailed(detailed),
+    is_cold(is_cold),
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
-    ool_segment_seq_allocator(
-      new SegmentSeqAllocator(segment_type_t::OOL))
+    ool_segment_seq_allocator(segment_seq_allocator)
 {
   config.validate();
 }
@@ -854,7 +856,13 @@ void SegmentCleaner::register_metrics()
   i = get_bucket_index(UTIL_STATE_EMPTY);
   stats.segment_util.buckets[i].count = segments.get_num_segments();
 
-  metrics.add_group("segment_cleaner", {
+  std::string prefix;
+  if (is_cold) {
+    prefix.append("cold_");
+  }
+  prefix.append("segment_cleaner");
+
+  metrics.add_group(prefix, {
     sm::make_counter("segments_number",
 		     [this] { return segments.get_num_segments(); },
 		     sm::description("the number of segments")),
@@ -978,7 +986,7 @@ segment_id_t SegmentCleaner::allocate_segment(
   ERROR("out of space with {} {} {} {}",
         type, segment_seq_printer_t{seq}, category,
         rewrite_gen_printer_t{generation});
-  ceph_abort();
+  ceph_abort("seastore device size setting is too small");
   return NULL_SEG_ID;
 }
 
@@ -1053,8 +1061,12 @@ SegmentCleaner::do_reclaim_space(
                         &pin_list, &reclaimed, &runs] {
     reclaimed = 0;
     runs++;
+    auto src = Transaction::src_t::CLEANER_MAIN;
+    if (is_cold) {
+      src = Transaction::src_t::CLEANER_COLD;
+    }
     return extent_callback->with_transaction_intr(
-      Transaction::src_t::CLEANER,
+      src,
       "clean_reclaim_space",
       [this, &backref_extents, &pin_list, &reclaimed](auto &t)
     {
@@ -1137,6 +1149,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
 {
   LOG_PREFIX(SegmentCleaner::clean_space);
   assert(background_callback->is_ready());
+  ceph_assert(can_clean_space());
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
     auto &segment_info = segments[seg_id];
@@ -1160,31 +1173,41 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   // Backref-tree doesn't support tree-read during tree-updates with parallel
   // transactions.  So, concurrent transactions between trim and reclaim are
   // not allowed right now.
-  return extent_callback->with_transaction_weak(
-      "retrieve_from_backref_tree",
-      [this](auto &t) {
-    return backref_manager.get_mappings(
-      t,
-      reclaim_state->start_pos,
-      reclaim_state->end_pos
-    ).si_then([this, &t](auto pin_list) {
-      if (!pin_list.empty()) {
-	auto it = pin_list.begin();
-	auto &first_pin = *it;
-	if (first_pin->get_key() < reclaim_state->start_pos) {
-	  // BackrefManager::get_mappings may include a entry before
-	  // reclaim_state->start_pos, which is semantically inconsistent
-	  // with the requirements of the cleaner
-	  pin_list.erase(it);
-	}
-      }
-      return backref_manager.retrieve_backref_extents_in_range(
-        t,
-        reclaim_state->start_pos,
-        reclaim_state->end_pos
-      ).si_then([pin_list=std::move(pin_list)](auto extents) mutable {
-        return std::make_pair(std::move(extents), std::move(pin_list));
+  return seastar::do_with(
+    std::pair<std::vector<CachedExtentRef>, backref_pin_list_t>(),
+    [this](auto &weak_read_ret) {
+    return repeat_eagain([this, &weak_read_ret] {
+      return extent_callback->with_transaction_intr(
+	  Transaction::src_t::READ,
+	  "retrieve_from_backref_tree",
+	  [this, &weak_read_ret](auto &t) {
+	return backref_manager.get_mappings(
+	  t,
+	  reclaim_state->start_pos,
+	  reclaim_state->end_pos
+	).si_then([this, &t, &weak_read_ret](auto pin_list) {
+	  if (!pin_list.empty()) {
+	    auto it = pin_list.begin();
+	    auto &first_pin = *it;
+	    if (first_pin->get_key() < reclaim_state->start_pos) {
+	      // BackrefManager::get_mappings may include a entry before
+	      // reclaim_state->start_pos, which is semantically inconsistent
+	      // with the requirements of the cleaner
+	      pin_list.erase(it);
+	    }
+	  }
+	  return backref_manager.retrieve_backref_extents_in_range(
+	    t,
+	    reclaim_state->start_pos,
+	    reclaim_state->end_pos
+	  ).si_then([pin_list=std::move(pin_list),
+		    &weak_read_ret](auto extents) mutable {
+	    weak_read_ret = std::make_pair(std::move(extents), std::move(pin_list));
+	  });
+	});
       });
+    }).safe_then([&weak_read_ret] {
+      return std::move(weak_read_ret);
     });
   }).safe_then([this, FNAME, pavail_ratio, start](auto weak_read_ret) {
     return seastar::do_with(
@@ -1291,6 +1314,7 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
         if (tail.segment_nonce != header.segment_nonce) {
           return scan_no_tail_segment(header, segment_id);
         }
+        ceph_assert(header.get_type() == tail.get_type());
 
         sea_time_point modify_time = mod_to_timepoint(tail.modify_time);
         std::size_t num_extents = tail.num_extents;
@@ -1400,23 +1424,27 @@ bool SegmentCleaner::check_usage()
       t,
       [&tracker](
         paddr_t paddr,
+	paddr_t backref_key,
         extent_len_t len,
         extent_types_t type,
         laddr_t laddr)
     {
       if (paddr.get_addr_type() == paddr_types_t::SEGMENT) {
         if (is_backref_node(type)) {
-          assert(laddr == L_ADDR_NULL);
+	  assert(laddr == L_ADDR_NULL);
+	  assert(backref_key != P_ADDR_NULL);
           tracker->allocate(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
             len);
         } else if (laddr == L_ADDR_NULL) {
+	  assert(backref_key == P_ADDR_NULL);
           tracker->release(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
             len);
         } else {
+	  assert(backref_key == P_ADDR_NULL);
           tracker->allocate(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
@@ -1434,6 +1462,7 @@ void SegmentCleaner::mark_space_used(
 {
   LOG_PREFIX(SegmentCleaner::mark_space_used);
   assert(background_callback->get_state() >= state_t::SCAN_SPACE);
+  assert(len);
   // TODO: drop
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
     return;
@@ -1464,6 +1493,7 @@ void SegmentCleaner::mark_space_free(
 {
   LOG_PREFIX(SegmentCleaner::mark_space_free);
   assert(background_callback->get_state() >= state_t::SCAN_SPACE);
+  assert(len);
   // TODO: drop
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
     return;
@@ -1605,6 +1635,7 @@ void RBMCleaner::mark_space_used(
     if (addr.get_device_id() == rbm->get_device_id()) {
       if (rbm->get_start() <= addr) {
 	INFO("allocate addr: {} len: {}", addr, len);
+	stats.used_bytes += len;
 	rbm->mark_space_used(addr, len);
       }
       return;
@@ -1623,6 +1654,8 @@ void RBMCleaner::mark_space_free(
     if (addr.get_device_id() == rbm->get_device_id()) {
       if (rbm->get_start() <= addr) {
 	INFO("free addr: {} len: {}", addr, len);
+	ceph_assert(stats.used_bytes >= len);
+	stats.used_bytes -= len;
 	rbm->mark_space_free(addr, len);
       }
       return;
@@ -1667,6 +1700,7 @@ RBMCleaner::clean_space_ret RBMCleaner::clean_space()
 RBMCleaner::mount_ret RBMCleaner::mount()
 {
   stats = {};
+  register_metrics();
   return seastar::do_with(
     rb_group->get_rb_managers(),
     [](auto &rbs) {
@@ -1696,6 +1730,7 @@ bool RBMCleaner::check_usage()
       t,
       [&tracker, &rbms](
         paddr_t paddr,
+	paddr_t backref_key,
         extent_len_t len,
         extent_types_t type,
         laddr_t laddr)
@@ -1704,14 +1739,17 @@ bool RBMCleaner::check_usage()
 	if (rbm->get_device_id() == paddr.get_device_id()) {
 	  if (is_backref_node(type)) {
 	    assert(laddr == L_ADDR_NULL);
+	    assert(backref_key != P_ADDR_NULL);
 	    tracker.allocate(
 	      paddr,
 	      len);
 	  } else if (laddr == L_ADDR_NULL) {
+	    assert(backref_key == P_ADDR_NULL);
 	    tracker.release(
 	      paddr,
 	      len);
 	  } else {
+	    assert(backref_key == P_ADDR_NULL);
 	    tracker.allocate(
 	      paddr,
 	      len);
@@ -1758,6 +1796,22 @@ bool RBMCleaner::equals(const RBMSpaceTracker &_other) const
     }
   }
   return all_match;
+}
+
+void RBMCleaner::register_metrics()
+{
+  namespace sm = seastar::metrics;
+
+  metrics.add_group("rbm_cleaner", {
+    sm::make_counter("total_bytes",
+		     [this] { return get_total_bytes(); },
+		     sm::description("the size of the space")),
+    sm::make_counter("available_bytes",
+		     [this] { return get_total_bytes() - get_journal_bytes() - stats.used_bytes; },
+		     sm::description("the size of the space is available")),
+    sm::make_counter("used_bytes", stats.used_bytes,
+		     sm::description("the size of the space occupied by live extents")),
+  });
 }
 
 }

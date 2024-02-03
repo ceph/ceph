@@ -253,8 +253,10 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
   BucketTrimWatcher(rgw::sal::RadosStore* store, const rgw_raw_obj& obj,
                     TrimCounters::Server *counters)
     : store(store), obj(obj) {
-    handlers.emplace(NotifyTrimCounters, new TrimCounters::Handler(counters));
-    handlers.emplace(NotifyTrimComplete, new TrimComplete::Handler(counters));
+    handlers.emplace(NotifyTrimCounters,
+        std::make_unique<TrimCounters::Handler>(counters));
+    handlers.emplace(NotifyTrimComplete,
+        std::make_unique<TrimComplete::Handler>(counters));
   }
 
   ~BucketTrimWatcher() {
@@ -268,18 +270,18 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
     }
 
     // register a watch on the realm's control object
-    r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
+    r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
     if (r == -ENOENT) {
       constexpr bool exclusive = true;
-      r = ref.pool.ioctx().create(ref.obj.oid, exclusive);
+      r = ref.ioctx.create(ref.obj.oid, exclusive);
       if (r == -EEXIST || r == 0) {
-        r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
+        r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
       }
     }
     if (r < 0) {
       ldpp_dout(dpp, -1) << "Failed to watch " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
-      ref.pool.ioctx().close();
+      ref.ioctx.close();
       return r;
     }
 
@@ -288,24 +290,24 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
   }
 
   int restart() {
-    int r = ref.pool.ioctx().unwatch2(handle);
+    int r = ref.ioctx.unwatch2(handle);
     if (r < 0) {
       lderr(store->ctx()) << "Failed to unwatch on " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
     }
-    r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
+    r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
     if (r < 0) {
       lderr(store->ctx()) << "Failed to restart watch on " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
-      ref.pool.ioctx().close();
+      ref.ioctx.close();
     }
     return r;
   }
 
   void stop() {
     if (handle) {
-      ref.pool.ioctx().unwatch2(handle);
-      ref.pool.ioctx().close();
+      ref.ioctx.unwatch2(handle);
+      ref.ioctx.close();
     }
   }
 
@@ -330,7 +332,7 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
     } catch (const buffer::error& e) {
       lderr(store->ctx()) << "Failed to decode notification: " << e.what() << dendl;
     }
-    ref.pool.ioctx().notify_ack(ref.obj.oid, notify_id, cookie, reply);
+    ref.ioctx.notify_ack(ref.obj.oid, notify_id, cookie, reply);
   }
 
   /// reestablish the watch if it gets disconnected
@@ -436,7 +438,7 @@ class BucketCleanIndexCollectCR : public RGWShardCollectCR {
   bool spawn_next() override {
     if (shard < num_shards) {
       RGWRados::BucketShard bs(store->getRados());
-      bs.init(dpp, bucket_info, index, shard);
+      bs.init(dpp, bucket_info, index, shard, null_yield);
       spawn(new RGWRadosRemoveOidCR(store, std::move(bs.bucket_obj), nullptr),
 	    false);
       ++shard;
@@ -615,7 +617,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
     get_policy_params.zone = zone_id;
     get_policy_params.bucket = bucket;
-    yield call(new RGWBucketGetSyncPolicyHandlerCR(store->svc()->rados->get_async_processor(),
+    yield call(new RGWBucketGetSyncPolicyHandlerCR(store->svc()->async_processor,
                                                    store,
                                                    get_policy_params,
                                                    source_policy,
@@ -726,14 +728,14 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       }
       while (clean_info && retries < MAX_RETRIES) {
 	yield call(new RGWPutBucketInstanceInfoCR(
-		     store->svc()->rados->get_async_processor(),
+		     store->svc()->async_processor,
 		     store, clean_info->first, false, {},
 		     no_change_attrs(), dpp));
 
 	// Raced, try again.
 	if (retcode == -ECANCELED) {
 	  yield call(new RGWGetBucketInstanceInfoCR(
-		       store->svc()->rados->get_async_processor(),
+		       store->svc()->async_processor,
 		       store, clean_info->first.bucket,
 		       &(clean_info->first), nullptr, dpp));
 	  if (retcode < 0) {
@@ -1096,8 +1098,7 @@ int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
       // read BucketTrimStatus for marker position
       set_status("reading trim status");
       using ReadStatus = RGWSimpleRadosReadCR<BucketTrimStatus>;
-      yield call(new ReadStatus(dpp, store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
-                                &status, true, &objv));
+      yield call(new ReadStatus(dpp, store, obj, &status, true, &objv));
       if (retcode < 0) {
         ldpp_dout(dpp, 10) << "failed to read bilog trim status: "
             << cpp_strerror(retcode) << dendl;
@@ -1131,7 +1132,7 @@ int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
           return buckets.size() < config.buckets_per_interval;
         };
 
-        call(new MetadataListCR(cct, store->svc()->rados->get_async_processor(),
+        call(new MetadataListCR(cct, store->svc()->async_processor,
                                 store->ctl()->meta.mgr,
                                 section, status.marker, cb));
       }
@@ -1155,8 +1156,7 @@ int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
       status.marker = std::move(last_cold_marker);
       ldpp_dout(dpp, 20) << "writing bucket trim marker=" << status.marker << dendl;
       using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
-      yield call(new WriteStatus(dpp, store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
-                                 status, &objv));
+      yield call(new WriteStatus(dpp, store, obj, status, &objv));
       if (retcode < 0) {
         ldpp_dout(dpp, 4) << "failed to write updated trim status: "
             << cpp_strerror(retcode) << dendl;
@@ -1219,7 +1219,7 @@ int BucketTrimPollCR::operate(const DoutPrefixProvider *dpp)
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->svc()->rados->get_async_processor(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc()->async_processor, store,
                                           obj, name, cookie,
                                           config.trim_interval_sec));
       if (retcode < 0) {
@@ -1232,7 +1232,7 @@ int BucketTrimPollCR::operate(const DoutPrefixProvider *dpp)
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
-        yield call(new RGWSimpleRadosUnlockCR(store->svc()->rados->get_async_processor(), store,
+        yield call(new RGWSimpleRadosUnlockCR(store->svc()->async_processor, store,
                                               obj, name, cookie));
       }
     }

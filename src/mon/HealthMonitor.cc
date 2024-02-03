@@ -300,13 +300,19 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
     cmd_getval(cmdmap, "sticky", sticky);
     string ttl_str;
     utime_t ttl;
+    std::chrono::seconds secs;
     if (cmd_getval(cmdmap, "ttl", ttl_str)) {
-      auto secs = parse_timespan(ttl_str);
-      if (secs == 0s) {
-	r = -EINVAL;
-	ss << "not a valid duration: " << ttl_str;
-	goto out;
+      try {
+        secs = parse_timespan(ttl_str);
+        if (secs == 0s) {
+          throw std::invalid_argument("timespan = 0");
+        }
+      } catch (const std::invalid_argument& e) {
+        ss << "invalid duration: " << ttl_str << " (" << e.what() << ")";
+        r = -EINVAL;
+        goto out;
       }
+      
       ttl = ceph_clock_now();
       ttl += std::chrono::duration<double>(secs).count();
     }
@@ -350,7 +356,7 @@ out:
 
   if (r >= 0) {
     // success.. delay reply
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
     return true;
   } else {

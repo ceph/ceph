@@ -34,12 +34,12 @@ ReplicatedRecoveryBackend::recover_object(
   return maybe_pull_missing_obj(soid, need).then_interruptible([this, soid, need] {
     logger().debug("recover_object: loading obc: {}", soid);
     return pg.obc_loader.with_obc<RWState::RWREAD>(soid,
-      [this, soid, need](auto obc) {
+      [this, soid, need](auto head, auto obc) {
       logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
       auto& recovery_waiter = get_recovering(soid);
       recovery_waiter.obc = obc;
       recovery_waiter.obc->wait_recovery_read();
-      return maybe_push_shards(soid, need);
+      return maybe_push_shards(head, soid, need);
     }).handle_error_interruptible(
       crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
       // TODO: may need eio handling?
@@ -51,16 +51,18 @@ ReplicatedRecoveryBackend::recover_object(
 
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::maybe_push_shards(
+  const crimson::osd::ObjectContextRef &head_obc,
   const hobject_t& soid,
   eversion_t need)
 {
   return seastar::do_with(
     get_shards_to_push(soid),
-    [this, need, soid](auto &shards) {
+    [this, need, soid, head_obc](auto &shards) {
     return interruptor::parallel_for_each(
       shards,
-      [this, need, soid](auto shard) {
-      return prep_push(soid, need, shard).then_interruptible([this, soid, shard](auto push) {
+      [this, need, soid, head_obc](auto shard) {
+      return prep_push_to_replica(soid, need, shard
+      ).then_interruptible([this, soid, shard](auto push) {
         auto msg = crimson::make_message<MOSDPGPush>();
         msg->from = pg.get_pg_whoami();
         msg->pgid = pg.get_pgid();
@@ -85,10 +87,10 @@ ReplicatedRecoveryBackend::maybe_push_shards(
       pg.get_recovery_handler()->on_global_recover(soid,
                                                    push_info->second.stat,
                                                    false);
-    } else if (recovery.pi) {
+    } else if (recovery.pull_info) {
       // no push happened (empty get_shards_to_push()) but pull actually did
       pg.get_recovery_handler()->on_global_recover(soid,
-                                                   recovery.pi->stat,
+                                                   recovery.pull_info->stat,
                                                    false);
     } else {
       // no pulls, no pushes
@@ -109,30 +111,37 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   const hobject_t& soid,
   eversion_t need)
 {
+  logger().debug("{}: {}, {}", __func__, soid, need);
   pg_missing_tracker_t local_missing = pg.get_local_missing();
   if (!local_missing.is_missing(soid)) {
+    // object is not missing, don't pull
     return seastar::make_ready_future<>();
   }
-  PullOp po;
-  auto& recovery_waiter = get_recovering(soid);
-  recovery_waiter.pi = std::make_optional<RecoveryBackend::PullInfo>();
-  auto& pi = *recovery_waiter.pi;
-  prepare_pull(po, pi, soid, need);
-  auto msg = crimson::make_message<MOSDPGPull>();
-  msg->from = pg.get_pg_whoami();
-  msg->set_priority(pg.get_recovery_op_priority());
-  msg->pgid = pg.get_pgid();
-  msg->map_epoch = pg.get_osdmap_epoch();
-  msg->min_epoch = pg.get_last_peering_reset();
-  msg->set_pulls({std::move(po)});
-  return interruptor::make_interruptible(
-    shard_services.send_to_osd(
-      pi.from.osd,
+  return pg.obc_loader.with_obc<RWState::RWREAD>(soid.get_head(),
+    [this, soid, need](auto head, auto) {
+    PullOp pull_op;
+    auto& recovery_waiter = get_recovering(soid);
+    recovery_waiter.pull_info =
+      std::make_optional<RecoveryBackend::pull_info_t>();
+    auto& pull_info = *recovery_waiter.pull_info;
+    prepare_pull(head, pull_op, pull_info, soid, need);
+    auto msg = crimson::make_message<MOSDPGPull>();
+    msg->from = pg.get_pg_whoami();
+    msg->set_priority(pg.get_recovery_op_priority());
+    msg->pgid = pg.get_pgid();
+    msg->map_epoch = pg.get_osdmap_epoch();
+    msg->min_epoch = pg.get_last_peering_reset();
+    msg->set_pulls({std::move(pull_op)});
+    return shard_services.send_to_osd(
+      pull_info.from.osd,
       std::move(msg),
-      pg.get_osdmap_epoch()
-  )).then_interruptible([&recovery_waiter] {
+      pg.get_osdmap_epoch());
+  }).si_then([this, soid] {
+    auto& recovery_waiter = get_recovering(soid);
     return recovery_waiter.wait_for_pull();
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::assert_all("unexpected error")
+  );
 }
 
 RecoveryBackend::interruptible_future<>
@@ -200,15 +209,19 @@ ReplicatedRecoveryBackend::on_local_recover_persist(
   epoch_t epoch_frozen)
 {
   logger().debug("{}", __func__);
-  ceph::os::Transaction t;
-  pg.get_recovery_handler()->on_local_recover(soid, _recovery_info, is_delete, t);
-  logger().debug("ReplicatedRecoveryBackend::on_local_recover_persist: do_transaction...");
-  return interruptor::make_interruptible(
-      shard_services.get_store().do_transaction(coll, std::move(t)))
-  .then_interruptible(
-    [this, epoch_frozen, last_complete = pg.get_info().last_complete] {
-    pg.get_recovery_handler()->_committed_pushed_object(epoch_frozen, last_complete);
-    return seastar::make_ready_future<>();
+  return seastar::do_with(
+    ceph::os::Transaction(),
+    [this, soid, &_recovery_info, is_delete, epoch_frozen](auto &t) {
+    return pg.get_recovery_handler()->on_local_recover(
+      soid, _recovery_info, is_delete, t
+    ).then_interruptible([this, &t] {
+      logger().debug("ReplicatedRecoveryBackend::{}: do_transaction...", __func__);
+      return shard_services.get_store().do_transaction(coll, std::move(t));
+    }).then_interruptible(
+      [this, epoch_frozen, last_complete = pg.get_info().last_complete] {
+      pg.get_recovery_handler()->_committed_pushed_object(epoch_frozen, last_complete);
+      return seastar::make_ready_future<>();
+    });
   });
 }
 
@@ -234,18 +247,24 @@ ReplicatedRecoveryBackend::local_recover_delete(
     }
     return seastar::make_ready_future<>();
   }).safe_then_interruptible([this, soid, epoch_to_freeze, need] {
-    ObjectRecoveryInfo recovery_info;
-    recovery_info.soid = soid;
-    recovery_info.version = need;
-    return on_local_recover_persist(soid, recovery_info,
-	                            true, epoch_to_freeze);
-  }, PGBackend::load_metadata_ertr::all_same_way(
-      [this, soid, epoch_to_freeze, need] (auto e) {
-      ObjectRecoveryInfo recovery_info;
+    return seastar::do_with(
+      ObjectRecoveryInfo(),
+      [soid, need, this, epoch_to_freeze](auto &recovery_info) {
       recovery_info.soid = soid;
       recovery_info.version = need;
       return on_local_recover_persist(soid, recovery_info,
-				      true, epoch_to_freeze);
+                                      true, epoch_to_freeze);
+    });
+  }, PGBackend::load_metadata_ertr::all_same_way(
+      [this, soid, epoch_to_freeze, need] (auto e) {
+      return seastar::do_with(
+        ObjectRecoveryInfo(),
+        [soid, need, this, epoch_to_freeze](auto &recovery_info) {
+        recovery_info.soid = soid;
+        recovery_info.version = need;
+        return on_local_recover_persist(soid, recovery_info,
+                                        true, epoch_to_freeze);
+      });
     })
   );
 }
@@ -291,7 +310,7 @@ ReplicatedRecoveryBackend::recover_delete(
 }
 
 RecoveryBackend::interruptible_future<PushOp>
-ReplicatedRecoveryBackend::prep_push(
+ReplicatedRecoveryBackend::prep_push_to_replica(
   const hobject_t& soid,
   eversion_t need,
   pg_shard_t pg_shard)
@@ -300,44 +319,110 @@ ReplicatedRecoveryBackend::prep_push(
 
   auto& recovery_waiter = get_recovering(soid);
   auto& obc = recovery_waiter.obc;
-  interval_set<uint64_t> data_subset;
-  if (obc->obs.oi.size) {
-    data_subset.insert(0, obc->obs.oi.size);
-  }
-  const auto& missing = pg.get_shard_missing().find(pg_shard)->second;
-  const auto it = missing.get_items().find(soid);
-  assert(it != missing.get_items().end());
-  data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
-  logger().debug("prep_push: {} data_subset {} to {}",
-                 soid, data_subset, pg_shard);
+  SnapSet push_info_ss; // only populated if soid is_snap()
+  crimson::osd::subsets_t subsets;
+  const auto& missing =
+    pg.get_shard_missing().find(pg_shard)->second;
 
-  auto& pi = recovery_waiter.pushing[pg_shard];
+  // are we doing a clone on the replica?
+  if (soid.snap && soid.snap < CEPH_NOSNAP) {
+    hobject_t head = soid;
+    head.snap = CEPH_NOSNAP;
+
+    // try to base push off of clones that succeed/preceed poid
+    // we need the head (and current SnapSet) locally to do that.
+    if (pg.get_local_missing().is_missing(head)) {
+      logger().debug("{} missing head {}, pushing raw clone",
+                     __func__, head);
+      if (obc->obs.oi.size) {
+        subsets.data_subset.insert(0, obc->obs.oi.size);
+      }
+      return prep_push(soid,
+                       need,
+                       pg_shard,
+                       subsets,
+                       push_info_ss);
+    }
+    auto ssc = obc->ssc;
+    ceph_assert(ssc);
+    push_info_ss = ssc->snapset;
+    logger().debug("push_to_replica snapset is {}",
+                   ssc->snapset);
+
+    subsets = crimson::osd::calc_clone_subsets(
+      ssc->snapset, soid,
+      missing,
+      // get_peer_info() asserts `peer_info` existence.
+      pg.get_peering_state().get_peer_info(
+        pg_shard).last_backfill);
+  } else if (soid.snap == CEPH_NOSNAP) {
+    // pushing head or unversioned object.
+    // base this on partially on replica's clones?
+    auto ssc = obc->ssc;
+    ceph_assert(ssc);
+    logger().debug("push_to_replica snapset is {}",
+                   ssc->snapset);
+    subsets = crimson::osd::calc_head_subsets(
+      obc->obs.oi.size,
+      ssc->snapset, soid,
+      missing,
+      pg.get_peering_state().get_peer_info(
+        pg_shard).last_backfill);
+  }
+  return prep_push(soid,
+                   need,
+                   pg_shard,
+                   subsets,
+                   push_info_ss);
+}
+
+RecoveryBackend::interruptible_future<PushOp>
+ReplicatedRecoveryBackend::prep_push(
+  const hobject_t& soid,
+  eversion_t need,
+  pg_shard_t pg_shard,
+  const crimson::osd::subsets_t& subsets,
+  const SnapSet push_info_ss)
+{
+  logger().debug("{}: {}, {}", __func__, soid, need);
+  auto& recovery_waiter = get_recovering(soid);
+  auto& obc = recovery_waiter.obc;
+
+  auto& push_info = recovery_waiter.pushing[pg_shard];
   pg.begin_peer_recover(pg_shard, soid);
   const auto pmissing_iter = pg.get_shard_missing().find(pg_shard);
   const auto missing_iter = pmissing_iter->second.get_items().find(soid);
   assert(missing_iter != pmissing_iter->second.get_items().end());
 
-  pi.obc = obc;
-  pi.recovery_info.size = obc->obs.oi.size;
-  pi.recovery_info.copy_subset = data_subset;
-  pi.recovery_info.soid = soid;
-  pi.recovery_info.oi = obc->obs.oi;
-  pi.recovery_info.version = obc->obs.oi.version;
-  pi.recovery_info.object_exist =
+  push_info.obc = obc;
+  push_info.recovery_info.size = obc->obs.oi.size;
+  push_info.recovery_info.copy_subset = subsets.data_subset;
+  push_info.recovery_info.clone_subset = subsets.clone_subsets;
+  push_info.recovery_info.ss = push_info_ss;
+  push_info.recovery_info.soid = soid;
+  push_info.recovery_info.oi = obc->obs.oi;
+  push_info.recovery_info.version = obc->obs.oi.version;
+  push_info.recovery_info.object_exist =
     missing_iter->second.clean_regions.object_is_exist();
-  pi.recovery_progress.omap_complete =
+  push_info.recovery_progress.omap_complete =
     !missing_iter->second.clean_regions.omap_is_dirty();
 
-  return build_push_op(pi.recovery_info, pi.recovery_progress, &pi.stat).then_interruptible(
-    [this, soid, pg_shard](auto pop) {
+  return build_push_op(push_info.recovery_info,
+                       push_info.recovery_progress,
+                       &push_info.stat).then_interruptible(
+    [this, soid, pg_shard](auto push_op) {
     auto& recovery_waiter = get_recovering(soid);
-    auto& pi = recovery_waiter.pushing[pg_shard];
-    pi.recovery_progress = pop.after_progress;
-    return pop;
+    auto& push_info = recovery_waiter.pushing[pg_shard];
+    push_info.recovery_progress = push_op.after_progress;
+    return push_op;
   });
+
 }
 
-void ReplicatedRecoveryBackend::prepare_pull(PullOp& po, PullInfo& pi,
+void ReplicatedRecoveryBackend::prepare_pull(
+  const crimson::osd::ObjectContextRef &head_obc,
+  PullOp& pull_op,
+  pull_info_t& pull_info,
   const hobject_t& soid,
   eversion_t need) {
   logger().debug("{}: {}, {}", __func__, soid, need);
@@ -346,26 +431,55 @@ void ReplicatedRecoveryBackend::prepare_pull(PullOp& po, PullInfo& pi,
   const auto missing_iter = local_missing.get_items().find(soid);
   auto m = pg.get_missing_loc_shards();
   pg_shard_t fromshard = *(m[soid].begin());
+  const auto& last_backfill =
+    pg.get_peering_state().get_peer_info(fromshard).last_backfill;
 
-  //TODO: skipped snap objects case for now
-  po.recovery_info.copy_subset.insert(0, (uint64_t) -1);
-  po.recovery_info.copy_subset.intersection_of(
-    missing_iter->second.clean_regions.get_dirty_regions());
-  po.recovery_info.size = ((uint64_t) -1);
-  po.recovery_info.object_exist =
-    missing_iter->second.clean_regions.object_is_exist();
-  po.recovery_info.soid = soid;
-  po.soid = soid;
-  po.recovery_progress.data_complete = false;
-  po.recovery_progress.omap_complete =
+  pull_op.recovery_info =
+    set_recovery_info(soid, head_obc->ssc, last_backfill);
+  pull_op.soid = soid;
+  pull_op.recovery_progress.data_complete = false;
+  pull_op.recovery_progress.omap_complete =
     !missing_iter->second.clean_regions.omap_is_dirty();
-  po.recovery_progress.data_recovered_to = 0;
-  po.recovery_progress.first = true;
+  pull_op.recovery_progress.data_recovered_to = 0;
+  pull_op.recovery_progress.first = true;
 
-  pi.from = fromshard;
-  pi.soid = soid;
-  pi.recovery_info = po.recovery_info;
-  pi.recovery_progress = po.recovery_progress;
+  pull_info.from = fromshard;
+  pull_info.soid = soid;
+  pull_info.head_ctx = head_obc;
+  pull_info.recovery_info = pull_op.recovery_info;
+  pull_info.recovery_progress = pull_op.recovery_progress;
+}
+
+ObjectRecoveryInfo ReplicatedRecoveryBackend::set_recovery_info(
+  const hobject_t& soid,
+  const crimson::osd::SnapSetContextRef ssc,
+  const hobject_t& last_backfill)
+{
+  pg_missing_tracker_t local_missing = pg.get_local_missing();
+  const auto missing_iter = local_missing.get_items().find(soid);
+  ObjectRecoveryInfo recovery_info;
+  if (soid.is_snap()) {
+    assert(!local_missing.is_missing(soid.get_head()));
+    assert(ssc);
+    recovery_info.ss = ssc->snapset;
+    auto subsets = crimson::osd::calc_clone_subsets(
+      ssc->snapset, soid, local_missing, last_backfill);
+    crimson::osd::set_subsets(subsets, recovery_info);
+    logger().debug("{}: pulling {}", __func__, recovery_info);
+    ceph_assert(ssc->snapset.clone_size.count(soid.snap));
+    recovery_info.size = ssc->snapset.clone_size[soid.snap];
+  } else {
+    // pulling head or unversioned object.
+    // always pull the whole thing.
+    recovery_info.copy_subset.insert(0, (uint64_t) -1);
+    recovery_info.copy_subset.intersection_of(
+      missing_iter->second.clean_regions.get_dirty_regions());
+    recovery_info.size = ((uint64_t) -1);
+  }
+  recovery_info.object_exist =
+    missing_iter->second.clean_regions.object_is_exist();
+  recovery_info.soid = soid;
+  return recovery_info;
 }
 
 RecoveryBackend::interruptible_future<PushOp>
@@ -382,10 +496,11 @@ ReplicatedRecoveryBackend::build_push_op(
 			  recovery_info.version,
 			  PushOp(),
     [this, &recovery_info, &progress, stat]
-    (auto& new_progress, auto& available, auto& v, auto& pop) {
+    (auto& new_progress, auto& available, auto& v, auto& push_op) {
     return read_metadata_for_push_op(recovery_info.soid,
                                      progress, new_progress,
-                                     v, &pop).then_interruptible([&](eversion_t local_ver) mutable {
+                                     v, &push_op
+    ).then_interruptible([&](eversion_t local_ver) mutable {
       // If requestor didn't know the version, use ours
       if (v == eversion_t()) {
         v = local_ver;
@@ -397,15 +512,17 @@ ReplicatedRecoveryBackend::build_push_op(
       return read_omap_for_push_op(recovery_info.soid,
                                    progress,
                                    new_progress,
-                                   available, &pop);
-    }).then_interruptible([this, &recovery_info, &progress, &available, &pop]() mutable {
+                                   available, &push_op);
+    }).then_interruptible([this, &recovery_info, &progress,
+                           &available, &push_op]() mutable {
       logger().debug("build_push_op: available: {}, copy_subset: {}",
 		     available, recovery_info.copy_subset);
       return read_object_for_push_op(recovery_info.soid,
 				     recovery_info.copy_subset,
 				     progress.data_recovered_to,
-				     available, &pop);
-    }).then_interruptible([&recovery_info, &v, &progress, &new_progress, stat, &pop]
+				     available, &push_op);
+    }).then_interruptible([&recovery_info, &v, &progress,
+                           &new_progress, stat, &push_op]
             (uint64_t recovered_to) mutable {
       new_progress.data_recovered_to = recovered_to;
       if (new_progress.is_complete(recovery_info)) {
@@ -418,17 +535,18 @@ ReplicatedRecoveryBackend::build_push_op(
 	new_progress.omap_complete = false;
       }
       if (stat) {
-	stat->num_keys_recovered += pop.omap_entries.size();
-	stat->num_bytes_recovered += pop.data.length();
+	stat->num_keys_recovered += push_op.omap_entries.size();
+	stat->num_bytes_recovered += push_op.data.length();
       }
-      pop.version = v;
-      pop.soid = recovery_info.soid;
-      pop.recovery_info = recovery_info;
-      pop.after_progress = new_progress;
-      pop.before_progress = progress;
-      logger().debug("build_push_op: pop version: {}, pop data length: {}",
-		     pop.version, pop.data.length());
-      return seastar::make_ready_future<PushOp>(std::move(pop));
+      push_op.version = v;
+      push_op.soid = recovery_info.soid;
+      push_op.recovery_info = recovery_info;
+      push_op.after_progress = new_progress;
+      push_op.before_progress = progress;
+      logger().debug("build_push_op: push_op version:"
+                     " {}, push_op data length: {}",
+		     push_op.version, push_op.data.length());
+      return seastar::make_ready_future<PushOp>(std::move(push_op));
     });
   });
 }
@@ -447,17 +565,17 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
   }
   return interruptor::make_interruptible(interruptor::when_all_succeed(
       backend->omap_get_header(coll, ghobject_t(oid)).handle_error_interruptible<false>(
-	crimson::os::FuturizedStore::read_errorator::all_same_way(
+	crimson::os::FuturizedStore::Shard::read_errorator::all_same_way(
 	  [oid] (const std::error_code& e) {
 	  logger().debug("read_metadata_for_push_op, error {} when getting omap header: {}", e, oid);
 	  return seastar::make_ready_future<bufferlist>();
 	})),
       interruptor::make_interruptible(store->get_attrs(coll, ghobject_t(oid)))
       .handle_error_interruptible<false>(
-	crimson::os::FuturizedStore::get_attrs_ertr::all_same_way(
+	crimson::os::FuturizedStore::Shard::get_attrs_ertr::all_same_way(
 	  [oid] (const std::error_code& e) {
 	  logger().debug("read_metadata_for_push_op, error {} when getting attrs: {}", e, oid);
-	  return seastar::make_ready_future<crimson::os::FuturizedStore::attrs_t>();
+	  return seastar::make_ready_future<crimson::os::FuturizedStore::Shard::attrs_t>();
 	}))
   )).then_unpack_interruptible([&new_progress, push_op](auto bl, auto attrs) {
     if (bl.length() == 0) {
@@ -585,7 +703,7 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
       return seastar::make_ready_future<seastar::stop_iteration>(
         stop ? seastar::stop_iteration::yes : seastar::stop_iteration::no
       );
-    }, crimson::os::FuturizedStore::read_errorator::assert_all{});
+    }, crimson::os::FuturizedStore::Shard::read_errorator::assert_all{});
   });
 }
 
@@ -637,14 +755,14 @@ ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
           assert(recovery_info.clone_subset.empty());
         }
         return build_push_op(recovery_info, progress, 0);
-      }).then_interruptible([this, from](auto pop) {
+      }).then_interruptible([this, from](auto push_op) {
         auto msg = crimson::make_message<MOSDPGPush>();
         msg->from = pg.get_pg_whoami();
         msg->pgid = pg.get_pgid();
         msg->map_epoch = pg.get_osdmap_epoch();
         msg->min_epoch = pg.get_last_peering_reset();
         msg->set_priority(pg.get_recovery_op_priority());
-        msg->pushes.push_back(std::move(pop));
+        msg->pushes.push_back(std::move(push_op));
         return shard_services.send_to_osd(from.osd, std::move(msg),
                                           pg.get_osdmap_epoch());
       });
@@ -655,80 +773,121 @@ ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
 RecoveryBackend::interruptible_future<bool>
 ReplicatedRecoveryBackend::_handle_pull_response(
   pg_shard_t from,
-  PushOp& pop,
+  PushOp& push_op,
   PullOp* response,
   ceph::os::Transaction* t)
 {
   logger().debug("handle_pull_response {} {} data.size() is {} data_included: {}",
-      pop.recovery_info, pop.after_progress, pop.data.length(), pop.data_included);
+      push_op.recovery_info, push_op.after_progress,
+      push_op.data.length(), push_op.data_included);
 
-  const hobject_t &hoid = pop.soid;
+  const hobject_t &hoid = push_op.soid;
   auto& recovery_waiter = get_recovering(hoid);
-  auto& pi = *recovery_waiter.pi;
-  if (pi.recovery_info.size == (uint64_t(-1))) {
-    pi.recovery_info.size = pop.recovery_info.size;
-    pi.recovery_info.copy_subset.intersection_of(
-	pop.recovery_info.copy_subset);
+  auto& pull_info = *recovery_waiter.pull_info;
+  if (pull_info.recovery_info.size == (uint64_t(-1))) {
+    pull_info.recovery_info.size = push_op.recovery_info.size;
+    pull_info.recovery_info.copy_subset.intersection_of(
+	push_op.recovery_info.copy_subset);
   }
 
   // If primary doesn't have object info and didn't know version
-  if (pi.recovery_info.version == eversion_t())
-    pi.recovery_info.version = pop.version;
+  if (pull_info.recovery_info.version == eversion_t())
+    pull_info.recovery_info.version = push_op.version;
 
   auto prepare_waiter = interruptor::make_interruptible(
       seastar::make_ready_future<>());
-  if (pi.recovery_progress.first) {
+  if (pull_info.recovery_progress.first) {
     prepare_waiter = pg.obc_loader.with_obc<RWState::RWNONE>(
-      pi.recovery_info.soid, [&pi, &recovery_waiter, &pop](auto obc) {
-        pi.obc = obc;
+      pull_info.recovery_info.soid,
+      [this, &pull_info, &recovery_waiter, &push_op](auto, auto obc) {
+        pull_info.obc = obc;
         recovery_waiter.obc = obc;
-        obc->obs.oi.decode_no_oid(pop.attrset.at(OI_ATTR), pop.soid);
-        pi.recovery_info.oi = obc->obs.oi;
+        obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR),
+                                  push_op.soid);
+        auto ss_attr_iter = push_op.attrset.find(SS_ATTR);
+        if (ss_attr_iter != push_op.attrset.end()) {
+          if (!obc->ssc) {
+            obc->ssc = new crimson::osd::SnapSetContext(
+              push_op.soid.get_snapdir());
+          }
+          try {
+            obc->ssc->snapset = SnapSet(ss_attr_iter->second);
+            obc->ssc->exists = true;
+          } catch (const buffer::error&) {
+            logger().warn("unable to decode SnapSet");
+            throw crimson::osd::invalid_argument();
+          }
+          assert(!pull_info.obc->ssc->exists ||
+                 obc->ssc->snapset.seq == pull_info.obc->ssc->snapset.seq);
+        }
+        pull_info.recovery_info.oi = obc->obs.oi;
+        if (pull_info.recovery_info.soid.snap &&
+            pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
+            recalc_subsets(pull_info.recovery_info,
+                           pull_info.obc->ssc);
+        }
         return crimson::osd::PG::load_obc_ertr::now();
       }).handle_error_interruptible(crimson::ct_error::assert_all{});
   };
-  return prepare_waiter.then_interruptible([this, &pi, &pop, t, response]() mutable {
-    const bool first = pi.recovery_progress.first;
-    pi.recovery_progress = pop.after_progress;
+  return prepare_waiter.then_interruptible(
+    [this, &pull_info, &push_op, t, response]() mutable {
+    const bool first = pull_info.recovery_progress.first;
+    pull_info.recovery_progress = push_op.after_progress;
     logger().debug("new recovery_info {}, new progress {}",
-		   pi.recovery_info, pi.recovery_progress);
+		   pull_info.recovery_info, pull_info.recovery_progress);
     interval_set<uint64_t> data_zeros;
     {
-      uint64_t offset = pop.before_progress.data_recovered_to;
-      uint64_t length = (pop.after_progress.data_recovered_to -
-			 pop.before_progress.data_recovered_to);
+      uint64_t offset = push_op.before_progress.data_recovered_to;
+      uint64_t length = (push_op.after_progress.data_recovered_to -
+			 push_op.before_progress.data_recovered_to);
       if (length) {
         data_zeros.insert(offset, length);
       }
     }
     auto [usable_intervals, data] =
-      trim_pushed_data(pi.recovery_info.copy_subset,
-                       pop.data_included, pop.data);
-    bool complete = pi.is_complete();
-    bool clear_omap = !pop.before_progress.omap_complete;
-    return submit_push_data(pi.recovery_info, first, complete, clear_omap,
+      trim_pushed_data(pull_info.recovery_info.copy_subset,
+                       push_op.data_included, push_op.data);
+    bool complete = pull_info.is_complete();
+    bool clear_omap = !push_op.before_progress.omap_complete;
+    return submit_push_data(pull_info.recovery_info,
+                            first, complete, clear_omap,
                             std::move(data_zeros), std::move(usable_intervals),
-                            std::move(data), std::move(pop.omap_header),
-                            pop.attrset, std::move(pop.omap_entries), t)
+                            std::move(data), std::move(push_op.omap_header),
+                            push_op.attrset, std::move(push_op.omap_entries), t)
     .then_interruptible(
-      [this, response, &pi, &pop, complete, t, bytes_recovered=data.length()] {
-      pi.stat.num_keys_recovered += pop.omap_entries.size();
-      pi.stat.num_bytes_recovered += bytes_recovered;
+      [this, response, &pull_info, &push_op, complete,
+        t, bytes_recovered=data.length()]()
+      -> RecoveryBackend::interruptible_future<bool> {
+      pull_info.stat.num_keys_recovered += push_op.omap_entries.size();
+      pull_info.stat.num_bytes_recovered += bytes_recovered;
 
       if (complete) {
-	pi.stat.num_objects_recovered++;
-	pg.get_recovery_handler()->on_local_recover(
-	    pop.soid, get_recovering(pop.soid).pi->recovery_info,
-	    false, *t);
-	return true;
+	pull_info.stat.num_objects_recovered++;
+	return pg.get_recovery_handler()->on_local_recover(
+	    push_op.soid, get_recovering(push_op.soid).pull_info->recovery_info,
+	    false, *t
+        ).then_interruptible([] {
+          return true;
+        });
       } else {
-        response->soid = pop.soid;
-        response->recovery_info = pi.recovery_info;
-        response->recovery_progress = pi.recovery_progress;
-        return false;
+        response->soid = push_op.soid;
+        response->recovery_info = pull_info.recovery_info;
+        response->recovery_progress = pull_info.recovery_progress;
+        return seastar::make_ready_future<bool>(false);
       }
     });
   });
+}
+
+void ReplicatedRecoveryBackend::recalc_subsets(
+    ObjectRecoveryInfo& recovery_info,
+    crimson::osd::SnapSetContextRef ssc)
+{
+  assert(ssc);
+  auto subsets = crimson::osd::calc_clone_subsets(
+    ssc->snapset, recovery_info.soid, pg.get_local_missing(),
+    pg.get_info().last_backfill);
+  crimson::osd::set_subsets(subsets, recovery_info);
 }
 
 RecoveryBackend::interruptible_future<>
@@ -739,15 +898,15 @@ ReplicatedRecoveryBackend::handle_pull_response(
     logger().debug("{}: discarding {}", __func__, *m);
     return seastar::now();
   }
-  const PushOp& pop = m->pushes[0]; //TODO: only one push per message for now.
-  if (pop.version == eversion_t()) {
+  const PushOp& push_op = m->pushes[0]; //TODO: only one push per message for now.
+  if (push_op.version == eversion_t()) {
     // replica doesn't have it!
-    pg.get_recovery_handler()->on_failed_recover({ m->from }, pop.soid,
-	get_recovering(pop.soid).pi->recovery_info.version);
+    pg.get_recovery_handler()->on_failed_recover({ m->from }, push_op.soid,
+	get_recovering(push_op.soid).pull_info->recovery_info.version);
     return seastar::make_exception_future<>(
 	std::runtime_error(fmt::format(
 	    "Error on pushing side {} when pulling obj {}",
-	    m->from, pop.soid)));
+	    m->from, push_op.soid)));
   }
 
   logger().debug("{}: {}", __func__, *m);
@@ -755,8 +914,9 @@ ReplicatedRecoveryBackend::handle_pull_response(
     return seastar::do_with(ceph::os::Transaction(), m.get(),
       [this, &response](auto& t, auto& m) {
       pg_shard_t from = m->from;
-      PushOp& pop = m->pushes[0]; // only one push per message for now
-      return _handle_pull_response(from, pop, &response, &t).then_interruptible(
+      PushOp& push_op = m->pushes[0]; // only one push per message for now
+      return _handle_pull_response(from, push_op, &response, &t
+      ).then_interruptible(
 	[this, &t](bool complete) {
 	epoch_t epoch_frozen = pg.get_osdmap_epoch();
 	logger().debug("ReplicatedRecoveryBackend::handle_pull_response: do_transaction...");
@@ -769,8 +929,8 @@ ReplicatedRecoveryBackend::handle_pull_response(
       });
     }).then_interruptible([this, m, &response](bool complete) {
       if (complete) {
-	auto& pop = m->pushes[0];
-	get_recovering(pop.soid).set_pulled();
+	auto& push_op = m->pushes[0];
+	get_recovering(push_op.soid).set_pulled();
 	return seastar::make_ready_future<>();
       } else {
 	auto reply = crimson::make_message<MOSDPGPull>();
@@ -789,38 +949,42 @@ ReplicatedRecoveryBackend::handle_pull_response(
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::_handle_push(
   pg_shard_t from,
-  PushOp &pop,
+  PushOp &push_op,
   PushReplyOp *response,
   ceph::os::Transaction *t)
 {
   logger().debug("{}", __func__);
 
-  bool first = pop.before_progress.first;
+  bool first = push_op.before_progress.first;
   interval_set<uint64_t> data_zeros;
   {
-    uint64_t offset = pop.before_progress.data_recovered_to;
-    uint64_t length = (pop.after_progress.data_recovered_to -
-                       pop.before_progress.data_recovered_to);
+    uint64_t offset = push_op.before_progress.data_recovered_to;
+    uint64_t length = (push_op.after_progress.data_recovered_to -
+                       push_op.before_progress.data_recovered_to);
     if (length) {
       data_zeros.insert(offset, length);
     }
   }
-  bool complete = (pop.after_progress.data_complete &&
-		   pop.after_progress.omap_complete);
-  bool clear_omap = !pop.before_progress.omap_complete;
-  response->soid = pop.recovery_info.soid;
+  bool complete = (push_op.after_progress.data_complete &&
+		   push_op.after_progress.omap_complete);
+  bool clear_omap = !push_op.before_progress.omap_complete;
+  response->soid = push_op.recovery_info.soid;
 
-  return submit_push_data(pop.recovery_info, first, complete, clear_omap,
-                          std::move(data_zeros), std::move(pop.data_included),
-                          std::move(pop.data), std::move(pop.omap_header),
-                          pop.attrset, std::move(pop.omap_entries), t)
+  return submit_push_data(push_op.recovery_info, first, complete, clear_omap,
+                          std::move(data_zeros),
+                          std::move(push_op.data_included),
+                          std::move(push_op.data),
+                          std::move(push_op.omap_header),
+                          push_op.attrset, 
+                          std::move(push_op.omap_entries), t)
   .then_interruptible(
-    [this, complete, &pop, t] {
+    [this, complete, &push_op, t] {
     if (complete) {
-      pg.get_recovery_handler()->on_local_recover(
-        pop.recovery_info.soid, pop.recovery_info,
+      return pg.get_recovery_handler()->on_local_recover(
+        push_op.recovery_info.soid, push_op.recovery_info,
         false, *t);
     }
+    return RecoveryBackend::interruptor::now();
   });
 }
 
@@ -838,10 +1002,10 @@ ReplicatedRecoveryBackend::handle_push(
 
   logger().debug("{}: {}", __func__, *m);
   return seastar::do_with(PushReplyOp(), [this, m](auto& response) {
-    PushOp& pop = m->pushes[0]; // TODO: only one push per message for now
+    PushOp& push_op = m->pushes[0]; // TODO: only one push per message for now
     return seastar::do_with(ceph::os::Transaction(),
-      [this, m, &pop, &response](auto& t) {
-      return _handle_push(m->from, pop, &response, &t).then_interruptible(
+      [this, m, &push_op, &response](auto& t) {
+      return _handle_push(m->from, push_op, &response, &t).then_interruptible(
 	[this, &t] {
 	epoch_t epoch_frozen = pg.get_osdmap_epoch();
 	logger().debug("ReplicatedRecoveryBackend::handle_push: do_transaction...");
@@ -880,21 +1044,26 @@ ReplicatedRecoveryBackend::_handle_push_reply(
     logger().debug("huh, i wasn't pushing {} to osd.{}", soid, peer);
     return seastar::make_ready_future<std::optional<PushOp>>();
   } else {
-    auto& pi = recovering_iter->second->pushing[peer];
-    bool error = pi.recovery_progress.error;
-    if (!pi.recovery_progress.data_complete && !error) {
-      return build_push_op(pi.recovery_info, pi.recovery_progress,
-			   &pi.stat).then_interruptible([&pi] (auto pop) {
-        pi.recovery_progress = pop.after_progress;
-	return seastar::make_ready_future<std::optional<PushOp>>(std::move(pop));
-      }).handle_exception_interruptible([recovering_iter, &pi, peer] (auto e) {
-        pi.recovery_progress.error = true;
+    auto& push_info = recovering_iter->second->pushing[peer];
+    bool error = push_info.recovery_progress.error;
+    if (!push_info.recovery_progress.data_complete && !error) {
+      return build_push_op(push_info.recovery_info, push_info.recovery_progress,
+			   &push_info.stat
+      ).then_interruptible([&push_info] (auto push_op) {
+        push_info.recovery_progress = push_op.after_progress;
+	return seastar::make_ready_future<std::optional<PushOp>>(
+          std::move(push_op));
+      }).handle_exception_interruptible(
+        [recovering_iter, &push_info, peer] (auto e) {
+        push_info.recovery_progress.error = true;
         recovering_iter->second->set_push_failed(peer, e);
         return seastar::make_ready_future<std::optional<PushOp>>();
       });
     }
     if (!error) {
-      pg.get_recovery_handler()->on_peer_recover(peer, soid, pi.recovery_info);
+      pg.get_recovery_handler()->on_peer_recover(peer,
+                                                 soid,
+                                                 push_info.recovery_info);
     }
     recovering_iter->second->set_pushed(peer);
     return seastar::make_ready_future<std::optional<PushOp>>();
@@ -1134,7 +1303,9 @@ ReplicatedRecoveryBackend::handle_recovery_delete_reply(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::handle_recovery_op(Ref<MOSDFastDispatchOp> m)
+ReplicatedRecoveryBackend::handle_recovery_op(
+  Ref<MOSDFastDispatchOp> m,
+  crimson::net::ConnectionXcoreRef conn)
 {
   switch (m->get_header().type) {
   case MSG_OSD_PG_PULL:
@@ -1152,7 +1323,7 @@ ReplicatedRecoveryBackend::handle_recovery_op(Ref<MOSDFastDispatchOp> m)
 	boost::static_pointer_cast<MOSDPGRecoveryDeleteReply>(m));
   default:
     // delegate to parent class for handling backend-agnostic recovery ops.
-    return RecoveryBackend::handle_recovery_op(std::move(m));
+    return RecoveryBackend::handle_recovery_op(std::move(m), conn);
   }
 }
 

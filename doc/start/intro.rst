@@ -2,14 +2,24 @@
  Intro to Ceph
 ===============
 
-Whether you want to provide :term:`Ceph Object Storage` and/or
-:term:`Ceph Block Device` services to :term:`Cloud Platforms`, deploy
-a :term:`Ceph File System` or use Ceph for another purpose, all
-:term:`Ceph Storage Cluster` deployments begin with setting up each
-:term:`Ceph Node`, your network, and the Ceph Storage Cluster. A Ceph
-Storage Cluster requires at least one Ceph Monitor, Ceph Manager, and
-Ceph OSD (Object Storage Daemon). The Ceph Metadata Server is also
-required when running Ceph File System clients.
+Ceph can be used to provide :term:`Ceph Object Storage` to :term:`Cloud
+Platforms` and Ceph can be used to provide :term:`Ceph Block Device` services
+to :term:`Cloud Platforms`. Ceph can be used to deploy a :term:`Ceph File
+System`.  All :term:`Ceph Storage Cluster` deployments begin with setting up
+each :term:`Ceph Node` and then setting up the network. 
+
+A Ceph Storage Cluster requires the following: at least one Ceph Monitor and at
+least one Ceph Manager, and at least as many :term:`Ceph Object Storage
+Daemon<Ceph OSD>`\s (OSDs) as there are copies of a given object stored in the
+Ceph cluster (for example, if three copies of a given object are stored in the
+Ceph cluster, then at least three OSDs must exist in that Ceph cluster).
+
+The Ceph Metadata Server is necessary to run Ceph File System clients.
+
+.. note::
+
+   It is a best practice to have a Ceph Manager for each Monitor, but it is not
+   necessary. 
 
 .. ditaa::
 

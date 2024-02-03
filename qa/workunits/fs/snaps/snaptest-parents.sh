@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -e
+set -ex
 
 echo "making directory tree and files"
 mkdir -p 1/a/b/c/

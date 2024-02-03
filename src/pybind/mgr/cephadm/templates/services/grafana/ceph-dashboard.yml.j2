@@ -1,12 +1,11 @@
 # {{ cephadm_managed }}
+apiVersion: 1
+
 deleteDatasources:
 {% for host in hosts %}
   - name: 'Dashboard{{ loop.index }}'
     orgId: 1
 {% endfor %}
-
-  - name: 'Loki'
-    orgId: 2
 
 datasources:
 {% for host in hosts %}
@@ -15,16 +14,26 @@ datasources:
     access: 'proxy'
     orgId: 1
     url: '{{ host }}'
-    basicAuth: false
+    basicAuth: {{ 'true' if security_enabled else 'false' }}
     isDefault: {{ 'true' if loop.first else 'false' }}
     editable: false
+{% if security_enabled %}
+    basicAuthUser: {{ prometheus_user }}
+    jsonData:
+       graphiteVersion: "1.1"
+       tlsAuth: false
+       tlsAuthWithCACert: true
+       tlsSkipVerify: false
+    secureJsonData:
+      basicAuthPassword: {{ prometheus_password }}
+      tlsCACert: "{{ cephadm_root_ca }}"
+{% endif %}
 {% endfor %}
 
   - name: 'Loki'
     type: 'loki'
     access: 'proxy'
-    orgId: 2
     url: '{{ loki_host }}'
     basicAuth: false
-    isDefault: true
+    isDefault: false
     editable: false

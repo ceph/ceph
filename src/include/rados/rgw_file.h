@@ -27,7 +27,8 @@ extern "C" {
 
 #define LIBRGW_FILE_VER_MAJOR 1
 #define LIBRGW_FILE_VER_MINOR 2
-#define LIBRGW_FILE_VER_EXTRA 0
+#define LIBRGW_FILE_VER_EXTRA 1 /* version number needs to advance to
+				 * match change in rgw_raddir2 signature */
 
 #define LIBRGW_FILE_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBRGW_FILE_VERSION_CODE LIBRGW_FILE_VERSION(LIBRGW_FILE_VER_MAJOR, LIBRGW_FILE_VER_MINOR, LIBRGW_FILE_VER_EXTRA)
@@ -221,7 +222,7 @@ int rgw_unlink(struct rgw_fs *rgw_fs,
 /*
     read  directory content
 */
-typedef bool (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset,
+typedef int (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset,
 			       struct stat *st, uint32_t mask,
 			       uint32_t flags);
 

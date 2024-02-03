@@ -18,6 +18,9 @@
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
+#ifdef UNIT_TESTS_BUILT
+#include "test/crimson/gtest_seastar.h"
+#endif
 
 using namespace crimson;
 using namespace crimson::os;
@@ -40,9 +43,16 @@ using EphemeralDevicesRef = std::unique_ptr<EphemeralDevices>;
 class EphemeralSegmentedDevices : public EphemeralDevices {
   segment_manager::EphemeralSegmentManagerRef segment_manager;
   std::list<segment_manager::EphemeralSegmentManagerRef> secondary_segment_managers;
+  std::size_t num_main_device_managers;
+  std::size_t num_cold_device_managers;
 
 public:
-  EphemeralSegmentedDevices(std::size_t num_device_managers) {
+  EphemeralSegmentedDevices(std::size_t num_main_devices,
+			    std::size_t num_cold_devices)
+    : num_main_device_managers(num_main_devices),
+      num_cold_device_managers(num_cold_devices)
+  {
+    auto num_device_managers = num_main_device_managers + num_cold_device_managers;
     assert(num_device_managers > 0);
     secondary_segment_managers.resize(num_device_managers - 1);
   }
@@ -63,7 +73,8 @@ public:
       });
     }).safe_then([this] {
       return segment_manager->mkfs(
-        segment_manager::get_ephemeral_device_config(0, get_num_devices()));
+        segment_manager::get_ephemeral_device_config(
+          0, num_main_device_managers, num_cold_device_managers));
     }).safe_then([this] {
       return seastar::do_with(std::size_t(0), [this](auto &cnt) {
         return crimson::do_for_each(
@@ -73,7 +84,8 @@ public:
         {
           ++cnt;
           return sec_sm->mkfs(
-            segment_manager::get_ephemeral_device_config(cnt, get_num_devices()));
+            segment_manager::get_ephemeral_device_config(
+              cnt, num_main_device_managers, num_cold_device_managers));
         });
       });
     }).handle_error(
@@ -125,14 +137,9 @@ public:
   }
   
   seastar::future<> setup() final {
-    rb_device = random_block_device::create_test_ephemeral(
-      journal::DEFAULT_TEST_CBJOURNAL_SIZE, journal::DEFAULT_TEST_CBJOURNAL_SIZE);
-    return rb_device->mount().handle_error(crimson::ct_error::assert_all{}
-    ).then([this]() {
-      device_config_t config = get_rbm_ephemeral_device_config(0, 1);
-      rb_device->set_journal_size(journal::DEFAULT_TEST_CBJOURNAL_SIZE);
-      return rb_device->mkfs(config).handle_error(crimson::ct_error::assert_all{});
-    });
+    rb_device = random_block_device::create_test_ephemeral();
+    device_config_t config = get_rbm_ephemeral_device_config(0, 1);
+    return rb_device->mkfs(config).handle_error(crimson::ct_error::assert_all{});
   }
 
   void remount() final {}
@@ -163,21 +170,30 @@ public:
   void set_primary_device_ref(DeviceRef) final;
 };
 
-class EphemeralTestState {
+class EphemeralTestState 
+#ifdef UNIT_TESTS_BUILT
+  : public ::testing::WithParamInterface<const char*> {
+#else 
+  {
+#endif
 protected:
   journal_type_t journal_type;
-  size_t num_device_managers = 0;
+  size_t num_main_device_managers = 0;
+  size_t num_cold_device_managers = 0;
   EphemeralDevicesRef devices;
-  EphemeralTestState(std::size_t num_device_managers) :
-    num_device_managers(num_device_managers) {}
+  bool secondary_is_cold;
+  EphemeralTestState(std::size_t num_main_device_managers,
+                     std::size_t num_cold_device_managers) :
+    num_main_device_managers(num_main_device_managers),
+    num_cold_device_managers(num_cold_device_managers) {}
 
-  virtual void _init() = 0;
+  virtual seastar::future<> _init() = 0;
 
-  virtual void _destroy() = 0;
+  virtual seastar::future<> _destroy() = 0;
   virtual seastar::future<> _teardown() = 0;
   seastar::future<> teardown() {
     return _teardown().then([this] {
-      _destroy();
+      return _destroy();
     });
   }
 
@@ -189,8 +205,9 @@ protected:
     SUBINFO(test, "begin ...");
     return teardown().then([this] {
       devices->remount();
-      _init();
-      return _mount().handle_error(crimson::ct_error::assert_all{});
+      return _init().then([this] {
+        return _mount().handle_error(crimson::ct_error::assert_all{});
+      });
     }).then([FNAME] {
       SUBINFO(test, "finish");
     });
@@ -200,30 +217,37 @@ protected:
     restart_fut().get0();
   }
 
-  seastar::future<> tm_setup(
-    journal_type_t type = journal_type_t::SEGMENTED) {
+  seastar::future<> tm_setup() {
     LOG_PREFIX(EphemeralTestState::tm_setup);
-    journal_type = type;
-    if (journal_type == journal_type_t::SEGMENTED) {
-      devices.reset(new EphemeralSegmentedDevices(num_device_managers));
-    } else {
-      assert(journal_type == journal_type_t::RANDOM_BLOCK);
+#ifdef UNIT_TESTS_BUILT
+    std::string j_type = GetParam();
+#else
+    std::string j_type = "segmented";
+#endif
+    if (j_type == "circularbounded") {
       //TODO: multiple devices
-      ceph_assert(num_device_managers == 1);
+      ceph_assert(num_main_device_managers == 1);
+      ceph_assert(num_cold_device_managers == 0);
       devices.reset(new EphemeralRandomBlockDevices(1));
+    } else {
+      // segmented by default
+      devices.reset(new
+        EphemeralSegmentedDevices(
+          num_main_device_managers, num_cold_device_managers));
     }
     SUBINFO(test, "begin with {} devices ...", devices->get_num_devices());
     return devices->setup(
-    ).then([this, FNAME]() {                                                               
-      _init();
-      return _mkfs(
+    ).then([this] {
+      return _init();
+    }).then([this, FNAME] {
+        return _mkfs(
       ).safe_then([this] {
-	return restart_fut();                                                               
+	return restart_fut();
       }).handle_error(
-	crimson::ct_error::assert_all{}                                                     
+	crimson::ct_error::assert_all{}
       ).then([FNAME] {
-	SUBINFO(test, "finish");                                                            
-      });                                                                                   
+	SUBINFO(test, "finish");
+      });
     });   
   }
 
@@ -245,31 +269,31 @@ protected:
   ExtentPlacementManager *epm;
   uint64_t seq = 0;
 
-  TMTestState() : EphemeralTestState(1) {}
+  TMTestState() : EphemeralTestState(1, 0) {}
 
-  TMTestState(std::size_t num_devices) : EphemeralTestState(num_devices) {}
+  TMTestState(std::size_t num_main_devices, std::size_t num_cold_devices)
+    : EphemeralTestState(num_main_devices, num_cold_devices) {}
 
-  virtual void _init() override {
+  virtual seastar::future<> _init() override {
     auto sec_devices = devices->get_secondary_devices();
     auto p_dev = devices->get_primary_device();
     tm = make_transaction_manager(p_dev, sec_devices, true);
     epm = tm->get_epm();
     lba_manager = tm->get_lba_manager();
     cache = tm->get_cache();
+    return seastar::now();
   }
 
-  virtual void _destroy() override {
+  virtual seastar::future<> _destroy() override {
     epm = nullptr;
     lba_manager = nullptr;
     cache = nullptr;
     tm.reset();
+    return seastar::now();
   }
 
   virtual seastar::future<> _teardown() {
-    return tm->close().safe_then([this] {
-      _destroy();
-      return seastar::now();
-    }).handle_error(
+    return tm->close().handle_error(
       crimson::ct_error::assert_all{"Error in teardown"}
     );
   }
@@ -392,18 +416,24 @@ class SeaStoreTestState : public EphemeralTestState {
 
 protected:
   std::unique_ptr<SeaStore> seastore;
+  FuturizedStore::Shard *sharded_seastore;
 
-  SeaStoreTestState() : EphemeralTestState(1) {}
+  SeaStoreTestState() : EphemeralTestState(1, 0) {}
 
-  virtual void _init() final {
+  virtual seastar::future<> _init() final {
     seastore = make_test_seastore(
-      devices->get_primary_device_ref(),
       std::make_unique<TestMDStoreState::Store>(mdstore_state.get_mdstore()));
+    return seastore->test_start(devices->get_primary_device_ref()
+    ).then([this] {
+      sharded_seastore = &(seastore->get_sharded_store());
+    });
   }
 
-  virtual void _destroy() final {
+  virtual seastar::future<> _destroy() final {
     devices->set_primary_device_ref(seastore->get_primary_device_ref());
-    seastore.reset();
+    return seastore->stop().then([this] {
+      seastore.reset();
+    });
   }
 
   virtual seastar::future<> _teardown() final {

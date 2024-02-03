@@ -82,7 +82,7 @@ protected:
   health_check_map_t health_checks;
 protected:
   /**
-   * format of our state in leveldb, 0 for default
+   * format of our state in RocksDB, 0 for default
    */
   version_t format_version;
 
@@ -358,8 +358,7 @@ public:
    * @invariant This function is only called on a Leader.
    *
    * @param m An update message
-   * @returns 'true' if the update message was handled (e.g., a command that
-   *	      went through); 'false' otherwise.
+   * @returns 'true' if the pending state should be proposed; 'false' otherwise.
    */
   virtual bool prepare_update(MonOpRequestRef op) = 0;
   /**
@@ -480,11 +479,16 @@ public:
    */
 
   /**
+   * Callback list to be used for waiting for the next proposal to commit.
+   */
+  std::vector<Context*> waiting_for_commit;
+
+  /**
    * Callback list to be used whenever we are running a proposal through
    * Paxos. These callbacks will be awaken whenever the said proposal
-   * finishes.
+   * finishes **and** the PaxosService is active.
    */
-  std::list<Context*> waiting_for_finished_proposal;
+  std::vector<Context*> waiting_for_finished_proposal;
 
  public:
 
@@ -546,7 +550,21 @@ public:
   }
 
   /**
-   * Wait for a proposal to finish.
+   * Wait for a proposal to commit.
+   *
+   * Note: the proposal may not be signaled yet. This simply adds a context to
+   * be completed when the next proposal commits.
+   *
+   * @param c The callback to be awaken once the proposal is committed.
+   */
+  void wait_for_commit(MonOpRequestRef op, Context *c) {
+    if (op)
+      op->mark_event(service_name + ":wait_for_commit");
+    waiting_for_commit.push_back(c);
+  }
+
+  /**
+   * Wait for a proposal to finish and PaxosService to become active.
    *
    * Add a callback to be awaken whenever our current proposal finishes being
    * proposed through Paxos.
@@ -558,10 +576,7 @@ public:
       op->mark_event(service_name + ":wait_for_finished_proposal");
     waiting_for_finished_proposal.push_back(c);
   }
-  void wait_for_finished_proposal_ctx(Context *c) {
-    MonOpRequestRef o;
-    wait_for_finished_proposal(o, c);
-  }
+
 
   /**
    * Wait for us to become active

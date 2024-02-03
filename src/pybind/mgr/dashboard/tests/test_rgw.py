@@ -19,7 +19,9 @@ class RgwControllerTestCase(ControllerTestCase):
     @patch.object(RgwClient, '_get_user_id', Mock(return_value='fake-user'))
     @patch.object(RgwClient, 'is_service_online', Mock(return_value=True))
     @patch.object(RgwClient, '_is_system_user', Mock(return_value=True))
-    def test_status_available(self):
+    @patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_status_available(self, send_command):
+        send_command.return_value = ''
         self._get('/test/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': True, 'message': None})
@@ -27,7 +29,9 @@ class RgwControllerTestCase(ControllerTestCase):
     @patch.object(RgwClient, '_get_user_id', Mock(return_value='fake-user'))
     @patch.object(RgwClient, 'is_service_online', Mock(
         side_effect=RequestException('My test error')))
-    def test_status_online_check_error(self):
+    @patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_status_online_check_error(self, send_command):
+        send_command.return_value = ''
         self._get('/test/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False,
@@ -35,7 +39,9 @@ class RgwControllerTestCase(ControllerTestCase):
 
     @patch.object(RgwClient, '_get_user_id', Mock(return_value='fake-user'))
     @patch.object(RgwClient, 'is_service_online', Mock(return_value=False))
-    def test_status_not_online(self):
+    @patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_status_not_online(self, send_command):
+        send_command.return_value = ''
         self._get('/test/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False,
@@ -44,7 +50,9 @@ class RgwControllerTestCase(ControllerTestCase):
     @patch.object(RgwClient, '_get_user_id', Mock(return_value='fake-user'))
     @patch.object(RgwClient, 'is_service_online', Mock(return_value=True))
     @patch.object(RgwClient, '_is_system_user', Mock(return_value=False))
-    def test_status_not_system_user(self):
+    @patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_status_not_system_user(self, send_command):
+        send_command.return_value = ''
         self._get('/test/ui-api/rgw/status')
         self.assertStatus(200)
         self.assertJsonBody({'available': False,
@@ -64,12 +72,20 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
 
     @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
         return_value='dummy_admin'))
-    def test_list(self):
+    @patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_list(self, send_command):
+        send_command.return_value = ''
         RgwStub.get_daemons()
         RgwStub.get_settings()
         mgr.list_servers.return_value = [{
             'hostname': 'host1',
-            'services': [{'id': '4832', 'type': 'rgw'}, {'id': '5356', 'type': 'rgw'}]
+            'services': [
+                {'id': '4832', 'type': 'rgw'},
+                {'id': '5356', 'type': 'rgw'},
+                {'id': '5357', 'type': 'rgw'},
+                {'id': '5358', 'type': 'rgw'},
+                {'id': '5359', 'type': 'rgw'}
+            ]
         }]
         mgr.get_metadata.side_effect = [
             {
@@ -77,15 +93,43 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 'id': 'daemon1',
                 'realm_name': 'realm1',
                 'zonegroup_name': 'zg1',
-                'zone_name': 'zone1'
+                'zone_name': 'zone1',
+                'frontend_config#0': 'beast port=80'
             },
             {
                 'ceph_version': 'ceph version master (dev)',
                 'id': 'daemon2',
                 'realm_name': 'realm2',
                 'zonegroup_name': 'zg2',
-                'zone_name': 'zone2'
-            }]
+                'zone_name': 'zone2',
+                'frontend_config#0': 'beast ssl_port=443 ssl_certificate=config:/config'
+            },
+            {
+                'ceph_version': 'ceph version master (dev)',
+                'id': 'daemon3',
+                'realm_name': 'realm3',
+                'zonegroup_name': 'zg3',
+                'zone_name': 'zone3',
+                'frontend_config#0':
+                    'beast ssl_endpoint=0.0.0.0:8080 ssl_certificate=config:/config'
+            },
+            {
+                'ceph_version': 'ceph version master (dev)',
+                'id': 'daemon4',
+                'realm_name': 'realm4',
+                'zonegroup_name': 'zg4',
+                'zone_name': 'zone4',
+                'frontend_config#0': 'beast ssl_certificate=config:/config'
+            },
+            {
+                'ceph_version': 'ceph version master (dev)',
+                'id': 'daemon5',
+                'realm_name': 'realm5',
+                'zonegroup_name': 'zg5',
+                'zone_name': 'zone5',
+                'frontend_config#0':
+                    'beast endpoint=0.0.0.0:8445 ssl_certificate=config:/config'
+            }, ]
         self._get('/test/api/rgw/daemon')
         self.assertStatus(200)
         self.assertJsonBody([{
@@ -95,7 +139,8 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'server_hostname': 'host1',
             'realm_name': 'realm1',
             'zonegroup_name': 'zg1',
-            'zone_name': 'zone1', 'default': True
+            'zone_name': 'zone1', 'default': True,
+            'port': 80
         },
             {
             'id': 'daemon2',
@@ -105,7 +150,41 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'realm_name': 'realm2',
             'zonegroup_name': 'zg2',
             'zone_name': 'zone2',
-            'default': False
+            'default': False,
+            'port': 443,
+        },
+            {
+            'id': 'daemon3',
+            'service_map_id': '5357',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm3',
+            'zonegroup_name': 'zg3',
+            'zone_name': 'zone3',
+            'default': False,
+            'port': 8080,
+        },
+            {
+            'id': 'daemon4',
+            'service_map_id': '5358',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm4',
+            'zonegroup_name': 'zg4',
+            'zone_name': 'zone4',
+            'default': False,
+            'port': None,
+        },
+            {
+            'id': 'daemon5',
+            'service_map_id': '5359',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm5',
+            'zonegroup_name': 'zg5',
+            'zone_name': 'zone5',
+            'default': False,
+            'port': 8445,
         }])
 
     def test_list_empty(self):
@@ -155,7 +234,9 @@ class RgwUserControllerTestCase(ControllerTestCase):
         self.assertJsonBody(['test1', 'test2', 'test3', 'admin'])
 
     @patch('dashboard.controllers.rgw.RgwRESTController.proxy')
-    def test_user_list_duplicate_marker(self, mock_proxy):
+    @patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_user_list_duplicate_marker(self, mock_proxy, send_command):
+        send_command.return_value = ''
         mock_proxy.side_effect = [{
             'count': 3,
             'keys': ['test1', 'test2', 'test3'],

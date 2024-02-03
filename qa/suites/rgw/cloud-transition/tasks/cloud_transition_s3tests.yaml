@@ -45,12 +45,14 @@ tasks:
         # cloud-user creds to be created on cloud-client
         #cloud_secret: "foobar"
         #cloud_access_key: "87654321"
+- tox: [client.0]
 - s3tests:
     client.0:
       rgw_server: client.0
       storage classes: LUKEWARM, FROZEN
       extra_attrs: ["cloud_transition"]
       lc_debug_interval: 10
+      lifecycle_tests: True
       cloudtier_tests: True
     #client.2:
       #force-branch: ceph-master

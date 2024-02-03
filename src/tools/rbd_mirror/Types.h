@@ -21,14 +21,19 @@ template <typename> struct MirrorStatusUpdater;
 // Performance counters
 enum {
   l_rbd_mirror_journal_first = 27000,
-  l_rbd_mirror_replay,
-  l_rbd_mirror_replay_bytes,
-  l_rbd_mirror_replay_latency,
+  l_rbd_mirror_journal_entries,
+  l_rbd_mirror_journal_replay_bytes,
+  l_rbd_mirror_journal_replay_latency,
   l_rbd_mirror_journal_last,
   l_rbd_mirror_snapshot_first,
-  l_rbd_mirror_snapshot_replay_snapshots,
-  l_rbd_mirror_snapshot_replay_snapshots_time,
-  l_rbd_mirror_snapshot_replay_bytes,
+  l_rbd_mirror_snapshot_snapshots,
+  l_rbd_mirror_snapshot_sync_time,
+  l_rbd_mirror_snapshot_sync_bytes,
+  // per-image only counters below
+  l_rbd_mirror_snapshot_remote_timestamp,
+  l_rbd_mirror_snapshot_local_timestamp,
+  l_rbd_mirror_snapshot_last_sync_time,
+  l_rbd_mirror_snapshot_last_sync_bytes,
   l_rbd_mirror_snapshot_last,
 };
 

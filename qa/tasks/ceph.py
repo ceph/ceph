@@ -28,6 +28,7 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology import exceptions
 from teuthology.orchestra import run
+from teuthology.util.scanner import ValgrindScanner
 from tasks import ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
 from tasks.daemonwatchdog import DaemonWatchdog
@@ -262,6 +263,7 @@ def ceph_log(ctx, config):
             run.wait(
                 ctx.cluster.run(
                     args=[
+                        'time',
                         'sudo',
                         'find',
                         '/var/log/ceph',
@@ -271,10 +273,15 @@ def ceph_log(ctx, config):
                         run.Raw('|'),
                         'sudo',
                         'xargs',
+                        '--max-args=1',
+                        '--max-procs=0',
+                        '--verbose',
                         '-0',
                         '--no-run-if-empty',
                         '--',
                         'gzip',
+                        '-5',
+                        '--verbose',
                         '--',
                     ],
                     wait=False,
@@ -321,38 +328,15 @@ def valgrind_post(ctx, config):
     try:
         yield
     finally:
-        lookup_procs = list()
-        log.info('Checking for errors in any valgrind logs...')
-        for remote in ctx.cluster.remotes.keys():
-            # look at valgrind logs for each node
-            proc = remote.run(
-                args="sudo zgrep '<kind>' /var/log/ceph/valgrind/* "
-                     # include a second file so that we always get
-                     # a filename prefix on the output
-                     "/dev/null | sort | uniq",
-                wait=False,
-                check_status=False,
-                stdout=StringIO(),
-            )
-            lookup_procs.append((proc, remote))
-
         valgrind_exception = None
-        for (proc, remote) in lookup_procs:
-            proc.wait()
-            out = proc.stdout.getvalue()
-            for line in out.split('\n'):
-                if line == '':
-                    continue
-                try:
-                    (file, kind) = line.split(':')
-                except Exception:
-                    log.error('failed to split line %s', line)
-                    raise
-                log.debug('file %s kind %s', file, kind)
-                if (file.find('mds') >= 0) and kind.find('Lost') > 0:
-                    continue
-                log.error('saw valgrind issue %s in %s', kind, file)
-                valgrind_exception = Exception('saw valgrind issues')
+        valgrind_yaml = os.path.join(ctx.archive, 'valgrind.yaml')
+        for remote in ctx.cluster.remotes.keys():
+            scanner = ValgrindScanner(remote)
+            errors = scanner.scan_all_files('/var/log/ceph/valgrind/*')
+            scanner.write_summary(valgrind_yaml)
+            if errors and not valgrind_exception:
+                log.debug('valgrind exception message: %s', errors[0])
+                valgrind_exception = Exception(errors[0])
 
         if config.get('expect_valgrind_errors'):
             if not valgrind_exception:
@@ -373,6 +357,24 @@ def crush_setup(ctx, config):
     mon_remote.run(
         args=['sudo', 'ceph', '--cluster', cluster_name,
               'osd', 'crush', 'tunables', profile])
+    yield
+
+
+@contextlib.contextmanager
+def check_enable_crimson(ctx, config):
+    # enable crimson-osds if crimson
+    log.info("check_enable_crimson: {}".format(is_crimson(config)))
+    if is_crimson(config):
+        cluster_name = config['cluster']
+        first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
+        (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
+        log.info('check_enable_crimson: setting set-allow-crimson')
+        mon_remote.run(
+            args=[
+                'sudo', 'ceph', '--cluster', cluster_name,
+                'osd', 'set-allow-crimson', '--yes-i-really-mean-it'
+            ]
+        )
     yield
 
 
@@ -597,9 +599,12 @@ def create_simple_monmap(ctx, remote, conf, mons,
     return fsid
 
 
+def is_crimson(config):
+    return config.get('flavor', 'default') == 'crimson'
+
+
 def maybe_redirect_stderr(config, type_, args, log_path):
-    if type_ == 'osd' and \
-       config.get('flavor', 'default') == 'crimson':
+    if type_ == 'osd' and is_crimson(config):
         # teuthworker uses ubuntu:ubuntu to access the test nodes
         create_log_cmd = \
             f'sudo install -b -o ubuntu -g ubuntu /dev/null {log_path}'
@@ -870,6 +875,7 @@ def cluster(ctx, config):
     teuthology.deep_merge(ctx.disk_config.remote_to_roles_to_dev, remote_to_roles_to_devs)
 
     log.info("ctx.disk_config.remote_to_roles_to_dev: {r}".format(r=str(ctx.disk_config.remote_to_roles_to_dev)))
+
     for remote, roles_for_host in osds.remotes.items():
         roles_to_devs = remote_to_roles_to_devs[remote]
 
@@ -1297,7 +1303,7 @@ def osd_scrub_pgs(ctx, config):
                     # request was missed.  do not do it every time because
                     # the scrub may be in progress or not reported yet and
                     # we will starve progress.
-                    manager.raw_cluster_cmd('pg', 'deep-scrub', pgid)
+                    manager.raw_cluster_cmd('tell', pgid, 'deep-scrub')
             if gap_cnt > retries:
                 raise RuntimeError('Exiting scrub checking -- not all pgs scrubbed.')
         if loop:
@@ -1473,9 +1479,8 @@ def healthy(ctx, config):
 
     if ctx.cluster.only(teuthology.is_type('mds', cluster_name)).remotes:
         # Some MDSs exist, wait for them to be healthy
-        ceph_fs = Filesystem(ctx) # TODO: make Filesystem cluster-aware
-        ceph_fs.wait_for_daemons(timeout=300)
-
+        for fs in Filesystem.get_all_fs(ctx):
+            fs.wait_for_daemons(timeout=300)
 
 def wait_for_mon_quorum(ctx, config):
     """
@@ -1585,6 +1590,20 @@ def restart(ctx, config):
     if config.get('wait-for-osds-up', False):
         for cluster in clusters:
             ctx.managers[cluster].wait_for_all_osds_up()
+    if config.get('expected-failure') is not None:
+        log.info('Checking for expected-failure in osds logs after restart...')
+        expected_fail = config.get('expected-failure')
+        is_osd = teuthology.is_type('osd')
+        for role in daemons:
+            if not is_osd(role):
+                continue
+            (remote,) = ctx.cluster.only(role).remotes.keys()
+            cluster, type_, id_ = teuthology.split_role(role)
+            remote.run(
+               args = ['sudo',
+                       'egrep', expected_fail,
+                       '/var/log/ceph/{cluster}-{type_}.{id_}.log'.format(cluster=cluster, type_=type_, id_=id_),
+                ])
     yield
 
 
@@ -1882,6 +1901,7 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
         lambda: run_daemon(ctx=ctx, config=config, type_='mgr'),
         lambda: crush_setup(ctx=ctx, config=config),
+        lambda: check_enable_crimson(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
         lambda: setup_manager(ctx=ctx, config=config),
         lambda: create_rbd_pool(ctx=ctx, config=config),
@@ -1899,7 +1919,8 @@ def task(ctx, config):
         finally:
             # set pg_num_targets back to actual pg_num, so we don't have to
             # wait for pending merges (which can take a while!)
-            ctx.managers[config['cluster']].stop_pg_num_changes()
+            if not config.get('skip_stop_pg_num_changes', True):
+                ctx.managers[config['cluster']].stop_pg_num_changes()
 
             if config.get('wait-for-scrub', True):
                 # wait for pgs to become active+clean in case any

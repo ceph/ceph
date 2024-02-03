@@ -1,4 +1,5 @@
 import json
+import pytest
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
 from ceph.utils import datetime_to_str, datetime_now
@@ -257,3 +258,83 @@ def test_migrate_set_sane_value(cephadm_module: CephadmOrchestrator):
     ongoing = cephadm_module.migration.is_migration_ongoing()
     assert ongoing
     assert cephadm_module.migration_current == 0
+
+
+@pytest.mark.parametrize(
+    "rgw_spec_store_entry, should_migrate",
+    [
+        ({
+            'spec': {
+                'service_type': 'rgw',
+                'service_name': 'rgw.foo',
+                'service_id': 'foo',
+                'placement': {
+                    'hosts': ['host1']
+                },
+                'spec': {
+                    'rgw_frontend_type': 'beast  tcp_nodelay=1    request_timeout_ms=65000   rgw_thread_pool_size=512',
+                    'rgw_frontend_port': '5000',
+                },
+            },
+            'created': datetime_to_str(datetime_now()),
+        }, True),
+        ({
+            'spec': {
+                'service_type': 'rgw',
+                'service_name': 'rgw.foo',
+                'service_id': 'foo',
+                'placement': {
+                    'hosts': ['host1']
+                },
+            },
+            'created': datetime_to_str(datetime_now()),
+        }, False),
+    ]
+)
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+def test_migrate_rgw_spec(cephadm_module: CephadmOrchestrator, rgw_spec_store_entry, should_migrate):
+    with with_host(cephadm_module, 'host1'):
+        cephadm_module.set_store(
+            SPEC_STORE_PREFIX + 'rgw',
+            json.dumps(rgw_spec_store_entry, sort_keys=True),
+        )
+
+        # make sure rgw_migration_queue is populated accordingly
+        cephadm_module.migration_current = 1
+        cephadm_module.spec_store.load()
+        ls = json.loads(cephadm_module.get_store('rgw_migration_queue'))
+        assert 'rgw' == ls[0]['spec']['service_type']
+
+        # shortcut rgw_migration_queue loading by directly assigning
+        # ls output to rgw_migration_queue list
+        cephadm_module.migration.rgw_migration_queue = ls
+
+        # skip other migrations and go directly to 5_6 migration (RGW spec)
+        cephadm_module.migration_current = 5
+        cephadm_module.migration.migrate()
+        assert cephadm_module.migration_current == LAST_MIGRATION
+
+        if should_migrate:
+            # make sure the spec has been migrated and the the param=value entries
+            # that were part of the rgw_frontend_type are now in the new
+            # 'rgw_frontend_extra_args' list
+            assert 'rgw.foo' in cephadm_module.spec_store.all_specs
+            rgw_spec = cephadm_module.spec_store.all_specs['rgw.foo']
+            assert dict(rgw_spec.to_json()) == {'service_type': 'rgw',
+                                                'service_id': 'foo',
+                                                'service_name': 'rgw.foo',
+                                                'placement': {'hosts': ['host1']},
+                                                'spec': {
+                                                    'rgw_frontend_extra_args': ['tcp_nodelay=1',
+                                                                                'request_timeout_ms=65000',
+                                                                                'rgw_thread_pool_size=512'],
+                                                    'rgw_frontend_port': '5000',
+                                                    'rgw_frontend_type': 'beast',
+                                                }}
+        else:
+            # in a real environment, we still expect the spec to be there,
+            # just untouched by the migration. For this test specifically
+            # though, the spec will only have ended up in the spec store
+            # if it was migrated, so we can use this to test the spec
+            # was untouched
+            assert 'rgw.foo' not in cephadm_module.spec_store.all_specs

@@ -3,7 +3,7 @@ meta:
    run basic import/export cli tests for rbd
 second-half-tasks:
 - workunit:
-    branch: octopus
+    branch: quincy
     clients:
       client.0:
         - rbd/import_export.sh

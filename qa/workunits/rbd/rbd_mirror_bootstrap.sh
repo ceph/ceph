@@ -24,8 +24,13 @@ start_mirrors ${CLUSTER1}
 start_mirrors ${CLUSTER2}
 
 testlog "TEST: verify rx-only direction"
-[ "$(rbd --cluster ${CLUSTER1} --pool ${POOL} mirror pool info --format xml |
-	${XMLSTARLET} sel -t -v  '//mirror/peers/peer[1]/uuid')" = "" ]
+# rx-only peer is added immediately by "rbd mirror pool peer bootstrap import"
+rbd --cluster ${CLUSTER2} --pool ${POOL} mirror pool info --format json | jq -e '.peers[0].direction == "rx-only"'
+# tx-only peer is added asynchronously by mirror_peer_ping class method
+while ! rbd --cluster ${CLUSTER1} --pool ${POOL} mirror pool info --format json | jq -e '.peers | length > 0'; do
+    sleep 1
+done
+rbd --cluster ${CLUSTER1} --pool ${POOL} mirror pool info --format json | jq -e '.peers[0].direction == "tx-only"'
 
 create_image_and_enable_mirror ${CLUSTER1} ${POOL} image1
 
@@ -34,6 +39,10 @@ write_image ${CLUSTER1} ${POOL} image1 100
 wait_for_replay_complete ${CLUSTER2} ${CLUSTER1} ${POOL} image1
 
 testlog "TEST: verify rx-tx direction"
+# both rx-tx peers are added immediately by "rbd mirror pool peer bootstrap import"
+rbd --cluster ${CLUSTER1} --pool ${PARENT_POOL} mirror pool info --format json | jq -e '.peers[0].direction == "rx-tx"'
+rbd --cluster ${CLUSTER2} --pool ${PARENT_POOL} mirror pool info --format json | jq -e '.peers[0].direction == "rx-tx"'
+
 create_image ${CLUSTER1} ${PARENT_POOL} image1
 create_image ${CLUSTER2} ${PARENT_POOL} image2
 

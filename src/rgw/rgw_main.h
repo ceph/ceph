@@ -18,6 +18,9 @@
 #include <vector>
 #include <map>
 #include <string>
+
+#include "common/async/context_pool.h"
+
 #include "rgw_common.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
@@ -34,7 +37,7 @@ class RGWPauser : public RGWRealmReloader::Pauser {
 
 public:
   ~RGWPauser() override = default;
-  
+
   void add_pauser(Pauser* pauser) {
     pausers.push_back(pauser);
   }
@@ -51,6 +54,7 @@ public:
 namespace rgw {
 
 namespace lua { class Background; }
+namespace sal { class ConfigStore; }
 
 class RGWLib;
 class AppMain {
@@ -63,7 +67,7 @@ class AppMain {
   std::vector<RGWFrontendConfig*> fe_configs;
   std::multimap<string, RGWFrontendConfig*> fe_map;
   std::unique_ptr<rgw::LDAPHelper> ldh;
-  OpsLogSink* olog;
+  OpsLogSink* olog = nullptr;
   RGWREST rest;
   std::unique_ptr<rgw::lua::Background> lua_background;
   std::unique_ptr<rgw::auth::ImplicitTenants> implicit_tenant_context;
@@ -76,17 +80,22 @@ class AppMain {
   std::unique_ptr<RGWFrontendPauser> fe_pauser;
   std::unique_ptr<RGWRealmWatcher> realm_watcher;
   std::unique_ptr<RGWPauser> rgw_pauser;
-  DoutPrefixProvider* dpp;
+  std::unique_ptr<sal::ConfigStore> cfgstore;
+  SiteConfig site;
+  const DoutPrefixProvider* dpp;
   RGWProcessEnv env;
-
+  void need_context_pool();
+  std::optional<ceph::async::io_context_pool> context_pool;
 public:
-  AppMain(DoutPrefixProvider* dpp)
-    : dpp(dpp)
-    {}
+  AppMain(const DoutPrefixProvider* dpp);
+  ~AppMain();
 
   void shutdown(std::function<void(void)> finalize_async_signals
 	       = []() { /* nada */});
 
+  sal::ConfigStore* get_config_store() const {
+    return cfgstore.get();
+  }
   rgw::sal::Driver* get_driver() {
     return env.driver;
   }
@@ -97,7 +106,7 @@ public:
 
   void init_frontends1(bool nfs = false);
   void init_numa();
-  void init_storage();
+  int init_storage();
   void init_perfcounters();
   void init_http_clients();
   void cond_init_apis();

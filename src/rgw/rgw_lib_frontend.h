@@ -1,13 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_LIB_FRONTEND_H
-#define RGW_LIB_FRONTEND_H
+#pragma once
 
 #include <boost/container/flat_map.hpp>
 
 #include "rgw_lib.h"
-#include "rgw_file.h"
+#include "rgw_file_int.h"
 
 namespace rgw {
 
@@ -112,5 +111,3 @@ namespace rgw {
   }; /* RGWLibFrontend */
 
 } /* namespace rgw */
-
-#endif /* RGW_LIB_FRONTEND_H */

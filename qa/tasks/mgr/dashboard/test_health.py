@@ -29,6 +29,7 @@ class HealthTest(DashboardTestCase):
         'in': JList(int),
         'last_failure': int,
         'max_file_size': int,
+        'max_xattr_size': int,
         'explicitly_allowed_features': int,
         'damaged': JList(int),
         'tableserver': int,
@@ -56,7 +57,10 @@ class HealthTest(DashboardTestCase):
             'joinable': bool,
             'allow_snaps': bool,
             'allow_multimds_snaps': bool,
-            'allow_standby_replay': bool
+            'allow_standby_replay': bool,
+            'refuse_client_session': bool,
+            'refuse_standby_for_another_fs': bool,
+            'balance_automate': bool,
         }),
         'ever_allowed_features': int,
         'root': int

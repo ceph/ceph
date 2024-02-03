@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_TAG_H
-#define RGW_TAG_H
+#pragma once
 
 #include <string>
 #include <include/types.h>
@@ -37,6 +36,7 @@ protected:
   }
 
   void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWObjTags*>& o);
   void add_tag(const std::string& key, const std::string& val="");
   void emplace_tag(std::string&& key, std::string&& val);
   int check_and_add_tag(const std::string& key, const std::string& val="");
@@ -48,5 +48,3 @@ protected:
   tag_map_t& get_tags() {return tag_map;}
 };
 WRITE_CLASS_ENCODER(RGWObjTags)
-
-#endif /* RGW_TAG_H */

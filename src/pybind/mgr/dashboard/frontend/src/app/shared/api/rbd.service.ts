@@ -89,9 +89,14 @@ export class RbdService extends ApiClient {
     return this.http.get<number>('api/block/image/clone_format_version');
   }
 
-  createSnapshot(imageSpec: ImageSpec, @cdEncodeNot snapshotName: string) {
+  createSnapshot(
+    imageSpec: ImageSpec,
+    @cdEncodeNot snapshotName: string,
+    mirrorImageSnapshot: boolean
+  ) {
     const request = {
-      snapshot_name: snapshotName
+      snapshot_name: snapshotName,
+      mirrorImageSnapshot: mirrorImageSnapshot
     };
     return this.http.post(`api/block/image/${imageSpec.toStringEncoded()}/snap`, request, {
       observe: 'response'

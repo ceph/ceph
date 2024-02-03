@@ -74,6 +74,33 @@ example spec file:
     spec:
       rgw_frontend_port: 8080
 
+Passing Frontend Extra Arguments
+--------------------------------
+
+The RGW service specification can be used to pass extra arguments to the rgw frontend by using
+the `rgw_frontend_extra_args` arguments list.
+
+example spec file:
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: foo
+    placement:
+      label: rgw
+      count_per_host: 2
+    spec:
+      rgw_realm: myrealm
+      rgw_zone: myzone
+      rgw_frontend_type: "beast"
+      rgw_frontend_port: 5000
+      rgw_frontend_extra_args:
+      - "tcp_nodelay=1"
+      - "max_header_size=65536"
+
+.. note:: cephadm combines the arguments from the `spec` section and the ones from
+	  the `rgw_frontend_extra_args` into a single space-separated arguments list
+	  which is used to set the value of `rgw_frontends` configuration parameter.
 
 Multisite zones
 ---------------
@@ -212,12 +239,14 @@ It is a yaml format file with the following properties:
         - host2
         - host3
     spec:
-      backend_service: rgw.something      # adjust to match your existing RGW service
-      virtual_ip: <string>/<string>       # ex: 192.168.20.1/24
-      frontend_port: <integer>            # ex: 8080
-      monitor_port: <integer>             # ex: 1967, used by haproxy for load balancer status
-      virtual_interface_networks: [ ... ] # optional: list of CIDR networks
-      ssl_cert: |                         # optional: SSL certificate and key
+      backend_service: rgw.something            # adjust to match your existing RGW service
+      virtual_ip: <string>/<string>             # ex: 192.168.20.1/24
+      frontend_port: <integer>                  # ex: 8080
+      monitor_port: <integer>                   # ex: 1967, used by haproxy for load balancer status
+      virtual_interface_networks: [ ... ]       # optional: list of CIDR networks
+      use_keepalived_multicast: <bool>          # optional: Default is False.
+      vrrp_interface_network: <string>/<string> # optional: ex: 192.168.20.0/24
+      ssl_cert: |                               # optional: SSL certificate and key
         -----BEGIN CERTIFICATE-----
         ...
         -----END CERTIFICATE-----
@@ -243,6 +272,7 @@ It is a yaml format file with the following properties:
       frontend_port: <integer>            # ex: 8080
       monitor_port: <integer>             # ex: 1967, used by haproxy for load balancer status
       virtual_interface_networks: [ ... ] # optional: list of CIDR networks
+      first_virtual_router_id: <integer>  # optional: default 50
       ssl_cert: |                         # optional: SSL certificate and key
         -----BEGIN CERTIFICATE-----
         ...
@@ -276,6 +306,21 @@ where the properties of this service specification are:
 * ``ssl_cert``:
     SSL certificate, if SSL is to be enabled. This must contain the both the certificate and
     private key blocks in .pem format.
+* ``use_keepalived_multicast``
+    Default is False. By default, cephadm will deploy keepalived config to use unicast IPs,
+    using the IPs of the hosts. The IPs chosen will be the same IPs cephadm uses to connect
+    to the machines. But if multicast is prefered, we can set ``use_keepalived_multicast``
+    to ``True`` and Keepalived will use multicast IP (224.0.0.18) to communicate between instances,
+    using the same interfaces as where the VIPs are.
+* ``vrrp_interface_network``
+    By default, cephadm will configure keepalived to use the same interface where the VIPs are
+    for VRRP communication. If another interface is needed, it can be set via ``vrrp_interface_network``
+    with a network to identify which ethernet interface to use.
+* ``first_virtual_router_id``
+    Default is 50. When deploying more than 1 ingress, this parameter can be used to ensure each
+    keepalived will have different virtual_router_id. In the case of using ``virtual_ips_list``,
+    each IP will create its own virtual router. So the first one will have ``first_virtual_router_id``,
+    second one will have ``first_virtual_router_id`` + 1, etc. Valid values go from 1 to 255.
 
 .. _ingress-virtual-ip:
 

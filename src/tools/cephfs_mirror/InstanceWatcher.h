@@ -49,9 +49,19 @@ public:
     return m_blocklisted;
   }
 
+  utime_t get_blocklisted_ts() {
+    std::scoped_lock locker(m_lock);
+    return m_blocklisted_ts;
+  }
+
   bool is_failed() {
     std::scoped_lock locker(m_lock);
     return m_failed;
+  }
+
+  utime_t get_failed_ts() {
+    std::scoped_lock locker(m_lock);
+    return m_failed_ts;
   }
 
 private:
@@ -65,6 +75,9 @@ private:
 
   bool m_blocklisted = false;
   bool m_failed = false;
+
+  utime_t m_blocklisted_ts;
+  utime_t m_failed_ts;
 
   void create_instance();
   void handle_create_instance(int r);

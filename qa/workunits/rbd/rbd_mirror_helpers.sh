@@ -24,7 +24,7 @@
 # The cleanup can be done as a separate step, running the script with
 # `cleanup ${RBD_MIRROR_TEMDIR}' arguments.
 #
-# Note, as other workunits tests, rbd_mirror_journal.sh expects to find ceph binaries
+# Note, as other workunits tests, rbd_mirror_helpers.sh expects to find ceph binaries
 # in PATH.
 #
 # Thus a typical troubleshooting session:
@@ -35,7 +35,7 @@
 #   cd $CEPH_SRC_PATH
 #   PATH=$CEPH_SRC_PATH:$PATH
 #   RBD_MIRROR_NOCLEANUP=1 RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
-#     ../qa/workunits/rbd/rbd_mirror_journal.sh
+#     RBD_MIRROR_MODE=journal ../qa/workunits/rbd/rbd_mirror.sh
 #
 # After the test failure cd to TEMPDIR and check the current state:
 #
@@ -49,21 +49,27 @@
 #   ceph --admin-daemon rbd-mirror.cluster1_daemon.cluster1.$pid.asok help
 #   ...
 #
+# To setup the environment without actually running the tests:
+#
+#   cd $CEPH_SRC_PATH
+#   RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
+#     ../qa/workunits/rbd_mirror_helpers.sh setup
+#
 # Also you can execute commands (functions) from the script:
 #
 #   cd $CEPH_SRC_PATH
 #   export RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror
-#   ../qa/workunits/rbd/rbd_mirror_journal.sh status
-#   ../qa/workunits/rbd/rbd_mirror_journal.sh stop_mirror cluster1
-#   ../qa/workunits/rbd/rbd_mirror_journal.sh start_mirror cluster2
-#   ../qa/workunits/rbd/rbd_mirror_journal.sh flush cluster2
+#   ../qa/workunits/rbd/rbd_mirror_helpers.sh status
+#   ../qa/workunits/rbd/rbd_mirror_helpers.sh stop_mirror cluster1
+#   ../qa/workunits/rbd/rbd_mirror_helpers.sh start_mirror cluster2
+#   ../qa/workunits/rbd/rbd_mirror_helpers.sh flush cluster2
 #   ...
 #
 # Eventually, run the cleanup:
 #
 #   cd $CEPH_SRC_PATH
 #   RBD_MIRROR_TEMDIR=/tmp/tmp.rbd_mirror \
-#     ../qa/workunits/rbd/rbd_mirror_journal.sh cleanup
+#     ../qa/workunits/rbd_mirror_helpers.sh cleanup
 #
 
 if type xmlstarlet > /dev/null 2>&1; then
@@ -88,8 +94,11 @@ TEMPDIR=
 CEPH_ID=${CEPH_ID:-mirror}
 RBD_IMAGE_FEATURES=${RBD_IMAGE_FEATURES:-layering,exclusive-lock,journaling}
 MIRROR_USER_ID_PREFIX=${MIRROR_USER_ID_PREFIX:-${CEPH_ID}.}
+RBD_MIRROR_MODE=${RBD_MIRROR_MODE:-journal}
 MIRROR_POOL_MODE=${MIRROR_POOL_MODE:-pool}
-MIRROR_IMAGE_MODE=${MIRROR_IMAGE_MODE:-journal}
+if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
+  MIRROR_POOL_MODE=image
+fi
 
 export CEPH_ARGS="--id ${CEPH_ID}"
 
@@ -795,9 +804,9 @@ wait_for_replay_complete()
     local pool=$3
     local image=$4
 
-    if [ "${MIRROR_IMAGE_MODE}" = "journal" ]; then
+    if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
         wait_for_journal_replay_complete ${local_cluster} ${cluster} ${pool} ${image}
-    elif [ "${MIRROR_IMAGE_MODE}" = "snapshot" ]; then
+    elif [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
         wait_for_snapshot_sync_complete ${local_cluster} ${cluster} ${pool} ${image}
     else
         return 1
@@ -880,6 +889,20 @@ wait_for_status_in_pool_dir()
     return 1
 }
 
+wait_for_replaying_status_in_pool_dir()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
+        wait_for_status_in_pool_dir ${cluster} ${pool} ${image} 'up+replaying' \
+                                    'primary_position'
+    else
+        wait_for_status_in_pool_dir ${cluster} ${pool} ${image} 'up+replaying'
+    fi
+}
+
 create_image()
 {
     local cluster=$1 ; shift
@@ -896,18 +919,35 @@ create_image()
         --image-feature "${RBD_IMAGE_FEATURES}" $@ ${pool}/${image}
 }
 
+is_pool_mirror_mode_image()
+{
+    local pool=$1
+
+    if [ "${MIRROR_POOL_MODE}" = "image" ]; then
+        return 0
+    fi
+
+    case "${pool}" in
+        */${NS2} | ${PARENT_POOL})
+            return 0
+            ;;
+    esac
+
+    return 1
+}
+
 create_image_and_enable_mirror()
 {
     local cluster=$1 ; shift
     local pool=$1 ; shift
     local image=$1 ; shift
-    local mode=${1:-${MIRROR_IMAGE_MODE}}
+    local mode=${1:-${RBD_MIRROR_MODE}}
     if [ -n "$1" ]; then
         shift
     fi
 
     create_image ${cluster} ${pool} ${image} $@
-    if [ "${MIRROR_POOL_MODE}" = "image" ] || [ "$pool" = "${PARENT_POOL}" ]; then
+    if is_pool_mirror_mode_image ${pool}; then
         enable_mirror ${cluster} ${pool} ${image} ${mode}
     fi
 }
@@ -987,9 +1027,14 @@ trash_move() {
 trash_restore() {
     local cluster=$1
     local pool=$2
-    local image_id=$3
+    local image=$3
+    local image_id=$4
+    local mode=${5:-${RBD_MIRROR_MODE}}
 
     rbd --cluster=${cluster} trash restore ${pool}/${image_id}
+    if is_pool_mirror_mode_image ${pool}; then
+        enable_mirror ${cluster} ${pool} ${image} ${mode}
+    fi
 }
 
 clone_image()
@@ -1018,13 +1063,15 @@ clone_image_and_enable_mirror()
     local clone_image=$6
     shift 6
 
-    local mode=${1:-${MIRROR_IMAGE_MODE}}
+    local mode=${1:-${RBD_MIRROR_MODE}}
     if [ -n "$1" ]; then
         shift
     fi
 
     clone_image ${cluster} ${parent_pool} ${parent_image} ${parent_snap} ${clone_pool} ${clone_image} $@
-    enable_mirror ${cluster} ${clone_pool} ${clone_image} ${mode}
+    if is_pool_mirror_mode_image ${clone_pool}; then
+      enable_mirror ${cluster} ${clone_pool} ${clone_image} ${mode}
+    fi
 }
 
 disconnect_image()
@@ -1169,6 +1216,16 @@ wait_for_snap_removed_from_trash()
     return 1
 }
 
+count_mirror_snaps()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster ${cluster} snap ls ${pool}/${image} --all |
+        grep -c -F " mirror ("
+}
+
 write_image()
 {
     local cluster=$1
@@ -1305,7 +1362,7 @@ enable_mirror()
     local cluster=$1
     local pool=$2
     local image=$3
-    local mode=${4:-${MIRROR_IMAGE_MODE}}
+    local mode=${4:-${RBD_MIRROR_MODE}}
 
     rbd --cluster=${cluster} mirror image enable ${pool}/${image} ${mode}
     # Display image info including the global image id for debugging purpose

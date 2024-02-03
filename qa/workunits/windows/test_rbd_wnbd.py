@@ -75,7 +75,7 @@ parser.add_argument('--skip-cleanup-on-error', action='store_true',
 class CephTestException(Exception):
     msg_fmt = "An exception has been encountered."
 
-    def __init__(self, message: str = None, **kwargs):
+    def __init__(self, message: str = '', **kwargs):
         self.kwargs = kwargs
         if not message:
             message = self.msg_fmt % kwargs
@@ -419,6 +419,8 @@ class RbdImage(object):
         if not self.mapped:
             raise CephTestException("Unable to create fs, image not mapped.")
 
+        LOG.info("Initializing fs, image: %s.", self.name)
+
         self._init_disk()
         self._create_partition()
         self._format_volume()
@@ -433,6 +435,49 @@ class RbdImage(object):
         result = ps_execute(cmd)
 
         return int(result.stdout.decode().strip())
+
+    @Tracer.trace
+    def resize(self, new_size_mb, allow_shrink=False):
+        LOG.info(
+            "Resizing image: %s. New size: %s MB, old size: %s MB",
+            self.name, new_size_mb, self.size_mb)
+
+        cmd = ["rbd", "resize", self.name,
+               "--size", f"{new_size_mb}M", "--no-progress"]
+        if allow_shrink:
+            cmd.append("--allow-shrink")
+
+        execute(*cmd)
+
+        self.size_mb = new_size_mb
+
+    @Tracer.trace
+    def get_disk_size(self):
+        """Retrieve the virtual disk size (bytes) reported by Windows."""
+        cmd = f"(Get-Disk -Number {self.disk_number}).Size"
+        result = ps_execute(cmd)
+
+        disk_size = result.stdout.decode().strip()
+        if not disk_size.isdigit():
+            raise CephTestException(
+                "Invalid disk size received: %s" % disk_size)
+
+        return int(disk_size)
+
+    @Tracer.trace
+    @retry_decorator(timeout=30)
+    def wait_for_disk_resize(self):
+        # After resizing the rbd image, the daemon is expected to receive
+        # the notification, inform the WNBD driver and then trigger a disk
+        # rescan (IOCTL_DISK_UPDATE_PROPERTIES). This might take a few seconds,
+        # so we'll need to do some polling.
+        disk_size = self.get_disk_size()
+        disk_size_mb = disk_size // (1 << 20)
+
+        if disk_size_mb != self.size_mb:
+            raise CephTestException(
+                "The disk size hasn't been updated yet. Retrieved size: "
+                f"{disk_size_mb}MB. Expected size: {self.size_mb}MB.")
 
 
 class RbdTest(object):
@@ -475,7 +520,7 @@ class RbdTest(object):
     @classmethod
     def print_results(cls,
                       title: str = "Test results",
-                      description: str = None):
+                      description: str = ''):
         pass
 
 
@@ -506,7 +551,7 @@ class RbdFioTest(RbdTest):
 
     def __init__(self,
                  *args,
-                 fio_size_mb: int = None,
+                 fio_size_mb: int = 0,
                  iterations: int = 1,
                  workers: int = 1,
                  bs: str = "2M",
@@ -542,20 +587,30 @@ class RbdFioTest(RbdTest):
                             'total_ios': job[op]['short_ios'],
                             'short_ios': job[op]['short_ios'],
                             'dropped_ios': job[op]['short_ios'],
+                            'clat_ns_min': job[op]['clat_ns']['min'],
+                            'clat_ns_max': job[op]['clat_ns']['max'],
+                            'clat_ns_mean': job[op]['clat_ns']['mean'],
+                            'clat_ns_stddev': job[op]['clat_ns']['stddev'],
+                            'clat_ns_10': job[op].get('clat_ns', {})
+                                                 .get('percentile', {})
+                                                 .get('10.000000', 0),
+                            'clat_ns_90': job[op].get('clat_ns', {})
+                                                 .get('percentile', {})
+                                                 .get('90.000000', 0)
                         })
 
     def _get_fio_path(self):
         return self.image.path
 
     @Tracer.trace
-    def run(self):
+    def _run_fio(self, fio_size_mb: int = 0) -> None:
         LOG.info("Starting FIO test.")
         cmd = [
             "fio", "--thread", "--output-format=json",
             "--randrepeat=%d" % self.iterations,
-            "--direct=1", "--gtod_reduce=1", "--name=test",
+            "--direct=1", "--name=test",
             "--bs=%s" % self.bs, "--iodepth=%s" % self.iodepth,
-            "--size=%sM" % self.fio_size_mb,
+            "--size=%sM" % (fio_size_mb or self.fio_size_mb),
             "--readwrite=%s" % self.op,
             "--numjobs=%s" % self.workers,
             "--filename=%s" % self._get_fio_path(),
@@ -566,10 +621,14 @@ class RbdFioTest(RbdTest):
         LOG.info("Completed FIO test.")
         self.process_result(result.stdout)
 
+    @Tracer.trace
+    def run(self):
+        self._run_fio()
+
     @classmethod
     def print_results(cls,
                       title: str = "Benchmark results",
-                      description: str = None):
+                      description: str = ''):
         if description:
             title = "%s (%s)" % (title, description)
 
@@ -590,7 +649,7 @@ class RbdFioTest(RbdTest):
                            s['median'], s['std_dev'],
                            s['max_90'], s['min_90'], 'N/A'])
 
-            s = array_stats([float(i["runtime"]) / 1000 for i in op_data])
+            s = array_stats([float(i["runtime"]) for i in op_data])
             table.add_row(["duration (s)",
                           s['min'], s['max'], s['mean'],
                           s['median'], s['std_dev'],
@@ -613,7 +672,50 @@ class RbdFioTest(RbdTest):
                            s['min'], s['max'], s['mean'],
                            s['median'], s['std_dev'],
                            s['max_90'], s['min_90'], s['sum']])
+
+            clat_min = array_stats([i["clat_ns_min"] for i in op_data])
+            clat_max = array_stats([i["clat_ns_max"] for i in op_data])
+            clat_mean = array_stats([i["clat_ns_mean"] for i in op_data])
+            clat_stddev = math.sqrt(
+                sum([float(i["clat_ns_stddev"]) ** 2 for i in op_data]) / len(op_data)
+                if len(op_data) else 0)
+            clat_10 = array_stats([i["clat_ns_10"] for i in op_data])
+            clat_90 = array_stats([i["clat_ns_90"] for i in op_data])
+            # For convenience, we'll convert it from ns to seconds.
+            table.add_row(["completion latency (s)",
+                           clat_min['min'] / 1e+9,
+                           clat_max['max'] / 1e+9,
+                           clat_mean['mean'] / 1e+9,
+                           clat_mean['median'] / 1e+9,
+                           clat_stddev / 1e+9,
+                           clat_10['mean'] / 1e+9,
+                           clat_90['mean'] / 1e+9,
+                           clat_mean['sum'] / 1e+9])
             print(table)
+
+
+class RbdResizeFioTest(RbdFioTest):
+    """Image resize test.
+
+    This test extends and then shrinks the image, performing FIO tests to
+    validate the resized image.
+    """
+
+    @Tracer.trace
+    def run(self):
+        self.image.resize(self.image_size_mb * 2)
+        self.image.wait_for_disk_resize()
+
+        self._run_fio(fio_size_mb=self.image_size_mb * 2)
+
+        self.image.resize(self.image_size_mb // 2, allow_shrink=True)
+        self.image.wait_for_disk_resize()
+
+        self._run_fio(fio_size_mb=self.image_size_mb // 2)
+
+        # Just like rbd-nbd, rbd-wnbd is masking out-of-bounds errors.
+        # For this reason, we don't have a negative test that writes
+        # passed the disk boundary.
 
 
 class RbdFsFioTest(RbdFsTestMixin, RbdFioTest):
@@ -677,12 +779,12 @@ class RbdStampTest(RbdTest):
             time.sleep(self._rand_float(0, 5))
 
             stamp = self._read_stamp()
-            assert(stamp == b'\0' * len(self._get_stamp()))
+            assert stamp == b'\0' * len(self._get_stamp())
 
         self._write_stamp()
 
         stamp = self._read_stamp()
-        assert(stamp == self._get_stamp())
+        assert stamp == self._get_stamp()
 
 
 class RbdFsStampTest(RbdFsTestMixin, RbdStampTest):
@@ -766,6 +868,7 @@ class TestRunner(object):
 TESTS: typing.Dict[str, typing.Type[RbdTest]] = {
     'RbdTest': RbdTest,
     'RbdFioTest': RbdFioTest,
+    'RbdResizeFioTest': RbdResizeFioTest,
     'RbdStampTest': RbdStampTest,
     # FS tests
     'RbdFsTest': RbdFsTest,
@@ -797,7 +900,7 @@ if __name__ == '__main__':
     try:
         test_cls = TESTS[args.test_name]
     except KeyError:
-        raise CephTestException("Unkown test: {}".format(args.test_name))
+        raise CephTestException("Unknown test: {}".format(args.test_name))
 
     runner = TestRunner(
         test_cls,

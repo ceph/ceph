@@ -89,7 +89,7 @@ def pre_process(ctx, config):
 
         ctx.cluster.only(client).run(
             args=[
-                'cd', '/home/ubuntu/.aws/models/s3/2006-03-01/', run.Raw('&&'), 'cp', '{tdir}/ceph/examples/boto3/service-2.sdk-extras.json'.format(tdir=test_dir), 'service-2.sdk-extras.json'
+                'cd', '/home/ubuntu/.aws/models/s3/2006-03-01/', run.Raw('&&'), 'cp', '{tdir}/ceph/examples/rgw/boto3/service-2.sdk-extras.json'.format(tdir=test_dir), 'service-2.sdk-extras.json'
                 ],
             )
 
@@ -220,7 +220,7 @@ def run_tests(ctx, config):
     for client, client_config in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
-        attr = ["!kafka_test", "!amqp_test", "!amqp_ssl_test", "!kafka_ssl_test", "!modification_required", "!manual_test"]
+        attr = ["!kafka_test", "!amqp_test", "!amqp_ssl_test", "!kafka_security_test", "!modification_required", "!manual_test"]
 
         if 'extra_attr' in client_config:
             attr = client_config.get('extra_attr')

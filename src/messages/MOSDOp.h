@@ -166,7 +166,11 @@ public:
   uint64_t get_features() const {
     if (features)
       return features;
+#ifdef WITH_SEASTAR
+    ceph_abort("In crimson, conn is independently maintained outside Message");
+#else
     return get_connection()->get_features();
+#endif
   }
 
   MOSDOp()
@@ -174,7 +178,7 @@ public:
       partial_decode_needed(true),
       final_decode_needed(true),
       bdata_encode(false) { }
-  MOSDOp(int inc, long tid, const hobject_t& ho, spg_t& _pgid,
+  MOSDOp(int inc, ceph_tid_t tid, const hobject_t& ho, spg_t& _pgid,
 	 epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
     : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),

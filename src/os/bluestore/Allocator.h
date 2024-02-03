@@ -88,6 +88,37 @@ public:
     return block_size;
   }
 
+  // The following code build Allocator's free extents histogram.
+  // Which is a set of N buckets to track extents layout.
+  // Extent matches a bucket depending on its length using the following
+  // length spans:
+  // [0..4K] (4K..16K] (16K..64K] .. (4M..16M] (16M..]
+  // Each bucket tracks:
+  // - total amount of extents of specific lengths
+  // - amount of extents aligned with allocation boundary
+  // - amount of allocation units in aligned extents
+  //
+  struct free_state_hist_bucket {
+    static const size_t base_bits = 12;
+    static const size_t base = 1ull << base_bits;
+    static const size_t mux = 2;
+
+    size_t total = 0;
+    size_t aligned = 0;
+    size_t alloc_units = 0;
+
+    // returns upper bound of the bucket
+    static size_t get_max(size_t bucket, size_t num_buckets) {
+      return
+        bucket < num_buckets - 1 ?
+          base << (mux * bucket) :
+          std::numeric_limits<uint64_t>::max();
+    };
+  };
+
+  typedef std::vector<free_state_hist_bucket> FreeStateHistogram;
+  void build_free_state_histogram(size_t alloc_unit, FreeStateHistogram& hist);
+
 private:
   class SocketHook;
   SocketHook* asok_hook = nullptr;

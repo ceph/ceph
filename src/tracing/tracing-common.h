@@ -21,7 +21,7 @@
 // type should be an integer type
 // val should have type type*
 #define ceph_ctf_integerp(type, field, val) \
-    ctf_integer(type, field, (val) == NULL ? 0 : (val)) \
+    ctf_integer(type, field, (val) == NULL ? 0 : *(val)) \
     ctf_integer(uint8_t, field##_isnull, (val) == NULL)
 
 // val should have type char*

@@ -52,9 +52,33 @@ public:
            m_mirror_watcher->is_failed();
   }
 
+  utime_t get_failed_ts() {
+    std::scoped_lock locker(m_lock);
+    if (m_instance_watcher) {
+      return m_instance_watcher->get_failed_ts();
+    }
+    if (m_mirror_watcher) {
+      return m_mirror_watcher->get_failed_ts();
+    }
+
+    return utime_t();
+  }
+
   bool is_blocklisted() {
     std::scoped_lock locker(m_lock);
     return is_blocklisted(locker);
+  }
+
+  utime_t get_blocklisted_ts() {
+    std::scoped_lock locker(m_lock);
+    if (m_instance_watcher) {
+      return m_instance_watcher->get_blocklisted_ts();
+    }
+    if (m_mirror_watcher) {
+      return m_mirror_watcher->get_blocklisted_ts();
+    }
+
+    return utime_t();
   }
 
   Peers get_peers() {

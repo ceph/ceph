@@ -291,7 +291,8 @@ SegmentedJournal::replay_segment(
 	      trimmer.get_dirty_tail(),
 	      trimmer.get_alloc_tail(),
               modify_time
-            ).safe_then([&stats, delta_type=delta.type](bool is_applied) {
+            ).safe_then([&stats, delta_type=delta.type](auto ret) {
+	      auto [is_applied, ext] = ret;
               if (is_applied) {
                 // see Cache::replay_delta()
                 assert(delta_type != extent_types_t::JOURNAL_TAIL);

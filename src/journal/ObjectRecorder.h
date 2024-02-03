@@ -146,7 +146,7 @@ private:
   ceph::condition_variable m_in_flight_callbacks_cond;
   uint64_t m_in_flight_bytes = 0;
 
-  bool send_appends(bool force, ceph::ref_t<FutureImpl> flush_sentinal);
+  bool send_appends(bool force, ceph::ref_t<FutureImpl> flush_sentinel);
   void handle_append_flushed(uint64_t tid, int r);
   void append_overflowed();
 

@@ -758,6 +758,7 @@ function test_mon_misc()
 
   ceph mgr stat
   ceph mgr dump
+  ceph mgr dump | jq -e '.active_clients[0].name'
   ceph mgr module ls
   ceph mgr module enable restful
   expect_false ceph mgr module enable foodne
@@ -1507,7 +1508,7 @@ function test_mon_osd()
   done
 
   for f in noup nodown noin noout noscrub nodeep-scrub nobackfill \
-	  norebalance norecover notieragent
+	  norebalance norecover notieragent noautoscale
   do
     ceph osd set $f
     ceph osd unset $f
@@ -1520,10 +1521,10 @@ function test_mon_osd()
 	expect_false ceph osd set $f
 	expect_false ceph osd unset $f
   done
-  ceph osd require-osd-release reef
+  ceph osd require-osd-release squid
   # can't lower
+  expect_false ceph osd require-osd-release reef
   expect_false ceph osd require-osd-release quincy
-  expect_false ceph osd require-osd-release pacific
   # these are no-ops but should succeed.
 
   ceph osd set noup

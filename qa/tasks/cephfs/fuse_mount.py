@@ -87,7 +87,8 @@ class FuseMount(CephFSMount):
             stdin=self._mount_cmd_stdin,
             stdout=mountcmd_stdout,
             stderr=mountcmd_stderr,
-            wait=False
+            wait=False,
+            omit_sudo=False
         )
 
         return self._wait_and_record_our_fuse_conn(
@@ -114,8 +115,8 @@ class FuseMount(CephFSMount):
 
         self.validate_subvol_options()
 
-        assert(self.cephfs_mntpt)
-        mount_cmd += ["--client_mountpoint=" + self.cephfs_mntpt]
+        if self.cephfs_mntpt:
+            mount_cmd += ["--client_mountpoint=" + self.cephfs_mntpt]
 
         if self.cephfs_name:
             mount_cmd += ["--client_fs=" + self.cephfs_name]
@@ -143,9 +144,11 @@ class FuseMount(CephFSMount):
 
         self.client_remote.run(args=['sudo', 'modprobe', 'fuse'],
                                check_status=False)
-        self.client_remote.run(
-            args=["sudo", "mount", "-t", "fusectl", conn_dir, conn_dir],
-            check_status=False, timeout=(30))
+
+        if not self.client_remote.is_mounted(conn_dir):
+            self.client_remote.run(
+                args=["sudo", "mount", "-t", "fusectl", conn_dir, conn_dir],
+                timeout=30, omit_sudo=False)
 
         try:
             ls_str = self.client_remote.sh("ls " + conn_dir,

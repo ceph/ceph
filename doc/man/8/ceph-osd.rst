@@ -18,14 +18,16 @@ Synopsis
 Description
 ===========
 
-**ceph-osd** is the object storage daemon for the Ceph distributed file
-system. It is responsible for storing objects on a local file system
-and providing access to them over the network.
+**ceph-osd** is the **o**\bject **s**\torage **d**\aemon for the Ceph
+distributed file system. It manages data on local storage with redundancy and
+provides access to that data over the network. 
 
-The datapath argument should be a directory on a xfs file system
-where the object data resides. The journal is optional, and is only
-useful performance-wise when it resides on a different disk than
-datapath with low latency (ideally, an NVRAM device).
+For Filestore-backed clusters, the argument of the ``--osd-data datapath``
+option (which is ``datapath`` in this example) should be a directory on an XFS
+file system where the object data resides. The journal is optional. The journal
+improves performance only when it resides on a different disk than the disk
+specified by ``datapath`` . The storage medium on which the journal is stored
+should be a low-latency medium (ideally, an SSD device).
 
 
 Options

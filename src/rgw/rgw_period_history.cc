@@ -106,7 +106,7 @@ class RGWPeriodHistory::Impl final {
   /// and return an iterator to the merged history
   Set::iterator merge(Set::iterator dst, Set::iterator src);
 
-  /// construct a Cursor object using Cursor's private constuctor
+  /// construct a Cursor object using Cursor's private constructor
   Cursor make_cursor(Set::const_iterator history, epoch_t epoch);
 
   CephContext *const cct;
@@ -133,6 +133,7 @@ RGWPeriodHistory::Impl::Impl(CephContext* cct, Puller* puller,
     history->periods.push_back(current_period);
 
     // insert as our current history
+    // coverity[leaked_storage:SUPPRESS]
     current_history = histories.insert(*history).first;
 
     // get a cursor to the current period
@@ -245,6 +246,7 @@ Cursor RGWPeriodHistory::Impl::insert_locked(RGWPeriod&& period)
     // create a new history for this period
     auto history = new History;
     history->periods.emplace_back(std::move(period));
+    // coverity[leaked_storage:SUPPRESS]
     histories.insert(last, *history);
 
     i = Set::s_iterator_to(*history);
@@ -294,6 +296,7 @@ Cursor RGWPeriodHistory::Impl::insert_locked(RGWPeriod&& period)
   // create a new history for this period
   auto history = new History;
   history->periods.emplace_back(std::move(period));
+  // coverity[leaked_storage:SUPPRESS]
   histories.insert(i, *history);
 
   i = Set::s_iterator_to(*history);

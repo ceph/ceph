@@ -12,12 +12,23 @@
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
 releases:
+  reef:
+    target_eol: 2025-08-01
+    releases:
+      - version: 18.2.0
+        released: 2023-08-07
+      - version: 18.2.1
+        released: 2023-12-18
   quincy:
     target_eol: 2024-06-01
     releases:
+      - version: 17.2.7
+        released: 2023-10-30
+      - version: 17.2.6
+        released: 2023-04-10
       - version: 17.2.5
         released: 2022-10-19
-      - version: 17.2.4  
+      - version: 17.2.4
         released: 2022-09-30
       - version: 17.2.3
         released: 2022-07-29
@@ -29,8 +40,16 @@ releases:
         released: 2022-04-19
 
   pacific:
-    target_eol: 2023-06-01
+    target_eol: 2023-10-01
     releases:
+      - version: 16.2.14
+        released: 2023-08-30
+      - version: 16.2.13
+        released: 2023-05-09
+      - version: 16.2.12
+        released: 2023-04-14
+      - version: 16.2.11
+        released: 2023-01-26
       - version: 16.2.10
         released: 2022-07-21
       - version: 16.2.9
@@ -38,7 +57,7 @@ releases:
       - version: 16.2.8
         released: 2022-05-16
       - version: 16.2.7
-        released: 2021-12-14        
+        released: 2021-12-14
       - version: 16.2.6
         released: 2021-09-16
       - version: 16.2.5
@@ -62,7 +81,7 @@ releases:
         released: 2022-08-09
       - version: 15.2.16
         released: 2022-03-01
-      - version: 15.2.15  
+      - version: 15.2.15
         released: 2021-10-20
       - version: 15.2.14
         released: 2021-08-05
@@ -172,7 +191,7 @@ releases:
         released: 2018-07-01
       - version: 13.2.0
         released: 2018-06-01
-  
+
   luminous:
     target_eol: 2019-06-01
     actual_eol: 2020-03-01
@@ -205,7 +224,7 @@ releases:
         released: 2017-09-01
       - version: 12.2.0
         released: 2017-08-01
-  
+
   kraken:
     target_eol: 2017-08-01
     actual_eol: 2017-08-01
@@ -367,19 +386,19 @@ development:
       skip_ref: true
     - version: 15.0.0
       released: 2019-04-03
-      skip_ref: true        
+      skip_ref: true
     - version: 14.1.1
       released:  2019-03-11
-      skip_ref: true        
+      skip_ref: true
     - version: 14.1.0
       released:  2019-02-22
-      skip_ref: true  
+      skip_ref: true
     - version: 14.0.1
       released:  2018-11-05
       skip_ref: true
     - version: 14.0.0
       released:  2018-05-06
-      skip_ref: true      
+      skip_ref: true
     - version: 13.1.0
       released: 2018-05-01
       skip_ref: true

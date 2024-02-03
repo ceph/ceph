@@ -43,6 +43,7 @@
 #include "Server.h"
 #include "MetricsHandler.h"
 #include "osdc/Journaler.h"
+#include "MDSMetaRequest.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
@@ -273,6 +274,13 @@ class MDSRank {
     }
 
     /**
+     * Abort the MDS and flush any clog messages.
+     *
+     * Callers must already hold mds_lock.
+     */
+    void abort(std::string_view msg);
+
+    /**
      * Report state DAMAGED to the mon, and then pass on to respawn().  Call
      * this when an unrecoverable error is encountered while attempting
      * to load an MDS rank's data structures.  This is *not* for use with
@@ -299,7 +307,7 @@ class MDSRank {
 
     void send_message_mds(const ref_t<Message>& m, mds_rank_t mds);
     void send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr);
-    void forward_message_mds(const cref_t<MClientRequest>& req, mds_rank_t mds);
+    void forward_message_mds(const MDRequestRef& mdr, mds_rank_t mds);
     void send_message_client_counted(const ref_t<Message>& m, client_t client);
     void send_message_client_counted(const ref_t<Message>& m, Session* session);
     void send_message_client_counted(const ref_t<Message>& m, const ConnectionRef& connection);
@@ -375,6 +383,10 @@ class MDSRank {
 		      std::ostream& ss);
     void schedule_inmemory_logger();
 
+    double get_inject_journal_corrupt_dentry_first() const {
+      return inject_journal_corrupt_dentry_first;
+    }
+
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
@@ -411,6 +423,8 @@ class MDSRank {
 
     PerfCounters *logger = nullptr, *mlogger = nullptr;
     OpTracker op_tracker;
+
+    std::map<ceph_tid_t, std::unique_ptr<MDSMetaRequest>> internal_client_requests;
 
     // The last different state I held before current
     MDSMap::DaemonState last_state = MDSMap::STATE_BOOT;
@@ -508,6 +522,7 @@ class MDSRank {
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
+    void command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
 
     // FIXME the state machine logic should be separable from the dispatch
@@ -618,6 +633,7 @@ class MDSRank {
 
     bool standby_replaying = false;  // true if current replay pass is in standby-replay mode
     uint64_t extraordinary_events_dump_interval = 0;
+    double inject_journal_corrupt_dentry_first = 0.0;
 private:
     bool send_status = true;
 

@@ -70,7 +70,7 @@ void LookupTable::decode() {
     return;
   }
 
-  // translate the lookup table (big-endian -> CPU endianess)
+  // translate the lookup table (big-endian -> CPU endianness)
   for (auto idx = 0UL; idx < size; ++idx) {
     cluster_offsets[idx] = big_to_native(cluster_offsets[idx]);
   }
@@ -125,7 +125,8 @@ class QCOWFormat<I>::ClusterCache {
 public:
   ClusterCache(QCOWFormat* qcow_format)
     : qcow_format(qcow_format),
-      m_strand(*qcow_format->m_image_ctx->asio_engine) {
+      m_strand(boost::asio::make_strand(
+        *qcow_format->m_image_ctx->asio_engine)) {
   }
 
   void get_cluster(uint64_t cluster_offset, uint64_t cluster_length,
@@ -149,7 +150,7 @@ private:
   typedef std::list<Completion> Completions;
 
   QCOWFormat* qcow_format;
-  boost::asio::io_context::strand m_strand;
+  boost::asio::strand<boost::asio::io_context::executor_type> m_strand;
 
   std::shared_ptr<Cluster> cluster;
   std::unordered_map<uint64_t, Completions> cluster_completions;
@@ -256,7 +257,8 @@ class QCOWFormat<I>::L2TableCache {
 public:
   L2TableCache(QCOWFormat* qcow_format)
     : qcow_format(qcow_format),
-      m_strand(*qcow_format->m_image_ctx->asio_engine),
+      m_strand(boost::asio::make_strand(
+        *qcow_format->m_image_ctx->asio_engine)),
       l2_cache_entries(QCOW_L2_CACHE_SIZE) {
   }
 
@@ -316,7 +318,7 @@ public:
 private:
   QCOWFormat* qcow_format;
 
-  boost::asio::io_context::strand m_strand;
+  boost::asio::strand<boost::asio::io_context::executor_type> m_strand;
 
   struct Request {
     const LookupTable* l1_table;
@@ -832,7 +834,7 @@ QCOWFormat<I>::QCOWFormat(
     const SourceSpecBuilder<I>* source_spec_builder)
   : m_image_ctx(image_ctx), m_json_object(json_object),
     m_source_spec_builder(source_spec_builder),
-    m_strand(*image_ctx->asio_engine) {
+    m_strand(boost::asio::make_strand(*image_ctx->asio_engine)) {
 }
 
 template <typename I>

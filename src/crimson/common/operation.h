@@ -317,14 +317,15 @@ private:
  * an interface for registering ops in flight and dumping
  * diagnostic information.
  */
-class Operation : public boost::intrusive_ref_counter<
-  Operation, boost::thread_unsafe_counter> {
+class Operation : public boost::intrusive_ref_counter<Operation> {
  public:
   using id_t = uint64_t;
   static constexpr id_t NULL_ID = std::numeric_limits<uint64_t>::max();
   id_t get_id() const {
     return id;
   }
+
+  static constexpr bool is_trackable = false;
 
   virtual unsigned get_type() const = 0;
   virtual const char *get_type_name() const = 0;
@@ -474,23 +475,23 @@ public:
   using Ref = std::unique_ptr<PipelineExitBarrierI>;
 
   /// Waits for exit barrier
-  virtual seastar::future<> wait() = 0;
+  virtual std::optional<seastar::future<>> wait() = 0;
 
-  /// Releases pipeline stage, can only be called after wait
+  /// Releases pipeline resources, after or without waiting
+  // FIXME: currently, exit() will discard the associated future even if it is
+  // still unresolved, which is discouraged by seastar.
   virtual void exit() = 0;
 
-  /// Releases pipeline resources without waiting on barrier
-  virtual void cancel() = 0;
-
-  /// Must ensure that resources are released, likely by calling cancel()
+  /// Must ensure that resources are released, likely by calling exit()
   virtual ~PipelineExitBarrierI() {}
 };
 
 template <class T>
 class PipelineStageIT : public BlockerT<T> {
-  const core_id_t core = seastar::this_shard_id();
 public:
-  core_id_t get_core() const { return core; }
+#ifndef NDEBUG
+  const core_id_t core = seastar::this_shard_id();
+#endif
 
   template <class... Args>
   decltype(auto) enter(Args&&... args) {
@@ -501,8 +502,8 @@ public:
 class PipelineHandle {
   PipelineExitBarrierI::Ref barrier;
 
-  auto wait_barrier() {
-    return barrier ? barrier->wait() : seastar::now();
+  std::optional<seastar::future<>> wait_barrier() {
+    return barrier ? barrier->wait() : std::nullopt;
   }
 
 public:
@@ -522,16 +523,27 @@ public:
   template <typename OpT, typename T>
   seastar::future<>
   enter(T &stage, typename T::BlockingEvent::template Trigger<OpT>&& t) {
-    ceph_assert(stage.get_core() == seastar::this_shard_id());
-    return wait_barrier().then([this, &stage, t=std::move(t)] () mutable {
-      auto fut = t.maybe_record_blocking(stage.enter(t), stage);
-      exit();
-      return std::move(fut).then(
-        [this, t=std::move(t)](auto &&barrier_ref) mutable {
-        barrier = std::move(barrier_ref);
-        return seastar::now();
+    assert(stage.core == seastar::this_shard_id());
+    auto wait_fut = wait_barrier();
+    if (wait_fut.has_value()) {
+      return wait_fut.value().then([this, &stage, t=std::move(t)] () mutable {
+        auto fut = t.maybe_record_blocking(stage.enter(t), stage);
+        exit();
+        return std::move(fut).then(
+          [this, t=std::move(t)](auto &&barrier_ref) mutable {
+          barrier = std::move(barrier_ref);
+          return seastar::now();
+        });
       });
-    });
+    } else {
+        auto fut = t.maybe_record_blocking(stage.enter(t), stage);
+        exit();
+        return std::move(fut).then(
+          [this, t=std::move(t)](auto &&barrier_ref) mutable {
+          barrier = std::move(barrier_ref);
+          return seastar::now();
+        });
+    }
   }
 
   /**
@@ -540,7 +552,7 @@ public:
   seastar::future<> complete() {
     auto ret = wait_barrier();
     barrier.reset();
-    return ret;
+    return ret ? std::move(ret.value()) : seastar::now();
   }
 
   /**
@@ -573,32 +585,23 @@ class OrderedExclusivePhaseT : public PipelineStageIT<T> {
     OrderedExclusivePhaseT *phase;
     Operation::id_t op_id;
   public:
-    ExitBarrier(OrderedExclusivePhaseT *phase, Operation::id_t id)
-      : phase(phase), op_id(id) {}
+    ExitBarrier(OrderedExclusivePhaseT &phase, Operation::id_t id)
+      : phase(&phase), op_id(id) {}
 
-    seastar::future<> wait() final {
-      return seastar::now();
+    std::optional<seastar::future<>> wait() final {
+      return std::nullopt;
     }
 
     void exit() final {
       if (phase) {
-	auto *p = phase;
-	auto id = op_id;
-	phase = nullptr;
-	std::ignore = seastar::smp::submit_to(
-	  p->get_core(),
-	  [p, id] {
-	    p->exit(id);
-	  });
+        assert(phase->core == seastar::this_shard_id());
+        phase->exit(op_id);
+        phase = nullptr;
       }
     }
 
-    void cancel() final {
-      exit();
-    }
-
     ~ExitBarrier() final {
-      cancel();
+      exit();
     }
   };
 
@@ -615,7 +618,7 @@ public:
       ceph_assert_always(waiting > 0);
       --waiting;
       set_held_by(op_id);
-      return PipelineExitBarrierI::Ref(new ExitBarrier{this, op_id});
+      return PipelineExitBarrierI::Ref(new ExitBarrier{*this, op_id});
     });
   }
 
@@ -675,11 +678,11 @@ private:
     TriggerT trigger;
   public:
     ExitBarrier(
-      OrderedConcurrentPhaseT *phase,
+      OrderedConcurrentPhaseT &phase,
       seastar::future<> &&barrier,
-      TriggerT& trigger) : phase(phase), barrier(std::move(barrier)), trigger(trigger) {}
+      TriggerT& trigger) : phase(&phase), barrier(std::move(barrier)), trigger(trigger) {}
 
-    seastar::future<> wait() final {
+    std::optional<seastar::future<>> wait() final {
       assert(phase);
       assert(barrier);
       auto ret = std::move(*barrier);
@@ -689,27 +692,23 @@ private:
 
     void exit() final {
       if (barrier) {
-	static_cast<void>(
-	  std::move(*barrier).then([phase=this->phase] { phase->mutex.unlock(); }));
-	barrier = std::nullopt;
-	phase = nullptr;
+        assert(phase);
+        assert(phase->core == seastar::this_shard_id());
+        std::ignore = std::move(*barrier
+        ).then([phase=this->phase] {
+          phase->mutex.unlock();
+        });
+        barrier = std::nullopt;
+        phase = nullptr;
+      } else if (phase) {
+        assert(phase->core == seastar::this_shard_id());
+        phase->mutex.unlock();
+        phase = nullptr;
       }
-      if (phase) {
-	std::ignore = seastar::smp::submit_to(
-	  phase->get_core(),
-	  [this] {
-	    phase->mutex.unlock();
-	    phase = nullptr;
-	  });
-      }
-    }
-
-    void cancel() final {
-      exit();
     }
 
     ~ExitBarrier() final {
-      cancel();
+      exit();
     }
   };
 
@@ -717,7 +716,7 @@ public:
   template <class TriggerT>
   seastar::future<PipelineExitBarrierI::Ref> enter(TriggerT& t) {
     return seastar::make_ready_future<PipelineExitBarrierI::Ref>(
-      new ExitBarrier<TriggerT>{this, mutex.lock(), t});
+      new ExitBarrier<TriggerT>{*this, mutex.lock(), t});
   }
 
 private:
@@ -737,13 +736,11 @@ class UnorderedStageT : public PipelineStageIT<T> {
   public:
     ExitBarrier() = default;
 
-    seastar::future<> wait() final {
-      return seastar::now();
+    std::optional<seastar::future<>> wait() final {
+      return std::nullopt;
     }
 
     void exit() final {}
-
-    void cancel() final {}
 
     ~ExitBarrier() final {}
   };

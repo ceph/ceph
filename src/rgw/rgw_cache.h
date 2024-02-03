@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGWCACHE_H
-#define CEPH_RGWCACHE_H
+#pragma once
 
 #include <string>
 #include <map>
@@ -221,5 +220,3 @@ public:
   void unchain_cache(RGWChainedCache *cache);
   void invalidate_all();
 };
-
-#endif

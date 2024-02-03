@@ -43,10 +43,13 @@ An example of the session tags that are passed in by the IDP in the web token is
         "active": true
     }
 
-Steps to configure Keycloak to pass tags in the web token are described here:doc:`keycloak`.
+Steps to configure Keycloak to pass tags in the web token are described here:
+:ref:`radosgw_keycloak`.
 
-The trust policy must have 'sts:TagSession' permission if the web token passed in by the federated user contains session tags, otherwise
-the AssumeRoleWithWebIdentity action will fail. An example of the trust policy with sts:TagSession is as follows:
+The trust policy must have 'sts:TagSession' permission if the web token passed
+in by the federated user contains session tags, otherwise the
+AssumeRoleWithWebIdentity action will fail. An example of the trust policy with
+sts:TagSession is as follows:
 
 .. code-block:: python
 
@@ -101,7 +104,7 @@ An example of a role permission policy that uses aws:PrincipalTag is as follows:
 	    {
 	        "Effect":"Allow",
 	        "Action":["s3:*"],
-            "Resource":["arn:aws:s3::t1tenant:my-test-bucket","arn:aws:s3::t1tenant:my-test-bucket/*],"+
+            "Resource":["arn:aws:s3::t1tenant:my-test-bucket","arn:aws:s3::t1tenant:my-test-bucket/*"],
 	        "Condition":{"StringEquals":{"aws:PrincipalTag/Department":"Engineering"}}
 	    }]
 	}
@@ -145,7 +148,7 @@ An example of a role's trust policy that uses aws:TagKeys is as follows:
 	        "Effect":"Allow",
 	        "Action":["sts:AssumeRoleWithWebIdentity","sts:TagSession"],
 	        "Principal":{"Federated":["arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart"]},
-	        "Condition":{"ForAllValues:StringEquals":{"aws:TagKeys":["Marketing,Engineering"]}}
+	        "Condition":{"ForAllValues:StringEquals":{"aws:TagKeys":["Department"]}}
 	    }]
 	}
 

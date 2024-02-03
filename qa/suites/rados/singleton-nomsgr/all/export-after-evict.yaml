@@ -17,6 +17,7 @@ tasks:
     log-ignorelist:
       - overall HEALTH_
       - \(CACHE_POOL_NO_HIT_SET\)
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       global:
         osd max object name len: 460

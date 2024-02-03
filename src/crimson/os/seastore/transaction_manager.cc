@@ -125,18 +125,22 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
           t,
           [this](
             paddr_t paddr,
+	    paddr_t backref_key,
             extent_len_t len,
             extent_types_t type,
             laddr_t laddr) {
           if (is_backref_node(type)) {
             assert(laddr == L_ADDR_NULL);
-            backref_manager->cache_new_backref_extent(paddr, type);
+	    assert(backref_key != P_ADDR_NULL);
+            backref_manager->cache_new_backref_extent(paddr, backref_key, type);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
           } else if (laddr == L_ADDR_NULL) {
+	    assert(backref_key == P_ADDR_NULL);
             cache->update_tree_extents_num(type, -1);
             epm->mark_space_free(paddr, len);
           } else {
+	    assert(backref_key == P_ADDR_NULL);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
           }
@@ -174,6 +178,7 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
   });
 }
 
+#ifdef UNIT_TESTS_BUILT
 TransactionManager::ref_ret TransactionManager::inc_ref(
   Transaction &t,
   LogicalCachedExtentRef &ref)
@@ -205,14 +210,15 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
     return result.refcount;
   });
 }
+#endif
 
-TransactionManager::ref_ret TransactionManager::dec_ref(
+TransactionManager::ref_ret TransactionManager::remove(
   Transaction &t,
   LogicalCachedExtentRef &ref)
 {
-  LOG_PREFIX(TransactionManager::dec_ref);
+  LOG_PREFIX(TransactionManager::remove);
   TRACET("{}", t, *ref);
-  return lba_manager->decref_extent(t, ref->get_laddr()
+  return lba_manager->decref_extent(t, ref->get_laddr(), true
   ).si_then([this, FNAME, &t, ref](auto result) {
     DEBUGT("extent refcount is decremented to {} -- {}",
            t, result.refcount, *ref);
@@ -223,43 +229,43 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   });
 }
 
-TransactionManager::ref_ret TransactionManager::dec_ref(
+TransactionManager::ref_ret TransactionManager::_dec_ref(
   Transaction &t,
-  laddr_t offset)
+  laddr_t offset,
+  bool cascade_remove)
 {
-  LOG_PREFIX(TransactionManager::dec_ref);
+  LOG_PREFIX(TransactionManager::_dec_ref);
   TRACET("{}", t, offset);
-  return lba_manager->decref_extent(t, offset
+  return lba_manager->decref_extent(t, offset, cascade_remove
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
     DEBUGT("extent refcount is decremented to {} -- {}~{}, {}",
            t, result.refcount, offset, result.length, result.addr);
-    if (result.refcount == 0 && !result.addr.is_zero()) {
-      return cache->retire_extent_addr(
-	t, result.addr, result.length
-      ).si_then([] {
-	return ref_ret(
-	  interruptible::ready_future_marker{},
-	  0);
-      });
-    } else {
-      return ref_ret(
-	interruptible::ready_future_marker{},
-	result.refcount);
+    auto fut = ref_iertr::now();
+    if (result.refcount == 0) {
+      if (result.addr.is_paddr() &&
+          !result.addr.get_paddr().is_zero()) {
+        fut = cache->retire_extent_addr(
+          t, result.addr.get_paddr(), result.length);
+      }
     }
+
+    return fut.si_then([result=std::move(result)] {
+      return result.refcount;
+    });
   });
 }
 
-TransactionManager::refs_ret TransactionManager::dec_ref(
+TransactionManager::refs_ret TransactionManager::remove(
   Transaction &t,
   std::vector<laddr_t> offsets)
 {
-  LOG_PREFIX(TransactionManager::dec_ref);
+  LOG_PREFIX(TransactionManager::remove);
   DEBUG("{} offsets", offsets.size());
   return seastar::do_with(std::move(offsets), std::vector<unsigned>(),
       [this, &t] (auto &&offsets, auto &refcnt) {
       return trans_intr::do_for_each(offsets.begin(), offsets.end(),
         [this, &t, &refcnt] (auto &laddr) {
-        return this->dec_ref(t, laddr).si_then([&refcnt] (auto ref) {
+        return this->remove(t, laddr).si_then([&refcnt] (auto ref) {
           refcnt.push_back(ref);
           return ref_iertr::now();
         });
@@ -373,30 +379,6 @@ TransactionManager::do_submit_transaction(
 	  backref_to_clear.push_back(e);
       }
 
-      // ...but add_pin from parent->leaf
-      std::vector<CachedExtentRef> lba_to_link;
-      std::vector<CachedExtentRef> backref_to_link;
-      lba_to_link.reserve(tref.get_fresh_block_stats().num +
-			  tref.get_existing_block_stats().valid_num);
-      backref_to_link.reserve(tref.get_fresh_block_stats().num);
-      tref.for_each_fresh_block([&](auto &e) {
-	if (e->is_valid()) {
-	  if (is_lba_node(e->get_type()) || e->is_logical())
-	    lba_to_link.push_back(e);
-	  else if (is_backref_node(e->get_type()))
-	    backref_to_link.push_back(e);
-	}
-      });
-
-      for (auto &e: tref.get_existing_block_list()) {
-	if (e->is_valid()) {
-	  lba_to_link.push_back(e);
-	}
-      }
-
-      lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
-      backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
-
       journal->get_trimmer().update_journal_tails(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
@@ -469,7 +451,6 @@ TransactionManager::rewrite_logical_extent(
     lextent->get_length(),
     nlextent->get_bptr().c_str());
   nlextent->set_laddr(lextent->get_laddr());
-  nlextent->set_pin(lextent->get_pin().duplicate());
   nlextent->set_modify_time(lextent->get_modify_time());
 
   DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
@@ -482,7 +463,8 @@ TransactionManager::rewrite_logical_extent(
     t,
     lextent->get_laddr(),
     lextent->get_paddr(),
-    nlextent->get_paddr());
+    nlextent->get_paddr(),
+    nlextent.get());
 }
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
@@ -505,6 +487,12 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
 
   assert(extent->is_valid() && !extent->is_initial_pending());
   if (extent->is_dirty()) {
+    if (epm->can_inplace_rewrite(t, extent)) {
+      DEBUGT("delta overwriting extent -- {}", t, *extent);
+      t.add_inplace_rewrite_extent(extent);
+      extent->set_inplace_rewrite_generation();
+      return rewrite_extent_iertr::now();
+    }
     extent->set_target_rewrite_generation(INIT_GENERATION);
   } else {
     extent->set_target_rewrite_generation(target_generation);
@@ -576,7 +564,7 @@ TransactionManager::get_extents_if_live(
           return trans_intr::parallel_for_each(
             pin_list,
             [=, this, &list, &t](
-              LBAPinRef &pin) -> Cache::get_extent_iertr::future<>
+              LBAMappingRef &pin) -> Cache::get_extent_iertr::future<>
           {
             auto pin_paddr = pin->get_val();
             auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
@@ -588,7 +576,7 @@ TransactionManager::get_extents_if_live(
             // Only extent split can happen during the lookup
             ceph_assert(pin_seg_paddr >= paddr &&
                         pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
-            return pin_to_extent_by_type(t, std::move(pin), type
+            return read_pin_by_type(t, std::move(pin), type
             ).si_then([&list](auto ret) {
               list.emplace_back(std::move(ret));
               return seastar::now();
@@ -642,10 +630,15 @@ TransactionManagerRef make_transaction_manager(
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
+  SegmentManagerGroupRef cold_sms = nullptr;
+  std::vector<SegmentProvider*> segment_providers_by_id{DEVICE_ID_MAX, nullptr};
 
   auto p_backend_type = primary_device->get_backend_type();
 
   if (p_backend_type == backend_type_t::SEGMENTED) {
+    auto dtype = primary_device->get_device_type();
+    ceph_assert(dtype != device_type_t::HDD &&
+		dtype != device_type_t::EPHEMERAL_COLD);
     sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
   } else {
     auto rbm = std::make_unique<BlockRBManager>(
@@ -655,7 +648,14 @@ TransactionManagerRef make_transaction_manager(
 
   for (auto &p_dev : secondary_devices) {
     if (p_dev->get_backend_type() == backend_type_t::SEGMENTED) {
-      sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+      if (p_dev->get_device_type() == primary_device->get_device_type()) {
+        sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+      } else {
+        if (!cold_sms) {
+          cold_sms = std::make_unique<SegmentManagerGroup>();
+        }
+        cold_sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+      }
     } else {
       auto rbm = std::make_unique<BlockRBManager>(
 	static_cast<RBMDevice*>(p_dev), "", is_test);
@@ -674,7 +674,7 @@ TransactionManagerRef make_transaction_manager(
 		->get_journal_size() - primary_device->get_block_size();
     // see CircularBoundedJournal::get_records_start()
     roll_start = static_cast<random_block_device::RBMDevice*>(primary_device)
-		 ->get_journal_start() + primary_device->get_block_size();
+		 ->get_shard_journal_start() + primary_device->get_block_size();
     ceph_assert_always(roll_size <= DEVICE_OFF_MAX);
     ceph_assert_always((std::size_t)roll_size + roll_start <=
                        primary_device->get_available_size());
@@ -704,14 +704,36 @@ TransactionManagerRef make_transaction_manager(
   AsyncCleanerRef cleaner;
   JournalRef journal;
 
+  SegmentCleanerRef cold_segment_cleaner = nullptr;
+
+  if (cold_sms) {
+    cold_segment_cleaner = SegmentCleaner::create(
+      cleaner_config,
+      std::move(cold_sms),
+      *backref_manager,
+      epm->get_ool_segment_seq_allocator(),
+      cleaner_is_detailed,
+      /* is_cold = */ true);
+    if (journal_type == journal_type_t::SEGMENTED) {
+      for (auto id : cold_segment_cleaner->get_device_ids()) {
+        segment_providers_by_id[id] =
+          static_cast<SegmentProvider*>(cold_segment_cleaner.get());
+      }
+    }
+  }
+
   if (journal_type == journal_type_t::SEGMENTED) {
     cleaner = SegmentCleaner::create(
       cleaner_config,
       std::move(sms),
       *backref_manager,
+      epm->get_ool_segment_seq_allocator(),
       cleaner_is_detailed);
     auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
-    cache->set_segment_provider(*segment_cleaner);
+    for (auto id : segment_cleaner->get_device_ids()) {
+      segment_providers_by_id[id] =
+        static_cast<SegmentProvider*>(segment_cleaner);
+    }
     segment_cleaner->set_journal_trimmer(*journal_trimmer);
     journal = journal::make_segmented(
       *segment_cleaner,
@@ -727,7 +749,11 @@ TransactionManagerRef make_transaction_manager(
       "");
   }
 
-  epm->init(std::move(journal_trimmer), std::move(cleaner));
+  cache->set_segment_providers(std::move(segment_providers_by_id));
+
+  epm->init(std::move(journal_trimmer),
+	    std::move(cleaner),
+	    std::move(cold_segment_cleaner));
   epm->set_primary_device(primary_device);
 
   return std::make_unique<TransactionManager>(

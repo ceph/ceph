@@ -178,7 +178,7 @@ public:
     cmd_getval(cmdmap, "logger", logger);
     cmd_getval(cmdmap, "counter", counter);
 
-    crimson::common::local_perf_coll().dump_formatted(f.get(), false, logger, counter);
+    crimson::common::local_perf_coll().dump_formatted(f.get(), false, false, logger, counter);
     return seastar::make_ready_future<tell_result_t>(std::move(f));
   }
 };
@@ -240,7 +240,9 @@ public:
           }
           for (const auto& [labels, metric] : metric_family) {
             if (metric && metric->is_enabled()) {
+	      f->open_object_section(""); // enclosed by array
               DumpMetricsHook::dump_metric_value(f, full_name, *metric, labels);
+	      f->close_section();
             }
           }
         }

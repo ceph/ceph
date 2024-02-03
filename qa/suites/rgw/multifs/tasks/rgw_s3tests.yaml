@@ -2,11 +2,7 @@ tasks:
 - install:
 - ceph:
 - rgw: [client.0]
+- tox: [client.0]
 - s3tests:
     client.0:
       rgw_server: client.0
-overrides:
-  ceph:
-    conf:
-      client:
-        rgw lc debug interval: 10

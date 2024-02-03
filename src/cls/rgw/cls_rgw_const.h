@@ -6,7 +6,7 @@
 #define RGW_CLASS "rgw"
 
 /* Special error code returned by cls bucket list operation if it was
- * unable to skip past enough not visibile entries to return any
+ * unable to skip past enough not visible entries to return any
  * entries in the call. */
 constexpr int RGWBIAdvanceAndRetryError = -EFBIG;
 
@@ -63,6 +63,9 @@ constexpr int RGWBIAdvanceAndRetryError = -EFBIG;
 #define RGW_LC_PUT_HEAD "lc_put_head"
 #define RGW_LC_GET_HEAD "lc_get_head"
 #define RGW_LC_LIST_ENTRIES "lc_list_entries"
+
+/* multipart */
+#define RGW_MP_UPLOAD_PART_INFO_UPDATE "mp_upload_part_info_update"
 
 /* resharding */
 #define RGW_RESHARD_ADD "reshard_add"

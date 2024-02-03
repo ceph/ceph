@@ -17,8 +17,9 @@
 #ifndef CEPH_MESSENGER_H
 #define CEPH_MESSENGER_H
 
-#include <map>
 #include <deque>
+#include <map>
+#include <optional>
 
 #include <errno.h>
 #include <sstream>
@@ -167,7 +168,6 @@ public:
                            uint64_t nonce);
 
   static uint64_t get_random_nonce();
-  static uint64_t get_pid_nonce();
 
   /**
    * create a new messenger
@@ -269,14 +269,7 @@ public:
    * @param addr The address to use as a template.
    */
   virtual bool set_addr_unknowns(const entity_addrvec_t &addrs) = 0;
-  /**
-   * set the address for this Messenger. This is useful if the Messenger
-   * binds to a specific address but advertises a different address on the
-   * the network.
-   *
-   * @param addr The address to use.
-   */
-  virtual void set_addrs(const entity_addrvec_t &addr) = 0;
+
   /// Get the default send priority.
   int get_default_send_priority() { return default_send_priority; }
   /**
@@ -426,12 +419,15 @@ public:
    * in an unspecified order.
    *
    * @param bind_addr The address to bind to.
+   * @patam public_addrs The addresses to announce over the network
    * @return 0 on success, or -1 on error, or -errno if
    * we can be more specific about the failure.
    */
-  virtual int bind(const entity_addr_t& bind_addr) = 0;
+  virtual int bind(const entity_addr_t& bind_addr,
+		   std::optional<entity_addrvec_t> public_addrs=std::nullopt) = 0;
 
-  virtual int bindv(const entity_addrvec_t& addrs);
+  virtual int bindv(const entity_addrvec_t& bind_addrs,
+                    std::optional<entity_addrvec_t> public_addrs=std::nullopt);
 
   /**
    * This function performs a full restart of the Messenger component,

@@ -4,9 +4,7 @@ usr/bin/radosgw
 usr/bin/radosgw-es
 usr/bin/radosgw-object-expirer
 usr/bin/radosgw-token
-usr/bin/rgw-gap-list
-usr/bin/rgw-gap-list-comparator
-usr/bin/rgw-orphan-list
 usr/share/man/man8/ceph-diff-sorted.8
 usr/share/man/man8/radosgw.8
 usr/share/man/man8/rgw-orphan-list.8
+usr/share/man/man8/rgw-restore-bucket-index.8

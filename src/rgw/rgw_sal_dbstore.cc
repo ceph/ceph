@@ -34,123 +34,43 @@ namespace rgw::sal {
 
   int DBUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
       const string& end_marker, uint64_t max, bool need_stats,
-      BucketList &buckets, optional_yield y)
+      BucketList &result, optional_yield y)
   {
     RGWUserBuckets ulist;
     bool is_truncated = false;
-    int ret;
 
-    buckets.clear();
-    ret = store->getDB()->list_buckets(dpp, "", info.user_id, marker, end_marker, max,
-        need_stats, &ulist, &is_truncated);
+    int ret = store->getDB()->list_buckets(dpp, "", info.user_id, marker,
+        end_marker, max, need_stats, &ulist, &is_truncated);
     if (ret < 0)
       return ret;
 
-    buckets.set_truncated(is_truncated);
-    for (const auto& ent : ulist.get_buckets()) {
-      buckets.add(std::make_unique<DBBucket>(this->store, ent.second, this));
+    result.buckets.clear();
+
+    for (auto& ent : ulist.get_buckets()) {
+      result.buckets.push_back(std::move(ent.second));
     }
 
+    if (is_truncated && !result.buckets.empty()) {
+      result.next_marker = result.buckets.back().bucket.name;
+    } else {
+      result.next_marker.clear();
+    }
     return 0;
   }
 
-  int DBUser::create_bucket(const DoutPrefixProvider *dpp,
-      const rgw_bucket& b,
-      const string& zonegroup_id,
-      rgw_placement_rule& placement_rule,
-      string& swift_ver_location,
-      const RGWQuotaInfo * pquota_info,
-      const RGWAccessControlPolicy& policy,
-      Attrs& attrs,
-      RGWBucketInfo& info,
-      obj_version& ep_objv,
-      bool exclusive,
-      bool obj_lock_enabled,
-      bool *existed,
-      req_info& req_info,
-      std::unique_ptr<Bucket>* bucket_out,
-      optional_yield y)
+  int DBBucket::create(const DoutPrefixProvider *dpp,
+                       const CreateParams& params,
+                       optional_yield y)
   {
-    int ret;
-    bufferlist in_data;
-    RGWBucketInfo master_info;
-    rgw_bucket *pmaster_bucket = nullptr;
-    uint32_t *pmaster_num_shards = nullptr;
-    real_time creation_time;
-    std::unique_ptr<Bucket> bucket;
-    obj_version objv, *pobjv = NULL;
+    rgw_bucket key = get_key();
+    key.marker = params.marker;
+    key.bucket_id = params.bucket_id;
 
-    /* If it exists, look it up; otherwise create it */
-    ret = store->get_bucket(dpp, this, b, &bucket, y);
-    if (ret < 0 && ret != -ENOENT)
-      return ret;
-
-    if (ret != -ENOENT) {
-      RGWAccessControlPolicy old_policy(store->ctx());
-      *existed = true;
-      if (swift_ver_location.empty()) {
-        swift_ver_location = bucket->get_info().swift_ver_location;
-      }
-      placement_rule.inherit_from(bucket->get_info().placement_rule);
-
-      // don't allow changes to the acl policy
-      /*    int r = rgw_op_get_bucket_policy_from_attr(dpp, this, this, bucket->get_attrs(),
-            &old_policy, y);
-            if (r >= 0 && old_policy != policy) {
-            bucket_out->swap(bucket);
-            return -EEXIST;
-            }*/
-    } else {
-      bucket = std::make_unique<DBBucket>(store, b, this);
-      *existed = false;
-      bucket->set_attrs(attrs);
-      // XXX: For now single default zone and STANDARD storage class
-      // supported.
-      placement_rule.name = "default";
-      placement_rule.storage_class = "STANDARD";
-    }
-
-    /*
-     * XXX: If not master zone, fwd the request to master zone.
-     * For now DBStore has single zone.
-     */
-    std::string zid = zonegroup_id;
-    /* if (zid.empty()) {
-       zid = svc()->zone->get_zonegroup().get_id();
-       } */
-
-    if (*existed) {
-      rgw_placement_rule selected_placement_rule;
-      /* XXX: Handle this when zone is implemented
-         ret = svc()->zone->select_bucket_placement(this.get_info(),
-         zid, placement_rule,
-         &selected_placement_rule, nullptr, y);
-         if (selected_placement_rule != info.placement_rule) {
-         ret = -EEXIST;
-         bucket_out->swap(bucket);
-         return ret;
-         } */
-    } else {
-
-      /* XXX: We may not need to send all these params. Cleanup the unused ones */
-      ret = store->getDB()->create_bucket(dpp, this->get_info(), bucket->get_key(),
-          zid, placement_rule, swift_ver_location, pquota_info,
-          attrs, info, pobjv, &ep_objv, creation_time,
-          pmaster_bucket, pmaster_num_shards, y, exclusive);
-      if (ret == -EEXIST) {
-        *existed = true;
-        ret = 0;
-      } else if (ret != 0) {
-        return ret;
-      }
-    }
-
-    bucket->set_version(ep_objv);
-    bucket->get_info() = info;
-
-    bucket_out->swap(bucket);
-
-    return ret;
+    /* XXX: We may not need to send all these params. Cleanup the unused ones */
+    return store->getDB()->create_bucket(dpp, params.owner, key,
+        params.zonegroup_id, params.placement_rule, params.attrs,
+        params.swift_ver_location, params.quota, params.creation_time,
+        &bucket_version, info, y);
   }
 
   int DBUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
@@ -170,7 +90,7 @@ namespace rgw::sal {
   }
 
   /* stats - Not for first pass */
-  int DBUser::read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB *cb)
+  int DBUser::read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb)
   {
     return 0;
   }
@@ -187,7 +107,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
+  int DBUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
   {
     return 0;
   }
@@ -232,7 +152,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y)
+  int DBBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y)
   {
     int ret;
 
@@ -273,14 +193,14 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBBucket::remove_bucket_bypass_gc(int concurrent_max, bool
-					keep_index_consistent,
-					optional_yield y, const
-					DoutPrefixProvider *dpp) {
+  int DBBucket::remove_bypass_gc(int concurrent_max, bool
+				 keep_index_consistent,
+				 optional_yield y, const
+				 DoutPrefixProvider *dpp) {
     return 0;
   }
 
-  int DBBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats)
+  int DBBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y)
   {
     int ret = 0;
 
@@ -301,35 +221,32 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::read_stats_async(const DoutPrefixProvider *dpp, const bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB *ctx)
+  int DBBucket::read_stats_async(const DoutPrefixProvider *dpp, const bucket_index_layout_generation& idx_layout, int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx)
   {
     return 0;
   }
 
-  int DBBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+  int DBBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                RGWBucketEnt* ent)
   {
     return 0;
   }
 
-  int DBBucket::update_container_stats(const DoutPrefixProvider *dpp)
+  int DBBucket::check_bucket_shards(const DoutPrefixProvider *dpp,
+                                    uint64_t num_objs, optional_yield y)
   {
     return 0;
   }
 
-  int DBBucket::check_bucket_shards(const DoutPrefixProvider *dpp)
-  {
-    return 0;
-  }
-
-  int DBBucket::chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y)
+  int DBBucket::chown(const DoutPrefixProvider *dpp, const rgw_user& new_owner, optional_yield y)
   {
     int ret;
 
-    ret = store->getDB()->update_bucket(dpp, "owner", info, false, &(new_user.get_id()), nullptr, nullptr, nullptr);
+    ret = store->getDB()->update_bucket(dpp, "owner", info, false, &new_owner, nullptr, nullptr, nullptr);
     return ret;
   }
 
-  int DBBucket::put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time _mtime)
+  int DBBucket::put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
   {
     int ret;
 
@@ -337,12 +254,6 @@ namespace rgw::sal {
 
     return ret;
 
-  }
-
-  /* Make sure to call get_bucket_info() if you need it first */
-  bool DBBucket::is_owner(User* user)
-  {
-    return (info.owner.compare(user->get_id()) == 0);
   }
 
   int DBBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y)
@@ -373,7 +284,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBBucket::try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime)
+  int DBBucket::try_refresh_info(const DoutPrefixProvider *dpp, ceph::real_time *pmtime, optional_yield y)
   {
     int ret = 0;
 
@@ -392,14 +303,14 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
+  int DBBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
   {
     return 0;
   }
 
   int DBBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
   {
-    /* XXX: CHECK: Unlike RadosStore, there is no seperate bucket index table.
+    /* XXX: CHECK: Unlike RadosStore, there is no separate bucket index table.
      * Delete all the object in the list from the object table of this
      * bucket
      */
@@ -424,7 +335,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::purge_instance(const DoutPrefixProvider *dpp)
+  int DBBucket::purge_instance(const DoutPrefixProvider *dpp, optional_yield y)
   {
     /* XXX: CHECK: for dbstore only single instance supported.
      * Remove all the objects for that instance? Anything extra needed?
@@ -443,7 +354,7 @@ namespace rgw::sal {
     Attrs attrs = get_attrs();
     attrs[RGW_ATTR_ACL] = aclbl;
 
-    ret = store->getDB()->update_bucket(dpp, "attrs", info, false, &(acl.get_owner().get_id()), &attrs, nullptr, nullptr);
+    ret = store->getDB()->update_bucket(dpp, "attrs", info, false, &acl.get_owner().id, &attrs, nullptr, nullptr);
 
     return ret;
   }
@@ -499,12 +410,12 @@ namespace rgw::sal {
 				const int& max_uploads,
 				vector<std::unique_ptr<MultipartUpload>>& uploads,
 				map<string, bool> *common_prefixes,
-				bool *is_truncated) {
+				bool *is_truncated, optional_yield y) {
     return 0;
   }
 
   int DBBucket::abort_multiparts(const DoutPrefixProvider* dpp,
-				 CephContext* cct) {
+				 CephContext* cct, optional_yield y) {
     return 0;
   }
 
@@ -514,29 +425,14 @@ namespace rgw::sal {
       dbsm->destroyAllHandles();
   }
 
-  const std::string&  DBZoneGroup::get_endpoint() const {
-    if (!group->endpoints.empty()) {
-      return group->endpoints.front();
-    } else {
-      // use zonegroup's master zone endpoints
-      auto z = group->zones.find(group->master_zone);
-      if (z != group->zones.end() && !z->second.endpoints.empty()) {
-	return z->second.endpoints.front();
-      }
-    }
-    return empty;
-  }
-
   bool DBZoneGroup::placement_target_exists(std::string& target) const {
     return !!group->placement_targets.count(target);
   }
 
-  int DBZoneGroup::get_placement_target_names(std::set<std::string>& names) const {
+  void DBZoneGroup::get_placement_target_names(std::set<std::string>& names) const {
     for (const auto& target : group->placement_targets) {
       names.emplace(target.second.name);
     }
-
-    return 0;
   }
 
   ZoneGroup& DBZone::get_zonegroup()
@@ -572,6 +468,9 @@ namespace rgw::sal {
 
   bool DBZone::has_zonegroup_api(const std::string& api) const
   {
+    if (api == "default")
+      return true;
+
     return false;
   }
 
@@ -600,7 +499,7 @@ namespace rgw::sal {
     return nullptr;
   }
 
-  std::unique_ptr<LuaManager> DBStore::get_lua_manager()
+  std::unique_ptr<LuaManager> DBStore::get_lua_manager(const std::string& luarocks_path)
   {
     return std::make_unique<DBLuaManager>(this);
   }
@@ -630,7 +529,7 @@ namespace rgw::sal {
 
   int DBObject::read_attrs(const DoutPrefixProvider* dpp, DB::Object::Read &read_op, optional_yield y, rgw_obj* target_obj)
   {
-    read_op.params.attrs = &attrs;
+    read_op.params.attrs = &state.attrset;
     read_op.params.target_obj = target_obj;
     read_op.params.obj_size = &state.size;
     read_op.params.lastmod = &state.mtime;
@@ -662,8 +561,8 @@ namespace rgw::sal {
       return r;
     }
     set_atomic();
-    attrs[attr_name] = attr_val;
-    return set_obj_attrs(dpp, &attrs, nullptr, y);
+    state.attrset[attr_name] = attr_val;
+    return set_obj_attrs(dpp, &state.attrset, nullptr, y);
   }
 
   int DBObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
@@ -685,23 +584,6 @@ namespace rgw::sal {
      store->getDB()->gen_rand_obj_instance_name(&state.obj.key);
   }
 
-
-  int DBObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-      std::map<std::string, bufferlist> *m,
-      bool* pmore, optional_yield y)
-  {
-    DB::Object op_target(store->getDB(),
-        get_bucket()->get_info(), get_obj());
-    return op_target.obj_omap_get_vals(dpp, marker, count, m, pmore);
-  }
-
-  int DBObject::omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
-      optional_yield y)
-  {
-    DB::Object op_target(store->getDB(),
-        get_bucket()->get_info(), get_obj());
-    return op_target.obj_omap_get_all(dpp, m);
-  }
 
   int DBObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
       const std::set<std::string>& keys,
@@ -736,7 +618,8 @@ namespace rgw::sal {
       const real_time& mtime,
       uint64_t olh_epoch,
       const DoutPrefixProvider* dpp,
-      optional_yield y)
+      optional_yield y,
+      uint32_t flags)
   {
     DB::Object op_target(store->getDB(),
         get_bucket()->get_info(), get_obj());
@@ -759,9 +642,9 @@ namespace rgw::sal {
     return std::make_unique<DBObject::DBReadOp>(this, nullptr);
   }
 
-  DBObject::DBReadOp::DBReadOp(DBObject *_source, RGWObjectCtx *_rctx) :
+  DBObject::DBReadOp::DBReadOp(DBObject *_source, RGWObjectCtx *_octx) :
     source(_source),
-    rctx(_rctx),
+    octx(_octx),
     op_target(_source->store->getDB(),
         _source->get_bucket()->get_info(),
         _source->get_obj()),
@@ -817,9 +700,9 @@ namespace rgw::sal {
     parent_op(&op_target)
   { }
 
-  int DBObject::DBDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y)
+  int DBObject::DBDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
   {
-    parent_op.params.bucket_owner = params.bucket_owner.get_id();
+    parent_op.params.bucket_owner = params.bucket_owner.id;
     parent_op.params.versioning_status = params.versioning_status;
     parent_op.params.obj_owner = params.obj_owner;
     parent_op.params.olh_epoch = params.olh_epoch;
@@ -844,7 +727,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, bool prevent_versioning)
+  int DBObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
   {
     DB::Object del_target(store->getDB(), bucket->get_info(), get_obj());
     DB::Object::Delete del_op(&del_target);
@@ -853,14 +736,6 @@ namespace rgw::sal {
     del_op.params.versioning_status = bucket->get_info().versioning_status();
 
     return del_op.delete_obj(dpp);
-  }
-
-  int DBObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
-      Completions* aio, bool keep_index_consistent,
-      optional_yield y)
-  {
-    /* XXX: Make it async */
-    return 0;
   }
 
   int DBObject::copy_object(User* user,
@@ -900,7 +775,7 @@ namespace rgw::sal {
   }
 
   int DBObject::swift_versioning_restore(bool& restored,
-      const DoutPrefixProvider* dpp)
+      const DoutPrefixProvider* dpp, optional_yield y)
   {
     return 0;
   }
@@ -911,7 +786,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
+  int DBMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
   {
     std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
     meta_obj->set_in_extra_data(true);
@@ -919,13 +794,13 @@ namespace rgw::sal {
     int ret;
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
-    del_op->params.bucket_owner = bucket->get_acl_owner();
+    del_op->params.bucket_owner.id = bucket->get_info().owner;
     del_op->params.versioning_status = 0;
 
     // Since the data objects are associated with meta obj till
     // MultipartUpload::Complete() is done, removing the metadata obj
     // should remove all the uploads so far.
-    ret = del_op->delete_obj(dpp, null_yield);
+    ret = del_op->delete_obj(dpp, null_yield, 0);
     if (ret < 0) {
       ldpp_dout(dpp, 20) << __func__ << ": del_op.delete_obj returned " <<
         ret << dendl;
@@ -959,7 +834,7 @@ namespace rgw::sal {
     DB::Object::Write obj_op(&op_target);
 
     /* Create meta object */
-    obj_op.meta.owner = owner.get_id();
+    obj_op.meta.owner = owner.id;
     obj_op.meta.category = RGWObjCategory::MultiMeta;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
     obj_op.meta.mtime = &mtime;
@@ -980,7 +855,7 @@ namespace rgw::sal {
 
   int DBMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
 				     int num_parts, int marker,
-				     int *next_marker, bool *truncated,
+				     int *next_marker, bool *truncated, optional_yield y,
 				     bool assume_unsorted)
   {
     std::list<RGWUploadPartInfo> parts_map;
@@ -1058,12 +933,12 @@ namespace rgw::sal {
     int marker = 0;
     uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
     auto etags_iter = part_etags.begin();
-    rgw::sal::Attrs attrs = target_obj->get_attrs();
+    rgw::sal::Attrs& attrs = target_obj->get_attrs();
 
     ofs = 0;
     accounted_size = 0;
     do {
-      ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated);
+      ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
       if (ret == -ENOENT) {
         ret = -ERR_NO_SUCH_UPLOAD;
       }
@@ -1138,7 +1013,7 @@ namespace rgw::sal {
     DB::Object::Write obj_op(&op_target);
     ret = obj_op.prepare(dpp);
 
-    obj_op.meta.owner = owner.get_id();
+    obj_op.meta.owner = owner.id;
     obj_op.meta.flags = PUT_OBJ_CREATE;
     obj_op.meta.category = RGWObjCategory::Main;
     obj_op.meta.modify_tail = true;
@@ -1227,21 +1102,20 @@ namespace rgw::sal {
   std::unique_ptr<Writer> DBMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)
   {
-    return std::make_unique<DBMultipartWriter>(dpp, y, this,
-				 std::move(_head_obj), store, owner,
+    return std::make_unique<DBMultipartWriter>(dpp, y, this, obj, store, owner,
 				 ptail_placement_rule, part_num, part_num_str);
   }
 
   DBMultipartWriter::DBMultipartWriter(const DoutPrefixProvider *dpp,
 	    	    optional_yield y,
                 MultipartUpload* upload,
-		        std::unique_ptr<rgw::sal::Object> _head_obj,
+		        rgw::sal::Object* obj,
 		        DBStore* _driver,
     		    const rgw_user& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
@@ -1250,7 +1124,7 @@ namespace rgw::sal {
 			store(_driver),
                 owner(_owner),
                 ptail_placement_rule(_ptail_placement_rule),
-                head_obj(std::move(_head_obj)),
+                head_obj(obj),
                 upload_id(upload->get_upload_id()),
                 part_num(_part_num),
                 oid(head_obj->get_name() + "." + upload_id +
@@ -1333,7 +1207,7 @@ namespace rgw::sal {
         return 0; /* nothing more to write */
       }
 
-      /* flush watever tail data is present */
+      /* flush whatever tail data is present */
       int ret = parent_op.write_data(dpp, tail_part_data, tail_part_offset);
       if (ret < 0) {
         return ret;
@@ -1353,9 +1227,9 @@ namespace rgw::sal {
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx,
+                       uint32_t flags)
   {
-    int ret = 0;
     /* XXX: same as AtomicWriter..consolidate code */
     parent_op.meta.mtime = mtime;
     parent_op.meta.delete_at = delete_at;
@@ -1367,9 +1241,6 @@ namespace rgw::sal {
     /* XXX: handle accounted size */
     accounted_size = total_data_size;
 
-    if (ret < 0)
-      return ret;
-
     RGWUploadPartInfo info;
     info.num = part_num;
     info.etag = etag;
@@ -1380,7 +1251,7 @@ namespace rgw::sal {
 
     DB::Object op_target(store->getDB(),
         meta_obj->get_bucket()->get_info(), meta_obj->get_obj());
-    ret = op_target.add_mp_part(dpp, info);
+    auto ret = op_target.add_mp_part(dpp, info);
     if (ret < 0) {
       return ret == -ENOENT ? -ERR_NO_SUCH_UPLOAD : ret;
     }
@@ -1390,7 +1261,7 @@ namespace rgw::sal {
 
   DBAtomicWriter::DBAtomicWriter(const DoutPrefixProvider *dpp,
 	    	    optional_yield y,
-		        std::unique_ptr<rgw::sal::Object> _head_obj,
+		        rgw::sal::Object* _obj,
 		        DBStore* _driver,
     		    const rgw_user& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
@@ -1402,7 +1273,7 @@ namespace rgw::sal {
                 ptail_placement_rule(_ptail_placement_rule),
                 olh_epoch(_olh_epoch),
                 unique_tag(_unique_tag),
-                obj(_driver, _head_obj->get_key(), _head_obj->get_bucket()),
+                obj(_driver, _obj->get_key(), _obj->get_bucket()),
                 op_target(_driver->getDB(), obj.get_bucket()->get_info(), obj.get_obj()),
                 parent_op(&op_target) {}
 
@@ -1491,7 +1362,7 @@ namespace rgw::sal {
         return 0; /* nothing more to write */
       }
 
-      /* flush watever tail data is present */
+      /* flush whatever tail data is present */
       int ret = parent_op.write_data(dpp, tail_part_data, tail_part_offset);
       if (ret < 0) {
         return ret;
@@ -1511,7 +1382,8 @@ namespace rgw::sal {
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
                          rgw_zone_set *zones_trace, bool *canceled,
-                         optional_yield y)
+                         const req_context& rctx,
+                         uint32_t flags)
   {
     parent_op.meta.mtime = mtime;
     parent_op.meta.delete_at = delete_at;
@@ -1572,14 +1444,14 @@ namespace rgw::sal {
 
   int DBStore::get_oidc_providers(const DoutPrefixProvider *dpp,
       const std::string& tenant,
-      vector<std::unique_ptr<RGWOIDCProvider>>& providers)
+      vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
   {
     return 0;
   }
 
   std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
@@ -1590,13 +1462,12 @@ namespace rgw::sal {
 
   std::unique_ptr<Writer> DBStore::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) {
-    return std::make_unique<DBAtomicWriter>(dpp, y,
-                    std::move(_head_obj), this, owner,
+    return std::make_unique<DBAtomicWriter>(dpp, y, obj, this, owner,
                     ptail_placement_rule, olh_epoch, unique_tag);
   }
 
@@ -1681,62 +1552,22 @@ namespace rgw::sal {
   }
 
 
-  int DBStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+  std::unique_ptr<Bucket> DBStore::get_bucket(const RGWBucketInfo& i)
   {
-    int ret;
-    Bucket* bp;
-
-    bp = new DBBucket(this, b, u);
-    ret = bp->load_bucket(dpp, y);
-    if (ret < 0) {
-      delete bp;
-      return ret;
-    }
-
-    bucket->reset(bp);
-    return 0;
-  }
-
-  int DBStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
-  {
-    Bucket* bp;
-
-    bp = new DBBucket(this, i, u);
     /* Don't need to fetch the bucket info, use the provided one */
-
-    bucket->reset(bp);
-    return 0;
+    return std::make_unique<DBBucket>(this, i);
   }
 
-  int DBStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+  int DBStore::load_bucket(const DoutPrefixProvider *dpp, const rgw_bucket& b,
+                           std::unique_ptr<Bucket>* bucket, optional_yield y)
   {
-    rgw_bucket b;
-
-    b.tenant = tenant;
-    b.name = name;
-
-    return get_bucket(dpp, u, b, bucket, y);
+    *bucket = std::make_unique<DBBucket>(this, b);
+    return (*bucket)->load_bucket(dpp, y);
   }
 
   bool DBStore::is_meta_master()
   {
     return true;
-  }
-
-  int DBStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version *objv,
-      bufferlist& in_data,
-      JSONParser *jp, req_info& info,
-      optional_yield y)
-  {
-    return 0;
-  }
-
-  int DBStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
-					     bufferlist& in_data,
-					     RGWXMLDecoder::XMLParser* parser, req_info& info,
-					     optional_yield y)
-  {
-      return 0;
   }
 
   std::string DBStore::zone_unique_id(uint64_t unique_num)
@@ -1752,7 +1583,11 @@ namespace rgw::sal {
   int DBStore::get_zonegroup(const std::string& id, std::unique_ptr<ZoneGroup>* zg)
   {
     /* XXX: for now only one zonegroup supported */
-    ZoneGroup* group = new DBZoneGroup(this, std::make_unique<RGWZoneGroup>());
+    std::unique_ptr<RGWZoneGroup> rzg =
+        std::make_unique<RGWZoneGroup>("default", "default");
+    rzg->api_name = "default";
+    rzg->is_master = true;
+    ZoneGroup* group = new DBZoneGroup(this, std::move(rzg));
     if (!group)
       return -ENOMEM;
 
@@ -1775,11 +1610,6 @@ namespace rgw::sal {
   std::unique_ptr<Lifecycle> DBStore::get_lifecycle(void)
   {
     return std::make_unique<DBLifecycle>(this);
-  }
-
-  std::unique_ptr<Completions> DBStore::get_completions(void)
-  {
-    return 0;
   }
 
   int DBLifecycle::get_entry(const std::string& oid, const std::string& marker,
@@ -1849,7 +1679,7 @@ namespace rgw::sal {
     return lc;
   }
 
-  int DBStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)
+  int DBStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y)
   {
     return 0;
   }
@@ -1876,7 +1706,7 @@ namespace rgw::sal {
     return;
   }
 
-  int DBStore::set_buckets_enabled(const DoutPrefixProvider *dpp, vector<rgw_bucket>& buckets, bool enabled)
+  int DBStore::set_buckets_enabled(const DoutPrefixProvider *dpp, vector<rgw_bucket>& buckets, bool enabled, optional_yield y)
   {
     int ret = 0;
 
@@ -1937,7 +1767,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
+  int DBStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
   {
     return 0;
   }
@@ -2022,6 +1852,12 @@ namespace rgw::sal {
   {
     return -ENOENT;
   }
+  
+  int DBLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yield y)
+  {
+    return -ENOENT;
+  }
+  
 } // namespace rgw::sal
 
 extern "C" {

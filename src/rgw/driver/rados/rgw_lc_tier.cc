@@ -237,35 +237,24 @@ static void init_headers(map<string, bufferlist>& attrs,
 static int cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
                          std::map<std::string, std::string>& headers) {
   RGWRESTConn::get_obj_params req_params;
-  RGWBucketInfo b;
   std::string target_obj_name;
   int ret = 0;
-  std::unique_ptr<rgw::sal::Bucket> dest_bucket;
-  std::unique_ptr<rgw::sal::Object> dest_obj;
   rgw_lc_obj_properties obj_properties(tier_ctx.o.meta.mtime, tier_ctx.o.meta.etag,
         tier_ctx.o.versioned_epoch, tier_ctx.acl_mappings,
         tier_ctx.target_storage_class);
   std::string etag;
   RGWRESTStreamRWRequest *in_req;
 
-  b.bucket.name = tier_ctx.target_bucket_name;
+  rgw_bucket dest_bucket;
+  dest_bucket.name = tier_ctx.target_bucket_name;
   target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
                     tier_ctx.obj->get_name();
   if (!tier_ctx.o.is_current()) {
     target_obj_name += get_key_instance(tier_ctx.obj->get_key());
   }
 
-  ret = tier_ctx.driver->get_bucket(nullptr, b, &dest_bucket);
-  if (ret < 0) {
-    ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to initialize dest_bucket - " << tier_ctx.target_bucket_name << " , reterr = " << ret << dendl;
-    return ret;
-  }
+  rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
-  dest_obj = dest_bucket->get_object(rgw_obj_key(target_obj_name));
-  if (!dest_obj) {
-    ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to initialize dest_object path - " << target_obj_name << dendl;
-    return -1;
-  }
   /* init input connection */
   req_params.get_op = !head;
   req_params.prepend_metadata = true;
@@ -273,7 +262,7 @@ static int cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
   req_params.sync_manifest = true;
   req_params.skip_decrypt = true;
 
-  ret = tier_ctx.conn.get_obj(tier_ctx.dpp, dest_obj.get(), req_params, true /* send */, &in_req);
+  ret = tier_ctx.conn.get_obj(tier_ctx.dpp, dest_obj, req_params, true /* send */, &in_req);
   if (ret < 0) {
     ldpp_dout(tier_ctx.dpp, 0) << "ERROR: " << __func__ << "(): conn.get_obj() returned ret=" << ret << dendl;
     return ret;
@@ -360,7 +349,7 @@ class RGWLCCloudStreamPut
   const DoutPrefixProvider *dpp;
   rgw_lc_obj_properties obj_properties;
   RGWRESTConn& conn;
-  rgw::sal::Object *dest_obj;
+  const rgw_obj& dest_obj;
   std::string etag;
   RGWRESTStreamS3PutObj *out_req{nullptr};
 
@@ -377,7 +366,7 @@ class RGWLCCloudStreamPut
   RGWLCCloudStreamPut(const DoutPrefixProvider *_dpp,
       const rgw_lc_obj_properties&  _obj_properties,
       RGWRESTConn& _conn,
-      rgw::sal::Object *_dest_obj) :
+      const rgw_obj& _dest_obj) :
     dpp(_dpp), obj_properties(_obj_properties), conn(_conn), dest_obj(_dest_obj) {
     }
   int init();
@@ -465,7 +454,7 @@ int RGWLCStreamRead::init_rest_obj() {
     rest_obj.content_len = m_part_size;
   }
 
-  /* For mulitpart attrs are sent as part of InitMultipartCR itself */
+  /* For multipart attrs are sent as part of InitMultipartCR itself */
   if (multipart) {
     return 0;
   }
@@ -475,7 +464,6 @@ int RGWLCStreamRead::init_rest_obj() {
    */
   init_headers(attrs, rest_obj.attrs);
 
-  rest_obj.acls.set_ctx(cct);
   const auto aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter != attrs.end()) {
     bufferlist& bl = aiter->second;
@@ -514,8 +502,7 @@ int RGWLCCloudStreamPut::init() {
 }
 
 bool RGWLCCloudStreamPut::keep_attr(const string& h) {
-  return (keep_headers.find(h) != keep_headers.end() ||
-      boost::algorithm::starts_with(h, "X_AMZ_"));
+  return (keep_headers.find(h) != keep_headers.end());
 }
 
 void RGWLCCloudStreamPut::init_send_attrs(const DoutPrefixProvider *dpp,
@@ -531,6 +518,12 @@ void RGWLCCloudStreamPut::init_send_attrs(const DoutPrefixProvider *dpp,
   for (auto& hi : rest_obj.attrs) {
     if (keep_attr(hi.first)) {
       attrs.insert(hi);
+    } else {
+      std::string s1 = boost::algorithm::to_lower_copy(hi.first);
+      const char* k = std::strstr(s1.c_str(), "x-amz");
+      if (k) {
+        attrs[k] = hi.second;
+      }
     }
   }
 
@@ -633,6 +626,8 @@ void RGWLCCloudStreamPut::init_send_attrs(const DoutPrefixProvider *dpp,
 
   /* New attribute to specify its transitioned from RGW */
   attrs["x-amz-meta-rgwx-source"] = "rgw";
+  attrs["x-rgw-cloud"] = "true";
+  attrs["x-rgw-cloud-keep-attrs"] = "true";
 
   char buf[32];
   snprintf(buf, sizeof(buf), "%llu", (long long)obj_properties.versioned_epoch);
@@ -756,33 +751,22 @@ static int cloud_tier_transfer_object(const DoutPrefixProvider* dpp,
 
 static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
   int ret;
-  std::unique_ptr<rgw::sal::Bucket> dest_bucket;
-  std::unique_ptr<rgw::sal::Object> dest_obj;
 
   rgw_lc_obj_properties obj_properties(tier_ctx.o.meta.mtime, tier_ctx.o.meta.etag,
                         tier_ctx.o.versioned_epoch, tier_ctx.acl_mappings,
                         tier_ctx.target_storage_class);
-  RGWBucketInfo b;
   std::string target_obj_name;
 
-  b.bucket.name = tier_ctx.target_bucket_name;
+  rgw_bucket dest_bucket;
+  dest_bucket.name = tier_ctx.target_bucket_name;
+
   target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
     tier_ctx.obj->get_name();
   if (!tier_ctx.o.is_current()) {
     target_obj_name += get_key_instance(tier_ctx.obj->get_key());
   }
 
-  ret = tier_ctx.driver->get_bucket(nullptr, b, &dest_bucket);
-  if (ret < 0) {
-    ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to initialize dest_bucket - " << tier_ctx.target_bucket_name << " , ret = " << ret << dendl;
-    return ret;
-  }
-
-  dest_obj = dest_bucket->get_object(rgw_obj_key(target_obj_name));
-  if (!dest_obj) {
-    ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to initialize dest_object path - " << target_obj_name << dendl;
-    return -1;
-  }
+  rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
   tier_ctx.obj->set_atomic();
 
@@ -797,7 +781,7 @@ static int cloud_tier_plain_transfer(RGWLCCloudTierCtx& tier_ctx) {
 
   std::shared_ptr<RGWLCCloudStreamPut> writef;
   writef.reset(new RGWLCCloudStreamPut(tier_ctx.dpp, obj_properties, tier_ctx.conn,
-               dest_obj.get()));
+               dest_obj));
 
   /* actual Read & Write */
   ret = cloud_tier_transfer_object(tier_ctx.dpp, readf.get(), writef.get());
@@ -810,34 +794,23 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
                                 const rgw_lc_multipart_part_info& part_info,
                                 std::string *petag) {
   int ret;
-  std::unique_ptr<rgw::sal::Bucket> dest_bucket;
-  std::unique_ptr<rgw::sal::Object> dest_obj;
 
   rgw_lc_obj_properties obj_properties(tier_ctx.o.meta.mtime, tier_ctx.o.meta.etag,
                         tier_ctx.o.versioned_epoch, tier_ctx.acl_mappings,
                         tier_ctx.target_storage_class);
-  RGWBucketInfo b;
   std::string target_obj_name;
   off_t end;
 
-  b.bucket.name = tier_ctx.target_bucket_name;
+  rgw_bucket dest_bucket;
+  dest_bucket.name = tier_ctx.target_bucket_name;
+
   target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
     tier_ctx.obj->get_name();
   if (!tier_ctx.o.is_current()) {
     target_obj_name += get_key_instance(tier_ctx.obj->get_key());
   }
 
-  ret = tier_ctx.driver->get_bucket(nullptr, b, &dest_bucket);
-  if (ret < 0) {
-    ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to initialize dest_bucket - " << tier_ctx.target_bucket_name << " , ret = " << ret << dendl;
-    return ret;
-  }
-
-  dest_obj = dest_bucket->get_object(rgw_obj_key(target_obj_name));
-  if (!dest_obj) {
-    ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to initialize dest_object path - " << target_obj_name << dendl;
-    return -1;
-  }
+  rgw_obj dest_obj(dest_bucket, rgw_obj_key(target_obj_name));
 
   tier_ctx.obj->set_atomic();
 
@@ -850,7 +823,7 @@ static int cloud_tier_send_multipart_part(RGWLCCloudTierCtx& tier_ctx,
 
   std::shared_ptr<RGWLCCloudStreamPut> writef;
   writef.reset(new RGWLCCloudStreamPut(tier_ctx.dpp, obj_properties, tier_ctx.conn,
-               dest_obj.get()));
+               dest_obj));
 
   /* Prepare Read from source */
   end = part_info.ofs + part_info.size - 1;

@@ -30,7 +30,7 @@ function test_install_uninstall() {
 	      sudo zypper -n remove cephadm )
 }
 
-sudo $CEPHADM -v add-repo --release octopus
+sudo $CEPHADM -v add-repo --release quincy
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 
@@ -38,7 +38,7 @@ sudo $CEPHADM -v add-repo --dev main
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 
-sudo $CEPHADM -v add-repo --release 15.2.7
+sudo $CEPHADM -v add-repo --release 17.2.6
 test_install_uninstall
 sudo $CEPHADM -v rm-repo
 

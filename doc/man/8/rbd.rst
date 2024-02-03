@@ -260,7 +260,7 @@ Commands
 
 :command:`device map` [-t | --device-type *device-type*] [--cookie *device-cookie*] [--show-cookie] [--snap-id *snap-id*] [--read-only] [--exclusive] [-o | --options *device-options*] *image-spec* | *snap-spec*
   Map the specified image to a block device via the rbd kernel module
-  (default) or other supported device (*nbd* on Linux or *ggate* on
+  (default) or other supported device (*nbd* or *ubbd* on Linux or *ggate* on
   FreeBSD).
 
   The --options argument is a comma separated list of device type
@@ -463,7 +463,7 @@ Commands
   The first diff could be - for stdin, and merged diff could be - for stdout, which
   enables multiple diff files to be merged using something like
   'rbd merge-diff first second - | rbd merge-diff - third result'. Note this command
-  currently only support the source incremental diff with stripe_count == 1
+  currently only support the source incremental diff with stripe-count == 1
 
 :command:`migration abort` *image-spec*
   Cancel image migration. This step may be run after successful or
@@ -731,19 +731,19 @@ The striping is controlled by three parameters:
   The size of objects we stripe over is a power of two. It will be rounded up the nearest power of two.
   The default object size is 4 MB, smallest is 4K and maximum is 32M.
 
-.. option:: stripe_unit
+.. option:: stripe-unit
 
-  Each [*stripe_unit*] contiguous bytes are stored adjacently in the same object, before we move on
+  Each [*stripe-unit*] contiguous bytes are stored adjacently in the same object, before we move on
   to the next object.
 
-.. option:: stripe_count
+.. option:: stripe-count
 
-  After we write [*stripe_unit*] bytes to [*stripe_count*] objects, we loop back to the initial object
+  After we write [*stripe-unit*] bytes to [*stripe-count*] objects, we loop back to the initial object
   and write another stripe, until the object reaches its maximum size.  At that point,
-  we move on to the next [*stripe_count*] objects.
+  we move on to the next [*stripe-count*] objects.
 
-By default, [*stripe_unit*] is the same as the object size and [*stripe_count*] is 1.  Specifying a different
-[*stripe_unit*] and/or [*stripe_count*] is often referred to as using "fancy" striping and requires format 2.
+By default, [*stripe-unit*] is the same as the object size and [*stripe-count*] is 1.  Specifying a different
+[*stripe-unit*] and/or [*stripe-count*] is often referred to as using "fancy" striping and requires format 2.
 
 
 Kernel rbd (krbd) options
@@ -983,7 +983,7 @@ To create an image and a clone from it::
        rbd snap protect mypool/parent@snap
        rbd clone mypool/parent@snap otherpool/child
 
-To create an image with a smaller stripe_unit (to better distribute small writes in some workloads)::
+To create an image with a smaller stripe-unit (to better distribute small writes in some workloads)::
 
        rbd create mypool/myimage --size 102400 --stripe-unit 65536B --stripe-count 16
 

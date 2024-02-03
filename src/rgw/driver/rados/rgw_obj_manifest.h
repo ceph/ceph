@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <optional>
 #include "rgw_zone_types.h"
 #include "rgw_bucket_types.h"
 #include "rgw_obj_types.h"
@@ -57,8 +58,16 @@ public:
     }
   }
 
+  std::optional<rgw_obj> get_head_obj() const {
+    if (is_raw) {
+      return std::nullopt;
+    } else {
+      return obj;
+    }
+  }
+
   rgw_raw_obj get_raw_obj(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params) const;
-  rgw_raw_obj get_raw_obj(rgw::sal::RadosStore* store) const;
+  rgw_raw_obj get_raw_obj(RGWRados* store) const;
 
   rgw_obj_select& operator=(const rgw_obj& rhs) {
     obj = rhs;
@@ -154,6 +163,7 @@ struct RGWObjManifestRule {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWObjManifestRule*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
@@ -180,6 +190,7 @@ struct RGWObjTier {
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const;
+    static void generate_test_instances(std::list<RGWObjTier*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjTier)
 
@@ -545,6 +556,14 @@ public:
       return ofs;
     }
 
+    const std::string& get_cur_override_prefix() const {
+      return cur_override_prefix;
+    }
+
+    int get_cur_part_id() const {
+      return cur_part_id;
+    }
+
     /* stripe number */
     int get_cur_stripe() const {
       return cur_stripe;
@@ -576,6 +595,8 @@ public:
   obj_iterator obj_find(const DoutPrefixProvider *dpp, uint64_t ofs) const {
     return obj_iterator{dpp, this, std::min(ofs, obj_size)};
   }
+  // return an iterator to the beginning of the given part number
+  obj_iterator obj_find_part(const DoutPrefixProvider *dpp, int part_num) const;
 
   /*
    * simple object generator. Using a simple single rule manifest.
@@ -607,7 +628,7 @@ public:
     int create_next(uint64_t ofs);
 
     rgw_raw_obj get_cur_obj(RGWZoneGroup& zonegroup, RGWZoneParams& zone_params) { return cur_obj.get_raw_obj(zonegroup, zone_params); }
-    rgw_raw_obj get_cur_obj(rgw::sal::RadosStore* store) const { return cur_obj.get_raw_obj(store); }
+    rgw_raw_obj get_cur_obj(RGWRados* store) const { return cur_obj.get_raw_obj(store); }
 
     /* total max size of current stripe (including head obj) */
     uint64_t cur_stripe_max_size() const {

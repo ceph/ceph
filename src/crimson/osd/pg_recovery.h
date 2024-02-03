@@ -11,8 +11,13 @@
 #include "crimson/osd/pg_recovery_listener.h"
 #include "crimson/osd/scheduler/scheduler.h"
 #include "crimson/osd/shard_services.h"
+#include "crimson/osd/recovery_backend.h"
 
 #include "osd/object_state.h"
+
+namespace crimson::osd {
+class UrgentRecovery;
+}
 
 class MOSDPGBackfillRemove;
 class PGBackend;
@@ -59,7 +64,7 @@ private:
     const hobject_t& soid,
     eversion_t need);
 
-  void on_local_recover(
+  RecoveryBackend::interruptible_future<> on_local_recover(
     const hobject_t& soid,
     const ObjectRecoveryInfo& recovery_info,
     bool is_delete,

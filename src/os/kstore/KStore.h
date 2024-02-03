@@ -276,6 +276,11 @@ public:
       std::lock_guard<std::mutex> l(qlock);
       q.push_back(*txc);
     }
+    void undo_queue(TransContext* txc) {
+      std::lock_guard<std::mutex> l(qlock);
+      ceph_assert(&q.back() == txc);
+      q.pop_back();
+    }
 
     void flush() {
       std::unique_lock<std::mutex> l(qlock);
@@ -436,7 +441,7 @@ public:
   }
   void dump_perf_counters(ceph::Formatter *f) override {
     f->open_object_section("perf_counters");
-    logger->dump_formatted(f, false);
+    logger->dump_formatted(f, false, false);
     f->close_section();
   }
   void get_db_statistics(ceph::Formatter *f) override {
@@ -561,6 +566,8 @@ public:
 
   objectstore_perf_stat_t get_cur_stats() override {
     return objectstore_perf_stat_t();
+  }
+  void refresh_perf_counters() override {
   }
   const PerfCounters* get_perf_counters() const override {
     return logger;

@@ -1,17 +1,17 @@
 add_library(neorados_objs OBJECT
   RADOSImpl.cc)
 target_compile_definitions(neorados_objs PRIVATE
-  $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>)
+  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
 add_library(neorados_api_obj OBJECT
   RADOS.cc)
 target_compile_definitions(neorados_api_obj PRIVATE
-  $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>)
+  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
 
 add_library(libneorados STATIC
   $<TARGET_OBJECTS:neorados_api_obj>
   $<TARGET_OBJECTS:neorados_objs>)
 target_link_libraries(libneorados PRIVATE
-  osdc ceph-common cls_lock_client fmt::fmt
+  osdc ceph-common cls_lock_client ${FMT_LIB}
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 
 # if(ENABLE_SHARED)
@@ -39,6 +39,3 @@ target_link_libraries(libneorados PRIVATE
 #   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 # target_link_libraries(libneorados ${rados_libs})
 # install(TARGETS libneorados DESTINATION ${CMAKE_INSTALL_LIBDIR})
-add_library(neorados_cls_fifo STATIC cls/fifo.cc)
-target_link_libraries(neorados_cls_fifo PRIVATE
-	libneorados ceph-common fmt::fmt)

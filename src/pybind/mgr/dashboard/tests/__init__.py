@@ -14,7 +14,7 @@ import cherrypy
 from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
 from mgr_module import HandleCommandResult
-from orchestrator import HostSpec, InventoryHost
+from orchestrator import DaemonDescription, HostSpec, InventoryHost
 from pyfakefs import fake_filesystem
 
 from .. import mgr
@@ -120,7 +120,7 @@ class ControllerTestCase(helper.CPWebCase):
             inst = ctrl()
 
             # We need to cache the controller endpoints because
-            # BaseController#endpoints method is not idempontent
+            # BaseController#endpoints method is not idempotent
             # and a controller might be needed by more than one
             # unit test.
             if ctrl not in cls._endpoints_cache:
@@ -359,12 +359,22 @@ class Waiter(threading.Thread):
 @contextlib.contextmanager
 def patch_orch(available: bool, missing_features: Optional[List[str]] = None,
                hosts: Optional[List[HostSpec]] = None,
-               inventory: Optional[List[dict]] = None):
+               inventory: Optional[List[dict]] = None,
+               daemons: Optional[List[DaemonDescription]] = None):
     with mock.patch('dashboard.controllers.orchestrator.OrchClient.instance') as instance:
         fake_client = mock.Mock()
         fake_client.available.return_value = available
         fake_client.get_missing_features.return_value = missing_features
 
+        if not daemons:
+            daemons = [
+                DaemonDescription(
+                    daemon_type='mon',
+                    daemon_id='a',
+                    hostname='node0'
+                )
+            ]
+        fake_client.services.list_daemons.return_value = daemons
         if hosts is not None:
             fake_client.hosts.list.return_value = hosts
 

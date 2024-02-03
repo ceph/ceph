@@ -47,6 +47,7 @@
 
         osd scrub load threshold = 5.0
 	osd scrub max interval = 600
+        osd mclock profile = high_recovery_ops
 
 	osd recover clone overlap = true
 	osd recovery max chunk = 1048576
@@ -54,8 +55,9 @@
 	osd debug shutdown = true
         osd debug op order = true
         osd debug verify stray on activate = true
+        osd debug trim objects = true
 
-	osd open classes on start = true
+        osd open classes on start = true
         osd debug pg log writeout = true
 
 	osd deep scrub update digest min age = 30

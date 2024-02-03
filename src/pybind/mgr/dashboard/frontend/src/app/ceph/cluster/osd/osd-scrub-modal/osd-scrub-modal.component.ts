@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormGroup } from '@angular/forms';
+import { UntypedFormGroup } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { forkJoin } from 'rxjs';
@@ -17,7 +17,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 })
 export class OsdScrubModalComponent implements OnInit {
   deep: boolean;
-  scrubForm: FormGroup;
+  scrubForm: UntypedFormGroup;
   selected: any[] = [];
 
   constructor(
@@ -29,7 +29,7 @@ export class OsdScrubModalComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    this.scrubForm = new FormGroup({});
+    this.scrubForm = new UntypedFormGroup({});
   }
 
   scrub() {

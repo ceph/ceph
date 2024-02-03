@@ -1,0 +1,80 @@
+<cd-alert-panel
+  *ngIf="(snapScheduleModuleStatus$ | async) === false"
+  type="info"
+  spacingClass="mb-3"
+  i18n
+  class="align-items-center"
+>
+  In order to access the snapshot scheduler feature, the snap_scheduler module must be enabled
+  <button
+    class="btn btn-light mx-2"
+    type="button"
+    (click)="enableSnapshotSchedule()">
+    Enable
+  </button>
+</cd-alert-panel>
+
+<ng-template
+  #pathTpl
+  let-row="row">
+  <span
+    class="fw-bold"
+    [ngbTooltip]="fullpathTpl"
+    triggers="click:blur">
+    {{ row.path | path }}
+  </span>
+
+  <span
+  *ngIf="row.active; else inactiveStatusTpl">
+    <i
+      [ngClass]="[icons.success, icons.large]"
+      ngbTooltip="{{ row.path }} is active"
+      class="text-success"
+    ></i>
+  </span>
+
+  <ng-template #inactiveStatusTpl>
+    <i
+      [ngClass]="[icons.warning, icons.large]"
+      class="text-warning"
+      ngbTooltip="{{ row.path }} has been deactivated"
+    ></i>
+  </ng-template>
+
+  <ng-template #fullpathTpl>
+    <span
+      data-toggle="tooltip"
+      [title]="row.path"
+      class="font-monospace"
+      >{{ row.path }}
+      <cd-copy-2-clipboard-button
+        *ngIf="row.path"
+        [source]="row.path"
+        [byId]="false"
+        [showIconOnly]="true"
+      >
+      </cd-copy-2-clipboard-button>
+    </span>
+  </ng-template>
+</ng-template>
+
+<cd-table
+  [data]="snapshotSchedules$ | async"
+  *ngIf="snapScheduleModuleStatus$ | async"
+  columnMode="flex"
+  [columns]="columns"
+  selectionType="single"
+  [hasDetails]="false"
+  (fetchData)="fetchData()"
+  (updateSelection)="updateSelection($event)"
+>
+  <div class="table-actions btn-toolbar">
+    <cd-table-actions
+      [permission]="permissions.cephfs"
+      [selection]="selection"
+      class="btn-group"
+      [tableActions]="tableActions"
+    >
+    </cd-table-actions>
+  </div>
+</cd-table>

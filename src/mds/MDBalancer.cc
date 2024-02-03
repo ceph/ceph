@@ -230,6 +230,7 @@ void MDBalancer::handle_export_pins(void)
 void MDBalancer::tick()
 {
   static int num_bal_times = g_conf()->mds_bal_max;
+  bool balance_automate = mds->mdsmap->allows_balance_automate();
   auto bal_interval = g_conf().get_val<int64_t>("mds_bal_interval");
   auto bal_max_until = g_conf().get_val<int64_t>("mds_bal_max_until");
   time now = clock::now();
@@ -248,7 +249,8 @@ void MDBalancer::tick()
   // We can use duration_cast below, although the result is an int,
   // because the values from g_conf are also integers.
   // balance?
-  if (mds->get_nodeid() == 0
+  if (balance_automate
+      && mds->get_nodeid() == 0
       && mds->is_active()
       && bal_interval > 0
       && chrono::duration_cast<chrono::seconds>(now - last_heartbeat).count() >= bal_interval
@@ -565,7 +567,8 @@ double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxe
 
 void MDBalancer::queue_split(const CDir *dir, bool fast)
 {
-  dout(10) << __func__ << " enqueuing " << *dir
+  constexpr const auto &_func_ = __func__;
+  dout(10) << _func_ << " enqueuing " << *dir
                        << " (fast=" << fast << ")" << dendl;
 
   const dirfrag_t df = dir->dirfrag();
@@ -576,6 +579,16 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
       // path, because we spawn two contexts, one with mds->timer and
       // one with mds->queue_waiter.  The loser can safely just drop
       // out.
+      return;
+    }
+
+    if (mds->is_stopping()) {
+      // not a good time. This could have been (!mds->is_active())
+      // or at least (mds->is_stopping() || mds->is_stopped()), but
+      // is_stopped() is never true because an MDS respawns as soon as it's removed from the map;
+      // the narrow is_stopping check is to avoid potential regressions
+      // due to unknown coupling with other parts of the MDS (especially multiple ranks).
+      dout(5) << "ignoring the " << _func_ << " callback because the MDS state is '" << ceph_mds_state_name(mds->get_state()) << "'" << dendl;
       return;
     }
 
@@ -593,7 +606,7 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
 
     // Pass on to MDCache: note that the split might still not
     // happen if the checks in MDCache::can_fragment fail.
-    dout(10) << __func__ << " splitting " << *dir << dendl;
+    dout(10) << _func_ << " splitting " << *dir << dendl;
     int bits = g_conf()->mds_bal_split_bits;
     if (dir->inode->is_ephemeral_dist()) {
       unsigned min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
@@ -623,6 +636,7 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
 void MDBalancer::queue_merge(CDir *dir)
 {
   const auto frag = dir->dirfrag();
+  constexpr const auto &_func_ = __func__;
   auto callback = [this, frag](int r) {
     ceph_assert(frag.frag != frag_t());
 
@@ -630,6 +644,16 @@ void MDBalancer::queue_merge(CDir *dir)
     // for a given frag at a time (because merge_pending is checked before
     // starting one), and this context is the only one that erases it.
     merge_pending.erase(frag);
+
+    if (mds->is_stopping()) {
+      // not a good time. This could have been (!mds->is_active())
+      // or at least (mds->is_stopping() || mds->is_stopped()), but
+      // is_stopped() is never true because an MDS respawns as soon as it's removed from the map;
+      // the narrow is_stopping check is to avoid potential regressions
+      // due to unknown coupling with other parts of the MDS (especially multiple ranks).
+      dout(5) << "ignoring the " << _func_ << " callback because the MDS state is '" << ceph_mds_state_name(mds->get_state()) << "'" << dendl;
+      return;
+    }
 
     auto mdcache = mds->mdcache;
     CDir *dir = mdcache->get_dirfrag(frag);
@@ -662,7 +686,12 @@ void MDBalancer::queue_merge(CDir *dir)
       }
       bool all = true;
       for (auto& sib : sibs) {
-        if (!sib->is_auth() || !sib->should_merge()) {
+	auto is_auth = sib->is_auth();
+	auto should_merge = sib->should_merge();
+
+	dout(20) << ": sib=" << *sib << ", is_auth=" << is_auth << ", should_merge="
+		 << should_merge << dendl;
+        if (!is_auth || !should_merge) {
           all = false;
           break;
         }
@@ -766,7 +795,7 @@ void MDBalancer::prep_rebalance(int beat)
       return;
     }
     // am i over long enough?
-    if (last_epoch_under && beat_epoch - last_epoch_under < 2) {
+    if (last_epoch_under && beat_epoch - last_epoch_under < g_conf()->mds_bal_overload_epochs) {
       dout(7) << "  i am overloaded, but only for " << (beat_epoch - last_epoch_under) << " epochs" << dendl;
       return;
     }

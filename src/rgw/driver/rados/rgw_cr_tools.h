@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_CR_TOOLS_H
-#define CEPH_RGW_CR_TOOLS_H
+#pragma once
 
 #include "rgw_cr_rados.h"
 #include "rgw_tools.h"
@@ -46,24 +45,6 @@ struct rgw_get_bucket_info_result {
 
 using RGWGetBucketInfoCR = RGWSimpleAsyncCR<rgw_get_bucket_info_params, rgw_get_bucket_info_result>;
 
-struct rgw_bucket_create_local_params {
-  std::shared_ptr<RGWUserInfo> user_info;
-  std::string bucket_name;
-  rgw_placement_rule placement_rule;
-};
-
-using RGWBucketCreateLocalCR = RGWSimpleWriteOnlyAsyncCR<rgw_bucket_create_local_params>;
-
-struct rgw_object_simple_put_params {
-  RGWDataAccess::BucketRef bucket;
-  rgw_obj_key key;
-  bufferlist data;
-  std::map<std::string, bufferlist> attrs;
-  std::optional<std::string> user_data;
-};
-
-using RGWObjectSimplePutCR = RGWSimpleWriteOnlyAsyncCR<rgw_object_simple_put_params>;
-
 
 struct rgw_bucket_lifecycle_config_params {
   rgw::sal::Bucket* bucket;
@@ -84,4 +65,3 @@ struct rgw_bucket_get_sync_policy_result {
 
 using RGWBucketGetSyncPolicyHandlerCR = RGWSimpleAsyncCR<rgw_bucket_get_sync_policy_params, rgw_bucket_get_sync_policy_result>;
 
-#endif

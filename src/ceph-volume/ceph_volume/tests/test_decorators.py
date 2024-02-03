@@ -46,7 +46,7 @@ class TestExceptionMessage(object):
 
 class TestCatches(object):
 
-    def teardown(self):
+    def teardown_method(self):
         try:
             del(os.environ['CEPH_VOLUME_DEBUG'])
         except KeyError:

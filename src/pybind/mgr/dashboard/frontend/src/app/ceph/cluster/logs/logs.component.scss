@@ -52,3 +52,7 @@ p {
 ::ng-deep cd-logs ngb-timepicker input.ngb-tp-input {
   width: 3.5rem !important;
 }
+
+.card-body.overflow-auto {
+  height: 50vh;
+}

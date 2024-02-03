@@ -55,7 +55,7 @@ struct GetMetadataRequest<MockTestImageCtx> {
 
 GetMetadataRequest<MockTestImageCtx>* GetMetadataRequest<MockTestImageCtx>::s_instance = nullptr;
 
-} // namspace image
+} // namespace image
 } // namespace librbd
 
 // template definitions

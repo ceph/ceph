@@ -24,6 +24,9 @@ namespace crimson::os::seastore {
 /* using a special xattr key "omap_header" to store omap header */
   const std::string OMAP_HEADER_XATTR_KEY = "omap_header";
 
+using transaction_id_t = uint64_t;
+constexpr transaction_id_t TRANS_ID_NULL = 0;
+
 /*
  * Note: NULL value is usually the default and max value.
  */
@@ -207,7 +210,7 @@ constexpr segment_id_t NULL_SEG_ID = MAX_SEG_ID;
 
 /* Monotonically increasing segment seq, uniquely identifies
  * the incarnation of a segment */
-using segment_seq_t = uint32_t;
+using segment_seq_t = uint64_t;
 static constexpr segment_seq_t MAX_SEG_SEQ =
   std::numeric_limits<segment_seq_t>::max();
 static constexpr segment_seq_t NULL_SEG_SEQ = MAX_SEG_SEQ;
@@ -485,6 +488,7 @@ constexpr device_off_t decode_device_off(internal_paddr_t addr) {
 struct seg_paddr_t;
 struct blk_paddr_t;
 struct res_paddr_t;
+struct pladdr_t;
 struct paddr_t {
 public:
   // P_ADDR_MAX == P_ADDR_NULL == paddr_t{}
@@ -622,6 +626,10 @@ public:
     return get_addr_type() != paddr_types_t::RESERVED;
   }
 
+  bool is_fake() const {
+    return get_device_id() == DEVICE_ID_FAKE;
+  }
+
   auto operator<=>(const paddr_t &) const = default;
 
   DENC(paddr_t, v, p) {
@@ -661,6 +669,8 @@ private:
                      static_cast<u_device_off_t>(offset)) {}
 
   friend struct paddr_le_t;
+  friend struct pladdr_le_t;
+
 };
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
@@ -875,8 +885,9 @@ enum class device_type_t : uint8_t {
   NONE = 0,
   HDD,
   SSD,
-  ZNS,
-  SEGMENTED_EPHEMERAL,
+  ZBD,            // ZNS SSD or SMR HDD
+  EPHEMERAL_COLD,
+  EPHEMERAL_MAIN,
   RANDOM_BLOCK_SSD,
   RANDOM_BLOCK_EPHEMERAL,
   NUM_TYPES
@@ -888,7 +899,7 @@ bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
 enum class backend_type_t {
-  SEGMENTED,    // SegmentManager: SSD, ZNS, HDD
+  SEGMENTED,    // SegmentManager: SSD, ZBD, HDD
   RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
 };
 
@@ -899,7 +910,7 @@ constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
   assert(dtype != device_type_t::NONE &&
 	 dtype != device_type_t::NUM_TYPES);
   if (dtype >= device_type_t::HDD &&
-      dtype <= device_type_t::SEGMENTED_EPHEMERAL) {
+      dtype <= device_type_t::EPHEMERAL_MAIN) {
     return backend_type_t::SEGMENTED;
   } else {
     return backend_type_t::RANDOM_BLOCK;
@@ -1024,6 +1035,103 @@ struct __attribute((packed)) laddr_le_t {
   }
 };
 
+constexpr uint64_t PL_ADDR_NULL = std::numeric_limits<uint64_t>::max();
+
+struct pladdr_t {
+  std::variant<laddr_t, paddr_t> pladdr;
+
+  pladdr_t() = default;
+  pladdr_t(const pladdr_t &) = default;
+  pladdr_t(laddr_t laddr)
+    : pladdr(laddr) {}
+  pladdr_t(paddr_t paddr)
+    : pladdr(paddr) {}
+
+  bool is_laddr() const {
+    return pladdr.index() == 0;
+  }
+
+  bool is_paddr() const {
+    return pladdr.index() == 1;
+  }
+
+  pladdr_t& operator=(paddr_t paddr) {
+    pladdr = paddr;
+    return *this;
+  }
+
+  pladdr_t& operator=(laddr_t laddr) {
+    pladdr = laddr;
+    return *this;
+  }
+
+  bool operator==(const pladdr_t &) const = default;
+
+  paddr_t get_paddr() const {
+    assert(pladdr.index() == 1);
+    return paddr_t(std::get<1>(pladdr));
+  }
+
+  laddr_t get_laddr() const {
+    assert(pladdr.index() == 0);
+    return laddr_t(std::get<0>(pladdr));
+  }
+
+};
+
+std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr);
+
+enum class addr_type_t : uint8_t {
+  PADDR=0,
+  LADDR=1,
+  MAX=2	// or NONE
+};
+
+struct __attribute((packed)) pladdr_le_t {
+  ceph_le64 pladdr = ceph_le64(PL_ADDR_NULL);
+  addr_type_t addr_type = addr_type_t::MAX;
+
+  pladdr_le_t() = default;
+  pladdr_le_t(const pladdr_le_t &) = default;
+  explicit pladdr_le_t(const pladdr_t &addr)
+    : pladdr(
+	ceph_le64(
+	  addr.is_laddr() ?
+	    std::get<0>(addr.pladdr) :
+	    std::get<1>(addr.pladdr).internal_paddr)),
+      addr_type(
+	addr.is_laddr() ?
+	  addr_type_t::LADDR :
+	  addr_type_t::PADDR)
+  {}
+
+  operator pladdr_t() const {
+    if (addr_type == addr_type_t::LADDR) {
+      return pladdr_t(laddr_t(pladdr));
+    } else {
+      assert(addr_type == addr_type_t::PADDR);
+      return pladdr_t(paddr_t(pladdr));
+    }
+  }
+};
+
+template <typename T>
+struct min_max_t {};
+
+template <>
+struct min_max_t<laddr_t> {
+  static constexpr laddr_t max = L_ADDR_MAX;
+  static constexpr laddr_t min = L_ADDR_MIN;
+  static constexpr laddr_t null = L_ADDR_NULL;
+};
+
+template <>
+struct min_max_t<paddr_t> {
+  static constexpr paddr_t max = P_ADDR_MAX;
+  static constexpr paddr_t min = P_ADDR_MIN;
+  static constexpr paddr_t null = P_ADDR_NULL;
+};
+
 // logical offset, see LBAManager, TransactionManager
 using extent_len_t = uint32_t;
 constexpr extent_len_t EXTENT_LEN_MAX =
@@ -1058,23 +1166,24 @@ enum class extent_types_t : uint8_t {
   ROOT = 0,
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
-  OMAP_INNER = 3,
-  OMAP_LEAF = 4,
-  ONODE_BLOCK_STAGED = 5,
-  COLL_BLOCK = 6,
-  OBJECT_DATA_BLOCK = 7,
-  RETIRED_PLACEHOLDER = 8,
+  DINK_LADDR_LEAF = 3, // should only be used for unitttests
+  OMAP_INNER = 4,
+  OMAP_LEAF = 5,
+  ONODE_BLOCK_STAGED = 6,
+  COLL_BLOCK = 7,
+  OBJECT_DATA_BLOCK = 8,
+  RETIRED_PLACEHOLDER = 9,
   // the following two types are not extent types,
   // they are just used to indicates paddr allocation deltas
-  ALLOC_INFO = 9,
-  JOURNAL_TAIL = 10,
+  ALLOC_INFO = 10,
+  JOURNAL_TAIL = 11,
   // Test Block Types
-  TEST_BLOCK = 11,
-  TEST_BLOCK_PHYSICAL = 12,
-  BACKREF_INTERNAL = 13,
-  BACKREF_LEAF = 14,
+  TEST_BLOCK = 12,
+  TEST_BLOCK_PHYSICAL = 13,
+  BACKREF_INTERNAL = 14,
+  BACKREF_LEAF = 15,
   // None and the number of valid extent_types_t
-  NONE = 15,
+  NONE = 16,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1104,13 +1213,19 @@ constexpr bool is_retired_placeholder(extent_types_t type)
 constexpr bool is_lba_node(extent_types_t type)
 {
   return type == extent_types_t::LADDR_INTERNAL ||
-    type == extent_types_t::LADDR_LEAF;
+    type == extent_types_t::LADDR_LEAF ||
+    type == extent_types_t::DINK_LADDR_LEAF;
 }
 
 constexpr bool is_backref_node(extent_types_t type)
 {
   return type == extent_types_t::BACKREF_INTERNAL ||
     type == extent_types_t::BACKREF_LEAF;
+}
+
+constexpr bool is_lba_backref_node(extent_types_t type)
+{
+  return is_lba_node(type) || is_backref_node(type);
 }
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
@@ -1144,14 +1259,9 @@ constexpr rewrite_gen_t OOL_GENERATION = 2;
 
 // All the rewritten extents start with MIN_REWRITE_GENERATION
 constexpr rewrite_gen_t MIN_REWRITE_GENERATION = 3;
-constexpr rewrite_gen_t MAX_REWRITE_GENERATION = 4;
-
-/**
- * TODO:
- * For tiering, might introduce 5 and 6 for the cold tier, and 1 ~ 4 for the
- * hot tier.
- */
-
+// without cold tier, the largest generation is less than MIN_COLD_GENERATION
+constexpr rewrite_gen_t MIN_COLD_GENERATION = 5;
+constexpr rewrite_gen_t MAX_REWRITE_GENERATION = 7;
 constexpr rewrite_gen_t REWRITE_GENERATIONS = MAX_REWRITE_GENERATION + 1;
 constexpr rewrite_gen_t NULL_GENERATION =
   std::numeric_limits<rewrite_gen_t>::max();
@@ -1190,12 +1300,14 @@ std::ostream &operator<<(std::ostream &out, data_category_t c);
 
 constexpr data_category_t get_extent_category(extent_types_t type) {
   if (type == extent_types_t::OBJECT_DATA_BLOCK ||
-      type == extent_types_t::COLL_BLOCK) {
+      type == extent_types_t::TEST_BLOCK) {
     return data_category_t::DATA;
   } else {
     return data_category_t::METADATA;
   }
 }
+
+bool can_inplace_rewrite(extent_types_t type);
 
 // type for extent modification time, milliseconds since the epoch
 using sea_time_point = seastar::lowres_system_clock::time_point;
@@ -1746,7 +1858,8 @@ enum class transaction_type_t : uint8_t {
   READ, // including weak and non-weak read transactions
   TRIM_DIRTY,
   TRIM_ALLOC,
-  CLEANER,
+  CLEANER_MAIN,
+  CLEANER_COLD,
   MAX
 };
 
@@ -2045,6 +2158,7 @@ struct scan_valid_records_cursor {
   journal_seq_t seq;
   journal_seq_t last_committed;
   std::size_t num_consumed_records = 0;
+  extent_len_t block_size = 0;
 
   struct found_record_group_t {
     paddr_t offset;
@@ -2071,10 +2185,12 @@ struct scan_valid_records_cursor {
     return seq.offset.as_seg_paddr().get_segment_off();
   }
 
+  extent_len_t get_block_size() const {
+    return block_size;
+  }
+
   void increment_seq(segment_off_t off) {
-    auto& seg_addr = seq.offset.as_seg_paddr();
-    seg_addr.set_segment_off(
-      seg_addr.get_segment_off() + off);
+    seq.offset = seq.offset.add_offset(off);
   }
 
   void emplace_record_group(const record_group_header_t&, ceph::bufferlist&&);
@@ -2118,7 +2234,9 @@ template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::os
 template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::pladdr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::device_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_size_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_header_t> : fmt::ostream_formatter {};

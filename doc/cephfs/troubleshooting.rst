@@ -21,6 +21,133 @@ We can get hints about what's going on by dumping the MDS cache ::
 If high logging levels are set on the MDS, that will almost certainly hold the
 information we need to diagnose and solve the issue.
 
+Stuck during recovery
+=====================
+
+Stuck in up:replay
+------------------
+
+If your MDS is stuck in ``up:replay`` then it is likely that the journal is
+very long. Did you see ``MDS_HEALTH_TRIM`` cluster warnings saying the MDS is
+behind on trimming its journal? If the journal has grown very large, it can
+take hours to read the journal. There is no working around this but there
+are things you can do to speed things along:
+
+Reduce MDS debugging to 0. Even at the default settings, the MDS logs some
+messages to memory for dumping if a fatal error is encountered. You can avoid
+this:
+
+.. code:: bash
+
+   ceph config set mds debug_mds 0
+   ceph config set mds debug_ms 0
+   ceph config set mds debug_monc 0
+
+Note if the MDS fails then there will be virtually no information to determine
+why. If you can calculate when ``up:replay`` will complete, you should restore
+these configs just prior to entering the next state:
+
+.. code:: bash
+
+   ceph config rm mds debug_mds
+   ceph config rm mds debug_ms
+   ceph config rm mds debug_monc
+
+Once you've got replay moving along faster, you can calculate when the MDS will
+complete. This is done by examining the journal replay status:
+
+.. code:: bash
+
+   $ ceph tell mds.<fs_name>:0 status | jq .replay_status
+   {
+     "journal_read_pos": 4195244,
+     "journal_write_pos": 4195244,
+     "journal_expire_pos": 4194304,
+     "num_events": 2,
+     "num_segments": 2
+   }
+
+Replay completes when the ``journal_read_pos`` reaches the
+``journal_write_pos``. The write position will not change during replay. Track
+the progression of the read position to compute the expected time to complete.
+
+
+Avoiding recovery roadblocks
+----------------------------
+
+When trying to urgently restore your file system during an outage, here are some
+things to do:
+
+* **Deny all reconnect to clients.** This effectively blocklists all existing
+  CephFS sessions so all mounts will hang or become unavailable.
+
+.. code:: bash
+
+   ceph config set mds mds_deny_all_reconnect true
+
+  Remember to undo this after the MDS becomes active.
+
+.. note:: This does not prevent new sessions from connecting. For that, see the ``refuse_client_session`` file system setting.
+
+* **Extend the MDS heartbeat grace period**. This avoids replacing an MDS that appears
+  "stuck" doing some operation. Sometimes recovery of an MDS may involve an
+  operation that may take longer than expected (from the programmer's
+  perspective). This is more likely when recovery is already taking a longer than
+  normal amount of time to complete (indicated by your reading this document).
+  Avoid unnecessary replacement loops by extending the heartbeat graceperiod:
+
+.. code:: bash
+
+   ceph config set mds mds_heartbeat_grace 3600
+
+.. note:: This has the effect of having the MDS continue to send beacons to the monitors
+          even when its internal "heartbeat" mechanism has not been reset (beat) in one
+          hour. The previous mechanism for achieving this was via the
+          `mds_beacon_grace` monitor setting.
+
+* **Disable open file table prefetch.** Normally, the MDS will prefetch
+  directory contents during recovery to heat up its cache. During long
+  recovery, the cache is probably already hot **and large**. So this behavior
+  can be undesirable. Disable using:
+
+.. code:: bash
+
+   ceph config set mds mds_oft_prefetch_dirfrags false
+
+* **Turn off clients.** Clients reconnecting to the newly ``up:active`` MDS may
+  cause new load on the file system when it's just getting back on its feet.
+  There will likely be some general maintenance to do before workloads should be
+  resumed. For example, expediting journal trim may be advisable if the recovery
+  took a long time because replay was reading a overly large journal.
+
+  You can do this manually or use the new file system tunable:
+
+.. code:: bash
+
+   ceph fs set <fs_name> refuse_client_session true
+
+  That prevents any clients from establishing new sessions with the MDS.
+
+
+
+Expediting MDS journal trim
+===========================
+
+If your MDS journal grew too large (maybe your MDS was stuck in up:replay for a
+long time!), you will want to have the MDS trim its journal more frequently.
+You will know the journal is too large because of ``MDS_HEALTH_TRIM`` warnings.
+
+The main tunable available to do this is to modify the MDS tick interval. The
+"tick" interval drives several upkeep activities in the MDS. It is strongly
+recommended no significant file system load be present when modifying this tick
+interval. This setting only affects an MDS in ``up:active``. The MDS does not
+trim its journal during recovery.
+
+.. code:: bash
+
+   ceph config set mds mds_tick_interval 2
+
+
 RADOS Health
 ============
 
@@ -221,6 +348,64 @@ in-memory logs containing the relevant event details in ceph-mds log.
 The In-memory Log Dump can be disabled using::
 
   $ ceph config set mds mds_extraordinary_events_dump_interval 0
+
+Filesystems Become Inaccessible After an Upgrade
+================================================
+
+.. note::
+   You can avoid ``operation not permitted`` errors by running this procedure
+   before an upgrade. As of May 2023, it seems that ``operation not permitted``
+   errors of the kind discussed here occur after upgrades after Nautilus
+   (inclusive).
+
+IF
+
+you have CephFS file systems that have data and metadata pools that were
+created by a ``ceph fs new`` command (meaning that they were not created
+with the defaults)
+
+OR
+
+you have an existing CephFS file system and are upgrading to a new post-Nautilus
+major version of Ceph
+
+THEN
+
+in order for the documented ``ceph fs authorize...`` commands to function as
+documented (and to avoid 'operation not permitted' errors when doing file I/O
+or similar security-related problems for all users except the ``client.admin``
+user), you must first run:
+
+.. prompt:: bash $
+
+   ceph osd pool application set <your metadata pool name> cephfs metadata <your ceph fs filesystem name>
+
+and
+
+.. prompt:: bash $
+
+   ceph osd pool application set <your data pool name> cephfs data <your ceph fs filesystem name>
+
+Otherwise, when the OSDs receive a request to read or write data (not the
+directory info, but file data) they will not know which Ceph file system name
+to look up. This is true also of pool names, because the 'defaults' themselves
+changed in the major releases, from::
+
+   data pool=fsname
+   metadata pool=fsname_metadata
+
+to::
+
+   data pool=fsname.data and
+   metadata pool=fsname.meta
+
+Any setup that used ``client.admin`` for all mounts did not run into this
+problem, because the admin key gave blanket permissions.
+
+A temporary fix involves changing mount requests to the 'client.admin' user and
+its associated key. A less drastic but half-fix is to change the osd cap for
+your user to just ``caps osd = "allow rw"``  and delete ``tag cephfs
+data=....``
 
 Reporting Issues
 ================

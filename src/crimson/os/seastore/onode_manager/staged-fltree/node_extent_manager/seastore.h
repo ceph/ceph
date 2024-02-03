@@ -59,7 +59,7 @@ class SeastoreNodeExtent final: public NodeExtent {
     return recorder.get();
   }
 
-  CachedExtentRef duplicate_for_write() override {
+  CachedExtentRef duplicate_for_write(Transaction&) override {
     return CachedExtentRef(new SeastoreNodeExtent(*this));
   }
   ceph::bufferlist get_delta() override {
@@ -165,7 +165,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         return retire_iertr::now();
       }
     }
-    return tm.dec_ref(t, extent).si_then([addr, len, &t] (unsigned cnt) {
+    return tm.remove(t, extent).si_then([addr, len, &t] (unsigned cnt) {
       assert(cnt == 0);
       SUBTRACET(seastore_onode, "retired {}B at {:#x} ...", t, len, addr);
     });

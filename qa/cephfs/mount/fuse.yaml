@@ -1,2 +1,16 @@
+teuthology:
+  postmerge:
+  - local function is_kupstream()
+      return false
+    end
+  - local function is_kdistro()
+      return false
+    end
+  - local function is_fuse()
+      return true
+    end
+  - local function syntax_version()
+      return ''
+    end
 tasks:
   - ceph-fuse:

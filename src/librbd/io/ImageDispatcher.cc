@@ -6,7 +6,6 @@
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/crypto/CryptoImageDispatch.h"
 #include "librbd/io/ImageDispatch.h"
 #include "librbd/io/ImageDispatchInterface.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -53,9 +52,8 @@ struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
     return image_dispatch->discard(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents),
-      discard.discard_granularity_bytes, image_dispatch_spec->io_context,
-      image_dispatch_spec->parent_trace, image_dispatch_spec->tid,
-      &image_dispatch_spec->image_dispatch_flags,
+      discard.discard_granularity_bytes, image_dispatch_spec->parent_trace,
+      image_dispatch_spec->tid, &image_dispatch_spec->image_dispatch_flags,
       &image_dispatch_spec->dispatch_result,
       &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
       &image_dispatch_spec->dispatcher_ctx);
@@ -65,33 +63,31 @@ struct ImageDispatcher<I>::SendVisitor : public boost::static_visitor<bool> {
     return image_dispatch->write(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents), std::move(write.bl),
-      image_dispatch_spec->io_context, image_dispatch_spec->op_flags,
-      image_dispatch_spec->parent_trace, image_dispatch_spec->tid,
-      &image_dispatch_spec->image_dispatch_flags,
+      image_dispatch_spec->op_flags, image_dispatch_spec->parent_trace,
+      image_dispatch_spec->tid, &image_dispatch_spec->image_dispatch_flags,
       &image_dispatch_spec->dispatch_result,
       &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
       &image_dispatch_spec->dispatcher_ctx);
   }
 
-  bool  operator()(ImageDispatchSpec::WriteSame& write_same) const {
+  bool operator()(ImageDispatchSpec::WriteSame& write_same) const {
     return image_dispatch->write_same(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents), std::move(write_same.bl),
-      image_dispatch_spec->io_context, image_dispatch_spec->op_flags,
-      image_dispatch_spec->parent_trace, image_dispatch_spec->tid,
-      &image_dispatch_spec->image_dispatch_flags,
+      image_dispatch_spec->op_flags, image_dispatch_spec->parent_trace,
+      image_dispatch_spec->tid, &image_dispatch_spec->image_dispatch_flags,
       &image_dispatch_spec->dispatch_result,
       &image_dispatch_spec->aio_comp->image_dispatcher_ctx,
       &image_dispatch_spec->dispatcher_ctx);
   }
 
-  bool  operator()(
+  bool operator()(
       ImageDispatchSpec::CompareAndWrite& compare_and_write) const {
     return image_dispatch->compare_and_write(
       image_dispatch_spec->aio_comp,
       std::move(image_dispatch_spec->image_extents),
       std::move(compare_and_write.cmp_bl), std::move(compare_and_write.bl),
-      compare_and_write.mismatch_offset, image_dispatch_spec->io_context,
+      compare_and_write.mismatch_offset,
       image_dispatch_spec->op_flags, image_dispatch_spec->parent_trace,
       image_dispatch_spec->tid, &image_dispatch_spec->image_dispatch_flags,
       &image_dispatch_spec->dispatch_result,
@@ -267,32 +263,6 @@ void ImageDispatcher<I>::unblock_writes() {
 template <typename I>
 void ImageDispatcher<I>::wait_on_writes_unblocked(Context *on_unblocked) {
   m_write_block_dispatch->wait_on_writes_unblocked(on_unblocked);
-}
-
-template <typename I>
-void ImageDispatcher<I>::remap_to_physical(Extents& image_extents,
-                                           ImageArea area) {
-  std::shared_lock locker{this->m_lock};
-  auto it = this->m_dispatches.find(IMAGE_DISPATCH_LAYER_CRYPTO);
-  if (it == this->m_dispatches.end()) {
-    ceph_assert(area == ImageArea::DATA);
-    return;
-  }
-  auto crypto_image_dispatch = static_cast<crypto::CryptoImageDispatch*>(
-      it->second.dispatch);
-  crypto_image_dispatch->remap_to_physical(image_extents, area);
-}
-
-template <typename I>
-ImageArea ImageDispatcher<I>::remap_to_logical(Extents& image_extents) {
-  std::shared_lock locker{this->m_lock};
-  auto it = this->m_dispatches.find(IMAGE_DISPATCH_LAYER_CRYPTO);
-  if (it == this->m_dispatches.end()) {
-    return ImageArea::DATA;
-  }
-  auto crypto_image_dispatch = static_cast<crypto::CryptoImageDispatch*>(
-      it->second.dispatch);
-  return crypto_image_dispatch->remap_to_logical(image_extents);
 }
 
 template <typename I>

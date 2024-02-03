@@ -32,8 +32,8 @@ defaults
     timeout connect         5s
     timeout http-request    1s
     timeout http-keep-alive 5s
-    timeout client          1s
-    timeout server          1s
+    timeout client          30s
+    timeout server          30s
     timeout check           5s
 {% endif %}
 {% if mode == 'tcp' %}
@@ -48,7 +48,7 @@ defaults
 frontend stats
     mode http
     bind {{ ip }}:{{ monitor_port }}
-    bind localhost:{{ monitor_port }}
+    bind {{ local_host_ip }}:{{ monitor_port }}
     stats enable
     stats uri /stats
     stats refresh 10s
@@ -81,6 +81,9 @@ backend backend
     mode        tcp
     balance     source
     hash-type   consistent
+{% if default_server_opts %}
+    default-server {{ default_server_opts|join(" ") }}
+{% endif %}
     {% for server in servers %}
     server {{ server.name }} {{ server.ip }}:{{ server.port }}
     {% endfor %}

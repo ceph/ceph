@@ -7,7 +7,14 @@
           [formGroup]="serviceForm"
           novalidate>
       <div class="modal-body">
-
+        <cd-alert-panel *ngIf="serviceForm.controls.service_type.value === 'rgw' && showRealmCreationForm"
+                        type="info"
+                        spacingClass="mb-3"
+                        i18n>
+          <a class="text-decoration-underline"
+             (click)="createMultisiteSetup()">
+             Click here</a> to create a new Realm/Zone Group/Zone
+        </cd-alert-panel>
         <!-- Service type -->
         <div class="form-group row">
           <label class="cd-col-form-label required"
@@ -84,11 +91,68 @@
                   *ngIf="serviceForm.showError('service_id', frm, 'uniqueName')"
                   i18n>This service id is already in use.</span>
             <span class="invalid-feedback"
-                  *ngIf="serviceForm.showError('service_id', frm, 'rgwPattern')"
-                  i18n>The value does not match the pattern <strong>&lt;service_id&gt;[.&lt;realm_name&gt;.&lt;zone_name&gt;]</strong>.</span>
-            <span class="invalid-feedback"
                   *ngIf="serviceForm.showError('service_id', frm, 'mdsPattern')"
                   i18n>MDS service id must start with a letter and contain alphanumeric characters or '.', '-', and '_'</span>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'rgw'">
+          <label class="cd-col-form-label"
+                 for="realm_name"
+                 i18n>Realm</label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="realm_name"
+                    formControlName="realm_name"
+                    name="realm_name"
+                    [attr.disabled]="realmList.length === 0  || editing ? true : null">
+            <option *ngIf="realmList.length === 0"
+                    i18n
+                    selected>-- No realm available --</option>
+            <option *ngFor="let realm of realmList"
+                    [value]="realm.name">
+                  {{ realm.name }}
+            </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'rgw'">
+          <label class="cd-col-form-label"
+                 for="zonegroup_name"
+                 i18n>Zone Group</label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="zonegroup_name"
+                    formControlName="zonegroup_name"
+                    name="zonegroup_name"
+                    [attr.disabled]="zonegroupList.length === 0  || editing ? true : null">
+              <option *ngFor="let zonegroup of zonegroupList"
+                      [value]="zonegroup.name">
+              {{ zonegroup.name }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'rgw'">
+          <label class="cd-col-form-label"
+                 for="zone_name"
+                 i18n>Zone</label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="zone_name"
+                    formControlName="zone_name"
+                    name="zone_name"
+                    [attr.disabled]="zoneList.length === 0  || editing ? true : null">
+              <option *ngFor="let zone of zoneList"
+                      [value]="zone.name">
+              {{ zone.name }}
+              </option>
+            </select>
           </div>
         </div>
 
@@ -103,6 +167,8 @@
               <label class="custom-control-label"
                      for="unmanaged"
                      i18n>Unmanaged</label>
+              <cd-helper i18n>If set to true, the orchestrator will not start nor stop any daemon associated with this service.
+                 Placement and all other properties will be ignored.</cd-helper>
             </div>
           </div>
         </div>
@@ -682,6 +748,65 @@
               <span class="invalid-feedback"
                     *ngIf="serviceForm.showError('ssl_key', frm, 'pattern')"
                     i18n>Invalid SSL private key.</span>
+            </div>
+          </div>
+        </ng-container>
+        <!-- Grafana -->
+        <ng-container *ngIf="serviceForm.controls.service_type.value === 'grafana'">
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="grafana_port">
+              <span i18n>Grafana Port</span>
+              <cd-helper>
+                <span i18n>The default port used by grafana.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="grafana_port"
+                     class="form-control"
+                     type="number"
+                     formControlName="grafana_port"
+                     min="1"
+                     max="65535">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'pattern')"
+                    i18n>The entered value needs to be a number.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'min')"
+                    i18n>The value must be at least 1.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'max')"
+                    i18n>The value cannot exceed 65535.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+          <div class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="grafana_admin_password">
+              <span>Grafana Password</span>
+              <cd-helper>The password of the default Grafana Admin. Set once on first-run.</cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <div class="input-group">
+                <input id="grafana_admin_password"
+                       class="form-control"
+                       type="password"
+                       autocomplete="new-password"
+                       [attr.disabled]="editing ? true:null"
+                       formControlName="grafana_admin_password">
+                <span class="input-group-append">
+                  <button type="button"
+                          class="btn btn-light"
+                          cdPasswordButton="grafana_admin_password">
+                  </button>
+                  <cd-copy-2-clipboard-button source="grafana_admin_password">
+                  </cd-copy-2-clipboard-button>
+                </span>
+              </div>
             </div>
           </div>
         </ng-container>

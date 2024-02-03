@@ -11,5 +11,5 @@ tasks:
       RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
       RBD_MIRROR_USE_RBD_MIRROR: '1'
       MIRROR_POOL_MODE: 'pool'
-      MIRROR_IMAGE_MODE: 'journal'
+      RBD_MIRROR_MODE: 'journal'
     timeout: 6h

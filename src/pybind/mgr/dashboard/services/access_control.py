@@ -14,6 +14,7 @@ from typing import List, Optional, Sequence
 
 import bcrypt
 from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
+from mgr_util import password_hash
 
 from .. import mgr
 from ..exceptions import PasswordPolicyException, PermissionNotValid, \
@@ -25,17 +26,6 @@ from ..settings import Settings
 
 logger = logging.getLogger('access_control')
 DEFAULT_FILE_DESC = 'password/secret'
-
-
-# password hashing algorithm
-def password_hash(password, salt_password=None):
-    if not password:
-        return None
-    if not salt_password:
-        salt_password = bcrypt.gensalt()
-    else:
-        salt_password = salt_password.encode('utf8')
-    return bcrypt.hashpw(password.encode('utf8'), salt_password).decode('utf8')
 
 
 _P = Permission  # short alias
@@ -232,6 +222,7 @@ BLOCK_MGR_ROLE = Role(
         Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
+        Scope.NVME_OF: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     })
 
 
@@ -569,7 +560,7 @@ class AccessControlDB(object):
 
 
 def load_access_control_db():
-    mgr.ACCESS_CTRL_DB = AccessControlDB.load()
+    mgr.ACCESS_CTRL_DB = AccessControlDB.load()  # type: ignore
 
 
 # CLI dashboard access control scope commands

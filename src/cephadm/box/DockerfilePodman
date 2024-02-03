@@ -9,11 +9,13 @@
 FROM fedora:34
 
 ENV CEPHADM_PATH=/usr/local/sbin/cephadm
+RUN ln -s /ceph/src/cephadm/cephadm.py $CEPHADM_PATH # NOTE: assume path of ceph volume
+
 # Don't include container-selinux and remove
 # directories used by yum that are just taking
 # up space.
 RUN dnf -y update; rpm --restore shadow-utils 2>/dev/null; \
-yum -y install strace podman fuse-overlayfs --exclude container-selinux; \
+yum -y install podman fuse-overlayfs --exclude container-selinux; \
 rm -rf /var/cache /var/log/dnf* /var/log/yum.*
 
 RUN dnf install which firewalld chrony procps systemd openssh openssh-server openssh-clients sshpass lvm2 -y
@@ -36,6 +38,7 @@ RUN echo 'root:root' | chpasswd
 
 RUN dnf install -y adjtimex # adjtimex syscall doesn't exist in fedora 35+ therefore we have to install it manually
                     # so chronyd works
+RUN dnf install -y strace sysstat # debugging tools
 RUN dnf -y install hostname iproute udev
 ENV _CONTAINERS_USERNS_CONFIGURED=""
 

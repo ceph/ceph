@@ -68,27 +68,30 @@ int main(int argc, const char **argv)
   auto prio =
       g_ceph_context->_conf.get_val<int64_t>("rbd_mirror_perf_stats_prio");
   {
-    PerfCountersBuilder plb(g_ceph_context, "rbd_mirror",
+    PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_journal",
                             rbd::mirror::l_rbd_mirror_journal_first,
                             rbd::mirror::l_rbd_mirror_journal_last);
-    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_replay, "replay", "Replays",
-                        "r", prio);
-    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_replay_bytes, "replay_bytes",
-                        "Replayed data", "rb", prio, unit_t(UNIT_BYTES));
-    plb.add_time_avg(rbd::mirror::l_rbd_mirror_replay_latency, "replay_latency",
-                     "Replay latency", "rl", prio);
+    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_journal_entries, "entries",
+                        "Number of entries replayed", nullptr, prio);
+    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_journal_replay_bytes,
+                        "replay_bytes", "Total bytes replayed", nullptr, prio,
+                        unit_t(UNIT_BYTES));
+    plb.add_time_avg(rbd::mirror::l_rbd_mirror_journal_replay_latency,
+                     "replay_latency", "Replay latency", nullptr, prio);
     g_journal_perf_counters = plb.create_perf_counters();
   }
   {
-    PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_snapshot",
-                            rbd::mirror::l_rbd_mirror_snapshot_first,
-                            rbd::mirror::l_rbd_mirror_snapshot_last);
-    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_snapshot_replay_snapshots,
-                        "snapshots", "Snapshots", "r", prio);
-    plb.add_time_avg(rbd::mirror::l_rbd_mirror_snapshot_replay_snapshots_time,
-                     "snapshots_time", "Snapshots time", "rl", prio);
-    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_snapshot_replay_bytes,
-                        "replay_bytes", "Replayed data", "rb", prio,
+    PerfCountersBuilder plb(
+        g_ceph_context, "rbd_mirror_snapshot",
+        rbd::mirror::l_rbd_mirror_snapshot_first,
+        rbd::mirror::l_rbd_mirror_snapshot_remote_timestamp);
+    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_snapshot_snapshots,
+                        "snapshots", "Number of snapshots synced", nullptr,
+                        prio);
+    plb.add_time_avg(rbd::mirror::l_rbd_mirror_snapshot_sync_time, "sync_time",
+                     "Average sync time", nullptr, prio);
+    plb.add_u64_counter(rbd::mirror::l_rbd_mirror_snapshot_sync_bytes,
+                        "sync_bytes", "Total bytes synced", nullptr, prio,
                         unit_t(UNIT_BYTES));
     g_snapshot_perf_counters = plb.create_perf_counters();
   }

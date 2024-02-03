@@ -18,6 +18,8 @@
 #include <variant>
 
 #include "common/ceph_context.h"
+#include "common/OpQueue.h"
+#include "mon/MonClient.h"
 #include "osd/scheduler/OpSchedulerItem.h"
 
 namespace ceph::osd::scheduler {
@@ -53,6 +55,9 @@ public:
   // Apply config changes to the scheduler (if any)
   virtual void update_configuration() = 0;
 
+  // Get the scheduler type set for the queue
+  virtual op_queue_type_t get_type() const = 0;
+
   // Destructor
   virtual ~OpScheduler() {};
 };
@@ -61,8 +66,9 @@ std::ostream &operator<<(std::ostream &lhs, const OpScheduler &);
 using OpSchedulerRef = std::unique_ptr<OpScheduler>;
 
 OpSchedulerRef make_scheduler(
-  CephContext *cct, uint32_t num_shards, bool is_rotational,
-  std::string_view osd_objectstore);
+  CephContext *cct, int whoami, uint32_t num_shards, int shard_id,
+  bool is_rotational, std::string_view osd_objectstore,
+  op_queue_type_t osd_scheduler, unsigned op_queue_cut_off, MonClient *monc);
 
 /**
  * Implements OpScheduler in terms of OpQueue
@@ -77,21 +83,10 @@ class ClassedOpQueueScheduler final : public OpScheduler {
   unsigned cutoff;
   T queue;
 
-  static unsigned int get_io_prio_cut(CephContext *cct) {
-    if (cct->_conf->osd_op_queue_cut_off == "debug_random") {
-      srand(time(NULL));
-      return (rand() % 2 < 1) ? CEPH_MSG_PRIO_HIGH : CEPH_MSG_PRIO_LOW;
-    } else if (cct->_conf->osd_op_queue_cut_off == "high") {
-      return CEPH_MSG_PRIO_HIGH;
-    } else {
-      // default / catch-all is 'low'
-      return CEPH_MSG_PRIO_LOW;
-    }
-  }
 public:
   template <typename... Args>
-  ClassedOpQueueScheduler(CephContext *cct, Args&&... args) :
-    cutoff(get_io_prio_cut(cct)),
+  ClassedOpQueueScheduler(CephContext *cct, unsigned prio_cut, Args&&... args) :
+    cutoff(prio_cut),
     queue(std::forward<Args>(args)...)
   {}
 
@@ -140,6 +135,10 @@ public:
 
   void update_configuration() final {
     // no-op
+  }
+
+  op_queue_type_t get_type() const final {
+    return queue.get_type();
   }
 
   ~ClassedOpQueueScheduler() final {};

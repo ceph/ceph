@@ -2,7 +2,9 @@ add_executable(crimson-osd
   backfill_state.cc
   ec_backend.cc
   heartbeat.cc
+  lsan_suppressions.cc
   main.cc
+  main_config_bootstrap_helpers.cc
   osd.cc
   osd_meta.cc
   pg.cc
@@ -13,6 +15,7 @@ add_executable(crimson-osd
   pg_shard_manager.cc
   object_context.cc
   object_context_loader.cc
+  object_metadata_helper.cc
   ops_executer.cc
   osd_operation.cc
   osd_operations/client_request.cc
@@ -25,11 +28,16 @@ add_executable(crimson-osd
   osd_operations/logmissing_request_reply.cc
   osd_operations/background_recovery.cc
   osd_operations/recovery_subrequest.cc
+  osd_operations/snaptrim_event.cc
+  osd_operations/scrub_events.cc
   pg_recovery.cc
   recovery_backend.cc
   replicated_recovery_backend.cc
   scheduler/scheduler.cc
   scheduler/mclock_scheduler.cc
+  scrub/scrub_machine.cc
+  scrub/scrub_validator.cc
+  scrub/pg_scrubber.cc
   osdmap_gate.cc
   pg_activation_blocker.cc
   pg_map.cc
@@ -37,6 +45,7 @@ add_executable(crimson-osd
   objclass.cc
   ${PROJECT_SOURCE_DIR}/src/objclass/class_api.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ClassHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_op_util.cc
   ${PROJECT_SOURCE_DIR}/src/osd/OSDCap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PeeringState.cc
@@ -44,6 +53,7 @@ add_executable(crimson-osd
   ${PROJECT_SOURCE_DIR}/src/osd/PGStateUtils.cc
   ${PROJECT_SOURCE_DIR}/src/osd/MissingLoc.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGLog.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/SnapMapper.cc
   ${PROJECT_SOURCE_DIR}/src/osd/recovery_types.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_perf_counters.cc
   watch.cc
@@ -57,7 +67,7 @@ target_link_libraries(crimson-osd
   crimson-common
   crimson-os
   crimson
-  fmt::fmt
+  ${FMT_LIB}
   Boost::MPL
   dmclock::dmclock)
 set_target_properties(crimson-osd PROPERTIES

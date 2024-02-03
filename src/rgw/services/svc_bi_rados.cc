@@ -22,29 +22,27 @@ RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct) : RGWSI_Bucke
 }
 
 void RGWSI_BucketIndex_RADOS::init(RGWSI_Zone *zone_svc,
-                                   RGWSI_RADOS *rados_svc,
-                                   RGWSI_BILog_RADOS *bilog_svc,
-                                   RGWDataChangesLog *datalog_rados_svc)
+				   librados::Rados* rados_,
+				   RGWSI_BILog_RADOS *bilog_svc,
+				   RGWDataChangesLog *datalog_rados_svc)
 {
   svc.zone = zone_svc;
-  svc.rados = rados_svc;
+  rados = rados_;
   svc.bilog = bilog_svc;
   svc.datalog_rados = datalog_rados_svc;
 }
 
 int RGWSI_BucketIndex_RADOS::open_pool(const DoutPrefixProvider *dpp,
                                        const rgw_pool& pool,
-                                       RGWSI_RADOS::Pool *index_pool,
+                                       librados::IoCtx* index_pool,
                                        bool mostly_omap)
 {
-  *index_pool = svc.rados->pool(pool);
-  return index_pool->open(dpp, RGWSI_RADOS::OpenParams()
-                          .set_mostly_omap(mostly_omap));
+  return rgw_init_ioctx(dpp, rados, pool, *index_pool, true, mostly_omap);
 }
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_pool(const DoutPrefixProvider *dpp,
                                                     const RGWBucketInfo& bucket_info,
-                                                    RGWSI_RADOS::Pool *index_pool)
+                                                    librados::IoCtx* index_pool)
 {
   const rgw_pool& explicit_pool = bucket_info.bucket.explicit_placement.index_pool;
 
@@ -74,7 +72,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_pool(const DoutPrefixProvider *dp
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_base(const DoutPrefixProvider *dpp,
                                                     const RGWBucketInfo& bucket_info,
-                                                    RGWSI_RADOS::Pool *index_pool,
+                                                    librados::IoCtx* index_pool,
                                                     string *bucket_oid_base)
 {
   const rgw_bucket& bucket = bucket_info.bucket;
@@ -96,7 +94,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_base(const DoutPrefixProvider *dp
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index(const DoutPrefixProvider *dpp,
                                                const RGWBucketInfo& bucket_info,
-                                               RGWSI_RADOS::Pool *index_pool,
+                                               librados::IoCtx* index_pool,
                                                string *bucket_oid)
 {
   const rgw_bucket& bucket = bucket_info.bucket;
@@ -194,7 +192,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const DoutPrefixProvider *dpp,
                                                const RGWBucketInfo& bucket_info,
                                                std::optional<int> _shard_id,
                                                const rgw::bucket_index_layout_generation& idx_layout,
-                                               RGWSI_RADOS::Pool *index_pool,
+                                               librados::IoCtx* index_pool,
                                                map<int, string> *bucket_objs,
                                                map<int, string> *bucket_instance_ids)
 {
@@ -216,13 +214,13 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_base,
-                                                      uint32_t num_shards,
-                                                      int shard_id,
-                                                      uint64_t gen_id,
-                                                      string *bucket_obj)
+void RGWSI_BucketIndex_RADOS::get_bucket_index_object(
+    const std::string& bucket_oid_base,
+    const rgw::bucket_index_normal_layout& normal,
+    uint64_t gen_id, int shard_id,
+    std::string* bucket_obj)
 {
-  if (!num_shards) {
+  if (!normal.num_shards) {
     // By default with no sharding, we use the bucket oid as itself
     (*bucket_obj) = bucket_oid_base;
   } else {
@@ -239,21 +237,23 @@ void RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_b
   }
 }
 
-int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
-                                                     uint32_t num_shards, rgw::BucketHashType hash_type,
-                                                     uint64_t gen_id, string *bucket_obj, int *shard_id)
+int RGWSI_BucketIndex_RADOS::get_bucket_index_object(
+    const std::string& bucket_oid_base,
+    const rgw::bucket_index_normal_layout& normal,
+    uint64_t gen_id, const std::string& obj_key,
+    std::string* bucket_obj, int* shard_id)
 {
   int r = 0;
-  switch (hash_type) {
+  switch (normal.hash_type) {
     case rgw::BucketHashType::Mod:
-      if (!num_shards) {
+      if (!normal.num_shards) {
         // By default with no sharding, we use the bucket oid as itself
         (*bucket_obj) = bucket_oid_base;
         if (shard_id) {
           *shard_id = -1;
         }
       } else {
-        uint32_t sid = bucket_shard_index(obj_key, num_shards);
+        uint32_t sid = bucket_shard_index(obj_key, normal.num_shards);
         char buf[bucket_oid_base.size() + 64];
         if (gen_id) {
           bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, sid);
@@ -275,56 +275,47 @@ int RGWSI_BucketIndex_RADOS::get_bucket_index_object(const string& bucket_oid_ba
 int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const DoutPrefixProvider *dpp,
                                                      const RGWBucketInfo& bucket_info,
                                                      const string& obj_key,
-                                                     RGWSI_RADOS::Obj *bucket_obj,
+                                                     rgw_rados_ref* bucket_obj,
                                                      int *shard_id)
 {
   string bucket_oid_base;
 
-  RGWSI_RADOS::Pool pool;
-
-  int ret = open_bucket_index_base(dpp, bucket_info, &pool, &bucket_oid_base);
+  int ret = open_bucket_index_base(dpp, bucket_info, &bucket_obj->ioctx, &bucket_oid_base);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << ": open_bucket_index_pool() returned "
                    << ret << dendl;
     return ret;
   }
 
-  string oid;
-
-  ret = get_bucket_index_object(bucket_oid_base, obj_key, bucket_info.layout.current_index.layout.normal.num_shards,
-        bucket_info.layout.current_index.layout.normal.hash_type, bucket_info.layout.current_index.gen, &oid, shard_id);
+  const auto& current_index = bucket_info.layout.current_index;
+  ret = get_bucket_index_object(bucket_oid_base, current_index.layout.normal,
+                                current_index.gen, obj_key,
+				&bucket_obj->obj.oid, shard_id);
   if (ret < 0) {
     ldpp_dout(dpp, 10) << "get_bucket_index_object() returned ret=" << ret << dendl;
     return ret;
   }
-
-  *bucket_obj = svc.rados->obj(pool, oid);
 
   return 0;
 }
 
 int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const DoutPrefixProvider *dpp,
                                                      const RGWBucketInfo& bucket_info,
+                                                     const rgw::bucket_index_layout_generation& index,
                                                      int shard_id,
-                                                     uint32_t num_shards,
-                                                     uint64_t gen,
-                                                     RGWSI_RADOS::Obj *bucket_obj)
+                                                     rgw_rados_ref* bucket_obj)
 {
-  RGWSI_RADOS::Pool index_pool;
   string bucket_oid_base;
-  int ret = open_bucket_index_base(dpp, bucket_info, &index_pool, &bucket_oid_base);
+  int ret = open_bucket_index_base(dpp, bucket_info, &bucket_obj->ioctx,
+				   &bucket_oid_base);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << ": open_bucket_index_pool() returned "
                    << ret << dendl;
     return ret;
   }
 
-  string oid;
-
-  get_bucket_index_object(bucket_oid_base, num_shards,
-                          shard_id, gen, &oid);
-
-  *bucket_obj = svc.rados->obj(index_pool, oid);
+  get_bucket_index_object(bucket_oid_base, index.layout.normal,
+                          index.gen, shard_id, &bucket_obj->obj.oid);
 
   return 0;
 }
@@ -337,7 +328,7 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
                                              map<int, string> *bucket_instance_ids,
                                              optional_yield y)
 {
-  RGWSI_RADOS::Pool index_pool;
+  librados::IoCtx index_pool;
   map<int, string> oids;
   int r = open_bucket_index(dpp, bucket_info, shard_id, idx_layout, &index_pool, &oids, bucket_instance_ids);
   if (r < 0)
@@ -348,7 +339,8 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
     list_results.emplace(iter.first, rgw_cls_list_ret());
   }
 
-  r = CLSRGWIssueGetDirHeader(index_pool.ioctx(), oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
+  r = CLSRGWIssueGetDirHeader(index_pool, oids, list_results,
+			      cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0)
     return r;
 
@@ -359,9 +351,9 @@ int RGWSI_BucketIndex_RADOS::cls_bucket_head(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
+int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp,RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
 {
-  RGWSI_RADOS::Pool index_pool;
+  librados::IoCtx index_pool;
 
   string dir_oid = dir_oid_prefix;
   int r = open_bucket_index_pool(dpp, bucket_info, &index_pool);
@@ -374,14 +366,14 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp, RGWBucket
   map<int, string> bucket_objs;
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards, idx_layout.gen, &bucket_objs);
 
-  return CLSRGWIssueBucketIndexInit(index_pool.ioctx(),
+  return CLSRGWIssueBucketIndexInit(index_pool,
 				    bucket_objs,
 				    cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
 {
-  RGWSI_RADOS::Pool index_pool;
+  librados::IoCtx index_pool;
 
   std::string dir_oid = dir_oid_prefix;
   int r = open_bucket_index_pool(dpp, bucket_info, &index_pool);
@@ -395,7 +387,7 @@ int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, RGWBucke
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards,
                            idx_layout.gen, &bucket_objs);
 
-  return CLSRGWIssueBucketIndexClean(index_pool.ioctx(),
+  return CLSRGWIssueBucketIndexClean(index_pool,
 				     bucket_objs,
 				     cct->_conf->rgw_bucket_index_max_aio)();
 }
@@ -438,7 +430,7 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp, c
 {
   map<int, string> bucket_objs;
 
-  RGWSI_RADOS::Pool index_pool;
+  librados::IoCtx index_pool;
 
   int r = open_bucket_index(dpp, bucket_info,
                             std::nullopt,
@@ -453,7 +445,7 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp, c
   for (auto i : bucket_objs) {
     cls_rgw_bucket_instance_entry entry;
 
-    int ret = cls_rgw_get_bucket_resharding(index_pool.ioctx(), i.second, &entry);
+    int ret = cls_rgw_get_bucket_resharding(index_pool, i.second, &entry);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, -1) << "ERROR: " << __func__ << ": cls_rgw_get_bucket_resharding() returned ret=" << ret << dendl;
       return ret;
@@ -465,9 +457,10 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const DoutPrefixProvider *dpp, c
   return 0;
 }
 
-int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp, 
+int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
                                               const RGWBucketInfo& info,
-                                              const RGWBucketInfo& orig_info)
+                                              const RGWBucketInfo& orig_info,
+					      optional_yield y)
 {
   bool new_sync_enabled = info.datasync_flag_enabled();
   bool old_sync_enabled = orig_info.datasync_flag_enabled();
@@ -496,7 +489,7 @@ int RGWSI_BucketIndex_RADOS::handle_overwrite(const DoutPrefixProvider *dpp,
   }
 
   for (int i = 0; i < shards_num; ++i) {
-    ret = svc.datalog_rados->add_entry(dpp, info, bilog, i);
+    ret = svc.datalog_rados->add_entry(dpp, info, bilog, i, y);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR: failed writing data log (info.bucket=" << info.bucket << ", shard_id=" << i << ")" << dendl;
     } // datalog error is not fatal

@@ -1,3 +1,5 @@
+.. _Perf Counters:
+
 ===============
  Perf counters
 ===============
@@ -200,3 +202,50 @@ The actual dump is similar to the schema, except that average values are grouped
    }
  }
 
+.. _Labeled Perf Counters:
+
+Labeled Perf Counters
+---------------------
+
+A Ceph daemon has the ability to emit a set of perf counter instances with varying labels. These counters are intended for visualizing specific metrics in 3rd party tools like Prometheus and Grafana.
+
+For example, the below counters show the number of put requests for different users on different buckets::
+
+  {
+      "rgw": [
+          {
+              "labels": {
+                  "Bucket: "bkt1",
+                  "User: "user1",
+              },
+              "counters": {
+                  "put": 1,
+              },
+          },
+          {
+              "labels": {},
+              "counters": {
+                  "put": 4,
+              },
+          },
+          {
+              "labels": {
+                  "Bucket: "bkt1",
+                  "User: "user2",
+              },
+              "counters": {
+                  "put": 3,
+              },
+          },
+      ]
+  }
+
+All labeled and unlabeled perf counters can be viewed with ``ceph daemon {daemon id} counter dump``. 
+
+All labeled and unlabeled perf counter's schema can be viewed with ``ceph daemon {daemon id} counter schema``.
+
+In the above example the second counter without labels is a counter that would also be shown in ``ceph daemon {daemon id} perf dump``.
+
+Since the ``counter dump`` and ``counter schema`` commands can be used to view both types of counters it is not recommended to use the ``perf dump`` and ``perf schema`` commands which are retained for backwards compatibility and continue to emit only non-labeled counters.
+
+Some perf counters that are emitted via ``perf dump`` and ``perf schema`` may become labeled in future releases and as such will no longer be emitted by ``perf dump`` and ``perf schema`` respectively.

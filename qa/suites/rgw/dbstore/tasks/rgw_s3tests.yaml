@@ -2,6 +2,7 @@ tasks:
 - install:
 - ceph:
 - rgw: [client.0]
+- tox: [client.0]
 - exec:
     client.0:
       - sudo chmod 0777 /var/lib/ceph
@@ -11,5 +12,4 @@ tasks:
     client.0:
       dbstore_tests: True
       rgw_server: client.0
-      extra_attrs: ["!fails_on_rgw,!fails_on_dbstore"]
-
+      extra_attrs: ["not fails_on_dbstore"]

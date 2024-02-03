@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_USER_H
-#define CEPH_RGW_USER_H
+#pragma once
 
 #include <string>
 #include <boost/algorithm/string.hpp>
@@ -31,8 +30,6 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWUserBuckets;
 
-class RGWGetUserStats_CB;
-
 /**
  * A string wrapper that includes encode/decode functions
  * for easily accessing a UID in all forms
@@ -51,6 +48,14 @@ struct RGWUID
     using ceph::decode;
     decode(s, bl);
     user_id.from_str(s);
+  }
+  void dump(Formatter *f) const {
+    f->dump_string("user_id", user_id.to_str());
+  }
+  static void generate_test_instances(std::list<RGWUID*>& o) {
+    o.push_back(new RGWUID);
+    o.push_back(new RGWUID);
+    o.back()->user_id.from_str("test:tester");
   }
 };
 WRITE_CLASS_ENCODER(RGWUID)
@@ -126,6 +131,8 @@ struct RGWUserAdminOpState {
   // key_attributes
   std::string id; // access key
   std::string key; // secret key
+  // access keys fetched for a user in the middle of an op
+  std::map<std::string, RGWAccessKey> op_access_keys;
   int32_t key_type{-1};
   bool access_key_exist = false;
 
@@ -303,6 +310,10 @@ struct RGWUserAdminOpState {
     max_buckets = mb;
     max_buckets_specified = true;
   }
+
+  rgw::sal::Attrs get_attrs();
+
+  void set_attrs(rgw::sal::Attrs& attrs);
 
   void set_gen_access() {
     gen_access = true;
@@ -882,6 +893,3 @@ class RGWUserMetaHandlerAllocator {
 public:
   static RGWMetadataHandler *alloc(RGWSI_User *user_svc);
 };
-
-
-#endif

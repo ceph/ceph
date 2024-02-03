@@ -1,10 +1,12 @@
 meta:
-- desc: 1 ceph cluster with 1 mon, 1 mgr, 3 osds, 1 mds
+- desc: 1 ceph cluster with 1 mon, 1 mgr, 3 osds, 2 mds, 2 clients
 roles:
 - - mon.a
   - mgr.x
   - mds.a
+  - mds.b
   - osd.0
   - osd.1
   - osd.2
   - client.0
+  - client.1

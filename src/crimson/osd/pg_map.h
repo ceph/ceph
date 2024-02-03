@@ -21,9 +21,11 @@ class PG;
 /**
  * PGShardMapping
  *
- * Maps pgs to shards.
+ * Maintains a mapping from spg_t to the core containing that PG.  Internally, each
+ * core has a local copy of the mapping to enable core-local lookups.  Updates
+ * are proxied to core 0, and the back out to all other cores -- see get_or_create_pg_mapping.
  */
-class PGShardMapping {
+class PGShardMapping : public seastar::peering_sharded_service<PGShardMapping> {
 public:
   /// Returns mapping if present, NULL_CORE otherwise
   core_id_t get_pg_mapping(spg_t pgid) {
@@ -33,37 +35,12 @@ public:
   }
 
   /// Returns mapping for pgid, creates new one if it doesn't already exist
-  core_id_t maybe_create_pg(spg_t pgid) {
-    auto [insert_iter, inserted] = pg_to_core.emplace(pgid, NULL_CORE);
-    if (!inserted) {
-      ceph_assert_always(insert_iter->second != NULL_CORE);
-      return insert_iter->second;
-    } else {
-      ceph_assert_always(core_to_num_pgs.size() > 0);
-      auto core_iter = std::min_element(
-	core_to_num_pgs.begin(),
-	core_to_num_pgs.end(),
-	[](const auto &left, const auto &right) {
-	  return left.second < right.second;
-	});
-      ceph_assert_always(core_to_num_pgs.end() != core_iter);
-      insert_iter->second = core_iter->first;
-      core_iter->second++;
-      return insert_iter->second;
-    }
-  }
+  seastar::future<core_id_t> get_or_create_pg_mapping(
+    spg_t pgid,
+    core_id_t core = NULL_CORE);
 
-  /// Remove pgid
-  void remove_pg(spg_t pgid) {
-    auto iter = pg_to_core.find(pgid);
-    ceph_assert_always(iter != pg_to_core.end());
-    ceph_assert_always(iter->second != NULL_CORE);
-    auto count_iter = core_to_num_pgs.find(iter->second);
-    ceph_assert_always(count_iter != core_to_num_pgs.end());
-    ceph_assert_always(count_iter->second > 0);
-    --(count_iter->second);
-    pg_to_core.erase(iter);
-  }
+  /// Remove pgid mapping
+  seastar::future<> remove_pg_mapping(spg_t pgid);
 
   size_t get_num_pgs() const { return pg_to_core.size(); }
 
@@ -153,6 +130,8 @@ public:
    * Cancel pending creation of pgid.
    */
   void pg_creation_canceled(spg_t pgid);
+
+  void remove_pg(spg_t pgid);
 
   pgs_t& get_pgs() { return pgs; }
   const pgs_t& get_pgs() const { return pgs; }

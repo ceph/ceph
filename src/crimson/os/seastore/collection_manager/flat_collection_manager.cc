@@ -80,12 +80,11 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
           coll_root.update(root_extent->get_laddr(), root_extent->get_length());
 
 	  root_extent->decoded = extent->decoded;
-	  root_extent->loaded = true;
 	  return root_extent->create(
 	    get_coll_context(t), cid, info.split_bits
 	  ).si_then([=, this, &t](auto result) {
 	    assert(result == CollectionNode::create_result_t::SUCCESS);
-	    return tm.dec_ref(t, extent->get_laddr());
+	    return tm.remove(t, extent->get_laddr());
 	  }).si_then([] (auto) {
             return create_iertr::make_ready_future<>();
           });

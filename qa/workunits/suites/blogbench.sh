@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -ex
 
 echo "getting blogbench"
 wget http://download.ceph.com/qa/blogbench-1.0.tar.bz2

@@ -1018,8 +1018,10 @@ options:
   type: str
   level: advanced
   desc: Compression algorithm to use in Messenger when communicating with OSD
-  long_desc: Compression algorithm for connections with OSD in order of preference
-  default: snappy zlib zstd lz4
+  long_desc: Compression algorithm for connections with OSD in order of preference 
+    Although the default value is set to snappy, a list
+    (like snappy zlib zstd etc.) is acceptable as well. 
+  default: snappy
   services:
   - osd
   see_also:
@@ -1959,19 +1961,19 @@ options:
   see_also:
   - mon_debug_dump_transactions
   with_legacy: true
-- name: mon_debug_no_require_quincy
+- name: mon_debug_no_require_reef
   type: bool
   level: dev
-  desc: do not set quincy feature for new mon clusters
+  desc: do not set reef feature for new mon clusters
   default: false
   services:
   - mon
   flags:
   - cluster_create
-- name: mon_debug_no_require_reef
+- name: mon_debug_no_require_squid
   type: bool
   level: dev
-  desc: do not set reef feature for new mon clusters
+  desc: do not set squid feature for new mon clusters
   default: false
   services:
   - mon
@@ -2056,7 +2058,6 @@ options:
   services:
   - mon
   enum_values:
-  - leveldb
   - rocksdb
   flags:
   - create
@@ -2233,6 +2234,14 @@ options:
   level: advanced
   default: 3
   with_legacy: true
+- name: mon_client_target_rank
+  type: int
+  level: advanced
+  default: -1
+  min: -1
+  flags:
+  - runtime
+  fmt_desc: automatically target mon rank for client communication
 # try new mon every N seconds until we connect
 - name: mon_client_hunt_interval
   type: float
@@ -2507,14 +2516,17 @@ options:
   type: uint
   level: advanced
   desc: number of PGs for placement purposes (0 to match pg_num)
-  fmt_desc: The default number of placement groups for placement for a pool.
+  fmt_desc: |
+    The default number of placement groups for placement for a pool.
     The default value is the same as ``pgp_num`` with ``mkpool``.
-    PG and PGP should be equal (for now).
+    PG and PGP should be equal (for now). Note: should not be set unless
+    autoscaling is disabled.
   default: 0
   services:
   - mon
   see_also:
   - osd_pool_default_pg_num
+  - osd_pool_default_pg_autoscale_mode
   flags:
   - runtime
 - name: osd_pool_default_type
@@ -2534,6 +2546,18 @@ options:
   level: advanced
   desc: default erasure code profile for new erasure-coded pools
   default: plugin=jerasure technique=reed_sol_van k=2 m=2
+  services:
+  - mon
+  flags:
+  - runtime
+- name: osd_pool_default_read_ratio
+  type: uint
+  level: advanced
+  desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
+  long_desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
+    applicable to replicated pools only. This value is used to improve read balancing
+    when OSDs have different weights.
+  default: 70
   services:
   - mon
   flags:
@@ -2891,9 +2915,19 @@ options:
   default: 5_min
   with_legacy: true
 # report pg stats for any given pg at least this often
-- name: osd_pg_stat_report_interval_max
+- name: osd_pg_stat_report_interval_max_seconds
   type: int
   level: advanced
+  desc: The maximum interval seconds for update pg's reported_epoch,
+        benefit for osdmap trim when osdmap not change frequently.
+  default: 500
+  with_legacy: true
+- name: osd_pg_stat_report_interval_max_epochs
+  type: int
+  level: advanced
+  desc: The maximum interval by which pg's reported_epoch lags behind,
+        otherwise, pg's reported_epoch must be updated,
+        benefit for osdmap trim when osdmap changes frequently.
   default: 500
   with_legacy: true
 # Max number of snap intervals to report to mgr in pg_stat_t
@@ -3356,56 +3390,6 @@ options:
   level: advanced
   default: 2
   with_legacy: true
-- name: leveldb_log_to_ceph_log
-  type: bool
-  level: advanced
-  default: true
-  with_legacy: true
-- name: leveldb_write_buffer_size
-  type: size
-  level: advanced
-  default: 8_M
-  with_legacy: true
-- name: leveldb_cache_size
-  type: size
-  level: advanced
-  default: 128_M
-  with_legacy: true
-- name: leveldb_block_size
-  type: size
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_bloom_size
-  type: int
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_max_open_files
-  type: int
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_compression
-  type: bool
-  level: advanced
-  default: true
-  with_legacy: true
-- name: leveldb_paranoid
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
-- name: leveldb_log
-  type: str
-  level: advanced
-  default: /dev/null
-  with_legacy: true
-- name: leveldb_compact_on_mount
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
 - name: rocksdb_log_to_ceph_log
   type: bool
   level: advanced
@@ -3639,6 +3623,12 @@ options:
   level: advanced
   desc: Cost for scrub operations in work queue
   default: 50_M
+  with_legacy: true
+- name: osd_scrub_event_cost
+  type: size
+  level: advanced
+  desc: Cost for each scrub operation, used when osd_op_queue=mclock_scheduler
+  default: 4_K
   with_legacy: true
 # set requested scrub priority higher than scrub priority to make the
 # requested scrubs jump the queue of scheduled scrubs
@@ -4055,6 +4045,18 @@ options:
   desc: Allocation unit size for primary/shared device
   default: 64_K
   with_legacy: true
+- name: bluefs_failed_shared_alloc_cooldown
+  type: float
+  level: advanced
+  desc: duration(in seconds) untill the next attempt to use
+   'bluefs_shared_alloc_size' after facing ENOSPC failure.
+  long_desc: Cooldown period(in seconds) when BlueFS uses shared/slow device
+   allocation size instead of "bluefs_shared_alloc_size' one after facing
+   recoverable (via fallback to smaller chunk size) ENOSPC failure. Intended
+   primarily to avoid repetitive unsuccessful allocations which might be
+   expensive.
+  default: 600
+  with_legacy: true
 - name: bluefs_max_prefetch
   type: size
   level: advanced
@@ -4211,7 +4213,7 @@ options:
 - name: bluestore_bluefs_alloc_failure_dump_interval
   type: float
   level: advanced
-  desc: How frequently (in seconds) to dump allocator onBlueFS space allocation failure
+  desc: How frequently (in seconds) to dump allocator on BlueFS space allocation failure
   default: 0
   with_legacy: true
 - name: bluestore_spdk_mem
@@ -4895,6 +4897,17 @@ options:
   flags:
   - create
   with_legacy: true
+- name: bluestore_elastic_shared_blobs
+  type: bool
+  level: advanced
+  desc: Let bluestore to reuse existing shared blobs if possible
+  long_desc: Overwrites on snapped objects cause shared blob count to grow.
+    It has a very negative performance effect. When enabled shared blob count
+    is significantly reduced.
+  default: true
+  flags:
+  - create
+  with_legacy: false
 - name: bluestore_allocator
   type: str
   level: advanced
@@ -4941,7 +4954,7 @@ options:
   type: str
   level: advanced
   desc: Full set of rocksdb settings to override
-  default: compression=kNoCompression,max_write_buffer_number=128,min_write_buffer_number_to_merge=16,compaction_style=kCompactionStyleLevel,write_buffer_size=8388608,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0,ttl=21600
+  default: compression=kLZ4Compression,max_write_buffer_number=64,min_write_buffer_number_to_merge=6,compaction_style=kCompactionStyleLevel,write_buffer_size=16777216,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0
   with_legacy: true
 - name: bluestore_rocksdb_options_annex
   type: str
@@ -4987,7 +5000,7 @@ options:
     The optimal value depends on multiple factors, and modification is invadvisable.
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
-  default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P
+  default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L=min_write_buffer_number_to_merge=32 P=min_write_buffer_number_to_merge=32
 - name: bluestore_qfsck_on_mount
   type: bool
   level: dev
@@ -5259,11 +5272,6 @@ options:
   type: float
   level: dev
   default: 0
-  with_legacy: true
-- name: bluestore_debug_inject_bug21040
-  type: bool
-  level: dev
-  default: false
   with_legacy: true
 - name: bluestore_debug_inject_csum_err_probability
   type: float
@@ -6356,6 +6364,14 @@ options:
   - rgw
   - osd
   with_legacy: true
+- name: jaeger_agent_port
+  type: int
+  level: advanced
+  desc: port number of the jaeger agent
+  default: 6799
+  services:
+  - rgw
+  - osd
 - name: mgr_ttl_cache_expire_seconds
   type: uint
   level: dev
@@ -6363,3 +6379,9 @@ options:
   default: 0
   services:
   - mgr
+- name: objectstore_debug_throw_on_failed_txc
+  type: bool
+  level: dev
+  desc: Enables exception throwing instead of process abort on transaction submission error.
+  default: false
+  with_legacy: false

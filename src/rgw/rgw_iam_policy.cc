@@ -163,6 +163,10 @@ static const actpair actpairs[] =
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
  { "sts:TagSession", stsTagSession},
+ { "sns:GetTopicAttributes", snsGetTopicAttributes},
+ { "sns:DeleteTopic", snsDeleteTopic},
+ { "sns:Publish", snsPublish},
+ { "sns:SetTopicAttributes", snsSetTopicAttributes},
 };
 
 struct PolicyParser;
@@ -538,10 +542,12 @@ boost::optional<Principal> ParseState::parse_principal(string&& s,
 }
 
 bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
+  assert(s);
+
   auto k = pp->tokens.lookup(s, l);
   Policy& p = pp->policy;
   bool is_action = false;
-  bool is_validaction = false;
+  bool is_valid_action = false;
   Statement* t = p.statements.empty() ? nullptr : &(p.statements.back());
 
   // Top level!
@@ -571,21 +577,21 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
 			   std::string_view{s, l}));
       return false;
     }
-  } else if (w->id == TokenID::Principal && s && *s == '*') {
+  } else if (w->id == TokenID::Principal && *s == '*') {
     t->princ.emplace(Principal::wildcard());
-  } else if (w->id == TokenID::NotPrincipal && s && *s == '*') {
+  } else if (w->id == TokenID::NotPrincipal && *s == '*') {
     t->noprinc.emplace(Principal::wildcard());
   } else if ((w->id == TokenID::Action) ||
 	     (w->id == TokenID::NotAction)) {
     is_action = true;
     if (*s == '*') {
-      is_validaction = true;
+      is_valid_action = true;
       (w->id == TokenID::Action ?
         t->action = allValue : t->notaction = allValue);
     } else {
       for (auto& p : actpairs) {
-        if (match_policy({s, l}, p.name, MATCH_POLICY_ACTION)) {
-          is_validaction = true;
+        if (match_policy(string(s, l), p.name, MATCH_POLICY_ACTION)) {
+          is_valid_action = true;
           (w->id == TokenID::Action ? t->action[p.bit] = 1 : t->notaction[p.bit] = 1);
         }
         if ((t->action & s3AllValue) == s3AllValue) {
@@ -605,6 +611,12 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         }
         if ((t->notaction & stsAllValue) == stsAllValue) {
           t->notaction[stsAll] = 1;
+        }
+        if ((t->action & snsAllValue) == snsAllValue) {
+          t->action[snsAll] = 1;
+        }
+        if ((t->notaction & snsAllValue) == snsAllValue) {
+          t->notaction[snsAll] = 1;
         }
       }
     }
@@ -681,7 +693,7 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
     pp->s.pop_back();
   }
 
-  if (is_action && !is_validaction) {
+  if (is_action && !is_valid_action) {
     annotate(fmt::format("`{}` is not a valid action.",
 			 std::string_view{s, l}));
     return false;
@@ -1469,6 +1481,18 @@ const char* action_bit_string(uint64_t action) {
 
   case stsTagSession:
     return "sts:TagSession";
+
+  case snsSetTopicAttributes:
+    return "sns:SetTopicAttributes";
+
+  case snsGetTopicAttributes:
+    return "sns:GetTopicAttributes";
+
+  case snsDeleteTopic:
+    return "sns:DeleteTopic";
+
+  case snsPublish:
+    return "sns:Publish";
   }
   return "s3Invalid";
 }

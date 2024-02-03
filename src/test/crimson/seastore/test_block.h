@@ -24,8 +24,8 @@ struct test_extent_desc_t {
 
 struct test_block_delta_t {
   int8_t val = 0;
-  uint16_t offset = 0;
-  uint16_t len = 0;
+  extent_len_t offset = 0;
+  extent_len_t len = 0;
 
 
   DENC(test_block_delta_t, v, p) {
@@ -49,12 +49,14 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 
   std::vector<test_block_delta_t> delta = {};
 
+  interval_set<extent_len_t> modified_region;
+
   TestBlock(ceph::bufferptr &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
   TestBlock(const TestBlock &other)
-    : LogicalCachedExtent(other) {}
+    : LogicalCachedExtent(other), modified_region(other.modified_region) {}
 
-  CachedExtentRef duplicate_for_write() final {
+  CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new TestBlock(*this));
   };
 
@@ -65,9 +67,12 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 
   ceph::bufferlist get_delta() final;
 
-  void set_contents(char c, uint16_t offset, uint16_t len) {
+  void set_contents(char c, extent_len_t offset, extent_len_t len) {
+    assert(offset + len <= get_length());
+    assert(len > 0);
     ::memset(get_bptr().c_str() + offset, c, len);
     delta.push_back({c, offset, len});
+    modified_region.union_insert(offset, len);
   }
 
   void set_contents(char c) {
@@ -79,6 +84,22 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
   }
 
   void apply_delta(const ceph::bufferlist &bl) final;
+
+  std::optional<modified_region_t> get_modified_region() final {
+    if (modified_region.empty()) {
+      return std::nullopt;
+    }
+    return modified_region_t{modified_region.range_start(),
+      modified_region.range_end() - modified_region.range_start()};
+  }
+
+  void clear_modified_region() final {
+    modified_region.clear();
+  }
+
+  void logical_on_delta_write() final {
+    delta.clear();
+  }
 };
 using TestBlockRef = TCachedExtentRef<TestBlock>;
 
@@ -93,7 +114,7 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
   TestBlockPhysical(const TestBlockPhysical &other)
     : CachedExtent(other) {}
 
-  CachedExtentRef duplicate_for_write() final {
+  CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new TestBlockPhysical(*this));
   };
 
@@ -102,7 +123,7 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
     return TYPE;
   }
 
-  void set_contents(char c, uint16_t offset, uint16_t len) {
+  void set_contents(char c, extent_len_t offset, extent_len_t len) {
     ::memset(get_bptr().c_str() + offset, c, len);
     delta.push_back({c, offset, len});
   }
@@ -123,13 +144,13 @@ struct test_block_mutator_t {
     std::numeric_limits<int8_t>::min(),
     std::numeric_limits<int8_t>::max());
 
-  std::uniform_int_distribution<uint16_t>
-  offset_distribution = std::uniform_int_distribution<uint16_t>(
+  std::uniform_int_distribution<extent_len_t>
+  offset_distribution = std::uniform_int_distribution<extent_len_t>(
     0, TestBlock::SIZE - 1);
 
-  std::uniform_int_distribution<uint16_t> length_distribution(uint16_t offset) {
-    return std::uniform_int_distribution<uint16_t>(
-      0, TestBlock::SIZE - offset - 1);
+  std::uniform_int_distribution<extent_len_t> length_distribution(extent_len_t offset) {
+    return std::uniform_int_distribution<extent_len_t>(
+      1, TestBlock::SIZE - offset);
   }
 
 

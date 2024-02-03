@@ -3,7 +3,6 @@
 
 #include "librbd/AsioEngine.h"
 #include "include/Context.h"
-#include "include/stringify.h"
 #include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
@@ -21,8 +20,8 @@ AsioEngine::AsioEngine(std::shared_ptr<librados::Rados> rados)
       neorados::RADOS::make_with_librados(*rados))),
     m_cct(m_rados_api->cct()),
     m_io_context(m_rados_api->get_io_context()),
-    m_api_strand(std::make_unique<boost::asio::io_context::strand>(
-      m_io_context)),
+    m_api_strand(std::make_unique<boost::asio::strand<executor_type>>(
+      boost::asio::make_strand(m_io_context))),
     m_context_wq(std::make_unique<asio::ContextWQ>(m_cct, m_io_context)) {
   ldout(m_cct, 20) << dendl;
 
@@ -31,7 +30,9 @@ AsioEngine::AsioEngine(std::shared_ptr<librados::Rados> rados)
   if (rbd_threads > rados_threads) {
     // inherit the librados thread count -- but increase it if librbd wants to
     // utilize more threads
-    m_cct->_conf.set_val("librados_thread_count", stringify(rbd_threads));
+    m_cct->_conf.set_val_or_die("librados_thread_count",
+                                std::to_string(rbd_threads));
+    m_cct->_conf.apply_changes(nullptr);
   }
 }
 

@@ -17,6 +17,7 @@
 #include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "SnapClient.h"
 
 #include "MDSRank.h"
 #include "MDCache.h"
@@ -32,7 +33,7 @@
 
 using namespace std;
 
-ostream& CDentry::print_db_line_prefix(ostream& out)
+ostream& CDentry::print_db_line_prefix(ostream& out) const
 {
   return out << ceph_clock_now() << " mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
 }
@@ -134,7 +135,7 @@ bool operator<(const CDentry& l, const CDentry& r)
 }
 
 
-void CDentry::print(ostream& out)
+void CDentry::print(ostream& out) const
 {
   out << *this;
 }
@@ -693,6 +694,29 @@ bool CDentry::scrub(snapid_t next_seq)
         /* TODO: maybe trim? */
       }
     }
+  }
+  return false;
+}
+
+bool CDentry::check_corruption(bool load)
+{
+  auto&& snapclient = dir->mdcache->mds->snapclient;
+  auto next_snap = snapclient->get_last_seq()+1;
+  if (first > last || (snapclient->is_server_ready() && first > next_snap)) {
+    if (load) {
+      dout(1) << "loaded already corrupt dentry: " << *this << dendl;
+      corrupt_first_loaded = true;
+    } else {
+      derr << "newly corrupt dentry to be committed: " << *this << dendl;
+    }
+    if (g_conf().get_val<bool>("mds_go_bad_corrupt_dentry")) {
+      dir->go_bad_dentry(last, get_name());
+    }
+    if (!load && g_conf().get_val<bool>("mds_abort_on_newly_corrupt_dentry")) {
+      dir->mdcache->mds->clog->error() << "MDS abort because newly corrupt dentry to be committed: " << *this;
+      dir->mdcache->mds->abort("detected newly corrupt dentry"); /* avoid writing out newly corrupted dn */
+    }
+    return true;
   }
   return false;
 }

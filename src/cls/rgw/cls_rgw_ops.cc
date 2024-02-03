@@ -430,6 +430,21 @@ void cls_rgw_bi_log_list_ret::generate_test_instances(list<cls_rgw_bi_log_list_r
   ls.back()->truncated = true;
 }
 
+void cls_rgw_mp_upload_part_info_update_op::generate_test_instances(std::list<cls_rgw_mp_upload_part_info_update_op*>& ls)
+{
+  ls.push_back(new cls_rgw_mp_upload_part_info_update_op);
+  ls.back()->part_key = "part1";
+  ls.push_back(new cls_rgw_mp_upload_part_info_update_op);
+  ls.back()->part_key = "part2";
+}
+
+void cls_rgw_mp_upload_part_info_update_op::dump(Formatter* f) const
+{
+  encode_json("part_key", part_key, f);
+  encode_json("part_num", info.num, f);
+  encode_json("part_prefix", info.manifest.get_prefix(), f);
+}
+
 void cls_rgw_reshard_add_op::generate_test_instances(list<cls_rgw_reshard_add_op*>& ls)
 {
   ls.push_back(new cls_rgw_reshard_add_op);

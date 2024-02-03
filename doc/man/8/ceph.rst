@@ -23,7 +23,7 @@ Synopsis
 
 | **ceph** **df** *{detail}*
 
-| **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* \| *authorize* ] ...
+| **ceph** **fs** [ *add_data_pool* \| *authorize* \| *dump* \| *feature ls* \| *flag set* \| *get* \| *ls* \| *lsflags* \| *new* \| *rename* \| *reset* \| *required_client_features add* \| *required_client_features rm* \| *rm* \| *rm_data_pool* \| *set* \| *swap* ] ...
 
 | **ceph** **fsid**
 
@@ -161,7 +161,7 @@ Usage::
 compact
 -------
 
-Causes compaction of monitor's leveldb storage.
+Causes compaction of monitor's RocksDB storage.
 
 Usage::
 
@@ -361,11 +361,69 @@ fs
 
 Manage cephfs file systems. It uses some additional subcommands.
 
+Subcommand ``add_data_pool`` adds an new data pool to the FS. Ths pool can
+be used for file layouts as an alternate location to store the file data.
+
+Usage::
+
+    ceph fs add_data_pool <fs-name> <pool name/id>
+
+Subcommand ``authorize`` creates a new client (if the client doesn't exists
+on the cluster) that will be authorized for the given path in ``<fs_name>``.
+Pass ``/`` to authorize for the entire FS. ``<perms>`` below can be ``r``,
+``rw`` or ``rwp``.
+
+Running it for an existing client can grant the client a new capability
+(capability for a different CephFS on the same cluster or for a different
+path on the same CephFS). Or it can also change read/write permission in the
+capability that client already holds.
+
+
+Usage::
+
+    ceph fs authorize <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
+
+Subcommand ``dump`` displays the FSMap at the given epoch (default: current).
+This includes all file system settings, MDS daemons and the ranks they hold
+and list of standby MDS daemons.
+
+Usage::
+
+    ceph fs dump [epoch]
+
+Subcommand ``feature ls`` lists all CephFS features supported by current
+version of Ceph.
+
+Usage::
+
+    ceph fs feature ls
+
+Subcommand ``flag set`` sets a global CephFS flag. Right now the only flag
+is ``enable_multiple`` which allows multiple CephFSs on a Ceph cluster.
+
+Usage::
+
+    ceph fs flag set <flag-name> <flag-val> --yes-i-really-mean-it
+
+Subcommand ``get`` displays the information about FS, including settings and
+ranks. Information printed here in subset of same information from the
+``fs dump`` command.
+
+Usage::
+
+    ceph fs get <fs-name>
+
 Subcommand ``ls`` to list file systems
 
 Usage::
 
 	ceph fs ls
+
+Subcommand ``lsflags`` displays all the flags set on the given FS.
+
+Usage::
+
+    ceph fs lsflags <fs-name>
 
 Subcommand ``new`` to make a new file system using named pools <metadata> and <data>
 
@@ -373,7 +431,24 @@ Usage::
 
 	ceph fs new <fs_name> <metadata> <data>
 
-Subcommand ``reset`` is used for disaster recovery only: reset to a single-MDS map
+Subcommand ``rename`` assigns a new name to CephFS and also updates
+application tags on the pools of this CephFS.
+
+Usage::
+
+    ceph fs rename <fs-name> <new-fs-name> {--yes-i-really-mean-it}
+
+Subcommand ``required_client_features`` disables a client that doesn't
+possess a certain feature from connecting. This subcommand has two
+subcommands, one to add a requirement and other to remove the requirement.
+
+Usage::
+
+    ceph fs required_client_features <fs name> add <feature-name>
+    ceph fs required_client_features <fs name> rm <feature-name>
+
+Subcommand ``reset`` is used for disaster recovery only: reset to a single-MDS
+map
 
 Usage::
 
@@ -385,13 +460,28 @@ Usage::
 
 	ceph fs rm <fs_name> {--yes-i-really-mean-it}
 
-Subcommand ``authorize`` creates a new client that will be authorized for the
-given path in ``<fs_name>``. Pass ``/`` to authorize for the entire FS.
-``<perms>`` below can be ``r``, ``rw`` or ``rwp``.
+Subcommand ``rm_data_pool``  removes the specified pool from FS's list of
+data pools. File data on this pool will become unavailable. Default data pool
+cannot be removed.
 
 Usage::
 
-    ceph fs authorize <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
+    ceph fs rm_data_pool <fs-name> <pool name/id>
+
+Subcommand ``set`` sets or updates a FS setting value for given FS name.
+
+Usage::
+
+    ceph fs set <fs-name> <fs-setting> <value>
+
+Subcommand ``swap`` swaps the names of two Ceph file system and updates
+application tags on the pool of the file systems accordingly. Optionally,
+FSIDs of the filesystems can also be swapped along with names by passing
+``--swap-fscids``.
+
+Usage::
+
+    ceph fs swap <fs1-name> <fs1-id> <fs2-name> <fs2-id> [--swap-fscids] {--yes-i-really-meant-it}
 
 fsid
 ----

@@ -1,6 +1,6 @@
 
 CXX?=g++
-CXX_FLAGS?=-std=c++11 -Wno-unused-parameter -Wall -Wextra -Werror -g
+CXX_FLAGS?=-Wno-unused-parameter -Wall -Wextra -Werror -g
 CXX_LIBS?=-lboost_system -lrbd -lrados
 CXX_INC?=$(LOCAL_LIBRADOS_INC)
 CXX_CC=$(CXX) $(CXX_FLAGS) $(CXX_INC) $(LOCAL_LIBRADOS)

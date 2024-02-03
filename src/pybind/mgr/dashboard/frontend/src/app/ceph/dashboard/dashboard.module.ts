@@ -4,9 +4,10 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
 import { NgbNavModule, NgbPopoverModule } from '@ng-bootstrap/ng-bootstrap';
-import { ChartsModule } from 'ng2-charts';
+import { NgChartsModule } from 'ng2-charts';
 
 import { SharedModule } from '~/app/shared/shared.module';
+import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { FeedbackComponent } from '../shared/feedback/feedback.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
@@ -25,11 +26,12 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     CommonModule,
     NgbNavModule,
     SharedModule,
-    ChartsModule,
+    NgChartsModule,
     RouterModule,
     NgbPopoverModule,
     FormsModule,
-    ReactiveFormsModule
+    ReactiveFormsModule,
+    DashboardV3Module
   ],
 
   declarations: [

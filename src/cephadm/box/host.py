@@ -3,20 +3,24 @@ from typing import List, Union
 
 from util import (
     Config,
+    HostContainer,
     Target,
     get_boxes_container_info,
+    get_container_engine,
     inside_container,
     run_cephadm_shell_command,
     run_dc_shell_command,
     run_shell_command,
     engine,
+    BoxType
 )
 
 
-def _setup_ssh(container_type, container_index):
+def _setup_ssh(container: HostContainer):
     if inside_container():
         if not os.path.exists('/root/.ssh/known_hosts'):
-            run_shell_command('ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N ""')
+            run_shell_command('echo "y" | ssh-keygen -b 2048 -t rsa -f /root/.ssh/id_rsa -q -N ""', 
+                              expect_error=True)
 
         run_shell_command('echo "root:root" | chpasswd')
         with open('/etc/ssh/sshd_config', 'a+') as f:
@@ -28,9 +32,8 @@ def _setup_ssh(container_type, container_index):
         print('Redirecting to _setup_ssh to container')
         verbose = '-v' if Config.get('verbose') else ''
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} --engine {engine()} host setup_ssh {container_type} {container_index}',
-            container_index,
-            container_type,
+            f'/cephadm/box/box.py {verbose} --engine {engine()} host setup_ssh {container.name}',
+            container
         )
 
 
@@ -47,11 +50,11 @@ def _add_hosts(ips: Union[List[str], str], hostnames: Union[List[str], str]):
         ips = f'{ips}'
         hostnames = ' '.join(hostnames)
         hostnames = f'{hostnames}'
+        seed = get_container_engine().get_seed()
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} --engine {engine()} host add_hosts seed 1 --ips {ips} --hostnames {hostnames}',
-            1,
-            'seed',
-        )
+                f'/cephadm/box/box.py {verbose} --engine {engine()} host add_hosts {seed.name} --ips {ips} --hostnames {hostnames}',
+                seed
+                )
 
 
 def _copy_cluster_ssh_key(ips: Union[List[str], str]):
@@ -73,10 +76,10 @@ def _copy_cluster_ssh_key(ips: Union[List[str], str]):
         ips = ' '.join(ips)
         ips = f'{ips}'
         # assume we only have one seed
+        seed = get_container_engine().get_seed()
         run_dc_shell_command(
-            f'/cephadm/box/box.py {verbose} --engine {engine()} host copy_cluster_ssh_key seed 1 --ips {ips}',
-            1,
-            'seed',
+            f'/cephadm/box/box.py {verbose} --engine {engine()} host copy_cluster_ssh_key {seed.name} --ips {ips}',
+            seed
         )
 
 
@@ -87,10 +90,9 @@ class Host(Target):
     def set_args(self):
         self.parser.add_argument('action', choices=Host.actions)
         self.parser.add_argument(
-            'container_type', type=str, help='box_{type}_{index}'
-        )
-        self.parser.add_argument(
-            'container_index', type=str, help='box_{type}_{index}'
+            'container_name', 
+            type=str, 
+            help='box_{type}_{index}. In docker, type can be seed or hosts. In podman only hosts.'
         )
         self.parser.add_argument('--ips', nargs='*', help='List of host ips')
         self.parser.add_argument(
@@ -98,7 +100,9 @@ class Host(Target):
         )
 
     def setup_ssh(self):
-        _setup_ssh(Config.get('container_type') ,Config.get('container_index'))
+        container_name = Config.get('container_name')
+        engine = get_container_engine()
+        _setup_ssh(engine.get_container(container_name))
 
     def add_hosts(self):
         ips = Config.get('ips')

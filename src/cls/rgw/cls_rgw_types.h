@@ -9,8 +9,6 @@
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include "rgw/rgw_basic_types.h"
@@ -38,6 +36,10 @@ struct rgw_zone_set_entry {
       return false;
     }
     return (location_key < e.location_key);
+  }
+
+  bool operator==(const rgw_zone_set_entry& e) const {
+    return zone == e.zone && location_key == e.location_key;
   }
 
   rgw_zone_set_entry() {}
@@ -70,7 +72,8 @@ struct rgw_zone_set {
     /* no DECODE_START, DECODE_END for backward compatibility */
     ceph::decode(entries, bl);
   }
-
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_zone_set*>& o);
   void insert(const std::string& zone, std::optional<std::string> location_key);
   bool exists(const std::string& zone, std::optional<std::string> location_key) const;
 };
@@ -129,7 +132,7 @@ inline uint64_t cls_rgw_get_rounded_size(uint64_t size) {
  * path that ends with a delimiter and appends a new character to the
  * end such that when a we request bucket-index entries *after* this,
  * we'll get the next object after the "subdirectory". This works
- * because we append a '\xFF' charater, and no valid UTF-8 character
+ * because we append a '\xFF' character, and no valid UTF-8 character
  * can contain that byte, so no valid entries can be skipped.
  */
 inline std::string cls_rgw_after_delim(const std::string& path) {
@@ -178,7 +181,7 @@ enum class RGWObjCategory : uint8_t {
 
   Main      = 1,  // b-i entries for standard objs
 
-  Shadow    = 2,  // presumfably intended for multipart shadow
+  Shadow    = 2,  // presumably intended for multipart shadow
                   // uploads; not currently used in the codebase
 
   MultiMeta = 3,  // b-i entries for multipart upload metadata objs

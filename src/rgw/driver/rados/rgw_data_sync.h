@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_DATA_SYNC_H
-#define CEPH_RGW_DATA_SYNC_H
+#pragma once
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
@@ -13,6 +12,7 @@
 #include "common/likely.h"
 
 #include "rgw_coroutine.h"
+#include "rgw_cr_rados.h"
 #include "rgw_http_client.h"
 #include "rgw_sal_rados.h"
 
@@ -23,6 +23,7 @@
 #include "rgw_sync_policy.h"
 
 #include "rgw_bucket_sync.h"
+#include "sync_fairness.h"
 
 // represents an obligation to sync an entry up a given time
 struct rgw_data_sync_obligation {
@@ -310,6 +311,7 @@ struct RGWDataSyncEnv {
   RGWSyncTraceManager *sync_tracer{nullptr};
   RGWSyncModuleInstanceRef sync_module{nullptr};
   PerfCounters* counters{nullptr};
+  rgw::sync_fairness::BidManager* bid_manager{nullptr};
 
   RGWDataSyncEnv() {}
 
@@ -350,6 +352,47 @@ void pretty_print(const RGWDataSyncEnv* env, const S& fmt, T&& ...t) {
   }
 }
 
+/// \brief Adjust concurrency based on latency
+///
+/// Keep a running average of operation latency and scale concurrency
+/// down when latency rises.
+class LatencyConcurrencyControl : public LatencyMonitor {
+  static constexpr auto dout_subsys = ceph_subsys_rgw;
+  ceph::coarse_mono_time last_warning;
+public:
+  CephContext* cct;
+
+  LatencyConcurrencyControl(CephContext* cct)
+    : cct(cct)  {}
+
+  /// \brief Lower concurrency when latency rises
+  ///
+  /// Since we have multiple spawn windows (data sync overall and
+  /// bucket), accept a number of concurrent operations to spawn and,
+  /// if latency is high, cut it in half. If latency is really high,
+  /// cut it to 1.
+  int64_t adj_concurrency(int64_t concurrency) {
+    using namespace std::literals;
+    auto threshold = (cct->_conf->rgw_sync_lease_period * 1s) / 12;
+
+    if (avg_latency() >= 2 * threshold) [[unlikely]] {
+      auto now = ceph::coarse_mono_clock::now();
+      if (now - last_warning > 5min) {
+        ldout(cct, -1)
+            << "WARNING: The OSD cluster is overloaded and struggling to "
+            << "complete ops. You need more capacity to serve this level "
+	    << "of demand." << dendl;
+	last_warning = now;
+      }
+      return 1;
+    } else if (avg_latency() >= threshold) [[unlikely]] {
+      return concurrency / 2;
+    } else [[likely]] {
+      return concurrency;
+    }
+  }
+};
+
 struct RGWDataSyncCtx {
   RGWDataSyncEnv *env{nullptr};
   CephContext *cct{nullptr};
@@ -357,12 +400,14 @@ struct RGWDataSyncCtx {
   RGWRESTConn *conn{nullptr};
   rgw_zone_id source_zone;
 
+  LatencyConcurrencyControl lcc{nullptr};
+
   RGWDataSyncCtx() = default;
 
   RGWDataSyncCtx(RGWDataSyncEnv* env,
 		 RGWRESTConn* conn,
 		 const rgw_zone_id& source_zone)
-    : env(env), cct(env->cct), conn(conn), source_zone(source_zone) {}
+    : env(env), cct(env->cct), conn(conn), source_zone(source_zone), lcc(cct) {}
 
   void init(RGWDataSyncEnv *_env,
             RGWRESTConn *_conn,
@@ -371,6 +416,7 @@ struct RGWDataSyncCtx {
     env = _env;
     conn = _conn;
     source_zone = _source_zone;
+    lcc.cct = cct;
   }
 };
 
@@ -779,8 +825,8 @@ public:
 				    uint64_t gen);
   // specific source obj sync status, can be used by sync modules
   static std::string obj_status_oid(const rgw_bucket_sync_pipe& sync_pipe,
-				    const rgw_zone_id& source_zone, const rgw::sal::Object* obj); /* specific source obj sync status,
-										       can be used by sync modules */
+				    const rgw_zone_id& source_zone,
+				    const rgw_obj& obj);
 
   // implements DoutPrefixProvider
   CephContext *get_cct() const override;
@@ -822,5 +868,3 @@ public:
   bool supports_data_export() override { return false; }
   int create_instance(const DoutPrefixProvider *dpp, CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
-
-#endif

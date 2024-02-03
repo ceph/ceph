@@ -16,11 +16,12 @@ public:
 	    CollectionRef coll,
 	    crimson::osd::ShardServices& shard_services,
 	    const ec_profile_t& ec_profile,
-	    uint64_t stripe_width);
+	    uint64_t stripe_width,
+	    DoutPrefixProvider &dpp);
   seastar::future<> stop() final {
     return seastar::now();
   }
-  void on_actingset_changed(peering_info_t pi) final {}
+  void on_actingset_changed(bool same_primary) final {}
 private:
   ll_read_ierrorator::future<ceph::bufferlist>
   _read(const hobject_t& hoid, uint64_t off, uint64_t len, uint32_t flags) override;
@@ -32,7 +33,6 @@ private:
 		      epoch_t min_epoch, epoch_t max_epoch,
 		      std::vector<pg_log_entry_t>&& log_entries) final;
   CollectionRef coll;
-  crimson::os::FuturizedStore* store;
   seastar::future<> request_committed(const osd_reqid_t& reqid,
 				       const eversion_t& version) final {
     return seastar::now();

@@ -43,7 +43,7 @@ class RGWLogDataSyncModule : public RGWDataSyncModule {
 public:
   explicit RGWLogDataSyncModule(const string& _prefix) : prefix(_prefix) {}
 
-  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
+  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, const rgw_zone_set_entry& source_trace_entry, rgw_zone_set *zones_trace) override {
     ldpp_dout(dpp, 0) << prefix << ": SYNC_LOG: sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     return new RGWLogStatRemoteObjCR(sc, sync_pipe.info.source_bs.bucket, key);
   }

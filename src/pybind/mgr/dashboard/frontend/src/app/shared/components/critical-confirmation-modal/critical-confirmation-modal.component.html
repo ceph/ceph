@@ -43,6 +43,7 @@
       </div>
       <div class="modal-footer">
         <cd-form-button-panel (submitActionEvent)="callSubmitAction()"
+                              (backActionEvent)="backAction ? callBackAction() : hideModal()"
                               [form]="deletionForm"
                               [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"></cd-form-button-panel>
       </div>

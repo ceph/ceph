@@ -1,7 +1,7 @@
 ==========================
  Journal Config Reference
 ==========================
-
+.. warning:: Filestore has been deprecated in the Reef release and is no longer supported.
 .. index:: journal; journal configuration
 
 Filestore OSDs use a journal for two reasons: speed and consistency.  Note

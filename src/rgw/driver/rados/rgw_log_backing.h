@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_LOGBACKING_H
-#define CEPH_RGW_LOGBACKING_H
+#pragma once
 
 #include <optional>
 #include <iostream>
@@ -263,12 +262,24 @@ class LazyFIFO {
 
   int lazy_init(const DoutPrefixProvider *dpp, optional_yield y) {
     std::unique_lock l(m);
-    if (fifo) return 0;
-    auto r = rgw::cls::fifo::FIFO::create(dpp, ioctx, oid, &fifo, y);
-    if (r) {
-      fifo.reset();
+    if (fifo) {
+      return 0;
+    } else {
+      l.unlock();
+      // FIFO supports multiple clients by design, so it's safe to
+      // race to create them.
+      std::unique_ptr<rgw::cls::fifo::FIFO> fifo_tmp;
+      auto r = rgw::cls::fifo::FIFO::create(dpp, ioctx, oid, &fifo, y);
+      if (r) {
+	return r;
+      }
+      l.lock();
+      if (!fifo) {
+	// We won the race
+	fifo = std::move(fifo_tmp);
+      }
     }
-    return r;
+    return 0;
   }
 
 public:
@@ -393,5 +404,3 @@ public:
     return 0;
   }
 };
-
-#endif

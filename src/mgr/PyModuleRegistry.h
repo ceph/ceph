@@ -122,9 +122,6 @@ public:
     return standby_modules != nullptr;
   }
 
-  void active_shutdown();
-  void shutdown();
-
   std::vector<MonCommand> get_commands() const;
   std::vector<ModuleCommand> get_py_commands() const;
 
@@ -202,12 +199,18 @@ public:
     return active_modules->get_services();
   }
 
-  void register_client(std::string_view name, entity_addrvec_t addrs)
+  void register_client(std::string_view name, entity_addrvec_t addrs, bool replace)
   {
-    clients.emplace(std::string(name), std::move(addrs));
+    std::lock_guard l(lock);
+    auto n = std::string(name);
+    if (replace) {
+      clients.erase(n);
+    }
+    clients.emplace(n, std::move(addrs));
   }
   void unregister_client(std::string_view name, const entity_addrvec_t& addrs)
   {
+    std::lock_guard l(lock);
     auto itp = clients.equal_range(std::string(name));
     for (auto it = itp.first; it != itp.second; ++it) {
       if (it->second == addrs) {
@@ -219,12 +222,18 @@ public:
 
   auto get_clients() const
   {
-    std::scoped_lock l(lock);
-    std::vector<entity_addrvec_t> v;
-    for (const auto& p : clients) {
-      v.push_back(p.second);
-    }
-    return v;
+    std::lock_guard l(lock);
+    return clients;
+  }
+
+  bool is_module_active(const std::string &name) {
+    ceph_assert(active_modules);
+    return active_modules->module_exists(name);
+  }
+
+  auto& get_active_module_finisher(const std::string &name) {
+    ceph_assert(active_modules);
+    return active_modules->get_module_finisher(name);
   }
 
   // <<< (end of ActivePyModules cheeky call-throughs)

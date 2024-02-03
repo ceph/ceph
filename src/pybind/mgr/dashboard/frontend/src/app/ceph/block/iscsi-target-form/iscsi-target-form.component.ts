@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormArray, FormControl, Validators } from '@angular/forms';
+import { UntypedFormArray, UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
@@ -179,11 +179,11 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
 
   createForm() {
     this.targetForm = new CdFormGroup({
-      target_iqn: new FormControl('iqn.2001-07.com.ceph:' + Date.now(), {
+      target_iqn: new UntypedFormControl('iqn.2001-07.com.ceph:' + Date.now(), {
         validators: [Validators.required, Validators.pattern(this.IQN_REGEX)]
       }),
-      target_controls: new FormControl({}),
-      portals: new FormControl([], {
+      target_controls: new UntypedFormControl({}),
+      portals: new UntypedFormControl([], {
         validators: [
           CdValidators.custom('minGateways', (value: any[]) => {
             const gateways = _.uniq(value.map((elem) => elem.split(':')[0]));
@@ -191,7 +191,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
           })
         ]
       }),
-      disks: new FormControl([], {
+      disks: new UntypedFormControl([], {
         validators: [
           CdValidators.custom('dupLunId', (value: any[]) => {
             const lunIds = this.getLunIds(value);
@@ -203,17 +203,17 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
           })
         ]
       }),
-      initiators: new FormArray([]),
-      groups: new FormArray([]),
-      acl_enabled: new FormControl(false)
+      initiators: new UntypedFormArray([]),
+      groups: new UntypedFormArray([]),
+      acl_enabled: new UntypedFormControl(false)
     });
     // Target level authentication was introduced in ceph-iscsi config v11
     if (this.cephIscsiConfigVersion > 10) {
       const authFormGroup = new CdFormGroup({
-        user: new FormControl(''),
-        password: new FormControl(''),
-        mutual_user: new FormControl(''),
-        mutual_password: new FormControl('')
+        user: new UntypedFormControl(''),
+        password: new UntypedFormControl(''),
+        mutual_user: new UntypedFormControl(''),
+        mutual_password: new UntypedFormControl('')
       });
       this.setAuthValidator(authFormGroup);
       this.targetForm.addControl('auth', authFormGroup);
@@ -285,7 +285,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
 
   // Portals
   get portals() {
-    return this.targetForm.get('portals') as FormControl;
+    return this.targetForm.get('portals') as UntypedFormControl;
   }
 
   onPortalSelection() {
@@ -306,7 +306,7 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
 
   // Images
   get disks() {
-    return this.targetForm.get('disks') as FormControl;
+    return this.targetForm.get('disks') as UntypedFormControl;
   }
 
   removeImage(index: number, image: string) {
@@ -412,12 +412,12 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
 
   // Initiators
   get initiators() {
-    return this.targetForm.get('initiators') as FormArray;
+    return this.targetForm.get('initiators') as UntypedFormArray;
   }
 
   addInitiator() {
     const fg = new CdFormGroup({
-      client_iqn: new FormControl('', {
+      client_iqn: new UntypedFormControl('', {
         validators: [
           Validators.required,
           CdValidators.custom('notUnique', (client_iqn: string) => {
@@ -431,13 +431,13 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
         ]
       }),
       auth: new CdFormGroup({
-        user: new FormControl(''),
-        password: new FormControl(''),
-        mutual_user: new FormControl(''),
-        mutual_password: new FormControl('')
+        user: new UntypedFormControl(''),
+        password: new UntypedFormControl(''),
+        mutual_user: new UntypedFormControl(''),
+        mutual_password: new UntypedFormControl('')
       }),
-      luns: new FormControl([]),
-      cdIsInGroup: new FormControl(false)
+      luns: new UntypedFormControl([]),
+      cdIsInGroup: new UntypedFormControl(false)
     });
 
     this.setAuthValidator(fg);
@@ -554,14 +554,14 @@ export class IscsiTargetFormComponent extends CdForm implements OnInit {
 
   // Groups
   get groups() {
-    return this.targetForm.get('groups') as FormArray;
+    return this.targetForm.get('groups') as UntypedFormArray;
   }
 
   addGroup() {
     const fg = new CdFormGroup({
-      group_id: new FormControl('', { validators: [Validators.required] }),
-      members: new FormControl([]),
-      disks: new FormControl([])
+      group_id: new UntypedFormControl('', { validators: [Validators.required] }),
+      members: new UntypedFormControl([]),
+      disks: new UntypedFormControl([])
     });
 
     this.groups.push(fg);

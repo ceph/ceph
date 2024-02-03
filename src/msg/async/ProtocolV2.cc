@@ -2808,6 +2808,7 @@ CtPtr ProtocolV2::reuse_connection(const AsyncConnectionRef& existing,
             existing->worker->references--;
             new_worker->references++;
             existing->logger = new_worker->get_perf_counter();
+            existing->labeled_logger = new_worker->get_labeled_perf_counter();
             existing->worker = new_worker;
             existing->center = new_center;
             if (existing->delay_state)
@@ -3005,6 +3006,9 @@ CtPtr ProtocolV2::handle_compression_request(ceph::bufferlist &payload) {
         peer_type, auth_meta->is_mode_secure());
       mode != Compressor::COMP_NONE && request.is_compress()) {
     comp_meta.con_method = messenger->comp_registry.pick_method(peer_type, request.preferred_methods());
+    ldout(cct, 10) << __func__ << " Compressor(pick_method=" 
+                   << Compressor::get_comp_alg_name(comp_meta.get_method())
+                   << ")" << dendl;
     if (comp_meta.con_method != Compressor::COMP_ALG_NONE) {
       comp_meta.con_mode = mode;
     }

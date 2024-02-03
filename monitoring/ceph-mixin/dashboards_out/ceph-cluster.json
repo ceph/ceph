@@ -23,12 +23,6 @@
       "id": "singlestat",
       "name": "Singlestat",
       "version": "5.0.0"
-    },
-    {
-      "type": "panel",
-      "id": "vonage-status-panel",
-      "name": "Status Panel",
-      "version": "1.0.8"
     }
   ],
   "annotations": {
@@ -64,7 +58,7 @@
       },
       "gridPos": {
         "h": 3,
-        "w": 2,
+        "w": 6,
         "x": 0,
         "y": 0
       },
@@ -157,8 +151,8 @@
       "fontFormat": "Regular",
       "gridPos": {
         "h": 3,
-        "w": 2,
-        "x": 2,
+        "w": 6,
+        "x": 6,
         "y": 0
       },
       "id": 43,
@@ -167,6 +161,19 @@
       "isHideAlertsOnDisable": false,
       "isIgnoreOKColors": false,
       "links": [],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
       "targets": [
         {
           "aggregation": "Last",
@@ -249,7 +256,264 @@
         }
       ],
       "title": "OSDs",
-      "type": "vonage-status-panel"
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Out"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "percentage",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0.1
+                    },
+                    {
+                      "value": 10,
+                      "color": "red"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Down"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "percentage",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0.1
+                    },
+                    {
+                      "value": 10,
+                      "color": "red"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "clusterName": "",
+      "colorMode": "Panel",
+      "colors": {
+        "crit": "rgba(245, 54, 54, 0.9)",
+        "disable": "rgba(128, 128, 128, 0.9)",
+        "ok": "rgba(50, 128, 45, 0.9)",
+        "warn": "rgba(237, 129, 40, 0.9)"
+      },
+      "cornerRadius": 1,
+      "datasource": "$datasource",
+      "displayName": "",
+      "flipCard": false,
+      "flipTime": 5,
+      "fontFormat": "Regular",
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 41,
+      "isAutoScrollOnOverflow": false,
+      "isGrayOnNoData": false,
+      "isHideAlertsOnDisable": false,
+      "isIgnoreOKColors": false,
+      "links": [],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "aggregation": "Last",
+          "alias": "In Quorum",
+          "decimals": 2,
+          "displayAliasType": "Always",
+          "displayType": "Regular",
+          "displayValueWithAlias": "When Alias Displayed",
+          "expr": "sum(ceph_mon_quorum_status)",
+          "format": "time_series",
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "In Quorum",
+          "refId": "A",
+          "units": "none",
+          "valueHandler": "Text Only"
+        },
+        {
+          "aggregation": "Last",
+          "alias": "Total",
+          "crit": 1,
+          "decimals": 2,
+          "displayAliasType": "Always",
+          "displayType": "Regular",
+          "displayValueWithAlias": "When Alias Displayed",
+          "expr": "count(ceph_mon_quorum_status)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "Total",
+          "refId": "B",
+          "units": "none",
+          "valueHandler": "Text Only",
+          "warn": 2
+        },
+        {
+          "aggregation": "Last",
+          "alias": "MONs out of Quorum",
+          "crit": 1.6,
+          "decimals": 2,
+          "displayAliasType": "Warning / Critical",
+          "displayType": "Annotation",
+          "displayValueWithAlias": "Never",
+          "expr": "count(ceph_mon_quorum_status) - sum(ceph_mon_quorum_status)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "legendFormat": "MONs out of Quorum",
+          "refId": "C",
+          "units": "none",
+          "valueHandler": "Number Threshold",
+          "warn": 1.1
+        }
+      ],
+      "title": "Monitors",
+      "type": "stat"
+    },
+    {
+      "colorMode": "Panel",
+      "colors": {
+        "crit": "rgba(245, 54, 54, 0.9)",
+        "disable": "rgba(128, 128, 128, 0.9)",
+        "ok": "rgba(50, 128, 45, 0.9)",
+        "warn": "rgba(237, 129, 40, 0.9)"
+      },
+      "cornerRadius": 1,
+      "datasource": "$datasource",
+      "displayName": "",
+      "flipCard": false,
+      "flipTime": 5,
+      "fontFormat": "Regular",
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 68,
+      "isAutoScrollOnOverflow": false,
+      "isGrayOnNoData": false,
+      "isHideAlertsOnDisable": false,
+      "isIgnoreOKColors": false,
+      "links": [],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "aggregation": "Last",
+          "alias": "Active",
+          "decimals": 2,
+          "displayAliasType": "Always",
+          "displayType": "Regular",
+          "displayValueWithAlias": "When Alias Displayed",
+          "expr": "count(ceph_mgr_status == 1) or vector(0)",
+          "format": "time_series",
+          "intervalFactor": 1,
+          "instant": true,
+          "legendFormat": "Active",
+          "refId": "A",
+          "units": "none",
+          "valueHandler": "Number Threshold"
+        },
+        {
+          "aggregation": "Last",
+          "alias": "Standby",
+          "decimals": 2,
+          "displayAliasType": "Always",
+          "displayType": "Regular",
+          "displayValueWithAlias": "When Alias Displayed",
+          "expr": "count(ceph_mgr_status == 0) or vector(0)",
+          "format": "time_series",
+          "instant": true,
+          "intervalFactor": 1,
+          "legendFormat": "Standby",
+          "refId": "B",
+          "units": "none",
+          "valueHandler": "Number Threshold"
+        }
+      ],
+      "title": "MGRs",
+      "type": "stat"
     },
     {
       "cacheTimeout": null,
@@ -272,9 +536,9 @@
       },
       "gridPos": {
         "h": 6,
-        "w": 4,
-        "x": 4,
-        "y": 0
+        "w": 6,
+        "x": 0,
+        "y": 6
       },
       "id": 47,
       "interval": null,
@@ -339,12 +603,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "short"
+        }
+      },
       "fill": 0,
       "gridPos": {
         "h": 6,
-        "w": 8,
-        "x": 8,
-        "y": 0
+        "w": 9,
+        "x": 6,
+        "y": 6
       },
       "id": 53,
       "legend": {
@@ -462,7 +735,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -495,12 +768,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "ms"
+        }
+      },
       "fill": 0,
       "gridPos": {
         "h": 6,
-        "w": 8,
-        "x": 16,
-        "y": 0
+        "w": 9,
+        "x": 15,
+        "y": 6
       },
       "id": 66,
       "legend": {
@@ -568,7 +850,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -596,160 +878,26 @@
       ]
     },
     {
-      "clusterName": "",
-      "colorMode": "Panel",
-      "colors": {
-        "crit": "rgba(245, 54, 54, 0.9)",
-        "disable": "rgba(128, 128, 128, 0.9)",
-        "ok": "rgba(50, 128, 45, 0.9)",
-        "warn": "rgba(237, 129, 40, 0.9)"
-      },
-      "cornerRadius": 1,
-      "datasource": "$datasource",
-      "displayName": "",
-      "flipCard": false,
-      "flipTime": 5,
-      "fontFormat": "Regular",
-      "gridPos": {
-        "h": 3,
-        "w": 2,
-        "x": 0,
-        "y": 3
-      },
-      "id": 41,
-      "isAutoScrollOnOverflow": false,
-      "isGrayOnNoData": false,
-      "isHideAlertsOnDisable": false,
-      "isIgnoreOKColors": false,
-      "links": [],
-      "targets": [
-        {
-          "aggregation": "Last",
-          "alias": "In Quorum",
-          "decimals": 2,
-          "displayAliasType": "Always",
-          "displayType": "Regular",
-          "displayValueWithAlias": "When Alias Displayed",
-          "expr": "sum(ceph_mon_quorum_status)",
-          "format": "time_series",
-          "interval": "",
-          "intervalFactor": 1,
-          "legendFormat": "In Quorum",
-          "refId": "A",
-          "units": "none",
-          "valueHandler": "Text Only"
-        },
-        {
-          "aggregation": "Last",
-          "alias": "Total",
-          "crit": 1,
-          "decimals": 2,
-          "displayAliasType": "Always",
-          "displayType": "Regular",
-          "displayValueWithAlias": "When Alias Displayed",
-          "expr": "count(ceph_mon_quorum_status)",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "Total",
-          "refId": "B",
-          "units": "none",
-          "valueHandler": "Text Only",
-          "warn": 2
-        },
-        {
-          "aggregation": "Last",
-          "alias": "MONs out of Quorum",
-          "crit": 1.6,
-          "decimals": 2,
-          "displayAliasType": "Warning / Critical",
-          "displayType": "Annotation",
-          "displayValueWithAlias": "Never",
-          "expr": "count(ceph_mon_quorum_status) / sum(ceph_mon_quorum_status)",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "MONs out of Quorum",
-          "refId": "C",
-          "units": "none",
-          "valueHandler": "Number Threshold",
-          "warn": 1.1
-        }
-      ],
-      "title": "Monitors",
-      "type": "vonage-status-panel"
-    },
-    {
-      "colorMode": "Panel",
-      "colors": {
-        "crit": "rgba(245, 54, 54, 0.9)",
-        "disable": "rgba(128, 128, 128, 0.9)",
-        "ok": "rgba(50, 128, 45, 0.9)",
-        "warn": "rgba(237, 129, 40, 0.9)"
-      },
-      "cornerRadius": 0,
-      "datasource": "$datasource",
-      "displayName": "",
-      "flipCard": false,
-      "flipTime": 5,
-      "fontFormat": "Regular",
-      "gridPos": {
-        "h": 3,
-        "w": 2,
-        "x": 2,
-        "y": 3
-      },
-      "id": 68,
-      "isAutoScrollOnOverflow": false,
-      "isGrayOnNoData": false,
-      "isHideAlertsOnDisable": false,
-      "isIgnoreOKColors": false,
-      "links": [],
-      "targets": [
-        {
-          "aggregation": "Last",
-          "alias": "Active",
-          "decimals": 2,
-          "displayAliasType": "Always",
-          "displayType": "Regular",
-          "displayValueWithAlias": "When Alias Displayed",
-          "expr": "count(ceph_mgr_status == 1) or vector(0)",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "Active",
-          "refId": "A",
-          "units": "none",
-          "valueHandler": "Number Threshold"
-        },
-        {
-          "aggregation": "Last",
-          "alias": "Standby",
-          "decimals": 2,
-          "displayAliasType": "Always",
-          "displayType": "Regular",
-          "displayValueWithAlias": "When Alias Displayed",
-          "expr": "count(ceph_mgr_status == 0) or vector(0)",
-          "format": "time_series",
-          "intervalFactor": 1,
-          "legendFormat": "Standby",
-          "refId": "B",
-          "units": "none",
-          "valueHandler": "Number Threshold"
-        }
-      ],
-      "title": "MGRs",
-      "type": "vonage-status-panel"
-    },
-    {
       "aliasColors": {},
       "bars": false,
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "Bps"
+        }
+      },
       "fill": 1,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 6
+        "y": 9
       },
       "id": 45,
       "legend": {
@@ -803,7 +951,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -836,12 +984,21 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "Bps"
+        }
+      },
       "fill": 1,
       "gridPos": {
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 6
+        "y": 9
       },
       "id": 62,
       "legend": {
@@ -882,7 +1039,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -1038,6 +1195,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "ops"
+        }
+      },
       "fill": 0,
       "gridPos": {
         "h": 9,
@@ -1085,7 +1251,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -1241,4 +1407,4 @@
   "timezone": "",
   "title": "Ceph - Cluster",
   "version": 13
-    }
+}

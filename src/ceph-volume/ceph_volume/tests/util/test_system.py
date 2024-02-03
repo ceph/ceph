@@ -264,7 +264,7 @@ except NameError:
 
 class TestSetContext(object):
 
-    def setup(self):
+    def setup_method(self):
         try:
             os.environ.pop('CEPH_VOLUME_SKIP_RESTORECON')
         except KeyError:

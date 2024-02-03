@@ -182,7 +182,7 @@ class S3tests_java(Task):
         Configuration is read from a skelethon config file
         s3tests.teuth.config.yaml in the java-s3tests repository
         and missing information is added from the task.
-        Existing values are NOT overriden unless they are empty!
+        Existing values are NOT overridden unless they are empty!
         """
         log.info("S3 Tests Java: Creating S3 users...")
         testdir = teuthology.get_testdir(self.ctx)

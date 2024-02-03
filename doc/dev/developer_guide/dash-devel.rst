@@ -50,11 +50,10 @@ optional Ceph internal services are started automatically when it is used to
 start a Ceph cluster. vstart is the basis for the three most commonly used
 development environments in Ceph Dashboard.
 
-You can read more about vstart in `Deploying a development cluster`_.
-Additional information for developers can also be found in the `Developer
-Guide`_.
+You can read more about vstart in :ref:`Deploying a development cluster
+<dev_deploying_a_development_cluster>`. Additional information for developers
+can also be found in the `Developer Guide`_.
 
-.. _Deploying a development cluster: https://docs.ceph.com/docs/master/dev/dev_cluster_deployment/
 .. _Developer Guide: https://docs.ceph.com/docs/master/dev/quick_guide/
 
 Host-based vs Docker-based Development Environments
@@ -215,8 +214,8 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
- * Node 14.15.0 or higher
- * NPM 6.14.9 or higher
+ * Node 18.17.0 or higher
+ * NPM 9.6.7 or higher
 
 nodeenv:
   During Ceph's build we create a virtualenv with ``node`` and ``npm``
@@ -1269,7 +1268,6 @@ Tests can be found under the `a11y folder <./src/pybind/mgr/dashboard/frontend/c
   
     beforeEach(() => {
       cy.login();
-      Cypress.Cookies.preserveOnce('token');
       shared.navigateTo();
     });
   

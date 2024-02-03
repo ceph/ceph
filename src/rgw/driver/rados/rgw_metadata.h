@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_METADATA_H
-#define CEPH_RGW_METADATA_H
+#pragma once
 
 #include <string>
 #include <utility>
@@ -297,4 +296,3 @@ void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::s
 void rgw_shard_name(const std::string& prefix, unsigned max_shards, const std::string& section, const std::string& key, std::string& name);
 void rgw_shard_name(const std::string& prefix, unsigned shard_id, std::string& name);
 
-#endif

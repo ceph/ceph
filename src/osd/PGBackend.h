@@ -260,7 +260,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        const pg_stat_t &stat) = 0;
 
      virtual void schedule_recovery_work(
-       GenContext<ThreadPool::TPHandle&> *c) = 0;
+       GenContext<ThreadPool::TPHandle&> *c,
+       uint64_t cost) = 0;
 
      virtual pg_shard_t whoami_shard() const = 0;
      int whoami() const {
@@ -567,7 +568,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual int objects_readv_sync(
      const hobject_t &hoid,
-     std::map<uint64_t, uint64_t>&& m,
+     std::map<uint64_t, uint64_t>& m,
      uint32_t op_flags,
      ceph::buffer::list *bl) {
      return -EOPNOTSUPP;

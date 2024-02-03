@@ -1,0 +1,8 @@
+@use './src/styles/vendor/variables' as vv;
+
+ul {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  list-style-type: none;
+}

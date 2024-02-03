@@ -131,7 +131,7 @@ std::string_view CInode::pin_name(int p) const
 }
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts
-ostream& CInode::print_db_line_prefix(ostream& out)
+ostream& CInode::print_db_line_prefix(ostream& out) const
 {
   return out << ceph_clock_now() << " mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << ino() << ") ";
 }
@@ -338,7 +338,7 @@ CInode::CInode(MDCache *c, bool auth, snapid_t f, snapid_t l) :
     state_set(STATE_AUTH);
 }
 
-void CInode::print(ostream& out)
+void CInode::print(ostream& out) const
 {
   out << *this;
 }
@@ -523,6 +523,10 @@ sr_t *CInode::prepare_new_srnode(snapid_t snapid)
     new_srnode->seq = snapid;
     new_srnode->created = snapid;
     new_srnode->current_parent_since = get_oldest_snap();
+    SnapRealm *sr = find_snaprealm();
+    dout(20) << __func__ << ": inheriting change_attr from " << *sr
+             << dendl;
+    new_srnode->change_attr = sr->srnode.change_attr;
   }
   return new_srnode;
 }
@@ -2405,7 +2409,6 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
       }
 	
       EUpdate *le = new EUpdate(mdlog, ename);
-      mdlog->start_entry(le);
       le->metablob.add_dir_context(dir);
       le->metablob.add_dir(dir, true);
       
@@ -3053,6 +3056,7 @@ const CInode::mempool_old_inode& CInode::cow_old_inode(snapid_t follows, bool co
 void CInode::pre_cow_old_inode()
 {
   snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  dout(20) << __func__ << " follows " << follows << " on " << *this << dendl;
   if (first <= follows)
     cow_old_inode(follows, true);
 }
@@ -3124,8 +3128,8 @@ void CInode::open_snaprealm(bool nosplit)
     SnapRealm *parent = find_snaprealm();
     snaprealm = new SnapRealm(mdcache, this);
     if (parent) {
-      dout(10) << __func__ << " " << snaprealm
-	       << " parent is " << parent
+      dout(10) << __func__ << " " << *snaprealm
+	       << " parent is " << *parent
 	       << dendl;
       dout(30) << " siblings are " << parent->open_children << dendl;
       snaprealm->parent = parent;
@@ -4783,6 +4787,7 @@ next:
                            false);
         // Flag that we repaired this BT so that it won't go into damagetable
         results->backtrace.repaired = true;
+        in->mdcache->mds->damage_table.remove_backtrace_damage_entry(in->ino());
         if (in->mdcache->mds->logger)
           in->mdcache->mds->logger->inc(l_mds_scrub_backtrace_repaired);
       }
@@ -4921,6 +4926,9 @@ next:
 	    << "freshly-calculated rstats don't match existing ones (will be fixed)";
 	  in->mdcache->repair_inode_stats(in);
           results->raw_stats.repaired = true;
+          for (const auto &p : in->dirfrags){
+            in->mdcache->mds->damage_table.remove_dirfrag_damage_entry(p.second);
+          }
 	} else {
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones";
@@ -5160,6 +5168,11 @@ void CInode::dump(Formatter *f, int flags) const
     }
     f->close_section();
   }
+
+  auto realm = find_snaprealm();
+  inodeno_t subvol_ino = realm->get_subvolume_ino();
+  bool is_subvol = (subvol_ino && subvol_ino == ino());
+  f->dump_bool("is_subvolume", is_subvol);
 }
 
 /****** Scrub Stuff *****/

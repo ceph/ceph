@@ -1,0 +1,283 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="multisiteZoneForm"
+          #formDir="ngForm"
+          [formGroup]="multisiteZoneForm"
+          novalidate>
+    <div class="modal-body">
+      <div class="form-group row">
+        <label class="cd-col-form-label"
+               for="selectedZonegroup"
+               i18n>Select Zone Group</label>
+        <div class="cd-col-form-input">
+          <select class="form-select"
+                  id="selectedZonegroup"
+                  [attr.disabled]="action === 'edit' ? true : null"
+                  formControlName="selectedZonegroup"
+                  name="selectedZonegroup"
+                  (change)="onZoneGroupChange($event.target.value)">
+            <option *ngFor="let zonegroupName of zonegroupList"
+                    [value]="zonegroupName.name"
+                    [selected]="zonegroupName.name === multisiteZoneForm.getValue('selectedZonegroup')">
+            {{ zonegroupName.name }}
+            </option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zonegroupName"
+               i18n>Zone Name</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Zone name..."
+                 id="zoneName"
+                 name="zoneName"
+                 formControlName="zoneName">
+          <span class="invalid-feedback"
+                *ngIf="multisiteZoneForm.showError('zoneName', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="multisiteZoneForm.showError('zoneName', formDir, 'uniqueName')"
+                i18n>The chosen zone name is already in use.</span>
+          <div class="custom-control custom-checkbox">
+            <input class="form-check-input"
+                   id="default_zone"
+                   name="default_zone"
+                   formControlName="default_zone"
+                   [attr.disabled]="action === 'edit' ? true : null"
+                   type="checkbox">
+            <label class="form-check-label"
+                   for="default_zone"
+                   i18n>Default</label>
+            <span *ngIf="disableDefault && action === 'create'">
+              <cd-helper i18n>Default zone can only exist in a default zone group.
+              </cd-helper>
+            </span>
+            <span *ngIf="isDefaultZone">
+              <cd-helper i18n>You cannot unset the default flag.
+              </cd-helper>
+            </span>
+            <cd-helper *ngIf="action === 'edit' && !isDefaultZone">
+              <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
+            </cd-helper><br>
+          </div>
+          <div class="custom-control custom-checkbox">
+            <input class="form-check-input"
+                   id="master_zone"
+                   name="master_zone"
+                   formControlName="master_zone"
+                   [attr.disabled]="action === 'edit' ? true : null"
+                   type="checkbox">
+            <label class="form-check-label"
+                   for="master_zone"
+                   i18n>Master</label>
+            <span *ngIf="disableMaster">
+              <cd-helper i18n>Master zone already exists for the selected zone group.
+              </cd-helper>
+            </span>
+            <span *ngIf="isMasterZone">
+              <cd-helper i18n>You cannot unset the master flag.
+              </cd-helper>
+            </span>
+            <cd-helper *ngIf="action === 'edit' && !isMasterZone">
+              <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
+            </cd-helper>
+          </div>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zone_endpoints"
+               i18n>Endpoints</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="e.g, http://ceph-node-00.com:80"
+                 id="zone_endpoints"
+                 name="zone_endpoints"
+                 formControlName="zone_endpoints">
+          <span class="invalid-feedback"
+                *ngIf="multisiteZoneForm.showError('zone_endpoints', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="multisiteZoneForm.showError('zone_endpoints', formDir, 'endpoint')"
+                i18n>Please enter a valid IP address.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="access_key"
+               i18n>S3 access key
+          <cd-helper>
+            <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the access key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
+          </cd-helper>
+        </label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="DiPt4V7WWvy2njL1z6aC"
+                 id="access_key"
+                 name="access_key"
+                 formControlName="access_key">
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="access_key"
+               i18n>S3 secret key
+          <cd-helper>
+            <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the secret key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
+          </cd-helper>
+        </label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="xSZUdYky0bTctAdCEEW8ikhfBVKsBV5LFYL82vvh"
+                 id="secret_key"
+                 name="secret_key"
+                 formControlName="secret_key">
+        </div>
+      </div>
+      <div class="form-group row"
+           *ngIf="action === 'edit'">
+        <div *ngIf="action === 'edit'">
+          <legend>Placement Targets</legend>
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="placementTarget"
+                   i18n>Placement target</label>
+            <div class="cd-col-form-input">
+              <select class="form-select"
+                      id="placementTarget"
+                      formControlName="placementTarget"
+                      name="placementTarget"
+                      (change)="getZonePlacementData($event.target.value)">
+                <option *ngFor="let placement of placementTargets"
+                        [value]="placement.name"
+                        [selected]="placement.name === multisiteZoneForm.getValue('placementTarget')">
+                {{ placement.name }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="placementDataPool"
+                   i18n>Data pool</label>
+            <div class="cd-col-form-input">
+              <select class="form-select"
+                      id="placementDataPool"
+                      formControlName="placementDataPool"
+                      [value]="placementDataPool"
+                      name="placementDataPool">
+                <option *ngFor="let pool of poolList"
+                        [value]="pool.poolname"
+                        [selected]="pool.poolname === multisiteZoneForm.getValue('placementDataPool')">
+                {{ pool.poolname }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="placementIndexPool"
+                   i18n>Index pool</label>
+            <div class="cd-col-form-input">
+              <select class="form-select"
+                      id="placementIndexPool"
+                      formControlName="placementIndexPool"
+                      name="placementIndexPool">
+                <option *ngFor="let pool of poolList"
+                        [value]="pool.poolname"
+                        [selected]="pool.poolname === multisiteZoneForm.getValue('placementIndexPool')">
+                {{ pool.poolname }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="placementDataExtraPool"
+                   i18n>Data extra pool</label>
+            <div class="cd-col-form-input">
+              <select class="form-select"
+                      id="placementDataExtraPool"
+                      formControlName="placementDataExtraPool"
+                      name="placementDataExtraPool">
+                <option *ngFor="let pool of poolList"
+                        [value]="pool.poolname"
+                        [selected]="pool.poolname === multisiteZoneForm.getValue('placementDataExtraPool')">
+                {{ pool.poolname }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <legend>Storage Classes</legend>
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="storageClass"
+                     i18n>Storage Class</label>
+              <div class="cd-col-form-input">
+                <select class="form-select"
+                        id="storageClass"
+                        formControlName="storageClass"
+                        (change)="getStorageClassData($event.target.value)"
+                        name="storageClass">
+                  <option *ngFor="let str of storageClassList"
+                          [value]="str.value">
+                  {{ str.value }}
+                  </option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="storageDataPool"
+                     i18n>Data pool</label>
+              <div class="cd-col-form-input">
+                <select class="form-select"
+                        id="storageDataPool"
+                        formControlName="storageDataPool"
+                        name="storageDataPool">
+                  <option *ngFor="let pool of poolList"
+                          [value]="pool.poolname"
+                          [selected]="pool.poolname === multisiteZoneForm.getValue('storageDataPool')">
+                  {{ pool.poolname }}
+                  </option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     for="storageCompression"
+                     i18n>Compression</label>
+              <div class="cd-col-form-input">
+                <select class="form-select"
+                        id="storageCompression"
+                        formControlName="storageCompression"
+                        name="storageCompression">
+                  <option *ngFor="let compression of compressionTypes"
+                          [value]="compression">
+                  {{ compression }}
+                  </option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [form]="multisiteZoneForm"
+                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+    </div>
+    </form>
+  </ng-container>
+</cd-modal>

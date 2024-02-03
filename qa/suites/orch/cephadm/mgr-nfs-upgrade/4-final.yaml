@@ -7,4 +7,8 @@ tasks:
       - ceph nfs cluster ls | grep foo
       - ceph nfs export ls foo --detailed
       - rados -p .nfs --all ls -
-      - ceph config get mgr mgr/cephadm/migration_current | grep 5
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+        [[ `ceph config get mgr mgr/cephadm/migration_current` -gt 2 ]]

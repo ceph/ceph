@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_STRING_H
-#define CEPH_RGW_STRING_H
+#pragma once
 
 #include <errno.h>
 #include <stdlib.h>
@@ -231,8 +230,6 @@ static constexpr uint32_t MATCH_CASE_INSENSITIVE = 0x01;
 
 /// attempt to match the given input string with the pattern, which may contain
 /// the wildcard characters * and ?
-extern bool match_wildcards(std::string_view pattern,
-                            std::string_view input,
+extern bool match_wildcards(const std::string& pattern,
+                            const std::string& input,
                             uint32_t flags = 0);
-
-#endif

@@ -17,7 +17,6 @@ immediately after completion.
 
 The backing objectstore can be specified with:
 
-* :ref:`--filestore <ceph-volume-lvm-prepare_filestore>`
 * :ref:`--bluestore <ceph-volume-lvm-prepare_bluestore>`
 
 All command line flags and options are the same as ``ceph-volume lvm prepare``.

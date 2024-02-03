@@ -18,7 +18,7 @@ class Perf(RestController):
          - 'daemon' -- filter by daemon, accepts Python regexp
         """
 
-        counters = context.instance.get_all_perf_counters()
+        counters = context.instance.get_unlabeled_perf_counters()
 
         if 'daemon' in kwargs:
             _re = re.compile(kwargs['daemon'])

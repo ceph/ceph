@@ -19,7 +19,6 @@ set -ex
 # Note that the failed clones would be in retry loop and it's state would be 'pending' or 'in-progress'.
 # It's state is not updated to 'failed' as the config update to gets ENOSPACE too.
 
-set -e
 ignore_failure() {
         if "$@"; then return 0; else return 0; fi
 }

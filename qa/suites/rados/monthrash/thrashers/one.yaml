@@ -3,6 +3,7 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
+      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - mon_thrash:
     revive_delay: 20

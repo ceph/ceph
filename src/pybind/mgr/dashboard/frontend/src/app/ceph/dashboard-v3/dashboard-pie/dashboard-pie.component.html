@@ -1,0 +1,15 @@
+<div class="chart-container d-flex align-items-center justify-content-center">
+  <canvas baseChart
+          #chartCanvas
+          [datasets]="chartConfig.dataset"
+          [type]="chartConfig.chartType"
+          [options]="chartConfig.options"
+          [labels]="chartConfig.labels"
+          [plugins]="doughnutChartPlugins"
+          class="chart-canvas">
+  </canvas>
+  <div class="chartjs-tooltip"
+       #chartTooltip>
+    <table></table>
+  </div>
+</div>

@@ -13,7 +13,9 @@
  */
 
 #include "gtest/gtest.h"
+#include "include/compat.h"
 #include "include/cephfs/libcephfs.h"
+#include "include/fs_types.h"
 #include <errno.h>
 #include <fcntl.h>
 
@@ -48,7 +50,7 @@ TEST(LibCephFS, ReaddirRCB) {
   // check correctness if buffer is too small
   ASSERT_LE(0, ceph_closedir(cmount, dirp));
   ASSERT_GE(0, ceph_opendir(cmount, c_dir, &dirp));
-  ASSERT_EQ(-ERANGE, ceph_getdnames(cmount, dirp, buf, 1));
+  ASSERT_EQ(-CEPHFS_ERANGE, ceph_getdnames(cmount, dirp, buf, 1));
 
   //check correctness if it needs to split listing
   ASSERT_LE(0, ceph_closedir(cmount, dirp));

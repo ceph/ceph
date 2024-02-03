@@ -129,13 +129,8 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  map<string,string> defaults = {
-    // We want to enable leveldb's log, while allowing users to override this
-    // option, therefore we will pass it as a default argument to global_init().
-    { "leveldb_log", "" }
-  };
   auto cct = global_init(
-    &defaults,
+    nullptr,
     args, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
@@ -544,7 +539,7 @@ flushjournal_out:
 
   public_msg_type = public_msg_type.empty() ? msg_type : public_msg_type;
   cluster_msg_type = cluster_msg_type.empty() ? msg_type : cluster_msg_type;
-  uint64_t nonce = Messenger::get_pid_nonce();
+  uint64_t nonce = Messenger::get_random_nonce();
   Messenger *ms_public = Messenger::create(g_ceph_context, public_msg_type,
 					   entity_name_t::OSD(whoami), "client", nonce);
   Messenger *ms_cluster = Messenger::create(g_ceph_context, cluster_msg_type,
@@ -614,12 +609,26 @@ flushjournal_out:
 
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  entity_addrvec_t public_addrs, cluster_addrs;
+  entity_addrvec_t public_addrs, public_bind_addrs, cluster_addrs;
   r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &public_addrs,
 		     iface_preferred_numa_node);
   if (r < 0) {
     derr << "Failed to pick public address." << dendl;
     forker.exit(1);
+  } else {
+    dout(10) << "picked public_addrs " << public_addrs << dendl;
+  }
+  r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC_BIND,
+		     &public_bind_addrs, iface_preferred_numa_node);
+  if (r == -ENOENT) {
+    dout(10) << "there is no public_bind_addrs, defaulting to public_addrs"
+	     << dendl;
+    public_bind_addrs = public_addrs;
+  } else if (r < 0) {
+    derr << "Failed to pick public bind address." << dendl;
+    forker.exit(1);
+  } else {
+    dout(10) << "picked public_bind_addrs " << public_bind_addrs << dendl;
   }
   r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_CLUSTER, &cluster_addrs,
 		     iface_preferred_numa_node);
@@ -628,8 +637,10 @@ flushjournal_out:
     forker.exit(1);
   }
 
-  if (ms_public->bindv(public_addrs) < 0)
+  if (ms_public->bindv(public_bind_addrs, public_addrs) < 0) {
+    derr << "Failed to bind to " << public_bind_addrs << dendl;
     forker.exit(1);
+  }
 
   if (ms_cluster->bindv(cluster_addrs) < 0)
     forker.exit(1);
@@ -642,7 +653,7 @@ flushjournal_out:
     ms_hb_front_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
   }
 
-  entity_addrvec_t hb_front_addrs = public_addrs;
+  entity_addrvec_t hb_front_addrs = public_bind_addrs;
   for (auto& a : hb_front_addrs.v) {
     a.set_port(0);
   }

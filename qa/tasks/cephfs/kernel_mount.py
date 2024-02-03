@@ -49,6 +49,8 @@ class KernelMount(CephFSMount):
 
         self.setup_netns()
 
+        if not self.cephfs_mntpt:
+            self.cephfs_mntpt = '/'
         if not self.cephfs_name:
             self.cephfs_name = 'cephfs'
 
@@ -66,7 +68,10 @@ class KernelMount(CephFSMount):
                 self.enable_dynamic_debug()
             self.ctx[f'kmount_count.{self.client_remote.hostname}'] = kmount_count + 1
 
-        self.gather_mount_info()
+        try:
+            self.gather_mount_info()
+        except:
+            log.warn('failed to fetch mount info - tests depending on mount addr/inst may fail!')
 
     def gather_mount_info(self):
         self.id = self._get_global_id()
@@ -255,9 +260,10 @@ class KernelMount(CephFSMount):
                 import json
 
                 def get_id_to_dir():
-                    result = {}
+                    meta_dir = "{meta_dir}"
+                    result = dict()
                     for dir in glob.glob("/sys/kernel/debug/ceph/*"):
-                        if os.path.basename(dir) == DEBUGFS_META_DIR:
+                        if os.path.basename(dir) == meta_dir:
                             continue
                         mds_sessions_lines = open(os.path.join(dir, "mds_sessions")).readlines()
                         global_id = mds_sessions_lines[0].split()[1].strip('"')
@@ -265,7 +271,7 @@ class KernelMount(CephFSMount):
                         result[client_id] = global_id
                     return result
                 print(json.dumps(get_id_to_dir()))
-            """)
+            """.format(meta_dir=DEBUGFS_META_DIR))
 
             output = self.client_remote.sh([
                 'sudo', 'python3', '-c', pyscript
@@ -337,7 +343,7 @@ echo '{fdata}' | sudo tee /sys/kernel/debug/dynamic_debug/control
         if self.inst is not None:
             return self.inst
 
-        client_gid = "client%d" % self.get_global_id()
+        client_gid = "client%d" % int(self.get_global_id())
         self.inst = " ".join([client_gid, self._global_addr])
         return self.inst
 

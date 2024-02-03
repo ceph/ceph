@@ -2,7 +2,12 @@ import enum
 import yaml
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, CustomConfig
+from ceph.deployment.service_spec import (
+    CustomConfig,
+    GeneralArgList,
+    PlacementSpec,
+    ServiceSpec,
+)
 from ceph.deployment.hostspec import SpecValidationError
 
 try:
@@ -14,6 +19,9 @@ except ImportError:
 class OSDMethod(str, enum.Enum):
     raw = 'raw'
     lvm = 'lvm'
+
+    def to_json(self) -> str:
+        return self.value
 
 
 class DeviceSelection(object):
@@ -31,7 +39,7 @@ class DeviceSelection(object):
 
     def __init__(self,
                  actuators=None,  # type: Optional[int]
-                 paths=None,  # type: Optional[List[str]]
+                 paths=None,  # type: Optional[List[Dict[str, str]]]
                  model=None,  # type: Optional[str]
                  size=None,  # type: Optional[str]
                  rotational=None,  # type: Optional[bool]
@@ -45,7 +53,16 @@ class DeviceSelection(object):
         self.actuators = actuators
 
         #: List of Device objects for devices paths.
-        self.paths = [] if paths is None else [Device(path) for path in paths]  # type: List[Device]
+
+        self.paths = []
+
+        if paths is not None:
+            for device in paths:
+                if isinstance(device, dict):
+                    path: str = device.get("path", '')
+                    self.paths.append(Device(path, crush_device_class=device.get("crush_device_class", None)))  # noqa E501
+                else:
+                    self.paths.append(Device(str(device)))
 
         #: A wildcard string. e.g: "SDD*" or "SanDisk SD8SN8U5"
         self.model = model
@@ -54,7 +71,7 @@ class DeviceSelection(object):
         self.vendor = vendor
 
         #: Size specification of format LOW:HIGH.
-        #: Can also take the the form :HIGH, LOW:
+        #: Can also take the form :HIGH, LOW:
         #: or an exact value (as ceph-volume inventory reports)
         self.size:  Optional[str] = size
 
@@ -154,7 +171,7 @@ class DriveGroupSpec(ServiceSpec):
         "data_devices", "db_devices", "wal_devices", "journal_devices",
         "data_directories", "osds_per_device", "objectstore", "osd_id_claims",
         "journal_size", "unmanaged", "filter_logic", "preview_only", "extra_container_args",
-        "data_allocate_fraction", "method", "crush_device_class", "config",
+        "extra_entrypoint_args", "data_allocate_fraction", "method", "crush_device_class", "config",
     ]
 
     def __init__(self,
@@ -178,12 +195,13 @@ class DriveGroupSpec(ServiceSpec):
                  unmanaged=False,  # type: bool
                  filter_logic='AND',  # type: str
                  preview_only=False,  # type: bool
-                 extra_container_args=None,  # type: Optional[List[str]]
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  data_allocate_fraction=None,  # type: Optional[float]
                  method=None,  # type: Optional[OSDMethod]
-                 crush_device_class=None,  # type: Optional[str]
                  config=None,  # type: Optional[Dict[str, str]]
                  custom_configs=None,  # type: Optional[List[CustomConfig]]
+                 crush_device_class=None,  # type: Optional[str]
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
@@ -192,6 +210,7 @@ class DriveGroupSpec(ServiceSpec):
                                              unmanaged=unmanaged,
                                              preview_only=preview_only,
                                              extra_container_args=extra_container_args,
+                                             extra_entrypoint_args=extra_entrypoint_args,
                                              custom_configs=custom_configs)
 
         #: A :class:`ceph.deployment.drive_group.DeviceSelection`
@@ -274,8 +293,8 @@ class DriveGroupSpec(ServiceSpec):
         # spec: was not mandatory in octopus
         if 'spec' in args:
             args['spec'].update(cls._drive_group_spec_from_json(s_id, args['spec']))
-        else:
-            args.update(cls._drive_group_spec_from_json(s_id, args))
+        args.update(cls._drive_group_spec_from_json(
+                    s_id, {k: v for k, v in args.items() if k != 'spec'}))
 
         return super(DriveGroupSpec, cls)._from_json_impl(args)
 
@@ -356,6 +375,11 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'method raw only supports bluestore')
+
+        if self.data_devices.paths is not None:
+            for device in list(self.data_devices.paths):
+                if not device.path:
+                    raise DriveGroupValidationError(self.service_id, 'Device path cannot be empty')  # noqa E501
 
 
 yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)

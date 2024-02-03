@@ -219,11 +219,6 @@ TEST_F(CRUSHTest, indep_out_progressive) {
       c->do_rule(0, x, out, 7, weight, 0);
       cout << "(" << i << "/" << weight.size() << " out) "
 	   << x << " -> " << out << std::endl;
-      int num_none = 0;
-      for (unsigned k=0; k<out.size(); ++k) {
-	if (out[k] == CRUSH_ITEM_NONE)
-	  num_none++;
-      }
       ASSERT_EQ(0, get_num_dups(out));
 
       // make sure nothing moved

@@ -1,6 +1,8 @@
 tasks:
 - ceph:
     fs: xfs
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       mds:
         debug mds: 20

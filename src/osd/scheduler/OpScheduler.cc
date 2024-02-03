@@ -22,30 +22,26 @@
 namespace ceph::osd::scheduler {
 
 OpSchedulerRef make_scheduler(
-  CephContext *cct, uint32_t num_shards,
-  bool is_rotational, std::string_view osd_objectstore)
+  CephContext *cct, int whoami, uint32_t num_shards, int shard_id,
+  bool is_rotational, std::string_view osd_objectstore,
+  op_queue_type_t osd_scheduler, unsigned op_queue_cut_off, MonClient *monc)
 {
-  const std::string *type = &cct->_conf->osd_op_queue;
-  if (*type == "debug_random") {
-    static const std::string index_lookup[] = { "mclock_scheduler",
-						"wpq" };
-    srand(time(NULL));
-    unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
-    type = &index_lookup[which];
-  }
-
   // Force the use of 'wpq' scheduler for filestore OSDs.
   // The 'mclock_scheduler' is not supported for filestore OSDs.
-  if (*type == "wpq" || osd_objectstore == "filestore") {
+  if (op_queue_type_t::WeightedPriorityQueue == osd_scheduler ||
+      osd_objectstore == "filestore") {
     return std::make_unique<
       ClassedOpQueueScheduler<WeightedPriorityQueue<OpSchedulerItem, client>>>(
 	cct,
+        op_queue_cut_off,
 	cct->_conf->osd_op_pq_max_tokens_per_priority,
 	cct->_conf->osd_op_pq_min_cost
     );
-  } else if (*type == "mclock_scheduler") {
+  } else if (op_queue_type_t::mClockScheduler == osd_scheduler) {
     // default is 'mclock_scheduler'
-    return std::make_unique<mClockScheduler>(cct, num_shards, is_rotational);
+    return std::make_unique<
+      mClockScheduler>(cct, whoami, num_shards, shard_id, is_rotational,
+        op_queue_cut_off, monc);
   } else {
     ceph_assert("Invalid choice of wq" == 0);
   }

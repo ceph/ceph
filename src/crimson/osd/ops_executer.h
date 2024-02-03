@@ -15,6 +15,7 @@
 #include <seastar/core/shared_ptr.hh>
 
 #include "common/dout.h"
+#include "common/map_cacher.hpp"
 #include "common/static_ptr.h"
 #include "messages/MOSDOp.h"
 #include "os/Transaction.h"
@@ -31,12 +32,16 @@
 
 struct ObjectState;
 struct OSDOp;
+class OSDriver;
+class SnapMapper;
 
 namespace crimson::osd {
 class PG;
 
 // OpsExecuter -- a class for executing ops targeting a certain object.
 class OpsExecuter : public seastar::enable_lw_shared_from_this<OpsExecuter> {
+  friend class SnapTrimObjSubEvent;
+
   using call_errorator = crimson::errorator<
     crimson::stateful_ec,
     crimson::ct_error::enoent,
@@ -95,24 +100,26 @@ public:
   // with other message types than just the `MOSDOp`. The type erasure
   // happens in the ctor of `OpsExecuter`.
   struct ExecutableMessage {
-    virtual const crimson::net::ConnectionFRef &get_connection() const = 0;
     virtual osd_reqid_t get_reqid() const = 0;
     virtual utime_t get_mtime() const = 0;
     virtual epoch_t get_map_epoch() const = 0;
     virtual entity_inst_t get_orig_source_inst() const = 0;
     virtual uint64_t get_features() const = 0;
     virtual bool has_flag(uint32_t flag) const = 0;
+    virtual entity_name_t get_source() const = 0;
   };
 
   template <class ImplT>
   class ExecutableMessagePimpl final : ExecutableMessage {
     const ImplT* pimpl;
+    // In crimson, conn is independently maintained outside Message.
+    const crimson::net::ConnectionXcoreRef conn;
   public:
-    ExecutableMessagePimpl(const ImplT* pimpl) : pimpl(pimpl) {
+    ExecutableMessagePimpl(const ImplT* pimpl,
+                           const crimson::net::ConnectionXcoreRef conn)
+      : pimpl(pimpl), conn(conn) {
     }
-    const crimson::net::ConnectionFRef &get_connection() const final {
-      return pimpl->get_connection();
-    }
+
     osd_reqid_t get_reqid() const final {
       return pimpl->get_reqid();
     }
@@ -126,7 +133,13 @@ public:
       return pimpl->get_map_epoch();
     }
     entity_inst_t get_orig_source_inst() const final {
-      return pimpl->get_orig_source_inst();
+      // We can't get the origin source address from the message
+      // since (In Crimson) the connection is maintained
+      // outside of the Message.
+      return entity_inst_t(get_source(), conn->get_peer_addr());
+    }
+    entity_name_t get_source() const final {
+      return pimpl->get_source();
     }
     uint64_t get_features() const final {
       return pimpl->get_features();
@@ -172,6 +185,7 @@ private:
     ceph::static_ptr<ExecutableMessage,
                      sizeof(ExecutableMessagePimpl<void>)>;
   abstracted_msg_t msg;
+  crimson::net::ConnectionXcoreRef conn;
   std::optional<osd_op_params_t> osd_op_params;
   bool user_modify = false;
   ceph::os::Transaction txn;
@@ -185,7 +199,6 @@ private:
     pg_log_entry_t log_entry;
 
     void apply_to(
-      const eversion_t& at_version,
       std::vector<pg_log_entry_t>& log_entries,
       ObjectContext& processed_obc) &&;
   };
@@ -242,8 +255,29 @@ private:
       && snapc.snaps[0] > initial_obc.ssc->snapset.seq; // existing obj is old
   }
 
-  void flush_clone_metadata(
-    std::vector<pg_log_entry_t>& log_entries);
+  interruptible_future<std::vector<pg_log_entry_t>> flush_clone_metadata(
+    std::vector<pg_log_entry_t>&& log_entries,
+    SnapMapper& snap_mapper,
+    OSDriver& osdriver,
+    ceph::os::Transaction& txn);
+
+  static interruptible_future<> snap_map_remove(
+    const hobject_t& soid,
+    SnapMapper& snap_mapper,
+    OSDriver& osdriver,
+    ceph::os::Transaction& txn);
+  static interruptible_future<> snap_map_modify(
+    const hobject_t& soid,
+    const std::set<snapid_t>& snaps,
+    SnapMapper& snap_mapper,
+    OSDriver& osdriver,
+    ceph::os::Transaction& txn);
+  static interruptible_future<> snap_map_clone(
+    const hobject_t& soid,
+    const std::set<snapid_t>& snaps,
+    SnapMapper& snap_mapper,
+    OSDriver& osdriver,
+    ceph::os::Transaction& txn);
 
   // this gizmo could be wrapped in std::optional for the sake of lazy
   // initialization. we don't need it for ops that doesn't have effect
@@ -338,6 +372,7 @@ private:
               ObjectContextRef obc,
               const OpInfo& op_info,
               abstracted_msg_t&& msg,
+              crimson::net::ConnectionXcoreRef conn,
               const SnapContext& snapc);
 
 public:
@@ -346,6 +381,7 @@ public:
               ObjectContextRef obc,
               const OpInfo& op_info,
               const MsgT& msg,
+              crimson::net::ConnectionXcoreRef conn,
               const SnapContext& snapc)
     : OpsExecuter(
         std::move(pg),
@@ -353,7 +389,9 @@ public:
         op_info,
         abstracted_msg_t{
           std::in_place_type_t<ExecutableMessagePimpl<MsgT>>{},
-          &msg},
+          &msg,
+          conn},
+        conn,
         snapc) {
   }
 
@@ -371,7 +409,10 @@ public:
   using rep_op_fut_t =
     interruptible_future<rep_op_fut_tuple>;
   template <typename MutFunc>
-  rep_op_fut_t flush_changes_n_do_ops_effects(const std::vector<OSDOp>& ops,
+  rep_op_fut_t flush_changes_n_do_ops_effects(
+    const std::vector<OSDOp>& ops,
+    SnapMapper& snap_mapper,
+    OSDriver& osdriver,
     MutFunc&& mut_func) &&;
   std::vector<pg_log_entry_t> prepare_transaction(
     const std::vector<OSDOp>& ops);
@@ -408,7 +449,7 @@ public:
 
   version_t get_last_user_version() const;
 
-  std::pair<object_info_t, ObjectContextRef> prepare_clone(
+  ObjectContextRef prepare_clone(
     const hobject_t& coid);
 
   void apply_stats();
@@ -455,6 +496,8 @@ template <typename MutFunc>
 OpsExecuter::rep_op_fut_t
 OpsExecuter::flush_changes_n_do_ops_effects(
   const std::vector<OSDOp>& ops,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
   MutFunc&& mut_func) &&
 {
   const bool want_mutate = !txn.empty();
@@ -472,22 +515,32 @@ OpsExecuter::flush_changes_n_do_ops_effects(
     if (user_modify) {
       osd_op_params->user_at_version = osd_op_params->at_version.version;
     }
-    auto log_entries = prepare_transaction(ops);
-    flush_clone_metadata(log_entries);
-    apply_stats();
-    auto [submitted, all_completed] = std::forward<MutFunc>(mut_func)(std::move(txn),
-                                                    std::move(obc),
-                                                    std::move(*osd_op_params),
-                                                    std::move(log_entries));
-    maybe_mutated = interruptor::make_ready_future<rep_op_fut_tuple>(
+    maybe_mutated = flush_clone_metadata(
+      prepare_transaction(ops),
+      snap_mapper,
+      osdriver,
+      txn
+    ).then_interruptible([mut_func=std::move(mut_func),
+                          this](auto&& log_entries) mutable {
+      auto [submitted, all_completed] =
+        std::forward<MutFunc>(mut_func)(std::move(txn),
+                                        std::move(obc),
+                                        std::move(*osd_op_params),
+                                        std::move(log_entries));
+      return interruptor::make_ready_future<rep_op_fut_tuple>(
 	std::move(submitted),
 	osd_op_ierrorator::future<>(std::move(all_completed)));
+    });
   }
+  apply_stats();
+
   if (__builtin_expect(op_effects.empty(), true)) {
     return maybe_mutated;
   } else {
     return maybe_mutated.then_unpack_interruptible(
-      [this, pg=std::move(pg)](auto&& submitted, auto&& all_completed) mutable {
+      // need extra ref pg due to apply_stats() which can be executed after
+      // informing snap mapper
+      [this, pg=this->pg](auto&& submitted, auto&& all_completed) mutable {
       return interruptor::make_ready_future<rep_op_fut_tuple>(
 	  std::move(submitted),
 	  all_completed.safe_then_interruptible([this, pg=std::move(pg)] {

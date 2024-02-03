@@ -16,36 +16,17 @@ constexpr const int INIT_EXECUTE_INTERVAL = 5;
 using BackgroundMapValue = std::variant<std::string, long long int, double, bool>;
 using BackgroundMap  = std::unordered_map<std::string, BackgroundMapValue>;
 
-inline void pushvalue(lua_State* L, const std::string& value) {
-  pushstring(L, value);
-}
-
-inline void pushvalue(lua_State* L, long long value) {
-  lua_pushinteger(L, value);
-}
-
-inline void pushvalue(lua_State* L, double value) {
-  lua_pushnumber(L, value);
-}
-
-inline void pushvalue(lua_State* L, bool value) {
-  lua_pushboolean(L, value);
-}
-
-
 struct RGWTable : EmptyMetaTable {
 
   static const char* INCREMENT;
   static const char* DECREMENT;
 
-  static std::string TableName() {return "RGW";}
-  static std::string Name() {return TableName() + "Meta";}
-  
   static int increment_by(lua_State* L);
 
   static int IndexClosure(lua_State* L) {
-    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    std::ignore = table_name_upvalue(L);
+    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(THIRD_UPVAL)));
     const char* index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, INCREMENT) == 0) {
@@ -86,8 +67,9 @@ struct RGWTable : EmptyMetaTable {
   }
 
   static int NewIndexClosure(lua_State* L) {
-    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(THIRD_UPVAL)));
     const auto index = luaL_checkstring(L, 2);
     
     if (strcasecmp(index, INCREMENT) == 0 || strcasecmp(index, DECREMENT) == 0) {
@@ -102,7 +84,11 @@ struct RGWTable : EmptyMetaTable {
 
     switch (value_type) {
       case LUA_TNIL:
-        map->erase(std::string(index));
+        // erase the element. since in lua: "t[index] = nil" is removing the entry at "t[index]"
+        if (const auto it = map->find(index); it != map->end()) {
+          // index was found
+          update_erased_iterator<BackgroundMap>(L, name, it, map->erase(it));
+        }
         return NO_RETURNVAL;
       case LUA_TBOOLEAN:
         value = static_cast<bool>(lua_toboolean(L, 3));
@@ -142,45 +128,13 @@ struct RGWTable : EmptyMetaTable {
   }
 
   static int PairsClosure(lua_State* L) {
-    auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    ceph_assert(map);
-    lua_pushlightuserdata(L, map);
-    lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
-    lua_pushnil(L);                                 // indicate this is the first call
-    // return stateless_iter, nil
-
-    return TWO_RETURNVALS;
-  }
-  
-  static int stateless_iter(lua_State* L) {
-    // based on: http://lua-users.org/wiki/GeneralizedPairsAndIpairs
-    auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    typename BackgroundMap::const_iterator next_it;
-    if (lua_isnil(L, -1)) {
-      next_it = map->begin();
-    } else {
-      const char* index = luaL_checkstring(L, 2);
-      const auto it = map->find(std::string(index));
-      ceph_assert(it != map->end());
-      next_it = std::next(it);
-    }
-
-    if (next_it == map->end()) {
-      // index of the last element was provided
-      lua_pushnil(L);
-      lua_pushnil(L);
-      // return nil, nil
-    } else {
-      pushstring(L, next_it->first);
-      std::visit([L](auto&& value) { pushvalue(L, value); }, next_it->second);
-      // return key, value
-    }
-
-    return TWO_RETURNVALS;
+    return Pairs<BackgroundMap>(L);
   }
 };
 
 class Background : public RGWRealmReloader::Pauser {
+public:
+  static const BackgroundMapValue empty_table_value;
 
 private:
   BackgroundMap rgw_map;
@@ -189,15 +143,13 @@ private:
   bool paused = false;
   int execute_interval;
   const DoutPrefix dp;
-  std::unique_ptr<rgw::sal::LuaManager> lua_manager; 
+  rgw::sal::LuaManager* lua_manager; 
   CephContext* const cct;
-  const std::string luarocks_path;
   std::thread runner;
   mutable std::mutex table_mutex;
   std::mutex cond_mutex;
   std::mutex pause_mutex;
   std::condition_variable cond;
-  static const BackgroundMapValue empty_table_value;
 
   void run();
 
@@ -206,25 +158,27 @@ protected:
   virtual int read_script();
 
 public:
-  Background(rgw::sal::Driver* driver,
-      CephContext* cct,
-      const std::string& luarocks_path,
-      int execute_interval = INIT_EXECUTE_INTERVAL);
+  Background(rgw::sal::Driver* _driver,
+      CephContext* _cct,
+      rgw::sal::LuaManager* _lua_manager,
+      int _execute_interval = INIT_EXECUTE_INTERVAL);
 
-    virtual ~Background() = default;
-    void start();
-    void shutdown();
-    void create_background_metatable(lua_State* L);
-    const BackgroundMapValue& get_table_value(const std::string& key) const;
-    template<typename T>
-    void put_table_value(const std::string& key, T value) {
-      std::unique_lock cond_lock(table_mutex);
-      rgw_map[key] = value;
-    }
-    
-    void pause() override;
-    void resume(rgw::sal::Driver* _driver) override;
+  ~Background() override = default;
+  void start();
+  void shutdown();
+  void create_background_metatable(lua_State* L);
+  const BackgroundMapValue& get_table_value(const std::string& key) const;
+  template<typename T>
+  void put_table_value(const std::string& key, T value) {
+    std::unique_lock cond_lock(table_mutex);
+    rgw_map[key] = value;
+  }
+   
+  // update the manager after 
+  void set_manager(rgw::sal::LuaManager* _lua_manager);
+  void pause() override;
+  void resume(rgw::sal::Driver* _driver) override;
 };
 
-} //namepsace rgw::lua
+} //namespace rgw::lua
 

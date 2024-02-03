@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_DATALOG_H
-#define CEPH_RGW_DATALOG_H
+#pragma once
 
 #include <cstdint>
 #include <list>
@@ -19,6 +18,7 @@
 
 #include <fmt/format.h>
 
+#include "common/async/yield_context.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/function2.hpp"
@@ -82,6 +82,7 @@ struct rgw_data_change {
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
+  static void generate_test_instances(std::list<rgw_data_change *>& l);
 };
 WRITE_CLASS_ENCODER(rgw_data_change)
 
@@ -180,9 +181,10 @@ public:
   }
   int list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 	   std::vector<rgw_data_change_log_entry>& entries,
-	   std::string_view marker,
-	   std::string* out_marker, bool* truncated);
-  int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker);
+	   std::string_view marker, std::string* out_marker, bool* truncated,
+	   optional_yield y);
+  int trim_entries(const DoutPrefixProvider *dpp, int shard_id,
+		   std::string_view marker, optional_yield y);
   void trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,
 		    librados::AioCompletion* c);
   void set_zero(RGWDataChangesBE* be) {
@@ -193,7 +195,9 @@ public:
   bs::error_code handle_new_gens(entries_t e) noexcept override;
   bs::error_code handle_empty_to(uint64_t new_tail) noexcept override;
 
-  int trim_generations(const DoutPrefixProvider *dpp, std::optional<uint64_t>& through);
+  int trim_generations(const DoutPrefixProvider *dpp,
+		       std::optional<uint64_t>& through,
+		       optional_yield y);
 };
 
 struct BucketGen {
@@ -295,22 +299,26 @@ public:
 	    librados::Rados* lr);
   int choose_oid(const rgw_bucket_shard& bs);
   int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
-		const rgw::bucket_log_layout_generation& gen, int shard_id);
+		const rgw::bucket_log_layout_generation& gen, int shard_id,
+		optional_yield y);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
-		   std::string_view marker,
-		   std::string* out_marker, bool* truncated);
-  int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker);
+		   std::string_view marker, std::string* out_marker,
+		   bool* truncated, optional_yield y);
+  int trim_entries(const DoutPrefixProvider *dpp, int shard_id,
+		   std::string_view marker, optional_yield y);
   int trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,
 		   librados::AioCompletion* c); // :(
-  int get_info(const DoutPrefixProvider *dpp, int shard_id, RGWDataChangesLogInfo *info);
+  int get_info(const DoutPrefixProvider *dpp, int shard_id,
+	       RGWDataChangesLogInfo *info, optional_yield y);
 
   using LogMarker = RGWDataChangesLogMarker;
 
   int list_entries(const DoutPrefixProvider *dpp, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
-		   LogMarker& marker, bool* ptruncated);
+		   LogMarker& marker, bool* ptruncated,
+		   optional_yield y);
 
   void mark_modified(int shard_id, const rgw_bucket_shard& bs, uint64_t gen);
   auto read_clear_modified() {
@@ -334,7 +342,9 @@ public:
 
 
   int change_format(const DoutPrefixProvider *dpp, log_type type, optional_yield y);
-  int trim_generations(const DoutPrefixProvider *dpp, std::optional<uint64_t>& through);
+  int trim_generations(const DoutPrefixProvider *dpp,
+		       std::optional<uint64_t>& through,
+		       optional_yield y);
 };
 
 class RGWDataChangesBE : public boost::intrusive_ref_counter<RGWDataChangesBE> {
@@ -363,22 +373,23 @@ public:
 		       const std::string& key,
 		       ceph::buffer::list&& entry,
 		       entries& out) = 0;
-  virtual int push(const DoutPrefixProvider *dpp, int index, entries&& items) = 0;
+  virtual int push(const DoutPrefixProvider *dpp, int index, entries&& items,
+		   optional_yield y) = 0;
   virtual int push(const DoutPrefixProvider *dpp, int index, ceph::real_time now,
-		   const std::string& key,
-		   ceph::buffer::list&& bl) = 0;
+		   const std::string& key, ceph::buffer::list&& bl,
+		   optional_yield y) = 0;
   virtual int list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   std::optional<std::string_view> marker,
-		   std::string* out_marker, bool* truncated) = 0;
-  virtual int get_info(const DoutPrefixProvider *dpp, int index, RGWDataChangesLogInfo *info) = 0;
-  virtual int trim(const DoutPrefixProvider *dpp, int index, std::string_view marker) = 0;
-  virtual int trim(const DoutPrefixProvider *dpp, int index, std::string_view marker,
-		   librados::AioCompletion* c) = 0;
+		   std::string* out_marker, bool* truncated,
+		   optional_yield y) = 0;
+  virtual int get_info(const DoutPrefixProvider *dpp, int index,
+		       RGWDataChangesLogInfo *info, optional_yield y) = 0;
+  virtual int trim(const DoutPrefixProvider *dpp, int index,
+		   std::string_view marker, optional_yield y) = 0;
+  virtual int trim(const DoutPrefixProvider *dpp, int index,
+		   std::string_view marker, librados::AioCompletion* c) = 0;
   virtual std::string_view max_marker() const = 0;
   // 1 on empty, 0 on non-empty, negative on error.
-  virtual int is_empty(const DoutPrefixProvider *dpp) = 0;
+  virtual int is_empty(const DoutPrefixProvider *dpp, optional_yield y) = 0;
 };
-
-
-#endif

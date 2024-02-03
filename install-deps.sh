@@ -12,6 +12,14 @@
 #  version 2.1 of the License, or (at your option) any later version.
 #
 set -e
+
+if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    CEPH_ROOT="${SCRIPT_DIR}"
+    . "${CEPH_ROOT}/src/script/lib-build.sh" || exit 2
+fi
+
+
 DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
@@ -24,9 +32,6 @@ export LC_ALL=C.UTF-8
 
 ARCH=$(uname -m)
 
-function in_jenkins() {
-    test -n "$JENKINS_HOME"
-}
 
 function munge_ceph_spec_in {
     local with_seastar=$1
@@ -63,7 +68,7 @@ function munge_debian_control {
 }
 
 function ensure_decent_gcc_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Start ensure_decent_gcc_on_ubuntu() in install-deps.sh"
+    ci_debug "Start ensure_decent_gcc_on_ubuntu() in install-deps.sh"
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
     local old=$(gcc -dumpfullversion -dumpversion)
@@ -100,7 +105,7 @@ ENDOFKEY
 }
 
 function ensure_python3_sphinx_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Running ensure_python3_sphinx_on_ubuntu() in install-deps.sh"
+    ci_debug "Running ensure_python3_sphinx_on_ubuntu() in install-deps.sh"
     local sphinx_command=/usr/bin/sphinx-build
     # python-sphinx points $sphinx_command to
     # ../share/sphinx/scripts/python2/sphinx-build when it's installed
@@ -111,7 +116,7 @@ function ensure_python3_sphinx_on_ubuntu {
 }
 
 function install_pkg_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Running install_pkg_on_ubuntu() in install-deps.sh"
+    ci_debug "Running install_pkg_on_ubuntu() in install-deps.sh"
     local project=$1
     shift
     local sha1=$1
@@ -128,61 +133,104 @@ function install_pkg_on_ubuntu {
         for pkg in $pkgs; do
             if ! apt -qq list $pkg 2>/dev/null | grep -q installed; then
                 missing_pkgs+=" $pkg"
-                in_jenkins && echo "CI_DEBUG: missing_pkgs=$missing_pkgs"
+                ci_debug "missing_pkgs=$missing_pkgs"
             fi
         done
     fi
     if test -n "$missing_pkgs"; then
         local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
-        $SUDO curl --silent --location $shaman_url --output /etc/apt/sources.list.d/$project.list
+        in_jenkins && echo -n "CI_DEBUG: Downloading $shaman_url ... "
+        $SUDO curl --silent --fail --write-out "%{http_code}" --location $shaman_url --output /etc/apt/sources.list.d/$project.list
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
     fi
 }
 
+boost_ver=1.82
+
+function clean_boost_on_ubuntu {
+    ci_debug "Running clean_boost_on_ubuntu() in install-deps.sh"
+    # Find currently installed version. If there are multiple
+    # versions, they end up newline separated
+    local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
+                              cut -d' ' -f2 |
+                              cut -d'.' -f1,2 |
+			      sort -u)
+    # If installed_ver contains whitespace, we can't really count on it,
+    # but otherwise, bail out if the version installed is the version
+    # we want.
+    if test -n "$installed_ver" &&
+	    echo -n "$installed_ver" | tr '[:space:]' ' ' | grep -v -q ' '; then
+	if echo "$installed_ver" | grep -q "^$boost_ver"; then
+	    return
+        fi
+    fi
+
+    # Historical packages
+    $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost*.list
+    # Currently used
+    $SUDO rm -f /etc/apt/sources.list.d/libboost.list
+    # Refresh package list so things aren't in the available list.
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
+    # Remove all ceph-libboost packages. We have an early return if
+    # the desired version is already (and the only) version installed,
+    # so no need to spare it.
+    if test -n "$installed_ver"; then
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y --fix-missing remove "ceph-libboost*"
+	# When an error occurs during `apt-get remove ceph-libboost*`, ceph-libboost* packages
+	# may be not removed, so use `dpkg` to force remove ceph-libboost*.
+	local ceph_libboost_pkgs=$(dpkg -l | grep ceph-libboost* | awk '{print $2}' |
+		                        awk -F: '{print $1}')
+	if test -n "$ceph_libboost_pkgs"; then
+	    ci_debug "Force remove ceph-libboost* packages $ceph_libboost_pkgs"
+	    $SUDO dpkg --purge --force-all $ceph_libboost_pkgs
+	fi
+    fi
+}
+
 function install_boost_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Running install_boost_on_ubuntu() in install-deps.sh"
-    local ver=1.79
+    ci_debug "Running install_boost_on_ubuntu() in install-deps.sh"
+    # Once we get to this point, clean_boost_on_ubuntu() should ensure
+    # that there is no more than one installed version.
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
                               cut -d'.' -f1,2)
     if test -n "$installed_ver"; then
-        if echo "$installed_ver" | grep -q "^$ver"; then
+        if echo "$installed_ver" | grep -q "^$boost_ver"; then
             return
-        else
-            $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove "ceph-libboost.*${installed_ver}.*"
-            $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost${installed_ver}.list
         fi
     fi
     local codename=$1
     local project=libboost
-    local sha1=892ab89e76b91b505ffbf083f6fb7f2a666d4132
+    local sha1=2804368f5b807ba8334b0ccfeb8af191edeb996f
     install_pkg_on_ubuntu \
         $project \
         $sha1 \
         $codename \
         check \
-        ceph-libboost-atomic$ver-dev \
-        ceph-libboost-chrono$ver-dev \
-        ceph-libboost-container$ver-dev \
-        ceph-libboost-context$ver-dev \
-        ceph-libboost-coroutine$ver-dev \
-        ceph-libboost-date-time$ver-dev \
-        ceph-libboost-filesystem$ver-dev \
-        ceph-libboost-iostreams$ver-dev \
-        ceph-libboost-program-options$ver-dev \
-        ceph-libboost-python$ver-dev \
-        ceph-libboost-random$ver-dev \
-        ceph-libboost-regex$ver-dev \
-        ceph-libboost-system$ver-dev \
-        ceph-libboost-test$ver-dev \
-        ceph-libboost-thread$ver-dev \
-        ceph-libboost-timer$ver-dev
+        ceph-libboost-atomic${boost_ver}-dev \
+        ceph-libboost-chrono${boost_ver}-dev \
+        ceph-libboost-container${boost_ver}-dev \
+        ceph-libboost-context${boost_ver}-dev \
+        ceph-libboost-coroutine${boost_ver}-dev \
+        ceph-libboost-date-time${boost_ver}-dev \
+        ceph-libboost-filesystem${boost_ver}-dev \
+        ceph-libboost-iostreams${boost_ver}-dev \
+        ceph-libboost-program-options${boost_ver}-dev \
+        ceph-libboost-python${boost_ver}-dev \
+        ceph-libboost-random${boost_ver}-dev \
+        ceph-libboost-regex${boost_ver}-dev \
+        ceph-libboost-system${boost_ver}-dev \
+        ceph-libboost-test${boost_ver}-dev \
+        ceph-libboost-thread${boost_ver}-dev \
+        ceph-libboost-timer${boost_ver}-dev \
+	|| ci_debug "ceph-libboost package unavailable, you can build the submodule"
+
 }
 
 function install_libzbd_on_ubuntu {
-    in_jenkins && echo "CI_DEBUG: Running install_libzbd_on_ubuntu() in install-deps.sh"
+    ci_debug "Running install_libzbd_on_ubuntu() in install-deps.sh"
     local codename=$1
     local project=libzbd
     local sha1=1fadde94b08fab574b17637c2bebd2b1e7f9127b
@@ -253,6 +301,64 @@ EOF
     fi
 }
 
+function populate_wheelhouse() {
+    ci_debug "Running populate_wheelhouse() in install-deps.sh"
+    local install=$1
+    shift
+
+    # although pip comes with virtualenv, having a recent version
+    # of pip matters when it comes to using wheel packages
+    PIP_OPTS="--timeout 300 --exists-action i"
+    pip $PIP_OPTS $install \
+      'setuptools >= 0.8' 'pip >= 21.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
+    if test $# != 0 ; then
+        pip $PIP_OPTS $install $@ || return 1
+    fi
+}
+
+function activate_virtualenv() {
+    ci_debug "Running activate_virtualenv() in install-deps.sh"
+    local top_srcdir=$1
+    local env_dir=$top_srcdir/install-deps-python3
+
+    if ! test -d $env_dir ; then
+        python3 -m venv ${env_dir}
+        . $env_dir/bin/activate
+        if ! populate_wheelhouse install ; then
+            rm -rf $env_dir
+            return 1
+        fi
+    fi
+    . $env_dir/bin/activate
+}
+
+function preload_wheels_for_tox() {
+    ci_debug "Running preload_wheels_for_tox() in install-deps.sh"
+    local ini=$1
+    shift
+    pushd . > /dev/null
+    cd $(dirname $ini)
+    local require_files=$(ls *requirements*.txt 2>/dev/null) || true
+    local constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
+    local require=$(echo -n "$require_files" | sed -e 's/^/-r /')
+    local constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
+    local md5=wheelhouse/md5
+    if test "$require"; then
+        if ! test -f $md5 || ! md5sum -c $md5 > /dev/null; then
+            rm -rf wheelhouse
+        fi
+    fi
+    if test "$require" && ! test -d wheelhouse ; then
+        type python3 > /dev/null 2>&1 || continue
+        activate_virtualenv $top_srcdir || exit 1
+        python3 -m pip install --upgrade pip
+        populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
+        mv $wip_wheelhouse wheelhouse
+        md5sum $require_files $constraint_files > $md5
+    fi
+    popd > /dev/null
+}
+
 for_make_check=false
 if tty -s; then
     # interactive
@@ -264,6 +370,10 @@ else
 fi
 
 if [ x$(uname)x = xFreeBSDx ]; then
+    if [ "$INSTALL_EXTRA_PACKAGES" ]; then
+        echo "Installing extra packages not supported on FreeBSD" >&2
+        exit 1
+    fi
     $SUDO pkg install -yq \
         devel/babeltrace \
         devel/binutils \
@@ -280,7 +390,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/libtool \
         devel/google-perftools \
         lang/cython \
-        databases/leveldb \
         net/openldap24-client \
         archivers/snappy \
         archivers/liblz4 \
@@ -329,6 +438,21 @@ else
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
         echo "Using apt-get to install dependencies"
+	# Put this before any other invocation of apt so it can clean
+	# up in a broken case.
+        clean_boost_on_ubuntu
+        if [ "$INSTALL_EXTRA_PACKAGES" ]; then
+            if ! $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
+                # try again. ported over from run-make.sh (orignally e278295)
+                # In the case that apt-get is interrupted, like when a jenkins
+                # job is cancelled, the package manager will be in an inconsistent
+                # state. Run the command again after `dpkg --configure -a` to
+                # bring package manager back into a clean state.
+                $SUDO dpkg --configure -a
+                ci_debug "trying to install $INSTALL_EXTRA_PACKAGES again"
+                $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES
+            fi
+        fi
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         ensure_python3_sphinx_on_ubuntu
@@ -357,7 +481,7 @@ else
         fi
         touch $DIR/status
 
-        in_jenkins && echo "CI_DEBUG: Running munge_debian_control() in install-deps.sh"
+        ci_debug "Running munge_debian_control() in install-deps.sh"
         backports=""
         control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
@@ -380,19 +504,17 @@ else
             build_profiles+=",pkg.ceph.pmdk"
         fi
 
-        in_jenkins && cat <<EOF
-CI_DEBUG: for_make_check=$for_make_check
-CI_DEBUG: with_seastar=$with_seastar
-CI_DEBUG: with_jaeger=$with_jaeger
-CI_DEBUG: build_profiles=$build_profiles
-CI_DEBUG: Now running 'mk-build-deps' and installing ceph-build-deps package
-EOF
+        ci_debug "for_make_check=$for_make_check"
+        ci_debug "with_seastar=$with_seastar"
+        ci_debug "with_jaeger=$with_jaeger"
+        ci_debug "build_profiles=$build_profiles"
+        ci_debug "Now running 'mk-build-deps' and installing ceph-build-deps package"
 
         $SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps \
               --build-profiles "${build_profiles#,}" \
               --install --remove \
               --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
-        in_jenkins && echo "CI_DEBUG: Removing ceph-build-deps"
+        ci_debug "Removing ceph-build-deps"
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
         if [ "$control" != "debian/control" ] ; then rm $control; fi
 
@@ -423,6 +545,8 @@ EOF
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
+                elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
+                    $SUDO dnf config-manager --set-enabled crb
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
@@ -432,6 +556,9 @@ EOF
                 fi
                 ;;
         esac
+        if [ "$INSTALL_EXTRA_PACKAGES" ]; then
+            $SUDO dnf install -y $INSTALL_EXTRA_PACKAGES
+        fi
         munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
@@ -455,6 +582,9 @@ EOF
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros rpm-build || exit 1
+        if [ "$INSTALL_EXTRA_PACKAGES" ]; then
+            $SUDO $zypp_install $INSTALL_EXTRA_PACKAGES
+        fi
         munge_ceph_spec_in $with_seastar false $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
@@ -464,67 +594,6 @@ EOF
         ;;
     esac
 fi
-
-function populate_wheelhouse() {
-    in_jenkins && echo "CI_DEBUG: Running populate_wheelhouse() in install-deps.sh"
-    local install=$1
-    shift
-
-    # although pip comes with virtualenv, having a recent version
-    # of pip matters when it comes to using wheel packages
-    PIP_OPTS="--timeout 300 --exists-action i"
-    pip $PIP_OPTS $install \
-      'setuptools >= 0.8' 'pip >= 21.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
-    if test $# != 0 ; then
-        # '--use-feature=fast-deps --use-deprecated=legacy-resolver' added per
-        # https://github.com/pypa/pip/issues/9818 These should be able to be
-        # removed at some point in the future.
-        pip --use-feature=fast-deps --use-deprecated=legacy-resolver $PIP_OPTS $install $@ || return 1
-    fi
-}
-
-function activate_virtualenv() {
-    in_jenkins && echo "CI_DEBUG: Running activate_virtualenv() in install-deps.sh"
-    local top_srcdir=$1
-    local env_dir=$top_srcdir/install-deps-python3
-
-    if ! test -d $env_dir ; then
-        python3 -m venv ${env_dir}
-        . $env_dir/bin/activate
-        if ! populate_wheelhouse install ; then
-            rm -rf $env_dir
-            return 1
-        fi
-    fi
-    . $env_dir/bin/activate
-}
-
-function preload_wheels_for_tox() {
-    in_jenkins && echo "CI_DEBUG: Running preload_wheels_for_tox() in install-deps.sh"
-    local ini=$1
-    shift
-    pushd . > /dev/null
-    cd $(dirname $ini)
-    local require_files=$(ls *requirements*.txt 2>/dev/null) || true
-    local constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
-    local require=$(echo -n "$require_files" | sed -e 's/^/-r /')
-    local constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
-    local md5=wheelhouse/md5
-    if test "$require"; then
-        if ! test -f $md5 || ! md5sum -c $md5 > /dev/null; then
-            rm -rf wheelhouse
-        fi
-    fi
-    if test "$require" && ! test -d wheelhouse ; then
-        type python3 > /dev/null 2>&1 || continue
-        activate_virtualenv $top_srcdir || exit 1
-        python3 -m pip install --upgrade pip
-        populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
-        mv $wip_wheelhouse wheelhouse
-        md5sum $require_files $constraint_files > $md5
-    fi
-    popd > /dev/null
-}
 
 # use pip cache if possible but do not store it outside of the source
 # tree
@@ -545,4 +614,4 @@ if $for_make_check; then
     type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
 
-in_jenkins && echo "CI_DEBUG: End install-deps.sh" || true
+ci_debug "End install-deps.sh" || true

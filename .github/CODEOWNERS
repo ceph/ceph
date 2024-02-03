@@ -47,18 +47,19 @@ README*                                         @ceph/doc-writers
 *.rst                                           @ceph/doc-writers
 
 # core
-/doc/man/8/ceph-authtool.rst                    @ceph/core
-/doc/man/8/ceph-conf.rst                        @ceph/core
-/doc/man/8/ceph-create-keys.rst                 @ceph/core
-/doc/man/8/ceph-kvstore-tool.rst                @ceph/core
-/doc/man/8/ceph-mon.rst                         @ceph/core
-/doc/man/8/ceph-objectstore-tool.rst            @ceph/core
-/doc/man/8/ceph-osd.rst                         @ceph/core
-/doc/man/8/ceph.rst                             @ceph/core
-/doc/man/8/crushtool.rst                        @ceph/core
-/doc/man/8/monmaptool.rst                       @ceph/core
-/doc/man/8/rados.rst                            @ceph/core
-/doc/rados                                      @ceph/core
+/doc/man/8/ceph-authtool.rst                    @ceph/core @ceph/doc-writers
+/doc/man/8/ceph-conf.rst                        @ceph/core @ceph/doc-writers
+/doc/man/8/ceph-create-keys.rst                 @ceph/core @ceph/doc-writers
+/doc/man/8/ceph-kvstore-tool.rst                @ceph/core @ceph/doc-writers
+/doc/man/8/ceph-mon.rst                         @ceph/core @ceph/doc-writers
+/doc/man/8/ceph-objectstore-tool.rst            @ceph/core @ceph/doc-writers
+/doc/man/8/ceph-osd.rst                         @ceph/core @ceph/doc-writers
+/doc/man/8/ceph.rst                             @ceph/core @ceph/doc-writers
+/doc/man/8/crushtool.rst                        @ceph/core @ceph/doc-writers
+/doc/man/8/monmaptool.rst                       @ceph/core @ceph/doc-writers
+/doc/man/8/rados.rst                            @ceph/core @ceph/doc-writers
+/doc/rados                                      @ceph/core @ceph/doc-writers
+/examples/librados                              @ceph/core
 /qa/standalone                                  @ceph/core
 /qa/suites/rados                                @ceph/core
 /qa/workunits/erasure-code                      @ceph/core
@@ -83,11 +84,13 @@ README*                                         @ceph/doc-writers
 /src/test/osd                                   @ceph/core
 
 # rbd
-/doc/dev/rbd*                                   @ceph/rbd
-/doc/man/8/ceph-rbdnamer.rst                    @ceph/rbd
-/doc/man/8/rbd*                                 @ceph/rbd
-/doc/rbd                                        @ceph/rbd
-/doc/start/quick-rbd.rst                        @ceph/rbd
+/doc/dev/rbd*                                   @ceph/rbd @ceph/doc-writers
+/doc/man/8/ceph-rbdnamer.rst                    @ceph/rbd @ceph/doc-writers
+/doc/man/8/rbd*                                 @ceph/rbd @ceph/doc-writers
+/doc/rbd                                        @ceph/rbd @ceph/doc-writers
+/doc/start/quick-rbd.rst                        @ceph/rbd @ceph/doc-writers
+/examples/librbd                                @ceph/rbd
+/examples/rbd-replay                            @ceph/rbd
 /qa/rbd                                         @ceph/rbd
 /qa/run_xfstests*                               @ceph/rbd
 /qa/suites/krbd                                 @ceph/rbd
@@ -101,9 +104,10 @@ README*                                         @ceph/doc-writers
 /qa/workunits/cls/test_cls_lock.sh              @ceph/rbd
 /qa/workunits/cls/test_cls_rbd.sh               @ceph/rbd
 /qa/workunits/rbd                               @ceph/rbd
+/qa/workunits/windows                           @ceph/rbd
 /src/ceph-rbdnamer                              @ceph/rbd
 /src/cls/journal                                @ceph/rbd
-/src/cls/lock                                   @ceph/rbd
+/src/cls/lock                                   @ceph/rbd @ceph/rgw
 /src/cls/rbd                                    @ceph/rbd
 /src/common/options/rbd*                        @ceph/rbd
 /src/etc-rbdmap                                 @ceph/rbd
@@ -119,7 +123,7 @@ README*                                         @ceph/doc-writers
 /src/test/cli/rbd                               @ceph/rbd
 /src/test/cli-integration/rbd                   @ceph/rbd
 /src/test/cls_journal                           @ceph/rbd
-/src/test/cls_lock                              @ceph/rbd
+/src/test/cls_lock                              @ceph/rbd @ceph/rgw
 /src/test/cls_rbd                               @ceph/rbd
 /src/test/journal                               @ceph/rbd
 /src/test/librbd                                @ceph/rbd
@@ -130,3 +134,45 @@ README*                                         @ceph/doc-writers
 /src/tools/rbd*                                 @ceph/rbd
 /systemd/rbdmap.service.in                      @ceph/rbd
 /udev/50-rbd.rules                              @ceph/rbd
+
+# rgw
+/doc/dev/radosgw                                @ceph/rgw @ceph/doc-writers
+/doc/radosgw                                    @ceph/rgw @ceph/doc-writers
+/examples/rgw                                   @ceph/rgw
+/qa/rgw                                         @ceph/rgw
+/qa/suites/rgw                                  @ceph/rgw
+/qa/tasks/barbican.py                           @ceph/rgw
+/qa/tasks/kafka.py                              @ceph/rgw
+/qa/tasks/keycloak.py                           @ceph/rgw
+/qa/tasks/keystone.py                           @ceph/rgw
+/qa/tasks/pykmip.py                             @ceph/rgw
+/qa/tasks/rabbitmq.py                           @ceph/rgw
+/qa/tasks/rgw*                                  @ceph/rgw
+/qa/tasks/s3*                                   @ceph/rgw
+/qa/tasks/tempest.py                            @ceph/rgw
+/qa/tasks/vault.py                              @ceph/rgw
+/qa/workunits/rgw                               @ceph/rgw
+/src/cls/2pc_queue                              @ceph/rgw
+/src/cls/cmpomap                                @ceph/rgw
+/src/cls/fifo                                   @ceph/rgw
+/src/cls/log                                    @ceph/rgw
+/src/cls/otp                                    @ceph/rgw
+/src/cls/queue                                  @ceph/rgw
+/src/cls/refcount                               @ceph/rgw
+/src/cls/rgw                                    @ceph/rgw
+/src/cls/rgw_gc                                 @ceph/rgw
+/src/cls/user                                   @ceph/rgw
+/src/cls/version                                @ceph/rgw
+/src/rgw                                        @ceph/rgw
+/src/s3select                                   @ceph/rgw
+/src/spawn                                      @ceph/rgw
+/src/test/cls_2pc_queue                         @ceph/rgw
+/src/test/cls_cmpomap                           @ceph/rgw
+/src/test/cls_otp                               @ceph/rgw
+/src/test/cls_queue                             @ceph/rgw
+/src/test/cls_refcount                          @ceph/rgw
+/src/test/cls_rgw                               @ceph/rgw
+/src/test/cls_rgw_gc                            @ceph/rgw
+/src/test/cls_version                           @ceph/rgw
+/src/test/rgw                                   @ceph/rgw
+/src/test/test_rgw*                             @ceph/rgw

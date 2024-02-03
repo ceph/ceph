@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef DB_STORE_H
-#define DB_STORE_H
+#pragma once
 
 #include <errno.h>
 #include <stdlib.h>
@@ -19,8 +18,9 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/ceph_context.h"
-#include "rgw_obj_manifest.h"
 #include "rgw_multi.h"
+
+#include "driver/rados/rgw_obj_manifest.h" // FIXME: subclass dependency
 
 namespace rgw { namespace store {
 
@@ -156,7 +156,7 @@ struct DBOpParams {
  * Difference with above structure is that all 
  * the fields are strings here to accommodate any
  * style identifiers used by backend db. By default
- * initialized with sqlitedb style, can be overriden
+ * initialized with sqlitedb style, can be overridden
  * using InitPrepareParams()
  *
  * These identifiers are used in prepare and bind statements
@@ -194,7 +194,6 @@ struct DBOpUserPrepareInfo {
   static constexpr const char* user_quota = ":user_quota";
   static constexpr const char* type = ":type";
   static constexpr const char* mfa_ids = ":mfa_ids";
-  static constexpr const char* assumed_role_arn = ":assumed_role_arn";
   static constexpr const char* user_attrs = ":user_attrs";
   static constexpr const char* user_ver = ":user_vers";
   static constexpr const char* user_ver_tag = ":user_ver_tag";
@@ -606,7 +605,7 @@ class DBOp {
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
     static constexpr std::string_view CreateObjectViewQ =
-      /* This query creats temporary view with entries from ObjectData table which have
+      /* This query creates temporary view with entries from ObjectData table which have
        * corresponding head object (i.e, with same ObjName, ObjInstance, ObjNS, ObjID)
        * in the Object table.
        *
@@ -712,8 +711,8 @@ class InsertUserOp : virtual public DBOp {
   private:
     /* For existing entires, -
      * (1) INSERT or REPLACE - it will delete previous entry and then
-     * inserts new one. Since it deletes previos enties, it will
-     * trigger all foriegn key cascade deletes or other triggers.
+     * inserts new one. Since it deletes previous entries, it will
+     * trigger all foreign key cascade deletes or other triggers.
      * (2) INSERT or UPDATE - this will set NULL values to unassigned
      * fields.
      * more info: https://code-examples.net/en/q/377728
@@ -726,10 +725,10 @@ class InsertUserOp : virtual public DBOp {
                            AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                            SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                            System, PlacementName, PlacementStorageClass, PlacementTags, \
-                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
+                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, \
                            UserAttrs, UserVersion, UserVersionTag) \
                           VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
 
   public:
     virtual ~InsertUserOp() {}
@@ -747,8 +746,8 @@ class InsertUserOp : virtual public DBOp {
           params.op.user.placement_tags, params.op.user.bucket_quota,
           params.op.user.temp_url_keys, params.op.user.user_quota,
           params.op.user.type, params.op.user.mfa_ids,
-          params.op.user.assumed_role_arn, params.op.user.user_attrs,
-          params.op.user.user_ver, params.op.user.user_ver_tag);
+          params.op.user.user_attrs, params.op.user.user_ver,
+          params.op.user.user_ver_tag);
     }
 
 };
@@ -1597,20 +1596,16 @@ class DB {
         RGWBucketInfo& info, rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,
         obj_version* pbucket_version);
     int create_bucket(const DoutPrefixProvider *dpp,
-        const RGWUserInfo& owner, rgw_bucket& bucket,
+        const rgw_user& owner, const rgw_bucket& bucket,
         const std::string& zonegroup_id,
         const rgw_placement_rule& placement_rule,
-        const std::string& swift_ver_location,
-        const RGWQuotaInfo * pquota_info,
-        std::map<std::string, bufferlist>& attrs,
-        RGWBucketInfo& info,
-        obj_version *pobjv,
+        const std::map<std::string, bufferlist>& attrs,
+        const std::optional<std::string>& swift_ver_location,
+        const std::optional<RGWQuotaInfo>& quota,
+        std::optional<ceph::real_time> creation_time,
         obj_version *pep_objv,
-        real_time creation_time,
-        rgw_bucket *pmaster_bucket,
-        uint32_t *pmaster_num_shards,
-        optional_yield y,
-        bool exclusive);
+        RGWBucketInfo& info,
+        optional_yield y);
 
     int next_bucket_id() { return ++max_bucket_id; };
 
@@ -1776,14 +1771,13 @@ class DB {
           rgw_obj_key end_marker;
           std::string ns;
           bool enforce_ns;
-          RGWAccessListFilter* access_list_filter;
+	  rgw::AccessListFilter access_list_filter;
           RGWBucketListNameFilter force_check_filter;
           bool list_versions;
 	  bool allow_unordered;
 
           Params() :
 	        enforce_ns(true),
-	        access_list_filter(nullptr),
 	        list_versions(false),
 	        allow_unordered(false)
 	        {}
@@ -2016,5 +2010,3 @@ struct db_get_obj_data {
 };
 
 } } // namespace rgw::store
-
-#endif

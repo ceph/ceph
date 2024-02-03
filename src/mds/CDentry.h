@@ -29,7 +29,6 @@
 #include "BatchOp.h"
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
-#include "Mutation.h"
 #include "SimpleLock.h"
 #include "LocalLockC.h"
 #include "ScrubHeader.h"
@@ -75,7 +74,6 @@ public:
       remote_d_type = d_type;
       inode = 0;
     }
-    void link_remote(CInode *in);
   };
 
 
@@ -87,23 +85,18 @@ public:
   static const int STATE_EVALUATINGSTRAY = (1<<4);
   static const int STATE_PURGINGPINNED =  (1<<5);
   static const int STATE_BOTTOMLRU =    (1<<6);
-  static const int STATE_UNLINKING =    (1<<7);
   // stray dentry needs notification of releasing reference
   static const int STATE_STRAY =	STATE_NOTIFYREF;
   static const int MASK_STATE_IMPORT_KEPT = STATE_BOTTOMLRU;
 
   // -- pins --
-  static const int PIN_INODEPIN =         1;  // linked inode is pinned
-  static const int PIN_FRAGMENTING =     -2;  // containing dir is refragmenting
-  static const int PIN_PURGING =          3;
-  static const int PIN_SCRUBPARENT =      4;
-  static const int PIN_WAITUNLINKSTATE  = 5;
+  static const int PIN_INODEPIN =     1;  // linked inode is pinned
+  static const int PIN_FRAGMENTING = -2;  // containing dir is refragmenting
+  static const int PIN_PURGING =      3;
+  static const int PIN_SCRUBPARENT =  4;
 
   static const unsigned EXPORT_NONCE = 1;
 
-  const static uint64_t WAIT_UNLINK_STATE  = (1<<0);
-  const static uint64_t WAIT_UNLINK_FINISH = (1<<1);
-  uint32_t replica_unlinking_ref = 0;
 
   CDentry(std::string_view n, __u32 h,
           mempool::mds_co::string alternate_name,
@@ -142,7 +135,6 @@ public:
     case PIN_FRAGMENTING: return "fragmenting";
     case PIN_PURGING: return "purging";
     case PIN_SCRUBPARENT: return "scrubparent";
-    case PIN_WAITUNLINKSTATE: return "waitunlinkstate";
     default: return generic_pin_name(p);
     }
   }
@@ -159,6 +151,8 @@ public:
   dentry_key_t key() {
     return dentry_key_t(last, name.c_str(), hash);
   }
+
+  bool check_corruption(bool load);
 
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
@@ -354,8 +348,8 @@ public:
   void remove_client_lease(ClientLease *r, Locker *locker);  // returns remaining mask (if any), and kicks locker eval_gathers
   void remove_client_leases(Locker *locker);
 
-  std::ostream& print_db_line_prefix(std::ostream& out) override;
-  void print(std::ostream& out) override;
+  std::ostream& print_db_line_prefix(std::ostream& out) const override;
+  void print(std::ostream& out) const override;
   void dump(ceph::Formatter *f) const;
 
   static void encode_remote(inodeno_t& ino, unsigned char d_type,
@@ -367,6 +361,7 @@ public:
 
   __u32 hash;
   snapid_t first, last;
+  bool corrupt_first_loaded = false; /* for Postgres corruption detection */
 
   elist<CDentry*>::item item_dirty, item_dir_dirty;
   elist<CDentry*>::item item_stray;
@@ -380,6 +375,8 @@ public:
 
   mempool::mds_co::map<client_t,ClientLease*> client_lease_map;
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;
+
+  ceph_tid_t reintegration_reqid = 0;
 
 
 protected:

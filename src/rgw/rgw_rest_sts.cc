@@ -80,7 +80,7 @@ WebTokenEngine::get_role_name(const string& role_arn) const
 }
 
 std::unique_ptr<rgw::sal::RGWOIDCProvider>
-WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const
+WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss, optional_yield y) const
 {
   string tenant = get_role_tenant(role_arn);
 
@@ -104,7 +104,7 @@ WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_a
   std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
   provider->set_arn(p_arn);
   provider->set_tenant(tenant);
-  auto ret = provider->get(dpp);
+  auto ret = provider->get(dpp, y);
   if (ret < 0) {
     return nullptr;
   }
@@ -248,7 +248,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     }
 
     string role_arn = s->info.args.get("RoleArn");
-    auto provider = get_provider(dpp, role_arn, iss);
+    auto provider = get_provider(dpp, role_arn, iss, y);
     if (! provider) {
       ldpp_dout(dpp, 0) << "Couldn't get oidc provider info using input iss" << iss << dendl;
       throw -EACCES;
@@ -309,8 +309,14 @@ std::string
 WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, optional_yield y) const
 {
   string cert_url;
-  string openidc_wellknown_url = iss + "/.well-known/openid-configuration";
+  string openidc_wellknown_url = iss;
   bufferlist openidc_resp;
+
+  if (openidc_wellknown_url.back() == '/') {
+    openidc_wellknown_url.pop_back();
+  }
+  openidc_wellknown_url.append("/.well-known/openid-configuration");
+
   RGWHTTPTransceiver openidc_req(cct, "GET", openidc_wellknown_url, &openidc_resp);
 
   //Headers
@@ -571,7 +577,7 @@ int RGWSTSGetSessionToken::verify_permission(optional_yield y)
                               s,
                               rgw::ARN(partition, service, "", s->user->get_tenant(), ""),
                               rgw::IAM::stsGetSessionToken)) {
-    ldpp_dout(this, 0) << "User does not have permssion to perform GetSessionToken" << dendl;
+    ldpp_dout(this, 0) << "User does not have permission to perform GetSessionToken" << dendl;
     return -EACCES;
   }
 
@@ -754,42 +760,34 @@ int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
   return rgw::auth::Strategy::apply(dpp, auth_registry.get_sts(), s, y);
 }
 
-void RGWHandler_REST_STS::rgw_sts_parse_input()
-{
-  if (post_body.size() > 0) {
-    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
+using op_generator = RGWOp*(*)();
+static const std::unordered_map<std::string_view, op_generator> op_generators = {
+  {"AssumeRole", []() -> RGWOp* {return new RGWSTSAssumeRole;}},
+  {"GetSessionToken", []() -> RGWOp* {return new RGWSTSGetSessionToken;}},
+  {"AssumeRoleWithWebIdentity", []() -> RGWOp* {return new RGWSTSAssumeRoleWithWebIdentity;}}
+};
 
-    if (post_body.find("Action") != string::npos) {
-      boost::char_separator<char> sep("&");
-      boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
-      for (const auto& t : tokens) {
-        auto pos = t.find("=");
-        if (pos != string::npos) {
-          s->info.args.append(t.substr(0,pos),
-                              url_decode(t.substr(pos+1, t.size() -1)));
-        }
-      }
-    }
+bool RGWHandler_REST_STS::action_exists(const req_state* s)
+{
+  if (s->info.args.exists("Action")) {
+    const std::string action_name = s->info.args.get("Action");
+    return op_generators.contains(action_name);
   }
-  auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
-  s->info.args.append("PayloadHash", payload_hash);
+  return false;
 }
 
 RGWOp *RGWHandler_REST_STS::op_post()
 {
-  rgw_sts_parse_input();
-
-  if (s->info.args.exists("Action"))    {
-    string action = s->info.args.get("Action");
-    if (action == "AssumeRole") {
-      return new RGWSTSAssumeRole;
-    } else if (action == "GetSessionToken") {
-      return new RGWSTSGetSessionToken;
-    } else if (action == "AssumeRoleWithWebIdentity") {
-      return new RGWSTSAssumeRoleWithWebIdentity;
+  if (s->info.args.exists("Action")) {
+    const std::string action_name = s->info.args.get("Action");
+    const auto action_it = op_generators.find(action_name);
+    if (action_it != op_generators.end()) {
+      return action_it->second();
     }
+    ldpp_dout(s, 10) << "unknown action '" << action_name << "' for STS handler" << dendl;
+  } else {
+    ldpp_dout(s, 10) << "missing action argument in STS handler" << dendl;
   }
-
   return nullptr;
 }
 
@@ -798,11 +796,7 @@ int RGWHandler_REST_STS::init(rgw::sal::Driver* driver,
                               rgw::io::BasicClient *cio)
 {
   s->dialect = "sts";
-
-  if (int ret = RGWHandler_REST_STS::init_from_header(s, RGWFormat::XML, true); ret < 0) {
-    ldpp_dout(s, 10) << "init_from_header returned err=" << ret <<  dendl;
-    return ret;
-  }
+  s->prot_flags = RGW_REST_STS;
 
   return RGWHandler_REST::init(driver, s, cio);
 }
@@ -813,48 +807,6 @@ int RGWHandler_REST_STS::authorize(const DoutPrefixProvider* dpp, optional_yield
     return RGW_Auth_STS::authorize(dpp, driver, auth_registry, s, y);
   }
   return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
-}
-
-int RGWHandler_REST_STS::init_from_header(req_state* s,
-                                          RGWFormat default_formatter,
-                                          bool configurable_format)
-{
-  string req;
-  string first;
-
-  s->prot_flags = RGW_REST_STS;
-
-  const char *p, *req_name;
-  if (req_name = s->relative_uri.c_str(); *req_name == '?') {
-    p = req_name;
-  } else {
-    p = s->info.request_params.c_str();
-  }
-
-  s->info.args.set(p);
-  s->info.args.parse(s);
-
-  /* must be called after the args parsing */
-  if (int ret = allocate_formatter(s, default_formatter, configurable_format); ret < 0)
-    return ret;
-
-  if (*req_name != '/')
-    return 0;
-
-  req_name++;
-
-  if (!*req_name)
-    return 0;
-
-  req = req_name;
-  int pos = req.find('/');
-  if (pos >= 0) {
-    first = req.substr(0, pos);
-  } else {
-    first = req;
-  }
-
-  return 0;
 }
 
 RGWHandler_REST*

@@ -35,6 +35,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/version.h"
+#include "common/win32/wstring.h"
 
 #include "global/global_init.h"
 
@@ -76,9 +77,26 @@ typedef struct {
 static_assert(sizeof(fd_context) <= 8,
               "fd_context exceeds DOKAN_FILE_INFO.Context size.");
 
-string get_path(LPCWSTR path_w) {
+string get_path(LPCWSTR path_w, bool normalize_case=true) {
   string path = to_string(path_w);
   replace(path.begin(), path.end(), '\\', '/');
+
+  if (normalize_case && !g_cfg->case_sensitive) {
+    if (g_cfg->convert_to_uppercase) {
+      std::transform(
+        path.begin(), path.end(), path.begin(),
+        [](unsigned char c){
+          return std::toupper(c);
+        });
+    } else {
+      std::transform(
+        path.begin(), path.end(), path.begin(),
+        [](unsigned char c){
+          return std::tolower(c);
+        });
+    }
+  }
+
   return path;
 }
 
@@ -111,7 +129,7 @@ static NTSTATUS WinCephCreateDirectory(
     return 0;
   }
 
-  int ret = ceph_mkdir(cmount, path.c_str(), 0755);
+  int ret = ceph_mkdir(cmount, path.c_str(), g_cfg->dir_mode);
   if (ret < 0) {
     dout(2) << __func__ << " " << path
             << ": ceph_mkdir failed. Error: " << ret << dendl;
@@ -166,13 +184,14 @@ static NTSTATUS WinCephCreateFile(
         return STATUS_OBJECT_NAME_COLLISION;
       case TRUNCATE_EXISTING:
         // open O_TRUNC & return 0
-        return do_open_file(path, O_CREAT | O_TRUNC | O_RDWR, 0755, fdc);
+        return do_open_file(path, O_CREAT | O_TRUNC | O_RDWR,
+                            g_cfg->file_mode, fdc);
       case OPEN_ALWAYS:
         // open & return STATUS_OBJECT_NAME_COLLISION
         if (!WRITE_ACCESS_REQUESTED(AccessMode))
           fdc->read_only = 1;
         if ((st = do_open_file(path, fdc->read_only ? O_RDONLY : O_RDWR,
-                               0755, fdc)))
+                               g_cfg->file_mode, fdc)))
           return st;
         return STATUS_OBJECT_NAME_COLLISION;
       case OPEN_EXISTING:
@@ -180,12 +199,13 @@ static NTSTATUS WinCephCreateFile(
         if (!WRITE_ACCESS_REQUESTED(AccessMode))
           fdc->read_only = 1;
         if ((st = do_open_file(path, fdc->read_only ? O_RDONLY : O_RDWR,
-                               0755, fdc)))
+                               g_cfg->file_mode, fdc)))
           return st;
         return 0;
       case CREATE_ALWAYS:
         // open O_TRUNC & return STATUS_OBJECT_NAME_COLLISION
-        if ((st = do_open_file(path, O_CREAT | O_TRUNC | O_RDWR, 0755, fdc)))
+        if ((st = do_open_file(path, O_CREAT | O_TRUNC | O_RDWR,
+                               g_cfg->file_mode, fdc)))
           return st;
         return STATUS_OBJECT_NAME_COLLISION;
       }
@@ -204,7 +224,7 @@ static NTSTATUS WinCephCreateFile(
         return 0;
       case OPEN_ALWAYS:
       case OPEN_EXISTING:
-        return do_open_file(path, O_RDONLY, 0755, fdc);
+        return do_open_file(path, O_RDONLY, g_cfg->file_mode, fdc);
       case CREATE_ALWAYS:
         return STATUS_OBJECT_NAME_COLLISION;
       }
@@ -220,18 +240,21 @@ static NTSTATUS WinCephCreateFile(
       if ((st = WinCephCreateDirectory(FileName, DokanFileInfo)))
         return st;
       // Dokan expects a file handle even when creating new directories.
-      return do_open_file(path, O_RDONLY, 0755, fdc);
+      return do_open_file(path, O_RDONLY, g_cfg->file_mode, fdc);
     }
     dout(20) << __func__ << " " << path << ". New file." << dendl;
     switch (CreationDisposition) {
       case CREATE_NEW:
         // create & return 0
-        return do_open_file(path, O_CREAT | O_RDWR | O_EXCL, 0755, fdc);
+        return do_open_file(path, O_CREAT | O_RDWR | O_EXCL,
+                            g_cfg->file_mode, fdc);
       case CREATE_ALWAYS:
         // create & return 0
-        return do_open_file(path, O_CREAT | O_TRUNC | O_RDWR, 0755, fdc);
+        return do_open_file(path, O_CREAT | O_TRUNC | O_RDWR,
+                            g_cfg->file_mode, fdc);
       case OPEN_ALWAYS:
-        return do_open_file(path, O_CREAT | O_RDWR, 0755, fdc);
+        return do_open_file(path, O_CREAT | O_RDWR,
+                            g_cfg->file_mode, fdc);
       case OPEN_EXISTING:
       case TRUNCATE_EXISTING:
         dout(2) << __func__ << " " << path << ": Not found." << dendl;
@@ -537,6 +560,11 @@ static NTSTATUS WinCephFindFiles(
     return cephfs_errno_to_ntstatus_map(ret);
   }
 
+  // TODO: retrieve the original case (e.g. using xattr) if configured
+  // to do so.
+  // TODO: provide aliases when case insensitive mounts cause collisions.
+  // For example, when having test.txt and Test.txt, the latter becomes
+  // TEST~1.txt
   WIN32_FIND_DATAW findData;
   int count = 0;
   while (1) {
@@ -788,14 +816,18 @@ static NTSTATUS WinCephGetVolumeInformation(
 {
   g_cfg->win_vol_name.copy(VolumeNameBuffer, VolumeNameSize);
   *VolumeSerialNumber = g_cfg->win_vol_serial;
-
   *MaximumComponentLength = g_cfg->max_path_len;
 
-  *FileSystemFlags = FILE_CASE_SENSITIVE_SEARCH |
-            FILE_CASE_PRESERVED_NAMES |
-            FILE_SUPPORTS_REMOTE_STORAGE |
-            FILE_UNICODE_ON_DISK |
-            FILE_PERSISTENT_ACLS;
+  *FileSystemFlags =
+    FILE_SUPPORTS_REMOTE_STORAGE |
+    FILE_UNICODE_ON_DISK |
+    FILE_PERSISTENT_ACLS;
+
+  if (g_cfg->case_sensitive) {
+    *FileSystemFlags |=
+      FILE_CASE_SENSITIVE_SEARCH |
+      FILE_CASE_PRESERVED_NAMES;
+  }
 
   wcscpy(FileSystemNameBuffer, L"Ceph");
   return 0;
@@ -1037,6 +1069,8 @@ boost::intrusive_ptr<CephContext> do_global_init(
 
 int main(int argc, const char** argv)
 {
+  SetConsoleOutputCP(CP_UTF8);
+
   if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)ConsoleHandler, TRUE)) {
     cerr << "Couldn't initialize console event handler." << std::endl;
     return -EINVAL;

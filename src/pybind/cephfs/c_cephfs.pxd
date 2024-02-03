@@ -36,6 +36,13 @@ cdef extern from "cephfs/libcephfs.h" nogil:
         size_t nr_snap_metadata
         snap_metadata *snap_metadata
 
+    cdef struct ceph_snapdiff_info:
+        pass
+
+    cdef struct ceph_snapdiff_entry_t:
+        dirent dir_entry
+        uint64_t snapid
+
     ctypedef void* rados_t
 
     const char *ceph_version(int *major, int *minor, int *patch)
@@ -111,6 +118,14 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     void ceph_seekdir(ceph_mount_info *cmount, ceph_dir_result *dirp, int64_t offset)
     int ceph_chdir(ceph_mount_info *cmount, const char *path)
     dirent * ceph_readdir(ceph_mount_info *cmount, ceph_dir_result *dirp)
+    int ceph_open_snapdiff(ceph_mount_info *cmount,
+                           const char *root_path,
+                           const char *rel_path,
+                           const char *snap1,
+                           const char *snap2,
+                           ceph_snapdiff_info *out)
+    int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out);
+    int ceph_close_snapdiff(ceph_snapdiff_info *snapdiff)
     int ceph_rmdir(ceph_mount_info *cmount, const char *path)
     const char* ceph_getcwd(ceph_mount_info *cmount)
     int ceph_sync_fs(ceph_mount_info *cmount)

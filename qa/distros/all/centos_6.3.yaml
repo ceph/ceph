@@ -1,2 +1,3 @@
 os_type: centos
 os_version: "6.3"
+ktype: distro

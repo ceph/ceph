@@ -76,7 +76,6 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
   dout(20) << dendl;
 
   auto fsmap = m->get_fsmap();
-  auto filesystems = fsmap.get_filesystems();
 
   std::vector<Filesystem> mirroring_enabled;
   std::vector<Filesystem> mirroring_disabled;
@@ -99,11 +98,11 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
       ++it;
     }
 
-    for (auto &filesystem : filesystems) {
-      auto fs = Filesystem{filesystem->fscid,
-                           std::string(filesystem->mds_map.get_fs_name())};
-      auto pool_id = filesystem->mds_map.get_metadata_pool();
-      auto &mirror_info = filesystem->mirror_info;
+    for (auto& [fscid, _fs] : std::as_const(fsmap)) {
+      auto& mds_map = _fs.get_mds_map();
+      auto fs = Filesystem{fscid, std::string(mds_map.get_fs_name())};
+      auto pool_id = mds_map.get_metadata_pool();
+      auto& mirror_info = _fs.get_mirror_info();
 
       if (!mirror_info.is_mirrored()) {
         auto it = m_filesystem_peers.find(fs);

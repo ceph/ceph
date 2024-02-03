@@ -20,6 +20,7 @@
 #include "msg/msg_types.h"
 #include "include/encoding.h"
 #include "include/utime.h"
+#include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/ceph_releases.h"
 #include "common/version.h"
@@ -74,7 +75,8 @@ public:
       decode(see_also, p);
       DECODE_FINISH(p);
     }
-    void dump(ceph::Formatter *f) const {
+    void dump(ceph::Formatter *f) const
+    {
       f->dump_string("name", name);
       f->dump_string("type", Option::type_to_str(
 		       static_cast<Option::type_t>(type)));
@@ -101,6 +103,23 @@ public:
 	f->dump_string("option", i);
       }
       f->close_section();
+    }
+    static void generate_test_instances(std::list<ModuleOption*>& ls)
+    {
+      ls.push_back(new ModuleOption);
+      ls.push_back(new ModuleOption);
+      ls.back()->name = "name";
+      ls.back()->type = Option::TYPE_STR;
+      ls.back()->level = Option::LEVEL_ADVANCED;
+      ls.back()->flags = Option::FLAG_RUNTIME;
+      ls.back()->default_value = "default_value";
+      ls.back()->min = "min";
+      ls.back()->max = "max";
+      ls.back()->enum_allowed.insert("enum_allowed");
+      ls.back()->desc = "desc";
+      ls.back()->long_desc = "long_desc";
+      ls.back()->tags.insert("tag");
+      ls.back()->see_also.insert("see_also");
     }
   };
 
@@ -139,7 +158,8 @@ public:
       return (name == rhs.name) && (can_run == rhs.can_run);
     }
 
-    void dump(ceph::Formatter *f) const {
+    void dump(ceph::Formatter *f) const 
+    {
       f->open_object_section("module");
       f->dump_string("name", name);
       f->dump_bool("can_run", can_run);
@@ -150,6 +170,16 @@ public:
       }
       f->close_section();
       f->close_section();
+    }
+
+    static void generate_test_instances(std::list<ModuleInfo*>& ls)
+    {
+      ls.push_back(new ModuleInfo);
+      ls.push_back(new ModuleInfo);
+      ls.back()->name = "name";
+      ls.back()->can_run = true;
+      ls.back()->error_string = "error_string";
+      ls.back()->module_options["module_option"] = ModuleOption();
     }
   };
 
@@ -209,6 +239,19 @@ public:
       }
       DECODE_FINISH(p);
     }
+    void dump(ceph::Formatter *f) const
+    {
+      f->dump_unsigned("gid", gid);
+      f->dump_string("name", name);
+      encode_json("available_modules", available_modules, f);
+      f->dump_unsigned("mgr_features", mgr_features);
+    }
+    static void generate_test_instances(std::list<StandbyInfo*>& ls)
+    {
+      ls.push_back(new StandbyInfo(1, "a", {}, 0));
+      ls.push_back(new StandbyInfo(2, "b", {}, 0));
+      ls.push_back(new StandbyInfo(3, "c", {}, 0));
+    }
 
     bool have_module(const std::string &module_name) const
     {
@@ -225,6 +268,10 @@ public:
   epoch_t epoch = 0;
   epoch_t last_failure_osd_epoch = 0;
 
+
+  static const uint64_t FLAG_DOWN = (1<<0);
+  uint64_t flags = 0;
+
   /// global_id of the ceph-mgr instance selected as a leader
   uint64_t active_gid = 0;
   /// server address reported by the leader once it is active
@@ -238,7 +285,7 @@ public:
   /// features
   uint64_t active_mgr_features = 0;
 
-  std::vector<entity_addrvec_t> clients; // for blocklist
+  std::multimap<std::string, entity_addrvec_t> clients; // for blocklist
 
   std::map<uint64_t, StandbyInfo> standbys;
 
@@ -256,6 +303,13 @@ public:
   // Map of module name to URI, indicating services exposed by
   // running modules on the active mgr daemon.
   std::map<std::string, std::string> services;
+
+  static MgrMap create_null_mgrmap() {
+    MgrMap null_map;
+    /* Use the largest epoch so it's always bigger than whatever the mgr has. */
+    null_map.epoch = std::numeric_limits<decltype(epoch)>::max();
+    return null_map;
+  }
 
   epoch_t get_epoch() const { return epoch; }
   epoch_t get_last_failure_osd_epoch() const { return last_failure_osd_epoch; }
@@ -394,7 +448,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(11, 6, bl);
+    ENCODE_START(13, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -408,14 +462,24 @@ public:
     encode(always_on_modules, bl);
     encode(active_mgr_features, bl);
     encode(last_failure_osd_epoch, bl);
-    encode(clients, bl, features);
+    std::vector<std::string> clients_names;
+    std::vector<entity_addrvec_t> clients_addrs;
+    for (const auto& i : clients) {
+      clients_names.push_back(i.first);
+      clients_addrs.push_back(i.second);
+    }
+    // The address vector needs to be encoded first to produce a
+    // backwards compatible messsage for older monitors.
+    encode(clients_addrs, bl, features);
+    encode(clients_names, bl, features);
+    encode(flags, bl);
     ENCODE_FINISH(bl);
     return;
   }
 
   void decode(ceph::buffer::list::const_iterator& p)
   {
-    DECODE_START(11, p);
+    DECODE_START(13, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -461,13 +525,37 @@ public:
       decode(last_failure_osd_epoch, p);
     }
     if (struct_v >= 11) {
-      decode(clients, p);
+      std::vector<entity_addrvec_t> clients_addrs;
+      decode(clients_addrs, p);
+      clients.clear();
+      if (struct_v >= 12) {
+	std::vector<std::string> clients_names;
+	decode(clients_names, p);
+	if (clients_names.size() != clients_addrs.size()) {
+	  throw ceph::buffer::malformed_input(
+	    "clients_names.size() != clients_addrs.size()");
+	}
+	auto cn = clients_names.begin();
+	auto ca = clients_addrs.begin();
+	for(; cn != clients_names.end(); ++cn, ++ca) {
+	  clients.emplace(*cn, *ca);
+	}
+      } else {
+	for (const auto& i : clients_addrs) {
+	  clients.emplace("", i);
+	}
+      }
+    }
+    if (struct_v >= 13) {
+      decode(flags, p);
     }
     DECODE_FINISH(p);
   }
 
-  void dump(ceph::Formatter *f) const {
+  void dump(ceph::Formatter *f) const
+  {
     f->dump_int("epoch", epoch);
+    f->dump_int("flags", flags);
     f->dump_int("active_gid", get_active_gid());
     f->dump_string("active_name", get_active_name());
     f->dump_object("active_addrs", active_addrs);
@@ -514,16 +602,20 @@ public:
       }
       f->close_section();
     }
+    f->close_section(); // always_on_modules
     f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
     f->open_array_section("active_clients");
-    for (const auto &c : clients) {
-      f->dump_object("client", c);
+    for (const auto& i : clients) {
+      f->open_object_section("client");
+      f->dump_string("name", i.first);
+      i.second.dump(f);
+      f->close_section();
     }
-    f->close_section();
-    f->close_section();
+    f->close_section(); // active_clients
   }
 
-  static void generate_test_instances(std::list<MgrMap*> &l) {
+  static void generate_test_instances(std::list<MgrMap*> &l)
+  {
     l.push_back(new MgrMap);
   }
 

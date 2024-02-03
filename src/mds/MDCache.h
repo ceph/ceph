@@ -129,6 +129,7 @@ static const int MDS_TRAVERSE_RDLOCK_PATH	= (1 << 7);
 static const int MDS_TRAVERSE_XLOCK_DENTRY	= (1 << 8);
 static const int MDS_TRAVERSE_RDLOCK_AUTHLOCK	= (1 << 9);
 static const int MDS_TRAVERSE_CHECK_LOCKCACHE	= (1 << 10);
+static const int MDS_TRAVERSE_WANT_INODE	= (1 << 11);
 
 
 // flags for predirty_journal_parents()
@@ -200,6 +201,19 @@ class MDCache {
 
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
+
+  void insert_taken_inos(inodeno_t ino) {
+    replay_taken_inos.insert(ino);
+  }
+  void clear_taken_inos(inodeno_t ino) {
+    replay_taken_inos.erase(ino);
+  }
+  bool test_and_clear_taken_inos(inodeno_t ino) {
+    return replay_taken_inos.erase(ino) != 0;
+  }
+  bool is_taken_inos_empty(void) {
+    return replay_taken_inos.empty();
+  }
 
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;
@@ -401,16 +415,16 @@ class MDCache {
     return active_requests.count(rid);
   }
   MDRequestRef request_get(metareqid_t rid);
-  void request_pin_ref(MDRequestRef& r, CInode *ref, std::vector<CDentry*>& trace);
-  void request_finish(MDRequestRef& mdr);
-  void request_forward(MDRequestRef& mdr, mds_rank_t mds, int port=0);
-  void dispatch_request(MDRequestRef& mdr);
-  void request_drop_foreign_locks(MDRequestRef& mdr);
-  void request_drop_non_rdlocks(MDRequestRef& r);
-  void request_drop_locks(MDRequestRef& r);
-  void request_cleanup(MDRequestRef& r);
+  void request_pin_ref(const MDRequestRef& r, CInode *ref, std::vector<CDentry*>& trace);
+  void request_finish(const MDRequestRef& mdr);
+  void request_forward(const MDRequestRef& mdr, mds_rank_t mds, int port=0);
+  void dispatch_request(const MDRequestRef& mdr);
+  void request_drop_foreign_locks(const MDRequestRef& mdr);
+  void request_drop_non_rdlocks(const MDRequestRef& r);
+  void request_drop_locks(const MDRequestRef& r);
+  void request_cleanup(const MDRequestRef& r);
   
-  void request_kill(MDRequestRef& r);  // called when session closes
+  void request_kill(const MDRequestRef& r);  // called when session closes
 
   // journal/snap helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
@@ -486,7 +500,7 @@ class MDCache {
   void add_rollback(metareqid_t reqid, mds_rank_t leader) {
     resolve_need_rollback[reqid] = leader;
   }
-  void finish_rollback(metareqid_t reqid, MDRequestRef& mdr);
+  void finish_rollback(metareqid_t reqid, const MDRequestRef& mdr);
 
   // ambiguous imports
   void add_ambiguous_import(dirfrag_t base, const std::vector<dirfrag_t>& bounds);
@@ -514,6 +528,7 @@ class MDCache {
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
   bool dump_inode(Formatter *f, uint64_t number);
+  void dump_dir(Formatter *f, CDir *dir, bool dentry_dump=false);
 
   void rejoin_start(MDSContext *rejoin_done_);
   void rejoin_gather_finish();
@@ -810,8 +825,13 @@ class MDCache {
    * dentry is encountered.
    * MDS_TRAVERSE_WANT_DENTRY: Caller wants tail dentry. Add a null dentry if
    * tail dentry does not exist. return 0 even tail dentry is null.
+   * MDS_TRAVERSE_WANT_INODE: Caller only wants target inode if it exists, or
+   * wants tail dentry if target inode does not exist and MDS_TRAVERSE_WANT_DENTRY
+   * is also set.
    * MDS_TRAVERSE_WANT_AUTH: Always forward request to auth MDS of target inode
    * or auth MDS of tail dentry (MDS_TRAVERSE_WANT_DENTRY is set).
+   * MDS_TRAVERSE_XLOCK_DENTRY: Caller wants to xlock tail dentry if MDS_TRAVERSE_WANT_INODE
+   * is not set or (MDS_TRAVERSE_WANT_INODE is set but target inode does not exist)
    *
    * @param pdnvec Data return parameter -- on success, contains a
    * vector of dentries. On failure, is either empty or contains the
@@ -825,14 +845,17 @@ class MDCache {
    * If it returns 2 the request has been forwarded, and again the requester
    * should unwind itself and back out.
    */
-  int path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
+  int path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 		    const filepath& path, int flags,
 		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr);
+
+  int maybe_request_forward_to_auth(const MDRequestRef& mdr, MDSContextFactory& cf,
+				    MDSCacheObject *p);
 
   CInode *cache_traverse(const filepath& path);
 
   void open_remote_dirfrag(CInode *diri, frag_t fg, MDSContext *fin);
-  CInode *get_dentry_inode(CDentry *dn, MDRequestRef& mdr, bool projected=false);
+  CInode *get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool projected=false);
 
   bool parallel_fetch(std::map<inodeno_t,filepath>& pathmap, std::set<inodeno_t>& missing);
   bool parallel_fetch_traverse_dir(inodeno_t ino, filepath& path, 
@@ -890,8 +913,8 @@ class MDCache {
   // -- namespace --
   void encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl);
   void decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::const_iterator& p);
-  void send_dentry_link(CDentry *dn, MDRequestRef& mdr);
-  void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr, bool unlinking=false);
+  void send_dentry_link(CDentry *dn, const MDRequestRef& mdr);
+  void send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestRef& mdr);
 
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSContext *c) {
     uncommitted_fragments.at(dirfrag).waiters.push_back(c);
@@ -953,7 +976,7 @@ class MDCache {
    */
   void enqueue_scrub(std::string_view path, std::string_view tag,
                      bool force, bool recursive, bool repair,
-		     Formatter *f, Context *fin);
+                     bool scrub_mdsdir, Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);
   void repair_dirfrag_stats(CDir *dir);
   void rdlock_dirfrags_stats(CInode *diri, MDSInternalContext *fin);
@@ -1134,11 +1157,10 @@ class MDCache {
   void handle_discover_reply(const cref_t<MDiscoverReply> &m);
   void handle_dentry_link(const cref_t<MDentryLink> &m);
   void handle_dentry_unlink(const cref_t<MDentryUnlink> &m);
-  void handle_dentry_unlink_ack(const cref_t<MDentryUnlinkAck> &m);
 
   int dump_cache(std::string_view fn, Formatter *f, double timeout);
 
-  void flush_dentry_work(MDRequestRef& mdr);
+  void flush_dentry_work(const MDRequestRef& mdr);
   /**
    * Resolve path to a dentry and pass it onto the ScrubStack.
    *
@@ -1147,10 +1169,10 @@ class MDCache {
    * this scrub (we won't block them on a whole scrub as it can take a very
    * long time)
    */
-  void enqueue_scrub_work(MDRequestRef& mdr);
-  void repair_inode_stats_work(MDRequestRef& mdr);
-  void repair_dirfrag_stats_work(MDRequestRef& mdr);
-  void rdlock_dirfrags_stats_work(MDRequestRef& mdr);
+  void enqueue_scrub_work(const MDRequestRef& mdr);
+  void repair_inode_stats_work(const MDRequestRef& mdr);
+  void repair_dirfrag_stats_work(const MDRequestRef& mdr);
+  void rdlock_dirfrags_stats_work(const MDRequestRef& mdr);
 
   ceph::unordered_map<inodeno_t,CInode*> inode_map;  // map of head inodes by ino
   std::map<vinodeno_t, CInode*> snap_inode_map;  // map of snap inodes by ino
@@ -1236,6 +1258,8 @@ class MDCache {
   StrayManager stray_manager;
 
  private:
+  std::set<inodeno_t> replay_taken_inos; // the inos have been taken when replaying
+
   // -- fragmenting --
   struct ufragment {
     ufragment() {}
@@ -1263,6 +1287,23 @@ class MDCache {
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins = 0;
     int num_remote_waiters = 0;	// number of remote authpin waiters
+  };
+
+  enum KILL_SHUTDOWN_AT {
+    SHUTDOWN_NULL,
+    SHUTDOWN_START,
+    SHUTDOWN_POSTTRIM,
+    SHUTDOWN_POSTONEEXPORT,
+    SHUTDOWN_POSTALLEXPORTS,
+    SHUTDOWN_SESSIONTERMINATE,
+    SHUTDOWN_SUBTREEMAP,
+    SHUTDOWN_TRIMALL,
+    SHUTDOWN_STRAYPUT,
+    SHUTDOWN_LOGCAP,
+    SHUTDOWN_EMPTYSUBTREES,
+    SHUTDOWN_MYINREMOVAL,
+    SHUTDOWN_GLOBALSNAPREALMREMOVAL,
+    SHUTDOWN_UNUSED
   };
 
   typedef std::map<dirfrag_t,fragment_info_t>::iterator fragment_info_iterator;
@@ -1306,14 +1347,14 @@ class MDCache {
 
   bool can_fragment(CInode *diri, const std::vector<CDir*>& dirs);
   void fragment_freeze_dirs(const std::vector<CDir*>& dirs);
-  void fragment_mark_and_complete(MDRequestRef& mdr);
-  void fragment_frozen(MDRequestRef& mdr, int r);
+  void fragment_mark_and_complete(const MDRequestRef& mdr);
+  void fragment_frozen(const MDRequestRef& mdr, int r);
   void fragment_unmark_unfreeze_dirs(const std::vector<CDir*>& dirs);
   void fragment_drop_locks(fragment_info_t &info);
   void fragment_maybe_finish(const fragment_info_iterator& it);
-  void dispatch_fragment_dir(MDRequestRef& mdr);
-  void _fragment_logged(MDRequestRef& mdr);
-  void _fragment_stored(MDRequestRef& mdr);
+  void dispatch_fragment_dir(const MDRequestRef& mdr);
+  void _fragment_logged(const MDRequestRef& mdr);
+  void _fragment_stored(const MDRequestRef& mdr);
   void _fragment_committed(dirfrag_t f, const MDRequestRef& mdr);
   void _fragment_old_purged(dirfrag_t f, int bits, const MDRequestRef& mdr);
 
@@ -1361,23 +1402,25 @@ class MDCache {
   std::thread upkeeper;
   ceph::mutex upkeep_mutex = ceph::make_mutex("MDCache::upkeep_mutex");
   ceph::condition_variable upkeep_cvar;
-  time upkeep_last_trim = time::min();
-  time upkeep_last_release = time::min();
+  time upkeep_last_trim = clock::zero();
+  time upkeep_last_release = clock::zero();
   std::atomic<bool> upkeep_trim_shutdown{false};
+
+  uint64_t kill_shutdown_at = 0;
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {
   MDCache *cache;
   MDRequestRef mdr;
  public:
-  C_MDS_RetryRequest(MDCache *c, MDRequestRef& r) :
+  C_MDS_RetryRequest(MDCache *c, const MDRequestRef& r) :
     MDSInternalContext(c->mds), cache(c), mdr(r) {}
   void finish(int r) override;
 };
 
 class CF_MDS_RetryRequestFactory : public MDSContextFactory {
 public:
-  CF_MDS_RetryRequestFactory(MDCache *cache, MDRequestRef &mdr, bool dl) :
+  CF_MDS_RetryRequestFactory(MDCache *cache, const MDRequestRef& mdr, bool dl) :
     mdcache(cache), mdr(mdr), drop_locks(dl) {}
   MDSContext *build() override;
 private:

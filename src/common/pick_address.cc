@@ -14,8 +14,15 @@
 
 #include "common/pick_address.h"
 
+#include <bitset>
 #include <netdb.h>
 #include <netinet/in.h>
+#ifdef _WIN32
+#include <ws2ipdef.h>
+#else
+#include <arpa/inet.h> // inet_pton()
+#include <net/if.h> // IFF_UP
+#endif
 #include <string>
 #include <string.h>
 #include <vector>
@@ -354,10 +361,13 @@ int pick_addresses(
   addrs->v.clear();
 
   unsigned addrt = (flags & (CEPH_PICK_ADDRESS_PUBLIC |
+			     CEPH_PICK_ADDRESS_PUBLIC_BIND |
 			     CEPH_PICK_ADDRESS_CLUSTER));
-  if (addrt == 0 ||
-      addrt == (CEPH_PICK_ADDRESS_PUBLIC |
-		CEPH_PICK_ADDRESS_CLUSTER)) {
+  // TODO: move to std::popcount when it's available for all release lines
+  // we are interested in (quincy was a blocker at the time of writing)
+  if (std::bitset<sizeof(addrt)*CHAR_BIT>(addrt).count() != 1) {
+    // these flags are mutually exclusive and one of them must be
+    // always set (in other words: it's mode selection).
     return -EINVAL;
   }
   unsigned msgrv = flags & (CEPH_PICK_ADDRESS_MSGR1 |
@@ -400,6 +410,13 @@ int pick_addresses(
     networks = cct->_conf.get_val<std::string>("public_network");
     interfaces =
       cct->_conf.get_val<std::string>("public_network_interface");
+  } else if (addrt & CEPH_PICK_ADDRESS_PUBLIC_BIND) {
+    addr = cct->_conf.get_val<entity_addr_t>("public_bind_addr");
+    // XXX: we don't support _network nor _network_interface for
+    // the public_bind addrs yet.
+    if (addr.is_blank_ip()) {
+      return -ENOENT;
+    }
   } else {
     addr = cct->_conf.get_val<entity_addr_t>("cluster_addr");
     networks = cct->_conf.get_val<std::string>("cluster_network");
@@ -620,3 +637,22 @@ int get_iface_numa_node(
   return r;
 }
 
+bool is_addr_in_subnet(
+  CephContext *cct,
+  const std::string &networks,
+  const std::string &addr)
+{
+  const auto nets = get_str_list(networks);
+  ceph_assert(!nets.empty());
+  const auto &net = nets.front();
+  struct ifaddrs ifa;
+  unsigned ipv = CEPH_PICK_ADDRESS_IPV4;
+  struct sockaddr_in public_addr;
+
+  ifa.ifa_next = nullptr;
+  ifa.ifa_addr = (struct sockaddr*)&public_addr;
+  public_addr.sin_family = AF_INET;
+  inet_pton(AF_INET, addr.c_str(), &public_addr.sin_addr);
+
+  return matches_with_net(cct, ifa, net, ipv);
+}

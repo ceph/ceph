@@ -85,15 +85,13 @@ def get_radosgw_endpoint():
     port = [i for i in x if ':' in i][0].split(':')[1]
     log.info('radosgw port: %s' % port)
     proto = "http"
-    hostname = 'localhost'
+    hostname = '127.0.0.1'
 
     if port == '443':
         proto = "https"
-        out = exec_cmd('hostname')
-        hostname = get_cmd_output(out)
-        hostname = hostname + ".front.sepia.ceph.com"
 
-    endpoint = proto + "://" + hostname + ":" + port
+    endpoint = hostname
+
     log.info("radosgw endpoint is: %s", endpoint)
     return endpoint, proto
 
@@ -156,16 +154,16 @@ def main():
     create_s3cmd_config(s3cmd_config_path, proto)
 
     # create a bucket
-    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --host=%s mb s3://%s'
+    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --no-check-hostname --host=%s mb s3://%s'
             % (ACCESS_KEY, SECRET_KEY, s3cmd_config_path, endpoint, BUCKET_NAME))
 
     # put an object in the bucket
-    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --host=%s put %s s3://%s'
+    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --no-check-hostname --host=%s put %s s3://%s'
             % (ACCESS_KEY, SECRET_KEY, s3cmd_config_path, endpoint, outfile, BUCKET_NAME))
 
     # get object from bucket
     get_file_path = pwd + '/' + GET_FILE_NAME
-    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --host=%s get s3://%s/%s %s --force'
+    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --no-check-hostname --host=%s get s3://%s/%s %s --force'
             % (ACCESS_KEY, SECRET_KEY, s3cmd_config_path, endpoint, BUCKET_NAME, FILE_NAME, get_file_path))
 
     # get info of object
@@ -186,7 +184,7 @@ def main():
     # list the files in the cache dir for troubleshooting
     out = exec_cmd('ls -l %s' % (cache_dir))
     # get name of cached object and check if it exists in the cache
-    out = exec_cmd('find %s -name "*%s*"' % (cache_dir, cached_object_name))
+    out = exec_cmd('find %s -name "*%s1"' % (cache_dir, cached_object_name))
     cached_object_path = get_cmd_output(out)
     log.debug("Path of file in datacache is: %s", cached_object_path)
     out = exec_cmd('basename %s' % (cached_object_path))
@@ -204,7 +202,7 @@ def main():
     # remove datacache dir
     #cmd = exec_cmd('rm -rf %s' % (cache_dir))
     #log.debug("RGW Datacache dir deleted")
-    #^ commenting for future refrence - the work unit will continue running tests and if the cache_dir is removed
+    #^ commenting for future reference - the work unit will continue running tests and if the cache_dir is removed
     #  all the writes to cache will fail with errno 2 ENOENT No such file or directory.
 
 main()

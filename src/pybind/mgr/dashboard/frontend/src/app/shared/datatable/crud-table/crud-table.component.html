@@ -1,10 +1,48 @@
+<ul class="nav nav-tabs"
+    *ngIf="tabs">
+  <li class="nav-item"
+      *ngFor="let tab of tabs; keyvalue">
+    <a class="nav-link"
+       [routerLink]="tab.url"
+       routerLinkActive="active"
+       ariaCurrentWhenActive="page"
+       [routerLinkActiveOptions]="{exact: true}"
+       i18n>{{tab.name}}</a>
+  </li>
+</ul>
+
 <ng-container *ngIf="meta">
   <cd-table
-    [data]="data$ | async"
-    [columns]="meta.table.columns"
-    [columnMode]="meta.table.columnMode"
-    [toolHeader]="meta.table.toolHeader"
-  ></cd-table>
+      [data]="data$ | async"
+      [columns]="meta.table.columns"
+      [columnMode]="meta.table.columnMode"
+      (setExpandedRow)="setExpandedRow($event)"
+      [hasDetails]="meta.detail_columns.length > 0"
+      [selectionType]="meta.table.selectionType"
+      (updateSelection)="updateSelection($event)"
+      [toolHeader]="meta.table.toolHeader">
+    <div class="table-actions btn-toolbar">
+      <cd-table-actions [permission]="permission"
+                        [selection]="selection"
+                        class="btn-group"
+                        id="crud-table-actions"
+                        [tableActions]="meta.actions">
+      </cd-table-actions>
+    </div>
+    <ng-container *ngIf="expandedRow && meta.detail_columns.length > 0"
+                  cdTableDetail>
+      <table class="table table-striped table-bordered">
+        <tbody>
+          <tr *ngFor="let column of meta.detail_columns">
+            <td i18n
+                class="bold">{{ column }}</td>
+            <td> {{ expandedRow[column] }} </td>
+          </tr>
+        </tbody>
+      </table>
+    </ng-container>
+
+  </cd-table>
 </ng-container>
 
 <ng-template #badgeDictTpl
@@ -13,4 +51,26 @@
     <span class="badge badge-background-primary" >{{ instance.key }}: {{ instance.value }}</span>
     <ng-container *ngIf="!isLast">&nbsp;</ng-container>
   </span>
+</ng-template>
+
+<ng-template #dateTpl
+             let-value="value">
+  <span>{{ value | cdDate }}</span>
+</ng-template>
+
+<ng-template #durationTpl
+             let-value="value">
+  <span>{{ value | duration }}</span>
+</ng-template>
+
+<ng-template #exportDataModalTpl>
+  <div class="d-flex flex-column align-items-center w-100 gap-3">
+    <textarea readonly
+              class="form-control w-100 bg-light height-400"
+              id="authExportArea">{{ modalState.authExportData }}</textarea>
+    <cd-copy-2-clipboard-button class="align-self-end"
+                                source="authExportArea">
+
+    </cd-copy-2-clipboard-button>
+  </div>
 </ng-template>

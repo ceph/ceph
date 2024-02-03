@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable } from 'rxjs';
+import { Observable, Subscription, timer } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
@@ -10,34 +10,52 @@ import {
   AlertmanagerNotification,
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
-import { SettingsService } from './settings.service';
+import moment from 'moment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class PrometheusService {
+  timerGetPrometheusDataSub: Subscription;
+  timerTime = 30000;
+  readonly lastHourDateObject = {
+    start: moment().unix() - 3600,
+    end: moment().unix(),
+    step: 14
+  };
   private baseURL = 'api/prometheus';
   private settingsKey = {
-    alertmanager: 'api/settings/alertmanager-api-host',
-    prometheus: 'api/settings/prometheus-api-host'
+    alertmanager: 'ui-api/prometheus/alertmanager-api-host',
+    prometheus: 'ui-api/prometheus/prometheus-api-host'
   };
+  private settings: { [url: string]: string } = {};
 
-  constructor(private http: HttpClient, private settingsService: SettingsService) {}
+  constructor(private http: HttpClient) {}
+
+  unsubscribe() {
+    if (this.timerGetPrometheusDataSub) {
+      this.timerGetPrometheusDataSub.unsubscribe();
+    }
+  }
+
+  getPrometheusData(params: any): any {
+    return this.http.get<any>(`${this.baseURL}/data`, { params });
+  }
 
   ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
-    this.settingsService.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
+    this.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
   }
 
   disableAlertmanagerConfig(): void {
-    this.settingsService.disableSetting(this.settingsKey.alertmanager);
+    this.disableSetting(this.settingsKey.alertmanager);
   }
 
   ifPrometheusConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
-    this.settingsService.ifSettingConfigured(this.settingsKey.prometheus, fn, elseFn);
+    this.ifSettingConfigured(this.settingsKey.prometheus, fn, elseFn);
   }
 
   disablePrometheusConfig(): void {
-    this.settingsService.disableSetting(this.settingsKey.prometheus);
+    this.disableSetting(this.settingsKey.prometheus);
   }
 
   getAlerts(params = {}): Observable<AlertmanagerAlert[]> {
@@ -78,5 +96,99 @@ export class PrometheusService {
       notification && notification.id ? notification.id : 'last'
     }`;
     return this.http.get<AlertmanagerNotification[]>(url);
+  }
+
+  ifSettingConfigured(url: string, fn: (value?: string) => void, elseFn?: () => void): void {
+    const setting = this.settings[url];
+    if (setting === undefined) {
+      this.http.get(url).subscribe(
+        (data: any) => {
+          this.settings[url] = this.getSettingsValue(data);
+          this.ifSettingConfigured(url, fn, elseFn);
+        },
+        (resp) => {
+          if (resp.status !== 401) {
+            this.settings[url] = '';
+          }
+        }
+      );
+    } else if (setting !== '') {
+      fn(setting);
+    } else {
+      if (elseFn) {
+        elseFn();
+      }
+    }
+  }
+
+  // Easiest way to stop reloading external content that can't be reached
+  disableSetting(url: string) {
+    this.settings[url] = '';
+  }
+
+  private getSettingsValue(data: any): string {
+    return data.value || data.instance || '';
+  }
+
+  getPrometheusQueriesData(
+    selectedTime: any,
+    queries: any,
+    queriesResults: any,
+    checkNan?: boolean
+  ) {
+    this.ifPrometheusConfigured(() => {
+      if (this.timerGetPrometheusDataSub) {
+        this.timerGetPrometheusDataSub.unsubscribe();
+      }
+      this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
+        selectedTime = this.updateTimeStamp(selectedTime);
+
+        for (const queryName in queries) {
+          if (queries.hasOwnProperty(queryName)) {
+            const query = queries[queryName];
+            this.getPrometheusData({
+              params: encodeURIComponent(query),
+              start: selectedTime['start'],
+              end: selectedTime['end'],
+              step: selectedTime['step']
+            }).subscribe((data: any) => {
+              if (data.result.length) {
+                queriesResults[queryName] = data.result[0].values;
+              } else {
+                queriesResults[queryName] = [];
+              }
+              if (
+                queriesResults[queryName] !== undefined &&
+                queriesResults[queryName] !== '' &&
+                checkNan
+              ) {
+                queriesResults[queryName].forEach((valueArray: string[]) => {
+                  if (valueArray.includes('NaN')) {
+                    const index = valueArray.indexOf('NaN');
+                    if (index !== -1) {
+                      valueArray[index] = '0';
+                    }
+                  }
+                });
+              }
+            });
+          }
+        }
+      });
+    });
+    return queriesResults;
+  }
+
+  private updateTimeStamp(selectedTime: any): any {
+    let formattedDate = {};
+    let secondsAgo = selectedTime['end'] - selectedTime['start'];
+    const date: number = moment().unix() - secondsAgo;
+    const dateNow: number = moment().unix();
+    formattedDate = {
+      start: date,
+      end: dateNow,
+      step: selectedTime['step']
+    };
+    return formattedDate;
   }
 }

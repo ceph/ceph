@@ -7,6 +7,7 @@ export class PrometheusAlertLabels {
 
 class Annotations {
   description: string;
+  summary: string;
 }
 
 class CommonAlertmanagerAlert {

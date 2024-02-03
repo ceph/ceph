@@ -422,7 +422,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   std::string_view pin_name(int p) const override;
 
-  std::ostream& print_db_line_prefix(std::ostream& out) override;
+  std::ostream& print_db_line_prefix(std::ostream& out) const override;
 
   const scrub_info_t *scrub_info() const {
     if (!scrub_infop)
@@ -656,6 +656,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(ino()); }
   bool is_base() const { return MDS_INO_IS_BASE(ino()); }
   bool is_system() const { return ino() < MDS_INO_SYSTEM_BASE; }
+  bool is_lost_and_found() const { return ino() == CEPH_INO_LOST_AND_FOUND; }
   bool is_normal() const { return !(is_base() || is_system() || is_stray()); }
   bool is_file() const    { return get_inode()->is_file(); }
   bool is_symlink() const { return get_inode()->is_symlink(); }
@@ -1030,7 +1031,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
            state_test(STATE_RANDEPHEMERALPIN);
   }
 
-  void print(std::ostream& out) override;
+  void print(std::ostream& out) const override;
   void dump(ceph::Formatter *f, int flags = DUMP_DEFAULT) const;
 
   /**

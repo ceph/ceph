@@ -27,6 +27,15 @@ options:
   default: 4_K
   services:
   - mon
+- name: osd_pool_default_crimson
+  type: bool
+  level: advanced
+  desc: Create pools by default with FLAG_CRIMSON
+  default: false
+  services :
+  - mon
+  flags:
+  - runtime
 - name: mon_max_pool_pg_num
   type: uint
   level: advanced
@@ -1083,7 +1092,7 @@ options:
   default: true
   services:
   - mon
-# compact leveldb on ceph-mon start
+# compact RocksDB on ceph-mon start
 - name: mon_compact_on_start
   type: bool
   level: advanced
@@ -1095,7 +1104,7 @@ options:
     monitor database and improve the performance of it if the regular
     compaction fails to work.
   with_legacy: true
-# trigger leveldb compaction on bootstrap
+# trigger RocksDB compaction on bootstrap
 - name: mon_compact_on_bootstrap
   type: bool
   level: advanced

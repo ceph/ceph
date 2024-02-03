@@ -547,6 +547,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "Show the top 10 busiest hosts by cpu",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "percent"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -599,7 +608,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -633,6 +642,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "Top 10 hosts by network load",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "Bps"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -685,7 +703,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",

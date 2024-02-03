@@ -308,7 +308,8 @@ def parse_cmdargs(args=None, target='') -> Tuple[argparse.ArgumentParser,
     parser.add_argument('--cluster', help='cluster name')
 
     parser.add_argument('--admin-daemon', dest='admin_socket',
-                        help='submit admin-socket commands (\"help\" for help)')
+                        help='submit admin-socket command (e.g. "help\" for' \
+                        'a list of available commands)')
 
     parser.add_argument('-s', '--status', action='store_true',
                         help='show cluster status')
@@ -1309,7 +1310,7 @@ def main():
         if final_e:
             raise final_e
 
-    # Block until command completion (currently scrub and deep_scrub only)
+    # Block until command completion (currently scrub and deep scrub only)
     if block:
         wait(childargs, waitdata)
 

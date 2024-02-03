@@ -10,6 +10,7 @@ tasks:
       dns-name: s3.
     client.1:
       dns-s3website-name: s3-website.
+- tox: [client.0]
 - s3tests:
     client.0:
       rgw_server: client.0

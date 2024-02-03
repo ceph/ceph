@@ -29,6 +29,7 @@ from mgr_util import ServerConfigException, build_url, \
 from . import mgr
 from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
+from .services import nvmeof_cli  # noqa # pylint: disable=unused-import
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
 from .services.rgw_client import configure_rgw_credentials
@@ -178,9 +179,9 @@ class CherryPyConfig(object):
             context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             context.load_cert_chain(cert_fname, pkey_fname)
             if sys.version_info >= (3, 7):
-                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                context.minimum_version = ssl.TLSVersion.TLSv1_3
             else:
-                context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
+                context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_2
 
             config['server.ssl_module'] = 'builtin'
             config['server.ssl_certificate'] = cert_fname
@@ -261,7 +262,7 @@ class CherryPyConfig(object):
                 resp_head['Access-Control-Allow-Origin'] = req_header_origin_url
             ac_method = req_head.get('Access-Control-Request-Method', None)
 
-            allowed_methods = ['GET', 'POST']
+            allowed_methods = ['GET', 'POST', 'PUT']
             allowed_headers = [
                 'Content-Type',
                 'Authorization',

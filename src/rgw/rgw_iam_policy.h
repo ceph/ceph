@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_IAM_POLICY_H
-#define CEPH_RGW_IAM_POLICY_H
+#pragma once
 
 #include <bitset>
 #include <chrono>
@@ -18,8 +17,6 @@
 #include <boost/thread/shared_mutex.hpp>
 #include <boost/variant.hpp>
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include "common/ceph_time.h"
@@ -144,8 +141,14 @@ static constexpr std::uint64_t stsGetSessionToken = iamAll + 3;
 static constexpr std::uint64_t stsTagSession = iamAll + 4;
 static constexpr std::uint64_t stsAll = iamAll + 5;
 
+static constexpr std::uint64_t snsGetTopicAttributes = stsAll + 1;
+static constexpr std::uint64_t snsDeleteTopic = stsAll + 2;
+static constexpr std::uint64_t snsPublish = stsAll + 3;
+static constexpr std::uint64_t snsSetTopicAttributes = stsAll + 4;
+static constexpr std::uint64_t snsAll = stsAll + 5;
+
 static constexpr std::uint64_t s3Count = s3All;
-static constexpr std::uint64_t allCount = stsAll + 1;
+static constexpr std::uint64_t allCount = snsAll + 1;
 
 using Action_t = std::bitset<allCount>;
 using NotAction_t = Action_t;
@@ -167,6 +170,7 @@ static const Action_t None(0);
 static const Action_t s3AllValue = set_cont_bits<allCount>(0,s3All);
 static const Action_t iamAllValue = set_cont_bits<allCount>(s3All+1,iamAll);
 static const Action_t stsAllValue = set_cont_bits<allCount>(iamAll+1,stsAll);
+static const Action_t snsAllValue = set_cont_bits<allCount>(stsAll + 1, snsAll);
 static const Action_t allValue = set_cont_bits<allCount>(0,allCount);
 
 namespace {
@@ -407,7 +411,7 @@ struct Condition {
     for (auto itr = it.first; itr != it.second; itr++) {
       bool matched = false;
       for (const auto& d : v) {
-        if (std::forward<F>(f)(itr->second, d)) {
+        if (f(itr->second, d)) {
 	        matched = true;
       }
      }
@@ -422,7 +426,7 @@ struct Condition {
 		      const std::vector<std::string>& v) {
     for (auto itr = it.first; itr != it.second; itr++) {
       for (const auto& d : v) {
-        if (std::forward<F>(f)(itr->second, d)) {
+        if (f(itr->second, d)) {
 	        return true;
       }
      }
@@ -439,13 +443,13 @@ struct Condition {
     }
 
     for (const auto& d : v) {
-      auto xd = std::forward<X>(x)(d);
+      auto xd = x(d);
       if (!xd) {
-	continue;
+        continue;
       }
 
-      if (std::forward<F>(f)(*xc, *xd)) {
-	return true;
+      if (f(*xc, *xd)) {
+        return true;
       }
     }
     return false;
@@ -580,5 +584,3 @@ bool is_public(const Policy& p);
 
 }
 }
-
-#endif

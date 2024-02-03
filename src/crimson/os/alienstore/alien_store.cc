@@ -57,10 +57,11 @@ public:
   }
 
   void finish(int) final {
-    return seastar::alien::submit_to(alien, cpuid, [this] {
-      alien_done.set_value();
+    std::ignore = seastar::alien::submit_to(alien, cpuid,
+        [&_alien_done=this->alien_done] {
+      _alien_done.set_value();
       return seastar::make_ready_future<>();
-    }).wait();
+    });
   }
 };
 }
@@ -202,7 +203,6 @@ AlienStore::list_objects(CollectionRef ch,
   assert(tp);
   return do_with_op_gate(std::vector<ghobject_t>(), ghobject_t(),
                          [=, this] (auto &objects, auto &next) {
-    objects.reserve(limit);
     return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
       [=, this, &objects, &next] {
       auto c = static_cast<AlienCollection*>(ch.get());
@@ -268,7 +268,7 @@ seastar::future<CollectionRef> AlienStore::open_collection(const coll_t& cid)
   });
 }
 
-seastar::future<std::vector<coll_t>> AlienStore::list_collections()
+seastar::future<std::vector<coll_core_t>> AlienStore::list_collections()
 {
   logger().debug("{}", __func__);
   assert(tp);
@@ -276,9 +276,14 @@ seastar::future<std::vector<coll_t>> AlienStore::list_collections()
   return do_with_op_gate(std::vector<coll_t>{}, [this] (auto &ls) {
     return tp->submit([this, &ls] {
       return store->list_collections(ls);
-    }).then([&ls] (int r) {
+    }).then([&ls] (int r) -> seastar::future<std::vector<coll_core_t>> {
       assert(r == 0);
-      return seastar::make_ready_future<std::vector<coll_t>>(std::move(ls));
+      std::vector<coll_core_t> ret;
+      ret.resize(ls.size());
+      std::transform(
+        ls.begin(), ls.end(), ret.begin(),
+        [](auto p) { return std::make_pair(p, NULL_CORE); });
+      return seastar::make_ready_future<std::vector<coll_core_t>>(std::move(ret));
     });
   });
 }

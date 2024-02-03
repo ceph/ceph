@@ -9,6 +9,8 @@
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/recovery_backend.h"
 #include "crimson/common/type_helpers.h"
+#include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/pg.h"
 
 namespace crimson::osd {
 class PG;
@@ -95,16 +97,6 @@ private:
 
 class BackfillRecovery final : public BackgroundRecoveryT<BackfillRecovery> {
 public:
-  class BackfillRecoveryPipeline {
-    struct Process : OrderedExclusivePhaseT<Process> {
-      static constexpr auto type_name = "BackfillRecovery::PGPipeline::process";
-    } process;
-    friend class BackfillRecovery;
-    template <class T>
-    friend class PeeringEvent;
-    friend class LocalPeeringEvent;
-    friend class RemotePeeringEvent;
-  };
 
   template <class EventT>
   BackfillRecovery(
@@ -113,18 +105,18 @@ public:
     epoch_t epoch_started,
     const EventT& evt);
 
-  static BackfillRecoveryPipeline &bp(PG &pg);
   PipelineHandle& get_handle() { return handle; }
 
   std::tuple<
     OperationThrottler::BlockingEvent,
-    BackfillRecoveryPipeline::Process::BlockingEvent
+    PGPeeringPipeline::Process::BlockingEvent
   > tracking_events;
 
 private:
   boost::intrusive_ptr<const boost::statechart::event_base> evt;
   PipelineHandle handle;
 
+  static PGPeeringPipeline &peering_pp(PG &pg);
   interruptible_future<bool> do_recovery() override;
 };
 

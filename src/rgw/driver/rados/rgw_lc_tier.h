@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_LC_TIER_H
-#define CEPH_RGW_LC_TIER_H
+#pragma once
 
 #include "rgw_lc.h"
 #include "rgw_rest_conn.h"
@@ -50,5 +49,3 @@ struct RGWLCCloudTierCtx {
 
 /* Transition object to cloud endpoint */
 int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::string>& cloud_targets);
-
-#endif

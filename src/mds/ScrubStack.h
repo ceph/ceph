@@ -101,6 +101,8 @@ public:
 
   void dispatch(const cref_t<Message> &m);
 
+  bool remove_inode_if_stacked(CInode *in);
+
   MDCache *mdcache;
 
 protected:

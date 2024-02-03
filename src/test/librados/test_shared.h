@@ -21,7 +21,7 @@ class TestAlarm
 public:
   #ifndef _WIN32
   TestAlarm() {
-    alarm(1200);
+    alarm(2400);
   }
   ~TestAlarm() {
     alarm(0);
@@ -37,7 +37,7 @@ public:
 };
 
 template<class Rep, class Period, typename Func, typename... Args,
-         typename Return = std::result_of_t<Func&&(Args&&...)>>
+         typename Return = std::invoke_result_t<Func, Args...>>
 Return wait_until(const std::chrono::duration<Rep, Period>& rel_time,
                 const std::chrono::duration<Rep, Period>& step,
                 const Return& expected,

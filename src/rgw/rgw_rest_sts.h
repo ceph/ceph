@@ -40,14 +40,14 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   bool is_cert_valid(const std::vector<std::string>& thumbprints, const std::string& cert) const;
 
-  std::unique_ptr<rgw::sal::RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const std::string& role_arn, const std::string& iss) const;
+  std::unique_ptr<rgw::sal::RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const std::string& role_arn, const std::string& iss, optional_yield y) const;
 
   std::string get_role_tenant(const std::string& role_arn) const;
 
   std::string get_role_name(const string& role_arn) const;
 
   std::string get_cert_url(const std::string& iss, const DoutPrefixProvider *dpp,optional_yield y) const;
-  
+
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
@@ -199,17 +199,14 @@ public:
 
 class RGWHandler_REST_STS : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
-  const std::string& post_body;
   RGWOp *op_post() override;
-  void rgw_sts_parse_input();
 public:
 
-  static int init_from_header(req_state *s, RGWFormat default_formatter, bool configurable_format);
+  static bool action_exists(const req_state* s);
 
-  RGWHandler_REST_STS(const rgw::auth::StrategyRegistry& auth_registry, const std::string& post_body="")
+  RGWHandler_REST_STS(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
-      auth_registry(auth_registry),
-      post_body(post_body) {}
+      auth_registry(auth_registry) {}
   ~RGWHandler_REST_STS() override = default;
 
   int init(rgw::sal::Driver* driver,
@@ -223,7 +220,7 @@ class RGWRESTMgr_STS : public RGWRESTMgr {
 public:
   RGWRESTMgr_STS() = default;
   ~RGWRESTMgr_STS() override = default;
-  
+
   RGWRESTMgr *get_resource_mgr(req_state* const s,
                                const std::string& uri,
                                std::string* const out_uri) override {

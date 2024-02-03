@@ -26,7 +26,6 @@ set(dbstore_mgr_srcs
 
 add_library(dbstore_lib ${dbstore_srcs})
 target_include_directories(dbstore_lib
-    PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include"
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
     PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/store/rados"
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")

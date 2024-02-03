@@ -259,7 +259,7 @@ void AbstractWriteLog<I>::perf_start(std::string name) {
 
   plb.add_u64_counter(l_librbd_pwl_cmp, "cmp", "Compare and Write requests");
   plb.add_u64_counter(l_librbd_pwl_cmp_bytes, "cmp_bytes", "Compare and Write bytes compared/written");
-  plb.add_time_avg(l_librbd_pwl_cmp_latency, "cmp_lat", "Compare and Write latecy");
+  plb.add_time_avg(l_librbd_pwl_cmp_latency, "cmp_lat", "Compare and Write latency");
   plb.add_u64_counter(l_librbd_pwl_cmp_fails, "cmp_fails", "Compare and Write compare fails");
 
   plb.add_u64_counter(l_librbd_pwl_internal_flush, "internal_flush", "Flush RWL (write back to OSD)");
@@ -301,7 +301,7 @@ void AbstractWriteLog<I>::log_perf() {
   ss << "\"image\": \"" << m_image_ctx.name << "\",";
   bl.append(ss);
   bl.append("\"stats\": ");
-  m_image_ctx.cct->get_perfcounters_collection()->dump_formatted(f, 0);
+  m_image_ctx.cct->get_perfcounters_collection()->dump_formatted(f, false, false);
   f->flush(bl);
   bl.append(",\n\"histograms\": ");
   m_image_ctx.cct->get_perfcounters_collection()->dump_formatted_histograms(f, 0);
@@ -517,7 +517,7 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
   if ((!m_cache_state->present) &&
       (access(m_log_pool_name.c_str(), F_OK) == 0)) {
     ldout(cct, 5) << "There's an existing pool file " << m_log_pool_name
-                  << ", While there's no cache in the image metatata." << dendl;
+                  << ", While there's no cache in the image metadata." << dendl;
     if (remove(m_log_pool_name.c_str()) != 0) {
       lderr(cct) << "failed to remove the pool file " << m_log_pool_name
                  << dendl;
@@ -1752,7 +1752,7 @@ void AbstractWriteLog<I>::process_writeback_dirty_entries() {
     std::lock_guard locker(m_lock);
     while (flushed < IN_FLIGHT_FLUSH_WRITE_LIMIT) {
       if (m_shutting_down) {
-        ldout(cct, 5) << "Flush during shutdown supressed" << dendl;
+        ldout(cct, 5) << "Flush during shutdown suppressed" << dendl;
         /* Do flush complete only when all flush ops are finished */
         all_clean = !m_flush_ops_in_flight;
         break;

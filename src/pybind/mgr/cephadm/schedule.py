@@ -146,8 +146,9 @@ class HostAssignment(object):
                  unreachable_hosts: List[orchestrator.HostSpec],
                  draining_hosts: List[orchestrator.HostSpec],
                  daemons: List[orchestrator.DaemonDescription],
+                 related_service_daemons: Optional[List[DaemonDescription]] = None,
                  networks: Dict[str, Dict[str, Dict[str, List[str]]]] = {},
-                 filter_new_host: Optional[Callable[[str], bool]] = None,
+                 filter_new_host: Optional[Callable[[str, ServiceSpec], bool]] = None,
                  allow_colo: bool = False,
                  primary_daemon_type: Optional[str] = None,
                  per_host_daemon_type: Optional[str] = None,
@@ -162,6 +163,7 @@ class HostAssignment(object):
         self.filter_new_host = filter_new_host
         self.service_name = spec.service_name()
         self.daemons = daemons
+        self.related_service_daemons = related_service_daemons
         self.networks = networks
         self.allow_colo = allow_colo
         self.per_host_daemon_type = per_host_daemon_type
@@ -325,7 +327,7 @@ class HostAssignment(object):
 
         # TODO: At some point we want to deploy daemons that are on offline hosts
         # at what point we do this differs per daemon type. Stateless daemons we could
-        # do quickly to improve availability. Steful daemons we might want to wait longer
+        # do quickly to improve availability. Stateful daemons we might want to wait longer
         # to see if the host comes back online
 
         existing = existing_active + existing_standby
@@ -343,6 +345,27 @@ class HostAssignment(object):
                 to_remove.extend(existing[count:])
                 del existing_slots[count:]
                 return self.place_per_host_daemons(existing_slots, [], to_remove)
+
+            if self.related_service_daemons:
+                # prefer to put daemons on the same host(s) as daemons of the related service
+                # Note that we are only doing this over picking arbitrary hosts to satisfy
+                # the count. We are not breaking any deterministic placements in order to
+                # match the placement with a related service.
+                related_service_hosts = list(set(dd.hostname for dd in self.related_service_daemons))
+                matching_dps = [dp for dp in others if dp.hostname in related_service_hosts]
+                for dp in matching_dps:
+                    if need <= 0:
+                        break
+                    if dp.hostname in related_service_hosts and dp.hostname not in [h.hostname for h in self.unreachable_hosts]:
+                        logger.debug(f'Preferring {dp.hostname} for service {self.service_name} as related daemons have been placed there')
+                        to_add.append(dp)
+                        need -= 1  # this is last use of need so it can work as a counter
+                # at this point, we've either met our placement quota entirely using hosts with related
+                # service daemons, or we still need to place more. If we do need to place more,
+                # we should make sure not to re-use hosts with related service daemons by filtering
+                # them out from the "others" list
+                if need > 0:
+                    others = [dp for dp in others if dp.hostname not in related_service_hosts]
 
             for dp in others:
                 if need <= 0:
@@ -428,7 +451,7 @@ class HostAssignment(object):
             old = ls.copy()
             ls = []
             for h in old:
-                if self.filter_new_host(h.hostname):
+                if self.filter_new_host(h.hostname, self.spec):
                     ls.append(h)
             if len(old) > len(ls):
                 logger.debug('Filtered %s down to %s' % (old, ls))

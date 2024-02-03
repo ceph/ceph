@@ -55,5 +55,10 @@ export enum CellTemplate {
   This templace replaces a time, datetime or timestamp with a user-friendly "X {seconds,minutes,hours,days,...} ago",
   but the tooltip still displays the absolute timestamp
   */
-  timeAgo = 'timeAgo'
+  timeAgo = 'timeAgo',
+  /*
+  This template truncates a path to a shorter format and shows the whole path in a tooltip
+  eg: /var/lib/ceph/osd/ceph-0 -> /var/.../ceph-0
+  */
+  path = 'path'
 }

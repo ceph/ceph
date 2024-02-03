@@ -4,7 +4,10 @@ overrides:
     cache-pools: true
 tasks:
 - ceph:
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
 - rgw: [client.0]
+- tox: [client.0]
 - s3tests:
     client.0:
       force-branch: ceph-master

@@ -4,6 +4,8 @@ overrides:
       osd:
         osd_class_load_list: "*"
         osd_class_default_list: "*"
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - workunit:
     clients:

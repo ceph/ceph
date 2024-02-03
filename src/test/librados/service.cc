@@ -4,7 +4,9 @@
 #include "common/config_proxy.h"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
+#ifndef _WIN32
 #include <sys/resource.h>
+#endif
 
 #include <mutex>
 #include <condition_variable>
@@ -54,7 +56,7 @@ static void status_format_func(const int i, std::mutex &lock,
                                int &threads_started, bool &stopped)
 {
   rados_t cluster;
-  char *metadata_buf = NULL;
+  char metadata_buf[4096];
 
   ASSERT_EQ(0, rados_create(&cluster, "admin"));
   ASSERT_EQ(0, rados_conf_read_file(cluster, NULL));
@@ -62,23 +64,22 @@ static void status_format_func(const int i, std::mutex &lock,
 
   ASSERT_EQ(0, rados_connect(cluster));
   if (i == 0) {
-    ASSERT_NE(-1, asprintf(&metadata_buf, "%s%c%s%c",
-                           "foo", '\0', "bar", '\0'));
+    ASSERT_LT(0, sprintf(metadata_buf, "%s%c%s%c",
+                         "foo", '\0', "bar", '\0'));
   } else if (i == 1) {
-    ASSERT_NE(-1, asprintf(&metadata_buf, "%s%c%s%c",
-                           "daemon_type", '\0', "portal", '\0'));
+    ASSERT_LT(0, sprintf(metadata_buf, "%s%c%s%c",
+                         "daemon_type", '\0', "portal", '\0'));
   } else if (i == 2) {
-    ASSERT_NE(-1, asprintf(&metadata_buf, "%s%c%s%c",
-                           "daemon_prefix", '\0', "gateway", '\0'));
+    ASSERT_LT(0, sprintf(metadata_buf, "%s%c%s%c",
+                         "daemon_prefix", '\0', "gateway", '\0'));
   } else {
     string prefix = string("gw") + stringify(i % 4);
     string zone = string("z") + stringify(i % 3);
-    ASSERT_NE(-1, asprintf(&metadata_buf, "%s%c%s%c%s%c%s%c%s%c%s%c%s%c%s%c",
-                           "daemon_type", '\0', "portal", '\0',
-                           "daemon_prefix", '\0', prefix.c_str(), '\0',
-			   "hostname", '\0', prefix.c_str(), '\0',
-			   "zone_id", '\0', zone.c_str(), '\0'
-		));
+    ASSERT_LT(0, sprintf(metadata_buf, "%s%c%s%c%s%c%s%c%s%c%s%c%s%c%s%c",
+                         "daemon_type", '\0', "portal", '\0',
+                         "daemon_prefix", '\0', prefix.c_str(), '\0',
+                         "hostname", '\0', prefix.c_str(), '\0',
+                         "zone_id", '\0', zone.c_str(), '\0'));
   }
   string name = string("rbd/image") + stringify(i);
   ASSERT_EQ(0, rados_service_register(cluster, "foo", name.c_str(),
@@ -102,12 +103,15 @@ TEST(LibRadosService, StatusFormat) {
   bool stopped = false;
   int threads_started = 0;
 
+  // no rlimits on Windows
+  #ifndef _WIN32
   // Need a bunch of fd's for this test
   struct rlimit rold, rnew;
   ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &rold), 0);
   rnew = rold;
   rnew.rlim_cur = rnew.rlim_max;
   ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rnew), 0);
+  #endif
 
   for (int i = 0; i < nthreads; ++i)
     threads[i] = std::thread(status_format_func, i, std::ref(lock),
@@ -174,7 +178,9 @@ TEST(LibRadosService, StatusFormat) {
     threads[i].join();
 
   ASSERT_NE(0, retry);
+  #ifndef _WIN32
   ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
+  #endif
 }
 
 TEST(LibRadosService, Status) {

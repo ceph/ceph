@@ -17,7 +17,6 @@
 #include "services/svc_meta_be_otp.h"
 #include "services/svc_notify.h"
 #include "services/svc_otp.h"
-#include "services/svc_rados.h"
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_quota.h"
@@ -31,9 +30,11 @@
 #include "common/errno.h"
 
 #include "rgw_bucket.h"
+#include "rgw_cr_rados.h"
 #include "rgw_datalog.h"
 #include "rgw_metadata.h"
 #include "rgw_otp.h"
+#include "rgw_sal_rados.h"
 #include "rgw_user.h"
 #include "rgw_role.h"
 
@@ -48,6 +49,7 @@ RGWServices_Def::~RGWServices_Def()
 }
 
 int RGWServices_Def::init(CephContext *cct,
+			  rgw::sal::RadosStore* driver,
 			  bool have_cache,
                           bool raw,
 			  bool run_sync,
@@ -68,7 +70,6 @@ int RGWServices_Def::init(CephContext *cct,
   meta_be_otp = std::make_unique<RGWSI_MetaBackend_OTP>(cct);
   notify = std::make_unique<RGWSI_Notify>(cct);
   otp = std::make_unique<RGWSI_OTP>(cct);
-  rados = std::make_unique<RGWSI_RADOS>(cct);
   zone = std::make_unique<RGWSI_Zone>(cct);
   zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
   quota = std::make_unique<RGWSI_Quota>(cct);
@@ -77,6 +78,8 @@ int RGWServices_Def::init(CephContext *cct,
   sysobj_core = std::make_unique<RGWSI_SysObj_Core>(cct);
   user_rados = std::make_unique<RGWSI_User_RADOS>(cct);
   role_rados = std::make_unique<RGWSI_Role_RADOS>(cct);
+  async_processor = std::make_unique<RGWAsyncRadosProcessor>(
+    cct, cct->_conf->rgw_num_async_rados_threads);
 
   if (have_cache) {
     sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(dpp, cct);
@@ -84,8 +87,10 @@ int RGWServices_Def::init(CephContext *cct,
 
   vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
 
+  async_processor->start();
   finisher->init();
-  bi_rados->init(zone.get(), rados.get(), bilog_rados.get(), datalog_rados.get());
+  bi_rados->init(zone.get(), driver->getRados()->get_rados_handle(),
+		 bilog_rados.get(), datalog_rados.get());
   bilog_rados->init(bi_rados.get());
   bucket_sobj->init(zone.get(), sysobj.get(), sysobj_cache.get(),
                     bi_rados.get(), meta.get(), meta_be_sobj.get(),
@@ -94,27 +99,29 @@ int RGWServices_Def::init(CephContext *cct,
                          sysobj.get(),
                          sysobj_cache.get(),
                          bucket_sobj.get());
-  cls->init(zone.get(), rados.get());
-  config_key_rados->init(rados.get());
-  mdlog->init(rados.get(), zone.get(), sysobj.get(), cls.get());
+  cls->init(zone.get(), driver->getRados()->get_rados_handle());
+  config_key_rados->init(driver->getRados()->get_rados_handle());
+  mdlog->init(driver->getRados()->get_rados_handle(), zone.get(), sysobj.get(),
+	      cls.get(), async_processor.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
   meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
-  notify->init(zone.get(), rados.get(), finisher.get());
+  notify->init(zone.get(), driver->getRados()->get_rados_handle(),
+	       finisher.get());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
-  rados->init();
-  zone->init(sysobj.get(), rados.get(), sync_modules.get(), bucket_sync_sobj.get());
-  zone_utils->init(rados.get(), zone.get());
+  zone->init(sysobj.get(), driver->getRados()->get_rados_handle(),
+	     sync_modules.get(), bucket_sync_sobj.get());
+  zone_utils->init(driver->getRados()->get_rados_handle(), zone.get());
   quota->init(zone.get());
   sync_modules->init(zone.get());
-  sysobj_core->core_init(rados.get(), zone.get());
+  sysobj_core->core_init(driver->getRados()->get_rados_handle(), zone.get());
   if (have_cache) {
-    sysobj_cache->init(rados.get(), zone.get(), notify.get());
-    sysobj->init(rados.get(), sysobj_cache.get());
+    sysobj_cache->init(driver->getRados()->get_rados_handle(), zone.get(), notify.get());
+    sysobj->init(driver->getRados()->get_rados_handle(), sysobj_cache.get());
   } else {
-    sysobj->init(rados.get(), sysobj_core.get());
+    sysobj->init(driver->getRados()->get_rados_handle(), sysobj_core.get());
   }
-  user_rados->init(rados.get(), zone.get(), sysobj.get(), sysobj_cache.get(),
+  user_rados->init(driver->getRados()->get_rados_handle(), zone.get(), sysobj.get(), sysobj_cache.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());
   role_rados->init(zone.get(), meta.get(), meta_be_sobj.get(), sysobj.get());
 
@@ -134,12 +141,6 @@ int RGWServices_Def::init(CephContext *cct,
     }
   }
 
-  r = rados->start(y, dpp);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to start rados service (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
   if (!raw) {
     r = zone->start(y, dpp);
     if (r < 0) {
@@ -149,7 +150,7 @@ int RGWServices_Def::init(CephContext *cct,
 
     r = datalog_rados->start(dpp, &zone->get_zone(),
 			     zone->get_zone_params(),
-			     rados->get_rados_handle());
+			     driver->getRados()->get_rados_handle());
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start datalog_rados service (" << cpp_strerror(-r) << dendl;
       return r;
@@ -299,18 +300,16 @@ void RGWServices_Def::shutdown()
   quota->shutdown();
   zone_utils->shutdown();
   zone->shutdown();
-  rados->shutdown();
+  async_processor->stop();
 
   has_shutdown = true;
-
 }
 
-
-int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp)
+int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp)
 {
   cct = _cct;
 
-  int r = _svc.init(cct, have_cache, raw, run_sync, y, dpp);
+  int r = _svc.init(cct, driver, have_cache, raw, run_sync, y, dpp);
   if (r < 0) {
     return r;
   }
@@ -333,7 +332,6 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   meta_be_otp = _svc.meta_be_otp.get();
   notify = _svc.notify.get();
   otp = _svc.otp.get();
-  rados = _svc.rados.get();
   zone = _svc.zone.get();
   zone_utils = _svc.zone_utils.get();
   quota = _svc.quota.get();
@@ -343,6 +341,7 @@ int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_
   core = _svc.sysobj_core.get();
   user = _svc.user_rados.get();
   role = _svc.role_rados.get();
+  async_processor = _svc.async_processor.get();
 
   return 0;
 }

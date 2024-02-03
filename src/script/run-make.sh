@@ -2,14 +2,17 @@
 
 set -e
 
+if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    CEPH_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+    . "${CEPH_ROOT}/src/script/lib-build.sh" || exit 2
+fi
+
+
 trap clean_up_after_myself EXIT
 
 ORIGINAL_CCACHE_CONF="$HOME/.ccache/ccache.conf"
 SAVED_CCACHE_CONF="$HOME/.run-make-check-saved-ccache-conf"
-
-function in_jenkins() {
-    test -n "$JENKINS_HOME"
-}
 
 function save_ccache_conf() {
     test -f $ORIGINAL_CCACHE_CONF && cp $ORIGINAL_CCACHE_CONF $SAVED_CCACHE_CONF || true
@@ -22,19 +25,6 @@ function restore_ccache_conf() {
 function clean_up_after_myself() {
     rm -fr ${CEPH_BUILD_VIRTUALENV:-/tmp}/*virtualenv*
     restore_ccache_conf
-}
-
-function get_processors() {
-    # get_processors() depends on coreutils nproc.
-    if test -n "$NPROC" ; then
-        echo $NPROC
-    else
-        if test $(nproc) -ge 2 ; then
-            expr $(nproc) / 2
-        else
-            echo 1
-        fi
-    fi
 }
 
 function detect_ceph_dev_pkgs() {
@@ -58,76 +48,26 @@ function detect_ceph_dev_pkgs() {
     echo "$cmake_opts"
 }
 
-function do_install() {
-    local install_cmd
-    local pkgs
-    local ret
-    install_cmd=$1
-    shift
-    pkgs=$@
-    shift
-    ret=0
-    $DRY_RUN sudo $install_cmd $pkgs || ret=$?
-    if test $ret -eq 0 ; then
-        return
-    fi
-    # try harder if apt-get, and it was interrutped
-    if [[ $install_cmd == *"apt-get"* ]]; then
-        if test $ret -eq 100 ; then
-            # dpkg was interrupted
-            $DRY_RUN sudo dpkg --configure -a
-            in_jenkins && echo "CI_DEBUG: Running 'sudo $install_cmd $pkgs'"
-            $DRY_RUN sudo $install_cmd $pkgs
-        else
-            return $ret
-        fi
-    fi
-}
 function prepare() {
-    local install_cmd
     local which_pkg="which"
-    source /etc/os-release
-    if test -f /etc/redhat-release ; then
-        if ! type bc > /dev/null 2>&1 ; then
-            echo "Please install bc and re-run." 
-            exit 1
-        fi
-        if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
-            install_cmd="dnf -y install"
-        else
-            install_cmd="yum install -y"
-        fi
-    elif type zypper > /dev/null 2>&1 ; then
-        install_cmd="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
-    elif type apt-get > /dev/null 2>&1 ; then
-        install_cmd="apt-get install -y"
+    if command -v apt-get > /dev/null 2>&1 ; then
         which_pkg="debianutils"
     fi
 
-    if ! type sudo > /dev/null 2>&1 ; then
-        echo "Please install sudo and re-run. This script assumes it is running"
-        echo "as a normal user with the ability to run commands as root via sudo." 
-        exit 1
-    fi
-    if [ -n "$install_cmd" ]; then
-        in_jenkins && echo "CI_DEBUG: Running '$install_cmd ccache $which_pkg clang'"
-        do_install "$install_cmd" ccache $which_pkg clang
-    else
-        echo "WARNING: Don't know how to install packages" >&2
-        echo "This probably means distribution $ID is not supported by run-make-check.sh" >&2
+    if test -f ./install-deps.sh ; then
+        ci_debug "Running install-deps.sh"
+        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang lvm2"
+        $DRY_RUN source ./install-deps.sh || return 1
+        trap clean_up_after_myself EXIT
     fi
 
     if ! type ccache > /dev/null 2>&1 ; then
         echo "ERROR: ccache could not be installed"
         exit 1
     fi
+}
 
-    if test -f ./install-deps.sh ; then
-        in_jenkins && echo "CI_DEBUG: Running install-deps.sh"
-        $DRY_RUN source ./install-deps.sh || return 1
-        trap clean_up_after_myself EXIT
-    fi
-
+function configure() {
     cat <<EOM
 Note that the binaries produced by this script do not contain correct time
 and git version information, which may make them unsuitable for debugging
@@ -148,12 +88,44 @@ EOM
         ccache -p | grep max_size
     fi
     $DRY_RUN ccache -sz # Reset the ccache statistics and show the current configuration
-}
 
-function configure() {
-    local cmake_build_opts=$(detect_ceph_dev_pkgs)
-    in_jenkins && echo "CI_DEBUG: Running do_cmake.sh"
-    $DRY_RUN ./do_cmake.sh $cmake_build_opts $@ || return 1
+    if ! discover_compiler ci-build ; then
+        ci_debug "Failed to discover a compiler"
+    fi
+    if [ "${discovered_compiler_env}" ]; then
+        ci_debug "Enabling compiler environment file: ${discovered_compiler_env}"
+        . "${discovered_compiler_env}"
+    fi
+    local cxx_compiler="${discovered_cxx_compiler}"
+    local c_compiler="${discovered_c_compiler}"
+    local cmake_opts
+    cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
+    cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
+    cmake_opts+=" -DENABLE_GIT_VERSION=OFF"
+    cmake_opts+=" -DWITH_GTEST_PARALLEL=ON"
+    cmake_opts+=" -DWITH_FIO=ON"
+    cmake_opts+=" -DWITH_CEPHFS_SHELL=ON"
+    cmake_opts+=" -DWITH_GRAFANA=ON"
+    cmake_opts+=" -DWITH_SPDK=ON"
+    cmake_opts+=" -DWITH_RBD_MIRROR=ON"
+    if [ $WITH_SEASTAR ]; then
+        cmake_opts+=" -DWITH_SEASTAR=ON"
+    fi
+    if [ $WITH_ZBD ]; then
+        cmake_opts+=" -DWITH_ZBD=ON"
+    fi
+    if [ $WITH_RBD_RWL ]; then
+        cmake_opts+=" -DWITH_RBD_RWL=ON"
+    fi
+    cmake_opts+=" -DWITH_RBD_SSD_CACHE=ON"
+
+    cmake_opts+=" $(detect_ceph_dev_pkgs)"
+
+    ci_debug "Our cmake_opts are: $cmake_opts"
+    ci_debug "Running ./configure"
+    ci_debug "Running do_cmake.sh"
+
+    $DRY_RUN ./do_cmake.sh $cmake_opts $@ || return 1
 }
 
 function build() {
@@ -161,11 +133,15 @@ function build() {
     if test -n "$targets"; then
         targets="--target $targets"
     fi
-    $DRY_RUN cd build
+    local bdir=build
+    if [ "$BUILD_DIR" ]; then
+        bdir="$BUILD_DIR"
+    fi
+    $DRY_RUN cd "${bdir}"
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
     # older cmake does not support --parallel or -j, so pass it to underlying generator
-    in_jenkins && echo "CI_DEBUG: Running cmake"
+    ci_debug "Running cmake"
     $DRY_RUN cmake --build . $targets -- $BUILD_MAKEOPTS || return 1
     $DRY_RUN ccache -s # print the ccache statistics to evaluate the efficiency
 }

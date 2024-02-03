@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_MULTI_DELETE_H_
-#define RGW_MULTI_DELETE_H_
+#pragma once
 
 #include <vector>
 #include "rgw_xml.h"
@@ -61,6 +60,3 @@ public:
   RGWMultiDelXMLParser() {}
   ~RGWMultiDelXMLParser() override {}
 };
-
-
-#endif

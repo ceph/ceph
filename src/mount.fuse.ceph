@@ -39,8 +39,11 @@ def ceph_options_compat(device):
     return [ 'ceph.' + opt for opt in device.split(',') ]
 
 def fs_options(opts, ceph_opts):
-    # strip out noauto and _netdev options; libfuse doesn't like it
-    strip_opts = ['defaults', 'noauto', '_netdev']
+    # - strip out noauto and _netdev options; libfuse doesn't like it
+    # - nofail option is also not recognized by libfuse.
+    #   Starting with fuse 3.2.2 the option is also ignored by mount.fuse, see
+    #   https://github.com/libfuse/libfuse/commit/a83cd72f641671b71b8268b1765e449cae071f3e
+    strip_opts = ['defaults', 'noauto', '_netdev', 'nofail']
     return ','.join(list(set(opts) - set(ceph_opts) - set(strip_opts)))
 
 def main(arguments):

@@ -2414,6 +2414,7 @@ CtPtr ProtocolV1::replace(const AsyncConnectionRef& existing,
               existing->worker->references--;
               new_worker->references++;
               existing->logger = new_worker->get_perf_counter();
+              existing->labeled_logger = new_worker->get_labeled_perf_counter();
               existing->worker = new_worker;
               existing->center = new_center;
               if (existing->delay_state)

@@ -1,0 +1,19 @@
+tasks:
+- install:
+    # extra packages added for the rgw-d4ntests task
+    extra_system_packages:
+      deb: ['s3cmd', 'redis']
+      rpm: ['s3cmd', 'redis']
+- ceph:
+- rgw: [client.0]
+- tox: [client.0]
+- exec:
+    client.0:
+      - sudo chmod 0777 /var/lib/ceph
+      - sudo chmod 0777 /var/lib/ceph/radosgw
+- d4ntests:
+    client.0:
+- workunit:
+    clients:
+      client.0:
+      - rgw/run-d4n.sh

@@ -1,32 +1,40 @@
+.. _radosgw_keycloak:
+
 =================================
-Keycloak integration with RadosGW
+Integrating Keycloak with RadosGW
 =================================
 
-Keycloak can be setup as an OpenID Connect Identity Provider, which can be used by mobile/ web apps
-to authenticate their users. The Web token returned as a result of authentication can be used by the
-mobile/ web app to call AssumeRoleWithWebIdentity to get back a set of temporary S3 credentials,
-which can be used by the app to make S3 calls.
+If Keycloak is set up as an OpenID Connect Identity Provider, it can be used by
+mobile apps and web apps to authenticate their users. By using the web token
+returned by the authentication process, a mobile app or web app can call
+AssumeRoleWithWebIdentity, receive a set of temporary S3 credentials, and use
+those credentials to make S3 calls.
 
 Setting up Keycloak
-====================
+===================
 
-Installing and bringing up Keycloak can be found here: https://www.keycloak.org/docs/latest/server_installation/.
+Documentation for installing and operating Keycloak can be found here:
+https://www.keycloak.org/guides.
 
 Configuring Keycloak to talk to RGW
 ===================================
 
-The following configurables have to be added for RGW to talk to Keycloak::
+To configure Keycloak to talk to RGW, add the following configurables::
 
   [client.radosgw.gateway]
   rgw sts key = {sts key for encrypting/ decrypting the session token}
   rgw s3 auth use sts = true
 
-Example showing how to fetch a web token from Keycloak
-======================================================
+Fetching a web token with Keycloak
+==================================
 
-Several examples of apps authenticating with Keycloak are given here: https://github.com/keycloak/keycloak-quickstarts/blob/latest/docs/getting-started.md
-Taking the example of app-profile-jee-jsp app given in the link above, its client id and client secret, can be used to fetch the
-access token (web token) for an application using grant type 'client_credentials' as given below::
+Several examples of apps authenticating with Keycloak can be found here:
+https://github.com/keycloak/keycloak-quickstarts/blob/latest/docs/getting-started.md.
+
+Here you might consider the example of the app-profile-jee-jsp app (in the link
+above). To fetch the access token (web token) for such an application using the
+grant type 'client_credentials', one can use client id and client secret as
+follows::
 
     KC_REALM=demo
     KC_CLIENT=<client id>
@@ -48,8 +56,9 @@ access token (web token) for an application using grant type 'client_credentials
 
     KC_ACCESS_TOKEN=$(echo $KC_RESPONSE| jq -r .access_token)
 
-An access token can also be fetched for a particular user with grant type 'password', using client id, client secret, username and its password
-as given below::
+It is also possible to fetch an access token for a particular user with the
+grant type 'password'. To fetch such an access token, use client id, client
+secret, username, and password as follows::
 
     KC_REALM=demo
     KC_USERNAME=<username>
@@ -75,43 +84,45 @@ as given below::
 
     KC_ACCESS_TOKEN=$(echo $KC_RESPONSE| jq -r .access_token)
 
-
-KC_ACCESS_TOKEN can be used to invoke AssumeRoleWithWebIdentity as given in
+``KC_ACCESS_TOKEN`` can be used to invoke ``AssumeRoleWithWebIdentity``: see
 :doc:`STS`.
 
-Attaching tags to a user in Keycloak
-====================================
+Adding tags to a user in Keycloak
+=================================
 
-We need to create a user in keycloak, and add tags to it as its attributes.
+To create a user in Keycloak and add tags to it as its attributes, follow these
+steps:
 
-Add a user as shown below:
+#. Add a user:
 
-.. image:: ../images/keycloak-adduser.png
-   :align: center
+   .. image:: ../images/keycloak-adduser.png
+      :align: center
 
-Add user details as shown below:
+#. Add user details:
 
-.. image:: ../images/keycloak-userdetails.png
-   :align: center
+   .. image:: ../images/keycloak-userdetails.png
+      :align: center
 
-Add user credentials as shown below:
+#. Add user credentials:
 
-.. image:: ../images/keycloak-usercredentials.png
-   :align: center
+   .. image:: ../images/keycloak-usercredentials.png
+      :align: center
 
-Add tags to the 'attributes' tab of the user as shown below:
+#. Add tags to the 'attributes' tab of the user:
 
-.. image:: ../images/keycloak-usertags.png
-   :align: center
+   .. image:: ../images/keycloak-usertags.png
+      :align: center
 
-Add a protocol mapper for the user attribute to a client as shown below:
+#. Add a protocol mapper that maps the user attribute to a client:
 
-.. image:: ../images/keycloak-userclientmapper.png
-   :align: center
+   .. image:: ../images/keycloak-userclientmapper.png
+      :align: center
 
+After these steps have been completed, the tag 'Department' will appear in the
+JWT (web token), under the 'https://aws.amazon.com/tags' namespace.
 
-After following the steps shown above, the tag 'Department' will appear in the JWT (web token), under 'https://aws.amazon.com/tags' namespace.
-The tags can be verified using token introspection of the JWT. The command to introspect a token using client id and client secret is shown below::
+Tags can be verified by performing token introspection on a JWT. To introspect
+a token, use ``client id`` and ``client secret`` as follows::
 
     KC_REALM=demo
     KC_CLIENT=<client id>

@@ -45,10 +45,10 @@ public:
       coll{coll},
       backend{backend} {}
   virtual ~RecoveryBackend() {}
-  WaitForObjectRecovery& add_recovering(const hobject_t& soid) {
+  std::pair<WaitForObjectRecovery&, bool> add_recovering(const hobject_t& soid) {
     auto [it, added] = recovering.emplace(soid, new WaitForObjectRecovery{});
-    assert(added);
-    return *(it->second);
+    assert(it->second);
+    return {*(it->second), added};
   }
   WaitForObjectRecovery& get_recovering(const hobject_t& soid) {
     assert(is_recovering(soid));
@@ -65,7 +65,8 @@ public:
   }
 
   virtual interruptible_future<> handle_recovery_op(
-    Ref<MOSDFastDispatchOp> m);
+    Ref<MOSDFastDispatchOp> m,
+    crimson::net::ConnectionXcoreRef conn);
 
   virtual interruptible_future<> recover_object(
     const hobject_t& soid,
@@ -95,11 +96,11 @@ public:
 protected:
   crimson::osd::PG& pg;
   crimson::osd::ShardServices& shard_services;
-  crimson::os::FuturizedStore* store;
+  crimson::os::FuturizedStore::Shard* store;
   crimson::os::CollectionRef coll;
   PGBackend* backend;
 
-  struct PullInfo {
+  struct pull_info_t {
     pg_shard_t from;
     hobject_t soid;
     ObjectRecoveryProgress recovery_progress;
@@ -112,7 +113,7 @@ protected:
     }
   };
 
-  struct PushInfo {
+  struct push_info_t {
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
     crimson::osd::ObjectContextRef obc;
@@ -130,8 +131,8 @@ public:
     static constexpr const char* type_name = "WaitForObjectRecovery";
 
     crimson::osd::ObjectContextRef obc;
-    std::optional<PullInfo> pi;
-    std::map<pg_shard_t, PushInfo> pushing;
+    std::optional<pull_info_t> pull_info;
+    std::map<pg_shard_t, push_info_t> pushing;
 
     seastar::future<> wait_for_readable() {
       return readable.get_shared_future();
@@ -210,18 +211,23 @@ protected:
   virtual seastar::future<> on_stop() = 0;
 private:
   void handle_backfill_finish(
-    MOSDPGBackfill& m);
+    MOSDPGBackfill& m,
+    crimson::net::ConnectionXcoreRef conn);
   interruptible_future<> handle_backfill_progress(
     MOSDPGBackfill& m);
   interruptible_future<> handle_backfill_finish_ack(
     MOSDPGBackfill& m);
-  interruptible_future<> handle_backfill(MOSDPGBackfill& m);
+  interruptible_future<> handle_backfill(
+    MOSDPGBackfill& m,
+    crimson::net::ConnectionXcoreRef conn);
 
   interruptible_future<> handle_scan_get_digest(
-    MOSDPGScan& m);
+    MOSDPGScan& m,
+    crimson::net::ConnectionXcoreRef conn);
   interruptible_future<> handle_scan_digest(
     MOSDPGScan& m);
   interruptible_future<> handle_scan(
-    MOSDPGScan& m);
+    MOSDPGScan& m,
+    crimson::net::ConnectionXcoreRef conn);
   interruptible_future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
 };

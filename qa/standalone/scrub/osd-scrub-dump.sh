@@ -15,13 +15,20 @@
 # GNU Library Public License for more details.
 #
 
+
+# 30.11.2023: the test is now disabled, as the reservation mechanism has been
+# thoroughly reworked and the test is no longer valid.  The test is left here
+# as a basis for a new set of primary vs. replicas scrub activation tests.
+
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 MAX_SCRUBS=4
-SCRUB_SLEEP=2
+SCRUB_SLEEP=3
 POOL_SIZE=3
 
 function run() {
+    echo "This test is disabled"
+    return 0
     local dir=$1
     shift
     local CHUNK_MAX=5
@@ -31,7 +38,7 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd_max_scrubs=$MAX_SCRUBS "
-    CEPH_ARGS+="--osd_scrub_chunk_max=$CHUNK_MAX "
+    CEPH_ARGS+="--osd_shallow_scrub_chunk_max=$CHUNK_MAX "
     CEPH_ARGS+="--osd_scrub_sleep=$SCRUB_SLEEP "
     CEPH_ARGS+="--osd_pool_default_size=$POOL_SIZE "
     # Set scheduler to "wpq" until there's a reliable way to query scrub states
@@ -85,7 +92,6 @@ function TEST_recover_unexpected() {
 
     for qpg in $(ceph pg dump pgs --format=json-pretty | jq '.pg_stats[].pgid')
     do
-	primary=$(ceph pg dump pgs --format=json | jq ".pg_stats[] | select(.pgid == $qpg) | .acting_primary")
 	eval pg=$qpg   # strip quotes around qpg
 	ceph tell $pg scrub
     done
@@ -124,7 +130,7 @@ function TEST_recover_unexpected() {
 	for o in $(seq 0 $(expr $OSDS - 1))
 	do
 		CEPH_ARGS='' ceph daemon $(get_asok_path osd.$o) dump_scrub_reservations
-		scrubs=$(CEPH_ARGS='' ceph daemon $(get_asok_path osd.$o) dump_scrub_reservations | jq '.scrubs_local + .scrubs_remote')
+		scrubs=$(CEPH_ARGS='' ceph daemon $(get_asok_path osd.$o) dump_scrub_reservations | jq '.scrubs_local + .granted_reservations')
 		if [ $scrubs -gt $MAX_SCRUBS ]; then
 		    echo "ERROR: More than $MAX_SCRUBS currently reserved"
 		    return 1
@@ -138,7 +144,13 @@ function TEST_recover_unexpected() {
 	    break
 	fi
 	total=$(expr $total + $pass)
-	sleep $(expr $SCRUB_SLEEP \* 2)
+	if [ $total -gt 0 ]; then
+	    # already saw some reservations, so wait longer to avoid excessive over-counting.
+	    # Note the loop itself takes about 2-3 seconds
+	    sleep $(expr $SCRUB_SLEEP - 2)
+	else
+	    sleep 0.5
+	fi
     done
 
     # Check that there are no more scrubs

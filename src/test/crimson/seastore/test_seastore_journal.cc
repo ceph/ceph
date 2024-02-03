@@ -146,7 +146,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
     return segment_manager->init(
     ).safe_then([this] {
       return segment_manager->mkfs(
-        segment_manager::get_ephemeral_device_config(0, 1));
+        segment_manager::get_ephemeral_device_config(0, 1, 0));
     }).safe_then([this] {
       block_size = segment_manager->get_block_size();
       sms.reset(new SegmentManagerGroup());
@@ -218,7 +218,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 	  delta_checker = std::nullopt;
 	  advance();
 	}
-	return Journal::replay_ertr::make_ready_future<bool>(true);
+	return Journal::replay_ertr::make_ready_future<
+	  std::pair<bool, CachedExtentRef>>(true, nullptr);
       }).unsafe_get0();
     ASSERT_EQ(record_iter, records.end());
     for (auto &i : records) {

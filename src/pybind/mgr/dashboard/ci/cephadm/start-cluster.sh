@@ -2,19 +2,6 @@
 
 set -eEx
 
-cleanup() {
-    set +x
-    if [[ -n "$JENKINS_HOME" ]]; then
-        echo "Starting cleanup..."
-        kcli delete plan -y ceph || true
-        kcli delete network ceph-dashboard -y
-        kcli delete pool ceph-dashboard -y
-        rm -rf ${HOME}/.kcli
-        docker container prune -f
-        echo "Cleanup completed."
-    fi
-}
-
 on_error() {
     set +x
     if [ "$1" != "0" ]; then
@@ -41,7 +28,6 @@ on_error() {
 }
 
 trap 'on_error $? $LINENO' ERR
-trap 'cleanup $? $LINENO' EXIT
 
 sed -i '/ceph-node-/d' $HOME/.ssh/known_hosts || true
 
@@ -74,9 +60,13 @@ npm run build ${FRONTEND_BUILD_OPTS} &
 
 cd ${CEPH_DEV_FOLDER}
 : ${VM_IMAGE:='fedora36'}
-: ${VM_IMAGE_URL:='https://download.fedoraproject.org/pub/fedora/linux/releases/36/Cloud/x86_64/images/Fedora-Cloud-Base-36-1.5.x86_64.qcow2'}
+: ${VM_IMAGE_URL:='https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/36/Cloud/x86_64/images/Fedora-Cloud-Base-36-1.5.x86_64.qcow2'}
 kcli download image -p ceph-dashboard -u ${VM_IMAGE_URL} ${VM_IMAGE}
 kcli delete plan -y ceph || true
+# Compile cephadm locally for the shared_ceph_folder to pick it up
+cd ${CEPH_DEV_FOLDER}/src/cephadm
+./build.sh ${CEPH_DEV_FOLDER}/src/cephadm/cephadm
+cd ${CEPH_DEV_FOLDER}
 kcli create plan -f src/pybind/mgr/dashboard/ci/cephadm/ceph_cluster.yml \
     -P ceph_dev_folder=${CEPH_DEV_FOLDER} \
     ${EXTRA_PARAMS} ceph

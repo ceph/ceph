@@ -19,15 +19,13 @@ play in the Ceph cluster (for example: BlueStore data or BlueStore WAL+DB).
 :term:`BlueStore<bluestore>` is the default backend. Ceph permits changing
 the backend, which can be done by using the following flags and arguments:
 
-* :ref:`--filestore <ceph-volume-lvm-prepare_filestore>`
 * :ref:`--bluestore <ceph-volume-lvm-prepare_bluestore>`
 
 .. _ceph-volume-lvm-prepare_bluestore:
 
 ``bluestore``
 -------------
-:term:`Bluestore<bluestore>` is the default backend for new OSDs. It
-offers more flexibility for devices than :term:`filestore` does.  Bluestore
+:term:`Bluestore<bluestore>` is the default backend for new OSDs.  Bluestore
 supports the following configurations:
 
 * a block device, a block.wal device, and a block.db device
@@ -103,8 +101,10 @@ a volume group and a logical volume using the following conventions:
 
 ``filestore``
 -------------
+.. warning:: Filestore has been deprecated in the Reef release and is no longer supported.
+
 ``Filestore<filestore>`` is the OSD backend that prepares logical volumes for a
-:term:`filestore`-backed object-store OSD.
+`filestore`-backed object-store OSD.
 
 
 ``Filestore<filestore>`` uses a logical volume to store OSD data and it uses
@@ -270,8 +270,7 @@ can be started later (for detailed metadata description see
 Crush device class
 ------------------
 
-To set the crush device class for the OSD, use the ``--crush-device-class`` flag. This will
-work for both bluestore and filestore OSDs::
+To set the crush device class for the OSD, use the ``--crush-device-class`` flag. 
 
     ceph-volume lvm prepare --bluestore --data vg/lv --crush-device-class foo
 
@@ -306,11 +305,6 @@ regardless of the type of volume (journal or data) or OSD objectstore:
 * ``osd_id``
 * ``crush_device_class``
 
-For :term:`filestore` these tags will be added:
-
-* ``journal_device``
-* ``journal_uuid``
-
 For :term:`bluestore` these tags will be added:
 
 * ``block_device``
@@ -336,15 +330,3 @@ To recap the ``prepare`` process for :term:`bluestore`:
 #. monmap is fetched for activation
 #. Data directory is populated by ``ceph-osd``
 #. Logical Volumes are assigned all the Ceph metadata using lvm tags
-
-
-And the ``prepare`` process for :term:`filestore`:
-
-#. Accepts raw physical devices, partitions on physical devices or logical volumes as arguments.
-#. Generate a UUID for the OSD
-#. Ask the monitor get an OSD ID reusing the generated UUID
-#. OSD data directory is created and data volume mounted
-#. Journal is symlinked from data volume to journal location
-#. monmap is fetched for activation
-#. devices is mounted and data directory is populated by ``ceph-osd``
-#. data and journal volumes are assigned all the Ceph metadata using lvm tags

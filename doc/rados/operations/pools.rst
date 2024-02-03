@@ -9,22 +9,24 @@ Pools provide:
 
 - **Resilience**: It is possible to set the number of OSDs that are allowed to
   fail without any data being lost. If your cluster uses replicated pools, the
-  number of OSDs that can fail without data loss is the number of replicas.
-  For example: a typical configuration stores an object and two additional
-  copies (that is: ``size = 3``), but you can configure the number of replicas
-  on a per-pool basis. For `erasure coded pools <../erasure-code>`_, resilience
-  is defined as the number of coding chunks (for example, ``m = 2`` in the
-  **erasure code profile**).
+  number of OSDs that can fail without data loss is equal to the number of
+  replicas.
+  
+  For example: a typical configuration stores an object and two replicas
+  (copies) of each RADOS object (that is: ``size = 3``), but you can configure
+  the number of replicas on a per-pool basis. For `erasure-coded pools
+  <../erasure-code>`_, resilience is defined as the number of coding chunks
+  (for example, ``m = 2`` in the default **erasure code profile**).
 
-- **Placement Groups**: You can set the number of placement groups for the
-  pool. A typical configuration targets approximately 100 placement groups per
-  OSD, providing optimal balancing without consuming many computing resources.
-  When setting up multiple pools, be careful to set a reasonable number of
-  placement groups for each pool and for the cluster as a whole. Note that each
-  PG belongs to a specific pool: when multiple pools use the same OSDs, make
-  sure that the **sum** of PG replicas per OSD is in the desired PG per OSD
-  target range. Use the `pgcalc`_ tool to calculate the number of placement
-  groups to set for your pool.
+- **Placement Groups**: You can set the number of placement groups (PGs) for
+  the pool. In a typical configuration, the target number of PGs is
+  approximately one hundred PGs per OSD. This provides reasonable balancing
+  without consuming excessive computing resources.  When setting up multiple
+  pools, be careful to set an appropriate number of PGs for each pool and for
+  the cluster as a whole. Each PG belongs to a specific pool: when multiple
+  pools use the same OSDs, make sure that the **sum** of PG replicas per OSD is
+  in the desired PG-per-OSD target range. To calculate an appropriate number of
+  PGs for your pools, use the `pgcalc`_ tool.
 
 - **CRUSH Rules**: When data is stored in a pool, the placement of the object
   and its replicas (or chunks, in the case of erasure-coded pools) in your
@@ -32,55 +34,100 @@ Pools provide:
   pool if the default rule does not fit your use case.
 
 - **Snapshots**: The command ``ceph osd pool mksnap`` creates a snapshot of a
-  pool. 
+  pool.
 
 Pool Names
 ==========
 
 Pool names beginning with ``.`` are reserved for use by Ceph's internal
-operations. Please do not create or manipulate pools with these names.
+operations. Do not create or manipulate pools with these names.
 
 
 List Pools
 ==========
 
-To list your cluster's pools, execute:
+There are multiple ways to get the list of pools in your cluster.
+
+To list just your cluster's pool names (good for scripting), execute:
+
+.. prompt:: bash $
+
+   ceph osd pool ls
+
+::
+
+   .rgw.root
+   default.rgw.log
+   default.rgw.control
+   default.rgw.meta
+
+To list your cluster's pools with the pool number, run the following command:
 
 .. prompt:: bash $
 
    ceph osd lspools
 
+::
+
+   1 .rgw.root
+   2 default.rgw.log
+   3 default.rgw.control
+   4 default.rgw.meta
+
+To list your cluster's pools with additional information, execute:
+
+.. prompt:: bash $
+
+   ceph osd pool ls detail
+
+::
+
+   pool 1 '.rgw.root' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 1 pgp_num 1 autoscale_mode on last_change 19 flags hashpspool stripe_width 0 application rgw read_balance_score 4.00
+   pool 2 'default.rgw.log' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 1 pgp_num 1 autoscale_mode on last_change 21 flags hashpspool stripe_width 0 application rgw read_balance_score 4.00
+   pool 3 'default.rgw.control' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 1 pgp_num 1 autoscale_mode on last_change 23 flags hashpspool stripe_width 0 application rgw read_balance_score 4.00
+   pool 4 'default.rgw.meta' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 1 pgp_num 1 autoscale_mode on last_change 25 flags hashpspool stripe_width 0 pg_autoscale_bias 4 application rgw read_balance_score 4.00
+
+To get even more information, you can execute this command with the ``--format`` (or ``-f``) option and the ``json``, ``json-pretty``, ``xml`` or ``xml-pretty`` value.
+
 .. _createpool:
 
-Create a Pool
-=============
+Creating a Pool
+===============
 
-Before creating pools, refer to the `Pool, PG and CRUSH Config Reference`_.
-Ideally, you should override the default value for the number of placement
-groups in your Ceph configuration file, as the default is NOT ideal.
-For details on placement group numbers refer to `setting the number of placement groups`_
-
-.. note:: Starting with Luminous, all pools need to be associated to the
-   application using the pool. See `Associate Pool to Application`_ below for
-   more information.
+Before creating a pool, consult `Pool, PG and CRUSH Config Reference`_.  Your
+Ceph configuration file contains a setting (namely, ``pg_num``) that determines
+the number of PGs.  However, this setting's default value is NOT appropriate
+for most systems.  In most cases, you should override this default value when
+creating your pool.  For details on PG numbers, see `setting the number of
+placement groups`_
 
 For example:
 
 .. prompt:: bash $
 
-	osd_pool_default_pg_num = 128
-	osd_pool_default_pgp_num = 128
+    osd_pool_default_pg_num = 128
+    osd_pool_default_pgp_num = 128
 
-To create a pool, execute:
+.. note:: In Luminous and later releases, each pool must be associated with the
+   application that will be using the pool. For more information, see
+   `Associating a Pool with an Application`_ below.
+
+To create a pool, run one of the following commands:
 
 .. prompt:: bash $
 
-	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]] [replicated] \
+    ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]] [replicated] \
              [crush-rule-name] [expected-num-objects]
-	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]]   erasure \
+
+or:
+
+.. prompt:: bash $
+
+    ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]]   erasure \
              [erasure-code-profile] [crush-rule-name] [expected_num_objects] [--autoscale-mode=<on,off,warn>]
 
-Where:
+For a brief description of the elements of the above commands, consult the
+following:
 
 .. describe:: {pool-name}
 
@@ -91,9 +138,9 @@ Where:
 
 .. describe:: {pg-num}
 
-   The total number of placement groups for the pool. See :ref:`placement groups`
-   for details on calculating a suitable number. The
-   default value ``8`` is NOT suitable for most systems.
+   The total number of PGs in the pool. For details on calculating an
+   appropriate number, see :ref:`placement groups`. The default value ``8`` is
+   NOT suitable for most systems.
 
   :Type: Integer
   :Required: Yes.
@@ -101,24 +148,22 @@ Where:
 
 .. describe:: {pgp-num}
 
-   The total number of placement groups for placement purposes. This
-   **should be equal to the total number of placement groups**, except
-   for placement group splitting scenarios.
+   The total number of PGs for placement purposes. This **should be equal to
+   the total number of PGs**, except briefly while ``pg_num`` is being
+   increased or decreased. 
 
   :Type: Integer
-  :Required: Yes. Picks up default or Ceph configuration value if not specified.
+  :Required: Yes. If no value has been specified in the command, then the default value is used (unless a different value has been set in Ceph configuration).
   :Default: 8
 
 .. describe:: {replicated|erasure}
 
-   The pool type which may either be **replicated** to
-   recover from lost OSDs by keeping multiple copies of the
-   objects or **erasure** to get a kind of
-   `generalized RAID5 <../erasure-code>`_ capability.
-   The **replicated** pools require more
-   raw storage but implement all Ceph operations. The
-   **erasure** pools require less raw storage but only
-   implement a subset of the available operations.
+   The pool type. This can be either **replicated** (to recover from lost OSDs
+   by keeping multiple copies of the objects) or **erasure** (to achieve a kind
+   of `generalized parity RAID <../erasure-code>`_ capability).  The
+   **replicated** pools require more raw storage but can implement all Ceph
+   operations. The **erasure** pools require less raw storage but can perform
+   only some Ceph tasks and may provide decreased performance.
 
   :Type: String
   :Required: No.
@@ -126,23 +171,18 @@ Where:
 
 .. describe:: [crush-rule-name]
 
-   The name of a CRUSH rule to use for this pool.  The specified
-   rule must exist.
+   The name of the CRUSH rule to use for this pool. The specified rule must
+   exist; otherwise the command will fail.
 
    :Type: String
    :Required: No.
-   :Default: For **replicated** pools it is the rule specified by the
-          :confval:`osd_pool_default_crush_rule` config variable.  This rule must exist.
-          For **erasure** pools it is ``erasure-code`` if the ``default``
-          `erasure code profile`_ is used or ``{pool-name}`` otherwise.  This
-          rule will be created implicitly if it doesn't exist already.
-
+   :Default: For **replicated** pools, it is the rule specified by the :confval:`osd_pool_default_crush_rule` configuration variable. This rule must exist.  For **erasure** pools, it is the ``erasure-code`` rule if the ``default`` `erasure code profile`_ is used or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
 
 .. describe:: [erasure-code-profile=profile]
 
-   For **erasure** pools only. Use the `erasure code profile`_. It
-   must be an existing profile as defined by
-   **osd erasure-code-profile set**.
+   For **erasure** pools only. Instructs Ceph to use the specified `erasure
+   code profile`_. This profile must be an existing profile as defined by **osd
+   erasure-code-profile set**.
 
   :Type: String
   :Required: No.
@@ -151,39 +191,38 @@ Where:
 
 .. describe:: --autoscale-mode=<on,off,warn>
 
-   If you set the autoscale mode to ``on`` or ``warn``, you can let the system
-   autotune or recommend changes to the number of placement groups in your pool
-   based on actual usage.  If you leave it off, then you should refer to
-   :ref:`placement groups` for more information.
+   - ``on``: the Ceph cluster will autotune or recommend changes to the number of PGs in your pool based on actual usage.
+   - ``warn``: the Ceph cluster will autotune or recommend changes to the number of PGs in your pool based on actual usage.
+   - ``off``: refer to :ref:`placement groups` for more information.
 
   :Type: String
   :Required: No.
-  :Default:  The default behavior is controlled by the :confval:`osd_pool_default_pg_autoscale_mode` option.
+  :Default: The default behavior is determined by the :confval:`osd_pool_default_pg_autoscale_mode` option.
 
 .. describe:: [expected-num-objects]
 
-   The expected number of objects for this pool. By setting this value (
-   together with a negative **filestore merge threshold**), the PG folder
-   splitting would happen at the pool creation time, to avoid the latency
-   impact to do a runtime folder splitting.
+   The expected number of RADOS objects for this pool. By setting this value and
+   assigning a negative value to **filestore merge threshold**, you arrange
+   for the PG folder splitting to occur at the time of pool creation and
+   avoid the latency impact that accompanies runtime folder splitting.
 
    :Type: Integer
    :Required: No.
-   :Default: 0, no splitting at the pool creation time.
+   :Default: 0, no splitting at the time of pool creation.
 
 .. _associate-pool-to-application:
 
-Associate Pool to Application
-=============================
+Associating a Pool with an Application
+======================================
 
-Pools need to be associated with an application before use. Pools that will be
-used with CephFS or pools that are automatically created by RGW are
-automatically associated. Pools that are intended for use with RBD should be
-initialized using the ``rbd`` tool (see `Block Device Commands`_ for more
-information).
+Pools need to be associated with an application before they can be used. Pools
+that are intended for use with CephFS and pools that are created automatically
+by RGW are associated automatically. Pools that are intended for use with RBD
+should be initialized with the ``rbd`` tool (see `Block Device Commands`_ for
+more information).
 
-For other cases, you can manually associate a free-form application name to
-a pool.:
+For other cases, you can manually associate a free-form application name to a
+pool by running the following command.:
 
 .. prompt:: bash $
 
@@ -192,11 +231,11 @@ a pool.:
 .. note:: CephFS uses the application name ``cephfs``, RBD uses the
    application name ``rbd``, and RGW uses the application name ``rgw``.
 
-Set Pool Quotas
-===============
+Setting Pool Quotas
+===================
 
-You can set pool quotas for the maximum number of bytes and/or the maximum
-number of objects per pool:
+To set pool quotas for the maximum number of bytes and/or the maximum number of
+RADOS objects per pool, run the following command:
 
 .. prompt:: bash $
 
@@ -211,91 +250,93 @@ For example:
 To remove a quota, set its value to ``0``.
 
 
-Delete a Pool
-=============
+Deleting a Pool
+===============
 
-To delete a pool, execute:
+To delete a pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
 
+To remove a pool, you must set the ``mon_allow_pool_delete`` flag to ``true``
+in the monitor's configuration. Otherwise, monitors will refuse to remove
+pools.
 
-To remove a pool the mon_allow_pool_delete flag must be set to true in the Monitor's
-configuration. Otherwise they will refuse to remove a pool.
-
-See `Monitor Configuration`_ for more information.
+For more information, see `Monitor Configuration`_.
 
 .. _Monitor Configuration: ../../configuration/mon-config-ref
 
-If you created your own rules for a pool you created, you should consider
-removing them when you no longer need your pool:
+If there are custom rules for a pool that is no longer needed, consider
+deleting those rules.
 
 .. prompt:: bash $
 
    ceph osd pool get {pool-name} crush_rule
 
-If the rule was "123", for example, you can check the other pools like so:
+For example, if the custom rule is "123", check all pools to see whether they
+use the rule by running the following command:
 
 .. prompt:: bash $
 
-	ceph osd dump | grep "^pool" | grep "crush_rule 123"
+    ceph osd dump | grep "^pool" | grep "crush_rule 123"
 
-If no other pools use that custom rule, then it's safe to delete that
-rule from the cluster.
+If no pools use this custom rule, then it is safe to delete the rule from the
+cluster.
 
-If you created users with permissions strictly for a pool that no longer
-exists, you should consider deleting those users too:
-
+Similarly, if there are users with permissions restricted to a pool that no
+longer exists, consider deleting those users by running commands of the
+following forms:
 
 .. prompt:: bash $
 
-	ceph auth ls | grep -C 5 {pool-name}
-	ceph auth del {user}
+    ceph auth ls | grep -C 5 {pool-name}
+    ceph auth del {user}
 
 
-Rename a Pool
-=============
+Renaming a Pool
+===============
 
-To rename a pool, execute:
+To rename a pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool rename {current-pool-name} {new-pool-name}
 
-If you rename a pool and you have per-pool capabilities for an authenticated
-user, you must update the user's capabilities (i.e., caps) with the new pool
-name.
+If you rename a pool for which an authenticated user has per-pool capabilities,
+you must update the user's capabilities ("caps") to refer to the new pool name.
 
-Show Pool Statistics
-====================
 
-To show a pool's utilization statistics, execute:
+Showing Pool Statistics
+=======================
+
+To show a pool's utilization statistics, run the following command:
 
 .. prompt:: bash $
 
    rados df
 
-Additionally, to obtain I/O information for a specific pool or all, execute:
+To obtain I/O information for a specific pool or for all pools, run a command
+of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool stats [{pool-name}]
 
 
-Make a Snapshot of a Pool
-=========================
+Making a Snapshot of a Pool
+===========================
 
-To make a snapshot of a pool, execute:
+To make a snapshot of a pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool mksnap {pool-name} {snap-name}
 
-Remove a Snapshot of a Pool
-===========================
+Removing a Snapshot of a Pool
+=============================
 
-To remove a snapshot of a pool, execute:
+To remove a snapshot of a pool, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -303,11 +344,11 @@ To remove a snapshot of a pool, execute:
 
 .. _setpoolvalues:
 
+Setting Pool Values
+===================
 
-Set Pool Values
-===============
-
-To set a value to a pool, execute the following:
+To assign values to a pool's configuration keys, run a command of the following
+form:
 
 .. prompt:: bash $
 
@@ -318,107 +359,84 @@ You may set values for the following keys:
 .. _compression_algorithm:
 
 .. describe:: compression_algorithm
-
-   Sets inline compression algorithm to use for underlying BlueStore. This setting overrides the global setting
-   :confval:`bluestore_compression_algorithm`.
-
+   
+   :Description: Sets the inline compression algorithm used in storing data on the underlying BlueStore back end. This key's setting overrides the global setting :confval:`bluestore_compression_algorithm`.
    :Type: String
    :Valid Settings: ``lz4``, ``snappy``, ``zlib``, ``zstd``
 
 .. describe:: compression_mode
-
-   Sets the policy for the inline compression algorithm for underlying BlueStore. This setting overrides the
-   global setting :confval:`bluestore_compression_mode`.
-
+   
+   :Description: Sets the policy for the inline compression algorithm used in storing data on the underlying BlueStore back end. This key's setting overrides the global setting :confval:`bluestore_compression_mode`.
    :Type: String
    :Valid Settings: ``none``, ``passive``, ``aggressive``, ``force``
 
 .. describe:: compression_min_blob_size
 
-   Chunks smaller than this are never compressed. This setting overrides the global settings of
-   :confval:`bluestore_compression_min_blob_size`, :confval:`bluestore_compression_min_blob_size_hdd` and
-   :confval:`bluestore_compression_min_blob_size_ssd`
+   
+   :Description: Sets the minimum size for the compression of chunks: that is, chunks smaller than this are not compressed.  This key's setting overrides the following global settings:
+   
+   * :confval:`bluestore_compression_min_blob_size` 
+   * :confval:`bluestore_compression_min_blob_size_hdd`
+   * :confval:`bluestore_compression_min_blob_size_ssd`
 
    :Type: Unsigned Integer
 
+
 .. describe:: compression_max_blob_size
-
-   Chunks larger than this are broken into smaller blobs sizing
-   ``compression_max_blob_size`` before being compressed.
-
+   
+   :Description: Sets the maximum size for chunks: that is, chunks larger than this are broken into smaller blobs of this size before compression is performed.
    :Type: Unsigned Integer
 
 .. _size:
 
 .. describe:: size
-
-   Sets the number of replicas for objects in the pool.
-   See `Set the Number of Object Replicas`_ for further details.
-   Replicated pools only.
-
+   
+   :Description: Sets the number of replicas for objects in the pool. For further details, see `Setting the Number of RADOS Object Replicas`_. Replicated pools only.
    :Type: Integer
 
 .. _min_size:
 
 .. describe:: min_size
-
-   Sets the minimum number of replicas required for I/O.
-   See `Set the Number of Object Replicas`_ for further details.
-   In the case of Erasure Coded pools this should be set to a value
-   greater than 'k' since if we allow IO at the value 'k' there is no
-   redundancy and data will be lost in the event of a permanent OSD
-   failure. For more information see `Erasure Code <../erasure-code>`_
-
+   
+   :Description: Sets the minimum number of replicas required for I/O.  For further details, see `Setting the Number of RADOS Object Replicas`_.  For erasure-coded pools, this should be set to a value greater than 'k'. If I/O is allowed at the value 'k', then there is no redundancy and data will be lost in the event of a permanent OSD failure. For more information, see `Erasure Code <../erasure-code>`_
    :Type: Integer
    :Version: ``0.54`` and above
 
 .. _pg_num:
 
 .. describe:: pg_num
-
-   The effective number of placement groups to use when calculating
-   data placement.
-
+   
+   :Description: Sets the effective number of PGs to use when calculating data placement.
    :Type: Integer
-   :Valid Range: Superior to ``pg_num`` current value.
+   :Valid Range: ``0`` to ``mon_max_pool_pg_num``. If set to ``0``, the value of ``osd_pool_default_pg_num`` will be used. 
 
 .. _pgp_num:
 
 .. describe:: pgp_num
-
-   The effective number of placement groups for placement to use
-   when calculating data placement.
-
+   
+   :Description: Sets the effective number of PGs to use when calculating data placement.
    :Type: Integer
-   :Valid Range: Equal to or less than ``pg_num``.
+   :Valid Range: Between ``1`` and the current value of ``pg_num``.
 
 .. _crush_rule:
 
 .. describe:: crush_rule
-
-   The rule to use for mapping object placement in the cluster.
-
+   
+   :Description: Sets the CRUSH rule that Ceph uses to map object placement within the pool.
    :Type: String
 
 .. _allow_ec_overwrites:
 
 .. describe:: allow_ec_overwrites
-
-
-   Whether writes to an erasure coded pool can update part
-   of an object, so cephfs and rbd can use it. See
-   `Erasure Coding with Overwrites`_ for more details.
-
+   
+   :Description: Determines whether writes to an erasure-coded pool are allowed to update only part of a RADOS object. This allows CephFS and RBD to use an EC (erasure-coded) pool for user data (but not for metadata). For more details, see `Erasure Coding with Overwrites`_.
    :Type: Boolean
 
    .. versionadded:: 12.2.0
-
-.. _hashpspool:
-
+   
 .. describe:: hashpspool
 
-   Set/Unset HASHPSPOOL flag on a given pool.
-
+   :Description: Sets and unsets the HASHPSPOOL flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
 
@@ -426,8 +444,7 @@ You may set values for the following keys:
 
 .. describe:: nodelete
 
-   Set/Unset NODELETE flag on a given pool.
-
+   :Description: Sets and unsets the NODELETE flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
    :Version: Version ``FIXME``
@@ -436,7 +453,7 @@ You may set values for the following keys:
 
 .. describe:: nopgchange
 
-   :Description: Set/Unset NOPGCHANGE flag on a given pool.
+   :Description: Sets and unsets the NOPGCHANGE flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
    :Version: Version ``FIXME``
@@ -445,8 +462,7 @@ You may set values for the following keys:
 
 .. describe:: nosizechange
 
-   Set/Unset NOSIZECHANGE flag on a given pool.
-
+   :Description: Sets and unsets the NOSIZECHANGE flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
    :Version: Version ``FIXME``
@@ -455,193 +471,73 @@ You may set values for the following keys:
 
 .. describe:: bulk
 
-   Set/Unset bulk flag on a given pool.
-
+   :Description: Sets and unsets the bulk flag on a given pool.
    :Type: Boolean
-   :Valid Range: true/1 sets flag, false/0 unsets flag
+   :Valid Range: ``true``/``1`` sets flag, ``false``/``0`` unsets flag
 
 .. _write_fadvise_dontneed:
 
 .. describe:: write_fadvise_dontneed
 
-   Set/Unset WRITE_FADVISE_DONTNEED flag on a given pool.
-
+   :Description: Sets and unsets the WRITE_FADVISE_DONTNEED flag on a given pool.
    :Type: Integer
-   :Valid Range: 1 sets flag, 0 unsets flag
+   :Valid Range: ``1`` sets flag, ``0`` unsets flag
 
 .. _noscrub:
 
 .. describe:: noscrub
 
-   Set/Unset NOSCRUB flag on a given pool.
-
+   :Description: Sets and unsets the NOSCRUB flag on a given pool.
    :Type: Integer
-   :Valid Range: 1 sets flag, 0 unsets flag
+   :Valid Range: ``1`` sets flag, ``0`` unsets flag
 
 .. _nodeep-scrub:
 
 .. describe:: nodeep-scrub
 
-   Set/Unset NODEEP_SCRUB flag on a given pool.
-
+   :Description: Sets and unsets the NODEEP_SCRUB flag on a given pool.
    :Type: Integer
-   :Valid Range: 1 sets flag, 0 unsets flag
-
-.. _hit_set_type:
-
-.. describe:: hit_set_type
-
-   Enables hit set tracking for cache pools.
-   See `Bloom Filter`_ for additional information.
-
-   :Type: String
-   :Valid Settings: ``bloom``, ``explicit_hash``, ``explicit_object``
-   :Default: ``bloom``. Other values are for testing.
-
-.. _hit_set_count:
-
-.. describe:: hit_set_count
-
-   The number of hit sets to store for cache pools. The higher
-   the number, the more RAM consumed by the ``ceph-osd`` daemon.
-
-   :Type: Integer
-   :Valid Range: ``1``. Agent doesn't handle > 1 yet.
-
-.. _hit_set_period:
-
-.. describe:: hit_set_period
-
-   The duration of a hit set period in seconds for cache pools.
-   The higher the number, the more RAM consumed by the
-   ``ceph-osd`` daemon.
-
-   :Type: Integer
-   :Example: ``3600`` 1hr
-
-.. _hit_set_fpp:
-
-.. describe:: hit_set_fpp
-
-   The false positive probability for the ``bloom`` hit set type.
-   See `Bloom Filter`_ for additional information.
-
-   :Type: Double
-   :Valid Range: 0.0 - 1.0
-   :Default: ``0.05``
-
-.. _cache_target_dirty_ratio:
-
-.. describe:: cache_target_dirty_ratio
-
-   The percentage of the cache pool containing modified (dirty)
-   objects before the cache tiering agent will flush them to the
-   backing storage pool.
-
-   :Type: Double
-   :Default: ``.4``
-
-.. _cache_target_dirty_high_ratio:
-
-.. describe:: cache_target_dirty_high_ratio
-
-   The percentage of the cache pool containing modified (dirty)
-   objects before the cache tiering agent will flush them to the
-   backing storage pool with a higher speed.
-
-   :Type: Double
-   :Default: ``.6``
-
-.. _cache_target_full_ratio:
-
-.. describe:: cache_target_full_ratio
-
-   The percentage of the cache pool containing unmodified (clean)
-   objects before the cache tiering agent will evict them from the
-   cache pool.
-
-   :Type: Double
-   :Default: ``.8``
+   :Valid Range: ``1`` sets flag, ``0`` unsets flag
 
 .. _target_max_bytes:
 
 .. describe:: target_max_bytes
-
-   Ceph will begin flushing or evicting objects when the
-   ``max_bytes`` threshold is triggered.
-
+   
+   :Description: Ceph will begin flushing or evicting objects when the
+                 ``max_bytes`` threshold is triggered.
    :Type: Integer
    :Example: ``1000000000000``  #1-TB
 
 .. _target_max_objects:
 
 .. describe:: target_max_objects
-
-   Ceph will begin flushing or evicting objects when the
-   ``max_objects`` threshold is triggered.
-
+   
+   :Description: Ceph will begin flushing or evicting objects when the
+                 ``max_objects`` threshold is triggered.
    :Type: Integer
    :Example: ``1000000`` #1M objects
-
-
-.. describe:: hit_set_grade_decay_rate
-
-   Temperature decay rate between two successive hit_sets
-
-   :Type: Integer
-   :Valid Range: 0 - 100
-   :Default: ``20``
-
-.. describe:: hit_set_search_last_n
-
-   Count at most N appearance in hit_sets for temperature calculation
-
-   :Type: Integer
-   :Valid Range: 0 - hit_set_count
-   :Default: ``1``
-
-.. _cache_min_flush_age:
-
-.. describe:: cache_min_flush_age
-
-   The time (in seconds) before the cache tiering agent will flush
-   an object from the cache pool to the storage pool.
-
-   :Type: Integer
-   :Example: ``600`` 10min
-
-.. _cache_min_evict_age:
-
-.. describe:: cache_min_evict_age
-
-   The time (in seconds) before the cache tiering agent will evict
-   an object from the cache pool.
-
-   :Type: Integer
-   :Example: ``1800`` 30min
 
 .. _fast_read:
 
 .. describe:: fast_read
-
-   On Erasure Coding pool, if this flag is turned on, the read request
-   would issue sub reads to all shards, and waits until it receives enough
-   shards to decode to serve the client. In the case of jerasure and isa
-   erasure plugins, once the first K replies return, client's request is
-   served immediately using the data decoded from these replies. This
-   helps to tradeoff some resources for better performance. Currently this
-   flag is only supported for Erasure Coding pool.
-
-   :Type: Boolean
+   
+   :Description: For erasure-coded pools, if this flag is turned ``on``, the
+                 read request issues "sub reads" to all shards, and then waits
+                 until it receives enough shards to decode before it serves 
+                 the client. If *jerasure* or *isa* erasure plugins are in 
+                 use, then after the first *K* replies have returned, the 
+                 client's request is served immediately using the data decoded 
+                 from these replies. This approach sacrifices resources in 
+                 exchange for better performance. This flag is supported only 
+                 for erasure-coded pools.
+   :Type: Boolean 
    :Defaults: ``0``
 
 .. _scrub_min_interval:
 
 .. describe:: scrub_min_interval
-
-   The minimum interval in seconds for pool scrubbing when
-   load is low. If it is 0, the value osd_scrub_min_interval
-   from config is used.
+   
+   :Description: Sets the minimum interval (in seconds) for successive scrubs of the pool's PGs when the load is low. If the default value of ``0`` is in effect, then the value of ``osd_scrub_min_interval`` from central config is used.
 
    :Type: Double
    :Default: ``0``
@@ -649,10 +545,8 @@ You may set values for the following keys:
 .. _scrub_max_interval:
 
 .. describe:: scrub_max_interval
-
-   The maximum interval in seconds for pool scrubbing
-   irrespective of cluster load. If it is 0, the value
-   osd_scrub_max_interval from config is used.
+   
+   :Description: Sets the maximum interval (in seconds) for scrubs of the pool's PGs regardless of cluster load. If the value of ``scrub_max_interval`` is ``0``, then the value ``osd_scrub_max_interval`` from central config is used.
 
    :Type: Double
    :Default: ``0``
@@ -660,9 +554,8 @@ You may set values for the following keys:
 .. _deep_scrub_interval:
 
 .. describe:: deep_scrub_interval
-
-   The interval in seconds for pool “deep” scrubbing. If it
-   is 0, the value osd_deep_scrub_interval from config is used.
+   
+   :Description: Sets the interval (in seconds) for pool “deep” scrubs of the pool's PGs. If the value of ``deep_scrub_interval`` is ``0``, the value ``osd_deep_scrub_interval`` from central config is used.
 
    :Type: Double
    :Default: ``0``
@@ -670,11 +563,8 @@ You may set values for the following keys:
 .. _recovery_priority:
 
 .. describe:: recovery_priority
-
-   When a value is set it will increase or decrease the computed
-   reservation priority. This value must be in the range -10 to
-   10.  Use a negative priority for less important pools so they
-   have lower priority than any new pools.
+   
+   :Description: Setting this value adjusts a pool's computed reservation priority. This value must be in the range ``-10`` to ``10``. Any pool assigned a negative value will be given a lower priority than any new pools, so users are directed to assign negative values to low-priority pools.
 
    :Type: Integer
    :Default: ``0``
@@ -683,47 +573,51 @@ You may set values for the following keys:
 .. _recovery_op_priority:
 
 .. describe:: recovery_op_priority
-
-   Specify the recovery operation priority for this pool instead of :confval:`osd_recovery_op_priority`.
+   
+   :Description: Sets the recovery operation priority for a specific pool's PGs. This overrides the general priority determined by :confval:`osd_recovery_op_priority`.
 
    :Type: Integer
    :Default: ``0``
 
 
-Get Pool Values
-===============
+Getting Pool Values
+===================
 
-To get a value from a pool, execute the following:
+To get a value from a pool's key, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool get {pool-name} {key}
 
-You may get values for the following keys:
+
+You may get values from the following keys:
+
 
 ``size``
 
-:Description: see size_
+:Description: See size_.
 
 :Type: Integer
 
+
 ``min_size``
 
-:Description: see min_size_
+:Description: See min_size_.
 
 :Type: Integer
 :Version: ``0.54`` and above
 
+
 ``pg_num``
 
-:Description: see pg_num_
+:Description: See pg_num_.
 
 :Type: Integer
 
 
 ``pgp_num``
 
-:Description: see pgp_num_
+:Description: See pgp_num_.
 
 :Type: Integer
 :Valid Range: Equal to or less than ``pg_num``.
@@ -731,179 +625,122 @@ You may get values for the following keys:
 
 ``crush_rule``
 
-:Description: see crush_rule_
-
-
-``hit_set_type``
-
-:Description: see hit_set_type_
-
-:Type: String
-:Valid Settings: ``bloom``, ``explicit_hash``, ``explicit_object``
-
-``hit_set_count``
-
-:Description: see hit_set_count_
-
-:Type: Integer
-
-
-``hit_set_period``
-
-:Description: see hit_set_period_
-
-:Type: Integer
-
-
-``hit_set_fpp``
-
-:Description: see hit_set_fpp_
-
-:Type: Double
-
-
-``cache_target_dirty_ratio``
-
-:Description: see cache_target_dirty_ratio_
-
-:Type: Double
-
-
-``cache_target_dirty_high_ratio``
-
-:Description: see cache_target_dirty_high_ratio_
-
-:Type: Double
-
-
-``cache_target_full_ratio``
-
-:Description: see cache_target_full_ratio_
-
-:Type: Double
+:Description: See crush_rule_.
 
 
 ``target_max_bytes``
 
-:Description: see target_max_bytes_
+:Description: See target_max_bytes_.
 
 :Type: Integer
 
 
 ``target_max_objects``
 
-:Description: see target_max_objects_
-
-:Type: Integer
-
-
-``cache_min_flush_age``
-
-:Description: see cache_min_flush_age_
-
-:Type: Integer
-
-
-``cache_min_evict_age``
-
-:Description: see cache_min_evict_age_
+:Description: See target_max_objects_.
 
 :Type: Integer
 
 
 ``fast_read``
 
-:Description: see fast_read_
+:Description: See fast_read_.
 
 :Type: Boolean
 
 
 ``scrub_min_interval``
 
-:Description: see scrub_min_interval_
+:Description: See scrub_min_interval_.
 
 :Type: Double
 
 
 ``scrub_max_interval``
 
-:Description: see scrub_max_interval_
+:Description: See scrub_max_interval_.
 
 :Type: Double
 
 
 ``deep_scrub_interval``
 
-:Description: see deep_scrub_interval_
+:Description: See deep_scrub_interval_.
 
 :Type: Double
 
 
 ``allow_ec_overwrites``
 
-:Description: see allow_ec_overwrites_
+:Description: See allow_ec_overwrites_.
 
 :Type: Boolean
 
 
 ``recovery_priority``
 
-:Description: see recovery_priority_
+:Description: See recovery_priority_.
 
 :Type: Integer
 
 
 ``recovery_op_priority``
 
-:Description: see recovery_op_priority_
+:Description: See recovery_op_priority_.
 
 :Type: Integer
 
 
-Set the Number of Object Replicas
-=================================
+Setting the Number of RADOS Object Replicas
+===========================================
 
-To set the number of object replicas on a replicated pool, execute the following:
+To set the number of data replicas on a replicated pool, run a command of the
+following form:
 
 .. prompt:: bash $
 
    ceph osd pool set {poolname} size {num-replicas}
 
-.. important:: The ``{num-replicas}`` includes the object itself.
-   If you want the object and two copies of the object for a total of
-   three instances of the object, specify ``3``.
-
-For example:
+.. important:: The ``{num-replicas}`` argument includes the primary object
+   itself.  For example, if you want there to be two replicas of the object in
+   addition to the original object (for a total of three instances of the
+   object) specify ``3`` by running the following command:
 
 .. prompt:: bash $
 
    ceph osd pool set data size 3
 
-You may execute this command for each pool. **Note:** An object might accept
-I/Os in degraded mode with fewer than ``pool size`` replicas.  To set a minimum
-number of required replicas for I/O, you should use the ``min_size`` setting.
-For example:
+You may run the above command for each pool. 
+
+.. Note:: An object might accept I/Os in degraded mode with fewer than ``pool
+   size`` replicas. To set a minimum number of replicas required for I/O, you
+   should use the ``min_size`` setting.  For example, you might run the
+   following command:
 
 .. prompt:: bash $
 
    ceph osd pool set data min_size 2
 
-This ensures that no object in the data pool will receive I/O with fewer than
-``min_size`` replicas.
+This command ensures that no object in the data pool will receive I/O if it has
+fewer than ``min_size`` (in this case, two) replicas.
 
 
-Get the Number of Object Replicas
-=================================
+Getting the Number of Object Replicas
+=====================================
 
-To get the number of object replicas, execute the following:
+To get the number of object replicas, run the following command:
 
 .. prompt:: bash $
 
    ceph osd dump | grep 'replicated size'
 
-Ceph will list the pools, with the ``replicated size`` attribute highlighted.
-By default, ceph creates two replicas of an object (a total of three copies, or
-a size of 3).
+Ceph will list pools and highlight the ``replicated size`` attribute.  By
+default, Ceph creates two replicas of an object (a total of three copies, for a
+size of ``3``).
+
+Managing pools that are flagged with ``--bulk``
+===============================================
+See :ref:`managing_bulk_flagged_pools`.
 
 
 .. _pgcalc: https://old.ceph.com/pgcalc/

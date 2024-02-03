@@ -19,6 +19,7 @@
 #include "crimson/osd/pg.h"
 #include "crimson/osd/watch.h"
 #include "osd/ClassHandler.h"
+#include "osd/SnapMapper.h"
 
 namespace {
   seastar::logger& logger() {
@@ -137,7 +138,8 @@ OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 }
 
 static watch_info_t create_watch_info(const OSDOp& osd_op,
-                                      const OpsExecuter::ExecutableMessage& msg)
+                                      const OpsExecuter::ExecutableMessage& msg,
+                                      entity_addr_t peer_addr)
 {
   using crimson::common::local_conf;
   const uint32_t timeout =
@@ -146,7 +148,7 @@ static watch_info_t create_watch_info(const OSDOp& osd_op,
   return {
     osd_op.op.watch.cookie,
     timeout,
-    msg.get_connection()->get_peer_addr()
+    peer_addr
   };
 }
 
@@ -158,48 +160,47 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
   logger().debug("{}", __func__);
   struct connect_ctx_t {
     ObjectContext::watch_key_t key;
-    crimson::net::ConnectionFRef conn;
+    crimson::net::ConnectionXcoreRef conn;
     watch_info_t info;
 
     connect_ctx_t(
       const OSDOp& osd_op,
       const ExecutableMessage& msg,
-      crimson::net::ConnectionFRef conn)
+      crimson::net::ConnectionXcoreRef conn)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name),
-        conn(std::move(conn)),
-        info(create_watch_info(osd_op, msg)) {
+        conn(conn),
+        info(create_watch_info(osd_op, msg, conn->get_peer_addr())) {
     }
   };
-  return get_message().get_connection().copy(
-  ).then([&, this](auto &&conn) {
-    return with_effect_on_obc(
-      connect_ctx_t{ osd_op, get_message(), std::move(conn) },
-      [&] (auto& ctx) {
-	const auto& entity = ctx.key.second;
-	auto [it, emplaced] =
-	  os.oi.watchers.try_emplace(ctx.key, std::move(ctx.info));
-	if (emplaced) {
-	  logger().info("registered new watch {} by {}", it->second, entity);
-	  txn.nop();
-	} else {
-	  logger().info("found existing watch {} by {}", it->second, entity);
-	}
-	return seastar::now();
-      },
-      [] (auto&& ctx, ObjectContextRef obc, Ref<PG> pg) {
-	assert(pg);
-	auto [it, emplaced] = obc->watchers.try_emplace(ctx.key, nullptr);
-	if (emplaced) {
-	  const auto& [cookie, entity] = ctx.key;
-	  it->second = crimson::osd::Watch::create(
-	    obc, ctx.info, entity, std::move(pg));
-	  logger().info("op_effect: added new watcher: {}", ctx.key);
-	} else {
-	  logger().info("op_effect: found existing watcher: {}", ctx.key);
-	}
-	return it->second->connect(std::move(ctx.conn), true /* will_ping */);
-      });
-  });
+
+  return with_effect_on_obc(
+    connect_ctx_t{ osd_op, get_message(), conn },
+    [&](auto& ctx) {
+      const auto& entity = ctx.key.second;
+      auto [it, emplaced] =
+        os.oi.watchers.try_emplace(ctx.key, std::move(ctx.info));
+      if (emplaced) {
+        logger().info("registered new watch {} by {}", it->second, entity);
+        txn.nop();
+      } else {
+        logger().info("found existing watch {} by {}", it->second, entity);
+      }
+      return seastar::now();
+    },
+    [](auto&& ctx, ObjectContextRef obc, Ref<PG> pg) {
+      assert(pg);
+      auto [it, emplaced] = obc->watchers.try_emplace(ctx.key, nullptr);
+      if (emplaced) {
+        const auto& [cookie, entity] = ctx.key;
+        it->second = crimson::osd::Watch::create(
+          obc, ctx.info, entity, std::move(pg));
+        logger().info("op_effect: added new watcher: {}", ctx.key);
+      } else {
+        logger().info("op_effect: found existing watcher: {}", ctx.key);
+      }
+      return it->second->connect(std::move(ctx.conn), true /* will_ping */);
+    }
+  );
 }
 
 OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_reconnect(
@@ -322,57 +323,56 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
     return crimson::ct_error::enoent::make();
   }
   struct notify_ctx_t {
-    crimson::net::ConnectionFRef conn;
+    crimson::net::ConnectionXcoreRef conn;
     notify_info_t ninfo;
     const uint64_t client_gid;
     const epoch_t epoch;
 
-    notify_ctx_t(const ExecutableMessage& msg, crimson::net::ConnectionFRef conn)
-      : conn(std::move(conn)),
+    notify_ctx_t(const ExecutableMessage& msg,
+                 crimson::net::ConnectionXcoreRef conn)
+      : conn(conn),
         client_gid(msg.get_reqid().name.num()),
         epoch(msg.get_map_epoch()) {
     }
   };
-  return get_message().get_connection().copy(
-  ).then([&, this](auto &&conn) {
-    return with_effect_on_obc(
-      notify_ctx_t{ get_message(), std::move(conn) },
-      [&] (auto& ctx) {
-	try {
-	  auto bp = osd_op.indata.cbegin();
-	  uint32_t ver; // obsolete
-	  ceph::decode(ver, bp);
-	  ceph::decode(ctx.ninfo.timeout, bp);
-	  ceph::decode(ctx.ninfo.bl, bp);
-	} catch (const buffer::error&) {
-	  ctx.ninfo.timeout = 0;
-	}
-	if (!ctx.ninfo.timeout) {
-	  using crimson::common::local_conf;
-	  ctx.ninfo.timeout = local_conf()->osd_default_notify_timeout;
-	}
-	ctx.ninfo.notify_id = get_next_notify_id(ctx.epoch);
-	ctx.ninfo.cookie = osd_op.op.notify.cookie;
-	// return our unique notify id to the client
-	ceph::encode(ctx.ninfo.notify_id, osd_op.outdata);
-	return seastar::now();
-      },
-      [] (auto&& ctx, ObjectContextRef obc, Ref<PG>) {
-	auto alive_watchers = obc->watchers | boost::adaptors::map_values
-	  | boost::adaptors::filtered(
-	    [] (const auto& w) {
-	      // FIXME: filter as for the `is_ping` in `Watch::start_notify`
-	      return w->is_alive();
-	    });
-	return crimson::osd::Notify::create_n_propagate(
-	  std::begin(alive_watchers),
-	  std::end(alive_watchers),
-	  std::move(ctx.conn),
-	  ctx.ninfo,
-	  ctx.client_gid,
-	  obc->obs.oi.user_version);
-      });
-  });
+  return with_effect_on_obc(
+    notify_ctx_t{ get_message(), conn },
+    [&](auto& ctx) {
+      try {
+        auto bp = osd_op.indata.cbegin();
+        uint32_t ver; // obsolete
+        ceph::decode(ver, bp);
+        ceph::decode(ctx.ninfo.timeout, bp);
+        ceph::decode(ctx.ninfo.bl, bp);
+      } catch (const buffer::error&) {
+        ctx.ninfo.timeout = 0;
+      }
+      if (!ctx.ninfo.timeout) {
+        using crimson::common::local_conf;
+        ctx.ninfo.timeout = local_conf()->osd_default_notify_timeout;
+      }
+      ctx.ninfo.notify_id = get_next_notify_id(ctx.epoch);
+      ctx.ninfo.cookie = osd_op.op.notify.cookie;
+      // return our unique notify id to the client
+      ceph::encode(ctx.ninfo.notify_id, osd_op.outdata);
+      return seastar::now();
+    },
+    [](auto&& ctx, ObjectContextRef obc, Ref<PG>) {
+      auto alive_watchers = obc->watchers | boost::adaptors::map_values
+        | boost::adaptors::filtered(
+          [] (const auto& w) {
+            // FIXME: filter as for the `is_ping` in `Watch::start_notify`
+            return w->is_alive();
+          });
+      return crimson::osd::Notify::create_n_propagate(
+        std::begin(alive_watchers),
+        std::end(alive_watchers),
+        std::move(ctx.conn),
+        ctx.ninfo,
+        ctx.client_gid,
+        obc->obs.oi.user_version);
+    }
+  );
 }
 
 OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_list_watchers(
@@ -636,9 +636,12 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.writefull(os, osd_op, txn, *osd_op_params, delta_stats);
     });
   case CEPH_OSD_OP_ROLLBACK:
-    return do_write_op([this, &ss=obc->get_ro_ss(),
+    return do_write_op([this, &head=obc,
                         &osd_op](auto& backend, auto& os, auto& txn) {
-      return backend.rollback(ss, os, osd_op, txn, *osd_op_params, delta_stats);
+      ceph_assert(obc->ssc);
+      return backend.rollback(os, obc->ssc->snapset,
+			      osd_op, txn, *osd_op_params, delta_stats,
+                              head, pg->obc_loader, snapc);
     });
   case CEPH_OSD_OP_APPEND:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
@@ -665,15 +668,22 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_DELETE:
   {
     bool whiteout = false;
-    if (!obc->ssc->snapset.clones.empty() ||
-        (snapc.snaps.size() &&                      // there are snaps
-        snapc.snaps[0] > obc->ssc->snapset.seq)) {  // existing obj is old
+    if (should_whiteout(obc->ssc->snapset, snapc)) {  // existing obj is old
       logger().debug("{} has or will have clones, will whiteout {}",
                      __func__, obc->obs.oi.soid);
       whiteout = true;
     }
     return do_write_op([this, whiteout](auto& backend, auto& os, auto& txn) {
-      return backend.remove(os, txn, delta_stats, whiteout);
+      int num_bytes = 0;
+      // Calculate num_bytes to be removed
+      if (obc->obs.oi.soid.is_snap()) {
+        ceph_assert(obc->ssc->snapset.clone_overlap.count(obc->obs.oi.soid.snap));
+        num_bytes = obc->ssc->snapset.get_clone_bytes(obc->obs.oi.soid.snap);
+      } else {
+        num_bytes = obc->obs.oi.size;
+      }
+      return backend.remove(os, txn, *osd_op_params,
+                            delta_stats, whiteout, num_bytes);
     });
   }
   case CEPH_OSD_OP_CALL:
@@ -796,7 +806,7 @@ void OpsExecuter::fill_op_params_bump_pg_version()
 {
   osd_op_params->req_id = msg->get_reqid();
   osd_op_params->mtime = msg->get_mtime();
-  osd_op_params->at_version = pg->next_version();
+  osd_op_params->at_version = pg->get_next_version();
   osd_op_params->pg_trim_to = pg->get_pg_trim_to();
   osd_op_params->min_last_complete_ondisk = pg->get_min_last_complete_ondisk();
   osd_op_params->last_complete = pg->get_info().last_complete;
@@ -805,6 +815,9 @@ void OpsExecuter::fill_op_params_bump_pg_version()
 std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   const std::vector<OSDOp>& ops)
 {
+  // let's ensure we don't need to inform SnapMapper about this particular
+  // entry.
+  assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
   std::vector<pg_log_entry_t> log_entries;
   log_entries.emplace_back(
     obc->obs.exists ?
@@ -816,6 +829,7 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
     osd_op_params->req_id,
     osd_op_params->mtime,
     op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
+  osd_op_params->at_version.version++;
   if (op_info.allows_returnvec()) {
     // also the per-op values are recorded in the pg log
     log_entries.back().set_op_returns(ops);
@@ -824,6 +838,57 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   }
   log_entries.back().clean_regions = std::move(osd_op_params->clean_regions);
   return log_entries;
+}
+
+OpsExecuter::interruptible_future<> OpsExecuter::snap_map_remove(
+  const hobject_t& soid,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
+  ceph::os::Transaction& txn)
+{
+  logger().debug("{}: soid {}", __func__, soid);
+  return interruptor::async([soid, &snap_mapper,
+                             _t=osdriver.get_transaction(&txn)]() mutable {
+    const auto r = snap_mapper.remove_oid(soid, &_t);
+    if (r) {
+      logger().error("{}: remove_oid {} failed with {}",
+                     __func__, soid, r);
+    }
+    // On removal tolerate missing key corruption
+    assert(r == 0 || r == -ENOENT);
+  });
+}
+
+OpsExecuter::interruptible_future<> OpsExecuter::snap_map_modify(
+  const hobject_t& soid,
+  const std::set<snapid_t>& snaps,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
+  ceph::os::Transaction& txn)
+{
+  logger().debug("{}: soid {}, snaps {}", __func__, soid, snaps);
+  return interruptor::async([soid, snaps, &snap_mapper,
+                             _t=osdriver.get_transaction(&txn)]() mutable {
+    assert(std::size(snaps) > 0);
+    [[maybe_unused]] const auto r = snap_mapper.update_snaps(
+      soid, snaps, 0, &_t);
+    assert(r == 0);
+  });
+}
+
+OpsExecuter::interruptible_future<> OpsExecuter::snap_map_clone(
+  const hobject_t& soid,
+  const std::set<snapid_t>& snaps,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
+  ceph::os::Transaction& txn)
+{
+  logger().debug("{}: soid {}, snaps {}", __func__, soid, snaps);
+  return interruptor::async([soid, snaps, &snap_mapper,
+                             _t=osdriver.get_transaction(&txn)]() mutable {
+    assert(std::size(snaps) > 0);
+    snap_mapper.add_oid(soid, snaps, &_t);
+  });
 }
 
 // Defined here because there is a circular dependency between OpsExecuter and PG
@@ -866,12 +931,12 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     return std::vector<snapid_t>{std::begin(snapc.snaps), last};
   }();
 
-  auto [snap_oi, clone_obc] = prepare_clone(coid);
+  auto clone_obc = prepare_clone(coid);
   // make clone
-  backend.clone(snap_oi, initial_obs, clone_obc->obs, txn);
+  backend.clone(clone_obc->obs.oi, initial_obs, clone_obc->obs, txn);
 
   delta_stats.num_objects++;
-  if (snap_oi.is_omap()) {
+  if (clone_obc->obs.oi.is_omap()) {
     delta_stats.num_objects_omap++;
   }
   delta_stats.num_object_clones++;
@@ -895,39 +960,58 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
   cloning_ctx->log_entry = {
     pg_log_entry_t::CLONE,
     coid,
-    osd_op_params->at_version,
+    clone_obc->obs.oi.version,
     initial_obs.oi.version,
     initial_obs.oi.user_version,
     osd_reqid_t(),
     initial_obs.oi.mtime, // will be replaced in `apply_to()`
     0
   };
+  osd_op_params->at_version.version++;
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
 
-  // TODO: update most recent clone_overlap and usage stats
+  // update most recent clone_overlap and usage stats
+  assert(cloning_ctx->new_snapset.clones.size() > 0);
+  // In classic, we check for evicted clones before
+  // adjusting the clone_overlap.
+  // This check is redundant here since `clone_obc`
+  // was just created (See prepare_clone()).
+  interval_set<uint64_t> &newest_overlap =
+    cloning_ctx->new_snapset.clone_overlap.rbegin()->second;
+  osd_op_params->modified_ranges.intersection_of(newest_overlap);
+  delta_stats.num_bytes += osd_op_params->modified_ranges.size();
+  newest_overlap.subtract(osd_op_params->modified_ranges);
   return cloning_ctx;
 }
 
 void OpsExecuter::CloningContext::apply_to(
-  const eversion_t& at_version,
   std::vector<pg_log_entry_t>& log_entries,
   ObjectContext& processed_obc) &&
 {
   log_entry.mtime = processed_obc.obs.oi.mtime;
-  log_entry.version = at_version;
-  log_entries.emplace_back(std::move(log_entry));
+  log_entries.insert(log_entries.begin(), std::move(log_entry));
   processed_obc.ssc->snapset = std::move(new_snapset);
 }
 
-void OpsExecuter::flush_clone_metadata(
-  std::vector<pg_log_entry_t>& log_entries)
+OpsExecuter::interruptible_future<std::vector<pg_log_entry_t>>
+OpsExecuter::flush_clone_metadata(
+  std::vector<pg_log_entry_t>&& log_entries,
+  SnapMapper& snap_mapper,
+  OSDriver& osdriver,
+  ceph::os::Transaction& txn)
 {
   assert(!txn.empty());
+  auto maybe_snap_mapped = interruptor::now();
   if (cloning_ctx) {
-    osd_op_params->at_version = pg->next_version();
-    std::move(*cloning_ctx).apply_to(osd_op_params->at_version,
-                                     log_entries,
-                                     *obc);
+    std::move(*cloning_ctx).apply_to(log_entries, *obc);
+    const auto& coid = log_entries.front().soid;
+    const auto& cloned_snaps = obc->ssc->snapset.clone_snaps[coid.snap];
+    maybe_snap_mapped = snap_map_clone(
+      coid,
+      std::set<snapid_t>{std::begin(cloned_snaps), std::end(cloned_snaps)},
+      snap_mapper,
+      osdriver,
+      txn);
   }
   if (snapc.seq > obc->ssc->snapset.seq) {
      // update snapset with latest snap context
@@ -936,41 +1020,37 @@ void OpsExecuter::flush_clone_metadata(
   }
   logger().debug("{} done, initial snapset={}, new snapset={}",
     __func__, obc->obs.oi.soid, obc->ssc->snapset);
+  return std::move(
+    maybe_snap_mapped
+  ).then_interruptible([log_entries=std::move(log_entries)]() mutable {
+    return interruptor::make_ready_future<std::vector<pg_log_entry_t>>(
+      std::move(log_entries));
+  });
 }
 
-// TODO: make this static
-std::pair<object_info_t, ObjectContextRef> OpsExecuter::prepare_clone(
+ObjectContextRef OpsExecuter::prepare_clone(
   const hobject_t& coid)
 {
-  object_info_t static_snap_oi(coid);
-  static_snap_oi.version = osd_op_params->at_version;
-  static_snap_oi.prior_version = obc->obs.oi.version;
-  static_snap_oi.copy_user_bits(obc->obs.oi);
-  if (static_snap_oi.is_whiteout()) {
-    // clone shouldn't be marked as whiteout
-    static_snap_oi.clear_flag(object_info_t::FLAG_WHITEOUT);
-  }
+  ceph_assert(pg->is_primary());
+  ObjectState clone_obs{coid};
+  clone_obs.exists = true;
+  clone_obs.oi.version = osd_op_params->at_version;
+  clone_obs.oi.prior_version = obc->obs.oi.version;
+  clone_obs.oi.copy_user_bits(obc->obs.oi);
+  clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
 
-  ObjectContextRef clone_obc;
-  if (pg->is_primary()) {
-    // lookup_or_create
-    auto [c_obc, existed] =
-      pg->get_shard_services().get_cached_obc(
-        std::move(coid));
-    assert(!existed);
-    c_obc->obs.oi = static_snap_oi;
-    c_obc->obs.exists = true;
-    c_obc->ssc = obc->ssc;
-    c_obc->head = obc->head;
-    logger().debug("clone_obc: {}", c_obc->obs.oi);
-    clone_obc = std::move(c_obc);
-  }
-  return std::make_pair(std::move(static_snap_oi), std::move(clone_obc));
+  auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(std::move(coid));
+  ceph_assert(!existed);
+
+  clone_obc->set_clone_state(std::move(clone_obs));
+  clone_obc->ssc = obc->ssc;
+  return clone_obc;
 }
 
 void OpsExecuter::apply_stats()
 {
   pg->get_peering_state().apply_op_stats(get_target(), delta_stats);
+  pg->scrubber.handle_op_stats(get_target(), delta_stats);
   pg->publish_stats_to_osd();
 }
 
@@ -978,11 +1058,13 @@ OpsExecuter::OpsExecuter(Ref<PG> pg,
                          ObjectContextRef _obc,
                          const OpInfo& op_info,
                          abstracted_msg_t&& msg,
+                         crimson::net::ConnectionXcoreRef conn,
                          const SnapContext& _snapc)
   : pg(std::move(pg)),
     obc(std::move(_obc)),
     op_info(op_info),
     msg(std::move(msg)),
+    conn(conn),
     snapc(_snapc)
 {
   if (op_info.may_write() && should_clone(*obc, snapc)) {

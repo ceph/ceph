@@ -6,6 +6,9 @@
 #include "cls/lock/cls_lock_client.h"
 #include <memory>
 #include <boost/algorithm/hex.hpp>
+#include <boost/asio/basic_waitable_timer.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/context/protected_fixedsize_stack.hpp>
 #include <spawn/spawn.hpp>
 #include "rgw_sal_rados.h"
@@ -24,33 +27,62 @@ struct event_entry_t {
   std::string push_endpoint;
   std::string push_endpoint_args;
   std::string arn_topic;
+  ceph::coarse_real_time creation_time;
+  uint32_t time_to_live = DEFAULT_GLOBAL_VALUE;
+  uint32_t max_retries = DEFAULT_GLOBAL_VALUE;
+  uint32_t retry_sleep_duration = DEFAULT_GLOBAL_VALUE;
   
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(event, bl);
     encode(push_endpoint, bl);
     encode(push_endpoint_args, bl);
     encode(arn_topic, bl);
+    encode(creation_time, bl);
+    encode(time_to_live, bl);
+    encode(max_retries, bl);
+    encode(retry_sleep_duration, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(3, bl);
     decode(event, bl);
     decode(push_endpoint, bl);
     decode(push_endpoint_args, bl);
     decode(arn_topic, bl);
+    if (struct_v > 1) {
+      decode(creation_time, bl);
+    } else {
+      creation_time = ceph::coarse_real_clock::zero();
+    }
+    if (struct_v > 2) {
+      decode(time_to_live, bl);
+      decode(max_retries, bl);
+      decode(retry_sleep_duration, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(event_entry_t)
 
+
+struct persistency_tracker {
+  ceph::coarse_real_time last_retry_time {ceph::coarse_real_clock::zero()};
+  uint32_t retires_num {0};
+};
+
 using queues_t = std::set<std::string>;
+using entries_persistency_tracker = ceph::unordered_map<std::string, persistency_tracker>;
+using queues_persistency_tracker = ceph::unordered_map<std::string, entries_persistency_tracker>;
+using rgw::persistent_topic_counters::CountersManager;
 
 // use mmap/mprotect to allocate 128k coroutine stacks
 auto make_stack_allocator() {
   return boost::context::protected_fixedsize_stack{128*1024};
 }
+
+const std::string Q_LIST_OBJECT_NAME = "queues_list_object";
 
 class Manager : public DoutPrefixProvider {
   const size_t max_queue_size;
@@ -59,7 +91,6 @@ class Manager : public DoutPrefixProvider {
   const uint32_t queue_idle_sleep_us;
   const utime_t failover_time;
   CephContext* const cct;
-  librados::IoCtx& rados_ioctx;
   static constexpr auto COOKIE_LEN = 16;
   const std::string lock_cookie;
   boost::asio::io_context io_context;
@@ -68,8 +99,11 @@ class Manager : public DoutPrefixProvider {
   std::vector<std::thread> workers;
   const uint32_t stale_reservations_period_s;
   const uint32_t reservations_cleanup_period_s;
- 
-  const std::string Q_LIST_OBJECT_NAME = "queues_list_object";
+  queues_persistency_tracker topics_persistency_tracker;
+public:
+  rgw::sal::RadosStore& rados_store;
+
+private:
 
   CephContext *get_cct() const override { return cct; }
   unsigned get_subsys() const override { return dout_subsys; }
@@ -85,7 +119,7 @@ class Manager : public DoutPrefixProvider {
       librados::ObjectReadOperation op;
       queues_t queues_chunk;
       op.omap_get_keys2(start_after, max_chunk, &queues_chunk, &more, &rval);
-      const auto ret = rgw_rados_operate(this, rados_ioctx, Q_LIST_OBJECT_NAME, &op, nullptr, y);
+      const auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), Q_LIST_OBJECT_NAME, &op, nullptr, y);
       if (ret == -ENOENT) {
         // queue list object was not created - nothing to do
         return 0;
@@ -144,7 +178,7 @@ class Manager : public DoutPrefixProvider {
       pending_tokens(0),
       timer(io_context) {}  
  
-    void async_wait(yield_context yield) {
+    void async_wait(spawn::yield_context yield) { 
       if (pending_tokens == 0) {
         return;
       }
@@ -159,17 +193,56 @@ class Manager : public DoutPrefixProvider {
     }   
   };
 
+  enum class EntryProcessingResult {
+    Failure, Successful, Sleeping, Expired, Migrating
+  };
+  std::vector<std::string> entryProcessingResultString = {"Failure", "Successful", "Sleeping", "Expired", "Migrating"};
+
   // processing of a specific entry
-  // return whether processing was successfull (true) or not (false)
-  bool process_entry(const cls_queue_entry& entry, yield_context yield) {
+  // return whether processing was successful (true) or not (false)
+  EntryProcessingResult process_entry(const ConfigProxy& conf, persistency_tracker& entry_persistency_tracker,
+                                      const cls_queue_entry& entry, spawn::yield_context yield) {
     event_entry_t event_entry;
     auto iter = entry.data.cbegin();
     try {
       decode(event_entry, iter);
     } catch (buffer::error& err) {
       ldpp_dout(this, 5) << "WARNING: failed to decode entry. error: " << err.what() << dendl;
-      return false;
+      return EntryProcessingResult::Failure;
     }
+
+    if (event_entry.creation_time == ceph::coarse_real_clock::zero()) {
+      return EntryProcessingResult::Migrating;
+    }
+
+    const auto topic_persistency_ttl = event_entry.time_to_live != DEFAULT_GLOBAL_VALUE ?
+        event_entry.time_to_live : conf->rgw_topic_persistency_time_to_live;
+    const auto topic_persistency_max_retries = event_entry.max_retries != DEFAULT_GLOBAL_VALUE ?
+        event_entry.max_retries : conf->rgw_topic_persistency_max_retries;
+    const auto topic_persistency_sleep_duration = event_entry.retry_sleep_duration != DEFAULT_GLOBAL_VALUE ?
+        event_entry.retry_sleep_duration : conf->rgw_topic_persistency_sleep_duration;
+    const auto time_now = ceph::coarse_real_clock::now();
+    if ( (topic_persistency_ttl != 0 && event_entry.creation_time != ceph::coarse_real_clock::zero() &&
+         time_now - event_entry.creation_time > std::chrono::seconds(topic_persistency_ttl))
+         || ( topic_persistency_max_retries != 0 && entry_persistency_tracker.retires_num >  topic_persistency_max_retries) ) {
+      ldpp_dout(this, 1) << "Expiring entry for topic= "
+                         << event_entry.arn_topic << " bucket_owner= "
+                         << event_entry.event.bucket_ownerIdentity
+                         << " bucket= " << event_entry.event.bucket_name
+                         << " object_name= " << event_entry.event.object_key
+                         << " entry retry_number="
+                         << entry_persistency_tracker.retires_num
+                         << " creation_time=" << event_entry.creation_time
+                         << " time_now=" << time_now << dendl;
+      return EntryProcessingResult::Expired;
+    }
+    if (time_now - entry_persistency_tracker.last_retry_time < std::chrono::seconds(topic_persistency_sleep_duration) ) {
+      return EntryProcessingResult::Sleeping;
+    }
+
+    ++entry_persistency_tracker.retires_num;
+    entry_persistency_tracker.last_retry_time = time_now;
+    ldpp_dout(this, 20) << "Processing entry retry_number=" << entry_persistency_tracker.retires_num << " time=" << dendl;
     try {
       // TODO move endpoint creation to queue level
       const auto push_endpoint = RGWPubSubEndpoint::create(event_entry.push_endpoint, event_entry.arn_topic,
@@ -181,22 +254,22 @@ class Manager : public DoutPrefixProvider {
       if (ret < 0) {
         ldpp_dout(this, 5) << "WARNING: push entry: " << entry.marker << " to endpoint: " << event_entry.push_endpoint 
           << " failed. error: " << ret << " (will retry)" << dendl;
-        return false;
+        return EntryProcessingResult::Failure;
       } else {
         ldpp_dout(this, 20) << "INFO: push entry: " << entry.marker << " to endpoint: " << event_entry.push_endpoint 
           << " ok" <<  dendl;
         if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
-        return true;
+        return EntryProcessingResult::Successful;
       }
     } catch (const RGWPubSubEndpoint::configuration_error& e) {
       ldpp_dout(this, 5) << "WARNING: failed to create push endpoint: " 
           << event_entry.push_endpoint << " for entry: " << entry.marker << ". error: " << e.what() << " (will retry) " << dendl;
-      return false;
+      return EntryProcessingResult::Failure;
     }
   }
 
   // clean stale reservation from queue
-  void cleanup_queue(const std::string& queue_name, yield_context yield) {
+  void cleanup_queue(const std::string& queue_name, spawn::yield_context yield) {
     while (true) {
       ldpp_dout(this, 20) << "INFO: trying to perform stale reservation cleanup for queue: " << queue_name << dendl;
       const auto now = ceph::coarse_real_time::clock::now();
@@ -209,7 +282,7 @@ class Manager : public DoutPrefixProvider {
         "" /*no tag*/);
       cls_2pc_queue_expire_reservations(op, stale_time);
       // check ownership and do reservation cleanup in one batch
-      auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
+      auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, optional_yield(io_context, yield));
       if (ret == -ENOENT) {
         // queue was deleted
         ldpp_dout(this, 5) << "INFO: queue: " 
@@ -232,16 +305,18 @@ class Manager : public DoutPrefixProvider {
   }
 
   // processing of a specific queue
-  void process_queue(const std::string& queue_name, yield_context yield) {
+  void process_queue(const std::string& queue_name, spawn::yield_context yield) {
     constexpr auto max_elements = 1024;
     auto is_idle = false;
     const std::string start_marker;
 
     // start a the cleanup coroutine for the queue
-    spawn::spawn(io_context, [this, queue_name](yield_context yield) {
+    spawn::spawn(io_context, [this, queue_name](spawn::yield_context yield) {
             cleanup_queue(queue_name, yield);
             }, make_stack_allocator());
-    
+
+    CountersManager queue_counters_container(queue_name, this->get_cct());
+
     while (true) {
       // if queue was empty the last time, sleep for idle timeout
       if (is_idle) {
@@ -252,6 +327,7 @@ class Manager : public DoutPrefixProvider {
       }
 
       // get list of entries in the queue
+      auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
       is_idle = true;
       bool truncated = false;
       std::string end_marker;
@@ -271,11 +347,13 @@ class Manager : public DoutPrefixProvider {
         auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, nullptr, optional_yield(io_context, yield));
         if (ret == -ENOENT) {
           // queue was deleted
+          topics_persistency_tracker.erase(queue_name);
           ldpp_dout(this, 5) << "INFO: queue: " 
             << queue_name << ". was removed. processing will stop" << dendl;
           return;
         }
         if (ret == -EBUSY) {
+          topics_persistency_tracker.erase(queue_name);
           ldpp_dout(this, 5) << "WARNING: queue: " << queue_name << " ownership moved to another daemon. processing will stop" << dendl;
           return;
         }
@@ -305,25 +383,34 @@ class Manager : public DoutPrefixProvider {
       auto remove_entries = false;
       auto entry_idx = 1U;
       tokens_waiter waiter(io_context);
+      std::vector<bool> needs_migration_vector(entries.size(), false);
       for (auto& entry : entries) {
         if (has_error) {
           // bail out on first error
           break;
         }
-        // TODO pass entry pointer instead of by-value
-        spawn::spawn(yield, [this, &queue_name, entry_idx, total_entries, &end_marker, &remove_entries, &has_error, &waiter, entry](yield_context yield) {
+
+        entries_persistency_tracker& notifs_persistency_tracker = topics_persistency_tracker[queue_name];
+        spawn::spawn(yield, [this, &notifs_persistency_tracker, &queue_name, entry_idx, total_entries, &end_marker,
+                             &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector](spawn::yield_context yield) {
             const auto token = waiter.make_token();
-            if (process_entry(entry, yield)) {
-              ldpp_dout(this, 20) << "INFO: processing of entry: " << 
-                entry.marker << " (" << entry_idx << "/" << total_entries << ") from: " << queue_name << " ok" << dendl;
+            auto& persistency_tracker = notifs_persistency_tracker[entry.marker];
+            auto result = process_entry(this->get_cct()->_conf, persistency_tracker, entry, yield);
+            if (result == EntryProcessingResult::Successful || result == EntryProcessingResult::Expired
+                || result == EntryProcessingResult::Migrating) {
+              ldpp_dout(this, 20) << "INFO: processing of entry: " << entry.marker
+                << " (" << entry_idx << "/" << total_entries << ") from: " << queue_name
+                << entryProcessingResultString[static_cast<unsigned int>(result)] << dendl;
               remove_entries = true;
+              needs_migration_vector[entry_idx - 1] = (result == EntryProcessingResult::Migrating);
+              notifs_persistency_tracker.erase(entry.marker);
             }  else {
               if (set_min_marker(end_marker, entry.marker) < 0) {
-                ldpp_dout(this, 1) << "ERROR: cannot determin minimum between malformed markers: " << end_marker << ", " << entry.marker << dendl;
+                ldpp_dout(this, 1) << "ERROR: cannot determine minimum between malformed markers: " << end_marker << ", " << entry.marker << dendl;
               } else {
                 ldpp_dout(this, 20) << "INFO: new end marker for removal: " << end_marker << " from: " << queue_name << dendl;
               }
-              has_error = true;
+              has_error = (result == EntryProcessingResult::Failure);
               ldpp_dout(this, 20) << "INFO: processing of entry: " << 
                 entry.marker << " (" << entry_idx << "/" << total_entries << ") from: " << queue_name << " failed" << dendl;
             } 
@@ -336,19 +423,33 @@ class Manager : public DoutPrefixProvider {
 
       // delete all published entries from queue
       if (remove_entries) {
+        std::vector<cls_queue_entry> entries_to_migrate;
+        uint64_t index = 0;
+
+        for (const auto& entry: entries) {
+          if (end_marker == entry.marker) {
+            break;
+          }
+          if (needs_migration_vector[index]) {
+            ldpp_dout(this, 20) << "INFO: migrating entry " << entry.marker << " from: " << queue_name  << dendl;
+            entries_to_migrate.push_back(entry);
+          }
+          index++;
+        }
+
+        uint64_t entries_to_remove = index;
         librados::ObjectWriteOperation op;
         op.assert_exists();
         rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
           ClsLockType::EXCLUSIVE,
           lock_cookie, 
           "" /*no tag*/);
-        cls_2pc_queue_remove_entries(op, end_marker); 
+        cls_2pc_queue_remove_entries(op, end_marker, entries_to_remove);
         // check ownership and deleted entries in one batch
-        const auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield)); 
+        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
         if (ret == -ENOENT) {
           // queue was deleted
-          ldpp_dout(this, 5) << "INFO: queue: " 
-            << queue_name << ". was removed. processing will stop" << dendl;
+          ldpp_dout(this, 5) << "INFO: queue: " << queue_name << ". was removed. processing will stop" << dendl;
           return;
         }
         if (ret == -EBUSY) {
@@ -358,10 +459,81 @@ class Manager : public DoutPrefixProvider {
         if (ret < 0) {
           ldpp_dout(this, 1) << "ERROR: failed to remove entries and/or lock queue up to: " << end_marker <<  " from queue: " 
             << queue_name << ". error: " << ret << dendl;
+          return;
         } else {
-          ldpp_dout(this, 20) << "INFO: removed entries up to: " << end_marker <<  " from queue: " 
-          << queue_name << dendl;
+          ldpp_dout(this, 20) << "INFO: removed entries up to: " << end_marker <<  " from queue: " << queue_name << dendl;
         }
+
+        // reserving and committing the migrating entries
+        if (!entries_to_migrate.empty()) {
+          std::vector<bufferlist> migration_vector;
+          std::string tenant_name;
+          // TODO: extract tenant name from queue_name once it is fixed
+          uint64_t size_to_migrate = 0;
+          RGWPubSub ps(&rados_store, tenant_name);
+
+          rgw_pubsub_topic topic;
+          auto ret_of_get_topic = ps.get_topic(this, queue_name, topic, optional_yield(io_context, yield));
+          if (ret_of_get_topic < 0) {
+            // we can't migrate entries without topic info
+            ldpp_dout(this, 1) << "ERROR: failed to fetch topic: " << queue_name << " error: "
+              << ret_of_get_topic << ". Aborting migration!" << dendl;
+            return;
+          }
+
+          for (auto entry: entries_to_migrate) {
+            event_entry_t event_entry;
+            auto iter = entry.data.cbegin();
+            try {
+              decode(event_entry, iter);
+            } catch (buffer::error& err) {
+              ldpp_dout(this, 5) << "WARNING: failed to decode entry. error: " << err.what() << dendl;
+              continue;
+            }
+            size_to_migrate += entry.data.length();
+            event_entry.creation_time = ceph::coarse_real_clock::now();
+            event_entry.time_to_live = topic.dest.time_to_live;
+            event_entry.max_retries = topic.dest.max_retries;
+            event_entry.retry_sleep_duration = topic.dest.retry_sleep_duration;
+
+            bufferlist bl;
+            encode(event_entry, bl);
+            migration_vector.push_back(bl);
+          }
+
+          cls_2pc_reservation::id_t reservation_id;
+          buffer::list obl;
+          int rval;
+          cls_2pc_queue_reserve(op, size_to_migrate, migration_vector.size(), &obl, &rval);
+          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield), librados::OPERATION_RETURNVEC);
+          if (ret < 0) {
+            ldpp_dout(this, 1) << "ERROR: failed to reserve migration space on queue: " << queue_name << ". error: " << ret << dendl;
+            return;
+          }
+          ret = cls_2pc_queue_reserve_result(obl, reservation_id);
+          if (ret < 0) {
+            ldpp_dout(this, 1) << "ERROR: failed to parse reservation id for migration. error: " << ret << dendl;
+            return;
+          }
+
+          cls_2pc_queue_commit(op, migration_vector, reservation_id);
+          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
+          reservation_id = cls_2pc_reservation::NO_ID;
+          if (ret < 0) {
+            ldpp_dout(this, 1) << "ERROR: failed to commit reservation to queue: " << queue_name << ". error: " << ret << dendl;
+          }
+        }
+      }
+
+      // updating perfcounters with topic stats
+      uint64_t entries_size;
+      uint32_t entries_number;
+      const auto ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, entries_number, entries_size);
+      if (ret < 0) {
+        ldpp_dout(this, 1) << "ERROR: topic stats for topic: " << queue_name << ". error: " << ret << dendl;
+      } else {
+        queue_counters_container.set(l_rgw_persistent_topic_len, entries_number);
+        queue_counters_container.set(l_rgw_persistent_topic_size, entries_size);
       }
     }
   }
@@ -371,7 +543,7 @@ class Manager : public DoutPrefixProvider {
 
   // process all queues
   // find which of the queues is owned by this daemon and process it
-  void process_queues(yield_context yield) {
+  void process_queues(spawn::yield_context yield) {
     auto has_error = false;
     owned_queues_t owned_queues;
 
@@ -405,7 +577,7 @@ class Manager : public DoutPrefixProvider {
 
       for (const auto& queue_name : queues) {
         // try to lock the queue to check if it is owned by this rgw
-        // or if ownershif needs to be taken
+        // or if ownership needs to be taken
         librados::ObjectWriteOperation op;
         op.assert_exists();
         rados::cls::lock::lock(&op, queue_name+"_lock", 
@@ -416,7 +588,7 @@ class Manager : public DoutPrefixProvider {
               failover_time,
               LOCK_FLAG_MAY_RENEW);
 
-        ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
+        ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, optional_yield(io_context, yield));
         if (ret == -EBUSY) {
           // lock is already taken by another RGW
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " owned (locked) by another daemon" << dendl;
@@ -438,9 +610,9 @@ class Manager : public DoutPrefixProvider {
         if (owned_queues.insert(queue_name).second) {
           ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " now owned (locked) by this daemon" << dendl;
           // start processing this queue
-          spawn::spawn(io_context, [this, &queue_gc, &queue_gc_lock, queue_name](yield_context yield) {
+          spawn::spawn(io_context, [this, &queue_gc, &queue_gc_lock, queue_name](spawn::yield_context yield) {
             process_queue(queue_name, yield);
-            // if queue processing ended, it measn that the queue was removed or not owned anymore
+            // if queue processing ended, it means that the queue was removed or not owned anymore
             // mark it for deletion
             std::lock_guard lock_guard(queue_gc_lock);
             queue_gc.push_back(queue_name);
@@ -454,6 +626,7 @@ class Manager : public DoutPrefixProvider {
       {
         std::lock_guard lock_guard(queue_gc_lock);
         std::for_each(queue_gc.begin(), queue_gc.end(), [this, &owned_queues](const std::string& queue_name) {
+          topics_persistency_tracker.erase(queue_name);
           owned_queues.erase(queue_name);
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " removed" << dendl;
         });
@@ -481,14 +654,14 @@ public:
     queue_idle_sleep_us(_queue_idle_sleep_us),
     failover_time(std::chrono::milliseconds(failover_time_ms)),
     cct(_cct),
-    rados_ioctx(store->getRados()->get_notif_pool_ctx()),
     lock_cookie(gen_rand_alphanumeric(cct, COOKIE_LEN)),
     work_guard(boost::asio::make_work_guard(io_context)),
     worker_count(_worker_count),
     stale_reservations_period_s(_stale_reservations_period_s),
-    reservations_cleanup_period_s(_reservations_cleanup_period_s)
+    reservations_cleanup_period_s(_reservations_cleanup_period_s),
+    rados_store(*store)
     {
-      spawn::spawn(io_context, [this] (yield_context yield) {
+      spawn::spawn(io_context, [this](spawn::yield_context yield) {
             process_queues(yield);
           }, make_stack_allocator());
 
@@ -518,6 +691,7 @@ public:
     librados::ObjectWriteOperation op;
     op.create(true);
     cls_2pc_queue_init(op, topic_name, max_queue_size);
+    auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
     auto ret = rgw_rados_operate(this, rados_ioctx, topic_name, &op, y);
     if (ret == -EEXIST) {
       // queue already exists - nothing to do
@@ -539,32 +713,6 @@ public:
       return ret;
     } 
     ldpp_dout(this, 20) << "INFO: queue: " << topic_name << " added to queue list"  << dendl;
-    return 0;
-  }
-  
-  int remove_persistent_topic(const std::string& topic_name, optional_yield y) {
-    librados::ObjectWriteOperation op;
-    op.remove();
-    auto ret = rgw_rados_operate(this, rados_ioctx, topic_name, &op, y);
-    if (ret == -ENOENT) {
-      // queue already removed - nothing to do
-      ldpp_dout(this, 20) << "INFO: queue for topic: " << topic_name << " already removed. nothing to do" << dendl;
-      return 0;
-    }
-    if (ret < 0) {
-      // failed to remove queue
-      ldpp_dout(this, 1) << "ERROR: failed to remove queue for topic: " << topic_name << ". error: " << ret << dendl;
-      return ret;
-    }
-  
-    std::set<std::string> topic_to_remove{{topic_name}};
-    op.omap_rm_keys(topic_to_remove);
-    ret = rgw_rados_operate(this, rados_ioctx, Q_LIST_OBJECT_NAME, &op, y);
-    if (ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to remove queue: " << topic_name << " from queue list. error: " << ret << dendl;
-      return ret;
-    } 
-    ldpp_dout(this, 20) << "INFO: queue: " << topic_name << " removed from queue list"  << dendl;
     return 0;
   }
 };
@@ -609,14 +757,40 @@ int add_persistent_topic(const std::string& topic_name, optional_yield y) {
   return s_manager->add_persistent_topic(topic_name, y);
 }
 
+int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_name, optional_yield y) {
+  librados::ObjectWriteOperation op;
+  op.remove();
+  auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_name, &op, y);
+  if (ret == -ENOENT) {
+    // queue already removed - nothing to do
+    ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_name << " already removed. nothing to do" << dendl;
+    return 0;
+  }
+  if (ret < 0) {
+    // failed to remove queue
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove queue for topic: " << topic_name << ". error: " << ret << dendl;
+    return ret;
+  }
+
+  std::set<std::string> topic_to_remove{{topic_name}};
+  op.omap_rm_keys(topic_to_remove);
+  ret = rgw_rados_operate(dpp, rados_ioctx, Q_LIST_OBJECT_NAME, &op, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove queue: " << topic_name << " from queue list. error: " << ret << dendl;
+    return ret;
+  }
+  ldpp_dout(dpp, 20) << "INFO: queue: " << topic_name << " removed from queue list"  << dendl;
+  return 0;
+}
+
 int remove_persistent_topic(const std::string& topic_name, optional_yield y) {
   if (!s_manager) {
     return -EAGAIN;
   }
-  return s_manager->remove_persistent_topic(topic_name, y);
+  return remove_persistent_topic(s_manager, s_manager->rados_store.getRados()->get_notif_pool_ctx(), topic_name, y);
 }
 
-rgw::sal::Object* get_object_with_atttributes(
+rgw::sal::Object* get_object_with_attributes(
   const reservation_t& res, rgw::sal::Object* obj) {
   // in case of copy obj, the tags and metadata are taken from source
   const auto src_obj = res.src_object ? res.src_object : obj;
@@ -634,10 +808,19 @@ rgw::sal::Object* get_object_with_atttributes(
   return src_obj;
 }
 
+static inline void filter_amz_meta(meta_map_t& dest, const meta_map_t& src) {
+  std::copy_if(src.cbegin(), src.cend(),
+               std::inserter(dest, dest.end()),
+               [](const auto& m) {
+                 return (boost::algorithm::starts_with(m.first, RGW_AMZ_META_PREFIX));
+               });
+}
+
+
 static inline void metadata_from_attributes(
   reservation_t& res, rgw::sal::Object* obj) {
   auto& metadata = res.x_meta_map;
-  const auto src_obj = get_object_with_atttributes(res, obj);
+  const auto src_obj = get_object_with_attributes(res, obj);
   if (!src_obj) {
     return;
   }
@@ -655,7 +838,7 @@ static inline void metadata_from_attributes(
 
 static inline void tags_from_attributes(
   const reservation_t& res, rgw::sal::Object* obj, KeyMultiValueMap& tags) {
-  const auto src_obj = get_object_with_atttributes(res, obj);
+  const auto src_obj = get_object_with_attributes(res, obj);
   if (!src_obj) {
     return;
   }
@@ -690,7 +873,7 @@ static inline void populate_event(reservation_t& res,
   event.x_amz_id_2 = res.store->getRados()->host_id; // RGW on which the change was made
   // configurationId is filled from notification configuration
   event.bucket_name = res.bucket->get_name();
-  event.bucket_ownerIdentity = res.bucket->get_owner() ? res.bucket->get_owner()->get_id().id : "";
+  event.bucket_ownerIdentity = res.bucket->get_owner().id;
   const auto region = res.store->get_zone()->get_zonegroup().get_api_name();
   rgw::ARN bucket_arn(res.bucket->get_key());
   bucket_arn.region = region; 
@@ -739,7 +922,7 @@ static inline bool notification_match(reservation_t& res,
   if (!filter.s3_filter.metadata_filter.kv.empty()) {
     // metadata filter exists
     if (res.s) {
-      res.x_meta_map = res.s->info.x_meta_map;
+      filter_amz_meta(res.x_meta_map, res.s->info.x_meta_map);
     }
     metadata_from_attributes(res, obj);
     if (!match(filter.s3_filter.metadata_filter, res.x_meta_map)) {
@@ -777,10 +960,10 @@ static inline bool notification_match(reservation_t& res,
 		      reservation_t& res,
 		      const RGWObjTags* req_tags)
 {
-  RGWPubSub ps(res.store, res.user_tenant);
-  RGWPubSub::Bucket ps_bucket(&ps, res.bucket->get_key());
+  const RGWPubSub ps(res.store, res.user_tenant);
+  const RGWPubSub::Bucket ps_bucket(ps, res.bucket);
   rgw_pubsub_bucket_topics bucket_topics;
-  auto rc = ps_bucket.get_topics(&bucket_topics);
+  auto rc = ps_bucket.get_topics(res.dpp, bucket_topics, res.yield);
   if (rc < 0) {
     // failed to fetch bucket topics
     return rc;
@@ -798,7 +981,7 @@ static inline bool notification_match(reservation_t& res,
         "' (unique topic: '" << topic_cfg.name <<
         "') apply to event of type: '" << to_string(event_type) << "'" << dendl;
 
-    cls_2pc_reservation::id_t res_id;
+    cls_2pc_reservation::id_t res_id = cls_2pc_reservation::NO_ID;
     if (topic_cfg.dest.persistent) {
       // TODO: take default reservation size from conf
       constexpr auto DEFAULT_RESERVATION = 4*1024U; // 4K
@@ -853,6 +1036,10 @@ int publish_commit(rgw::sal::Object* obj,
       event_entry.push_endpoint_args =
 	std::move(topic.cfg.dest.push_endpoint_args);
       event_entry.arn_topic = topic.cfg.dest.arn_topic;
+      event_entry.creation_time = ceph::coarse_real_clock::now();
+      event_entry.time_to_live = topic.cfg.dest.time_to_live;
+      event_entry.max_retries = topic.cfg.dest.max_retries;
+      event_entry.retry_sleep_duration = topic.cfg.dest.retry_sleep_duration;
       bufferlist bl;
       encode(event_entry, bl);
       const auto& queue_name = topic.cfg.dest.arn_topic;
@@ -923,16 +1110,24 @@ int publish_commit(rgw::sal::Object* obj,
         const auto ret = push_endpoint->send_to_completion_async(
 	  dpp->get_cct(), event_entry.event, res.yield);
         if (ret < 0) {
-          ldpp_dout(dpp, 1) << "ERROR: push to endpoint "
-			    << topic.cfg.dest.push_endpoint
-			    << " failed. error: " << ret << dendl;
+          ldpp_dout(dpp, 1)
+              << "ERROR: push to endpoint " << topic.cfg.dest.push_endpoint
+              << " bucket: " << event_entry.event.bucket_name
+              << " bucket_owner: " << event_entry.event.bucket_ownerIdentity
+              << " object_name: " << event_entry.event.object_key
+              << " failed. error: " << ret << dendl;
           if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
           return ret;
         }
         if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
       } catch (const RGWPubSubEndpoint::configuration_error& e) {
-        ldpp_dout(dpp, 1) << "ERROR: failed to create push endpoint: " 
-            << topic.cfg.dest.push_endpoint << ". error: " << e.what() << dendl;
+        ldpp_dout(dpp, 1) << "ERROR: failed to create push endpoint: "
+                          << topic.cfg.dest.push_endpoint
+                          << " bucket: " << event_entry.event.bucket_name
+                          << " bucket_owner: "
+                          << event_entry.event.bucket_ownerIdentity
+                          << " object_name: " << event_entry.event.object_key
+                          << ". error: " << e.what() << dendl;
         if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
         return -EINVAL;
       }
@@ -965,6 +1160,26 @@ int publish_abort(reservation_t& res) {
   return 0;
 }
 
+int get_persistent_queue_stats_by_topic_name(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
+                                             const std::string &topic_name, rgw_topic_stats &stats, optional_yield y)
+{
+  cls_2pc_reservations reservations;
+  auto ret = cls_2pc_queue_list_reservations(rados_ioctx, topic_name, reservations);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to read queue list reservation: " << ret << dendl;
+    return ret;
+  }
+  stats.queue_reservations = reservations.size();
+
+  ret = cls_2pc_queue_get_topic_stats(rados_ioctx, topic_name, stats.queue_entries, stats.queue_size);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get the queue size or the number of entries: " << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::RadosStore* _store,
 			     const req_state* _s,
@@ -976,13 +1191,14 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   object(_object), src_object(_src_object), bucket(_s->bucket.get()),
   object_name(_object_name),
   tagset(_s->tagset),
-  x_meta_map(_s->info.x_meta_map),
   metadata_fetched_from_attributes(false),
   user_id(_s->user->get_id().id),
   user_tenant(_s->user->get_id().tenant),
   req_id(_s->req_id),
   yield(y)
-{}
+{
+  filter_amz_meta(x_meta_map, _s->info.x_meta_map);
+}
 
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::RadosStore* _store,
@@ -1005,6 +1221,14 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 
 reservation_t::~reservation_t() {
   publish_abort(*this);
+}
+
+void rgw_topic_stats::dump(Formatter *f) const {
+  f->open_object_section("Topic Stats");
+  f->dump_int("Reservations", queue_reservations);
+  f->dump_int("Size", queue_size);
+  f->dump_int("Entries", queue_entries);
+  f->close_section();
 }
 
 } // namespace rgw::notify

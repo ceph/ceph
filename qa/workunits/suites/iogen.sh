@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -ex
 
 echo "getting iogen"
 wget http://download.ceph.com/qa/iogen_3.1p0.tar

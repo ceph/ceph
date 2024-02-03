@@ -1,91 +1,122 @@
 JAEGER- DISTRIBUTED TRACING
 ===========================
 
-Jaeger  provides ready to use tracing services for distributed
-systems and is becoming the widely used standard because of their simplicity and
-standardization.
-
+Jaeger provides ready-to-use tracing services for distributed systems. 
 
 BASIC ARCHITECTURE AND TERMINOLOGY
 ----------------------------------
 
 * TRACE: A trace shows the data/execution path through a system.
-* SPAN: A single unit of a trace, it is a data structure that stores
-  information like operation name, timestamps, ordering in a trace.
-* JAEGER CLIENT: language-specific implementations of the OpenTracing API.
-* JAEGER AGENT: a daemon that listens for spans sent over User Datagram Protocol.
-  The agent is meant to be placed on the same host as the instrumented
-  application. (acts like a sidecar listener)
-* JAEGER COLLECTOR: Jaeger agent sends the spans to this daemon which then
-  stitches the spans together to form a trace(if enabled, also persists a database
-  for these traces)
-* JAEGER QUERY AND CONSOLE FRONTEND: UI based frontend to checkout the jaeger
-  traces, navigate to http://<jaeger frontend host>:16686 
+* SPAN: A single unit of a trace. A data structure that stores information such
+  as the operation name, timestamps, and the ordering within a trace.
+* JAEGER CLIENT: Language-specific implementations of the OpenTracing API.
+* JAEGER AGENT: A daemon that listens for spans sent over User Datagram
+  Protocol. The agent is meant to be placed on the same host as the
+  instrumented application. (The Jaeger agent acts like a sidecar listener.)
+* JAEGER COLLECTOR: A daemon that receives spans sent by the Jaeger agent. The
+  Jaeger collector then stitches the spans together to form a trace. (A databse
+  can be enabled to persist a database for these traces).
+* JAEGER QUERY AND CONSOLE FRONTEND: The UI-based frontend that presents
+  reports of the jaeger traces. Accessible at  http://<jaeger frontend host>:16686.
 
-
-read more about jaeger tracing:.
+Read more about jaeger tracing:.
 
   https://www.jaegertracing.io/docs/
-
 
 JAEGER DEPLOYMENT
 -----------------
 
-there are couple of ways to deploy jaeger.
-it can be done using cephadm, or manually.
+Jaeger can be deployed using cephadm, or manually.
 
-please refer to:
+CEPHADM BASED DEPLOYMENT AS A SERVICE
+-------------------------------------
 
-`Cephadm Jaeger services deployment <../cephadm/services/tracing/>`_
-
-`jaeger deployment <https://www.jaegertracing.io/docs/1.25/deployment/>`_
-
-`jaeger performance tuning <https://www.jaegertracing.io/docs/1.25/performance-tuning/>`_
+`Cephadm Jaeger Services Deployment <../cephadm/services/tracing/>`_
 
 
-Important Notes:
-^^^^^^^^^^^^^^^^
+MANUAL TEST DEPLOYMENT FOR JAEGER OPENTELEMETRY ALL IN ONE CONTAINER
+--------------------------------------------------------------------
 
-- Spans are being sent to local jaeger agent, so the jaeger agent must be running on each host (not in all-in-one mode). otherwise, spans of hosts without active jaeger agent will be lost.
+For single node testing Jaeger opentelemetry can be deployed using:
 
-- Ceph tracers are configured to send tracers to agents that are listening to port 6799, so on manual jaeger deployment, option "--processor.jaeger-compact.server-host-port=6799" should be used.
+.. prompt:: bash $
+
+   docker run -d --name jaeger \
+  -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 \
+  -e COLLECTOR_OTLP_ENABLED=true \
+  -p 6799:6799/udp \
+  -p 6832:6832/udp \
+  -p 5778:5778 \
+  -p 16686:16686 \
+  -p 4317:4317 \
+  -p 4318:4318 \
+  -p 14250:14250 \
+  -p 14268:14268 \
+  -p 14269:14269 \
+  -p 9411:9411 \
+  jaegertracing/all-in-one:latest --processor.jaeger-compact.server-host-port=6799
+
+
+`Jaeger Deployment <https://www.jaegertracing.io/docs/1.25/deployment/>`_
+
+`Jaeger Performance Tuning <https://www.jaegertracing.io/docs/1.25/performance-tuning/>`_
+
+.. note::
+
+  The Jaeger agent must be running on each host (and not running in all-in-one
+  mode). This is because spans are sent to the local Jaeger agent. Spans of
+  hosts that do not have active Jaeger agents will be lost.
+
+  The default configured port for Jaeger agent differs from the official default
+  6831, since Ceph tracers are configured to send tracers to agents that listen
+  to port the configured 6799. Use the option "--processor.jaeger-compact.server-host-port=6799" for manual Jaeger
+  deployments.
 
 
 HOW TO ENABLE TRACING IN CEPH
 -----------------------------
 
-tracing in Ceph is disabled by default.
-it could be enabled globally, or for each entity separately (e.g. rgw).
+Tracing in Ceph is disabled by default.
 
-  Enable tracing globally::
+Tracing can be enabled globally, and tracing can also be enabled separately for
+each entity (for example, for rgw).
 
-      $ ceph config set global jaeger_tracing_enable true
+Enable tracing globally:
+
+.. prompt:: bash $
+
+   ceph config set global jaeger_tracing_enable true
 
 
-  Enable tracing for each entity::
+Enable tracing for each entity:
 
-      $ ceph config set <entity> jaeger_tracing_enable true
+.. prompt:: bash $
+
+   ceph config set <entity> jaeger_tracing_enable true
 
 
 TRACES IN RGW
 -------------
 
-traces of RGW can be found under Service `rgw` in Jaeger Frontend.
+Traces run on RGW can be found under the Service `rgw` in the Jaeger Frontend.
 
 REQUESTS
 ^^^^^^^^
-every user request is being traced. each trace contains tags for
-`Operation name`, `User id`, `Object name` and `Bucket name`.
+Every user request is traced. Each trace contains tags for `Operation name`,
+`User id`, `Object name` and `Bucket name`.
 
-there is also `Upload id` tag for Multipart upload operations.
+There is also an `Upload id` tag for Multipart upload operations.
 
-request trace is named `<command> <transaction id>`.
+The names of request traces have the following format: `<command> <transaction
+id>`.
 
 MULTIPART UPLOAD
 ^^^^^^^^^^^^^^^^
-there is a trace, that consists a span for each request that made by that multipart upload, including all `Put Object` requests.
+There is a kind of trace that consists of a span for each request made by a
+multipart upload, and it includes all `Put Object` requests.
 
-multipart trace is named `multipart_upload <upload id>`.
+The names of multipart traces have the following format: `multipart_upload
+<upload id>`.
 
 
 rgw service in Jaeger Frontend:

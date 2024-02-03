@@ -54,15 +54,12 @@
           <label i18n
                  class="cd-col-form-label">Permissions</label>
           <div class="cd-col-form-input">
-            <cd-table [data]="scopes_permissions"
-                      [columns]="columns"
-                      columnMode="flex"
-                      [toolHeader]="false"
-                      [autoReload]="false"
-                      [autoSave]="false"
-                      [footer]="false"
-                      [limit]="0">
-            </cd-table>
+            <cd-checked-table-form [data]="scopes_permissions"
+                                   [columns]="columns"
+                                   [form]="roleForm"
+                                   inputField="scopes_permissions"
+                                   [scopes]="scopes"
+                                   [initialValue]="initialValue"></cd-checked-table-form>
           </div>
         </div>
 
@@ -76,46 +73,3 @@
     </div>
   </form>
 </div>
-
-<ng-template #cellScopeCheckboxTpl
-             let-column="column"
-             let-row="row"
-             let-value="value">
-  <div class="custom-control custom-checkbox">
-    <input class="custom-control-input"
-           id="scope_{{ row.scope }}"
-           type="checkbox"
-           [checked]="isRowChecked(row.scope)"
-           (change)="onClickCellCheckbox(row.scope, column.prop, $event)">
-    <label class="datatable-permissions-scope-cell-label custom-control-label"
-           for="scope_{{ row.scope }}">{{ value }}</label>
-  </div>
-</ng-template>
-
-<ng-template #cellPermissionCheckboxTpl
-             let-column="column"
-             let-row="row"
-             let-value="value">
-  <div class="custom-control custom-checkbox">
-    <input class="custom-control-input"
-           type="checkbox"
-           [checked]="value"
-           [id]="row.scope + '-' + column.prop"
-           (change)="onClickCellCheckbox(row.scope, column.prop, $event)">
-    <label class="custom-control-label"
-           [for]="row.scope + '-' + column.prop"></label>
-  </div>
-</ng-template>
-
-<ng-template #headerPermissionCheckboxTpl
-             let-column="column">
-  <div class="custom-control custom-checkbox">
-    <input class="custom-control-input"
-           id="header_{{ column.prop }}"
-           type="checkbox"
-           [checked]="isHeaderChecked(column.prop)"
-           (change)="onClickHeaderCheckbox(column.prop, $event)">
-    <label class="datatable-permissions-header-cell-label custom-control-label"
-           for="header_{{ column.prop }}">{{ column.name }}</label>
-  </div>
-</ng-template>

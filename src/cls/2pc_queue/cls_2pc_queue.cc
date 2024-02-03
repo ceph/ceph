@@ -55,6 +55,36 @@ static int cls_2pc_queue_get_capacity(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+static int cls_2pc_queue_get_topic_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls_queue_get_stats_ret op_ret;
+
+  // get head
+  cls_queue_head head;
+  auto ret = queue_read_head(hctx, head);
+  if (ret < 0) {
+    return ret;
+  }
+  const auto remaining_size = (head.tail.offset >= head.front.offset) ?
+                              (head.queue_size - head.tail.offset) + (head.front.offset - head.max_head_size) :
+                              head.front.offset - head.tail.offset;
+  op_ret.queue_size = head.queue_size - head.max_head_size - remaining_size;
+
+  cls_2pc_urgent_data urgent_data;
+  try {
+    auto in_iter = head.bl_urgent_data.cbegin();
+    decode(urgent_data, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_2pc_queue_get_topic_stats: failed to decode header of queue: %s", err.what());
+    return -EINVAL;
+  }
+  op_ret.queue_entries = urgent_data.committed_entries;
+
+  encode(op_ret, *out);
+
+  return 0;
+}
+
 static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   cls_2pc_queue_reserve_op res_op;
   try {
@@ -105,14 +135,14 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
   }
 
   urgent_data.reserved_size += res_op.size + overhead;
-  // note that last id is incremented regadless of failures
+  // note that last id is incremented regardless of failures
   // to avoid "old reservation" issues below
   ++urgent_data.last_id;
   bool result;
   cls_2pc_reservations::iterator last_reservation;
   std::tie(last_reservation, result) = urgent_data.reservations.emplace(std::piecewise_construct,
           std::forward_as_tuple(urgent_data.last_id),
-          std::forward_as_tuple(res_op.size, ceph::coarse_real_clock::now()));
+          std::forward_as_tuple(res_op.size, ceph::coarse_real_clock::now(), res_op.entries));
   if (!result) {
     // an old reservation that was never committed or aborted is in the map
     // caller should try again assuming other IDs are ok
@@ -148,7 +178,7 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
     }
     std::tie(std::ignore, result) = xattr_reservations.emplace(std::piecewise_construct,
           std::forward_as_tuple(urgent_data.last_id),
-          std::forward_as_tuple(res_op.size, ceph::coarse_real_clock::now()));
+          std::forward_as_tuple(res_op.size, ceph::coarse_real_clock::now(), res_op.entries));
     if (!result) {
       // an old reservation that was never committed or aborted is in the map
       // caller should try again assuming other IDs are ok
@@ -268,6 +298,7 @@ static int cls_2pc_queue_commit(cls_method_context_t hctx, bufferlist *in, buffe
   }
 
   urgent_data.reserved_size -= res.size;
+  urgent_data.committed_entries += res.entries;
 
   if (xattr_reservations.empty()) {
     // remove the reservation from urgent data
@@ -547,12 +578,25 @@ static int cls_2pc_queue_list_entries(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+static int cls_2pc_queue_count_entries(cls_method_context_t hctx, cls_queue_list_op& op, cls_queue_head& head,
+                                       uint32_t& entries_to_remove)
+{
+  cls_queue_list_ret op_ret;
+  auto ret = queue_list_entries(hctx, op, op_ret, head);
+  if (ret < 0) {
+    return ret;
+  }
+
+  entries_to_remove = op_ret.entries.size();
+  return 0;
+}
+
 static int cls_2pc_queue_remove_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
-  cls_queue_remove_op op;
+  cls_2pc_queue_remove_op rem_2pc_op;
   try {
-    decode(op, in_iter);
+    decode(rem_2pc_op, in_iter);
   } catch (ceph::buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_2pc_queue_remove_entries: failed to decode entry: %s", err.what());
     return -EINVAL;
@@ -563,10 +607,41 @@ static int cls_2pc_queue_remove_entries(cls_method_context_t hctx, bufferlist *i
   if (ret < 0) {
     return ret;
   }
-  ret = queue_remove_entries(hctx, op, head);
+
+  // Old RGW is running, and it sent cls_queue_remove_op instead of cls_2pc_queue_remove_op
+  if (rem_2pc_op.entries_to_remove == 0) {
+    CLS_LOG(10, "INFO: cls_2pc_queue_remove_entries: incompatible RGW with rados, counting entries to remove...");
+    cls_queue_list_op list_op;
+    list_op.max = std::numeric_limits<uint64_t>::max(); // max length because endmarker is the stopping condition.
+    list_op.end_marker = rem_2pc_op.end_marker;
+    ret = cls_2pc_queue_count_entries(hctx, list_op, head, rem_2pc_op.entries_to_remove);
+    if (ret < 0) {
+      CLS_LOG(1, "ERROR: cls_2pc_queue_count_entries: returned: %d", ret);
+      return ret;
+    }
+    CLS_LOG(10, "INFO: cls_2pc_queue_count_entries: counted: %u", rem_2pc_op.entries_to_remove);
+  }
+
+  cls_queue_remove_op rem_op;
+  rem_op.end_marker = std::move(rem_2pc_op.end_marker);
+  ret = queue_remove_entries(hctx, rem_op, head);
   if (ret < 0) {
     return ret;
   }
+
+  cls_2pc_urgent_data urgent_data;
+  try {
+    auto in_iter = head.bl_urgent_data.cbegin();
+    decode(urgent_data, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_2pc_queue_remove_entries: failed to decode header of queue: %s", err.what());
+    return -EINVAL;
+  }
+  urgent_data.committed_entries -= rem_2pc_op.entries_to_remove;
+  // write back head
+  head.bl_urgent_data.clear();
+  encode(urgent_data, head.bl_urgent_data);
+
   return queue_write_head(hctx, head);
 }
 
@@ -577,6 +652,7 @@ CLS_INIT(2pc_queue)
   cls_handle_t h_class;
   cls_method_handle_t h_2pc_queue_init;
   cls_method_handle_t h_2pc_queue_get_capacity;
+  cls_method_handle_t h_2pc_queue_get_topic_stats;
   cls_method_handle_t h_2pc_queue_reserve;
   cls_method_handle_t h_2pc_queue_commit;
   cls_method_handle_t h_2pc_queue_abort;
@@ -589,6 +665,7 @@ CLS_INIT(2pc_queue)
 
   cls_register_cxx_method(h_class, TPC_QUEUE_INIT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_init, &h_2pc_queue_init);
   cls_register_cxx_method(h_class, TPC_QUEUE_GET_CAPACITY, CLS_METHOD_RD, cls_2pc_queue_get_capacity, &h_2pc_queue_get_capacity);
+  cls_register_cxx_method(h_class, TPC_QUEUE_GET_TOPIC_STATS, CLS_METHOD_RD, cls_2pc_queue_get_topic_stats, &h_2pc_queue_get_topic_stats);
   cls_register_cxx_method(h_class, TPC_QUEUE_RESERVE, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_reserve, &h_2pc_queue_reserve);
   cls_register_cxx_method(h_class, TPC_QUEUE_COMMIT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_commit, &h_2pc_queue_commit);
   cls_register_cxx_method(h_class, TPC_QUEUE_ABORT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_abort, &h_2pc_queue_abort);

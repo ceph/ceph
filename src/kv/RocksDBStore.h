@@ -122,6 +122,7 @@ private:
     std::vector<rocksdb::ColumnFamilyHandle *> handles;
   };
   std::unordered_map<std::string, prefix_shards> cf_handles;
+  typedef decltype(cf_handles)::iterator cf_handles_iterator;
   std::unordered_map<uint32_t, std::string> cf_ids_to_prefix;
   std::unordered_map<std::string, rocksdb::BlockBasedTableOptions> cf_bbt_opts;
   
@@ -132,7 +133,7 @@ private:
   rocksdb::ColumnFamilyHandle *get_key_cf(const prefix_shards& shards, const char* key, const size_t keylen);
   rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const std::string& key);
   rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const char* key, size_t keylen);
-  rocksdb::ColumnFamilyHandle *get_cf_handle(const std::string& prefix, const IteratorBounds& bounds);
+  rocksdb::ColumnFamilyHandle *check_cf_handle_bounds(const cf_handles_iterator& it, const IteratorBounds& bounds);
 
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
   int install_cf_mergeop(const std::string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
@@ -199,7 +200,10 @@ public:
   /// compact the underlying rocksdb store
   bool compact_on_mount;
   bool disableWAL;
-  const uint64_t delete_range_threshold;
+  uint64_t get_delete_range_threshold() const {
+    return cct->_conf.get_val<uint64_t>("rocksdb_delete_range_threshold");
+  }
+
   void compact() override;
 
   void compact_async() override {
@@ -244,8 +248,7 @@ public:
     compact_queue_stop(false),
     compact_thread(this),
     compact_on_mount(false),
-    disableWAL(false),
-    delete_range_threshold(cct->_conf.get_val<uint64_t>("rocksdb_delete_range_threshold"))
+    disableWAL(false)
   {}
 
   ~RocksDBStore() override;
@@ -387,7 +390,9 @@ public:
   Iterator get_iterator(const std::string& prefix, IteratorOpts opts = 0, IteratorBounds = IteratorBounds()) override;
 private:
   /// this iterator spans single cf
-  rocksdb::Iterator* new_shard_iterator(rocksdb::ColumnFamilyHandle* cf);
+  WholeSpaceIterator new_shard_iterator(rocksdb::ColumnFamilyHandle* cf);
+  Iterator new_shard_iterator(rocksdb::ColumnFamilyHandle* cf,
+			      const std::string& prefix, IteratorBounds bound);
 public:
   /// Utility
   static std::string combine_strings(const std::string &prefix, const std::string &value) {

@@ -24,7 +24,6 @@
 
 namespace ECTransaction {
   struct WritePlan {
-    PGTransactionUPtr t;
     bool invalidates_cache = false; // Yes, both are possible
     std::map<hobject_t,extent_set> to_read;
     std::map<hobject_t,extent_set> will_write; // superset of to_read
@@ -32,18 +31,14 @@ namespace ECTransaction {
     std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
   };
 
-  bool requires_overwrite(
-    uint64_t prev_size,
-    const PGTransaction::ObjectOperation &op);
-
   template <typename F>
   WritePlan get_write_plan(
     const ECUtil::stripe_info_t &sinfo,
-    PGTransactionUPtr &&t,
+    PGTransaction& t,
     F &&get_hinfo,
     DoutPrefixProvider *dpp) {
     WritePlan plan;
-    t->safe_create_traverse(
+    t.safe_create_traverse(
       [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
 	ECUtil::HashInfoRef hinfo = get_hinfo(i.first);
 	plan.hash_infos[i.first] = hinfo;
@@ -59,6 +54,7 @@ namespace ECTransaction {
 
 	hobject_t source;
 	if (i.second.has_source(&source)) {
+	  // typically clone or mv
 	  plan.invalidates_cache = true;
 
 	  ECUtil::HashInfoRef shinfo = get_hinfo(source);
@@ -178,11 +174,11 @@ namespace ECTransaction {
 	       (!plan.to_read.at(i.first).empty() &&
 		!i.second.has_source()));
       });
-    plan.t = std::move(t);
     return plan;
   }
 
   void generate_transactions(
+    PGTransaction* _t,
     WritePlan &plan,
     ceph::ErasureCodeInterfaceRef &ecimpl,
     pg_t pgid,

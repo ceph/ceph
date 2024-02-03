@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# version 7
+# Last revision 2023-01-13
 
-# NOTE: This script based based on rgw-orphan-list but doing the
+# NOTE: This script based on rgw-orphan-list but doing the
 # reverse calculation.
 
 # NOTE: The awk included in this script replaces the 'ceph-diff-sorted'
@@ -17,114 +17,139 @@ trap "exit 1" TERM
 TOP_PID=$$
 
 out_dir="$PWD"
-temp_file=/tmp/gap-tmp.$$
 timestamp=$(date -u +%Y%m%d%H%M)
 lspools_err="${out_dir}/lspools-${timestamp}.error"
 rados_out="${out_dir}/rados-${timestamp}.intermediate"
 rados_err="${out_dir}/rados-${timestamp}.error"
-rados_temp=/tmp/rados-tmp.$$
-rados_flag=/tmp/rados-flag.$$
 rgwadmin_out="${out_dir}/radosgw-admin-${timestamp}.intermediate"
 rgwadmin_err="${out_dir}/radosgw-admin-${timestamp}.error"
-rgwadmin_temp=/tmp/radosgw-admin-tmp.$$
-rgwadmin_flag=/tmp/radosgw-admin-flag.$$
 gap_out="${out_dir}/gap-list-${timestamp}.gap"
-incremental_grep_awk="/tmp/ig-${$}.awk"
 
-# field separator -- contains ascii 0xFE, designed to be a character
-# that won't appear in normal output, can only be a single character
-# due to use in in the sort command
-fs="þ"
 
-log_out() {
-  echo $(date +%F\ %T) $1
+# field separator
+# contains ascii 0xFE, designed to be a  character that won't appear
+# in normal output, can only be a single character due to use in the 
+# sort command
+fs=$(echo -e "\xFE")
+
+log() {
+  echo $(date +%F\ %T) $(hostname -s) "$1"
 }
 
-error_out() {
-  mydate=$(date +%F\ %T)
-  >&2 echo
-  >&2 echo
-  >&2 echo
-  >&2 echo $mydate "An error was encountered while running '$1'. Aborting!"
-  if [ $# -gt 1 ] ;then
-    >&2 echo $mydate "Review file '$2' for details."
+#
+# checkReturn RETURNCODE MESSAGE TERMINATE
+#  RETURNCODE - ( usually $? ) of previous command
+#  MESSAGE    - Message to print on non-zero return code
+#  TERMINATE  - non-empty == terminate the script on non-zero return code
+#
+checkReturn() {
+  if [ $1 -ne 0 ]; then
+    error_addon=""
+    if [ ! -z "$3" ]; then
+      error_addon="; Terminating"
+    fi
+    log "ERROR: ${2} failed: returned ${1}${error_addon}"
+    if [ ! -z "$3" ]; then
+      >&2 echo
+      >&2 echo '***'
+      >&2 echo '*** WARNING: The results are incomplete. Do not use! ***'
+      >&2 echo '***'
+      kill -s TERM $TOP_PID
+    fi
   fi
-  >&2 echo
-  >&2 echo '***'
-  >&2 echo '*** WARNING: The results are incomplete. Do not use! ***'
-  >&2 echo '***'
-  kill -s TERM $TOP_PID
 }
 
 prompt_pool() {
   # note: all prompts go to stderr so stdout contains just the result
   rados lspools >"$temp_file" 2>"$lspools_err"
-  if [ "$?" -ne 0 ] ;then
-    error_out "rados lspools" "$lspools_err"
-  else
-    >&2 echo "Available pools:"
-    >&2 sed 's/^/    /' "$temp_file" # list pools and indent
-    >&2 echo ""
-    >&2 echo "Which Rados Gateway Data pool do you want to search for gaps? "
-    >&2 echo ""
-    >&2 echo "NOTE: If your installation has multiple bucket data pools using "
-    >&2 echo "      bucket placement policies, please enter a space separated "
-    >&2 echo "      list of bucket data pools to enumerate."
-    >&2 echo ""
-    local mypool
-    read mypool
-    echo $mypool
-  fi
+  checkReturn $? "Listing pools" 1
+
+  >&2 echo ""
+  >&2 echo "Available pools:"
+  >&2 sed 's/^/    /' "$temp_file" # list pools and indent
+  >&2 echo ""
+  >&2 echo "Which Rados Gateway Data pool do you want to search for gaps? "
+  >&2 echo ""
+  >&2 echo "NOTE: If your installation has multiple bucket data pools using "
+  >&2 echo "      bucket placement policies, please enter a space separated "
+  >&2 echo "      list of bucket data pools to enumerate."
+  >&2 echo ""
+  local mypool
+  read mypool
+  echo $mypool
 }
 
 radosgw_radoslist() {
-  log_out "Running 'radosgw-admin bucket radoslist'."
+  log "Running 'radosgw-admin bucket radoslist'."
   rm -f "$rgwadmin_flag" &> /dev/null
   radosgw-admin bucket radoslist --rgw-obj-fs="$fs" >"$rgwadmin_out" 2>"$rgwadmin_err"
-  if [ "$?" -ne 0 ] ;then
+  RETVAL=$?
+  if [ "$RETVAL" -ne 0 ] ;then
     touch "$rgwadmin_flag"
-    error_out "radosgw-admin radoslist" "$rgwadmin_err"
-  else
-    sort --field-separator="$fs" -k1,1 -u "$rgwadmin_out" > "$rgwadmin_temp"
-    mv -f "$rgwadmin_temp" "$rgwadmin_out"
-    log_out "Completed 'radosgw-admin bucket radoslist'."
   fi
+  checkReturn $RETVAL "radosgw-admin radoslist" 1
+  log "Completed 'radosgw-admin bucket radoslist'."
+
+  log "Sorting 'radosgw-admin bucket radoslist' output."
+  sort -T ${temp_prefix} --field-separator="$fs" -k1,1 -u "$rgwadmin_out" > "$rgwadmin_temp"
+  checkReturn $? "Sorting 'radosgw-admin bucket radoslist' output" 1
+  log "Completed sorting 'radosgw-admin bucket radoslist'."
+
+  log "Moving 'radosgw-admin bucket radoslist' output."
+  mv -f "$rgwadmin_temp" "$rgwadmin_out"
+  checkReturn $? "Moving 'radosgw-admin bucket radoslist' output" 1
+  log "Completed moving 'radosgw-admin bucket radoslist' output."
 }
 
 rados_ls() {
-  log_out "Starting 'rados ls' function."
+  log "Starting 'rados ls' function."
   rm -f "$rados_flag" &> /dev/null
   rm -f "$rados_out" &> /dev/null
   local mypool
   for mypool in $pool; do
-    log_out "Running 'rados ls' on pool ${mypool}."
+    log "Running 'rados ls' on pool ${mypool}."
     rados ls --pool="$mypool" >>"$rados_out" 2>"$rados_err"
-    if [ "$?" -ne 0 ] ;then
+    RETVAL=$?
+    if [ "$RETVAL" -ne 0 ] ;then
       touch "$rados_flag"
-      error_out "rados ls ${mypool}" "$rados_err"
     fi
-    log_out "Completed 'rados ls' on pool ${mypool}."
+    checkReturn $RETVAL "'rados ls' on pool ${mypool}" 1
+    log "Completed 'rados ls' on pool ${mypool}."
   done
   if [ ! -e "$rados_flag" ]; then
-    log_out "Sorting 'rados ls' output(s)."
-    sort -u "$rados_out" >"$rados_temp"
+    log "Sorting 'rados ls' output(s)."
+    sort -T ${temp_prefix} -u "$rados_out" >"$rados_temp"
+    checkReturn $? "Sorting 'rados ls' output(s)" 1
+
+    log "Moving sorted output(s)."
     mv -f "$rados_temp" "$rados_out"
-    log_out "Sorting 'rados ls' output(s) complete."
+    checkReturn $? "Moving temp file to output file" 1
+    log "Sorting 'rados ls' output(s) complete."
   fi
 }
 
 usage() {
   >&2 cat << EOF
 
+WARNING   WARNING   WARNING   WARNING   WARNING   WARNING   WARNING
+WARNING: 
+WARNING: Command option format has changed.  Please check closely.
+WARNING: 
+WARNING   WARNING   WARNING   WARNING   WARNING   WARNING   WARNING
 
-Usage: $0 [<pool> [parallel]]
+Usage: $0 [-m] [-p <pool>] [-t <temp_dir>]
 
 Where:
-  pool = The RGW data pool name, if omitted, pool name will be
-         prompted for during execution.
+  -m               Optionally, run the two listings in multiple threads.
+                   --See NOTE below--
 
-  parallel = Optionally, run the two listings in parallel - requires
-             pool name be specified as option 1.
+  -p <pool>        The RGW bucket data pool name, if omitted, pool name
+                   will be prompted for during execution.
+                   Multiple pools can be supplied as a space separated
+                   double quoted list.
+
+  -t <temp_dir>    Optionally, set the directory to use for temp space.
+                   This may be required if /tmp is low on space.
 
 NOTE: This tool is currently considered to be EXPERIMENTAL.
 
@@ -132,8 +157,8 @@ NOTE: False positives are possible. False positives would likely
       appear as objects that were never deleted and are fully
       intact. All results should therefore be verified.
 
-NOTE: Parallel listing may increase performance but may also increase
-      the risk of false positives when the cluster is undergong
+NOTE: Multithread listing may increase performance but may also increase
+      the risk of false positives when the cluster is undergoing
       modifications during the listing processes. In addition to the
       above, false positives might also include objects that were
       intentionally deleted.
@@ -142,7 +167,117 @@ EOF
   exit 1
 }
 
-# Create an awk script in a file for parsing the two command outoputs.
+multithread=0
+error=0
+temp_prefix="/tmp"
+while getopts ":mp:t:" o; do
+  case "${o}" in
+    m)
+      multithread=1
+    ;;
+    p)
+      pool=${OPTARG}
+    ;;
+    t)
+      if [ -d ${OPTARG} ]; then
+        temp_prefix=${OPTARG}
+      else
+        echo
+        echo "ERROR: Temporary directory does not exist: ${OPTARG}"
+        error=1
+      fi
+    ;;
+    *)
+      echo
+      echo "ERROR: Unrecognized argument: ${o}"
+      error=1
+    ;;
+  esac
+done
+shift $((OPTIND-1))
+
+temp_file=${temp_prefix}/gap-tmp.$$
+rados_temp=${temp_prefix}/rados-tmp.$$
+rgwadmin_temp=${temp_prefix}/radosgw-admin-tmp.$$
+rados_flag=${temp_prefix}/rados-flag.$$
+rgwadmin_flag=${temp_prefix}/radosgw-admin-flag.$$
+incremental_grep_awk="${temp_prefix}/ig-${$}.awk"
+
+if [ $error -gt 0 ]; then
+  usage
+fi
+
+if [ -z "$pool" ]; then
+  pool="$(prompt_pool)"
+fi
+
+error=0
+rados ${CEPH_ARGS} lspools > ${temp_file}
+checkReturn $? "rados lspools" 1
+for mypool in $pool; do
+  if [ $(grep -c "^${mypool}$" "${temp_file}") -eq 0 ]; then
+      echo
+      echo "ERROR: Supplied pool does not exist: ${mypool}"
+      error=1
+  fi
+done
+
+if [ $error -gt 0 ]; then
+  exit 1
+fi
+
+log "Pool is \"$pool\"."
+log "Note: output files produced will be tagged with the current timestamp -- ${timestamp}."
+
+if [ $multithread -eq 1 ] ;then
+  startsecs=$(date +%s)
+  log "Starting multithread tasks..."
+  rados_ls &
+  radosgw_radoslist &
+  jobs &> /dev/null  # without this, the myjobs count always equals 1 (confused)
+  myjobs=$(jobs | wc -l)
+  while [ $myjobs -gt 0 ]; do
+    # provide minutely status update
+    if [ $(( ($(date +%s)-$startsecs) % 60 )) -eq 0 ]; then
+      echo
+      deltasecs=$(( $(date +%s)-$startsecs ))
+      log "Waiting for listing tasks to complete. Running ${myjobs} tasks for ${deltasecs} seconds."
+    fi
+    sleep 1
+    echo -n .
+    if [ -e "$rgw_admin_flag" ]; then
+      exit 1
+    fi
+    if [ -e "$rados_flag" ]; then
+      exit 2
+    fi
+    jobs &> /dev/null  # without this, the myjobs count always equals 1 (confused)
+    myjobs=$(jobs | wc -l)
+  done
+  echo
+else
+  rados_ls
+  radosgw_radoslist
+fi
+
+if [ -e "$rgw_admin_flag" ]; then
+  exit 1
+fi
+
+if [ -e "$rados_flag" ]; then
+  exit 2
+fi
+
+for myfile in $rados_out $rgwadmin_out; do
+  if [ ! -s "${myfile}" ]; then
+    log "ERROR: Empty file detected: ${myfile}"
+    log "ERROR: RESULTS ARE INCOMPLETE - DO NOT USE"
+    exit 1
+  fi 
+done
+
+# Create an awk script in a file for parsing the two command outputs.
+log "Creating awk script for comparing outputs: ${incremental_grep_awk}"
 
 cat <<"EOF" >$incremental_grep_awk
 # This awk script is used by rgw-gap-list and will sequence through
@@ -157,7 +292,7 @@ cat <<"EOF" >$incremental_grep_awk
 #    indicates a possible deleted tail object and the accompanying
 #    bucket / user object name is output, assuming it had not been
 #    previously identified.
-#    - A map of outputed bucket / user object is maintained in memory
+#    - A map of outputted bucket / user object is maintained in memory
 #  * If a value appears in $rados_out, but not in $rgwadmin_out, the
 #    $rados_out file is iterated until the $rados_out line is equal
 #    or > (alphabetically) the value from the $rgwadmin_out file.
@@ -288,80 +423,22 @@ END {
 
 EOF
 
-parallel=0
-if [ $# -eq 0 ] ;then
-  pool="$(prompt_pool)"
-elif [ $# -eq 1 ] ;then
-  pool="$1"
-elif [ $# -eq 2 ] ; then
-  pool="$1"
-  if [ "$2" == "parallel" ]; then
-    parallel=1
-  else
-    echo
-    log_out "WARNING: Invalid 2nd parameter"
-    usage
-  fi
-else
-  usage
-fi
 
-log_out "Pool is \"$pool\"."
-
-log_out "Note: output files produced will be tagged with the current timestamp -- ${timestamp}."
-
-if [ $parallel -eq 1 ] ;then
-  startsecs=$(date +%s)
-  log_out "Starting parallel tasks..."
-  rados_ls &
-  radosgw_radoslist &
-  jobs &> /dev/null  # without this, the myjobs count always equals 1 (confused)
-  myjobs=$(jobs | wc -l)
-  while [ $myjobs -gt 0 ]; do
-    # provide minutely status update
-    if [ $(( ($(date +%s)-$startsecs) % 60 )) -eq 0 ]; then
-      echo
-      deltasecs=$(( $(date +%s)-$startsecs ))
-      log_out "Waiting for listing tasks to complete. Running ${myjobs} tasks for ${deltasecs} seconds."
-    fi
-    sleep 1
-    echo -n .
-    if [ -e "$rgw_admin_flag" ]; then
-      exit 1
-    fi
-    if [ -e "$rados_flag" ]; then
-      exit 2
-    fi
-    jobs &> /dev/null  # without this, the myjobs count always equals 1 (confused)
-    myjobs=$(jobs | wc -l)
-  done
-  echo
-else
-  rados_ls
-  radosgw_radoslist
-fi
-
-if [ -e "$rgw_admin_flag" ]; then
-  exit 1
-fi
-
-if [ -e "$rados_flag" ]; then
-  exit 2
-fi
-
-log_out "Begin identifying potentially impacted user object names."
+log "Begin identifying potentially impacted user object names."
 
 echo -n > "$temp_file" # Ensure the file is empty
 awk -F "$fs" -v filetwo=$rados_out -v map_out=$temp_file -f $incremental_grep_awk $rgwadmin_out
+checkReturn $? "Identifying potentially impacted user object names" 1
 
-log_out "Begin sorting results."
-sort "$temp_file" > "$gap_out"
+log "Begin sorting results."
+sort -T ${temp_prefix} "$temp_file" > "$gap_out"
+checkReturn $? "sorting results" 1
 rm -f "$temp_file"
 
 found=$(wc -l < "$gap_out")
 mydate=$(date +%F\ %T)
 
-log_out "Done."
+log "Done."
 
 cat << EOF
 

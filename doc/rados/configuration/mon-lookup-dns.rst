@@ -1,16 +1,22 @@
+.. _mon-dns-lookup:
+
 ===============================
 Looking up Monitors through DNS
 ===============================
 
-Since version 11.0.0 RADOS supports looking up Monitors through DNS.
+Since Ceph version 11.0.0 (Kraken), RADOS has supported looking up monitors
+through DNS.
 
-This way daemons and clients do not require a *mon host* configuration directive in their ceph.conf configuration file.
+The addition of the ability to look up monitors through DNS means that daemons
+and clients do not require a *mon host* configuration directive in their
+``ceph.conf`` configuration file.
 
-Using DNS SRV TCP records clients are able to look up the monitors.
+With a DNS update, clients and daemons can be made aware of changes
+in the monitor topology. To be more precise and technical, clients look up the
+monitors by using ``DNS SRV TCP`` records. 
 
-This allows for less configuration on clients and monitors. Using a DNS update clients and daemons can be made aware of changes in the monitor topology.
-
-By default clients and daemons will look for the TCP service called *ceph-mon* which is configured by the *mon_dns_srv_name* configuration directive.
+By default, clients and daemons look for the TCP service called *ceph-mon*,
+which is configured by the *mon_dns_srv_name* configuration directive.
 
 
 .. confval:: mon_dns_srv_name

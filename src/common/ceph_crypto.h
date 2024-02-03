@@ -14,6 +14,7 @@
 #define CEPH_CRYPTO_SHA1_DIGESTSIZE 20
 #define CEPH_CRYPTO_HMACSHA256_DIGESTSIZE 32
 #define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
+#define CEPH_CRYPTO_HMACSHA512_DIGESTSIZE 64
 #define CEPH_CRYPTO_SHA512_DIGESTSIZE 64
 
 #include <openssl/evp.h>
@@ -54,9 +55,12 @@ namespace TOPNSPC::crypto {
       private:
 	EVP_MD_CTX *mpContext;
 	const EVP_MD *mpType;
+        EVP_MD *mpType_FIPS = nullptr;
       public:
 	OpenSSLDigest (const EVP_MD *_type);
 	~OpenSSLDigest ();
+	OpenSSLDigest(OpenSSLDigest&& o) noexcept;
+	OpenSSLDigest& operator=(OpenSSLDigest&& o) noexcept;
 	void Restart();
 	void SetFlags(int flags);
 	void Update (const unsigned char *input, size_t length);
@@ -184,6 +188,12 @@ namespace TOPNSPC::crypto {
       : HMAC(EVP_sha256(), key, length) {
     }
   };
+
+  struct HMACSHA512 : public HMAC {
+    HMACSHA512 (const unsigned char *key, size_t length)
+      : HMAC(EVP_sha512(), key, length) {
+    }
+  };
 }
 
 
@@ -194,6 +204,7 @@ namespace TOPNSPC::crypto {
 
   using ssl::HMACSHA256;
   using ssl::HMACSHA1;
+  using ssl::HMACSHA512;
 
 template<class Digest>
 auto digest(const ceph::buffer::list& bl)

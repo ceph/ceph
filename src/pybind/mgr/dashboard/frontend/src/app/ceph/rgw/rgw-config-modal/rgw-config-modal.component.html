@@ -69,9 +69,6 @@
                     name="auth_method"
                     class="form-select"
                     formControlName="auth_method">
-              <option i18n
-                      *ngIf="authMethods !== null"
-                      [ngValue]="null">-- Select a method --</option>
               <option *ngFor="let auth_method of authMethods"
                       [value]="auth_method">{{ auth_method }}</option>
             </select>
@@ -92,9 +89,6 @@
                     name="secret_engine"
                     class="form-select"
                     formControlName="secret_engine">
-              <option i18n
-                      *ngIf="secretEngines !== null"
-                      [ngValue]="null">-- Select a method --</option>
               <option *ngFor="let secret_engine of secretEngines"
                       [value]="secret_engine">{{ secret_engine }}</option>
             </select>
@@ -150,7 +144,8 @@
             <input id="address"
                    name="address"
                    class="form-control"
-                   formControlName="address">
+                   formControlName="address"
+                   placeholder="http://127.0.0.1:8000">
             <span class="invalid-feedback"
                   *ngIf="configForm.showError('address', frm, 'required')"
                   i18n>This field is required.</span>
@@ -163,6 +158,9 @@
         <label class="cd-col-form-label required"
                for="token">
         <span i18n>Token</span>
+        <cd-helper i18n>
+          The token authentication method expects a Vault token to be present in a plaintext file.
+        </cd-helper>
         </label>
         <div class="cd-col-form-input">
           <input type="file"
@@ -171,24 +169,6 @@
           <span class="invalid-feedback"
                 *ngIf="configForm.showError('token', frm, 'required')"
                 i18n>This field is required.</span>
-        </div>
-      </div>
-
-      <div *ngIf="configForm.getValue('auth_method') === 'agent'">
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="role"
-                 i18n>Role
-          </label>
-          <div class="cd-col-form-input">
-            <input id="role"
-                   name="role"
-                   class="form-control"
-                   formControlName="role">
-            <span class="invalid-feedback"
-                  *ngIf="configForm.showError('role', frm, 'required')"
-                  i18n>This field is required.</span>
-          </div>
         </div>
       </div>
 

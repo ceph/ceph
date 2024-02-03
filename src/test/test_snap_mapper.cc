@@ -193,6 +193,19 @@ public:
       return -ENOENT;
     }
   }
+  int get_next_or_current(
+    const string &key,
+    pair<string, bufferlist> *next_or_current) override {
+    std::lock_guard l{lock};
+    map<string, bufferlist>::iterator j = store.lower_bound(key);
+    if (j != store.end()) {
+      if (next_or_current)
+	*next_or_current = *j;
+      return 0;
+    } else {
+      return -ENOENT;
+    }
+  }
   void submit(Transaction *t) {
     doer.submit(t->ops);
     doer.submit(t->callbacks);
@@ -448,7 +461,19 @@ public:
     uint32_t bits)
     : driver(driver),
       mapper(new SnapMapper(g_ceph_context, driver, mask, bits, 0, shard_id_t(1))),
-             mask(mask), bits(bits) {}
+	     mask(mask), bits(bits) {}
+
+  hobject_t create_hobject(
+    unsigned           idx,
+    snapid_t           snapid,
+    int64_t            pool,
+    const std::string& nspace) {
+    const object_t    oid("OID" + std::to_string(idx));
+    const std::string key("KEY" + std::to_string(idx));
+    const uint32_t    hash = (idx & ((~0)<<bits)) | (mask & ~((~0)<<bits));
+
+    return hobject_t(oid, key, snapid, hash, pool, nspace);
+  }
 
   hobject_t random_hobject() {
     return hobject_t(
@@ -467,9 +492,28 @@ public:
     }
   }
 
-  void create_snap() {
-    snap_to_hobject[next];
+  snapid_t create_snap() {
+    snapid_t snapid = next;
+    snap_to_hobject[snapid];
     ++next;
+
+    return snapid;
+  }
+
+  // must be called with lock held to protect access to
+  // hobject_to_snap and snap_to_hobject
+  void add_object_to_snaps(const hobject_t & obj, const set<snapid_t> &snaps) {
+    hobject_to_snap[obj] = snaps;
+    for (auto snap : snaps) {
+      map<snapid_t, set<hobject_t> >::iterator j = snap_to_hobject.find(snap);
+      ceph_assert(j != snap_to_hobject.end());
+      j->second.insert(obj);
+    }
+    {
+      PausyAsyncMap::Transaction t;
+      mapper->add_oid(obj, snaps, &t);
+      driver->submit(&t);
+    }
   }
 
   void create_object() {
@@ -481,20 +525,9 @@ public:
       obj = random_hobject();
     } while (hobject_to_snap.count(obj));
 
-    set<snapid_t> &snaps = hobject_to_snap[obj];
+    set<snapid_t> snaps;
     choose_random_snaps(1 + (rand() % 20), &snaps);
-    for (set<snapid_t>::iterator i = snaps.begin();
-	 i != snaps.end();
-	 ++i) {
-      map<snapid_t, set<hobject_t> >::iterator j = snap_to_hobject.find(*i);
-      ceph_assert(j != snap_to_hobject.end());
-      j->second.insert(obj);
-    }
-    {
-      PausyAsyncMap::Transaction t;
-      mapper->add_oid(obj, snaps, &t);
-      driver->submit(&t);
-    }
+    add_object_to_snaps(obj, snaps);
   }
 
   std::pair<std::string, ceph::buffer::list> to_raw(
@@ -522,27 +555,23 @@ public:
     return mapper->make_purged_snap_key(std::forward<Args>(args)...);
   }
 
-  void trim_snap() {
-    std::lock_guard l{lock};
-    if (snap_to_hobject.empty())
-      return;
-    map<snapid_t, set<hobject_t> >::iterator snap =
-      rand_choose(snap_to_hobject);
-    set<hobject_t> hobjects = snap->second;
-
+  // must be called with lock held to protect access to
+  // snap_to_hobject and hobject_to_snap
+  int trim_snap(snapid_t snapid, unsigned max_count, vector<hobject_t> & out) {
+    set<hobject_t>&   hobjects = snap_to_hobject[snapid];
     vector<hobject_t> hoids;
-    while (mapper->get_next_objects_to_trim(
-	     snap->first, rand() % 5 + 1, &hoids) == 0) {
+    int ret = mapper->get_next_objects_to_trim(snapid, max_count, &hoids);
+    if (ret == 0) {
+      out.insert(out.end(), hoids.begin(), hoids.end());
       for (auto &&hoid: hoids) {
 	ceph_assert(!hoid.is_max());
 	ceph_assert(hobjects.count(hoid));
 	hobjects.erase(hoid);
 
-	map<hobject_t, set<snapid_t>>::iterator j =
-	  hobject_to_snap.find(hoid);
-	ceph_assert(j->second.count(snap->first));
+	map<hobject_t, set<snapid_t>>::iterator j = hobject_to_snap.find(hoid);
+	ceph_assert(j->second.count(snapid));
 	set<snapid_t> old_snaps(j->second);
-	j->second.erase(snap->first);
+	j->second.erase(snapid);
 
 	{
 	  PausyAsyncMap::Transaction t;
@@ -560,6 +589,48 @@ public:
       }
       hoids.clear();
     }
+    return ret;
+  }
+
+  // must be called with lock held to protect access to
+  // snap_to_hobject and hobject_to_snap in trim_snap
+  // will keep trimming until reaching max_count or failing a call to trim_snap()
+  void trim_snap_force(snapid_t           snapid,
+		       unsigned           max_count,
+		       vector<hobject_t>& out) {
+    int               guard = 1000;
+    vector<hobject_t> tmp;
+    unsigned          prev_size = 0;
+    while (tmp.size() < max_count) {
+      unsigned req_size = max_count - tmp.size();
+      // each call adds more objects into the tmp vector
+      trim_snap(snapid, req_size, tmp);
+      if (prev_size < tmp.size()) {
+	prev_size = tmp.size();
+      }
+      else{
+	// the tmp vector size was not increased in the last call
+	// which means we were unable to find anything to trim
+	break;
+      }
+      ceph_assert(--guard > 0);
+    }
+    out.insert(out.end(), tmp.begin(), tmp.end());
+  }
+
+  void trim_snap() {
+    std::lock_guard l{lock};
+    if (snap_to_hobject.empty()) {
+      return;
+    }
+    int ret = 0;
+    map<snapid_t, set<hobject_t> >::iterator snap = rand_choose(snap_to_hobject);
+    do {
+      int max_count = rand() % 5 + 1;
+      vector<hobject_t> out;
+      ret = trim_snap(snap->first, max_count, out);
+    } while(ret == 0);
+    set<hobject_t> hobjects = snap->second;
     ceph_assert(hobjects.empty());
     snap_to_hobject.erase(snap);
   }
@@ -598,6 +669,189 @@ public:
     int r = mapper->get_snaps(obj->first, &snaps);
     ceph_assert(r == 0);
     ASSERT_EQ(snaps, obj->second);
+  }
+
+  void test_prefix_itr() {
+    // protects access to snap_to_hobject and hobject_to_snap
+    std::lock_guard   l{lock};
+    snapid_t          snapid = create_snap();
+    // we initialize 32 PGS
+    ceph_assert(bits == 5);
+
+    const int64_t     pool(0);
+    const std::string nspace("GBH");
+    set<snapid_t>     snaps = { snapid };
+    set<hobject_t>&   hobjects = snap_to_hobject[snapid];
+    vector<hobject_t> trimmed_objs;
+    vector<hobject_t> stored_objs;
+
+    // add objects 0, 32, 64, 96, 128, 160, 192, 224
+    // which should hit all the prefixes
+    for (unsigned idx = 0; idx < 8; idx++) {
+      hobject_t hobj = create_hobject(idx * 32, snapid, pool, nspace);
+      add_object_to_snaps(hobj, snaps);
+      stored_objs.push_back(hobj);
+    }
+    ceph_assert(hobjects.size() == 8);
+
+    // trim 0, 32, 64, 96
+    trim_snap(snapid, 4, trimmed_objs);
+    ceph_assert(hobjects.size() == 4);
+
+    // add objects (3, 35, 67) before the prefix_itr position
+    // to force an iteartor reset later
+    for (unsigned idx = 0; idx < 3; idx++) {
+      hobject_t hobj = create_hobject(idx * 32 + 3, snapid, pool, nspace);
+      add_object_to_snaps(hobj, snaps);
+      stored_objs.push_back(hobj);
+    }
+    ceph_assert(hobjects.size() == 7);
+
+    // will now trim 128, 160, 192, 224
+    trim_snap(snapid, 4, trimmed_objs);
+    ceph_assert(hobjects.size() == 3);
+
+    // finally, trim 3, 35, 67
+    // This will force a reset to the prefix_itr (which is what we test here)
+    trim_snap(snapid, 3, trimmed_objs);
+    ceph_assert(hobjects.size() == 0);
+
+    ceph_assert(trimmed_objs.size() == 11);
+    // trimmed objs must be in the same order they were inserted
+    // this will prove that the second call to add_object_to_snaps inserted
+    // them before the current prefix_itr
+    ceph_assert(trimmed_objs.size() == stored_objs.size());
+    ceph_assert(std::equal(trimmed_objs.begin(), trimmed_objs.end(),
+			   stored_objs.begin()));
+    snap_to_hobject.erase(snapid);
+  }
+
+  // insert 256 objects which should populate multiple prefixes
+  // trim until we change prefix and then insert an old object
+  // which we know for certain belongs to a prefix before prefix_itr
+  void test_prefix_itr2() {
+    // protects access to snap_to_hobject and hobject_to_snap
+    std::lock_guard   l{lock};
+    snapid_t          snapid = create_snap();
+    // we initialize 32 PGS
+    ceph_assert(bits == 5);
+
+    const int64_t     pool(0);
+    const std::string nspace("GBH");
+    set<snapid_t>     snaps = { snapid };
+    vector<hobject_t> trimmed_objs;
+    vector<hobject_t> stored_objs;
+
+    constexpr unsigned MAX_IDX = 256;
+    for (unsigned idx = 0; idx < MAX_IDX; idx++) {
+      hobject_t hobj = create_hobject(idx, snapid, pool, nspace);
+      add_object_to_snaps(hobj, snaps);
+      stored_objs.push_back(hobj);
+    }
+
+    hobject_t dup_hobj;
+    bool      found = false;
+    trim_snap(snapid, 1, trimmed_objs);
+    const std::set<std::string>::iterator itr = mapper->get_prefix_itr();
+    for (unsigned idx = 1; idx < MAX_IDX + 1; idx++) {
+      trim_snap(snapid, 1, trimmed_objs);
+      if (!found && mapper->get_prefix_itr() != itr) {
+	// we changed prefix -> insert an OBJ belonging to perv prefix
+	dup_hobj = create_hobject(idx - 1, snapid, pool, nspace);
+	add_object_to_snaps(dup_hobj, snaps);
+	stored_objs.push_back(dup_hobj);
+	found = true;
+      }
+    }
+    ceph_assert(found);
+
+    sort(trimmed_objs.begin(), trimmed_objs.end());
+    sort(stored_objs.begin(),  stored_objs.end());
+    ceph_assert(trimmed_objs.size() == MAX_IDX+1);
+    ceph_assert(trimmed_objs.size() == stored_objs.size());
+    ceph_assert(std::equal(trimmed_objs.begin(), trimmed_objs.end(),
+			   stored_objs.begin()));
+    snap_to_hobject.erase(snapid);
+  }
+
+  void add_rand_hobjects(unsigned           count,
+			 snapid_t           snapid,
+			 int64_t            pool,
+			 const std::string& nspace,
+			 vector<hobject_t>& stored_objs) {
+    constexpr unsigned MAX_VAL = 1000;
+    set<snapid_t> snaps = { snapid };
+    for (unsigned i = 0; i < count; i++) {
+      hobject_t hobj;
+      do {
+	unsigned val = rand() % MAX_VAL;
+	hobj = create_hobject(val, snapid, pool, nspace);
+      }while (hobject_to_snap.count(hobj));
+      add_object_to_snaps(hobj, snaps);
+      stored_objs.push_back(hobj);
+    }
+  }
+
+  // Start with a set of random objects then run a partial trim
+  // followed by another random insert
+  // This should cause *some* objects to be added before the prefix_itr
+  // and will verify that we still remove them
+  void test_prefix_itr_rand() {
+    // protects access to snap_to_hobject and hobject_to_snap
+    std::lock_guard   l{lock};
+    snapid_t          snapid = create_snap();
+    // we initialize 32 PGS
+    ceph_assert(bits == 5);
+
+    const int64_t     pool(0);
+    const std::string nspace("GBH");
+    vector<hobject_t> trimmed_objs;
+    vector<hobject_t> stored_objs;
+    set<hobject_t>&   hobjects = snap_to_hobject[snapid];
+    ceph_assert(hobjects.size() == 0);
+
+    // add 100 random objects
+    add_rand_hobjects(100, snapid, pool, nspace, stored_objs);
+    ceph_assert(hobjects.size() == 100);
+
+    // trim the first 75 objects leaving 25 objects
+    trim_snap(snapid, 75, trimmed_objs);
+    ceph_assert(hobjects.size() == 25);
+
+    // add another 25 random objects (now we got 50 objects)
+    add_rand_hobjects(25, snapid, pool, nspace, stored_objs);
+    ceph_assert(hobjects.size() == 50);
+
+    // trim 49 objects leaving a single object
+    // we must use a wrapper function to keep trimming while until -ENOENT
+    trim_snap_force(snapid, 49, trimmed_objs);
+    ceph_assert(hobjects.size() == 1);
+
+    // add another 9 random objects (now we got 10 objects)
+    add_rand_hobjects(9, snapid, pool, nspace, stored_objs);
+    ceph_assert(hobjects.size() == 10);
+
+    // trim 10 objects leaving no object in store
+    trim_snap_force(snapid, 10, trimmed_objs);
+    ceph_assert(hobjects.size() == 0);
+
+    // add 10 random objects (now we got 10 objects)
+    add_rand_hobjects(10, snapid, pool, nspace, stored_objs);
+    ceph_assert(hobjects.size() == 10);
+
+    // trim 10 objects leaving no object in store
+    trim_snap_force(snapid, 10, trimmed_objs);
+    ceph_assert(hobjects.size() == 0);
+
+    sort(trimmed_objs.begin(), trimmed_objs.end());
+    sort(stored_objs.begin(),  stored_objs.end());
+    ceph_assert(trimmed_objs.size() == 144);
+    ceph_assert(trimmed_objs.size() == stored_objs.size());
+
+    bool are_equal = std::equal(trimmed_objs.begin(), trimmed_objs.end(),
+				stored_objs.begin());
+    ceph_assert(are_equal);
+    snap_to_hobject.erase(snapid);
   }
 };
 
@@ -661,6 +915,27 @@ protected:
     }
   }
 };
+
+// This test creates scenarios which are impossible to get with normal code.
+// The normal code deletes the snap before calling TRIM and so no new clones
+// can be added to that snap.
+// Our test calls get_next_objects_to_trim() *without* deleting the snap first.
+// This allows us to add objects to the (non-deleted) snap after trimming began.
+// We test that SnapTrim will find them even when added into positions before the prefix_itr.
+// Since those tests are doing illegal inserts we must disable osd_debug_trim_objects
+// during those tests as otherwise the code will assert.
+TEST_F(SnapMapperTest, prefix_itr) {
+  bool orig_val = g_ceph_context->_conf.get_val<bool>("osd_debug_trim_objects");
+  std::cout << "osd_debug_trim_objects = " << orig_val << std::endl;
+  g_ceph_context->_conf.set_val("osd_debug_trim_objects", std::to_string(false));
+  init(32);
+  get_tester().test_prefix_itr();
+  get_tester().test_prefix_itr2();
+  get_tester().test_prefix_itr_rand();
+  g_ceph_context->_conf.set_val("osd_debug_trim_objects", std::to_string(orig_val));
+  bool curr_val = g_ceph_context->_conf.get_val<bool>("osd_debug_trim_objects");
+  ceph_assert(curr_val == orig_val);
+}
 
 TEST_F(SnapMapperTest, Simple) {
   init(1);
@@ -793,7 +1068,7 @@ public:
   DirectMapper(
     uint32_t mask,
     uint32_t bits)
-   : mapper(new SnapMapper(g_ceph_context, driver.get(), mask, bits, 0, shard_id_t(1))), 
+    : mapper(new SnapMapper(g_ceph_context, driver.get(), mask, bits, 0, shard_id_t(1))),
              mask(mask), bits(bits) {}
 
   hobject_t random_hobject() {

@@ -751,12 +751,13 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 
 int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     ::ObjectOperation *o, AioCompletionImpl *c,
-				     const SnapContext& snap_context, int flags,
+				     const SnapContext& snap_context,
+				     const ceph::real_time *pmtime, int flags,
                                      const blkin_trace_info *trace_info)
 {
   FUNCTRACE(client->cct);
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_WRITE_OP_BEGIN");
-  auto ut = ceph::real_clock::now();
+  const ceph::real_time ut = (pmtime ? *pmtime : ceph::real_clock::now());
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
@@ -1137,7 +1138,7 @@ int librados::IoCtxImpl::aio_rmxattr(const object_t& oid, AioCompletionImpl *c,
   ::ObjectOperation op;
   prepare_assert_ops(&op);
   op.rmxattr(name);
-  return aio_operate(oid, &op, c, snapc, 0);
+  return aio_operate(oid, &op, c, snapc, nullptr, 0);
 }
 
 int librados::IoCtxImpl::aio_setxattr(const object_t& oid, AioCompletionImpl *c,
@@ -1146,7 +1147,7 @@ int librados::IoCtxImpl::aio_setxattr(const object_t& oid, AioCompletionImpl *c,
   ::ObjectOperation op;
   prepare_assert_ops(&op);
   op.setxattr(name, bl);
-  return aio_operate(oid, &op, c, snapc, 0);
+  return aio_operate(oid, &op, c, snapc, nullptr, 0);
 }
 
 namespace {
@@ -1787,9 +1788,12 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
                                                             extra_op_flags);
 
   C_SaferCond notify_finish_cond;
+  auto e = boost::asio::prefer(
+    objecter->service.get_executor(),
+    boost::asio::execution::outstanding_work.tracked);
   linger_op->on_notify_finish =
-    Objecter::LingerOp::OpComp::create(
-      objecter->service.get_executor(),
+    boost::asio::bind_executor(
+      std::move(e),
       CB_notify_Finish(client->cct, &notify_finish_cond,
                        objecter, linger_op, preply_bl,
                        preply_buf, preply_buf_len));
@@ -1843,9 +1847,12 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
   c->io = this;
 
   C_aio_notify_Complete *oncomplete = new C_aio_notify_Complete(c, linger_op);
+  auto e = boost::asio::prefer(
+    objecter->service.get_executor(),
+    boost::asio::execution::outstanding_work.tracked);
   linger_op->on_notify_finish =
-    Objecter::LingerOp::OpComp::create(
-      objecter->service.get_executor(),
+    boost::asio::bind_executor(
+      std::move(e),
       CB_notify_Finish(client->cct, oncomplete,
                        objecter, linger_op,
                        preply_bl, preply_buf,

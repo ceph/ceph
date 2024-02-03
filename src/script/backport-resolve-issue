@@ -324,7 +324,8 @@ def read_from_file(fs):
 def releases():
     return ('argonaut', 'bobtail', 'cuttlefish', 'dumpling', 'emperor',
             'firefly', 'giant', 'hammer', 'infernalis', 'jewel', 'kraken',
-            'luminous', 'mimic', 'nautilus', 'octopus', 'pacific', 'quincy')
+            'luminous', 'mimic', 'nautilus', 'octopus', 'pacific', 'quincy',
+            'reef')
 
 def report_params(a):
     global dry_run
@@ -351,8 +352,9 @@ def tag_sha1(repo, sha1):
 def ver_to_release():
     return {'v9.2': 'infernalis', 'v10.2': 'jewel', 'v11.2': 'kraken',
             'v12.2': 'luminous', 'v13.2': 'mimic', 'v14.2': 'nautilus',
-            'v15.2': 'octopus', 'v16.0': 'pacific', 'v16.1': 'pacific',
-            'v16.2': 'pacific', 'v17.0': 'quincy'}
+            'v15.2': 'octopus', 'v16.0': 'pacific', 'v16.1': 'pacific', 
+            'v16.2': 'pacific', 'v17.0': 'quincy', 'v17.2': 'quincy',
+            'v18.0': 'reef', 'v18.1': 'reef'}
 
 def usage():
     logging.error("Redmine credentials are required to perform this operation. "
@@ -521,7 +523,10 @@ Ceph version:     base {}, target {}'''
         maybe_stable = "v{}.{}".format(x, y)
         assert ver_to_release()[maybe_stable], \
             "SHA1 {} is not based on any known stable release ({})".format(sha1, maybe_stable)
-        tv = "v{}.{}.{}".format(x, y, int(z) + 1)
+        if int(y) == 0:
+            tv = "v{}.{}.{}".format(x, 1, z)
+        else:
+            tv = "v{}.{}.{}".format(x, y, int(z) + 1)
         if tv in version2version_id:
             self.target_version = tv
         else:

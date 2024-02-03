@@ -28,6 +28,7 @@
 #include "include/compat.h"
 
 #include "common/detail/construct_suspended.h"
+#include "common/Thread.h"
 
 namespace bi = boost::intrusive;
 namespace ceph {
@@ -52,7 +53,7 @@ class timer {
   using sh = bi::set_member_hook<bi::link_mode<bi::normal_link>>;
 
   struct event {
-    typename TC::time_point t = typename TC::time_point::min();
+    typename TC::time_point t = typename TC::zero();
     std::uint64_t id = 0;
     fu2::unique_function<void()> f;
 
@@ -104,8 +105,20 @@ class timer {
       while (!schedule.empty()) {
 	auto p = schedule.begin();
 	// Should we wait for the future?
-	if (p->t > now)
-	  break;
+        #if defined(_WIN32)
+        if (p->t - now > std::chrono::milliseconds(1)) {
+          // std::condition_variable::wait_for uses SleepConditionVariableSRW
+          // on Windows, which has millisecond precision. Deltas <1ms will
+          // lead to busy loops, which should be avoided. This situation is
+          // quite common since "wait_for" often returns ~1ms earlier than
+          // requested.
+          break;
+        }
+        #else // !_WIN32
+        if (p->t > now) {
+          break;
+        }
+        #endif
 
 	auto& e = *p;
 	schedule.erase(e);
@@ -142,7 +155,7 @@ class timer {
 public:
   timer() : suspended(false) {
     thread = std::thread(&timer::timer_thread, this);
-    ceph_pthread_setname(thread.native_handle(), "ceph_timer");
+    set_thread_name(thread, "ceph_timer");
   }
 
   // Create a suspended timer, jobs will be executed in order when

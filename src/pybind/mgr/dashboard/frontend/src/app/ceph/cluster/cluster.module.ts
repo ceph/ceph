@@ -10,6 +10,7 @@ import {
   NgbDropdownModule,
   NgbNavModule,
   NgbPopoverModule,
+  NgbProgressbarModule,
   NgbTimepickerModule,
   NgbTooltipModule,
   NgbTypeaheadModule
@@ -57,6 +58,9 @@ import { ServiceDetailsComponent } from './services/service-details/service-deta
 import { ServiceFormComponent } from './services/service-form/service-form.component';
 import { ServicesComponent } from './services/services.component';
 import { TelemetryComponent } from './telemetry/telemetry.component';
+import { UpgradeComponent } from './upgrade/upgrade.component';
+import { UpgradeStartModalComponent } from './upgrade/upgrade-form/upgrade-start-modal.component';
+import { UpgradeProgressComponent } from './upgrade/upgrade-progress/upgrade-progress.component';
 
 @NgModule({
   imports: [
@@ -76,7 +80,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     NgbDatepickerModule,
     NgbPopoverModule,
     NgbDropdownModule,
-    NgxPipeFunctionModule
+    NgxPipeFunctionModule,
+    NgbProgressbarModule
   ],
   declarations: [
     HostsComponent,
@@ -116,7 +121,10 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     OsdFlagsIndivModalComponent,
     PlacementPipe,
     CreateClusterComponent,
-    CreateClusterReviewComponent
+    CreateClusterReviewComponent,
+    UpgradeComponent,
+    UpgradeStartModalComponent,
+    UpgradeProgressComponent
   ],
   providers: [NgbActiveModal]
 })

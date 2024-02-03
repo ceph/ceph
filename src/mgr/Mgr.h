@@ -94,9 +94,6 @@ public:
   bool ms_dispatch2(const ceph::ref_t<Message>& m);
 
   void background_init(Context *completion);
-  void shutdown();
-
-  void handle_signal(int signum);
 
   std::map<std::string, std::string> get_services() const;
 

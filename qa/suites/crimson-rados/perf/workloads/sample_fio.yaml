@@ -1,0 +1,31 @@
+tasks:
+- cbt:
+    benchmarks:
+      librbdfio:
+        op_size: [4096]
+        time: 60
+        mode: ['randwrite']
+        norandommap: True
+        vol_size: 4096
+        procs_per_volume: [1]
+        volumes_per_client: [2]
+        iodepth: [32]
+        osd_ra: [4096]
+        pool_profile: 'rbd'
+        log_avg_msec: 100
+    cluster:
+      user: 'ubuntu'
+      osds_per_node: 3
+      iterations: 1
+      pool_profiles:
+        rbd:
+          pg_size: 128
+          pgp_size: 128
+          replication: 3
+    monitoring_profiles:
+      perf:
+        nodes:
+          - osds
+        perf_cmd: 'perf'
+        args: 'stat -p {pid} -o {perf_dir}/perf_stat.{pid}'
+        pid_glob: crimson-osd.*.pid

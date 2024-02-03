@@ -102,26 +102,31 @@ describe('NavigationComponent', () => {
       [
         ['hosts'],
         [
-          '.tc_submenuitem_hosts',
+          '.tc_submenuitem_cluster_hosts',
           '.tc_submenuitem_cluster_inventory',
-          '.tc_submenuitem_cluster_services'
+          '.tc_submenuitem_admin_services'
         ]
       ],
       [['monitor'], ['.tc_submenuitem_cluster_monitor']],
-      [['osd'], ['.tc_submenuitem_osds', '.tc_submenuitem_crush']],
+      [['osd'], ['.tc_submenuitem_cluster_osds', '.tc_submenuitem_cluster_crush']],
       [
         ['configOpt'],
-        ['.tc_submenuitem_configuration', '.tc_submenuitem_modules', '.tc_submenuitem_users']
+        [
+          '.tc_submenuitem_admin_configuration',
+          '.tc_submenuitem_admin_modules',
+          '.tc_submenuitem_admin_users',
+          '.tc_submenuitem_admin_upgrade'
+        ]
       ],
-      [['log'], ['.tc_submenuitem_log']],
-      [['prometheus'], ['.tc_submenuitem_monitoring']],
-      [['pool'], ['.tc_menuitem_pool']],
+      [['log'], ['.tc_submenuitem_observe_log']],
+      [['prometheus'], ['.tc_submenuitem_observe_monitoring']],
+      [['pool'], ['.tc_submenuitem_cluster_pool']],
       [['rbdImage'], ['.tc_submenuitem_block_images']],
       [['rbdMirroring'], ['.tc_submenuitem_block_mirroring']],
       [['iscsi'], ['.tc_submenuitem_block_iscsi']],
       [['rbdImage', 'rbdMirroring', 'iscsi'], ['.tc_menuitem_block']],
-      [['nfs'], ['.tc_menuitem_nfs']],
-      [['cephfs'], ['.tc_menuitem_cephfs']],
+      [['nfs'], ['.tc_submenuitem_file_nfs']],
+      [['cephfs'], ['.tc_submenuitem_file_cephfs']],
       [
         ['rgw'],
         [
@@ -168,8 +173,8 @@ describe('NavigationComponent', () => {
       [['mirroring'], ['.tc_submenuitem_block_mirroring']],
       [['iscsi'], ['.tc_submenuitem_block_iscsi']],
       [['rbd', 'mirroring', 'iscsi'], ['.tc_menuitem_block']],
-      [['nfs'], ['.tc_menuitem_nfs']],
-      [['cephfs'], ['.tc_menuitem_cephfs']],
+      [['nfs'], ['.tc_submenuitem_file_nfs']],
+      [['cephfs'], ['.tc_submenuitem_file_cephfs']],
       [
         ['rgw'],
         [

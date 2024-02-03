@@ -22,13 +22,13 @@
 #include "svc_meta_be.h"
 #include "svc_bucket_types.h"
 #include "svc_bucket.h"
+#include "svc_bucket_sync.h"
 
 class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
 class RGWSI_Meta;
 class RGWSI_SyncModules;
-class RGWSI_Bucket_Sync;
 
 struct rgw_cache_entry_info;
 
@@ -118,7 +118,7 @@ public:
                                    RGWBucketEntryPoint& info,
                                    bool exclusive,
                                    real_time mtime,
-                                   std::map<std::string, bufferlist> *pattrs,
+                                   const std::map<std::string, bufferlist> *pattrs,
                                    RGWObjVersionTracker *objv_tracker,
                                    optional_yield y,
                                    const DoutPrefixProvider *dpp) override;
@@ -155,7 +155,7 @@ public:
                                                                               nullptr: orig_info was not found (new bucket instance */
                                  bool exclusive,
                                  real_time mtime,
-                                 std::map<std::string, bufferlist> *pattrs,
+                                 const std::map<std::string, bufferlist> *pattrs,
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp) override;
 

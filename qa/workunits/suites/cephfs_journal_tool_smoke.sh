@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
-set -x
+set -ex
 
 export BIN="${BIN:-cephfs-journal-tool --rank=cephfs:0}"
 export JOURNAL_FILE=/tmp/journal.bin

@@ -11,7 +11,7 @@ import orchestrator
 from .lock import GlobalLock
 from ..exception import VolumeException
 from ..fs_util import create_pool, remove_pool, rename_pool, create_filesystem, \
-    remove_filesystem, rename_filesystem, create_mds, volume_exists
+    remove_filesystem, rename_filesystem, create_mds, volume_exists, listdir
 from .trash import Trash
 from mgr_util import open_filesystem, CephfsConnectionException
 
@@ -40,7 +40,7 @@ def get_pool_names(mgr, volname):
     """
     fs_map = mgr.get("fs_map")
     metadata_pool_id = None
-    data_pool_ids = [] # type: List[int]
+    data_pool_ids: List[int] = []
     for f in fs_map['filesystems']:
         if volname == f['mdsmap']['fs_name']:
             metadata_pool_id = f['mdsmap']['metadata_pool']
@@ -61,7 +61,7 @@ def get_pool_ids(mgr, volname):
     """
     fs_map = mgr.get("fs_map")
     metadata_pool_id = None
-    data_pool_ids = [] # type: List[int]
+    data_pool_ids: List[int] = []
     for f in fs_map['filesystems']:
         if volname == f['mdsmap']['fs_name']:
             metadata_pool_id = f['mdsmap']['metadata_pool']
@@ -80,7 +80,9 @@ def create_volume(mgr, volname, placement):
     r, outb, outs = create_pool(mgr, metadata_pool)
     if r != 0:
         return r, outb, outs
-    r, outb, outs = create_pool(mgr, data_pool)
+    # default to a bulk pool for data. In case autoscaling has been disabled
+    # for the cluster with `ceph osd pool set noautoscale`, this will have no effect.
+    r, outb, outs = create_pool(mgr, data_pool, bulk=True)
     if r != 0:
         #cleanup
         remove_pool(mgr, metadata_pool)
@@ -244,15 +246,15 @@ def list_volumes(mgr):
     return result
 
 
-def get_pending_subvol_deletions_count(path):
+def get_pending_subvol_deletions_count(fs, path):
     """
     Get the number of pending subvolumes deletions.
     """
     trashdir = os.path.join(path, Trash.GROUP_NAME)
     try:
-        num_pending_subvol_del = len(os.listdir(trashdir))
-    except OSError as e:
-        if e.errno == errno.ENOENT:
+        num_pending_subvol_del = len(listdir(fs, trashdir, filter_entries=None, filter_files=False))
+    except VolumeException as ve:
+        if ve.errno == -errno.ENOENT:
             num_pending_subvol_del = 0
 
     return {'pending_subvolume_deletions': num_pending_subvol_del}

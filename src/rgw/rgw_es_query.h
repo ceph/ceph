@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_ES_QUERY_H
-#define CEPH_RGW_ES_QUERY_H
+#pragma once
 
 #include "rgw_string.h"
 
@@ -163,6 +162,3 @@ public:
     return (restricted_fields && restricted_fields->find(f) != restricted_fields->end());
   }
 };
-
-
-#endif

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
-set -x
+set -ex
 
 WC_INPUT=/wc_input
 WC_OUTPUT=/wc_output

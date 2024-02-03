@@ -45,6 +45,9 @@ class JSONObj;
 #define CEPHFS_EMLINK          31
 #define CEPHFS_ETIME           62
 #define CEPHFS_EOLDSNAPC       85
+#define CEPHFS_EFAULT          14
+#define CEPHFS_EISCONN         106
+#define CEPHFS_EMULTIHOP       72
 
 // taken from linux kernel: include/uapi/linux/fcntl.h
 #define CEPHFS_AT_FDCWD        -100    /* Special value used to indicate
@@ -71,6 +74,13 @@ struct inodeno_t {
   void decode(ceph::buffer::list::const_iterator& p) {
     using ceph::decode;
     decode(val, p);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("val", val);
+  }
+  static void generate_test_instances(std::list<inodeno_t*>& ls) {
+    ls.push_back(new inodeno_t(1));
+    ls.push_back(new inodeno_t(123456789));
   }
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(inodeno_t)

@@ -18,6 +18,8 @@ overrides:
       - Metadata damage detected
       - MDS_READ_ONLY
       - force file system read-only
+      - with standby daemon mds
+      - MDS abort because newly corrupt dentry
 tasks:
   - cephfs_test_runner:
       modules:

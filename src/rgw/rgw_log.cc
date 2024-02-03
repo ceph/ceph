@@ -171,7 +171,7 @@ public:
     num_entries = 0;
     lock.unlock();
 
-    driver->log_usage(this, old_map);
+    driver->log_usage(this, old_map, null_yield);
   }
 
   CephContext *get_cct() const override { return cct; }
@@ -207,14 +207,14 @@ static void log_usage(req_state *s, const string& op_name)
   bucket_name = s->bucket_name;
 
   if (!bucket_name.empty()) {
-  bucket_name = s->bucket_name;
-    user = s->bucket_owner.get_id();
+    bucket_name = s->bucket_name;
+    user = s->bucket_owner.id;
     if (!rgw::sal::Bucket::empty(s->bucket.get()) &&
 	s->bucket->get_info().requester_pays) {
       payer = s->user->get_id();
     }
   } else {
-      user = s->user->get_id();
+    user = s->user->get_id();
   }
 
   bool error = s->err.is_err();
@@ -251,6 +251,7 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
 {
   formatter->open_object_section("log_entry");
   formatter->dump_string("bucket", entry.bucket);
+  formatter->dump_string("object", entry.obj.name);
   {
     auto t = utime_t{entry.time};
     t.gmtime(formatter->dump_stream("time"));      // UTC
@@ -605,13 +606,9 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
     uri.append(s->info.env->get("REQUEST_URI"));
   }
 
-  if (s->info.env->exists("QUERY_STRING")) {
-    const char* qs = s->info.env->get("QUERY_STRING");
-    if(qs && (*qs != '\0')) {
-      uri.append("?");
-      uri.append(qs);
-    }
-  }
+  /* Formerly, we appended QUERY_STRING to uri, but in RGW, QUERY_STRING is a
+   * substring of REQUEST_URI--appending qs to uri here duplicates qs to the
+   * ops log */
 
   if (s->info.env->exists("HTTP_VERSION")) {
     uri.append(" ");
@@ -650,9 +647,8 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
   }
 
   entry.user = s->user->get_id().to_str();
-  if (s->object_acl)
-    entry.object_owner = s->object_acl->get_owner().get_id();
-  entry.bucket_owner = s->bucket_owner.get_id();
+  entry.object_owner = s->object_acl.get_owner().id;
+  entry.bucket_owner = s->bucket_owner.id;
 
   uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();

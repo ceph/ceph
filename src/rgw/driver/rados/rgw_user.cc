@@ -237,7 +237,7 @@ int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
   }
 
   const rgw_user& uid = op_state.get_user_id();
-  if (uid.compare(RGW_USER_ANON_ID) == 0) {
+  if (uid == rgw_user(RGW_USER_ANON_ID)) {
     keys_allowed = false;
     return -EINVAL;
   }
@@ -293,6 +293,15 @@ void RGWUserAdminOpState::set_user_info(RGWUserInfo& user_info)
 void RGWUserAdminOpState::set_user_version_tracker(RGWObjVersionTracker& objv_tracker)
 {
   user->get_version_tracker() = objv_tracker;
+}
+
+void RGWUserAdminOpState::set_attrs(rgw::sal::Attrs& attrs)
+{
+  user->get_attrs() = attrs;
+}
+
+rgw::sal::Attrs RGWUserAdminOpState::get_attrs() {
+  return user->get_attrs();
 }
 
 const rgw_user& RGWUserAdminOpState::get_user_id()
@@ -881,7 +890,7 @@ int RGWSubUserPool::init(RGWUserAdminOpState& op_state)
   }
 
   const rgw_user& uid = op_state.get_user_id();
-  if (uid.compare(RGW_USER_ANON_ID) == 0) {
+  if (uid == rgw_user(RGW_USER_ANON_ID)) {
     subusers_allowed = false;
     return -EACCES;
   }
@@ -1189,7 +1198,7 @@ int RGWUserCapPool::init(RGWUserAdminOpState& op_state)
   }
 
   const rgw_user& uid = op_state.get_user_id();
-  if (uid.compare(RGW_USER_ANON_ID) == 0) {
+  if (uid == rgw_user(RGW_USER_ANON_ID)) {
     caps_allowed = false;
     return -EACCES;
   }
@@ -1364,7 +1373,7 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
     }
   }
 
-  if (!user_id.empty() && (user_id.compare(RGW_USER_ANON_ID) != 0)) {
+  if (!user_id.empty() && user_id != rgw_user(RGW_USER_ANON_ID)) {
     user = driver->get_user(user_id);
     found = (user->load_user(dpp, y) >= 0);
     op_state.found_by_uid = found;
@@ -1386,6 +1395,7 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
   
   op_state.set_existing_user(found);
   if (found) {
+    op_state.set_attrs(user->get_attrs());
     op_state.set_user_info(user->get_info());
     op_state.set_populated();
     op_state.objv = user->get_version_tracker();
@@ -1393,10 +1403,10 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
 
     old_info = user->get_info();
     set_populated();
-  }
 
-  if (user_id.empty()) {
-    user_id = user->get_id();
+    if (user_id.empty()) {
+      user_id = user->get_id();
+    }
   }
   op_state.set_initialized();
 
@@ -1439,6 +1449,12 @@ int RGWUser::update(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
     return -EINVAL;
   }
 
+  // if op_state.op_access_keys is not empty most recent keys have been fetched from master zone
+  if(!op_state.op_access_keys.empty()) {
+    auto user_access_keys = op_state.get_access_keys();
+    *(user_access_keys) = op_state.op_access_keys;
+  }
+
   RGWUserInfo *pold_info = (is_populated() ? &old_info : nullptr);
 
   ret = user->store_user(dpp, y, false, pold_info);
@@ -1461,12 +1477,12 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
   int ret = 0;
   const rgw_user& uid = op_state.get_user_id();
 
-  if (uid.compare(RGW_USER_ANON_ID) == 0) {
+  if (uid == rgw_user(RGW_USER_ANON_ID)) {
     set_err_msg(err_msg, "unable to perform operations on the anonymous user");
     return -EINVAL;
   }
 
-  if (is_populated() && user_id.compare(uid) != 0) {
+  if (is_populated() && user_id != uid) {
     set_err_msg(err_msg, "user id mismatch, operation id: " + uid.to_str()
             + " does not match: " + user_id.to_str());
 
@@ -1550,25 +1566,20 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   policy_instance.create_default(new_user->get_id(), old_user->get_display_name());
 
   //unlink and link buckets to new user
-  string marker;
-  CephContext *cct = driver->ctx();
-  size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
-  rgw::sal::BucketList buckets;
+  size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
 
+  rgw::sal::BucketList listing;
   do {
-    ret = old_user->list_buckets(dpp, marker, "", max_buckets, false, buckets, y);
+    ret = old_user->list_buckets(dpp, listing.next_marker, "",
+                                 max_entries, false, listing, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to list user buckets");
       return ret;
     }
 
-    auto& m = buckets.get_buckets();
-
-    for (auto it = m.begin(); it != m.end(); ++it) {
-      auto& bucket = it->second;
-      marker = it->first;
-
-      ret = bucket->load_bucket(dpp, y);
+    for (const auto& ent : listing.buckets) {
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      ret = driver->load_bucket(dpp, ent.bucket, &bucket, y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket->get_name());
         return ret;
@@ -1588,7 +1599,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       }
     }
 
-  } while (buckets.is_truncated());
+  } while (!listing.next_marker.empty());
 
   // update the 'stub user' with all of the other fields and rewrite all of the
   // associated index objects
@@ -1756,34 +1767,37 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     return -ENOENT;
   }
 
-  rgw::sal::BucketList buckets;
-  string marker;
-  CephContext *cct = driver->ctx();
-  size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
+  size_t max_buckets = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+
+  rgw::sal::BucketList listing;
   do {
-    ret = user->list_buckets(dpp, marker, string(), max_buckets, false, buckets, y);
+    ret = user->list_buckets(dpp, listing.next_marker, string(),
+                             max_buckets, false, listing, y);
     if (ret < 0) {
-      set_err_msg(err_msg, "unable to read user bucket info");
+      set_err_msg(err_msg, "unable to list user buckets");
       return ret;
     }
 
-    auto& m = buckets.get_buckets();
-    if (!m.empty() && !purge_data) {
+    if (!listing.buckets.empty() && !purge_data) {
       set_err_msg(err_msg, "must specify purge data to remove user with buckets");
       return -EEXIST; // change to code that maps to 409: conflict
     }
 
-    for (auto it = m.begin(); it != m.end(); ++it) {
-      ret = it->second->remove_bucket(dpp, true, false, nullptr, y);
+    for (const auto& ent : listing.buckets) {
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      ret = driver->load_bucket(dpp, ent.bucket, &bucket, y);
+      if (ret < 0) {
+        set_err_msg(err_msg, "unable to load bucket " + ent.bucket.name);
+        return ret;
+      }
+
+      ret = bucket->remove(dpp, true, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
       }
-
-      marker = it->first;
     }
-
-  } while (buckets.is_truncated());
+  } while (!listing.next_marker.empty());
 
   ret = user->remove_user(dpp, y);
   if (ret < 0) {
@@ -1844,7 +1858,7 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   }
 
   // ensure that we can modify the user's attributes
-  if (user_id.compare(RGW_USER_ANON_ID) == 0) {
+  if (user_id == rgw_user(RGW_USER_ANON_ID)) {
     set_err_msg(err_msg, "unable to modify anonymous user's info");
     return -EACCES;
   }
@@ -1856,7 +1870,7 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     // make sure we are not adding a duplicate email
     if (old_email != op_email) {
       ret = driver->get_user_by_email(dpp, op_email, y, &duplicate_check);
-      if (ret >= 0 && duplicate_check->get_id().compare(user_id) != 0) {
+      if (ret >= 0 && duplicate_check->get_id() != user_id) {
         set_err_msg(err_msg, "cannot add duplicate email");
         return -ERR_EMAIL_EXIST;
       }
@@ -1902,41 +1916,36 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     __u8 suspended = op_state.get_suspension_status();
     user_info.suspended = suspended;
 
-    rgw::sal::BucketList buckets;
 
     if (user_id.empty()) {
       set_err_msg(err_msg, "empty user id passed...aborting");
       return -EINVAL;
     }
-
-    string marker;
-    CephContext *cct = driver->ctx();
-    size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
     std::unique_ptr<rgw::sal::User> user = driver->get_user(user_id);
+
+    size_t max_buckets = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+
+    rgw::sal::BucketList listing;
     do {
-      ret = user->list_buckets(dpp, marker, string(), max_buckets, false, buckets, y);
+      ret = user->list_buckets(dpp, listing.next_marker, string(),
+                               max_buckets, false, listing, y);
       if (ret < 0) {
         set_err_msg(err_msg, "could not get buckets for uid:  " + user_id.to_str());
         return ret;
       }
 
-      auto& m = buckets.get_buckets();
-
-      vector<rgw_bucket> bucket_names;
-      for (auto iter = m.begin(); iter != m.end(); ++iter) {
-	auto& bucket = iter->second;
-        bucket_names.push_back(bucket->get_key());
-
-        marker = iter->first;
+      std::vector<rgw_bucket> bucket_names;
+      for (auto& ent : listing.buckets) {
+        bucket_names.push_back(std::move(ent.bucket));
       }
 
-      ret = driver->set_buckets_enabled(dpp, bucket_names, !suspended);
+      ret = driver->set_buckets_enabled(dpp, bucket_names, !suspended, y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to modify bucket");
         return ret;
       }
 
-    } while (buckets.is_truncated());
+    } while (!listing.next_marker.empty());
   }
 
   if (op_state.mfa_ids_specified) {

@@ -5,7 +5,7 @@
 #include "global/global_context.h"
 #include "exporter/DaemonMetricCollector.h"
 
-#include <boost/asio.hpp>
+#include <boost/asio/ip/tcp.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 #include <boost/beast/version.hpp>

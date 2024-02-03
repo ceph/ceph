@@ -85,6 +85,12 @@
                     aria-label="Close"
                     (backAction)="onPreviousStep()"
                     [name]="showCancelButtonLabel()"></cd-back-button>
+    <button class="btn btn-light m-2 me-4 float-end"
+            id="skipStepBtn"
+            (click)="onSkip()"
+            aria-label="Skip this step"
+            *ngIf="stepTitles[currentStep.stepIndex - 1] === 'Create OSDs'"
+            i18n>Skip</button>
   </div>
 </div>
 

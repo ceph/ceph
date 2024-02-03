@@ -5,6 +5,9 @@
 
 int main(int argc, const char **argv)
 {
+  #ifdef _WIN32
+  SetConsoleOutputCP(CP_UTF8);
+  #endif
   rbd::Shell shell;
   return shell.execute(argc, argv);
 }

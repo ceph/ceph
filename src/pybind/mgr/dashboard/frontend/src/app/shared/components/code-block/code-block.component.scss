@@ -1,0 +1,6 @@
+@use './src/styles/vendor/variables' as vv;
+
+pre {
+  background-color: vv.$code-block-bg;
+  border-radius: 0.5rem;
+}

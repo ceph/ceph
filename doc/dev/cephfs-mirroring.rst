@@ -2,38 +2,44 @@
 CephFS Mirroring
 ================
 
-CephFS supports asynchronous replication of snapshots to a remote CephFS file system via
-`cephfs-mirror` tool. Snapshots are synchronized by mirroring snapshot data followed by
-creating a snapshot with the same name (for a given directory on the remote file system) as
-the snapshot being synchronized.
+CephFS supports asynchronous replication of snapshots to a remote CephFS file
+system via `cephfs-mirror` tool. Snapshots are synchronized by mirroring
+snapshot data followed by creating a snapshot with the same name (for a given
+directory on the remote file system) as the snapshot being synchronized.
 
 Requirements
 ------------
 
-The primary (local) and secondary (remote) Ceph clusters version should be Pacific or later.
+The primary (local) and secondary (remote) Ceph clusters version should be
+Pacific or later.
 
 Key Idea
 --------
 
-For a given snapshot pair in a directory, `cephfs-mirror` daemon will rely on readdir diff
-to identify changes in a directory tree. The diffs are applied to directory in the remote
-file system thereby only synchronizing files that have changed between two snapshots.
+For a given snapshot pair in a directory, `cephfs-mirror` daemon will rely on
+readdir diff to identify changes in a directory tree. The diffs are applied to
+directory in the remote file system thereby only synchronizing files that have
+changed between two snapshots.
 
 This feature is tracked here: https://tracker.ceph.com/issues/47034.
 
-Currently, snapshot data is synchronized by bulk copying to the remote filesystem.
+Currently, snapshot data is synchronized by bulk copying to the remote
+filesystem.
 
-.. note:: Synchronizing hardlinks is not supported -- hardlinked files get synchronized
-          as separate files.
+.. note:: Synchronizing hardlinks is not supported -- hardlinked files get
+   synchronized as separate files.
 
 Creating Users
 --------------
 
-Start by creating a user (on the primary/local cluster) for the mirror daemon. This user
-requires write capability on the metadata pool to create RADOS objects (index objects)
-for watch/notify operation and read capability on the data pool(s).
+Start by creating a user (on the primary/local cluster) for the mirror daemon.
+This user requires write capability on the metadata pool to create RADOS
+objects (index objects) for watch/notify operation and read capability on the
+data pool(s).
 
-  $ ceph auth get-or-create client.mirror mon 'profile cephfs-mirror' mds 'allow r' osd 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*' mgr 'allow r'
+.. prompt:: bash $
+
+   ceph auth get-or-create client.mirror mon 'profile cephfs-mirror' mds 'allow r' osd 'allow rw tag cephfs metadata=*, allow r tag cephfs data=*' mgr 'allow r'
 
 Create a user for each file system peer (on the secondary/remote cluster). This user needs
 to have full capabilities on the MDS (to take snapshots) and the OSDs::
@@ -371,7 +377,7 @@ information. To check which mirror daemon a directory has been mapped to use::
     "state": "mapped"
   }
 
-.. note:: `instance_id` is the RAODS instance-id associated with a mirror daemon.
+.. note:: `instance_id` is the RADOS instance-id associated with a mirror daemon.
 
 Other information such as `state` and `last_shuffled` are interesting when running
 multiple mirror daemons.

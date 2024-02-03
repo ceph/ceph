@@ -1,7 +1,6 @@
-CherryPy==13.1.0
-more-itertools==8.14.0
-PyJWT==2.0.1
-bcrypt==3.1.4
-python3-saml==1.4.1
-requests==2.26
-Routes==2.4.1
+CherryPy~=13.1
+more-itertools~=8.14
+bcrypt~=3.1
+python3-saml~=1.4
+requests~=2.26
+Routes~=2.4

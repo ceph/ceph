@@ -6,7 +6,7 @@ options:
   type: uint
   level: advanced
   desc: Number of obcs to cache
-  default: 10
+  default: 512
 - name: crimson_osd_scheduler_concurrency
   type: uint
   level: advanced
@@ -17,6 +17,13 @@ options:
   level: advanced
   desc: The number of threads for serving alienized ObjectStore
   default: 6
+  flags:
+  - startup
+- name: crimson_seastar_smp
+  type: uint
+  level: advanced
+  desc: Number of seastar reactor threads to use for the osd
+  default: 1
   flags:
   - startup
 - name: crimson_alien_thread_cpu_cores
@@ -80,3 +87,38 @@ options:
   level: advanced
   desc: split extent if ratio of total extent size to write size exceeds this value
   default: 1.25
+- name: seastore_max_concurrent_transactions
+  type: uint
+  level: advanced
+  desc: maximum concurrent transactions that seastore allows
+  default: 8
+- name: seastore_main_device_type
+  type: str
+  level: dev
+  desc: The main device type seastore uses (SSD or RANDOM_BLOCK_SSD)
+  default: SSD
+- name: seastore_cbjournal_size
+  type: size
+  level: dev
+  desc: Total size to use for CircularBoundedJournal if created, it is valid only if seastore_main_device_type is RANDOM_BLOCK
+  default: 5_G
+- name: seastore_multiple_tiers_stop_evict_ratio
+  type: float
+  level: advanced
+  desc: When the used ratio of main tier is less than this value, then stop evict cold data to the cold tier.
+  default: 0.5
+- name: seastore_multiple_tiers_default_evict_ratio
+  type: float
+  level: advanced
+  desc: Begin evicting cold data to the cold tier when the used ratio of the main tier reaches this value.
+  default: 0.6
+- name: seastore_multiple_tiers_fast_evict_ratio
+  type: float
+  level: advanced
+  desc: Begin fast eviction when the used ratio of the main tier reaches this value.
+  default: 0.7
+- name: seastore_data_delta_based_overwrite
+  type: size
+  level: dev
+  desc: overwrite the existing data block based on delta if the original size is smaller than the value, otherwise do overwrite based on remapping, set to 0 to enforce the remap-based overwrite.
+  default: 0

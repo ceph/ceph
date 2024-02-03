@@ -190,6 +190,6 @@ function get_mstart_parameters {
     fi
   fi
 
-  echo "$parameters"
+  echo "$parameters $VSTART_PARAMETERS"
 }
 

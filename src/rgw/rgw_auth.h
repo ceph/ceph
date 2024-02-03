@@ -1,9 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-
-#ifndef CEPH_RGW_AUTH_H
-#define CEPH_RGW_AUTH_H
+#pragma once
 
 #include <functional>
 #include <optional>
@@ -222,7 +220,7 @@ public:
         reason(reason) {
     }
 
-    /* Allow only the reasonable combintations - returning just Completer
+    /* Allow only the reasonable combinations - returning just Completer
      * without accompanying IdentityApplier is strictly prohibited! */
     explicit AuthResult(IdentityApplier::aplptr_t&& applier)
       : result_pair(std::move(applier), nullptr) {
@@ -238,7 +236,7 @@ public:
       /* Engine doesn't grant the access but also doesn't reject it. */
       DENIED,
 
-      /* Engine successfully authenicated requester. */
+      /* Engine successfully authenticated requester. */
       GRANTED,
 
       /* Engine strictly indicates that a request should be rejected
@@ -313,7 +311,7 @@ public:
 
 /* Abstract class for stacking sub-engines to expose them as a single
  * Engine. It is responsible for ordering its sub-engines and managing
- * fall-backs between them. Derivatee is supposed to encapsulate engine
+ * fall-backs between them. Derivative is supposed to encapsulate engine
  * instances and add them using the add_engine() method in the order it
  * wants to be tried during the call to authenticate().
  *
@@ -791,5 +789,3 @@ uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
   const rgw::auth::Identity::aclspec_t& aclspec,
   const DoutPrefixProvider *dpp);
-
-#endif /* CEPH_RGW_AUTH_H */

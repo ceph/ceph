@@ -117,13 +117,13 @@ public:
     if (ref->is_exist_clean() ||
 	ref->is_exist_mutation_pending()) {
       existing_block_stats.dec(ref);
-      ref->state = CachedExtent::extent_state_t::INVALID;
+      ref->set_invalid(*this);
       write_set.erase(*ref);
     } else if (ref->is_initial_pending()) {
-      ref->state = CachedExtent::extent_state_t::INVALID;
+      ref->set_invalid(*this);
       write_set.erase(*ref);
     } else if (ref->is_mutation_pending()) {
-      ref->state = CachedExtent::extent_state_t::INVALID;
+      ref->set_invalid(*this);
       write_set.erase(*ref);
       assert(ref->prior_instance);
       retired_set.insert(ref->prior_instance);
@@ -140,8 +140,16 @@ public:
   void add_to_read_set(CachedExtentRef ref) {
     if (is_weak()) return;
 
+    assert(ref->is_valid());
+
+    auto it = ref->transactions.lower_bound(
+      this, read_set_item_t<Transaction>::trans_cmp_t());
+    if (it != ref->transactions.end() && it->t == this) return;
+
     auto [iter, inserted] = read_set.emplace(this, ref);
     ceph_assert(inserted);
+    ref->transactions.insert_before(
+      it, const_cast<read_set_item_t<Transaction>&>(*iter));
   }
 
   void add_fresh_extent(
@@ -158,12 +166,14 @@ public:
       delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
       fresh_block_stats.increment(ref->get_length());
     } else if (ref->get_paddr().is_absolute()) {
-      assert(ref->is_logical());
       pre_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
       fresh_block_stats.increment(ref->get_length());
     } else {
-      assert(ref->get_paddr() == make_record_relative_paddr(0));
-      ref->set_paddr(make_record_relative_paddr(offset));
+      if (likely(ref->get_paddr() == make_record_relative_paddr(0))) {
+	ref->set_paddr(make_record_relative_paddr(offset));
+      } else {
+	ceph_assert(ref->get_paddr().is_fake());
+      }
       offset += ref->get_length();
       inline_block_list.push_back(ref);
       fresh_block_stats.increment(ref->get_length());
@@ -207,6 +217,20 @@ public:
     written_ool_block_list.push_back(ref);
   }
 
+  void mark_inplace_rewrite_extent_ool(LogicalCachedExtentRef& ref) {
+    assert(ref->get_paddr().is_absolute());
+    assert(!ref->is_inline());
+    written_inplace_ool_block_list.push_back(ref);
+  }
+
+  void add_inplace_rewrite_extent(CachedExtentRef ref) {
+   ceph_assert(!is_weak());
+   ceph_assert(ref);
+   ceph_assert(ref->get_paddr().is_absolute());
+   assert(ref->state == CachedExtent::extent_state_t::DIRTY);
+   pre_inplace_rewrite_list.emplace_back(ref->cast<LogicalCachedExtent>());
+  }
+
   void add_mutated_extent(CachedExtentRef ref) {
     ceph_assert(!is_weak());
     assert(ref->is_exist_mutation_pending() ||
@@ -232,7 +256,8 @@ public:
       assert(where != read_set.end());
       assert(where->ref.get() == &placeholder);
       where = read_set.erase(where);
-      read_set.emplace_hint(where, this, &extent);
+      auto it = read_set.emplace_hint(where, this, &extent);
+      extent.transactions.insert(const_cast<read_set_item_t<Transaction>&>(*it));
     }
     {
       auto where = retired_set.find(&placeholder);
@@ -266,6 +291,11 @@ public:
       } else {
 	++num_allocated_invalid_extents;
       }
+    }
+    for (auto& extent : pre_inplace_rewrite_list) {
+      if (extent->is_valid()) {
+	ret.push_back(extent);
+      } 
     }
     return ret;
   }
@@ -338,16 +368,18 @@ public:
     bool weak,
     src_t src,
     journal_seq_t initiated_after,
-    on_destruct_func_t&& f
+    on_destruct_func_t&& f,
+    transaction_id_t trans_id
   ) : weak(weak),
       handle(std::move(handle)),
       on_destruct(std::move(f)),
-      src(src)
+      src(src),
+      trans_id(trans_id)
   {}
 
   void invalidate_clear_write_set() {
     for (auto &&i: write_set) {
-      i.state = CachedExtent::extent_state_t::INVALID;
+      i.set_invalid(*this);
     }
     write_set.clear();
   }
@@ -374,7 +406,9 @@ public:
     delayed_alloc_list.clear();
     inline_block_list.clear();
     written_ool_block_list.clear();
+    written_inplace_ool_block_list.clear();
     pre_alloc_list.clear();
+    pre_inplace_rewrite_list.clear();
     retired_set.clear();
     existing_block_list.clear();
     existing_block_stats = {};
@@ -469,6 +503,10 @@ public:
     return existing_block_stats;
   }
 
+  transaction_id_t get_trans_id() const {
+    return trans_id;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -512,16 +550,20 @@ private:
   io_stat_t fresh_block_stats;
   uint64_t num_delayed_invalid_extents = 0;
   uint64_t num_allocated_invalid_extents = 0;
-  /// blocks that will be committed with journal record inline
-  std::list<CachedExtentRef> inline_block_list;
-  /// blocks that will be committed with out-of-line record
-  std::list<CachedExtentRef> written_ool_block_list;
-  /// blocks with delayed allocation, may become inline or ool above
+  /// fresh blocks with delayed allocation, may become inline or ool below
   std::list<LogicalCachedExtentRef> delayed_alloc_list;
-
-  /// Extents with pre-allocated addresses,
-  /// will be added to written_ool_block_list after write
+  /// fresh blocks with pre-allocated addresses with RBM,
+  /// should be released upon conflicts, will be added to ool below
   std::list<LogicalCachedExtentRef> pre_alloc_list;
+  /// dirty blocks for inplace rewrite with RBM, will be added to inplace ool below
+  std::list<LogicalCachedExtentRef> pre_inplace_rewrite_list;
+
+  /// fresh blocks that will be committed with inline journal record
+  std::list<CachedExtentRef> inline_block_list;
+  /// fresh blocks that will be committed with out-of-line record
+  std::list<CachedExtentRef> written_ool_block_list;
+  /// dirty blocks that will be committed out-of-line with inplace rewrite
+  std::list<LogicalCachedExtentRef> written_inplace_ool_block_list;
 
   /// list of mutated blocks, holds refcounts, subset of write_set
   std::list<CachedExtentRef> mutated_block_list;
@@ -554,17 +596,21 @@ private:
   on_destruct_func_t on_destruct;
 
   const src_t src;
+
+  transaction_id_t trans_id = TRANS_ID_NULL;
 };
 using TransactionRef = Transaction::Ref;
 
 /// Should only be used with dummy staged-fltree node extent manager
 inline TransactionRef make_test_transaction() {
+  static transaction_id_t next_id = 0;
   return std::make_unique<Transaction>(
     get_dummy_ordering_handle(),
     false,
     Transaction::src_t::MUTATE,
     JOURNAL_SEQ_NULL,
-    [](Transaction&) {}
+    [](Transaction&) {},
+    ++next_id
   );
 }
 

@@ -4,7 +4,7 @@ Device health monitoring
 
 import errno
 import json
-from mgr_module import MgrModule, CommandResult, CLIRequiresDB, CLICommand, CLIReadCommand, Option
+from mgr_module import MgrModule, CommandResult, MgrModuleRecoverDB, CLIRequiresDB, CLICommand, CLIReadCommand, Option, MgrDBNotReady
 import operator
 import rados
 import re
@@ -182,6 +182,7 @@ CREATE TABLE DeviceHealthMetrics (
 
     @CLIRequiresDB
     @CLIReadCommand('device scrape-daemon-health-metrics')
+    @MgrModuleRecoverDB
     def do_scrape_daemon_health_metrics(self, who: str) -> Tuple[int, str, str]:
         '''
         Scrape and store device health metrics for a given daemon
@@ -193,6 +194,7 @@ CREATE TABLE DeviceHealthMetrics (
 
     @CLIRequiresDB
     @CLIReadCommand('device scrape-health-metrics')
+    @MgrModuleRecoverDB
     def do_scrape_health_metrics(self, devid: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Scrape and store device health metrics
@@ -204,6 +206,7 @@ CREATE TABLE DeviceHealthMetrics (
 
     @CLIRequiresDB
     @CLIReadCommand('device get-health-metrics')
+    @MgrModuleRecoverDB
     def do_get_health_metrics(self, devid: str, sample: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Show stored device metrics for the device
@@ -212,6 +215,7 @@ CREATE TABLE DeviceHealthMetrics (
 
     @CLIRequiresDB
     @CLICommand('device check-health')
+    @MgrModuleRecoverDB
     def do_check_health(self) -> Tuple[int, str, str]:
         '''
         Check life expectancy of devices
@@ -238,6 +242,7 @@ CREATE TABLE DeviceHealthMetrics (
 
     @CLIRequiresDB
     @CLIReadCommand('device predict-life-expectancy')
+    @MgrModuleRecoverDB
     def do_predict_life_expectancy(self, devid: str) -> Tuple[int, str, str]:
         '''
         Predict life expectancy with local predictor
@@ -322,19 +327,31 @@ CREATE TABLE DeviceHealthMetrics (
                         count += 1
                 except json.decoder.JSONDecodeError:
                     pass
+                except rados.ObjectNotFound:
+                    # https://tracker.ceph.com/issues/63882
+                    # Sometimes an object appears in the pool listing but cannot be interacted with?
+                    self.log.debug(f"object {obj} does not exist because it is deleted in HEAD")
+                    pass
                 if count >= 10:
                     break
             done = count < 10
         self.log.debug(f"finished reading legacy pool, complete = {done}")
         return done
 
-    def serve(self) -> None:
-        self.log.info("Starting")
-        self.config_notify()
-
+    @MgrModuleRecoverDB
+    def _do_serve(self) -> None:
         last_scrape = None
         finished_loading_legacy = False
+
         while self.run:
+            # sleep first, in case of exceptions causing retry:
+            sleep_interval = self.sleep_interval or 60
+            if not finished_loading_legacy:
+                sleep_interval = 2
+            self.log.debug('Sleeping for %d seconds', sleep_interval)
+            self.event.wait(sleep_interval)
+            self.event.clear()
+
             if self.db_ready() and self.enable_monitoring:
                 self.log.debug('Running')
 
@@ -375,13 +392,11 @@ CREATE TABLE DeviceHealthMetrics (
                     last_scrape = now
                     self.set_kv('last_scrape', last_scrape.strftime(TIME_FORMAT))
 
-            # sleep
-            sleep_interval = self.sleep_interval or 60
-            if not finished_loading_legacy:
-                sleep_interval = 2
-            self.log.debug('Sleeping for %d seconds', sleep_interval)
-            self.event.wait(sleep_interval)
-            self.event.clear()
+    def serve(self) -> None:
+        self.log.info("Starting")
+        self.config_notify()
+
+        self._do_serve()
 
     def shutdown(self) -> None:
         self.log.info('Stopping')
@@ -492,8 +507,8 @@ CREATE TABLE DeviceHealthMetrics (
 
     def put_device_metrics(self, devid: str, data: Any) -> None:
         SQL = """
-        INSERT INTO DeviceHealthMetrics (devid, raw_smart)
-            VALUES (?, ?);
+        INSERT OR REPLACE INTO DeviceHealthMetrics (devid, raw_smart, time)
+            VALUES (?, ?, strftime('%s', 'now'));
         """
 
         with self._db_lock, self.db:
@@ -761,7 +776,10 @@ CREATE TABLE DeviceHealthMetrics (
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
 
     def get_recent_device_metrics(self, devid: str, min_sample: str) -> Dict[str, Dict[str, Any]]:
-        return self._get_device_metrics(devid, min_sample=min_sample)
+        try:
+            return self._get_device_metrics(devid, min_sample=min_sample)
+        except MgrDBNotReady:
+            return dict()
 
     def get_time_format(self) -> str:
         return TIME_FORMAT

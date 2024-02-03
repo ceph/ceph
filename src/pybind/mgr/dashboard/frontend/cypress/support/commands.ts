@@ -30,43 +30,47 @@ const fillAuth = () => {
 };
 
 Cypress.Commands.add('login', (username, password) => {
-  requestAuth(username, password).then((resp) => {
-    auth = resp.body;
-    auth.permissions = JSON.stringify(new Permissions(auth.permissions));
-    auth.pwdExpirationDate = String(auth.pwdExpirationDate);
-    auth.pwdUpdateRequired = String(auth.pwdUpdateRequired);
-    auth.sso = String(auth.sso);
-    fillAuth();
+  cy.session([username, password], () => {
+    requestAuth(username, password).then((resp) => {
+      auth = resp.body;
+      auth.permissions = JSON.stringify(new Permissions(auth.permissions));
+      auth.pwdExpirationDate = String(auth.pwdExpirationDate);
+      auth.pwdUpdateRequired = String(auth.pwdUpdateRequired);
+      auth.sso = String(auth.sso);
+      fillAuth();
+    });
   });
 });
 
 Cypress.Commands.add('ceph2Login', (username, password) => {
   const url: string = Cypress.env('CEPH2_URL');
-  requestAuth(username, password, url).then((resp) => {
-    auth = resp.body;
-    auth.permissions = JSON.stringify(new Permissions(auth.permissions));
-    auth.pwdExpirationDate = String(auth.pwdExpirationDate);
-    auth.pwdUpdateRequired = String(auth.pwdUpdateRequired);
-    auth.sso = String(auth.sso);
-    const args = {
-      username: auth.username,
-      permissions: auth.permissions,
-      pwdExpirationDate: auth.pwdExpirationDate,
-      pwdUpdateRequired: auth.pwdUpdateRequired,
-      sso: auth.sso
-    };
-    // @ts-ignore
-    cy.origin(
-      url,
-      { args },
-      ({ uname, permissions, pwdExpirationDate, pwdUpdateRequired, sso }: any) => {
-        window.localStorage.setItem('dashboard_username', uname);
-        window.localStorage.setItem('dashboard_permissions', permissions);
-        window.localStorage.setItem('user_pwd_expiration_date', pwdExpirationDate);
-        window.localStorage.setItem('user_pwd_update_required', pwdUpdateRequired);
-        window.localStorage.setItem('sso', sso);
-      }
-    );
+  cy.session([username, password, url], () => {
+    requestAuth(username, password, url).then((resp) => {
+      auth = resp.body;
+      auth.permissions = JSON.stringify(new Permissions(auth.permissions));
+      auth.pwdExpirationDate = String(auth.pwdExpirationDate);
+      auth.pwdUpdateRequired = String(auth.pwdUpdateRequired);
+      auth.sso = String(auth.sso);
+      const args = {
+        username: auth.username,
+        permissions: auth.permissions,
+        pwdExpirationDate: auth.pwdExpirationDate,
+        pwdUpdateRequired: auth.pwdUpdateRequired,
+        sso: auth.sso
+      };
+      // @ts-ignore
+      cy.origin(
+        url,
+        { args },
+        ({ uname, permissions, pwdExpirationDate, pwdUpdateRequired, sso }: any) => {
+          window.localStorage.setItem('dashboard_username', uname);
+          window.localStorage.setItem('dashboard_permissions', permissions);
+          window.localStorage.setItem('user_pwd_expiration_date', pwdExpirationDate);
+          window.localStorage.setItem('user_pwd_update_required', pwdUpdateRequired);
+          window.localStorage.setItem('sso', sso);
+        }
+      );
+    });
   });
 });
 
@@ -82,8 +86,14 @@ function requestAuth(username: string, password: string, url = '') {
 }
 
 // @ts-ignore
-Cypress.Commands.add('text', { prevSubject: true }, (subject: any) => {
-  return subject.text();
+Cypress.Commands.add('text', { prevSubject: true }, ($element: JQuery<HTMLElement>) => {
+  cy.wrap($element).scrollIntoView();
+  return cy
+    .wrap($element)
+    .invoke('text')
+    .then((text: string) => {
+      return text.toString();
+    });
 });
 
 Cypress.Commands.add('logToConsole', (message: string, optional?: any) => {

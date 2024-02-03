@@ -7,7 +7,7 @@
 You can configure Ceph OSD Daemons in the Ceph configuration file (or in recent
 releases, the central config store), but Ceph OSD
 Daemons can use the default values and a very minimal configuration. A minimal
-Ceph OSD Daemon configuration sets ``osd journal size`` (for Filestore), ``host``,  and
+Ceph OSD Daemon configuration sets ``host`` and
 uses default values for nearly everything else.
 
 Ceph OSD Daemons are numerically identified in incremental fashion, beginning
@@ -140,20 +140,25 @@ See `Pool & PG Config Reference`_ for details.
 
 .. index:: OSD; scrubbing
 
+.. _rados_config_scrubbing:
+
 Scrubbing
 =========
 
-In addition to making multiple copies of objects, Ceph ensures data integrity by
-scrubbing placement groups. Ceph scrubbing is analogous to ``fsck`` on the
-object storage layer. For each placement group, Ceph generates a catalog of all
-objects and compares each primary object and its replicas to ensure that no
-objects are missing or mismatched. Light scrubbing (daily) checks the object
-size and attributes.  Deep scrubbing (weekly) reads the data and uses checksums
-to ensure data integrity.
+One way that Ceph ensures data integrity is by "scrubbing" placement groups.
+Ceph scrubbing is analogous to ``fsck`` on the object storage layer. Ceph
+generates a catalog of all objects in each placement group and compares each
+primary object to its replicas, ensuring that no objects are missing or
+mismatched. Light scrubbing checks the object size and attributes, and is
+usually done daily. Deep scrubbing reads the data and uses checksums to ensure
+data integrity, and is usually done weekly. The freqeuncies of both light
+scrubbing and deep scrubbing are determined by the cluster's configuration,
+which is fully under your control and subject to the settings explained below
+in this section.
 
-Scrubbing is important for maintaining data integrity, but it can reduce
-performance. You can adjust the following settings to increase or decrease
-scrubbing operations.
+Although scrubbing is important for maintaining data integrity, it can reduce
+the performance of the Ceph cluster. You can adjust the following settings to
+increase or decrease the frequency and depth of scrubbing operations.
 
 
 .. confval:: osd_max_scrubs
@@ -198,6 +203,11 @@ Operations
 .. confval:: osd_op_history_size
 .. confval:: osd_op_history_duration
 .. confval:: osd_op_log_threshold
+.. confval:: osd_op_thread_suicide_timeout
+.. note:: See https://old.ceph.com/planet/dealing-with-some-osd-timeouts/ for
+   more on ``osd_op_thread_suicide_timeout``. Be aware that this is a link to a
+   reworking of a blog post from 2017, and that its conclusion will direct you
+   back to this page "for more information".
 
 .. _dmclock-qos:
 

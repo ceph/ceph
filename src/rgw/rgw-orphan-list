@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# version 2021-02-04
+# version 2023-01-11
 
 # IMPORTANT: affects order produced by 'sort' and 'ceph-diff-sorted'
 # relies on this ordering
@@ -8,8 +8,10 @@ export LC_ALL=C
 
 # If your ceph.conf is not in /etc/ceph, then set CEPH_CONF="-c /path/to/ceph.conf"
 
+trap "exit 1" TERM
+TOP_PID=$$
+
 out_dir="."
-temp_file=/tmp/temp.$$
 timestamp=$(date -u +%Y%m%d%H%M%S)
 lspools_err="${out_dir}/lspools-${timestamp}.error"
 rados_out="${out_dir}/rados-${timestamp}.intermediate"
@@ -19,27 +21,73 @@ rgwadmin_out="${out_dir}/radosgw-admin-${timestamp}.intermediate"
 rgwadmin_err="${out_dir}/radosgw-admin-${timestamp}.error"
 delta_out="${out_dir}/orphan-list-${timestamp}.out"
 
-error_out() {
-    echo "An error was encountered while running '$1'. Aborting."
-    if [ $# -gt 2 ] ;then
-	echo "Error: $3"
+log() {
+  echo $(date +%F\ %T) $(hostname -s) "$1"
+}
+
+usage() {
+  >&2 cat << EOF
+
+Usage: $0 [-h] "<radospools>" [<temp_dir>]
+
+Where:
+  -h               This help output
+  <radospools>     The RGW data pool name, if omitted, pool name will be
+                   prompted for during execution.
+                   If specifying multiple pools, please use space separated
+                   list and wrap the entire list in quotes.
+
+  <temp_dir>       Optionally, set the directory to use for temp space.
+                   This may be required if /tmp is low on space.
+
+NOTES:
+  - This tool should be ran on a node with ceph-radosgw package installed.
+    Specifically, it needs the 'ceph-diff-tool' command from that package.
+
+  - This tool is currently considered to be EXPERIMENTAL.
+
+  - False positives are possible. False positives would likely
+    appear as objects that were never deleted and are fully
+    intact. All results should therefore be verified.
+
+WARNING:
+  - Indexless buckets will appear as 100% orphan objects.
+  - Therefore, this tool MUST NOT be used in environments with indexless
+    buckets.
+
+EOF
+  exit 1
+}
+
+#
+# checkReturn RETURNCODE MESSAGE TERMINATE
+#  RETURNCODE - ( usually $? ) of previous command
+#  MESSAGE    - Message to print on non-zero return code
+#  TERMINATE  - non-empty == terminate the script on non-zero return code
+#
+checkReturn() {
+  if [ $1 -ne 0 ]; then
+    error_addon=""
+    if [ ! -z "$3" ]; then
+      error_addon="; Terminating"
     fi
-    if [ $# -gt 1 ] ;then
-	echo "Review file '$2' for details."
+    log "ERROR: ${2} failed: returned ${1}${error_addon}"
+    if [ ! -z "$3" ]; then
+      >&2 echo
+      >&2 echo '***'
+      >&2 echo '*** WARNING: The results are incomplete. Do not use! ***'
+      >&2 echo '***'
+      kill -s TERM $TOP_PID
     fi
-    echo "***"
-    echo "*** WARNING: The results are incomplete. Do not use! ***"
-    echo "***"
-    exit 1
+  fi
 }
 
 prompt_pool() {
     # note: all prompts go to stderr so stdout contains just the result
     >&2 echo "Available pools:"
     rados ${CEPH_CONF} lspools >"$temp_file" 2>"$lspools_err"
-    if [ "$?" -ne 0 ] ;then
-	error_out "rados lspools" "$lspools_err"
-    fi
+    checkReturn $? "Listing pools failed" 1
+
     >&2 sed 's/^/    /' "$temp_file" # list pools and indent
     >&2 printf "Which pool do you want to search for orphans (for multiple, use space-separated list)? "
     local mypool
@@ -47,87 +95,168 @@ prompt_pool() {
     echo $mypool
 }
 
+radosgw_radoslist() {
+  log "Running 'radosgw-admin bucket radoslist'."
+  rm -f "$rgwadmin_flag" &> /dev/null
+  radosgw-admin ${CEPH_CONF} bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
+  RETVAL=$?
+  if [ "$RETVAL" -ne 0 ] ;then
+    touch "$rgwadmin_flag"
+  fi
+  checkReturn $RETVAL "radosgw-admin radoslist" 1
+  log "Completed 'radosgw-admin bucket radoslist'."
+
+  log "Sorting 'radosgw-admin bucket radoslist' output."
+  sort -T ${temp_prefix} -u "$rgwadmin_out" > "$rgwadmin_temp"
+  checkReturn $? "Sorting 'radosgw-admin bucket radoslist' output" 1
+  log "Completed sorting 'radosgw-admin bucket radoslist'."
+
+  log "Moving 'radosgw-admin bucket radoslist' output."
+  mv -f "$rgwadmin_temp" "$rgwadmin_out"
+  checkReturn $? "Moving 'radosgw-admin bucket radoslist' output" 1
+  log "Completed moving 'radosgw-admin bucket radoslist' output."
+}
+
+rados_ls() {
+  log "Starting 'rados ls' function."
+  rm -f "$rados_flag" &> /dev/null
+  rm -f "$rados_out" &> /dev/null
+  local mypool
+  for mypool in $pool; do
+    log "Running 'rados ls' on pool ${mypool}."
+    rados ${CEPH_CONF} ls --pool="$mypool" --all >>"$rados_out" 2>"$rados_err"
+    RETVAL=$?
+    if [ "$RETVAL" -ne 0 ] ;then
+      touch "$rados_flag"
+    fi
+    checkReturn $RETVAL "'rados ls' on pool ${mypool}" 1
+    log "Completed 'rados ls' on pool ${mypool}."
+  done
+  if [ ! -e "$rados_flag" ]; then
+    # NOTE: Each entry (line of output) of `rados ls --all` should be in
+    # one of four formats depending on whether or not an entry has a
+    # namespace and/or locator:
+    #
+    #   <TAB>oid
+    #   <TAB>oid<TAB>locator
+    #   namespace<TAB>oid
+    #   namespace<TAB>oid<TAB>locator
+    #
+    # Any occurrences of the 2nd, 3rd, or 4th (i.e., existence of
+    # namespace and/or locator) should cause the create of the "odd" file
+    # and an explanation in the output, and those entries will not be
+    # retained, and therefore they will not be called out as orphans. They
+    # will need special handling by the end-user as we do not expect
+    # namespaces or locators.
+
+    # check for namespaces -- any line that does not begin with a tab
+    # indicates a namespace; add those to "odd" file and set flag; note:
+    # this also picks up entries with namespace and locator
+    log "Checking for namespaces"
+    grep --text $'^[^\t]' "$rados_out" >"$rados_odd"
+    if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
+        log "Namespaces found"
+        namespace_found=1
+    fi
+
+    # check for locators (w/o namespace); we identify them by skipping
+    # past the empty namespace (i.e., one TAB), skipping past the oid,
+    # then looking for a TAB; note we use egrep to get the '+' character
+    # and the $ in front of the ' allows the \t to be interpreted as a TAB
+    log "Checking for locators"
+    egrep --text $'^\t[[:graph:]]+\t' "$rados_out" >>"$rados_odd"
+    if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
+        log "Locator found"
+        locator_found=1
+    fi
+
+    # extract the entries that are just oids (i.e., no namespace or
+    # locator) for further processing; only look at lines that begin with
+    # a TAB and do not contain a second TAB, and then grab everything
+    # after the initial TAB
+    log "Generating final 'rados ls' output (without namespaces or locators)"
+    grep --text $'^\t' "$rados_out" | grep --text -v $'^\t.*\t' | sed -E 's/^\t//' >"$temp_file"
+    mv -f "$temp_file" "$rados_out"
+
+    log "Sorting 'rados ls' output(s)."
+    sort -T ${temp_prefix} -u "$rados_out" >"$temp_file"
+    checkReturn $? "Sorting 'rados ls' output(s)" 1
+    log "Sorting 'rados ls' output(s) complete."
+
+    log "Moving sorted output(s)."
+    mv -f "$temp_file" "$rados_out"
+    checkReturn $? "Moving temp file to output file" 1
+  fi
+}
+
+temp_prefix="/tmp"
+if [ ! -z "$2" ]; then
+    if [ -d "$2" ]; then
+        temp_prefix=$2
+    else
+        echo
+        echo "ERROR: Provided temp directory does not exist: ${2}"
+        usage
+    fi
+    temp_prefix="$2"
+fi
+temp_file=${temp_prefix}/temp.$$
+rados_flag=${temp_prefix}/rados_flag.$$
+rgwadmin_flag=${temp_prefix}/rgwadmin_flag.$$
+rgwadmin_temp=${temp_prefix}/rgwadmin_temp.$$
+
 if [ $# -eq 0 ] ;then
     pool="$(prompt_pool)"
 else
-    pool="$*"
+    if [ "$1" == "-h" ]; then
+      usage
+    fi
+    pool="$1"
 fi
 
-echo "Pool is \"$pool\"."
-
-echo "Note: output files produced will be tagged with the current timestamp -- ${timestamp}."
-
-echo "running 'rados ls' at $(date)"
-# since --format is not specified, plain should be used
-
-rm -f "$rados_out" &> /dev/null
-for mypool in $pool ; do
-    echo "running 'rados ls' on pool ${mypool}."
-    rados ${CEPH_CONF} ls --pool="$mypool" --all >>"$rados_out" 2>"$rados_err"
-    if [ "$?" -ne 0 ] ;then
-	error_out "rados ls" "$rados_err"
+error=0
+rados ${CEPH_CONF} lspools > $temp_file
+for mypool in $pool; do
+    if [ $(grep -c "^${mypool}$" "${temp_file}") -eq 0 ]; then
+        echo
+        echo "ERROR: Supplied pool does not exist: ${mypool}"
+        error=1
     fi
 done
+if [ $error -gt 0 ]; then
+    echo "Terminating"
+    exit 1
+fi
 
-# NOTE: Each entry (line of output) of `rados ls --all` should be in
-# one of four formats depending on whether or not an entry has a
-# namespace and/or locator:
+log "Pool is \"$pool\"."
+log "Note: output files produced will be tagged with the current timestamp -- ${timestamp}."
+
+rados_ls
+radosgw_radoslist
+
 #
-#   <TAB>oid
-#   <TAB>oid<TAB>locator
-#   namespace<TAB>oid
-#   namespace<TAB>oid<TAB>locator
+# Check for any empty output files
 #
-# Any occurrences of the 2nd, 3rd, or 4th (i.e., existence of
-# namespace and/or locator) should cause the create of the "odd" file
-# and an explanation in the output, and those entries will not be
-# retained, and therefore they will not be called out as orphans. They
-# will need special handling by the end-user as we do not expect
-# namespaces or locators.
 
-# check for namespaces -- any line that does not begin with a tab
-# indicates a namespace; add those to "odd" file and set flag; note:
-# this also picks up entries with namespace and locator
-grep --text $'^[^\t]' "$rados_out" >"$rados_odd"
-if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
-    namespace_found=1
-fi
+for myfile in $rados_out $rgwadmin_out; do
+  if [ ! -s "${myfile}" ]; then
+    log "ERROR: Empty file detected: ${myfile}"
+    log "ERROR: RESULTS ARE INCOMPLETE - DO NOT USE"
+    exit 1
+  fi 
+done
 
-# check for locators (w/o namespace); we idenitfy them by skipping
-# past the empty namespace (i.e., one TAB), skipping past the oid,
-# then looking for a TAB; note we use egrep to get the '+' character
-# and the $ in front of the ' allows the \t to be interpreted as a TAB
-egrep --text $'^\t[[:graph:]]+\t' "$rados_out" >>"$rados_odd"
-if [ "${PIPESTATUS[0]}" -eq 0 ] ;then
-    locator_found=1
-fi
-
-# extract the entries that are just oids (i.e., no namespace or
-# locator) for further processing; only look at lines that begin with
-# a TAB and do not contain a second TAB, and then grab everything
-# after the initial TAB
-grep --text $'^\t' "$rados_out" | grep --text -v $'^\t.*\t' | sed -E 's/^\t//' >"$temp_file"
-mv -f "$temp_file" "$rados_out"
-
-sort -u "$rados_out" >"$temp_file"
-mv -f "$temp_file" "$rados_out"
-
-echo "running 'radosgw-admin bucket radoslist' at $(date)"
-radosgw-admin ${CEPH_CONF} bucket radoslist >"$rgwadmin_out" 2>"$rgwadmin_err"
-if [ "$?" -ne 0 ] ;then
-    error_out "radosgw-admin radoslist" "$rgwadmin_err"
-fi
-sort -u "$rgwadmin_out" >"$temp_file"
-mv -f "$temp_file" "$rgwadmin_out"
-
-echo "computing delta at $(date)"
+log "Computing delta..."
 ceph-diff-sorted "$rados_out" "$rgwadmin_out" | grep --text "^<" | sed 's/^< *//' >"$delta_out"
 # use PIPESTATUS to get at exit status of first process in above pipe;
 # 0 means same, 1 means different, >1 means error
 if [ "${PIPESTATUS[0]}" -gt 1 ] ;then
-    error_out "ceph-diff-sorted"
+    log "ERROR: ceph-diff-sorted failed with status: ${PIPESTATUS[0]}"
+    log "TERMINATING - Results are incomplete - DO NOT USE"
+    exit 1
 fi
 
+log "Computing results..."
 found=$(wc -l < "$delta_out")
 possible=$(wc -l < "$rados_out")
 percentage=0
@@ -146,4 +275,4 @@ echo "***"
 echo "*** WARNING: This is EXPERIMENTAL code and the results should be used"
 echo "***          only with CAUTION!"
 echo "***"
-echo "Done at $(date)."
+echo "Done at $(date +%F\ %T)."

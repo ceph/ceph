@@ -1,8 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_REALM_RELOADER_H
-#define RGW_REALM_RELOADER_H
+#pragma once
+
+#include <boost/asio/io_context.hpp>
 
 #include "rgw_realm_watcher.h"
 #include "common/Cond.h"
@@ -37,7 +38,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   RGWRealmReloader(RGWProcessEnv& env,
                    const rgw::auth::ImplicitTenants& implicit_tenants,
                    std::map<std::string, std::string>& service_map_meta,
-                   Pauser* frontends);
+                   Pauser* frontends, boost::asio::io_context& io_context);
   ~RGWRealmReloader() override;
 
   /// respond to realm notifications by scheduling a reload()
@@ -53,6 +54,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   const rgw::auth::ImplicitTenants& implicit_tenants;
   std::map<std::string, std::string>& service_map_meta;
   Pauser *const frontends;
+  boost::asio::io_context& io_context;
 
   /// reload() takes a significant amount of time, so we don't want to run
   /// it in the handle_notify() thread. we choose a timer thread instead of a
@@ -63,5 +65,3 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   ceph::condition_variable cond; //< to signal reload() after an invalid realm config
   C_Reload* reload_scheduled; //< reload() context if scheduled
 };
-
-#endif // RGW_REALM_RELOADER_H

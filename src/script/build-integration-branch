@@ -7,7 +7,12 @@ Builds integration branches. Something similar to
   >   git pull b
   > done
 
-Requires `~/.github_token`.
+Requires either `~/.github_token` containing ONLY the token
+OR adding an entry like the following to `~/.netrc`:
+  ```
+  machine github.com
+  password ghp_E7ln0tAR34LtoK3nIsw34RyTve2moM3BvK
+  ```
 
 
 Usage:
@@ -24,6 +29,7 @@ import os
 import requests
 import sys
 import time
+import netrc
 
 from subprocess import call, check_output
 from urllib.parse import urljoin
@@ -33,7 +39,7 @@ postfix = "-" + time.strftime(TIME_FORMAT, time.localtime())
 
 current_branch = check_output('git rev-parse --abbrev-ref HEAD',
                               shell=True).strip().decode()
-if current_branch in 'mimic nautilus octopus pacific quincy'.split():
+if current_branch in 'mimic nautilus octopus pacific quincy reef'.split():
     postfix += '-' + current_branch
     print(f"Adding current branch name '-{current_branch}' as a postfix")
 
@@ -52,9 +58,28 @@ except ImportError:
     assert len(sys.argv) == 2
     branch = label + postfix
 
-
-with open(os.path.expanduser('~/.github_token')) as myfile:
-    token = myfile.readline().strip()
+token = ''
+try:
+    nrc = netrc.netrc()
+    nrauth = nrc.authenticators("api.github.com")
+    if nrauth:
+        token = nrauth[2]
+    if not token:
+        nrauth = nrc.authenticators("github.com")
+        if nrauth:
+            token = nrauth[2]
+except FileNotFoundError:
+    pass
+if not token:
+    try:
+        with open(os.path.expanduser('~/.github_token')) as myfile:
+            token = myfile.readline().strip()
+    except FileNotFoundError:
+        pass
+if not token:
+    print('No github api access token found')
+    print('  Add a token to .netrc for [api.]github.com')
+    print('  OR add a token to $HOME/.github_token')
 
 # get prs
 baseurl = urljoin('https://api.github.com',
@@ -65,7 +90,11 @@ url = baseurl.format(label=label,
                      repo=repo)
 r = requests.get(url,
                  headers={'Authorization': 'token %s' % token})
-assert(r.ok)
+if not r.ok:
+    print("Failed to access github api")
+    print("(Do you have a valid, unexpired github api token?)")
+    sys.exit(1)
+
 j = json.loads(r.text or r.content)
 print("--- found %d issues tagged with %s" % (len(j), label))
 

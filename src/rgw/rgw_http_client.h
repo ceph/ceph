@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_HTTP_CLIENT_H
-#define CEPH_RGW_HTTP_CLIENT_H
+#pragma once
 
 #include "common/async/yield_context.h"
 #include "common/Cond.h"
@@ -53,6 +52,7 @@ protected:
   CephContext *cct;
 
   std::string method;
+  std::string url_orig;
   std::string url;
 
   std::string protocol;
@@ -165,6 +165,10 @@ public:
 
   void set_url(const std::string& _url) {
     url = _url;
+  }
+
+  const std::string& get_url_orig() const {
+    return url_orig;
   }
 
   void set_method(const std::string& _method) {
@@ -347,4 +351,3 @@ public:
   static int send(RGWHTTPClient *req);
   static int process(RGWHTTPClient *req, optional_yield y);
 };
-#endif

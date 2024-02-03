@@ -336,13 +336,13 @@ TEST(formatable, encode_simple) {
 
 
 struct struct1 {
-  long i;
+  long long i;
   string s;
   bool b;
 
   struct1() {
     void *p = (void *)this;
-    i = (long)p;
+    i = (long long)p;
     char buf[32];
     snprintf(buf, sizeof(buf), "%p", p);
     s = buf;
@@ -363,12 +363,12 @@ struct struct1 {
 
   bool compare(const JSONFormattable& jf) const {
     bool ret = (s == (string)jf["s"] &&
-            i == (long)jf["i"] &&
+            i == (long long)jf["i"] &&
             b == (bool)jf["b"]);
 
     if (!ret) {
       cout << "failed comparison: s=" << s << " jf[s]=" << (string)jf["s"] << 
-        " i=" << i << " jf[i]=" << (long)jf["i"] << " b=" << b << " jf[b]=" << (bool)jf["b"] << std::endl;
+        " i=" << i << " jf[i]=" << (long long)jf["i"] << " b=" << b << " jf[b]=" << (bool)jf["b"] << std::endl;
       dumpf(jf);
     }
 
@@ -383,7 +383,7 @@ struct struct2 {
 
   struct2() {
     void *p = (void *)this;
-    long i = (long)p;
+    long long i = (long long)p;
     v.resize((i >> 16) % 16 + 1);
   }
 

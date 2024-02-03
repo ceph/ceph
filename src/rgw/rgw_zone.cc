@@ -33,7 +33,6 @@ std::string zonegroup_names_oid_prefix = "zonegroups_names.";
 std::string RGW_DEFAULT_ZONE_ROOT_POOL = "rgw.root";
 std::string RGW_DEFAULT_ZONEGROUP_ROOT_POOL = "rgw.root";
 std::string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
-std::string avail_pools = ".pools.avail";
 std::string default_storage_pool_suffix = "rgw.buckets.data";
 
 }
@@ -412,22 +411,14 @@ int RGWZoneParams::set_as_default(const DoutPrefixProvider *dpp, optional_yield 
 
 int RGWZoneParams::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
 {
-  /* check for old pools config */
-  rgw_raw_obj obj(domain_root, avail_pools);
-  auto sysobj = sysobj_svc->get_obj(obj);
-  int r = sysobj.rop().stat(y, dpp);
-  if (r < 0) {
-    ldpp_dout(dpp, 10) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
-    /* a new system, let's set new placement info */
-    RGWZonePlacementInfo default_placement;
-    default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
-    rgw_pool pool = name + "." + default_storage_pool_suffix;
-    default_placement.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
-    default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
-    placement_pools["default-placement"] = default_placement;
-  }
+  RGWZonePlacementInfo default_placement;
+  default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
+  rgw_pool pool = name + "." + default_storage_pool_suffix;
+  default_placement.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
+  default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
+  placement_pools["default-placement"] = default_placement;
 
-  r = fix_pool_names(dpp, y);
+  int r = fix_pool_names(dpp, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: fix_pool_names returned r=" << r << dendl;
     return r;
@@ -755,9 +746,7 @@ void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
   if (storage_classes.empty()) {
     storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
   }
-  if (!tier_targets.empty()) {
-    JSONDecoder::decode_json("tier_targets", tier_targets, obj);
-  }
+  JSONDecoder::decode_json("tier_targets", tier_targets, obj);
 }
 
 void RGWZonePlacementInfo::dump(Formatter *f) const
@@ -770,6 +759,17 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
 
   /* no real need for backward compatibility of compression_type and data_pool in here,
    * rather not clutter the output */
+}
+
+void RGWZonePlacementInfo::generate_test_instances(list<RGWZonePlacementInfo*>& o)
+{
+  o.push_back(new RGWZonePlacementInfo);
+  o.push_back(new RGWZonePlacementInfo);
+  o.back()->index_pool = rgw_pool("rgw.buckets.index");
+  
+  o.back()->data_extra_pool = rgw_pool("rgw.buckets.non-ec");
+  o.back()->index_type = rgw::BucketIndexType::Normal;
+  o.back()->inline_data = false;
 }
 
 void RGWZonePlacementInfo::decode_json(JSONObj *obj)
@@ -862,6 +862,11 @@ void RGWZoneStorageClasses::dump(Formatter *f) const
   }
 }
 
+void RGWZoneStorageClasses::generate_test_instances(list<RGWZoneStorageClasses*>& o)
+{
+  o.push_back(new RGWZoneStorageClasses);
+}
+
 void RGWZoneStorageClasses::decode_json(JSONObj *obj)
 {
   JSONFormattable f;
@@ -915,6 +920,14 @@ void RGWZoneStorageClass::dump(Formatter *f) const
   if (compression_type) {
     encode_json("compression_type", compression_type.get(), f);
   }
+}
+
+void RGWZoneStorageClass::generate_test_instances(list<RGWZoneStorageClass*>& o)
+{
+  o.push_back(new RGWZoneStorageClass);
+  o.push_back(new RGWZoneStorageClass);
+  o.back()->data_pool = rgw_pool("pool1");
+  o.back()->compression_type = "zlib";
 }
 
 void RGWZoneStorageClass::decode_json(JSONObj *obj)
@@ -1246,6 +1259,19 @@ int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
+std::string get_zonegroup_endpoint(const RGWZoneGroup& info)
+{
+  if (!info.endpoints.empty()) {
+    return info.endpoints.front();
+  }
+  // use zonegroup's master zone endpoints
+  auto z = info.zones.find(info.master_zone);
+  if (z != info.zones.end() && !z->second.endpoints.empty()) {
+    return z->second.endpoints.front();
+  }
+  return "";
+}
+
 int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
                       const RGWZoneParams& zone_params,
                       const bool *pis_master, const bool *pread_only,
@@ -1282,8 +1308,8 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
     }
   }
 
+  rgw_zone_id& master_zone = zonegroup.master_zone;
   if (pis_master) {
-    rgw_zone_id& master_zone = zonegroup.master_zone;
     if (*pis_master) {
       if (!master_zone.empty() && master_zone != zone_id) {
         ldpp_dout(dpp, 0) << "NOTICE: overriding master zone: "
@@ -1293,6 +1319,10 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
     } else if (master_zone == zone_id) {
       master_zone.clear();
     }
+  } else if (master_zone.empty() && zonegroup.zones.empty()) {
+    ldpp_dout(dpp, 0) << "NOTICE: promoted " << zone_name
+        << " as new master_zone of zonegroup " << zonegroup.name << dendl;
+    master_zone = zone_id;
   }
 
   // make sure the zone's placement targets are named in the zonegroup

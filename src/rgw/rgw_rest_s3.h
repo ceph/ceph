@@ -9,7 +9,7 @@
 #include <string_view>
 
 #include <boost/container/static_vector.hpp>
-#include <boost/crc.hpp> 
+#include <boost/crc.hpp>
 
 #include "common/sstring.hh"
 #include "rgw_op.h"
@@ -135,7 +135,7 @@ public:
     return 0;
   }
   void send_response_begin(bool has_buckets) override;
-  void send_response_data(rgw::sal::BucketList& buckets) override;
+  void send_response_data(std::span<const RGWBucketEnt> buckets) override;
   void send_response_end() override;
 };
 
@@ -355,7 +355,8 @@ public:
   RGWPutACLs_ObjStore_S3() {}
   ~RGWPutACLs_ObjStore_S3() override {}
 
-  int get_policy_from_state(rgw::sal::Driver* driver, req_state *s, std::stringstream& ss) override;
+  int get_policy_from_state(const ACLOwner& owner,
+                            RGWAccessControlPolicy& p) override;
   void send_response() override;
   int get_params(optional_yield y) override;
 };
@@ -668,19 +669,14 @@ public:
 
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
-  const bool isSTSEnabled;
-  const bool isIAMEnabled;
-  const bool isPSEnabled;
   bool is_usage_op() const {
     return s->info.args.exists("usage");
   }
   RGWOp *op_get() override;
   RGWOp *op_head() override;
-  RGWOp *op_post() override;
 public:
-   RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry,
-                              bool _isSTSEnabled, bool _isIAMEnabled, bool _isPSEnabled) :
-      RGWHandler_REST_S3(auth_registry), isSTSEnabled(_isSTSEnabled), isIAMEnabled(_isIAMEnabled), isPSEnabled(_isPSEnabled) {}
+   RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry) :
+      RGWHandler_REST_S3(auth_registry) {}
   ~RGWHandler_REST_Service_S3() override = default;
 };
 
@@ -887,7 +883,7 @@ inline int valid_s3_bucket_name(const std::string& name, bool relaxed=false)
       continue;
 
     if (c == '.') {
-      if (!relaxed && s && *s) {
+      if (!relaxed) {
 	// name cannot have consecutive periods or dashes
 	// adjacent to periods
 	// ensure s is neither the first nor the last character
@@ -1174,7 +1170,7 @@ class STSEngine : public AWSEngine {
   int get_session_token(const DoutPrefixProvider* dpp, const std::string_view& session_token,
                         STS::SessionToken& token) const;
 
-  result_t authenticate(const DoutPrefixProvider* dpp, 
+  result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string_view& access_key_id,
                         const std::string_view& signature,
                         const std::string_view& session_token,

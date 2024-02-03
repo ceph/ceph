@@ -9,59 +9,72 @@ you can profile Ceph's CPU usage. See `Installing Oprofile`_ for details.
 Initializing oprofile
 =====================
 
-The first time you use ``oprofile`` you need to initialize it. Locate the
-``vmlinux`` image corresponding to the kernel you are now running. :: 
+``oprofile`` must be initalized the first time it is used. Locate the
+``vmlinux`` image that corresponds to the kernel you are running:
 
-	ls /boot
-	sudo opcontrol --init
-	sudo opcontrol --setup --vmlinux={path-to-image} --separate=library --callgraph=6
+.. prompt:: bash $
+
+   ls /boot
+   sudo opcontrol --init
+   sudo opcontrol --setup --vmlinux={path-to-image} --separate=library --callgraph=6
 
 
 Starting oprofile
 =================
 
-To start ``oprofile`` execute the following command:: 
+Run the following command to start ``oprofile``: 
 
-	opcontrol --start
+.. prompt:: bash $
 
-Once you start ``oprofile``, you may run some tests with Ceph. 
+   opcontrol --start
 
 
 Stopping oprofile
 =================
 
-To stop ``oprofile`` execute the following command:: 
+Run the following command to stop ``oprofile``: 
 
-	opcontrol --stop
-	
-	
+.. prompt:: bash $
+
+   opcontrol --stop
+    
+    
 Retrieving oprofile Results
 ===========================
 
-To retrieve the top ``cmon`` results, execute the following command:: 
+Run the following command to retrieve the top ``cmon`` results: 
 
-	opreport -gal ./cmon | less	
-	
+.. prompt:: bash $
 
-To retrieve the top ``cmon`` results with call graphs attached, execute the
-following command:: 
+   opreport -gal ./cmon | less    
+    
 
-	opreport -cal ./cmon | less	
-	
-.. important:: After reviewing results, you should reset ``oprofile`` before
-   running it again. Resetting ``oprofile`` removes data from the session 
-   directory.
+Run the following command to retrieve the top ``cmon`` results, with call
+graphs attached: 
+
+.. prompt:: bash $
+
+   opreport -cal ./cmon | less    
+    
+.. important:: After you have reviewed the results, reset ``oprofile`` before
+   running it again. The act of resetting ``oprofile`` removes data from the
+   session directory.
 
 
 Resetting oprofile
 ==================
 
-To reset ``oprofile``, execute the following command:: 
+Run the following command to reset ``oprofile``:  
 
-	sudo opcontrol --reset   
+.. prompt:: bash $
+
+   sudo opcontrol --reset   
    
-.. important:: You should reset ``oprofile`` after analyzing data so that 
-   you do not commingle results from different tests.
+.. important:: Reset ``oprofile`` after analyzing data. This ensures that 
+   results from prior tests do not get mixed in with the results of the current
+   test. 
 
 .. _oprofile: http://oprofile.sourceforge.net/about/
 .. _Installing Oprofile: ../../../dev/cpu-profiler
+
+

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_KEYSTONE_H
-#define CEPH_RGW_KEYSTONE_H
+#pragma once
 
 #include <atomic>
 #include <string_view>
@@ -121,16 +120,16 @@ public:
   typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
 
   static int get_admin_token(const DoutPrefixProvider *dpp,
-                             CephContext* const cct,
                              TokenCache& token_cache,
                              const Config& config,
+                             optional_yield y,
                              std::string& token);
   static int issue_admin_token_request(const DoutPrefixProvider *dpp,
-                                       CephContext* const cct,
                                        const Config& config,
+                                       optional_yield y,
                                        TokenEnvelope& token);
   static int get_keystone_barbican_token(const DoutPrefixProvider *dpp,
-                                         CephContext * const cct,
+                                         optional_yield y,
                                          std::string& token);
 };
 
@@ -162,8 +161,17 @@ public:
 
   class Role {
   public:
+    Role() : is_admin(false), is_reader(false) { }
+    Role(const Role &r) {
+      id = r.id;
+      name = r.name;
+      is_admin = r.is_admin;
+      is_reader = r.is_reader;
+    }
     std::string id;
     std::string name;
+    bool is_admin;
+    bool is_reader;
     void decode_json(JSONObj *obj);
   };
 
@@ -201,10 +209,12 @@ public:
     const uint64_t now = ceph_clock_now().sec();
     return std::cmp_greater_equal(now, get_expires());
   }
-  int parse(const DoutPrefixProvider *dpp, CephContext* cct,
+  int parse(const DoutPrefixProvider *dpp,
             const std::string& token_str,
             ceph::buffer::list& bl /* in */,
             ApiVersion version);
+  void update_roles(const std::vector<std::string> & admin,
+                    const std::vector<std::string> & reader);
 };
 
 
@@ -332,5 +342,3 @@ public:
 
 }; /* namespace keystone */
 }; /* namespace rgw */
-
-#endif

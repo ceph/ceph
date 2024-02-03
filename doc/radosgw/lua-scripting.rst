@@ -18,10 +18,13 @@ A request (pre or post) or data (get or put) context script may be constrained t
 The request context script can also access fields in the request and modify certain fields, as well as the `Global RGW Table`_.
 The data context script can access the content of the object as well as the request fields and the `Global RGW Table`_. 
 All Lua language features can be used in all contexts.
+An execution of a script in a context can use up to 500K byte of memory. This include all libraries used by Lua, but not the memory which is managed by the RGW itself, and may be accessed from Lua.
+To change this default value, use the ``rgw_lua_max_memory_per_state`` configuration parameter. Note that the basic overhead of Lua with its standard libraries is ~32K bytes. To disable the limit, use zero or a negative number.
 
 By default, all Lua standard libraries are available in the script, however, in order to allow for other Lua modules to be used in the script, we support adding packages to an allowlist:
 
-  - All packages in the allowlist are being re-installed using the luarocks package manager on radosgw restart. Therefore a restart is needed for adding or removing of packages to take effect 
+  - Adding a Lua package to the allowlist, or removing a packge from it does not install or remove it. For the changes to take affect a "reload" command should be called.
+  - In addition all packages in the allowlist are being re-installed using the luarocks package manager on radosgw restart.
   - To add a package that contains C source code that needs to be compiled, use the ``--allow-compilation`` flag. In this case a C compiler needs to be available on the host
   - Lua packages are installed in, and used from, a directory local to the radosgw. Meaning that Lua packages in the allowlist are separated from any Lua packages available on the host.
     By default, this directory would be ``/tmp/luarocks/<entity name>``. Its prefix part (``/tmp/luarocks/``) could be set to a different location via the ``rgw_luarocks_location`` configuration parameter. 
@@ -40,10 +43,15 @@ To upload a script:
 
 ::
    
-   # radosgw-admin script put --infile={lua-file} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
-* When uploading a script with the ``background`` context, a tenant name may not be specified.
+* When uploading a script with the ``background`` context, a tenant name should not be specified.
+* When uploading a script into a cluster deployed with cephadm, use the following command:
+
+::
+
+  # cephadm shell radosgw-admin script put --infile=/rootfs/{lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
 
 
 To print the content of the script to standard output:
@@ -109,6 +117,13 @@ To print the list of packages in the allowlist:
   # radosgw-admin script-package list
 
 
+To apply changes from the allowlist to all RGWs:
+
+::
+
+  # radosgw-admin script-package reload
+
+
 Context Free Functions
 ----------------------
 Debug Log
@@ -162,10 +177,6 @@ Request Fields
 | ``Request.Bucket.Marker``                          | string   | bucket marker (initial id)                                   | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.Id``                              | string   | bucket id                                                    | no       | no        | yes      |
-+----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Count``                           | integer  | number of objects in the bucket                              | no       | no        | yes      |
-+----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.Bucket.Size``                            | integer  | total size of objects in the bucket                          | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Bucket.ZoneGroupId``                     | string   | zone group of the bucket                                     | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -237,15 +248,15 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.UserAcl.Grants["<name>"].Type``          | integer  | user ACL grant type                                          | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.UserAcl.Grants["<name>"].User``          | table    | user ACL grant user                                          | no       | no        | no       |
+| ``Request.UserAcl.Grants["<name>"].User``          | table    | user ACL grant user                                          | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.UserAcl.Grants["<name>"].User.Tenant``   | table    | user ACL grant user tenant                                   | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.UserAcl.Grants["<name>"].User.Id``       | table    | user ACL grant user id                                       | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.UserAcl.Grants["<name>"].GroupType``     | integer  | user ACL grant group type                                    | no       | no        | no       |
+| ``Request.UserAcl.Grants["<name>"].GroupType``     | integer  | user ACL grant group type                                    | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
-| ``Request.UserAcl.Grants["<name>"].Referer``       | string   | user ACL grant referer                                       | no       | no        | no       |
+| ``Request.UserAcl.Grants["<name>"].Referer``       | string   | user ACL grant referer                                       | no       | no        | yes      |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.BucketAcl``                              | table    | bucket ACL. See: ``Request.UserAcl``                         | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
@@ -457,16 +468,23 @@ First we should add the following packages to the allowlist:
 
 ::
 
-  # radosgw-admin script-package add --package=luajson
+  # radosgw-admin script-package add --package=lua-cjson --allow-compilation
   # radosgw-admin script-package add --package=luasocket --allow-compilation
 
 
-Then, do a restart for the radosgw and upload the following script to the ``postrequest`` context:
+Then, run a server to listen on the Unix socket. For example, use "netcat":
+
+::
+
+  # rm -f /tmp/socket       
+  # nc -vklU /tmp/socket
+
+And last, do a restart for the radosgw and upload the following script to the ``postrequest`` context:
 
 .. code-block:: lua
 
   if Request.RGWOp == "get_obj" then
-    local json = require("json")
+    local json = require("cjson")
     local socket = require("socket")
     local unix = require("socket.unix")
     local s = assert(unix())

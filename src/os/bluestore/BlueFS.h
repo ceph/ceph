@@ -31,18 +31,22 @@ enum {
   l_bluefs_num_files,
   l_bluefs_log_bytes,
   l_bluefs_log_compactions,
+  l_bluefs_log_write_count,
   l_bluefs_logged_bytes,
   l_bluefs_files_written_wal,
   l_bluefs_files_written_sst,
+  l_bluefs_write_count_wal,
+  l_bluefs_write_count_sst,
   l_bluefs_bytes_written_wal,
   l_bluefs_bytes_written_sst,
   l_bluefs_bytes_written_slow,
   l_bluefs_max_bytes_wal,
   l_bluefs_max_bytes_db,
   l_bluefs_max_bytes_slow,
-  l_bluefs_main_alloc_unit,
+  l_bluefs_slow_alloc_unit,
   l_bluefs_db_alloc_unit,
   l_bluefs_wal_alloc_unit,
+  l_bluefs_read_random_lat,
   l_bluefs_read_random_count,
   l_bluefs_read_random_bytes,
   l_bluefs_read_random_disk_count,
@@ -52,6 +56,7 @@ enum {
   l_bluefs_read_random_disk_bytes_slow,
   l_bluefs_read_random_buffer_count,
   l_bluefs_read_random_buffer_bytes,
+  l_bluefs_read_lat,
   l_bluefs_read_count,
   l_bluefs_read_bytes,
   l_bluefs_read_disk_count,
@@ -61,9 +66,25 @@ enum {
   l_bluefs_read_disk_bytes_slow,
   l_bluefs_read_prefetch_count,
   l_bluefs_read_prefetch_bytes,
+  l_bluefs_write_count,
+  l_bluefs_write_disk_count,
+  l_bluefs_write_bytes,
+  l_bluefs_compaction_lat,
+  l_bluefs_compaction_lock_lat,
+  l_bluefs_fsync_lat,
+  l_bluefs_flush_lat,
+  l_bluefs_unlink_lat,
+  l_bluefs_truncate_lat,
+  l_bluefs_alloc_shared_dev_fallbacks,
+  l_bluefs_alloc_shared_size_fallbacks,
   l_bluefs_read_zeros_candidate,
   l_bluefs_read_zeros_errors,
-
+  l_bluefs_wal_alloc_lat,
+  l_bluefs_db_alloc_lat,
+  l_bluefs_slow_alloc_lat,
+  l_bluefs_wal_alloc_max_lat,
+  l_bluefs_db_alloc_max_lat,
+  l_bluefs_slow_alloc_max_lat,
   l_bluefs_last,
 };
 
@@ -73,15 +94,102 @@ public:
 
   virtual ~BlueFSVolumeSelector() {
   }
+  /**
+  *  Method to learn a hint (aka logic level discriminator)  specific for
+  *  BlueFS log
+  *
+  */
   virtual void* get_hint_for_log() const = 0;
+  /**
+  *  Method to learn a hint (aka logic level discriminator) provided directory
+  *  bound to.
+  *
+  */
   virtual void* get_hint_by_dir(std::string_view dirname) const = 0;
 
-  virtual void add_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
-  virtual void sub_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
-  virtual void add_usage(void* file_hint, uint64_t fsize) = 0;
-  virtual void sub_usage(void* file_hint, uint64_t fsize) = 0;
+  /**
+  *  Increments stats for a given logical level using provided fnode as a delta,
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fnode: fnode metadata to be used as a complex delta value:
+  *           (+1 file count, +file size, +all the extents)
+  *
+  */
+  void add_usage(void* hint, const bluefs_fnode_t& fnode) {
+    for (auto& e : fnode.extents) {
+      add_usage(hint, e);
+    }
+    add_usage(hint, fnode.size, true);
+  }
+  /**
+  *  Decrements stats for a given logical level using provided fnode as a delta
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fnode: fnode metadata to be used as a complex delta value:
+  *           (-1 file count, -file size, -all the extents)
+  *
+  */
+  void sub_usage(void* hint, const bluefs_fnode_t& fnode) {
+    for (auto& e : fnode.extents) {
+      sub_usage(hint, e);
+    }
+    sub_usage(hint, fnode.size, true);
+  }
+  /**
+  *  Increments stats for a given logical level using provided extent as a delta,
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    extent: bluefs extent to be used as a complex delta value:
+  *           (.bdev determines physical location, +length)
+  *
+  */
+  virtual void add_usage(void* hint, const bluefs_extent_t& extent) = 0;
+  /**
+  *  Decrements stats for a given logical level using provided extent as a delta,
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    extent: bluefs extent to be used as a complex delta value:
+  *           (.bdev determines physical location, -length)
+  *
+  */
+  virtual void sub_usage(void* hint, const bluefs_extent_t& extent) = 0;
+  /**
+  *  Increments files count and overall files size for a given logical level
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fsize: delta value for file size
+  *    upd_files: whether or not to increment file count
+  *
+  */
+  virtual void add_usage(void* hint, uint64_t fsize, bool upd_files = false) = 0;
+  /**
+  *  Decrements files count and overall files size for a given logical level
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fsize: delta value for file size
+  *    upd_files: whether or not to decrement file count
+  *
+  */
+  virtual void sub_usage(void* hint, uint64_t fsize, bool upd_files = false) = 0;
+
+  /**
+  *  Determines preferred physical device for the given logical level
+  *  Parameters:
+  *    hint: logical level discriminator
+  *
+  */
   virtual uint8_t select_prefer_bdev(void* hint) = 0;
+  /**
+  *  Builds path set for RocksDB to use
+  *  Parameters:
+  *    base: path's root
+  *
+  */
   virtual void get_paths(const std::string& base, paths& res) const = 0;
+  /**
+  *  Dumps VSelector's state
+  *
+  */
   virtual void dump(std::ostream& sout) = 0;
 
   /* used for sanity checking of vselector */
@@ -92,16 +200,19 @@ public:
 struct bluefs_shared_alloc_context_t {
   bool need_init = false;
   Allocator* a = nullptr;
+  uint64_t alloc_unit = 0;
 
   std::atomic<uint64_t> bluefs_used = 0;
 
-  void set(Allocator* _a) {
+  void set(Allocator* _a, uint64_t _au) {
     a = _a;
+    alloc_unit = _au;
     need_init = true;
     bluefs_used = 0;
   }
   void reset() {
     a = nullptr;
+    alloc_unit = 0;
   }
 };
 
@@ -331,7 +442,11 @@ private:
     l_bluefs_max_bytes_wal,
     l_bluefs_max_bytes_db,
     l_bluefs_max_bytes_slow,
+    l_bluefs_max_bytes_wal,
+    l_bluefs_max_bytes_db,
   };
+
+  ceph::timespan max_alloc_lat[MAX_BDEV] = {ceph::make_timespan(0)};
 
   // cache
   struct {
@@ -391,6 +506,7 @@ private:
   inline bool is_shared_alloc(unsigned id) const {
     return id == shared_alloc_id;
   }
+  std::atomic<int64_t> cooldown_deadline = 0;
 
   class SocketHook;
   SocketHook* asok_hook = nullptr;
@@ -404,7 +520,8 @@ private:
   void _init_alloc();
   void _stop_alloc();
 
-  void _pad_bl(ceph::buffer::list& bl);  ///< pad ceph::buffer::list to block size w/ zeros
+  ///< pad ceph::buffer::list to max(block size, pad_size) w/ zeros
+  void _pad_bl(ceph::buffer::list& bl, uint64_t pad_size = 0);
 
   uint64_t _get_used(unsigned id) const;
   uint64_t _get_total(unsigned id) const;
@@ -417,10 +534,15 @@ private:
     return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
   }
   const char* get_device_name(unsigned id);
+
+  typedef std::function<void(const bluefs_extent_t)> update_fn_t;
+  void _update_allocate_stats(uint8_t id, const ceph::timespan& d);
   int _allocate(uint8_t bdev, uint64_t len,
-		bluefs_fnode_t* node);
-  int _allocate_without_fallback(uint8_t id, uint64_t len,
-				 PExtentVector* extents);
+                uint64_t alloc_unit,
+		bluefs_fnode_t* node,
+                update_fn_t cb = nullptr,
+                size_t alloc_attempts = 0,
+                bool permit_dev_fallback = true);
 
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log_D(FileWriter *h);
@@ -428,7 +550,6 @@ private:
   int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
   uint64_t _flush_special(FileWriter *h);
-  int _fsync(FileWriter *h);
 
 #ifdef HAVE_LIBAIO
   void _claim_completed_aios(FileWriter *h, std::list<aio_t> *ls);
@@ -436,17 +557,21 @@ private:
 #endif
 
   int64_t _maybe_extend_log();
-  void _extend_log();
+  void _extend_log(uint64_t amount);
   uint64_t _log_advance_seq();
   void _consume_dirty(uint64_t seq);
   void _clear_dirty_set_stable_D(uint64_t seq_stable);
   void _release_pending_allocations(std::vector<interval_set<uint64_t>>& to_release);
 
-  void _flush_and_sync_log_core(int64_t available_runway);
-  int _flush_and_sync_log_jump_D(uint64_t jump_to,
-			       int64_t available_runway);
+  void _flush_and_sync_log_core();
+  int _flush_and_sync_log_jump_D(uint64_t jump_to);
   int _flush_and_sync_log_LD(uint64_t want_seq = 0);
 
+  uint64_t _estimate_transaction_size(bluefs_transaction_t* t);
+  uint64_t _make_initial_transaction(uint64_t start_seq,
+                                     bluefs_fnode_t& fnode,
+                                     uint64_t expected_final_size,
+                                     bufferlist* out);
   uint64_t _estimate_log_size_N();
   bool _should_start_compact_log_L_N();
 
@@ -456,15 +581,15 @@ private:
     RENAME_SLOW2DB = 4,
     RENAME_DB2SLOW = 8,
   };
-  void _compact_log_dump_metadata_NF(bluefs_transaction_t *t,
-				 int flags);
-  void _compact_log_async_dump_metadata_NF(bluefs_transaction_t *t,
-					   uint64_t capture_before_seq);
+  void _compact_log_dump_metadata_NF(uint64_t start_seq,
+                                     bluefs_transaction_t *t,
+				     int flags,
+				     uint64_t capture_before_seq);
 
   void _compact_log_sync_LNF_LD();
   void _compact_log_async_LD_LNF_D();
 
-  void _rewrite_log_and_layout_sync_LNF_LD(bool allocate_with_fallback,
+  void _rewrite_log_and_layout_sync_LNF_LD(bool permit_dev_fallback,
 				    int super_dev,
 				    int log_dev,
 				    int new_log_dev,
@@ -473,7 +598,7 @@ private:
 
   //void _aio_finish(void *priv);
 
-  void _flush_bdev(FileWriter *h);
+  void _flush_bdev(FileWriter *h, bool check_mutex_locked = true);
   void _flush_bdev();  // this is safe to call without a lock
   void _flush_bdev(std::array<bool, MAX_BDEV>& dirty_bdevs);  // this is safe to call without a lock
 
@@ -500,6 +625,7 @@ private:
     const char* op_name);
   int _verify_alloc_granularity(
     __u8 id, uint64_t offset, uint64_t length,
+    uint64_t alloc_unit,
     const char *op);
   int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
@@ -614,7 +740,6 @@ public:
   }
 
   int add_block_device(unsigned bdev, const std::string& path, bool trim,
-                       uint64_t reserved,
 		       bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev) const;
@@ -690,19 +815,19 @@ public:
   void* get_hint_for_log() const override;
   void* get_hint_by_dir(std::string_view dirname) const override;
 
-  void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
+  void add_usage(void* hint, const bluefs_extent_t& extent) override {
     // do nothing
     return;
   }
-  void sub_usage(void* hint, const bluefs_fnode_t& fnode) override {
+  void sub_usage(void* hint, const bluefs_extent_t& extent) override {
     // do nothing
     return;
   }
-  void add_usage(void* hint, uint64_t fsize) override {
+  void add_usage(void*, uint64_t, bool) override {
     // do nothing
     return;
   }
-  void sub_usage(void* hint, uint64_t fsize) override {
+  void sub_usage(void*, uint64_t, bool) override {
     // do nothing
     return;
   }

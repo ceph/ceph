@@ -16,12 +16,15 @@ namespace {
 struct MockTestImageCtx;
 
 struct MockTestJournal : public MockJournal {
-  MOCK_METHOD4(append_write_event, uint64_t(uint64_t, size_t,
+  MOCK_METHOD3(append_write_event, uint64_t(const io::Extents&,
                                             const bufferlist &, bool));
+  MOCK_METHOD3(append_write_same_event, uint64_t(const io::Extents&,
+                                                 const bufferlist &, bool));
   MOCK_METHOD5(append_compare_and_write_event, uint64_t(uint64_t, size_t,
                                                         const bufferlist &,
                                                         const bufferlist &,
                                                         bool));
+  MOCK_METHOD3(append_discard_event, uint64_t(const io::Extents&, uint32_t, bool));
   MOCK_METHOD5(append_io_event_mock, uint64_t(const journal::EventEntry&,
                                               uint64_t, size_t, bool, int));
   uint64_t append_io_event(journal::EventEntry &&event_entry,
@@ -119,6 +122,13 @@ struct TestMockIoImageRequest : public TestMockFixture {
     }
   }
 
+  void expect_journal_append_discard_event(MockTestJournal &mock_journal,
+                                           uint64_t journal_tid,
+                                           const io::Extents& extents) {
+    EXPECT_CALL(mock_journal, append_discard_event(extents, _, _))
+      .WillOnce(Return(journal_tid));
+  }
+
   void expect_object_discard_request(MockTestImageCtx &mock_image_ctx,
                                      uint64_t object_no, uint64_t offset,
                                      uint32_t length, int r) {
@@ -205,7 +215,7 @@ TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
   bl.append("1");
   MockImageWriteRequest mock_aio_image_write_1(
     mock_image_ctx, aio_comp_1, {{0, 1}}, ImageArea::DATA, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    0, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write_1.send();
@@ -218,7 +228,7 @@ TEST_F(TestMockIoImageRequest, AioWriteModifyTimestamp) {
   bl.append("1");
   MockImageWriteRequest mock_aio_image_write_2(
     mock_image_ctx, aio_comp_2, {{0, 1}}, ImageArea::DATA, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    0, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write_2.send();
@@ -300,7 +310,7 @@ TEST_F(TestMockIoImageRequest, PartialDiscard) {
     &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
   MockImageDiscardRequest mock_aio_image_discard(
     mock_image_ctx, aio_comp, {{16, 63}, {84, 100}}, ImageArea::DATA,
-    ictx->discard_granularity_bytes, mock_image_ctx.get_data_io_context(), {});
+    ictx->discard_granularity_bytes, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_discard.send();
@@ -328,7 +338,7 @@ TEST_F(TestMockIoImageRequest, TailDiscard) {
   MockImageDiscardRequest mock_aio_image_discard(
     mock_image_ctx, aio_comp,
     {{ictx->layout.object_size - 1024, 1024}}, ImageArea::DATA,
-    ictx->discard_granularity_bytes, mock_image_ctx.get_data_io_context(), {});
+    ictx->discard_granularity_bytes, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_discard.send();
@@ -358,8 +368,170 @@ TEST_F(TestMockIoImageRequest, DiscardGranularity) {
   MockImageDiscardRequest mock_aio_image_discard(
     mock_image_ctx, aio_comp,
     {{16, 63}, {96, 31}, {84, 100}, {ictx->layout.object_size - 33, 33}},
-    ImageArea::DATA, ictx->discard_granularity_bytes,
-    mock_image_ctx.get_data_io_context(), {});
+    ImageArea::DATA, ictx->discard_granularity_bytes, {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_aio_image_discard.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx.wait());
+}
+
+TEST_F(TestMockIoImageRequest, PartialDiscardJournalAppendEnabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ictx->discard_granularity_bytes = 0;
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockTestJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+
+  InSequence seq;
+  expect_get_modify_timestamp(mock_image_ctx, false);
+  expect_is_journal_appending(mock_journal, true);
+  expect_journal_append_discard_event(mock_journal, 0,
+                                      {{16, 63}, {84, 100}});
+  expect_object_discard_request(mock_image_ctx, 0, 16, 63, 0);
+  expect_object_discard_request(mock_image_ctx, 0, 84, 100, 0);
+
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
+  MockImageDiscardRequest mock_aio_image_discard(
+    mock_image_ctx, aio_comp, {{16, 63}, {84, 100}}, ImageArea::DATA,
+    ictx->discard_granularity_bytes, {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_aio_image_discard.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx.wait());
+}
+
+TEST_F(TestMockIoImageRequest, TailDiscardJournalAppendEnabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, resize(ictx, ictx->layout.object_size));
+  ictx->discard_granularity_bytes = 2 * ictx->layout.object_size;
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockTestJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+
+  InSequence seq;
+  expect_get_modify_timestamp(mock_image_ctx, false);
+  expect_is_journal_appending(mock_journal, true);
+  expect_journal_append_discard_event(
+    mock_journal, 0, {{ictx->layout.object_size - 1024, 1024}});
+  expect_object_discard_request(
+    mock_image_ctx, 0, ictx->layout.object_size - 1024, 1024, 0);
+
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
+  MockImageDiscardRequest mock_aio_image_discard(
+    mock_image_ctx, aio_comp,
+    {{ictx->layout.object_size - 1024, 1024}}, ImageArea::DATA,
+    ictx->discard_granularity_bytes, {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_aio_image_discard.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx.wait());
+}
+
+TEST_F(TestMockIoImageRequest, PruneRequiredDiscardJournalAppendEnabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ictx->discard_granularity_bytes = 32;
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockTestJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+
+  InSequence seq;
+  expect_get_modify_timestamp(mock_image_ctx, false);
+  expect_is_journal_appending(mock_journal, true);
+  EXPECT_CALL(mock_journal, append_discard_event(_, _, _)).Times(0);
+  EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, send(_)).Times(0);
+
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
+  MockImageDiscardRequest mock_aio_image_discard(
+    mock_image_ctx, aio_comp, {{96, 31}}, ImageArea::DATA,
+    ictx->discard_granularity_bytes, {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_aio_image_discard.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx.wait());
+}
+
+TEST_F(TestMockIoImageRequest, LengthModifiedDiscardJournalAppendEnabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ictx->discard_granularity_bytes = 32;
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockTestJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+
+  InSequence seq;
+  expect_get_modify_timestamp(mock_image_ctx, false);
+  expect_is_journal_appending(mock_journal, true);
+  expect_journal_append_discard_event(mock_journal, 0, {{32, 32}});
+  expect_object_discard_request(mock_image_ctx, 0, 32, 32, 0);
+
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
+  MockImageDiscardRequest mock_aio_image_discard(
+    mock_image_ctx, aio_comp, {{16, 63}}, ImageArea::DATA,
+    ictx->discard_granularity_bytes, {});
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    mock_aio_image_discard.send();
+  }
+  ASSERT_EQ(0, aio_comp_ctx.wait());
+}
+
+TEST_F(TestMockIoImageRequest, DiscardGranularityJournalAppendEnabled) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, resize(ictx, ictx->layout.object_size));
+  ictx->discard_granularity_bytes = 32;
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  MockTestJournal mock_journal;
+  mock_image_ctx.journal = &mock_journal;
+
+  InSequence seq;
+  expect_get_modify_timestamp(mock_image_ctx, false);
+  expect_is_journal_appending(mock_journal, true);
+  expect_journal_append_discard_event(
+    mock_journal, 0,
+    {{32, 32}, {96, 64}, {ictx->layout.object_size - 32, 32}});
+  expect_object_discard_request(mock_image_ctx, 0, 32, 32, 0);
+  expect_object_discard_request(mock_image_ctx, 0, 96, 64, 0);
+  expect_object_discard_request(
+    mock_image_ctx, 0, ictx->layout.object_size - 32, 32, 0);
+
+  C_SaferCond aio_comp_ctx;
+  AioCompletion *aio_comp = AioCompletion::create_and_start(
+    &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
+  MockImageDiscardRequest mock_aio_image_discard(
+    mock_image_ctx, aio_comp,
+    {{16, 63}, {96, 31}, {84, 100}, {ictx->layout.object_size - 33, 33}},
+    ImageArea::DATA, ictx->discard_granularity_bytes, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_discard.send();
@@ -389,8 +561,7 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
   bufferlist bl;
   bl.append("1");
   MockImageWriteRequest mock_aio_image_write(
-    mock_image_ctx, aio_comp, {{0, 1}}, ImageArea::DATA, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx, aio_comp, {{0, 1}}, ImageArea::DATA, std::move(bl), 0, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write.send();
@@ -419,7 +590,7 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
     &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
   MockImageDiscardRequest mock_aio_image_discard(
     mock_image_ctx, aio_comp, {{0, 1}}, ImageArea::DATA,
-    ictx->discard_granularity_bytes, mock_image_ctx.get_data_io_context(), {});
+    ictx->discard_granularity_bytes, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_discard.send();
@@ -477,8 +648,7 @@ TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
   bufferlist bl;
   bl.append("1");
   MockImageWriteSameRequest mock_aio_image_writesame(
-    mock_image_ctx, aio_comp, {{0, 1}}, ImageArea::DATA, std::move(bl),
-    mock_image_ctx.get_data_io_context(), 0, {});
+    mock_image_ctx, aio_comp, {{0, 1}}, ImageArea::DATA, std::move(bl), 0, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_writesame.send();
@@ -512,8 +682,7 @@ TEST_F(TestMockIoImageRequest, AioCompareAndWriteJournalAppendDisabled) {
   uint64_t mismatch_offset;
   MockImageCompareAndWriteRequest mock_aio_image_write(
     mock_image_ctx, aio_comp, {{0, 1}}, ImageArea::DATA,
-    std::move(cmp_bl), std::move(write_bl), &mismatch_offset,
-    mock_image_ctx.get_data_io_context(), 0, {});
+    std::move(cmp_bl), std::move(write_bl), &mismatch_offset, 0, {});
   {
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     mock_aio_image_write.send();

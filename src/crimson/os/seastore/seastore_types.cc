@@ -89,6 +89,15 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   }
 }
 
+std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
+{
+  if (pladdr.is_laddr()) {
+    return out << pladdr.get_laddr();
+  } else {
+    return out << pladdr.get_paddr();
+  }
+}
+
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
 {
   auto id = rhs.get_device_id();
@@ -219,6 +228,8 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "LADDR_INTERNAL";
   case extent_types_t::LADDR_LEAF:
     return out << "LADDR_LEAF";
+  case extent_types_t::DINK_LADDR_LEAF:
+    return out << "LADDR_LEAF";
   case extent_types_t::ONODE_BLOCK_STAGED:
     return out << "ONODE_BLOCK_STAGED";
   case extent_types_t::OMAP_INNER:
@@ -273,6 +284,10 @@ std::ostream &operator<<(std::ostream &out, data_category_t c)
     default:
       return out << "INVALID_CATEGORY!";
   }
+}
+
+bool can_inplace_rewrite(extent_types_t type) {
+  return get_extent_category(type) == data_category_t::DATA;
 }
 
 std::ostream &operator<<(std::ostream &out, sea_time_point_printer_t tp)
@@ -399,8 +414,10 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "TRIM_DIRTY";
   case transaction_type_t::TRIM_ALLOC:
     return os << "TRIM_ALLOC";
-  case transaction_type_t::CLEANER:
-    return os << "CLEANER";
+  case transaction_type_t::CLEANER_MAIN:
+    return os << "CLEANER_MAIN";
+  case transaction_type_t::CLEANER_COLD:
+    return os << "CLEANER_COLD";
   case transaction_type_t::MAX:
     return os << "TRANS_TYPE_NULL";
   default:
@@ -775,8 +792,8 @@ device_type_t string_to_device_type(std::string type) {
   if (type == "SSD") {
     return device_type_t::SSD;
   }
-  if (type == "ZNS") {
-    return device_type_t::ZNS;
+  if (type == "ZBD") {
+    return device_type_t::ZBD;
   }
   if (type == "RANDOM_BLOCK_SSD") {
     return device_type_t::RANDOM_BLOCK_SSD;
@@ -793,10 +810,12 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
     return out << "HDD";
   case device_type_t::SSD:
     return out << "SSD";
-  case device_type_t::ZNS:
-    return out << "ZNS";
-  case device_type_t::SEGMENTED_EPHEMERAL:
-    return out << "SEGMENTED_EPHEMERAL";
+  case device_type_t::ZBD:
+    return out << "ZBD";
+  case device_type_t::EPHEMERAL_COLD:
+    return out << "EPHEMERAL_COLD";
+  case device_type_t::EPHEMERAL_MAIN:
+    return out << "EPHEMERAL_MAIN";
   case device_type_t::RANDOM_BLOCK_SSD:
     return out << "RANDOM_BLOCK_SSD";
   case device_type_t::RANDOM_BLOCK_EPHEMERAL:

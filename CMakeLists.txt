@@ -1,19 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(ceph
-  VERSION 18.0.0
+  VERSION 19.0.0
   LANGUAGES CXX C ASM)
 
-cmake_policy(SET CMP0028 NEW)
-cmake_policy(SET CMP0046 NEW)
-cmake_policy(SET CMP0048 NEW)
-cmake_policy(SET CMP0051 NEW)
-cmake_policy(SET CMP0054 NEW)
-cmake_policy(SET CMP0056 NEW)
-cmake_policy(SET CMP0065 NEW)
-cmake_policy(SET CMP0074 NEW)
-cmake_policy(SET CMP0075 NEW)
-cmake_policy(SET CMP0093 NEW)
 foreach(policy CMP0127 CMP0135)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
@@ -22,10 +12,15 @@ endforeach()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
-if(NOT CMAKE_BUILD_TYPE AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
-  set(default_build_type "Debug")
-  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
-      STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
+if(NOT CMAKE_BUILD_TYPE)
+  if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    message(WARNING "CMAKE_BUILD_TYPE not specified, assuming CMAKE_BUILD_TYPE=Debug because .git exists.")
+    set(default_build_type "Debug")
+    set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+        STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
+  else()
+    message(WARNING "CMAKE_BUILD_TYPE not specified, leaving unset because .git does NOT exist.")
+  endif()
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -41,14 +36,19 @@ if(WIN32)
   # the targeted Windows version. The availability of certain functions and
   # structures will depend on it.
   set(WIN32_WINNT "0x0A00" CACHE STRING "Targeted Windows version.")
-  # In order to avoid known winpthread issues, we're using the boost
-  # shared mutex implementation.
-  # https://github.com/msys2/MINGW-packages/issues/3319
   add_definitions(
     -D_WIN32_WINNT=${WIN32_WINNT}
-    -DBOOST_THREAD_PROVIDES_GENERIC_SHARED_MUTEX_ON_WIN
-    -DBOOST_THREAD_V2_SHARED_MUTEX
+    -DFMT_USE_TZSET=0
   )
+  # In order to avoid known winpthread issues, we're using the Boost
+  # shared mutex implementation. This isn't required with llvm/libc++.
+  # https://github.com/msys2/MINGW-packages/issues/3319
+  if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+    add_definitions(
+      -DBOOST_THREAD_PROVIDES_GENERIC_SHARED_MUTEX_ON_WIN
+      -DBOOST_THREAD_V2_SHARED_MUTEX
+    )
+  endif()
   set(Boost_THREADAPI "win32")
 endif()
 
@@ -247,6 +247,17 @@ set(HAVE_LIBURING ${WITH_LIBURING})
 CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_LIBURING "Require and build with system liburing" OFF
   "HAVE_LIBAIO;WITH_BLUESTORE" OFF)
 
+if(WITH_LIBURING)
+  if(WITH_SYSTEM_LIBURING)
+    find_package(uring REQUIRED)
+  else()
+    include(Builduring)
+    build_uring()
+  endif()
+  # enable uring in boost::asio
+  add_compile_definitions("BOOST_ASIO_HAS_IO_URING")
+endif()
+
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
   "WITH_BLUESTORE" OFF)
 if(WITH_BLUESTORE_PMEM)
@@ -269,6 +280,14 @@ CMAKE_DEPENDENT_OPTION(WITH_RBD_SSD_CACHE "Enable librbd persistent write back c
 
 CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_PMDK "Require and build with system PMDK" OFF
   "WITH_RBD_RWL OR WITH_BLUESTORE_PMEM" OFF)
+
+CMAKE_DEPENDENT_OPTION(WITH_RBD_UBBD "Enable ubbd support for rbd device utility" OFF
+    "WITH_RBD" OFF)
+
+if(WITH_RBD_UBBD)
+  include(BuildUBBD)
+  build_ubbd()
+endif()
 
 if(WITH_BLUESTORE_PMEM)
   set(HAVE_BLUESTORE_PMEM ON)
@@ -391,6 +410,7 @@ if(NOT ALLOCATOR STREQUAL "libc")
     $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
 endif()
+message(STATUS "allocator selected: ${ALLOCATOR}")
 
 # Mingw generates incorrect entry points when using "-pie".
 if(WIN32 OR (HAVE_LIBTCMALLOC AND WITH_STATIC_LIBSTDCXX))
@@ -430,15 +450,19 @@ if(WITH_JAEGER)
 endif()
 
 #option for RGW
-option(WITH_RADOSGW "Rados Gateway is enabled" ON)
-option(WITH_RADOSGW_BEAST_OPENSSL "Rados Gateway's Beast frontend uses OpenSSL" ON)
-option(WITH_RADOSGW_AMQP_ENDPOINT "Rados Gateway's pubsub support for AMQP push endpoint" ON)
-option(WITH_RADOSGW_KAFKA_ENDPOINT "Rados Gateway's pubsub support for Kafka push endpoint" ON)
-option(WITH_RADOSGW_LUA_PACKAGES "Rados Gateway's support for dynamically adding lua packagess" ON)
-option(WITH_RADOSGW_DBSTORE "DBStore backend for Rados Gateway" ON)
-option(WITH_RADOSGW_MOTR "CORTX-Motr backend for Rados Gateway" OFF)
+option(WITH_RADOSGW "RADOS Gateway is enabled" ON)
+option(WITH_RADOSGW_BEAST_OPENSSL "RADOS Gateway's Beast frontend uses OpenSSL" ON)
+option(WITH_RADOSGW_AMQP_ENDPOINT "RADOS Gateway's pubsub support for AMQP push endpoint" ON)
+option(WITH_RADOSGW_KAFKA_ENDPOINT "RADOS Gateway's pubsub support for Kafka push endpoint" ON)
+option(WITH_RADOSGW_LUA_PACKAGES "RADOS Gateway's support for dynamically adding lua packagess" ON)
+option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
+option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
+option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
+option(WITH_RADOSGW_POSIX "POSIX backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
+option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
+option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
@@ -649,7 +673,7 @@ if(WITH_SYSTEM_BOOST)
   if(BOOST_ROOT AND CMAKE_LIBRARY_ARCHITECTURE)
     set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
   endif()
-  find_package(Boost 1.79 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  find_package(Boost 1.82 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
   if(NOT ENABLE_SHARED)
     set_property(TARGET Boost::iostreams APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
@@ -663,10 +687,15 @@ else()
   set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.79
+  build_boost(1.82
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
+
+if(Boost_VERSION VERSION_LESS 1.84)
+  # This is a workaround for https://github.com/boostorg/phoenix/issues/111
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DBOOST_PHOENIX_STL_TUPLE_H_>)
+endif()
 
 # dashboard angular2 frontend
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)

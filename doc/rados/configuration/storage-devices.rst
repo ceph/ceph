@@ -25,6 +25,7 @@ There are several Ceph daemons in a storage cluster:
   additional monitoring and providing interfaces to external
   monitoring and management systems.
 
+.. _rados_config_storage_devices_osd_backends:
 
 OSD Back Ends
 =============
@@ -71,6 +72,8 @@ For more information, see :doc:`bluestore-config-ref` and :doc:`/rados/operation
 
 FileStore
 ---------
+.. warning:: Filestore has been deprecated in the Reef release and is no longer supported.
+
 
 FileStore is the legacy approach to storing objects in Ceph. It
 relies on a standard file system (normally XFS) in combination with a

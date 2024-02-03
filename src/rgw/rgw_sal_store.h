@@ -27,6 +27,13 @@ class StoreDriver : public Driver {
     virtual uint64_t get_new_req_id() override {
       return ceph::util::generate_random_number<uint64_t>();
     }
+
+    int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) override {return -EOPNOTSUPP;}
+    int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+	optional_yield y, const DoutPrefixProvider *dpp) override {return -ENOENT;}
+    int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) override {return -ENOENT;}
 };
 
 class StoreUser : public User {
@@ -51,12 +58,20 @@ class StoreUser : public User {
     virtual const rgw_user& get_id() const override { return info.user_id; }
     virtual uint32_t get_type() const override { return info.type; }
     virtual int32_t get_max_buckets() const override { return info.max_buckets; }
+    virtual void set_max_buckets(int32_t _max_buckets) override {
+      info.max_buckets = _max_buckets;
+    }
     virtual const RGWUserCaps& get_caps() const override { return info.caps; }
     virtual RGWObjVersionTracker& get_version_tracker() override { return objv_tracker; }
     virtual Attrs& get_attrs() override { return attrs; }
     virtual void set_attrs(Attrs& _attrs) override { attrs = _attrs; }
     virtual bool empty() const override { return info.user_id.id.empty(); }
     virtual RGWUserInfo& get_info() override { return info; }
+    virtual void set_info(RGWQuotaInfo& _quota) override {
+      info.quota.user_quota.max_size = _quota.max_size;
+      info.quota.user_quota.max_objects = _quota.max_objects;
+    }
+
     virtual void print(std::ostream& out) const override { out << info.user_id; }
 
     friend class StoreBucket;
@@ -64,9 +79,7 @@ class StoreUser : public User {
 
 class StoreBucket : public Bucket {
   protected:
-    RGWBucketEnt ent;
     RGWBucketInfo info;
-    User* owner = nullptr;
     Attrs attrs;
     obj_version bucket_version;
     ceph::real_time mtime;
@@ -74,48 +87,18 @@ class StoreBucket : public Bucket {
   public:
 
     StoreBucket() = default;
-    StoreBucket(User* _u) :
-      owner(_u) { }
-    StoreBucket(const rgw_bucket& _b) { ent.bucket = _b; info.bucket = _b; }
-    StoreBucket(const RGWBucketEnt& _e) : ent(_e) {
-      info.bucket = ent.bucket;
-      info.placement_rule = ent.placement_rule;
-      info.creation_time = ent.creation_time;
-    }
-    StoreBucket(const RGWBucketInfo& _i) : info(_i) {
-      ent.bucket = info.bucket;
-      ent.placement_rule = info.placement_rule;
-      ent.creation_time = info.creation_time;
-    }
-    StoreBucket(const rgw_bucket& _b, User* _u) :
-      owner(_u) { ent.bucket = _b; info.bucket = _b; }
-    StoreBucket(const RGWBucketEnt& _e, User* _u) : ent(_e), owner(_u) {
-      info.bucket = ent.bucket;
-      info.placement_rule = ent.placement_rule;
-      info.creation_time = ent.creation_time;
-    }
-    StoreBucket(const RGWBucketInfo& _i, User* _u) : info(_i), owner(_u) {
-      ent.bucket = info.bucket;
-      ent.placement_rule = info.placement_rule;
-      ent.creation_time = info.creation_time;
-    }
+    StoreBucket(const rgw_bucket& b) { info.bucket = b; }
+    StoreBucket(const RGWBucketInfo& i) : info(i) {}
     virtual ~StoreBucket() = default;
 
     virtual Attrs& get_attrs(void) override { return attrs; }
     virtual int set_attrs(Attrs a) override { attrs = a; return 0; }
-    virtual void set_owner(rgw::sal::User* _owner) override {
-      owner = _owner;
-    }
-    virtual User* get_owner(void) override { return owner; };
-    virtual ACLOwner get_acl_owner(void) override { return ACLOwner(info.owner); };
+    virtual const rgw_user& get_owner() const override { return info.owner; };
     virtual bool empty() const override { return info.bucket.name.empty(); }
     virtual const std::string& get_name() const override { return info.bucket.name; }
     virtual const std::string& get_tenant() const override { return info.bucket.tenant; }
     virtual const std::string& get_marker() const override { return info.bucket.marker; }
     virtual const std::string& get_bucket_id() const override { return info.bucket.bucket_id; }
-    virtual size_t get_size() const override { return ent.size; }
-    virtual size_t get_size_rounded() const override { return ent.size_rounded; }
-    virtual uint64_t get_count() const override { return ent.count; }
     virtual rgw_placement_rule& get_placement_rule() override { return info.placement_rule; }
     virtual ceph::real_time& get_creation_time() override { return info.creation_time; }
     virtual ceph::real_time& get_modification_time() override { return mtime; }
@@ -147,44 +130,30 @@ class StoreBucket : public Bucket {
 	     (info.bucket.bucket_id != sb.info.bucket.bucket_id);
     }
 
+    int read_topics(rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) override {return 0;}
+    int write_topics(const rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) override {return 0;}
+    int remove_topics(RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) override {return 0;}
+
     friend class BucketList;
-  protected:
-    virtual void set_ent(RGWBucketEnt& _ent) { ent = _ent; info.bucket = ent.bucket; info.placement_rule = ent.placement_rule; }
 };
 
 class StoreObject : public Object {
   protected:
     RGWObjState state;
-    Bucket* bucket;
-    Attrs attrs;
+    Bucket* bucket = nullptr;
     bool delete_marker{false};
 
   public:
-
-    struct StoreReadOp : ReadOp {
-      virtual ~StoreReadOp() = default;
-    };
-
-    struct StoreDeleteOp : DeleteOp {
-      virtual ~StoreDeleteOp() = default;
-    };
-
-    StoreObject()
-      : state(),
-      bucket(nullptr),
-      attrs()
-      {}
+    StoreObject() = default;
     StoreObject(const rgw_obj_key& _k)
-      : state(),
-      bucket(),
-      attrs()
-      { state.obj.key = _k; }
+    { state.obj.key = _k; }
     StoreObject(const rgw_obj_key& _k, Bucket* _b)
-      : state(),
-      bucket(_b),
-      attrs()
-      { state.obj.init(_b->get_key(), _k); }
-    StoreObject(StoreObject& _o) = default;
+      : bucket(_b)
+    { state.obj.init(_b->get_key(), _k); }
+    StoreObject(const StoreObject& _o) = default;
 
     virtual ~StoreObject() = default;
 
@@ -209,6 +178,9 @@ class StoreObject : public Object {
 
     virtual bool empty() const override { return state.obj.empty(); }
     virtual const std::string &get_name() const override { return state.obj.key.name; }
+    virtual void set_obj_state(RGWObjState& _state) override {
+      state = _state;
+    }
     virtual Attrs& get_attrs(void) override { return state.attrset; }
     virtual const Attrs& get_attrs(void) const override { return state.attrset; }
     virtual int set_attrs(Attrs a) override { state.attrset = a; state.has_attrs = true; return 0; }
@@ -244,6 +216,16 @@ class StoreObject : public Object {
       /* Return failure here, so stores which don't transition to cloud will
        * work with lifecycle */
       return -1;
+    }
+
+    virtual int get_torrent_info(const DoutPrefixProvider* dpp,
+                                 optional_yield y, bufferlist& bl) override {
+      const auto& attrs = get_attrs();
+      if (auto i = attrs.find(RGW_ATTR_TORRENT); i != attrs.end()) {
+        bl = i->second;
+        return 0;
+      }
+      return -ENOENT;
     }
 
     virtual void print(std::ostream& out) const override {
@@ -417,7 +399,18 @@ class StoreZone : public Zone {
 };
 
 class StoreLuaManager : public LuaManager {
+protected:
+  std::string _luarocks_path;
 public:
+  const std::string& luarocks_path() const override {
+    return _luarocks_path;
+  }
+  void set_luarocks_path(const std::string& path) override {
+    _luarocks_path = path;
+  }
+  StoreLuaManager() = default;
+  StoreLuaManager(const std::string& __luarocks_path) :
+    _luarocks_path(__luarocks_path) {}
   virtual ~StoreLuaManager() = default;
 };
 

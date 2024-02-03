@@ -112,6 +112,8 @@ const char *ceph_release_name(int r)
 		return "quincy";
 	case CEPH_RELEASE_REEF:
 		return "reef";
+	case CEPH_RELEASE_SQUID:
+		return "squid";
 	default:
 		if (r < 0)
 			return "unspecified";
@@ -300,6 +302,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_MKSNAP: return "mksnap";
 	case CEPH_MDS_OP_RMSNAP: return "rmsnap";
 	case CEPH_MDS_OP_RENAMESNAP: return "renamesnap";
+	case CEPH_MDS_OP_READDIR_SNAPDIFF: return "readdir_snapdiff";
 	case CEPH_MDS_OP_SETFILELOCK: return "setfilelock";
 	case CEPH_MDS_OP_GETFILELOCK: return "getfilelock";
 	case CEPH_MDS_OP_FRAGMENTDIR: return "fragmentdir";

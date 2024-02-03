@@ -80,9 +80,8 @@ batch
 
 .. program:: ceph-volume lvm batch
 
-Creates OSDs from a list of devices using a ``filestore``
-or ``bluestore`` (default) setup. It will create all necessary volume groups
-and logical volumes required to have a working OSD.
+Creates OSDs from a list of devices using a ``bluestore`` (default) setup. 
+It will create all necessary volume groups and logical volumes required to have a working OSD.
 
 Example usage with three devices::
 
@@ -97,10 +96,6 @@ Optional arguments:
 .. option:: --bluestore
 
    Use the bluestore objectstore (default)
-
-.. option:: --filestore
-
-   Use the filestore objectstore
 
 .. option:: --yes
 
@@ -179,10 +174,6 @@ Optional Arguments:
 
    bluestore objectstore (default)
 
-.. option:: --filestore
-
-   filestore objectstore
-
 .. option:: --all
 
    Activate all OSDs found in the system
@@ -202,13 +193,12 @@ prepare
 
 .. program:: ceph-volume lvm prepare
 
-Prepares a logical volume to be used as an OSD and journal using a ``filestore``
-or ``bluestore`` (default) setup. It will not create or modify the logical volumes
-except for adding extra metadata.
+Prepares a logical volume to be used as an OSD and journal using a ``bluestore`` (default) setup. 
+It will not create or modify the logical volumes except for adding extra metadata.
 
 Usage::
 
-    ceph-volume lvm prepare --filestore --data <data lv> --journal <journal device>
+    ceph-volume lvm prepare --bluestore --data <data lv> --journal <journal device>
 
 Optional arguments:
 
@@ -231,10 +221,6 @@ Optional arguments:
 .. option:: --block.db
 
    Path to a bluestore block.db logical volume or partition
-
-.. option:: --filestore
-
-   Use the filestore objectstore
 
 .. option:: --dmcrypt
 
@@ -492,10 +478,6 @@ Optional Arguments:
 .. option:: --bluestore
 
    bluestore objectstore (default)
-
-.. option:: --filestore
-
-   filestore objectstore
 
 .. note::
 

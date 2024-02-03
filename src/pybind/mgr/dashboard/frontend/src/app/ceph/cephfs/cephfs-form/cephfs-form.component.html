@@ -1,0 +1,118 @@
+<div class="cd-col-form"
+     *ngIf="orchStatus$ | async as orchStatus">
+  <form #frm="ngForm"
+        #formDir="ngForm"
+        [formGroup]="form"
+        novalidate>
+    <div class="card">
+      <div i18n="form title|Example: Create Volume@@formTitle"
+           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+
+      <ng-container *ngIf="!orchStatus.available">
+        <cd-alert-panel type="info"
+                        class="m-3"
+                        spacingClass="mt-3"
+                        i18n
+                        *ngIf="!editing">Orchestrator is not configured. Deploy MDS daemons manually after creating the volume.</cd-alert-panel>
+      </ng-container>
+
+      <cd-alert-panel type="info"
+                      class="m-3"
+                      spacingClass="mt-3"
+                      i18n
+                      *ngIf="editing && disableRename">
+        <p>The File System can only be renamed if it is shutdown and `refuse_client_session` is set to true.
+           Follow the steps below in the command line and refresh the page:</p>
+        <cd-code-block [codes]="[fsFailCmd]"></cd-code-block>
+        <cd-code-block [codes]="[fsSetCmd]"></cd-code-block>
+      </cd-alert-panel>
+
+      <div class="card-body">
+        <!-- Name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="name"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
+            <input id="name"
+                   name="name"
+                   type="text"
+                   class="form-control"
+                   placeholder="Name..."
+                   i18n-placeholder
+                   formControlName="name"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="form.showError('name', formDir, 'required')"
+                  i18n>This field is required!</span>
+            <span *ngIf="form.showError('name', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>File System name should start with a letter and can only contain letters, numbers, '.', '-' or '_'</span>
+          </div>
+        </div>
+
+        <ng-container *ngIf="orchStatus.available">
+          <!-- Placement -->
+          <div class="form-group row"
+               *ngIf="!editing">
+            <label class="cd-col-form-label"
+                   for="placement"
+                   i18n>Placement</label>
+            <div class="cd-col-form-input">
+              <select id="placement"
+                      class="form-select"
+                      formControlName="placement">
+                <option i18n
+                        value="hosts">Hosts</option>
+                <option i18n
+                        value="label">Label</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Label -->
+          <div *ngIf="form.controls.placement.value === 'label' && !editing"
+               class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="label">Label</label>
+            <div class="cd-col-form-input">
+              <input id="label"
+                     class="form-control"
+                     type="text"
+                     formControlName="label"
+                     [ngbTypeahead]="searchLabels"
+                     (focus)="labelFocus.next($any($event).target.value)"
+                     (click)="labelClick.next($any($event).target.value)">
+              <span class="invalid-feedback"
+                    *ngIf="form.showError('label', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+          <!-- Hosts -->
+          <div *ngIf="form.controls.placement.value === 'hosts' && !editing"
+               class="form-group row">
+            <label class="cd-col-form-label"
+                   for="hosts"
+                   i18n>Hosts</label>
+            <div class="cd-col-form-input">
+              <cd-select-badges id="hosts"
+                                [data]="form.controls.hosts.value"
+                                [options]="hosts.options"
+                                [messages]="hosts.messages">
+              </cd-select-badges>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+      <div class="card-footer">
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="form"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              [disabled]="editing ? disableRename: false"
+                              wrappingClass="text-right"></cd-form-button-panel>
+      </div>
+    </div>
+  </form>
+</div>

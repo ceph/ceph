@@ -45,6 +45,7 @@ enum {
   l_mdssm_total_load,
   l_mdssm_avg_load,
   l_mdssm_avg_session_uptime,
+  l_mdssm_metadata_threshold_sessions_evicted,
   l_mdssm_last,
 };
 
@@ -313,6 +314,7 @@ public:
   bool trim_completed_requests(ceph_tid_t mintid) {
     // trim
     bool erased_any = false;
+    last_trim_completed_requests_tid = mintid;
     while (!info.completed_requests.empty() && 
 	   (mintid == 0 || info.completed_requests.begin()->first < mintid)) {
       info.completed_requests.erase(info.completed_requests.begin());
@@ -338,6 +340,7 @@ public:
   }
   bool trim_completed_flushes(ceph_tid_t mintid) {
     bool erased_any = false;
+    last_trim_completed_flushes_tid = mintid;
     while (!info.completed_flushes.empty() &&
 	(mintid == 0 || *info.completed_flushes.begin() < mintid)) {
       info.completed_flushes.erase(info.completed_flushes.begin());
@@ -492,6 +495,9 @@ private:
 
   unsigned num_trim_flushes_warnings = 0;
   unsigned num_trim_requests_warnings = 0;
+
+  ceph_tid_t last_trim_completed_requests_tid = 0;
+  ceph_tid_t last_trim_completed_flushes_tid = 0;
 };
 
 class SessionFilter
@@ -589,7 +595,7 @@ protected:
 class SessionMap : public SessionMapStore {
 public:
   SessionMap() = delete;
-  explicit SessionMap(MDSRank *m) : mds(m) {}
+  explicit SessionMap(MDSRank *m);
 
   ~SessionMap() override
   {
@@ -838,6 +844,11 @@ private:
   }
 
   time avg_birth_time = clock::zero();
+
+  size_t mds_session_metadata_threshold;
+
+  bool validate_and_encode_session(MDSRank *mds, Session *session, bufferlist& bl);
+  void apply_blocklist(const std::set<entity_name_t>& victims);
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);

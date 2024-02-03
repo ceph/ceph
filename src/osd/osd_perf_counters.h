@@ -5,6 +5,7 @@
 
 #include "include/common_fwd.h"
 #include "common/perf_counters.h"
+#include "common/perf_counters_key.h"
 
 enum {
   l_osd_first = 10000,
@@ -36,6 +37,9 @@ enum {
   l_osd_op_rw_process_lat,
   l_osd_op_rw_prepare_lat,
 
+  l_osd_op_delayed_unreadable,
+  l_osd_op_delayed_degraded,
+
   l_osd_op_before_queue_op_lat,
   l_osd_op_before_dequeue_op_lat,
 
@@ -57,6 +61,16 @@ enum {
 
   l_osd_rop,
   l_osd_rbytes,
+
+  l_osd_recovery_push_queue_lat,
+  l_osd_recovery_push_reply_queue_lat,
+  l_osd_recovery_pull_queue_lat,
+  l_osd_recovery_backfill_queue_lat,
+  l_osd_recovery_backfill_remove_queue_lat,
+  l_osd_recovery_scan_queue_lat,
+
+  l_osd_recovery_queue_lat,
+  l_osd_recovery_context_queue_lat,
 
   l_osd_loadavg,
   l_osd_cached_crc,
@@ -118,6 +132,10 @@ enum {
   l_osd_pg_fastinfo,
   l_osd_pg_biginfo,
 
+  // scrubber related. Here, as the rest of the scrub counters
+  // are labeled, and histograms do not fully support labels.
+  l_osd_scrub_reservation_dur_hist,
+
   l_osd_last,
 };
 
@@ -161,3 +179,57 @@ enum {
 };
 
 PerfCounters *build_recoverystate_perf(CephContext *cct);
+
+// Scrubber perf counters. There are four sets (shallow vs. deep,
+// EC vs. replicated) of these counters:
+enum {
+  scrbcnt_first = 20500,
+
+  // -- basic statistics --
+  /// The number of times we started a scrub
+  scrbcnt_started,
+  /// # scrubs that got past replicas reservation
+  scrbcnt_active_started,
+  /// # successful scrubs
+  scrbcnt_successful,
+  /// time to complete a successful scrub
+  scrbcnt_successful_elapsed,
+  /// # failed scrubs
+  scrbcnt_failed,
+  /// time for a scrub to fail
+  scrbcnt_failed_elapsed,
+
+  // -- interruptions of various types
+  /// # preemptions
+  scrbcnt_preempted,
+  /// # chunks selection performed
+  scrbcnt_chunks_selected,
+  /// # busy chunks
+  scrbcnt_chunks_busy,
+  /// # waiting on object events
+  scrbcnt_blocked,
+  /// # write blocked by the scrub
+  scrbcnt_write_blocked,
+
+  // -- replicas reservation
+  /// # successfully completed reservation steps
+  scrbcnt_resrv_success,
+  /// time to complete a successful replicas reservation
+  scrbcnt_resrv_successful_elapsed,
+  /// # failed attempt to reserve replicas due to an abort
+  scrbcnt_resrv_aborted,
+  /// # reservation process timed out
+  scrbcnt_resrv_timed_out,
+  /// # reservation failed due to a 'rejected' response
+  scrbcnt_resrv_rejected,
+  /// # reservation skipped for high-priority scrubs
+  scrbcnt_resrv_skipped,
+  /// time for a replicas reservation process to fail
+  scrbcnt_resrv_failed_elapsed,
+  /// # number of replicas
+  scrbcnt_resrv_replicas_num,
+
+  scrbcnt_last,
+};
+
+PerfCounters *build_scrub_labeled_perf(CephContext *cct, std::string label);

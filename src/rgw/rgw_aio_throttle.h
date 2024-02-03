@@ -15,12 +15,10 @@
 
 #pragma once
 
-#include "include/rados/librados_fwd.hpp"
 #include <memory>
 #include "common/ceph_mutex.h"
 #include "common/async/completion.h"
 #include "common/async/yield_context.h"
-#include "services/svc_rados.h"
 #include "rgw_aio.h"
 
 namespace rgw {
@@ -61,14 +59,13 @@ class BlockingAioThrottle final : public Aio, private Throttle {
   struct Pending : AioResultEntry {
     BlockingAioThrottle *parent = nullptr;
     uint64_t cost = 0;
-    librados::AioCompletion *completion = nullptr;
   };
  public:
   BlockingAioThrottle(uint64_t window) : Throttle(window) {}
 
   virtual ~BlockingAioThrottle() override {};
 
-  AioResultList get(const RGWSI_RADOS::Obj& obj, OpFunc&& f,
+  AioResultList get(rgw_raw_obj obj, OpFunc&& f,
                     uint64_t cost, uint64_t id) override final;
 
   void put(AioResult& r) override final;
@@ -84,7 +81,7 @@ class BlockingAioThrottle final : public Aio, private Throttle {
 // functions must be called within the coroutine strand
 class YieldingAioThrottle final : public Aio, private Throttle {
   boost::asio::io_context& context;
-  yield_context yield;
+  spawn::yield_context yield;
   struct Handler;
 
   // completion callback associated with the waiter
@@ -98,13 +95,13 @@ class YieldingAioThrottle final : public Aio, private Throttle {
 
  public:
   YieldingAioThrottle(uint64_t window, boost::asio::io_context& context,
-                      yield_context yield)
+                      spawn::yield_context yield)
     : Throttle(window), context(context), yield(yield)
   {}
 
   virtual ~YieldingAioThrottle() override {};
 
-  AioResultList get(const RGWSI_RADOS::Obj& obj, OpFunc&& f,
+  AioResultList get(rgw_raw_obj obj, OpFunc&& f,
                     uint64_t cost, uint64_t id) override final;
 
   void put(AioResult& r) override final;

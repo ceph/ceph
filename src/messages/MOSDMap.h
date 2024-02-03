@@ -30,7 +30,25 @@ public:
   uint64_t encode_features = 0;
   std::map<epoch_t, ceph::buffer::list> maps;
   std::map<epoch_t, ceph::buffer::list> incremental_maps;
-  epoch_t oldest_map =0, newest_map = 0;
+  /**
+   * cluster_osdmap_trim_lower_bound
+   *
+   * Encodes a lower bound on the monitor's osdmap trim bound.  Recipients
+   * can safely trim up to this bound.  The sender stores maps back to
+   * cluster_osdmap_trim_lower_bound.
+   *
+   * This field was formerly named oldest_map and encoded the oldest map
+   * stored by the sender.  The primary usage of this field, however, was to
+   * allow the recipient to trim.  The secondary usage was to inform the
+   * recipient of how many maps the sender stored in case it needed to request
+   * more.  For both purposes, it should be safe for an older OSD to interpret
+   * this field as oldest_map, and it should be safe for a new osd to interpret
+   * the oldest_map field sent by an older osd as
+   * cluster_osdmap_trim_lower_bound.
+   * See bug https://tracker.ceph.com/issues/49689
+   */
+  epoch_t cluster_osdmap_trim_lower_bound = 0;
+  epoch_t newest_map = 0;
 
   epoch_t get_first() const {
     epoch_t e = 0;
@@ -50,19 +68,12 @@ public:
         (e == 0 || i->first > e)) e = i->first;
     return e;
   }
-  epoch_t get_oldest() {
-    return oldest_map;
-  }
-  epoch_t get_newest() {
-    return newest_map;
-  }
-
 
   MOSDMap() : Message{CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION} { }
   MOSDMap(const uuid_d &f, const uint64_t features)
     : Message{CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION},
       fsid(f), encode_features(features),
-      oldest_map(0), newest_map(0) { }
+      cluster_osdmap_trim_lower_bound(0), newest_map(0) { }
 private:
   ~MOSDMap() final {}
 public:
@@ -74,10 +85,10 @@ public:
     decode(incremental_maps, p);
     decode(maps, p);
     if (header.version >= 2) {
-      decode(oldest_map, p);
+      decode(cluster_osdmap_trim_lower_bound, p);
       decode(newest_map, p);
     } else {
-      oldest_map = 0;
+      cluster_osdmap_trim_lower_bound = 0;
       newest_map = 0;
     }
     if (header.version >= 4) {
@@ -143,7 +154,7 @@ public:
     encode(incremental_maps, payload);
     encode(maps, payload);
     if (header.version >= 2) {
-      encode(oldest_map, payload);
+      encode(cluster_osdmap_trim_lower_bound, payload);
       encode(newest_map, payload);
     }
     if (header.version >= 4) {
@@ -154,8 +165,9 @@ public:
   std::string_view get_type_name() const override { return "osdmap"; }
   void print(std::ostream& out) const override {
     out << "osd_map(" << get_first() << ".." << get_last();
-    if (oldest_map || newest_map)
-      out << " src has " << oldest_map << ".." << newest_map;
+    if (cluster_osdmap_trim_lower_bound || newest_map)
+      out << " src has " << cluster_osdmap_trim_lower_bound
+          << ".." << newest_map;
     out << ")";
   }
 private:

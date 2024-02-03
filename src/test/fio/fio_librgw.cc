@@ -21,8 +21,6 @@
 
 #include <semaphore.h> // XXX kill this?
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include "fmt/include/fmt/format.h"
 
 #include "include/rados/librgw.h"

@@ -4,11 +4,12 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { inject, TestBed } from '@angular/core/testing';
 
 import { DataGatewayService } from './data-gateway.service';
+import { RouterTestingModule } from '@angular/router/testing';
 
 describe('Service: DataGateway', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule],
+      imports: [HttpClientTestingModule, RouterTestingModule],
       providers: [DataGatewayService]
     });
   });

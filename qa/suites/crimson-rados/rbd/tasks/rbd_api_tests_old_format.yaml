@@ -10,4 +10,4 @@ tasks:
 - workunit:
     clients:
       client.0:
-        - rbd/test_librbd.sh
+        - rbd/crimson/test_crimson_librbd.sh

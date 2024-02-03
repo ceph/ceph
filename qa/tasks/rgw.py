@@ -239,6 +239,7 @@ def start_rgw(ctx, config, clients):
                     ],
                 )
             ctx.cluster.only(client).run(args=['sudo', 'rm', '-f', token_path])
+            rgwadmin(ctx, client, cmd=['gc', 'process', '--include-all'], check_status=True)
 
 def assign_endpoints(ctx, config, default_cert):
     role_endpoints = {}

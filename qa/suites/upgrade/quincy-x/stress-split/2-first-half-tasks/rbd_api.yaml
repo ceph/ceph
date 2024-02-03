@@ -3,8 +3,10 @@ meta:
    librbd C and C++ api tests
 first-half-tasks:
 - workunit:
-     branch: octopus
+     branch: quincy
      clients:
         client.0:
            - rbd/test_librbd.sh
+     env:
+       RBD_FEATURES: "61"
 - print: "**** done rbd/test_librbd.sh 7-workload"

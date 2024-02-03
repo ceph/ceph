@@ -1,5 +1,6 @@
 # vim: expandtab smarttab shiftwidth=4 softtabstop=4
-from nose.tools import assert_raises, assert_equal, with_setup
+import pytest
+from assertions import assert_raises, assert_equal
 import rgw as librgwfs
 
 rgwfs = None
@@ -19,7 +20,8 @@ def teardown_module():
     rgwfs.shutdown()
 
 
-def setup_test():
+@pytest.fixture
+def testdir():
     global root_dir_handler
 
     names = []
@@ -36,13 +38,11 @@ def setup_test():
         rgwfs.unlink(root_dir_handler, name, 0)
 
 
-@with_setup(setup_test)
 def test_version():
     rgwfs.version()
 
 
-@with_setup(setup_test)
-def test_fstat():
+def test_fstat(testdir):
     stat = rgwfs.fstat(root_dir_handler)
     assert(len(stat) == 13)
     file_handler = rgwfs.create(root_dir_handler, b'file-1', 0)
@@ -51,14 +51,12 @@ def test_fstat():
     rgwfs.close(file_handler)
 
 
-@with_setup(setup_test)
-def test_statfs():
+def test_statfs(testdir):
     stat = rgwfs.statfs()
     assert(len(stat) == 11)
 
 
-@with_setup(setup_test)
-def test_fsync():
+def test_fsync(testdir):
     fd = rgwfs.create(root_dir_handler, b'file-1', 0)
     rgwfs.write(fd, 0, b"asdf")
     rgwfs.fsync(fd, 0)
@@ -67,15 +65,13 @@ def test_fsync():
     rgwfs.close(fd)
 
 
-@with_setup(setup_test)
-def test_directory():
+def test_directory(testdir):
     dir_handler = rgwfs.mkdir(root_dir_handler, b"temp-directory", 0)
     rgwfs.close(dir_handler)
     rgwfs.unlink(root_dir_handler, b"temp-directory")
 
 
-@with_setup(setup_test)
-def test_walk_dir():
+def test_walk_dir(testdir):
     dirs = [b"dir-1", b"dir-2", b"dir-3"]
     handles = []
     for i in dirs:
@@ -96,8 +92,7 @@ def test_walk_dir():
         rgwfs.unlink(root_dir_handler, name)
 
 
-@with_setup(setup_test)
-def test_rename():
+def test_rename(testdir):
     file_handler = rgwfs.create(root_dir_handler, b"a", 0)
     rgwfs.close(file_handler)
     rgwfs.rename(root_dir_handler, b"a", root_dir_handler, b"b")
@@ -107,8 +102,7 @@ def test_rename():
     rgwfs.unlink(root_dir_handler, b"b")
 
 
-@with_setup(setup_test)
-def test_open():
+def test_open(testdir):
     assert_raises(librgwfs.ObjectNotFound, rgwfs.open,
                   root_dir_handler, b'file-1', 0)
     assert_raises(librgwfs.ObjectNotFound, rgwfs.open,
@@ -131,8 +125,7 @@ def test_open():
     rgwfs.unlink(root_dir_handler, b"file-1")
 
 
-@with_setup(setup_test)
-def test_mount_unmount():
+def test_mount_unmount(testdir):
     global root_handler
     global root_dir_handler
     test_directory()

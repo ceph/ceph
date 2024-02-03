@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "common/async/context_pool.h"
 #include "common/ceph_context.h"
 #include "rgw_common.h"
 #include "rgw_auth_registry.h"
@@ -7,6 +8,8 @@
 #include "rgw_lua_request.h"
 #include "rgw_lua_background.h"
 #include "rgw_lua_data_filter.h"
+#include "driver/rados/rgw_zone.h"
+#include "rgw_sal_config.h"
 
 using namespace std;
 using namespace rgw;
@@ -74,11 +77,7 @@ public:
     return std::unique_ptr<User>(new TestUser(*this));
   }
 
-  virtual int list_buckets(const DoutPrefixProvider *dpp, const string&, const string&, uint64_t, bool, sal::BucketList&, optional_yield y) override {
-    return 0;
-  }
-
-  virtual int create_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, const std::string& zonegroup_id, rgw_placement_rule& placement_rule, std::string& swift_ver_location, const RGWQuotaInfo* pquota_info, const RGWAccessControlPolicy& policy, sal::Attrs& attrs, RGWBucketInfo& info, obj_version& ep_objv, bool exclusive, bool obj_lock_enabled, bool* existed, req_info& req_info, std::unique_ptr<sal::Bucket>* bucket, optional_yield y) override {
+  virtual int list_buckets(const DoutPrefixProvider *dpp, const string&, const string&, uint64_t, bool, sal::BucketList& results, optional_yield y) {
     return 0;
   }
 
@@ -90,7 +89,7 @@ public:
     return 0;
   }
 
-  virtual int read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB *cb) override {
+  virtual int read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<sal::ReadStatsCB> cb) override {
     return 0;
   }
 
@@ -102,7 +101,7 @@ public:
     return 0;
   }
 
-  virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) override {
+  virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override {
     return 0;
   }
 
@@ -163,8 +162,35 @@ CctCleaner cleaner(g_cct);
 
 tracing::Tracer tracer;
 
-#define DEFINE_REQ_STATE RGWProcessEnv pe; RGWEnv e; req_state s(g_cct, pe, &e, 0);
-#define INIT_TRACE tracer.init("test"); \
+inline std::unique_ptr<sal::RadosStore> make_store() {
+  auto context_pool = std::make_unique<ceph::async::io_context_pool>(
+    g_cct->_conf->rgw_thread_pool_size);
+  std::unique_ptr<rgw::SiteConfig> site = rgw::SiteConfig::make_fake();
+
+
+  struct StoreBundle : public sal::RadosStore {
+    std::unique_ptr<ceph::async::io_context_pool> context_pool;
+    std::unique_ptr<rgw::SiteConfig> site;
+    StoreBundle(std::unique_ptr<ceph::async::io_context_pool> context_pool_,
+                std::unique_ptr<rgw::SiteConfig> site_)
+      : sal::RadosStore(*context_pool_.get(), *site_),
+        context_pool(std::move(context_pool_)),
+        site(std::move(site_)) {
+      setRados(new RGWRados);
+    }
+    virtual ~StoreBundle() = default;
+  };
+  return std::make_unique<StoreBundle>(std::move(context_pool),
+                                       std::move(site));
+};
+
+#define DEFINE_REQ_STATE RGWProcessEnv pe; \
+  auto store = make_store();                   \
+  pe.lua.manager = store->get_lua_manager(""); \
+  RGWEnv e; \
+  req_state s(g_cct, pe, &e, 0);
+
+#define INIT_TRACE tracer.init(g_cct, "test"); \
                    s.trace = tracer.start_trace("test", true);
 
 TEST(TestRGWLua, EmptyScript)
@@ -321,8 +347,6 @@ TEST(TestRGWLua, Bucket)
     assert(Request.Bucket.Marker == "mymarker")
     assert(Request.Bucket.Name == "myname")
     assert(Request.Bucket.Tenant == "mytenant")
-    assert(Request.Bucket.Count == 0)
-    assert(Request.Bucket.Size == 0)
     assert(Request.Bucket.ZoneGroupId)
     assert(Request.Bucket.CreationTime)
     assert(Request.Bucket.MTime)
@@ -330,18 +354,20 @@ TEST(TestRGWLua, Bucket)
     assert(Request.Bucket.Quota.MaxObjects == -1)
     assert(tostring(Request.Bucket.Quota.Enabled))
     assert(tostring(Request.Bucket.Quota.Rounded))
-    assert(Request.Bucket.User.Id)
-    assert(Request.Bucket.User.Tenant)
+    assert(Request.Bucket.User.Id == "myuser")
+    assert(Request.Bucket.User.Tenant == "mytenant")
   )";
 
   DEFINE_REQ_STATE;
 
-  rgw_bucket b;
-  b.tenant = "mytenant";
-  b.name = "myname";
-  b.marker = "mymarker";
-  b.bucket_id = "myid"; 
-  s.bucket.reset(new sal::RadosBucket(nullptr, b));
+  RGWBucketInfo info;
+  info.bucket.tenant = "mytenant";
+  info.bucket.name = "myname";
+  info.bucket.marker = "mymarker";
+  info.bucket.bucket_id = "myid";
+  info.owner.id = "myuser";
+  info.owner.tenant = "mytenant";
+  s.bucket.reset(new sal::RadosBucket(nullptr, info));
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
@@ -485,13 +511,158 @@ TEST(TestRGWLua, Metadata)
   ASSERT_EQ(rc, 0);
 }
 
+TEST(TestRGWLua, WriteMetadata)
+{
+  const std::string script = R"(
+    -- change existing entry
+    Request.HTTP.Metadata["hello"] = "earth"
+    -- add new entry
+    Request.HTTP.Metadata["goodbye"] = "mars"
+    -- delete existing entry
+    Request.HTTP.Metadata["foo"] = nil
+    -- delete missing entry
+    Request.HTTP.Metadata["venus"] = nil
+
+    assert(Request.HTTP.Metadata["hello"] == "earth")
+    assert(Request.HTTP.Metadata["goodbye"] == "mars")
+    assert(Request.HTTP.Metadata["foo"] == nil)
+    assert(Request.HTTP.Metadata["venus"] == nil)
+  )";
+
+  DEFINE_REQ_STATE;
+  s.info.x_meta_map["hello"] = "world";
+  s.info.x_meta_map["foo"] = "bar";
+  s.info.x_meta_map["ka"] = "boom";
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, MetadataIterateWrite)
+{
+  const std::string script = R"(
+    assert(#Request.HTTP.Metadata == 7)
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      counter = counter + 1
+      if tostring(k) == "c" then
+        Request.HTTP.Metadata["c"] = nil
+        print("'c' is deleted and iterator moves")
+        assert(tostring(k) ~= "c")
+      end
+    end
+    assert(counter == 6)
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      counter = counter + 1
+      if tostring(k) == "d" then
+        Request.HTTP.Metadata["e"] = nil
+        print("'e' is deleted")
+      end
+      assert(tostring(k) ~= "e")
+    end
+    assert(counter == 5)
+  )";
+
+  DEFINE_REQ_STATE;
+  s.info.x_meta_map["a"] = "1";
+  s.info.x_meta_map["b"] = "2";
+  s.info.x_meta_map["c"] = "3";
+  s.info.x_meta_map["d"] = "4";
+  s.info.x_meta_map["e"] = "5";
+  s.info.x_meta_map["f"] = "6";
+  s.info.x_meta_map["g"] = "7";
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+  ASSERT_EQ(s.info.x_meta_map.count("c"), 0);
+}
+
+TEST(TestRGWLua, MetadataIterator)
+{
+
+  DEFINE_REQ_STATE;
+  s.info.x_meta_map["a"] = "1";
+  s.info.x_meta_map["b"] = "2";
+  s.info.x_meta_map["c"] = "3";
+  s.info.x_meta_map["d"] = "4";
+  s.info.x_meta_map["e"] = "5";
+  s.info.x_meta_map["f"] = "6";
+  s.info.x_meta_map["g"] = "7";
+  
+  std::string script = R"(
+    -- nested loop
+    counter = 0
+    for k1,v1 in pairs(Request.HTTP.Metadata) do
+      assert(k1)
+      assert(v2)
+      for k2,v2 in pairs(Request.HTTP.Metadata) do
+        print("we should not reach this line")
+        print(k2, v2)
+      end
+      counter = counter + 1
+    end
+  )";
+
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+  
+  script = R"(
+    -- break loop
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      counter = counter + 1
+      assert(k)
+      assert(v)
+      if counter == 3 then
+        break
+      end
+      counter = counter + 1
+    end
+    -- full loop
+    for k,v in pairs(Request.HTTP.Metadata) do
+        print("we should not reach this line")
+      print(k,v)
+    end
+  )";
+
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+  
+  script = R"(
+    -- 2 loops
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+     assert(k)
+     assert(v)
+     counter = counter + 1
+    end
+    assert(counter == #Request.HTTP.Metadata)
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      assert(k)
+      assert(v)
+      counter = counter + 1
+    end
+    assert(counter == #Request.HTTP.Metadata)
+  )";
+
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
 TEST(TestRGWLua, Acl)
 {
   const std::string script = R"(
-    function print_grant(g)
+    function print_grant(k, g)
+      print("Grant Key: " .. tostring(k))
       print("Grant Type: " .. g.Type)
-      print("Grant Group Type: " .. g.GroupType)
-      print("Grant Referer: " .. g.Referer)
+      if (g.GroupType) then
+        print("Grant Group Type: " .. g.GroupType)
+      end
+      if (g.Referer) then
+        print("Grant Referer: " .. g.Referer)
+      end
       if (g.User) then
         print("Grant User.Tenant: " .. g.User.Tenant)
         print("Grant User.Id: " .. g.User.Id)
@@ -501,37 +672,42 @@ TEST(TestRGWLua, Acl)
     assert(Request.UserAcl.Owner.DisplayName == "jack black", Request.UserAcl.Owner.DisplayName)
     assert(Request.UserAcl.Owner.User.Id == "black", Request.UserAcl.Owner.User.Id)
     assert(Request.UserAcl.Owner.User.Tenant == "jack", Request.UserAcl.Owner.User.Tenant)
-    assert(#Request.UserAcl.Grants == 5)
-    print_grant(Request.UserAcl.Grants[""])
+    assert(#Request.UserAcl.Grants == 7)
+    print_grant("", Request.UserAcl.Grants[""])
     for k, v in pairs(Request.UserAcl.Grants) do
-      print_grant(v)
-      if k == "john$doe" then
+      if tostring(k) == "john$doe" then
         assert(v.Permission == 4)
-      elseif k == "jane$doe" then
+      elseif tostring(k) == "jane$doe" then
         assert(v.Permission == 1)
-      else
+      elseif tostring(k) == "kill$bill" then
+        assert(v.Permission == 6 or v.Permission == 7)
+      elseif tostring(k) ~= "" then
         assert(false)
       end
     end
   )";
 
   DEFINE_REQ_STATE;
-  ACLOwner owner;
-  owner.set_id(rgw_user("jack", "black"));
-  owner.set_name("jack black");
-  s.user_acl.reset(new RGWAccessControlPolicy(g_cct));
-  s.user_acl->set_owner(owner);
-  ACLGrant grant1, grant2, grant3, grant4, grant5;
+  const ACLOwner owner{
+    .id = rgw_user("jack", "black"),
+    .display_name = "jack black"
+  };
+  s.user_acl.set_owner(owner);
+  ACLGrant grant1, grant2, grant3, grant4, grant5, grant6_1, grant6_2;
   grant1.set_canon(rgw_user("jane", "doe"), "her grant", 1);
   grant2.set_group(ACL_GROUP_ALL_USERS ,2);
   grant3.set_referer("http://localhost/ref2", 3);
   grant4.set_canon(rgw_user("john", "doe"), "his grant", 4);
   grant5.set_group(ACL_GROUP_AUTHENTICATED_USERS, 5);
-  s.user_acl->get_acl().add_grant(&grant1);
-  s.user_acl->get_acl().add_grant(&grant2);
-  s.user_acl->get_acl().add_grant(&grant3);
-  s.user_acl->get_acl().add_grant(&grant4);
-  s.user_acl->get_acl().add_grant(&grant5);
+  grant6_1.set_canon(rgw_user("kill", "bill"), "his grant", 6);
+  grant6_2.set_canon(rgw_user("kill", "bill"), "her grant", 7);
+  s.user_acl.get_acl().add_grant(grant1);
+  s.user_acl.get_acl().add_grant(grant2);
+  s.user_acl.get_acl().add_grant(grant3);
+  s.user_acl.get_acl().add_grant(grant4);
+  s.user_acl.get_acl().add_grant(grant5);
+  s.user_acl.get_acl().add_grant(grant6_1);
+  s.user_acl.get_acl().add_grant(grant6_2);
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
@@ -546,21 +722,17 @@ TEST(TestRGWLua, User)
 
   DEFINE_REQ_STATE;
 
-  rgw_user u;
-  u.tenant = "mytenant";
-  u.id = "myid";
-  s.user.reset(new sal::RadosUser(nullptr, u));
+  s.user.reset(new sal::RadosUser(nullptr, rgw_user("mytenant", "myid")));
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
 
-
 TEST(TestRGWLua, UseFunction)
 {
 	const std::string script = R"(
 		function print_owner(owner)
-  		print("Owner Dispaly Name: " .. owner.DisplayName)
+  		print("Owner Display Name: " .. owner.DisplayName)
   		print("Owner Id: " .. owner.User.Id)
   		print("Owner Tenanet: " .. owner.User.Tenant)
 		end
@@ -584,17 +756,14 @@ TEST(TestRGWLua, UseFunction)
 	)";
 
   DEFINE_REQ_STATE;
-  s.owner.set_name("user two");
-  s.owner.set_id(rgw_user("tenant2", "user2"));
-  s.user_acl.reset(new RGWAccessControlPolicy());
-  s.user_acl->get_owner().set_name("user three");
-  s.user_acl->get_owner().set_id(rgw_user("tenant3", "user3"));
-  s.bucket_acl.reset(new RGWAccessControlPolicy());
-  s.bucket_acl->get_owner().set_name("user four");
-  s.bucket_acl->get_owner().set_id(rgw_user("tenant4", "user4"));
-  s.object_acl.reset(new RGWAccessControlPolicy());
-  s.object_acl->get_owner().set_name("user five");
-  s.object_acl->get_owner().set_id(rgw_user("tenant5", "user5"));
+  s.owner.display_name = "user two";
+  s.owner.id = rgw_user("tenant2", "user2");
+  s.user_acl.get_owner().display_name = "user three";
+  s.user_acl.get_owner().id = rgw_user("tenant3", "user3");
+  s.bucket_acl.get_owner().display_name = "user four";
+  s.bucket_acl.get_owner().id = rgw_user("tenant4", "user4");
+  s.object_acl.get_owner().display_name = "user five";
+  s.object_acl.get_owner().id = rgw_user("tenant5", "user5");
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
@@ -634,9 +803,6 @@ TEST(TestRGWLua, NotAllowedInLib)
   ASSERT_NE(rc, 0);
 }
 
-#define MAKE_STORE auto store = std::unique_ptr<sal::RadosStore>(new sal::RadosStore); \
-                        store->setRados(new RGWRados);
-
 TEST(TestRGWLua, OpsLog)
 {
   const std::string script = R"(
@@ -647,8 +813,6 @@ TEST(TestRGWLua, OpsLog)
     	assert(Request.Log() == 0)
 		end
   )";
-
-  MAKE_STORE;
 
   struct MockOpsLogSink : OpsLogSink {
     bool logged = false;
@@ -699,8 +863,11 @@ protected:
   }
 
 public:
-  TestBackground(sal::RadosStore* store, const std::string& script, unsigned read_time = 0) : 
-    rgw::lua::Background(store, g_cct, "", /* luarocks path */ 1 /* run every second */),
+  TestBackground(sal::RadosStore* store, const std::string& script, rgw::sal::LuaManager* manager, unsigned read_time = 0) : 
+    rgw::lua::Background(store, 
+        g_cct, 
+        manager,
+        1 /* run every second */),
     read_time(read_time) {
       // the script is passed in the constructor
       rgw_script = script;
@@ -713,14 +880,15 @@ public:
 
 TEST(TestRGWLuaBackground, Start)
 {
-  MAKE_STORE;
+  auto store = make_store();
+  auto manager = store->get_lua_manager("");
   {
     // ctr and dtor without running
-    TestBackground lua_background(store.get(), "");
+    TestBackground lua_background(store.get(), "", manager.get());
   }
   {
     // ctr and dtor with running
-    TestBackground lua_background(store.get(), "");
+    TestBackground lua_background(store.get(), "", manager.get());
     lua_background.start();
   }
 }
@@ -746,8 +914,9 @@ TEST(TestRGWLuaBackground, Script)
     RGW[key] = value
   )";
 
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), script);
+  auto store = make_store();
+  auto manager = store->get_lua_manager("");
+  TestBackground lua_background(store.get(), script, manager.get());
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
   EXPECT_EQ(get_table_value<std::string>(lua_background, "hello"), "world");
@@ -761,8 +930,8 @@ TEST(TestRGWLuaBackground, RequestScript)
     RGW[key] = value
   )";
 
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), background_script);
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), background_script, pe.lua.manager.get());
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
 
@@ -773,10 +942,9 @@ TEST(TestRGWLuaBackground, RequestScript)
     RGW[key] = value
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
-  // to make sure test is consistent we have to puase the background
+  // to make sure test is consistent we have to pause the background
   lua_background.pause();
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
   ASSERT_EQ(rc, 0);
@@ -799,8 +967,9 @@ TEST(TestRGWLuaBackground, Pause)
     end
   )";
 
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), script);
+  auto store = make_store();
+  auto manager = store->get_lua_manager("");
+  TestBackground lua_background(store.get(), script, manager.get());
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
   const auto value_len = get_table_value<std::string>(lua_background, "hello").size();
@@ -824,10 +993,11 @@ TEST(TestRGWLuaBackground, PauseWhileReading)
     end
   )";
 
-  MAKE_STORE;
-  constexpr auto long_wait_time = std::chrono::seconds(6);
-  TestBackground lua_background(store.get(), script, 2);
+  auto store = make_store();
+  auto manager = store->get_lua_manager("");
+  TestBackground lua_background(store.get(), script, manager.get(), 2);
   lua_background.start();
+  constexpr auto long_wait_time = std::chrono::seconds(6);
   std::this_thread::sleep_for(long_wait_time);
   const auto value_len = get_table_value<std::string>(lua_background, "hello").size();
   EXPECT_GT(value_len, 0);
@@ -845,8 +1015,9 @@ TEST(TestRGWLuaBackground, ReadWhilePaused)
     RGW[key] = value
   )";
 
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), script);
+  auto store = make_store();
+  auto manager = store->get_lua_manager("");
+  TestBackground lua_background(store.get(), script, manager.get());
   lua_background.pause();
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
@@ -868,8 +1039,9 @@ TEST(TestRGWLuaBackground, PauseResume)
     end
   )";
 
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), script);
+  auto store = make_store();
+  auto manager = store->get_lua_manager("");
+  TestBackground lua_background(store.get(), script, manager.get());
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
   const auto value_len = get_table_value<std::string>(lua_background, "hello").size();
@@ -896,8 +1068,9 @@ TEST(TestRGWLuaBackground, MultipleStarts)
     end
   )";
 
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), script);
+  auto store = make_store();
+  auto manager = store->get_lua_manager("");
+  TestBackground lua_background(store.get(), script, manager.get());
   lua_background.start();
   std::this_thread::sleep_for(wait_time);
   const auto value_len = get_table_value<std::string>(lua_background, "hello").size();
@@ -914,8 +1087,8 @@ TEST(TestRGWLuaBackground, MultipleStarts)
 
 TEST(TestRGWLuaBackground, TableValues)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
 
   const std::string request_script = R"(
     RGW["key1"] = "string value"
@@ -924,7 +1097,6 @@ TEST(TestRGWLuaBackground, TableValues)
     RGW["key4"] = true
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
@@ -937,15 +1109,14 @@ TEST(TestRGWLuaBackground, TableValues)
 
 TEST(TestRGWLuaBackground, TablePersist)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
 
   std::string request_script = R"(
     RGW["key1"] = "string value"
     RGW["key2"] = 42
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
@@ -968,8 +1139,8 @@ TEST(TestRGWLuaBackground, TablePersist)
 
 TEST(TestRGWLuaBackground, TableValuesFromRequest)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
   lua_background.start();
 
   const std::string request_script = R"(
@@ -979,7 +1150,6 @@ TEST(TestRGWLuaBackground, TableValuesFromRequest)
     RGW["key4"] = Request.Tags["key1"] == Request.Tags["key2"] 
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   s.tagset.add_tag("key1", "val1");
@@ -997,8 +1167,8 @@ TEST(TestRGWLuaBackground, TableValuesFromRequest)
 
 TEST(TestRGWLuaBackground, TableInvalidValue)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
   lua_background.start();
 
   const std::string request_script = R"(
@@ -1009,7 +1179,6 @@ TEST(TestRGWLuaBackground, TableInvalidValue)
     RGW["key5"] = Request.Tags
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
   s.tagset.add_tag("key1", "val1");
   s.tagset.add_tag("key2", "val2");
@@ -1024,8 +1193,8 @@ TEST(TestRGWLuaBackground, TableInvalidValue)
 
 TEST(TestRGWLuaBackground, TableErase)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
 
   std::string request_script = R"(
     RGW["size"] = 0
@@ -1035,7 +1204,6 @@ TEST(TestRGWLuaBackground, TableErase)
     RGW["size"] = #RGW
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
@@ -1063,8 +1231,8 @@ TEST(TestRGWLuaBackground, TableErase)
 
 TEST(TestRGWLuaBackground, TableIterate)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
 
   const std::string request_script = R"(
     RGW["key1"] = "string value"
@@ -1077,7 +1245,6 @@ TEST(TestRGWLuaBackground, TableIterate)
     end
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
@@ -1089,10 +1256,40 @@ TEST(TestRGWLuaBackground, TableIterate)
   EXPECT_EQ(get_table_value<long long int>(lua_background, "size"), 5);
 }
 
+TEST(TestRGWLuaBackground, TableIterateWrite)
+{
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
+
+  const std::string request_script = R"(
+    RGW["a"] = 1
+    RGW["b"] = 2
+    RGW["c"] = 3
+    RGW["d"] = 4
+    RGW["e"] = 5
+    counter = 0 
+    for k, v in pairs(RGW) do
+      counter = counter + 1
+      if tostring(k) == "c" then
+        RGW["c"] = nil
+        print("'c' is deleted and iterator moves")
+        assert(tostring(k) ~= "c")
+      end
+    end
+    assert(counter == 4)
+  )";
+
+  pe.lua.background = &lua_background;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
+  ASSERT_EQ(rc, 0);
+  EXPECT_EQ(lua_background.get_table_value("c"), TestBackground::empty_table_value);
+}
+
 TEST(TestRGWLuaBackground, TableIncrement)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
 
   const std::string request_script = R"(
     RGW["key1"] = 42
@@ -1103,7 +1300,6 @@ TEST(TestRGWLuaBackground, TableIncrement)
     assert(RGW["key2"] == 43.2)
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
@@ -1112,8 +1308,8 @@ TEST(TestRGWLuaBackground, TableIncrement)
 
 TEST(TestRGWLuaBackground, TableIncrementBy)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
 
   const std::string request_script = R"(
     RGW["key1"] = 42
@@ -1126,7 +1322,6 @@ TEST(TestRGWLuaBackground, TableIncrementBy)
     assert(RGW["key1"] == 52.2)
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
@@ -1135,8 +1330,8 @@ TEST(TestRGWLuaBackground, TableIncrementBy)
 
 TEST(TestRGWLuaBackground, TableDecrement)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
 
   const std::string request_script = R"(
     RGW["key1"] = 42
@@ -1147,7 +1342,6 @@ TEST(TestRGWLuaBackground, TableDecrement)
     assert(RGW["key2"] == 41.2)
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
@@ -1156,8 +1350,8 @@ TEST(TestRGWLuaBackground, TableDecrement)
 
 TEST(TestRGWLuaBackground, TableDecrementBy)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
 
   const std::string request_script = R"(
     RGW["key1"] = 42
@@ -1170,7 +1364,6 @@ TEST(TestRGWLuaBackground, TableDecrementBy)
     assert(RGW["key1"] == 31.2)
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
@@ -1179,8 +1372,8 @@ TEST(TestRGWLuaBackground, TableDecrementBy)
 
 TEST(TestRGWLuaBackground, TableIncrementValueError)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
 
   std::string request_script = R"(
     -- cannot increment string values
@@ -1188,7 +1381,6 @@ TEST(TestRGWLuaBackground, TableIncrementValueError)
     RGW.increment("key1")
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
@@ -1215,8 +1407,8 @@ TEST(TestRGWLuaBackground, TableIncrementValueError)
 
 TEST(TestRGWLuaBackground, TableIncrementError)
 {
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
+  DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
 
   std::string request_script = R"(
     -- missing argument
@@ -1224,7 +1416,6 @@ TEST(TestRGWLuaBackground, TableIncrementError)
     RGW.increment()
   )";
 
-  DEFINE_REQ_STATE;
   pe.lua.background = &lua_background;
 
   auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
@@ -1305,9 +1496,8 @@ TEST(TestRGWLua, Data)
     assert(Offset == 12345678)
   )";
 
-  MAKE_STORE;
-  TestBackground lua_background(store.get(), "");
   DEFINE_REQ_STATE;
+  TestBackground lua_background(store.get(), "", pe.lua.manager.get());
   s.host_id = "foo";
   pe.lua.background = &lua_background;
   lua::RGWObjFilter filter(&s, script);
@@ -1334,5 +1524,97 @@ TEST(TestRGWLua, WriteDataFail)
   bl.append("The quick brown fox jumps over the lazy dog");
   const auto rc = filter.execute(bl, 0, "put_obj");
   ASSERT_NE(rc, 0);
+}
+
+TEST(TestRGWLua, MemoryLimit)
+{
+  std::string script = "print(\"hello world\")";
+
+  DEFINE_REQ_STATE;
+  
+  // memory should be sufficient
+  s.cct->_conf->rgw_lua_max_memory_per_state = 1024*32;
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+  
+  // no memory limit
+  s.cct->_conf->rgw_lua_max_memory_per_state = 0;
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+  
+  // not enough memory to start lua
+  s.cct->_conf->rgw_lua_max_memory_per_state = 2048;
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+
+  // not enough memory for initial setup
+  s.cct->_conf->rgw_lua_max_memory_per_state = 1024*16;
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+  
+  // not enough memory for the script
+  script = R"(
+    t = {}
+    for i = 1,1000 do
+      table.insert(t, i)
+    end
+  )";
+  s.cct->_conf->rgw_lua_max_memory_per_state = 1024*32;
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+}
+
+TEST(TestRGWLua, DifferentContextUser)
+{
+  const std::string script = R"(
+    assert(Request.User.Id == "user1")
+    assert(Request.User.Tenant == "tenant1")
+    assert(Request.Bucket.User.Id == "user2")
+    assert(Request.Bucket.User.Tenant == "tenant2")
+    local u1 = Request.User
+    local u2 = Request.Bucket.User
+    assert(u1.Id == "user1")
+    assert(u2.Id == "user2")
+    assert(u1.Tenant == "tenant1")
+    assert(u2.Tenant == "tenant2")
+  )";
+
+  DEFINE_REQ_STATE;
+
+  s.user.reset(new sal::RadosUser(nullptr, rgw_user("tenant1", "user1")));
+  RGWBucketInfo info;
+  info.bucket.name = "bucket1";
+  info.owner.id = "user2";
+  info.owner.tenant = "tenant2";
+  s.bucket.reset(new sal::RadosBucket(nullptr, info));
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, NestedLoop)
+{
+  const std::string script = R"(
+  for k1, v1 in pairs(Request.Environment) do
+    assert(k1)
+    assert(v1)
+    for k2, v2 in pairs(Request.HTTP.Metadata) do
+      assert(k2)
+      assert(v2)
+    end
+  end
+  )";
+
+  DEFINE_REQ_STATE;
+  s.env.emplace("1", "a");
+  s.env.emplace("2", "b");
+  s.env.emplace("3", "c");
+  s.info.x_meta_map["11"] = "aa";
+  s.info.x_meta_map["22"] = "bb";
+  s.info.x_meta_map["33"] = "cc";
+  s.info.x_meta_map["44"] = "dd";
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
 }
 

@@ -17,6 +17,7 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -200,8 +201,8 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         {
           prop: 'path',
           name: $localize`Path`,
-          isHidden: true,
-          flexGrow: 2
+          flexGrow: 1.5,
+          cellTransformation: CellTemplate.path
         },
         {
           prop: 'created',
@@ -237,7 +238,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
 
   private disableCreateSnapshot(): string | boolean {
     const folders = this.selectedDir.path.split('/').slice(1);
-    // With deph of 4 or more we have the subvolume files/folders for which we cannot create
+    // With depth of 4 or more we have the subvolume files/folders for which we cannot create
     // a snapshot. Somehow, you can create a snapshot of the subvolume but not its files.
     if (folders.length >= 4 && folders[0] === 'volumes') {
       return $localize`Cannot create snapshots for files/folders in the subvolume ${folders[2]}`;
@@ -288,6 +289,10 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         this.updateTree();
         resolve(this.getChildren(path));
         this.setLoadingIndicator(path, false);
+
+        if (path === '/' && this.treeComponent.treeModel.activeNodes?.length === 0) {
+          this.selectNode(this.getNode('/'));
+        }
       });
     });
   }
@@ -312,6 +317,13 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     this.nodeIds[dir.path] = dir;
     if (!subTree) {
       this.getSubTree(dir.parent);
+    }
+
+    if (dir.path === '/volumes') {
+      const innerNode = this.treeComponent.treeModel.getNodeById('/volumes');
+      if (innerNode) {
+        innerNode.expand();
+      }
     }
     return {
       name: dir.name,
@@ -640,7 +652,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     }
     const node = this.getNode(parent);
     if (!node) {
-      // Node will not be found for new sub sub directories - this is the intended behaviour
+      // Node will not be found for new sub directories - this is the intended behaviour
       return;
     }
     const children = this.getChildren(parent);

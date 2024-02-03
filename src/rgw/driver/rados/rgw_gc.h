@@ -1,9 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_GC_H
-#define CEPH_RGW_GC_H
-
+#pragma once
 
 #include "include/types.h"
 #include "include/rados/librados.hpp"
@@ -29,7 +27,7 @@ class RGWGC : public DoutPrefixProvider {
   static constexpr uint64_t seed = 8675309;
 
   int tag_index(const std::string& tag);
-  int send_chain(const cls_rgw_obj_chain& chain, const std::string& tag);
+  int send_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
 
   class GCWorker : public Thread {
     const DoutPrefixProvider *dpp;
@@ -52,7 +50,7 @@ public:
     finalize();
   }
   std::vector<bool> transitioned_objects_cache;
-  std::tuple<int, std::optional<cls_rgw_obj_chain>> send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag);
+  std::tuple<int, std::optional<cls_rgw_obj_chain>> send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y);
 
   // asynchronously defer garbage collection on an object that's still being read
   int async_defer_chain(const std::string& tag, const cls_rgw_obj_chain& info);
@@ -60,17 +58,17 @@ public:
   // callback for when async_defer_chain() fails with ECANCELED
   void on_defer_canceled(const cls_rgw_gc_obj_info& info);
 
-  int remove(int index, const std::vector<std::string>& tags, librados::AioCompletion **pc);
-  int remove(int index, int num_entries);
+  int remove(int index, const std::vector<std::string>& tags, librados::AioCompletion **pc, optional_yield y);
+  int remove(int index, int num_entries, optional_yield y);
 
-  void initialize(CephContext *_cct, RGWRados *_store);
+  void initialize(CephContext *_cct, RGWRados *_store, optional_yield y);
   void finalize();
 
   int list(int *index, std::string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue);
   void list_init(int *index) { *index = 0; }
   int process(int index, int process_max_secs, bool expired_only,
-              RGWGCIOManager& io_manager);
-  int process(bool expired_only);
+              RGWGCIOManager& io_manager, optional_yield y);
+  int process(bool expired_only, optional_yield y);
 
   bool going_down();
   void start_processor();
@@ -82,6 +80,3 @@ public:
   std::ostream& gen_prefix(std::ostream& out) const;
 
 };
-
-
-#endif

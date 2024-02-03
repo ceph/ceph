@@ -1,0 +1,22 @@
+@use './src/styles/vendor/variables' as vv;
+
+::ng-deep json-schema-form {
+  label.control-label.hidden {
+    display: none;
+  }
+
+  .form-group.schema-form-submit p {
+    display: none;
+  }
+
+  legend {
+    font-weight: 100 !important;
+  }
+
+  .card-footer {
+    border: 1px solid rgba(0, 0, 0, 0.125);
+    left: -1px;
+    width: -webkit-fill-available;
+    width: -moz-available;
+  }
+}

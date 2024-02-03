@@ -84,7 +84,7 @@ BtreeOMapManager::handle_root_merge(
     omap_root.hint);
   oc.t.get_omap_tree_stats().depth = omap_root.depth;
   oc.t.get_omap_tree_stats().extents_num_delta--;
-  return oc.tm.dec_ref(oc.t, root->get_laddr()
+  return oc.tm.remove(oc.t, root->get_laddr()
   ).si_then([](auto &&ret) -> handle_root_merge_ret {
     return seastar::now();
   }).handle_error_interruptible(
@@ -198,13 +198,17 @@ BtreeOMapManager::omap_rm_key_range(
   LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
   DEBUGT("{} ~ {}", t, first, last);
   assert(first <= last);
-  return omap_list(
-    omap_root,
-    t,
-    first,
-    last,
-    config
-  ).si_then([this, &omap_root, &t](auto results) {
+  return seastar::do_with(
+    std::make_optional<std::string>(first),
+    std::make_optional<std::string>(last),
+    [this, &omap_root, &t, config](auto &first, auto &last) {
+    return omap_list(
+      omap_root,
+      t,
+      first,
+      last,
+      config);
+  }).si_then([this, &omap_root, &t](auto results) {
     LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
     auto &[complete, kvs] = results;
     std::vector<std::string> keys;
@@ -270,7 +274,7 @@ BtreeOMapManager::omap_clear(
   ).si_then([this, &t, &omap_root](auto extent) {
     return extent->clear(get_omap_context(t, omap_root.hint));
   }).si_then([this, &omap_root, &t] {
-    return tm.dec_ref(
+    return tm.remove(
       t, omap_root.get_location()
     ).si_then([&omap_root] (auto ret) {
       omap_root.update(

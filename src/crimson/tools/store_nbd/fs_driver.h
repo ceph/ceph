@@ -37,6 +37,7 @@ private:
   size_t size = 0;
   const config_t config;
   std::unique_ptr<crimson::os::FuturizedStore> fs;
+  crimson::os::FuturizedStore::Shard* sharded_fs;
 
   struct pg_analogue_t {
     crimson::os::CollectionRef collection;

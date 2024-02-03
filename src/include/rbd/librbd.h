@@ -32,7 +32,7 @@ extern "C" {
 #include "features.h"
 
 #define LIBRBD_VER_MAJOR 1
-#define LIBRBD_VER_MINOR 18
+#define LIBRBD_VER_MINOR 19
 #define LIBRBD_VER_EXTRA 0
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -905,7 +905,7 @@ CEPH_RBD_API int rbd_snap_rename(rbd_image_t image, const char *snapname,
  */
 CEPH_RBD_API int rbd_snap_protect(rbd_image_t image, const char *snap_name);
 /**
- * Allow a snaphshot to be deleted.
+ * Allow a snapshot to be deleted.
  *
  * @param snap_name which snapshot to unprotect
  * @returns 0 on success, negative error code on failure
@@ -1526,8 +1526,8 @@ CEPH_RBD_API int rbd_quiesce_watch(rbd_image_t image,
  * @param handle which watch is complete
  * @param r the return code
  */
-CEPH_RADOS_API void rbd_quiesce_complete(rbd_image_t image, uint64_t handle,
-                                         int r);
+CEPH_RBD_API void rbd_quiesce_complete(rbd_image_t image, uint64_t handle,
+                                       int r);
 
 /**
  * Unregister a quiesce/unquiesce watcher.

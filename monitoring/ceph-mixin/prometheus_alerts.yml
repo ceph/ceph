@@ -196,7 +196,7 @@ groups:
           type: "ceph_default"
       - alert: "CephDeviceFailurePredictionTooHigh"
         annotations:
-          description: "The device health module has determined that devices predicted to fail can not be remediated automatically, since too many OSDs would be removed from the cluster to ensure performance and availabililty. Prevent data integrity issues by adding new OSDs so that data may be relocated."
+          description: "The device health module has determined that devices predicted to fail can not be remediated automatically, since too many OSDs would be removed from the cluster to ensure performance and availability. Prevent data integrity issues by adding new OSDs so that data may be relocated."
           documentation: "https://docs.ceph.com/en/latest/rados/operations/health-checks#device-health-toomany"
           summary: "Too many devices are predicted to fail, unable to resolve"
         expr: "ceph_health_detail{name=\"DEVICE_HEALTH_TOOMANY\"} == 1"
@@ -393,7 +393,7 @@ groups:
           oid: "1.3.6.1.4.1.50495.1.2.1.7.5"
           severity: "critical"
           type: "ceph_default"
-      - alert: "CephPGUnavilableBlockingIO"
+      - alert: "CephPGUnavailableBlockingIO"
         annotations:
           description: "Data availability is reduced, impacting the cluster's ability to service I/O. One or more placement groups (PGs) are in a state that blocks I/O."
           documentation: "https://docs.ceph.com/en/latest/rados/operations/health-checks#pg-availability"
@@ -497,8 +497,8 @@ groups:
           type: "ceph_default"
       - alert: "CephNodeNetworkBondDegraded"
         annotations:
-          summary: "Degraded Bond on Node {{ $labels.instance }}"
           description: "Bond {{ $labels.master }} is degraded on Node {{ $labels.instance }}."
+          summary: "Degraded Bond on Node {{ $labels.instance }}"
         expr: |
           node_bonding_slaves - node_bonding_active != 0
         labels:
@@ -573,15 +573,15 @@ groups:
           severity: "warning"
           type: "ceph_default"
       - alert: "CephDaemonSlowOps"
-        for: "30s"
-        expr: "ceph_daemon_health_metrics{type=\"SLOW_OPS\"} > 0"
-        labels: 
-          severity: 'warning'
-          type: 'ceph_default'
         annotations:
-          summary: "{{ $labels.ceph_daemon }} operations are slow to complete"
           description: "{{ $labels.ceph_daemon }} operations are taking too long to process (complaint time exceeded)"
           documentation: "https://docs.ceph.com/en/latest/rados/operations/health-checks#slow-ops"
+          summary: "{{ $labels.ceph_daemon }} operations are slow to complete"
+        expr: "ceph_daemon_health_metrics{type=\"SLOW_OPS\"} > 0"
+        for: "30s"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
   - name: "cephadm"
     rules:
       - alert: "CephadmUpgradeFailed"
@@ -597,7 +597,7 @@ groups:
       - alert: "CephadmDaemonFailed"
         annotations:
           description: "A daemon managed by cephadm is no longer active. Determine, which daemon is down with 'ceph health detail'. you may start daemons with the 'ceph orch daemon start <daemon_id>'"
-          summary: "A ceph daemon manged by cephadm is down"
+          summary: "A ceph daemon managed by cephadm is down"
         expr: "ceph_health_detail{name=\"CEPHADM_FAILED_DAEMON\"} > 0"
         for: "30s"
         labels:
@@ -613,6 +613,68 @@ groups:
         for: "1m"
         labels:
           severity: "warning"
+          type: "ceph_default"
+  - name: "hardware"
+    rules:
+      - alert: "HardwareStorageError"
+        annotations:
+          description: "Some storage devices are in error. Check `ceph health detail`."
+          summary: "Storage devices error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_STORAGE\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.1"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "HardwareMemoryError"
+        annotations:
+          description: "DIMM error(s) detected. Check `ceph health detail`."
+          summary: "DIMM error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_MEMORY\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.2"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "HardwareProcessorError"
+        annotations:
+          description: "Processor error(s) detected. Check `ceph health detail`."
+          summary: "Processor error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_PROCESSOR\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.3"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "HardwareNetworkError"
+        annotations:
+          description: "Network error(s) detected. Check `ceph health detail`."
+          summary: "Network error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_NETWORK\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.4"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "HardwarePowerError"
+        annotations:
+          description: "Power supply error(s) detected. Check `ceph health detail`."
+          summary: "Power supply error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_POWER\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.5"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "HardwareFanError"
+        annotations:
+          description: "Fan error(s) detected. Check `ceph health detail`."
+          summary: "Fan error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_FANS\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.6"
+          severity: "critical"
           type: "ceph_default"
   - name: "PrometheusServer"
     rules:
@@ -651,4 +713,46 @@ groups:
         labels:
           oid: "1.3.6.1.4.1.50495.1.2.1.1.2"
           severity: "critical"
+          type: "ceph_default"
+  - name: "rbdmirror"
+    rules:
+      - alert: "CephRBDMirrorImagesPerDaemonHigh"
+        annotations:
+          description: "Number of image replications per daemon is not suppossed to go beyond threshold 100"
+          summary: "Number of image replications are now above 100"
+        expr: "sum by (ceph_daemon, namespace) (ceph_rbd_mirror_snapshot_image_snapshots) > 100"
+        for: "1m"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.10.2"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "CephRBDMirrorImagesNotInSync"
+        annotations:
+          description: "Both local and remote RBD mirror images should be in sync."
+          summary: "Some of the RBD mirror images are not in sync with the remote counter parts."
+        expr: "sum by (ceph_daemon, image, namespace, pool) (topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0"
+        for: "1m"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.10.3"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "CephRBDMirrorImagesNotInSyncVeryHigh"
+        annotations:
+          description: "More than 10% of the images have synchronization problems"
+          summary: "Number of unsynchronized images are very high."
+        expr: "count by (ceph_daemon) ((topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0) > (sum by (ceph_daemon) (ceph_rbd_mirror_snapshot_snapshots)*.1)"
+        for: "1m"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.10.4"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "CephRBDMirrorImageTransferBandwidthHigh"
+        annotations:
+          description: "Detected a heavy increase in bandwidth for rbd replications (over 80%) in the last 30 min. This might not be a problem, but it is good to review the number of images being replicated simultaneously"
+          summary: "The replication network usage has been increased over 80% in the last 30 minutes. Review the number of images being replicated. This alert will be cleaned automatically after 30 minutes"
+        expr: "rate(ceph_rbd_mirror_journal_replay_bytes[30m]) > 0.80"
+        for: "1m"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.10.5"
+          severity: "warning"
           type: "ceph_default"

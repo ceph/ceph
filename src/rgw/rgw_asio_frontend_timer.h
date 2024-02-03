@@ -20,7 +20,8 @@ struct timeout_handler {
   void operator()(boost::system::error_code ec) {
     if (!ec) { // wait was not canceled
       boost::system::error_code ec_ignored;
-      stream->close(ec_ignored);
+      stream->get_socket().cancel();
+      stream->get_socket().shutdown(boost::asio::ip::tcp::socket::shutdown_both, ec_ignored);
     }
   }
 };

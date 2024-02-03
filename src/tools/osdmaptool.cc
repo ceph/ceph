@@ -67,31 +67,49 @@ void usage()
   cout << "   --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds" << std::endl;
   cout << "   --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight> (but do not persist)" << std::endl;
   cout << "   --save                  write modified osdmap with upmap or crush-adjust changes" << std::endl;
+  cout << "   --read <file>           calculate pg upmap entries to balance pg primaries" << std::endl;
+  cout << "   --read-pool <poolname>  specify which pool the read balancer should adjust" << std::endl;
+  cout << "   --osd-size-aware        account for devices of different sizes, applicable to read mode only" << std::endl;
+  cout << "   --vstart                prefix upmap and read output with './bin/'" << std::endl;
   exit(1);
 }
 
-void print_inc_upmaps(const OSDMap::Incremental& pending_inc, int fd)
+void print_inc_upmaps(const OSDMap::Incremental& pending_inc, int fd, bool vstart, std::string cmd="ceph")
 {
   ostringstream ss;
+  std::string prefix = "./bin/";
   for (auto& i : pending_inc.old_pg_upmap) {
-    ss << "ceph osd rm-pg-upmap " << i << std::endl;
+    if (vstart)
+      ss << prefix;
+    ss << cmd + " osd rm-pg-upmap " << i << std::endl;
   }
   for (auto& i : pending_inc.new_pg_upmap) {
-    ss << "ceph osd pg-upmap " << i.first;
+    if (vstart)
+      ss << prefix;
+    ss << cmd + " osd pg-upmap " << i.first;
     for (auto osd : i.second) {
       ss << " " << osd;
     }
     ss << std::endl;
   }
   for (auto& i : pending_inc.old_pg_upmap_items) {
-    ss << "ceph osd rm-pg-upmap-items " << i << std::endl;
+    if (vstart)
+      ss << prefix;
+    ss << cmd + " osd rm-pg-upmap-items " << i << std::endl;
   }
   for (auto& i : pending_inc.new_pg_upmap_items) {
-    ss << "ceph osd pg-upmap-items " << i.first;
+    if (vstart)
+      ss << prefix;
+    ss << cmd + " osd pg-upmap-items " << i.first;
     for (auto p : i.second) {
       ss << " " << p.first << " " << p.second;
     }
     ss << std::endl;
+  }
+  for (auto& i : pending_inc.new_pg_upmap_primary) {
+    if (vstart)
+      ss << prefix;
+    ss << cmd +  " osd pg-upmap-primary " << i.first << " " << i.second << std::endl;
   }
   string s = ss.str();
   int r = safe_write(fd, s.c_str(), s.size());
@@ -157,10 +175,14 @@ int main(int argc, const char **argv)
   std::set<std::string> upmap_pools;
   std::random_device::result_type upmap_seed;
   std::random_device::result_type *upmap_p_seed = nullptr;
+  bool read = false;
+  std::string read_pool;
 
   int64_t pg_num = -1;
   bool test_map_pgs_dump_all = false;
   bool save = false;
+  bool vstart = false;
+  bool osd_size_aware = false;
 
   std::string val;
   std::ostringstream err;
@@ -186,12 +208,16 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap", (char*)NULL)) {
       upmap_cleanup = true;
       upmap = true;
+    } else if (ceph_argparse_witharg(args, i, &upmap_file, "--read", (char*)NULL)) {
+	read = true;
     } else if (ceph_argparse_witharg(args, i, &upmap_max, err, "--upmap-max", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &upmap_deviation, err, "--upmap-deviation", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, (int *)&upmap_seed, err, "--upmap-seed", (char*)NULL)) {
       upmap_p_seed = &upmap_seed;
     } else if (ceph_argparse_witharg(args, i, &val, "--upmap-pool", (char*)NULL)) {
       upmap_pools.insert(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--read-pool", (char*)NULL)) {
+      read_pool = val;
     } else if (ceph_argparse_witharg(args, i, &num_osd, err, "--createsimple", (char*)NULL)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
@@ -266,6 +292,10 @@ int main(int argc, const char **argv)
       adjust_crush_weight = val;
     } else if (ceph_argparse_flag(args, i, "--save", (char*)NULL)) {
       save = true;
+    } else if (ceph_argparse_flag(args, i, "--vstart", (char*)NULL)) {
+      vstart = true;
+    } else if (ceph_argparse_flag(args, i, "--osd-size-aware", (char*)NULL)) {
+      osd_size_aware = true;
     } else {
       ++i;
     }
@@ -280,6 +310,10 @@ int main(int argc, const char **argv)
   }
   if (upmap_deviation < 1) {
     cerr << me << ": upmap-deviation must be >= 1" << std::endl;
+    usage();
+  }
+  if (!read && osd_size_aware) {
+    cerr << me << ": osd-size-aware is only applicable to read mode" << std::endl;
     usage();
   }
   fn = args[0];
@@ -422,7 +456,7 @@ int main(int argc, const char **argv)
     OSDMap::clean_temps(g_ceph_context, osdmap, tmpmap, &pending_inc);
   }
   int upmap_fd = STDOUT_FILENO;
-  if (upmap || upmap_cleanup) {
+  if (upmap || upmap_cleanup || read) {
     if (upmap_file != "-") {
       upmap_fd = ::open(upmap_file.c_str(), O_CREAT|O_WRONLY|O_TRUNC, 0644);
       if (upmap_fd < 0) {
@@ -439,9 +473,94 @@ int main(int argc, const char **argv)
     pending_inc.fsid = osdmap.get_fsid();
     int r = osdmap.clean_pg_upmaps(g_ceph_context, &pending_inc);
     if (r > 0) {
-      print_inc_upmaps(pending_inc, upmap_fd);
+      print_inc_upmaps(pending_inc, upmap_fd, vstart);
       r = osdmap.apply_incremental(pending_inc);
       ceph_assert(r == 0);
+    }
+  }
+  if (read) {
+    int64_t pid = osdmap.lookup_pg_pool_name(read_pool);
+    if (pid < 0) {
+      cerr << " pool " << read_pool << " does not exist" << std::endl;
+      exit(1);
+    }
+
+    const pg_pool_t* pool = osdmap.get_pg_pool(pid);
+    if (! pool->is_replicated()) {
+      cerr << read_pool << " is an erasure coded pool; "
+	   << "please try again with a replicated pool." << std::endl;
+      exit(1);
+    }
+
+    int64_t read_ratio = 0;
+    if (osd_size_aware) {
+      pool->opts.get(pool_opts_t::READ_RATIO, &read_ratio);
+      if (read_ratio <= 0 || read_ratio > 100) {
+	cerr << "The read ratio for pool " << read_pool << " is unset or invalid."
+	     << " To set read ratio, please run 'ceph osd pool set <pool name> read_ratio <value>'." << std::endl;
+	exit(1);
+      } else {
+	cout << "Accounting for devices of different sizes on pool " << read_pool
+	     << " with a read ratio of " << read_ratio << "." << std::endl;
+      }
+    }
+
+    OSDMap tmp_osd_map;
+    tmp_osd_map.deepish_copy_from(osdmap);
+
+    // Gather BEFORE info
+    map<uint64_t,set<pg_t>> pgs_by_osd;
+    map<uint64_t,set<pg_t>> prim_pgs_by_osd;
+    map<uint64_t,set<pg_t>> acting_prims_by_osd;
+    pgs_by_osd = tmp_osd_map.get_pgs_by_osd(g_ceph_context, pid, &prim_pgs_by_osd, &acting_prims_by_osd);
+    OSDMap::read_balance_info_t rb_info;
+    tmp_osd_map.calc_read_balance_score(g_ceph_context, pid, &rb_info);
+    float read_balance_score_before = rb_info.adjusted_score;
+    ceph_assert(read_balance_score_before >= 0);
+
+    // Calculate read balancer
+    int num_changes = 0;
+    OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
+    if (osd_size_aware) { // account for different device sizes
+      num_changes = osdmap.balance_primaries(g_ceph_context, pid, &pending_inc, tmp_osd_map, OSDMap::RB_OSDSIZEOPT);
+    } else { // default
+      num_changes = osdmap.balance_primaries(g_ceph_context, pid, &pending_inc, tmp_osd_map);
+    }
+
+    if (num_changes < 0) {
+      cerr << "Error balancing primaries. Rerun with at least --debug-osd=10 for more details." << std::endl;
+      exit(1);
+    }
+
+    // Gather AFTER info
+    map<uint64_t,set<pg_t>> pgs_by_osd_2;
+    map<uint64_t,set<pg_t>> prim_pgs_by_osd_2;
+    map<uint64_t,set<pg_t>> acting_prims_by_osd_2;
+    pgs_by_osd_2 = tmp_osd_map.get_pgs_by_osd(g_ceph_context, pid, &prim_pgs_by_osd_2, &acting_prims_by_osd_2);
+    tmp_osd_map.calc_read_balance_score(g_ceph_context, pid, &rb_info);
+    float read_balance_score_after = rb_info.adjusted_score;
+    ceph_assert(read_balance_score_after >= 0);
+
+    if (num_changes > 0) {
+	cout << " \n";
+        cout << "---------- BEFORE ------------ \n";
+        for (auto & [osd, pgs] : prim_pgs_by_osd) {
+	  cout << " osd." << osd << " | primary affinity: " << tmp_osd_map.get_primary_affinityf(osd) << " | number of prims: " << pgs.size() << "\n";
+	}
+        cout << " \n";
+	cout << "read_balance_score of '" << read_pool << "': " << read_balance_score_before << "\n\n\n";
+
+        cout << "---------- AFTER ------------ \n";
+        for (auto & [osd, pgs] : prim_pgs_by_osd_2) {
+	  cout << " osd." << osd << " | primary affinity: " << tmp_osd_map.get_primary_affinityf(osd) << " | number of prims: " << pgs.size() << "\n";
+        }
+	cout << " \n";
+	cout << "read_balance_score of '" << read_pool << "': " << read_balance_score_after << "\n\n\n";
+	cout << "num changes: " << num_changes << "\n";
+
+	print_inc_upmaps(pending_inc, upmap_fd, vstart);
+    } else {
+      cout << " Unable to find further optimization, or distribution is already perfect\n";
     }
   }
   if (upmap) {
@@ -513,7 +632,7 @@ int main(int argc, const char **argv)
       if (upmap_active)
         cout << "Time elapsed " << elapsed_time << " secs" << std::endl;
       if (total_did > 0) {
-        print_inc_upmaps(pending_inc, upmap_fd);
+        print_inc_upmaps(pending_inc, upmap_fd, vstart);
         if (save || upmap_active) {
 	  int r = osdmap.apply_incremental(pending_inc);
 	  ceph_assert(r == 0);
@@ -798,7 +917,7 @@ skip_upmap:
       export_crush.empty() && import_crush.empty() && 
       test_map_pg.empty() && test_map_object.empty() &&
       !test_map_pgs && !test_map_pgs_dump && !test_map_pgs_dump_all &&
-      adjust_crush_weight.empty() && !upmap && !upmap_cleanup) {
+      adjust_crush_weight.empty() && !upmap && !upmap_cleanup && !read) {
     cerr << me << ": no action specified?" << std::endl;
     usage();
   }
@@ -820,7 +939,7 @@ skip_upmap:
       print_formatter->close_section();
       print_formatter->flush(cout);
     } else {
-      osdmap.print(cout);
+      osdmap.print(cct.get(), cout);
     }
   }
 

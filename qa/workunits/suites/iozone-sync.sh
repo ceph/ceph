@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 # basic tests of O_SYNC, O_DSYNC, O_RSYNC
 # test O_SYNC

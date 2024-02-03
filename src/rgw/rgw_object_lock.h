@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_OBJECT_LOCK_H
-#define CEPH_RGW_OBJECT_LOCK_H
+#pragma once
 
 #include <string>
 #include "common/ceph_time.h"
@@ -46,7 +45,7 @@ public:
     decode(years, bl);
     DECODE_FINISH(bl);
   }
-
+  void dump(Formatter *f) const;
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
 };
@@ -83,6 +82,8 @@ public:
 
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<ObjectLockRule*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectLockRule)
 
@@ -142,6 +143,8 @@ public:
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
   ceph::real_time get_lock_until_date(const ceph::real_time& mtime) const;
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWObjectLock*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjectLock)
 
@@ -171,16 +174,20 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(mode, bl);
     encode(retain_until_date, bl);
+    ceph::round_trip_encode(retain_until_date, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(mode, bl);
     decode(retain_until_date, bl);
+    if (struct_v >= 2) {
+      ceph::round_trip_decode(retain_until_date, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -221,4 +228,3 @@ public:
   bool is_enabled() const;
 };
 WRITE_CLASS_ENCODER(RGWObjectLegalHold)
-#endif //CEPH_RGW_OBJECT_LOCK_H

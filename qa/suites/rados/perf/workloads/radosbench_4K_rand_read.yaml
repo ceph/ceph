@@ -5,11 +5,7 @@ tasks:
         concurrent_ops: 4
         concurrent_procs: 2
         op_size: [4096]
-        pool_monitoring_list:
-        - collectl
         pool_profile: 'replicated'
-        run_monitoring_list:
-        - collectl
         time: 60
         write_only: false
         readmode: 'rand'
@@ -22,3 +18,10 @@ tasks:
           pg_size: 256
           pgp_size: 256
           replication: 'replicated'
+    monitoring_profiles:
+      perf:
+        nodes:
+          - osds
+        perf_cmd: 'perf'
+        args: 'stat -p {pid} -o {perf_dir}/perf_stat.{pid}'
+        pid_glob: ceph-osd.*.pid

@@ -217,13 +217,11 @@ public:
   std::map<int, failure_info_t> failure_info;
   std::map<int,utime_t>    down_pending_out;  // osd down -> out
   bool priority_convert = false;
-  std::map<int64_t,std::set<snapid_t>> pending_pseudo_purged_snaps;
   std::shared_ptr<PriorityCache::PriCache> rocksdb_binned_kv_cache = nullptr;
   std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
   ceph::mutex balancer_lock = ceph::make_mutex("OSDMonitor::balancer_lock");
 
   std::map<int,double> osd_weight;
-  std::set<int32_t> filestore_osds;
 
   using osdmap_key_t = std::pair<version_t, uint64_t>;
   using osdmap_cache_t = SimpleLRU<osdmap_key_t,
@@ -516,6 +514,7 @@ private:
 				const std::string &erasure_code_profile,
 				unsigned *stripe_width,
 				std::ostream *ss);
+  uint32_t get_osd_num_by_crush(int crush_rule);
   int check_pg_num(int64_t pool, int pg_num, int size, int crush_rule, std::ostream* ss);
   int prepare_new_pool(std::string& name,
 		       int crush_rule,
@@ -530,8 +529,9 @@ private:
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
                        FastReadType fast_read,
-		       const std::string& pg_autoscale_mode,
+		       std::string pg_autoscale_mode,
 		       bool bulk,
+		       bool crimson,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 
@@ -632,8 +632,6 @@ private:
 public:
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
   void get_versions(std::map<std::string, std::list<std::string>> &versions);
-  void get_filestore_osd_list();
-  void check_for_filestore_osds(health_check_map_t *checks);
 protected:
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
@@ -700,8 +698,8 @@ public:
   void do_osd_create(const int32_t id, const uuid_d& uuid,
 		     const std::string& device_class,
 		     int32_t* new_id);
-  int prepare_command_osd_purge(int32_t id, std::stringstream& ss);
-  int prepare_command_osd_destroy(int32_t id, std::stringstream& ss);
+  int prepare_command_osd_purge(MonOpRequestRef op, int32_t id, std::stringstream& ss);
+  int prepare_command_osd_destroy(MonOpRequestRef op, int32_t id, std::stringstream& ss);
   int _prepare_command_osd_crush_remove(
       CrushWrapper &newcrush,
       int32_t id,

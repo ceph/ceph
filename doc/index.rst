@@ -2,15 +2,20 @@
  Welcome to Ceph
 =================
 
-Ceph uniquely delivers **object, block, and file storage in one unified
-system**.
+Ceph delivers **object, block, and file storage in one unified system**.
 
-.. warning:: 
+.. warning::
 
-   :ref:`If this is your first time using Ceph, read the "Basic Workflow" 
-   page in the Ceph Developer Guide to learn how to contribute to the 
-   Ceph project. (Click anywhere in this paragraph to read the "Basic 
+   :ref:`If this is your first time using Ceph, read the "Basic Workflow"
+   page in the Ceph Developer Guide to learn how to contribute to the
+   Ceph project. (Click anywhere in this paragraph to read the "Basic
    Workflow" page of the Ceph Developer Guide.) <basic workflow dev guide>`.
+
+.. note::
+
+   :ref:`If you want to make a commit to the documentation but you don't
+   know how to get started, read the "Documenting Ceph" page. (Click anywhere
+   in this paragraph to read the "Documenting Ceph" page.) <documenting_ceph>`.
 
 .. container:: columns-3
 
@@ -105,6 +110,7 @@ about Ceph, see our `Architecture`_ section.
    radosgw/index
    mgr/index
    mgr/dashboard
+   monitoring/index
    api/index
    architecture
    Developer Guide <dev/developer_guide/index>
@@ -115,5 +121,6 @@ about Ceph, see our `Architecture`_ section.
    releases/general
    releases/index
    security/index
+   hardware-monitoring/index
    Glossary <glossary>
    Tracing <jaegertracing/index>

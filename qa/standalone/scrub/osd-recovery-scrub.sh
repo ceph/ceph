@@ -24,6 +24,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--osd-op-queue=wpq "
 
     export -n CEPH_CLI_TEST_DUP_COMMAND
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
@@ -32,7 +33,7 @@ function run() {
     done
 }
 
-# Simple test for "not scheduling scrubs due to active recovery"
+# Simple test for "recovery in progress. Only high priority scrubs allowed."
 # OSD::sched_scrub() called on all OSDs during ticks
 function TEST_recovery_scrub_1() {
     local dir=$1
@@ -45,9 +46,12 @@ function TEST_recovery_scrub_1() {
     ERRORS=0
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true \
-                   --osd_scrub_interval_randomize_ratio=0.0 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 "
+    ceph_osd_args+="--osd_stats_update_period_not_scrubbing=3 "
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2"
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
         run_osd $dir $osd --osd_scrub_during_recovery=false || return 1
@@ -95,11 +99,11 @@ function TEST_recovery_scrub_1() {
     kill_daemons $dir #|| return 1
 
     declare -a err_strings
-    err_strings[0]="not scheduling scrubs due to active recovery"
+    err_strings[0]="recovery in progress. Only high priority scrubs allowed."
 
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-        grep "not scheduling scrubs" $dir/osd.${osd}.log
+        grep "recovery in progress. Only high priority scrubs allowed." $dir/osd.${osd}.log
     done
     for err_string in "${err_strings[@]}"
     do
@@ -236,12 +240,16 @@ function TEST_recovery_scrub_2() {
     OBJECTS=40
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true \
-                   --osd_scrub_interval_randomize_ratio=0.0 || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 "
+    ceph_osd_args+="--osd_stats_update_period_not_scrubbing=3 "
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2"
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-        run_osd $dir $osd --osd_scrub_during_recovery=true --osd_recovery_sleep=10 || return 1
+        run_osd $dir $osd --osd_scrub_during_recovery=true --osd_recovery_sleep=10 \
+                          $ceph_osd_args || return 1
     done
 
     # Create a pool with $PGS pgs
@@ -259,6 +267,15 @@ function TEST_recovery_scrub_2() {
     ceph osd pool set $poolname size 3
 
     ceph pg dump pgs
+
+    # note that the following will be needed if the mclock scheduler is specified
+    #ceph tell osd.* config get osd_mclock_override_recovery_settings
+
+    # the '_max_active' is expected to be 0
+    ceph tell osd.1 config get osd_recovery_max_active
+    # both next parameters are expected to be >=3
+    ceph tell osd.1 config get osd_recovery_max_active_hdd
+    ceph tell osd.1 config get osd_recovery_max_active_ssd
 
     # Wait for recovery to start
     count=0

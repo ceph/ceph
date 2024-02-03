@@ -8,6 +8,7 @@ tasks:
 - openssl_keys:
 - rgw:
     client.0:
+- tox: [client.0]
 
 overrides:
   ceph:
@@ -15,5 +16,3 @@ overrides:
       global:
         osd_min_pg_log_entries: 10
         osd_max_pg_log_entries: 10
-      client:
-        rgw lc debug interval: 10

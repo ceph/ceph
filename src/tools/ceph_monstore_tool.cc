@@ -210,6 +210,8 @@ void usage(const char *n, po::options_description &d)
   << "                                  (default: last committed)\n"
   << "  get crushmap [-- options]       get crushmap (version VER if specified)\n"
   << "                                  (default: last committed)\n"
+  << "  get-key PREFIX KEY [-- options] get key\n"
+  << "  remove-key PREFIX KEY           remove key\n"
   << "  show-versions [-- options]      show the first&last committed version of map\n"
   << "                                  (show-versions -- --help for more info)\n"
   << "  dump-keys                       dumps store keys to FILE\n"
@@ -232,6 +234,7 @@ void usage(const char *n, po::options_description &d)
     << "\nPlease Note:\n"
     << "* Ceph-specific options should be in the format --option-name=VAL\n"
     << "  (specifically, do not forget the '='!!)\n"
+    << "  e.g., 'dump-keys --debug-rocksdb=0'\n"
     << "* Command-specific options need to be passed after a '--'\n"
     << "  e.g., 'get monmap -- --version 10 --out /tmp/foo'"
     << std::endl;
@@ -959,7 +962,7 @@ int main(int argc, char **argv) {
         } else if (map_type == "osdmap") {
           OSDMap osdmap;
           osdmap.decode(bl);
-          osdmap.print(ss);
+          osdmap.print(cct.get(), ss);
         } else if (map_type == "mdsmap") {
           FSMap fs_map;
           fs_map.decode(bl);
@@ -997,6 +1000,103 @@ int main(int argc, char **argv) {
       std::cout << "wrote " << map_type
                 << " version " << v << " to " << outpath
                 << std::endl;
+    }
+} else if (cmd == "get-key") {
+    string outpath;
+    string prefix;
+    string key;
+
+    // visible options for this command
+    po::options_description op_desc("Allowed 'get-key' options");
+    op_desc.add_options()
+      ("help,h", "produce this help message")
+      ("out,o", po::value<string>(&outpath),
+       "output file (default: stdout)")
+      ("readable,r", "print the map information in human readable format")
+      ;
+    // this is going to be a positional argument; we don't want to show
+    // it as an option during --help, but we do want to have it captured
+    // when parsing.
+    po::options_description hidden_op_desc("Hidden 'get-key' options");
+    hidden_op_desc.add_options()
+      ("prefix", po::value<string>(&prefix),"prefix")
+      ("key", po::value<string>(&key),"key")
+      ;
+    po::positional_options_description op_positional;
+    op_positional.add("prefix", 1);
+    op_positional.add("key", 1);
+
+
+    po::variables_map op_vm;
+    int r = parse_cmd_args(&op_desc, &hidden_op_desc, &op_positional,
+                           subcmds, &op_vm);
+    if (r < 0) {
+      return -r;
+    }
+
+    if (op_vm.count("help") || prefix.empty()) {
+      usage(argv[0], op_desc);
+      return 0;
+    }
+
+    int fd = STDOUT_FILENO;
+    if (!outpath.empty()){
+      fd = ::open(outpath.c_str(), O_WRONLY|O_CREAT|O_TRUNC|O_BINARY, 0666);
+      if (fd < 0) {
+        std::cerr << "error opening output file: "
+          << cpp_strerror(errno) << std::endl;
+        return EINVAL;
+      }
+    }
+
+    auto close_fd = make_scope_guard([&] {
+      ::close(fd);
+      if (r < 0 && fd != STDOUT_FILENO) {
+        ::remove(outpath.c_str());
+      }
+    });
+    bufferlist bl;
+    r = 0;
+    std::cout << prefix << " " << key << std::endl;
+    r = st.get(prefix, key, bl);
+    if (r < 0) {
+      std::cerr << "Error getting key: " << cpp_strerror(r) << std::endl;
+      return EINVAL;
+    }
+
+    if (op_vm.count("readable")) {
+      try {
+        if (prefix == "osd_snap") {
+          auto p = bl.cbegin();
+          if (key.starts_with("purged_epoch_")) {
+            map<int64_t,snap_interval_set_t> val;
+            ceph::decode(val, p);
+            std::cout << val << std::endl;
+          } else if (key.starts_with("purged_snap_")) {
+            snapid_t first_snap, end_snap;
+            epoch_t epoch;
+            ceph::decode(first_snap, p);
+            ceph::decode(end_snap, p);
+            ceph::decode(epoch, p);
+            std::cout << "first_snap:" << first_snap
+                      << " end_snap: " << end_snap
+                      << " epoch: " << epoch
+                      << std::endl;
+          }
+        } else {
+          std::cerr << "This type of readable key does not exist: " << prefix
+                    << std::endl << "You can only specify[osd_snap]" << std::endl;
+        }
+      } catch (const buffer::error &err) {
+        std::cerr << "Could not decode for human readable output (you may still"
+	  " use non-readable mode).  Detail: " << err.what() << std::endl;
+      }
+    }
+
+    bl.write_fd(fd);
+
+    if (!outpath.empty()) {
+      std::cout << "wrote " << prefix << " " <<  key <<  " to " << outpath << std::endl;
     }
   } else if (cmd == "show-versions") {
     string map_type; //map type:osdmap,monmap...
@@ -1311,6 +1411,32 @@ int main(int argc, char **argv) {
     err = rewrite_crush(argv[0], subcmds, st);
   } else if (cmd == "rebuild") {
     err = rebuild_monstore(argv[0], subcmds, st);
+  } else if (cmd == "remove-key") {
+    string prefix, key;
+    // No visible options for this command
+    po::options_description op_desc("Allowed 'get' options");
+    po::options_description hidden_op_desc("Hidden 'get' options");
+    hidden_op_desc.add_options()
+      ("prefix", po::value<string>(&prefix),"prefix")
+      ("key", po::value<string>(&key),"key")
+      ;
+    po::positional_options_description op_positional;
+    op_positional.add("prefix", 1);
+    op_positional.add("key", 1);
+
+    po::variables_map op_vm;
+    int r = parse_cmd_args(&op_desc, &hidden_op_desc, &op_positional,
+                           subcmds, &op_vm);
+    if (r < 0) {
+      return -r;
+    }
+    r = st.clear_key(prefix, key);
+    if (r < 0) {
+      std::cerr << "error removing ("
+                << prefix << "," << key << ")"
+                << std::endl;
+      return r;
+    }
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     usage(argv[0], desc);

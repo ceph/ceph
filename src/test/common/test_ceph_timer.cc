@@ -18,6 +18,7 @@
 
 #include <gtest/gtest.h>
 
+#include "common/ceph_time.h"
 #include "common/ceph_timer.h"
 
 using namespace std::literals;
@@ -133,6 +134,30 @@ void cancellation()
     EXPECT_FALSE(timer.cancel_event(e));
   }
 }
+
+template<typename TC>
+void tick(ceph::timer<TC>* t,
+          typename TC::time_point deadline,
+          double interval,
+          bool* test_finished,
+          typename TC::time_point* last_tick,
+          uint64_t* tick_count,
+          typename TC::time_point* last_tp,
+          typename TC::time_point* second_last_tp) {
+  *last_tick = TC::now();
+  *tick_count += 1;
+
+  if (TC::now() > deadline) {
+    *test_finished = true;
+  } else {
+    auto tp = TC::now() + ceph::make_timespan(interval);
+
+    *second_last_tp = *last_tp;
+    *last_tp = tp;
+
+    t->reschedule_me(tp);
+  }
+}
 }
 
 TEST(RunSome, Steady)
@@ -160,4 +185,43 @@ TEST(CancelAll, Steady)
 TEST(CancelAll, Wall)
 {
   cancel_all<std::chrono::system_clock>();
+}
+
+TEST(TimerLoopTest, TimerLoop)
+{
+  using TC = ceph::coarse_mono_clock;
+  ceph::timer<TC> t;
+  bool test_finished = false;
+  int test_duration = 10;
+  double tick_interval = 0.00004;
+  auto last_tick = TC::now();
+  uint64_t tick_count = 0;
+
+  auto last_tp = TC::now();
+  auto second_last_tp = TC::now();
+  TC::time_point test_deadline = TC::now() +
+                                 std::chrono::seconds(test_duration);
+
+  t.add_event(
+    ceph::make_timespan(tick_interval),
+    &tick<TC>,
+    &t,
+    test_deadline,
+    tick_interval,
+    &test_finished,
+    &last_tick,
+    &tick_count,
+    &last_tp,
+    &second_last_tp);
+
+  std::this_thread::sleep_for(std::chrono::seconds(test_duration + 2));
+
+  ASSERT_TRUE(test_finished)
+    << "The timer job didn't complete, it probably hung. "
+    << "Time since last tick: "
+    << (TC::now() - last_tick)
+    << ". Tick count: " << tick_count
+    << ". Last wait tp: " << last_tp
+    << ", second last tp: " << second_last_tp
+    << ", deadline tp: " << test_deadline;
 }

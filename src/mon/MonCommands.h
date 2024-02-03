@@ -209,7 +209,7 @@ COMMAND("auth rm "
 /*
  * Monitor commands (Monitor.cc)
  */
-COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb/rocksdb storage",
+COMMAND_WITH_FLAG("compact", "cause compaction of monitor's RocksDB storage",
 	     "mon", "rw",
              FLAG(TELL))
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r")
@@ -374,10 +374,26 @@ COMMAND("fs get name=fs_name,type=CephString",
 	"fs", "r")
 COMMAND("fs set "
 	"name=fs_name,type=CephString "
-	"name=var,type=CephChoices,strings=max_mds|max_file_size"
-        "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer"
-        "|standby_count_wanted|session_timeout|session_autoclose"
-        "|allow_standby_replay|down|joinable|min_compat_client|bal_rank_mask "
+	"name=var,type=CephChoices,strings=max_mds"
+          "|allow_dirfrags"
+          "|allow_new_snaps"
+          "|allow_standby_replay"
+          "|bal_rank_mask"
+          "|balance_automate"
+          "|balancer"
+          "|cluster_down"
+          "|down"
+          "|inline_data"
+          "|joinable"
+          "|max_file_size"
+          "|max_xattr_size"
+          "|min_compat_client"
+          "|refuse_client_session"
+          "|refuse_standby_for_another_fs"
+          "|session_autoclose"
+          "|session_timeout"
+          "|standby_count_wanted"
+          " "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=yes_i_really_really_mean_it,type=CephBool,req=false",
@@ -443,6 +459,14 @@ COMMAND("fs rename "
 	"name=new_fs_name,type=CephString,goodchars=" FS_NAME_GOODCHARS
 	" name=yes_i_really_mean_it,type=CephBool,req=false",
 	"rename a ceph file system", "mds", "rw")
+COMMAND("fs swap "
+	"name=fs1_name,type=CephString "
+	"name=fs1_id,type=CephInt,range=0 "
+	"name=fs2_name,type=CephString "
+	"name=fs2_id,type=CephInt,range=0 "
+	"name=swap_fscids,type=CephChoices,strings=yes|no,req=true "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"swap ceph file system names", "mds", "rw")
 
 /*
  * Monmap commands
@@ -842,16 +866,16 @@ COMMAND("osd erasure-code-profile ls",
 COMMAND("osd set "
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|"
 	"noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|"
-	"notieragent|nosnaptrim|pglog_hardlimit "
+	"notieragent|nosnaptrim|pglog_hardlimit|noautoscale "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set <key>", "osd", "rw")
 COMMAND("osd unset "
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|"\
 	"noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|"
-	"notieragent|nosnaptrim",
+	"notieragent|nosnaptrim|noautoscale",
 	"unset <key>", "osd", "rw")
 COMMAND("osd require-osd-release "\
-	"name=release,type=CephChoices,strings=octopus|pacific|quincy|reef "
+	"name=release,type=CephChoices,strings=octopus|pacific|quincy|reef|squid "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw")
@@ -993,7 +1017,11 @@ COMMAND("osd rm-pg-upmap-primary "
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName",
-        "set primary_temp mapping pgid:<id>|-1 (developers only)",
+        "set primary_temp mapping pgid:<id> (developers only)",
+        "osd", "rw")
+COMMAND("osd rm-primary-temp "
+	"name=pgid,type=CephPgid ",
+        "clear primary_temp mapping pgid (developers only)",
         "osd", "rw")
 COMMAND("osd primary-affinity "
 	"name=id,type=CephOsdName "
@@ -1084,7 +1112,8 @@ COMMAND("osd pool create "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
 	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "\
-	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"name=yes_i_really_mean_it,type=CephBool,req=false"
+	"name=crimson,type=CephBool,req=false",
 	"create pool", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete "
 	"name=pool,type=CephPoolname "
@@ -1108,11 +1137,11 @@ COMMAND("osd pool rename "
 	"rename <srcpool> to <destpool>", "osd", "rw")
 COMMAND("osd pool get "
 	"name=pool,type=CephPoolname "
-	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recency_for_promote|all|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|dedup_tier|dedup_chunk_algorithm|dedup_cdc_chunk_size|eio|bulk",
+	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recency_for_promote|all|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|dedup_tier|dedup_chunk_algorithm|dedup_cdc_chunk_size|eio|bulk|read_ratio",
 	"get pool parameter <var>", "osd", "r")
 COMMAND("osd pool set "
 	"name=pool,type=CephPoolname "
-	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|pgp_num_actual|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|dedup_tier|dedup_chunk_algorithm|dedup_cdc_chunk_size|eio|bulk "
+	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|pgp_num_actual|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|dedup_tier|dedup_chunk_algorithm|dedup_cdc_chunk_size|eio|bulk|read_ratio "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set pool parameter <var> to <val>", "osd", "rw")
@@ -1172,6 +1201,13 @@ COMMAND("osd force_recovery_stretch_mode " \
 	"try and force a recovery stretch mode, increasing the "
 	"pool size to its non-failure value if currently degraded and "
 	"all monitor buckets are up",
+	"osd", "rw")
+COMMAND("osd set-allow-crimson " \
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"Allow crimson-osds to boot and join the cluster.  Note, crimson-osd is "
+	"not yet considered stable and may crash or cause data loss -- should "
+	"be avoided outside of testing and development.  This setting is "
+	"irrevocable",
 	"osd", "rw")
 
 
@@ -1260,6 +1296,10 @@ COMMAND("mgr dump "
 	"name=epoch,type=CephInt,range=0,req=false",
 	"dump the latest MgrMap",
 	"mgr", "r")
+COMMAND("mgr set "
+	"name=var,type=CephChoices,strings=down "
+	"name=val,type=CephString ",
+	"set mgr parameter <var> to <val>", "mgr", "rw")
 COMMAND("mgr fail name=who,type=CephString,req=false",
 	"treat the named manager daemon as failed", "mgr", "rw")
 COMMAND("mgr module ls",
@@ -1398,6 +1438,10 @@ COMMAND_WITH_FLAG("sessions",
             "mon", "r",
             FLAG(TELL))
 COMMAND_WITH_FLAG("dump_historic_ops",
-            "dump_historic_ops",
+            "show recent ops",
+            "mon", "r",
+            FLAG(TELL))
+COMMAND_WITH_FLAG("dump_historic_slow_ops",
+            "show recent slow ops",
             "mon", "r",
             FLAG(TELL))

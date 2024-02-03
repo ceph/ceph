@@ -456,7 +456,7 @@ TEST_F(cls_rgw, index_list)
     { static_cast<char>(0xCF), static_cast<char>(0x8F) },
     /* treble byte utf8 character */
     { static_cast<char>(0xDF), static_cast<char>(0x8F), static_cast<char>(0x8F) },
-    /* quadruble byte utf8 character */
+    /* quadruple byte utf8 character */
     { static_cast<char>(0xF7), static_cast<char>(0x8F), static_cast<char>(0x8F), static_cast<char>(0x8F) },
   };
 
@@ -738,7 +738,7 @@ TEST_F(cls_rgw, bi_list)
       "bi list test with filters should return correct truncation indicator";
   }
 
-  // test whether combined segment count is correcgt
+  // test whether combined segment count is correct
   is_truncated = false;
   entries.clear();
   marker.clear();
@@ -1251,4 +1251,92 @@ TEST_F(cls_rgw, bi_log_trim)
     EXPECT_EQ(40u, entries.size());
     EXPECT_FALSE(truncated);
   }
+}
+
+TEST_F(cls_rgw, index_racing_removes)
+{
+  string bucket_oid = str_int("bucket", 8);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  int epoch = 0;
+  rgw_bucket_dir_entry dirent;
+  rgw_bucket_dir_entry_meta meta;
+
+  // prepare/complete add for single object
+  const cls_rgw_obj_key obj{"obj"};
+  std::string loc = "loc";
+  {
+    std::string tag = "tag-add";
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, ++epoch, obj, meta);
+    test_stats(ioctx, bucket_oid, RGWObjCategory::None, 1, 0);
+  }
+
+  // list to verify no pending ops
+  {
+    std::map<int, rgw_cls_list_ret> results;
+    list_entries(ioctx, bucket_oid, 1, results);
+    ASSERT_EQ(1, results.size());
+    const auto& entries = results.begin()->second.dir.m;
+    ASSERT_EQ(1, entries.size());
+    dirent = std::move(entries.begin()->second);
+    ASSERT_EQ(obj, dirent.key);
+    ASSERT_TRUE(dirent.exists);
+    ASSERT_TRUE(dirent.pending_map.empty());
+  }
+
+  // prepare three racing removals
+  std::string tag1 = "tag-rm1";
+  std::string tag2 = "tag-rm2";
+  std::string tag3 = "tag-rm3";
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag1, obj, loc);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag2, obj, loc);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag3, obj, loc);
+
+  test_stats(ioctx, bucket_oid, RGWObjCategory::None, 1, 0);
+
+  // complete on tag2
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag2, ++epoch, obj, meta);
+  {
+    std::map<int, rgw_cls_list_ret> results;
+    list_entries(ioctx, bucket_oid, 1, results);
+    ASSERT_EQ(1, results.size());
+    const auto& entries = results.begin()->second.dir.m;
+    ASSERT_EQ(1, entries.size());
+    dirent = std::move(entries.begin()->second);
+    ASSERT_EQ(obj, dirent.key);
+    ASSERT_FALSE(dirent.exists);
+    ASSERT_FALSE(dirent.pending_map.empty());
+  }
+
+  // cancel on tag1
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_CANCEL, tag1, ++epoch, obj, meta);
+  {
+    std::map<int, rgw_cls_list_ret> results;
+    list_entries(ioctx, bucket_oid, 1, results);
+    ASSERT_EQ(1, results.size());
+    const auto& entries = results.begin()->second.dir.m;
+    ASSERT_EQ(1, entries.size());
+    dirent = std::move(entries.begin()->second);
+    ASSERT_EQ(obj, dirent.key);
+    ASSERT_FALSE(dirent.exists);
+    ASSERT_FALSE(dirent.pending_map.empty());
+  }
+
+  // final cancel on tag3
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_CANCEL, tag3, ++epoch, obj, meta);
+
+  // verify that the key was removed
+  {
+    std::map<int, rgw_cls_list_ret> results;
+    list_entries(ioctx, bucket_oid, 1, results);
+    EXPECT_EQ(1, results.size());
+    const auto& entries = results.begin()->second.dir.m;
+    ASSERT_EQ(0, entries.size());
+  }
+
+  test_stats(ioctx, bucket_oid, RGWObjCategory::None, 0, 0);
 }

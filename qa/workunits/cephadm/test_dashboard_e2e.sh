@@ -20,6 +20,9 @@ install_common () {
         $SUDO apt-get update
         $SUDO apt-get install nodejs
     elif grep -q rhel /etc/*-release; then
+        if grep -q "CentOS Stream 9" /etc/*-release; then
+            NODEJS_VERSION="18"
+        fi
         $SUDO yum module -y enable nodejs:$NODEJS_VERSION
         $SUDO yum install -y jq npm
     else
@@ -58,7 +61,7 @@ EOF
 cypress_run () {
     local specs="$1"
     local timeout="$2"
-    local override_config="ignoreTestFiles=*.po.ts,retries=0,testFiles=${specs}"
+    local override_config="excludeSpecPattern=*.po.ts,retries=0,specPattern=${specs}"
 
     if [ x"$timeout" != "x" ]; then
         override_config="${override_config},defaultCommandTimeout=${timeout}"
@@ -96,12 +99,12 @@ ceph dashboard ac-user-set-password admin -i "${DASHBOARD_ADMIN_SECRET_FILE}" --
 # See /ceph/src/pybind/mgr/dashboard/frontend/cypress/integration/orchestrator/ folder.
 find cypress # List all specs
 
-cypress_run "orchestrator/01-hosts.e2e-spec.ts"
+cypress_run "cypress/e2e/orchestrator/01-hosts.e2e-spec.ts"
 
 # Hosts are removed and added in the previous step. Do a refresh again.
 ceph orch device ls --refresh
 sleep 10
 ceph orch device ls --format=json | tee cypress/fixtures/orchestrator/inventory.json
 
-cypress_run "orchestrator/03-inventory.e2e-spec.ts"
-cypress_run "orchestrator/04-osds.e2e-spec.ts" 300000
+cypress_run "cypress/e2e/orchestrator/03-inventory.e2e-spec.ts"
+cypress_run "cypress/e2e/orchestrator/04-osds.e2e-spec.ts" 300000

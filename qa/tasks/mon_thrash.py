@@ -9,6 +9,7 @@ import gevent
 import json
 import math
 from teuthology import misc as teuthology
+from teuthology.contextutil import safe_while
 from tasks import ceph_manager
 from tasks.cephfs.filesystem import MDSCluster
 from tasks.thrasher import Thrasher
@@ -224,6 +225,25 @@ class MonitorThrasher(Thrasher):
         else:
             return m
 
+    def _wait_until_quorum(self, mon, size, timeout=300):
+        """
+        Wait until the monitor specified is in the quorum.
+        """
+        self.log('waiting for quorum size %d for mon %s' % (size, mon))
+        s = {}
+
+        with safe_while(sleep=3,
+                        tries=timeout // 3,
+                        action=f'wait for quorum size {size} on mon {mon}') as proceed:
+            while proceed():
+                s = self.manager.get_mon_status(mon)
+                if len(s['quorum']) == size:
+                   break
+                self.log("quorum is size %d" % len(s['quorum']))
+
+        self.log("final quorum is size %d" % len(s['quorum']))
+        return s
+
     def do_thrash(self):
         """
         _do_thrash() wrapper.
@@ -261,7 +281,11 @@ class MonitorThrasher(Thrasher):
             self.manager.wait_for_mon_quorum_size(len(mons))
             self.log('making sure all monitors are in the quorum')
             for m in mons:
-                s = self.manager.get_mon_status(m)
+                try:
+                    s = self._wait_until_quorum(m, len(mons), timeout=30)
+                except Exception as e:
+                    self.log('mon.{m} is not in quorum size, exception: {e}'.format(m=m,e=e))
+                    self.log('mon_status: {s}'.format(s=s))
                 assert s['state'] == 'leader' or s['state'] == 'peon'
                 assert len(s['quorum']) == len(mons)
 
@@ -300,7 +324,12 @@ class MonitorThrasher(Thrasher):
                 for m in mons:
                     if m in mons_to_kill:
                         continue
-                    s = self.manager.get_mon_status(m)
+                    try:
+                        s = self._wait_until_quorum(m, len(mons)-len(mons_to_kill), timeout=30)
+                    except Exception as e:
+                        self.log('mon.{m} is not in quorum size, exception: {e}'.format(m=m,e=e))
+                        self.log('mon_status: {s}'.format(s=s))
+
                     assert s['state'] == 'leader' or s['state'] == 'peon'
                     assert len(s['quorum']) == len(mons)-len(mons_to_kill)
 
@@ -322,7 +351,12 @@ class MonitorThrasher(Thrasher):
 
             self.manager.wait_for_mon_quorum_size(len(mons))
             for m in mons:
-                s = self.manager.get_mon_status(m)
+                try:
+                    s = self._wait_until_quorum(m, len(mons), timeout=30)
+                except Exception as e:
+                    self.log('mon.{m} is not in quorum size, exception: {e}'.format(m=m,e=e))
+                    self.log('mon_status: {s}'.format(s=s))
+
                 assert s['state'] == 'leader' or s['state'] == 'peon'
                 assert len(s['quorum']) == len(mons)
 

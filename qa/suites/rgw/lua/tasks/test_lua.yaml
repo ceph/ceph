@@ -1,0 +1,5 @@
+tasks:
+- tox: [client.0]
+- lua-tests:
+    client.0:
+      rgw_server: client.0

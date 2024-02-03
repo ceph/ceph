@@ -1,6 +1,6 @@
 #!/bin/sh
 
-set -e
+set -ex
 
 do_tarball() {
     wget http://download.ceph.com/qa/$1

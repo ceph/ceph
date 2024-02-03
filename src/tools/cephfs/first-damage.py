@@ -56,7 +56,7 @@ MEMO = None
 REMOVE = False
 POOL = None
 NEXT_SNAP = None
-CONF = os.environ['CEPH_CONF']
+CONF = os.environ.get('CEPH_CONF')
 REPAIR_NOSNAP = None
 
 CEPH_NOSNAP = 0xfffffffe # int32 -2
@@ -76,26 +76,32 @@ def traverse(MEMO, ioctx):
         log.info("examining: %s", o.key)
 
         with rados.ReadOpCtx() as rctx:
-            it = ioctx.get_omap_vals(rctx, None, None, 100000)[0]
-            ioctx.operate_read_op(rctx, o.key)
-            for (dnk, val) in it:
-                log.debug('\t%s: val size %d', dnk, len(val))
-                (first,) = struct.unpack('<I', val[:4])
-                if first > NEXT_SNAP:
-                    log.warning(f"found {o.key}:{dnk} first (0x{first:x}) > NEXT_SNAP (0x{NEXT_SNAP:x})")
-                    if REPAIR_NOSNAP and dnk.endswith("_head") and first == CEPH_NOSNAP:
-                        log.warning(f"repairing first==CEPH_NOSNAP damage, setting to NEXT_SNAP (0x{NEXT_SNAP:x})")
-                        first = NEXT_SNAP
-                        nval = bytearray(val)
-                        struct.pack_into("<I", nval, 0, NEXT_SNAP)
-                        with rados.WriteOpCtx() as wctx:
-                            ioctx.set_omap(wctx, (dnk,), (bytes(nval),))
-                            ioctx.operate_write_op(wctx, o.key)
-                    elif REMOVE:
-                        log.warning(f"removing {o.key}:{dnk}")
-                        with rados.WriteOpCtx() as wctx:
-                            ioctx.remove_omap_keys(wctx, [dnk])
-                            ioctx.operate_write_op(wctx, o.key)
+            nkey = None
+            while True:
+                it = ioctx.get_omap_vals(rctx, nkey, None, 100, omap_key_type=bytes)[0]
+                ioctx.operate_read_op(rctx, o.key)
+                nkey = None
+                for (dnk, val) in it:
+                    log.debug(f'\t{dnk}: val size {len(val)}')
+                    (first,) = struct.unpack('<I', val[:4])
+                    if first > NEXT_SNAP:
+                        log.warning(f"found {o.key}:{dnk} first (0x{first:x}) > NEXT_SNAP (0x{NEXT_SNAP:x})")
+                        if REPAIR_NOSNAP and dnk.endswith(b"_head") and first == CEPH_NOSNAP:
+                            log.warning(f"repairing first==CEPH_NOSNAP damage, setting to NEXT_SNAP (0x{NEXT_SNAP:x})")
+                            first = NEXT_SNAP
+                            nval = bytearray(val)
+                            struct.pack_into("<I", nval, 0, NEXT_SNAP)
+                            with rados.WriteOpCtx() as wctx:
+                                ioctx.set_omap(wctx, (dnk,), (bytes(nval),))
+                                ioctx.operate_write_op(wctx, o.key)
+                        elif REMOVE:
+                            log.warning(f"removing {o.key}:{dnk}")
+                            with rados.WriteOpCtx() as wctx:
+                                ioctx.remove_omap_keys(wctx, [dnk])
+                                ioctx.operate_write_op(wctx, o.key)
+                    nkey = dnk
+                if nkey is None:
+                    break
         MEMO.write(f"{o.key}\n")
 
 if __name__ == '__main__':

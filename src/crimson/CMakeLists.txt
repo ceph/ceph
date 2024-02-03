@@ -23,7 +23,8 @@ set(crimson_common_srcs
   common/operation.cc
   common/throttle.cc
   common/tmap_helpers.cc
-  common/tri_mutex.cc)
+  common/tri_mutex.cc
+  crush/CrushLocation.cc)
 
 # the specialized version of ceph-common, where
 #  - the logging is sent to Seastar backend
@@ -63,6 +64,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/mempool.cc
   ${PROJECT_SOURCE_DIR}/src/common/options.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters.cc
+  ${PROJECT_SOURCE_DIR}/src/common/perf_counters_key.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_histogram.cc
   ${PROJECT_SOURCE_DIR}/src/common/page.cc
   ${PROJECT_SOURCE_DIR}/src/common/pick_address.cc
@@ -97,7 +99,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/crush/CrushWrapper.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushCompiler.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushTester.cc
-  ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
@@ -109,6 +110,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/mds/FSMap.cc
   ${PROJECT_SOURCE_DIR}/src/mds/FSMapUser.cc
   ${PROJECT_SOURCE_DIR}/src/mds/MDSMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mds/MDSAuthCaps.cc
   ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
   ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc
@@ -119,6 +121,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/HitSet.cc
   ${PROJECT_SOURCE_DIR}/src/osd/OSDMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
+  ${PROJECT_SOURCE_DIR}/src/common/scrub_types.cc
   ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
   ${crimson_common_srcs}
   $<TARGET_OBJECTS:common_mountcephfs_objs>
@@ -147,7 +150,7 @@ target_link_libraries(crimson-common
   PUBLIC
     ${crimson_common_public_deps}
   PRIVATE
-    crc32
+    crc32 arch
     ${crimson_common_deps}
     OpenSSL::Crypto)
 
@@ -175,11 +178,12 @@ set(crimson_net_srcs
   ${PROJECT_SOURCE_DIR}/src/msg/async/compression_onwire.cc
   ${PROJECT_SOURCE_DIR}/src/msg/async/frames_v2.cc
   net/Errors.cc
+  net/FrameAssemblerV2.cc
+  net/io_handler.cc
   net/Messenger.cc
   net/SocketConnection.cc
   net/SocketMessenger.cc
   net/Socket.cc
-  net/Protocol.cc
   net/ProtocolV2.cc
   net/chained_dispatchers.cc)
 add_library(crimson STATIC

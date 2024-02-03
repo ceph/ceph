@@ -45,8 +45,6 @@ FS_TOP_SUPPORTED_VER = 2
 ITEMS_PAD_LEN = 3
 ITEMS_PAD = " " * ITEMS_PAD_LEN
 DEFAULT_REFRESH_INTERVAL = 1
-# min refresh interval allowed
-MIN_REFRESH_INTERVAL = 0.5
 
 # metadata provided by mgr/stats
 FS_TOP_MAIN_WINDOW_COL_CLIENT_ID = "client_id"
@@ -100,10 +98,6 @@ CLIENT_METADATA_VALID_METRICS_KEY = "valid_metrics"
 GLOBAL_METRICS_KEY = "global_metrics"
 GLOBAL_COUNTERS_KEY = "global_counters"
 
-last_time = time.time()
-last_read_size = {}
-last_write_size = {}
-
 fs_list = []
 # store the current states of cephfs-top
 # last_fs    : last filesystem visited
@@ -156,8 +150,138 @@ def wrap(s, sl):
     return f'{s[0:sl-1]}+'
 
 
-class FSTop(object):
+class FSTopBase(object):
+    def __init__(self):
+        self.last_time = time.time()
+        self.last_read_size = {}
+        self.last_write_size = {}
+        self.dump_json = {}
+
+    @staticmethod
+    def has_metric(metadata, metrics_key):
+        return metrics_key in metadata
+
+    @staticmethod
+    def has_metrics(metadata, metrics_keys):
+        for key in metrics_keys:
+            if not FSTopBase.has_metric(metadata, key):
+                return False
+        return True
+
+    def __build_clients(self, fs, clients_json):
+        fs_meta = clients_json.setdefault(fs, {})
+        fs_key = self.stats_json[GLOBAL_METRICS_KEY].get(fs, {})
+        clients = fs_key.keys()
+        for client_id in clients:
+            cur_time = time.time()
+            duration = cur_time - self.last_time
+            self.last_time = cur_time
+            client_meta = self.stats_json[CLIENT_METADATA_KEY].get(fs, {}).get(client_id, {})
+            for item in MAIN_WINDOW_TOP_LINE_ITEMS_START[1:]:
+                if item == FS_TOP_MAIN_WINDOW_COL_CLIENT_ID:
+                    client_id_meta = fs_meta.setdefault(client_id.split('.')[1], {})
+                elif item == FS_TOP_MAIN_WINDOW_COL_MNT_ROOT:
+                    client_id_meta.update({item:
+                                           client_meta[CLIENT_METADATA_MOUNT_ROOT_KEY]})
+            counters = [m.upper() for m in self.stats_json[GLOBAL_COUNTERS_KEY]]
+            metrics = fs_key.get(client_id, {})
+            cidx = 0
+            for item in counters:
+                if item in MAIN_WINDOW_TOP_LINE_METRICS_LEGACY:
+                    cidx += 1
+                    continue
+                m = metrics[cidx]
+                key = MGR_STATS_COUNTERS[cidx]
+                typ = MAIN_WINDOW_TOP_LINE_METRICS[key]
+                if item.lower() in client_meta.get(
+                        CLIENT_METADATA_VALID_METRICS_KEY, []):
+                    key_name = self.items(item)
+                    if typ == MetricType.METRIC_TYPE_PERCENTAGE:
+                        client_id_meta.update({f'{key_name}': calc_perc(m)})
+                    elif typ == MetricType.METRIC_TYPE_LATENCY:
+                        client_id_meta.update({f'{key_name}': calc_lat(m)})
+                    elif typ == MetricType.METRIC_TYPE_STDEV:
+                        client_id_meta.update({f'{key_name}': calc_stdev(m)})
+                    elif typ == MetricType.METRIC_TYPE_SIZE:
+                        client_id_meta.update({f'{key_name}': calc_size(m)})
+                        # average io sizes
+                        client_id_meta.update({f'{self.avg_items(item)}':
+                                               calc_avg_size(m)})
+                        # io speeds
+                        size = 0
+                        if key == "READ_IO_SIZES":
+                            if m[1] > 0:
+                                last_size = self.last_read_size.get(client_id, 0)
+                                size = m[1] - last_size
+                                self.last_read_size[client_id] = m[1]
+                        if key == "WRITE_IO_SIZES":
+                            if m[1] > 0:
+                                last_size = self.last_write_size.get(client_id, 0)
+                                size = m[1] - last_size
+                                self.last_write_size[client_id] = m[1]
+                        client_id_meta.update({f'{self.speed_items(item)}':
+                                               calc_speed(abs(size), duration)})
+                    else:
+                        # display 0th element from metric tuple
+                        client_id_meta.update({f'{key_name}': f'{m[0]}'})
+                else:
+                    client_id_meta.update({f'{self.items(item)}': "N/A"})
+                cidx += 1
+
+            for item in MAIN_WINDOW_TOP_LINE_ITEMS_END:
+                if item == FS_TOP_MAIN_WINDOW_COL_MNTPT_HOST_ADDR:
+                    if FSTopBase.has_metrics(client_meta,
+                                             [CLIENT_METADATA_MOUNT_POINT_KEY,
+                                              CLIENT_METADATA_HOSTNAME_KEY,
+                                              CLIENT_METADATA_IP_KEY]):
+                        mount_point = f'{client_meta[CLIENT_METADATA_MOUNT_POINT_KEY]}'\
+                            f'@{client_meta[CLIENT_METADATA_HOSTNAME_KEY]}/'\
+                            f'{client_meta[CLIENT_METADATA_IP_KEY]}'
+                        client_id_meta.update({item: mount_point})
+                    else:
+                        client_id_meta.update({item: "N/A"})
+
+    def dump_metrics_to_stdout(self, fs_name=None):
+        fs_list = self.get_fs_names()
+        if not fs_list:
+            sys.stdout.write("No filesystem available\n")
+        else:
+            self.stats_json = self.perf_stats_query()
+            if fs_name:  # --dumpfs
+                if fs_name in fs_list:
+                    self.__build_clients(fs_name, clients_json=self.dump_json)
+                else:
+                    sys.stdout.write(f"Filesystem {fs_name} not available\n")
+                    return
+            else:  # --dump
+                num_clients = num_mounts = num_kclients = num_libs = 0
+                for fs_name in fs_list:
+                    client_metadata = self.stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
+                    client_cnt = len(client_metadata)
+                    if client_cnt:
+                        num_clients = num_clients + client_cnt
+                        num_mounts = num_mounts + len(
+                            [client for client, metadata in client_metadata.items() if
+                             CLIENT_METADATA_MOUNT_POINT_KEY in metadata
+                             and metadata[CLIENT_METADATA_MOUNT_POINT_KEY] != 'N/A'])
+                        num_kclients = num_kclients + len(
+                            [client for client, metadata in client_metadata.items() if
+                             "kernel_version" in metadata])
+                        num_libs = num_clients - (num_mounts + num_kclients)
+                self.dump_json.update({'date': datetime.now().ctime()})
+                client_count = self.dump_json.setdefault("client_count", {})
+                client_count.update({'total_clients': num_clients, 'fuse': num_mounts,
+                                     'kclient': num_kclients, 'libcephfs': num_libs})
+                clients_json = self.dump_json.setdefault("filesystems", {})
+                for fs in fs_list:
+                    self.__build_clients(fs, clients_json)
+            sys.stdout.write(json.dumps(self.dump_json))
+            sys.stdout.write("\n")
+
+
+class FSTop(FSTopBase):
     def __init__(self, args):
+        super(FSTop, self).__init__()
         self.rados = None
         self.stdscr = None  # curses instance
         self.active_screen = ""
@@ -278,7 +402,7 @@ class FSTop(object):
         stdscr.clear()
         h, w = stdscr.getmaxyx()
         title = ['No filesystem available',
-                 'Press "q" to go back to home (all filesystem info) screen']
+                 'Press "q" to go back to home (All Filesystem Info) screen']
         pos_x1 = w // 2 - len(title[0]) // 2
         pos_x2 = w // 2 - len(title[1]) // 2
         stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
@@ -306,10 +430,10 @@ class FSTop(object):
                 endmenu = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if self.active_screen == FS_TOP_ALL_FS_APP:
-                    self.run_all_display()
-                else:
+                if fs_list and self.active_screen == FS_TOP_FS_SELECTED_APP:
                     self.run_display()
+                else:
+                    self.run_all_display()
                 endmenu = True
 
             try:
@@ -338,13 +462,14 @@ class FSTop(object):
         key = 0
         endwhile = False
         while not endwhile:
-            global current_states
+            global current_states, fs_list
+            fs_list = self.get_fs_names()
 
             if key == curses.KEY_UP and curr_row1 > 0:
                 curr_row1 -= 1
             elif key == curses.KEY_DOWN and curr_row1 < len(field_menu) - 1:
                 curr_row1 += 1
-            elif key == curses.KEY_ENTER or key in [10, 13]:
+            elif (key in [curses.KEY_ENTER, 10, 13]) and fs_list:
                 self.stdscr.erase()
                 if curr_row1 != len(field_menu) - 1:
                     current_states["last_field"] = (field_menu[curr_row1].split('='))[0]
@@ -358,10 +483,10 @@ class FSTop(object):
                 endwhile = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if self.active_screen == FS_TOP_ALL_FS_APP:
-                    self.run_all_display()
-                else:
+                if fs_list and self.active_screen == FS_TOP_FS_SELECTED_APP:
                     self.run_display()
+                else:
+                    self.run_all_display()
                 endwhile = True
 
             try:
@@ -607,17 +732,6 @@ class FSTop(object):
             # return empty string for none type
             return ''
 
-    @staticmethod
-    def has_metric(metadata, metrics_key):
-        return metrics_key in metadata
-
-    @staticmethod
-    def has_metrics(metadata, metrics_keys):
-        for key in metrics_keys:
-            if not FSTop.has_metric(metadata, key):
-                return False
-        return True
-
     def create_table_header(self):  # formerly named as top_line
         heading = []
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_START:
@@ -645,12 +759,11 @@ class FSTop(object):
 
     def create_client(self, fs_name, client_id, metrics, counters,
                       client_meta, y_coord):
-        global last_time
         metrics_dict.setdefault(fs_name, {})
         metrics_dict[fs_name].setdefault(client_id, {})
         cur_time = time.time()
-        duration = cur_time - last_time
-        last_time = cur_time
+        duration = cur_time - self.last_time
+        self.last_time = cur_time
         xp = 0  # xp is incremented after each addstr to position the next incoming metrics.
         for item in MAIN_WINDOW_TOP_LINE_ITEMS_START:  # note: the first item is ITEMS_PAD
             hlen = len(item) + ITEMS_PAD_LEN
@@ -714,16 +827,14 @@ class FSTop(object):
                     size = 0
                     if key == "READ_IO_SIZES":
                         if m[1] > 0:
-                            global last_read_size
-                            last_size = last_read_size.get(client_id, 0)
+                            last_size = self.last_read_size.get(client_id, 0)
                             size = m[1] - last_size
-                            last_read_size[client_id] = m[1]
+                            self.last_read_size[client_id] = m[1]
                     if key == "WRITE_IO_SIZES":
                         if m[1] > 0:
-                            global last_write_size
-                            last_size = last_write_size.get(client_id, 0)
+                            last_size = self.last_write_size.get(client_id, 0)
                             size = m[1] - last_size
-                            last_write_size[client_id] = m[1]
+                            self.last_write_size[client_id] = m[1]
                     speed = calc_speed(abs(size), duration)
                     metrics_dict[fs_name][client_id][self.speed_items(key)] = speed
                     self.fsstats.addstr(y_coord, xp,
@@ -731,6 +842,7 @@ class FSTop(object):
                     xp += len(f'{self.speed_items(item)}{self.speed_mtype(typ)}') + ITEMS_PAD_LEN
                 else:
                     # display 0th element from metric tuple
+                    metrics_dict[fs_name][client_id][self.items(item)] = m[0]
                     self.fsstats.addstr(y_coord, xp, f'{m[0]}', curses.A_DIM)
                     xp += len(f'{self.items(item)}{self.mtype(typ)}') + ITEMS_PAD_LEN
             else:
@@ -762,7 +874,7 @@ class FSTop(object):
         res = stats_json[GLOBAL_METRICS_KEY].get(fs_name, {})
         client_cnt = len(res)
         self.fsstats.addstr(self.tablehead_y, 0, FS_TOP_NAME_TOPL_FMT.format(
-            fs_name=fs_name, client_count=client_cnt), curses.A_BOLD | curses.A_ITALIC)
+            fs_name=fs_name, client_count=client_cnt), curses.A_BOLD)
         self.tablehead_y += 2
         metrics_dict_client = metrics_dict.get(fs_name, {})
         if len(metrics_dict) > len(fs_list):
@@ -1090,14 +1202,6 @@ class FSTop(object):
 
 
 if __name__ == '__main__':
-    def float_greater_than(x):
-        value = float(x)
-        if value < MIN_REFRESH_INTERVAL:
-            raise argparse.ArgumentTypeError(
-                'Refresh interval should be greater than or equal to'
-                f' {MIN_REFRESH_INTERVAL}')
-        return value
-
     parser = argparse.ArgumentParser(description='Ceph Filesystem top utility')
     parser.add_argument('--cluster', nargs='?', const='ceph', default='ceph',
                         help='Ceph cluster to connect (default: ceph)')
@@ -1107,11 +1211,15 @@ if __name__ == '__main__':
                         help='Path to cluster configuration file')
     parser.add_argument('--selftest', dest='selftest', action='store_true',
                         help='Run in selftest mode')
-    parser.add_argument('-d', '--delay', nargs='?',
+    parser.add_argument('-d', '--delay', metavar='DELAY', dest='delay', choices=range(1, 26),
                         default=DEFAULT_REFRESH_INTERVAL,
-                        type=float_greater_than,
+                        type=int,
                         help='Refresh interval in seconds '
-                        f'(default: {DEFAULT_REFRESH_INTERVAL})')
+                        f'(default: {DEFAULT_REFRESH_INTERVAL}, range: 1 - 25)')
+    parser.add_argument('--dump', dest='dump', action='store_true',
+                        help='Dump the metrics to stdout')
+    parser.add_argument('--dumpfs', action='append',
+                        help='Dump the metrics of the given fs to stdout')
 
     args = parser.parse_args()
     err = False
@@ -1121,6 +1229,10 @@ if __name__ == '__main__':
         if args.selftest:
             ft.selftest()
             sys.stdout.write("selftest ok\n")
+        elif args.dump:
+            ft.dump_metrics_to_stdout()
+        elif args.dumpfs:
+            ft.dump_metrics_to_stdout(args.dumpfs[0])
         else:
             curses.wrapper(ft.setup_curses)
     except FSTopException as fst:

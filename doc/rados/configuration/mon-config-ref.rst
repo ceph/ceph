@@ -16,24 +16,27 @@ consistent, but you can add, remove or replace a monitor in a cluster. See
 Background
 ==========
 
-Ceph Monitors maintain a "master copy" of the :term:`Cluster Map`, which means a
-:term:`Ceph Client` can determine the location of all Ceph Monitors, Ceph OSD
-Daemons, and Ceph Metadata Servers just by connecting to one Ceph Monitor and
-retrieving a current cluster map. Before Ceph Clients can read from or write to
-Ceph OSD Daemons or Ceph Metadata Servers, they must connect to a Ceph Monitor
-first. With a current copy of the cluster map and the CRUSH algorithm, a Ceph
-Client can compute the location for any object. The ability to compute object
-locations allows a Ceph Client to talk directly to Ceph OSD Daemons, which is a
-very important aspect of Ceph's high scalability and performance. See 
-`Scalability and High Availability`_ for additional details.
+Ceph Monitors maintain a "master copy" of the :term:`Cluster Map`. 
 
-The primary role of the Ceph Monitor is to maintain a master copy of the cluster
-map. Ceph Monitors also provide authentication and logging services. Ceph
-Monitors write all changes in the monitor services to a single Paxos instance,
-and Paxos writes the changes to a key/value store for strong consistency. Ceph
-Monitors can query the most recent version of the cluster map during sync
-operations. Ceph Monitors leverage the key/value store's snapshots and iterators
-(using leveldb) to perform store-wide synchronization.
+The :term:`Cluster Map` makes it possible for :term:`Ceph client`\s to
+determine the location of all Ceph Monitors, Ceph OSD Daemons, and Ceph
+Metadata Servers. Clients do this by connecting to one Ceph Monitor and
+retrieving a current cluster map. Ceph clients must connect to a Ceph Monitor
+before they can read from or write to Ceph OSD Daemons or Ceph Metadata
+Servers. A Ceph client that has a current copy of the cluster map and the CRUSH
+algorithm can compute the location of any RADOS object within the cluster. This
+makes it possible for Ceph clients to talk directly to Ceph OSD Daemons. Direct
+communication between clients and Ceph OSD Daemons improves upon traditional
+storage architectures that required clients to communicate with a central
+component.  See `Scalability and High Availability`_ for more on this subject.
+
+The Ceph Monitor's primary function is to maintain a master copy of the cluster
+map. Monitors also provide authentication and logging services. All changes in
+the monitor services are written by the Ceph Monitor to a single Paxos
+instance, and Paxos writes the changes to a key/value store. This provides
+strong consistency. Ceph Monitors are able to query the most recent version of
+the cluster map during sync operations, and they use the key/value store's
+snapshots and iterators (using RocksDB) to perform store-wide synchronization.
 
 .. ditaa::
  /-------------\               /-------------\
@@ -55,12 +58,6 @@ operations. Ceph Monitors leverage the key/value store's snapshots and iterators
  +-------------+                      |
  |    cCCC     |*---------------------+
  \-------------/
-
-
-.. deprecated:: version 0.58
-
-In Ceph versions 0.58 and earlier, Ceph Monitors use a Paxos instance for
-each service and store the map as a file. 
 
 .. index:: Ceph Monitor; cluster map
 
@@ -266,7 +263,7 @@ Data
 
 Ceph provides a default path where Ceph Monitors store data. For optimal
 performance in a production Ceph Storage Cluster, we recommend running Ceph
-Monitors on separate hosts and drives from Ceph OSD Daemons. As leveldb uses
+Monitors on separate hosts and drives from Ceph OSD Daemons. As RocksDB uses
 ``mmap()`` for writing the data, Ceph Monitors flush their data from memory to disk
 very often, which can interfere with Ceph OSD Daemon workloads if the data
 store is co-located with the OSD Daemons.
@@ -290,7 +287,6 @@ by setting it in the ``[mon]`` section of the configuration file.
 .. confval:: mon_data_size_warn
 .. confval:: mon_data_avail_warn
 .. confval:: mon_data_avail_crit
-.. confval:: mon_warn_on_cache_pools_without_hit_sets
 .. confval:: mon_warn_on_crush_straw_calc_version_zero
 .. confval:: mon_warn_on_legacy_crush_tunables
 .. confval:: mon_crush_min_required_version
@@ -540,6 +536,8 @@ Trimming requires that the placement groups are ``active+clean``.
 
 
 .. index:: Ceph Monitor; clock
+
+.. _mon-config-ref-clock:
 
 Clock
 -----

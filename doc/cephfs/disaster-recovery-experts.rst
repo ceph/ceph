@@ -15,7 +15,7 @@ Advanced: Metadata repair tools
     file system before attempting to repair it.
 
     If you do not have access to professional support for your cluster,
-    consult the ceph-users mailing list or the #ceph IRC channel.
+    consult the ceph-users mailing list or the #ceph IRC/Slack channel.
 
 
 Journal export
@@ -149,8 +149,8 @@ errors.
 
 ::
 
-    cephfs-data-scan scan_extents <data pool>
-    cephfs-data-scan scan_inodes <data pool>
+    cephfs-data-scan scan_extents [<data pool> [<extra data pool> ...]]
+    cephfs-data-scan scan_inodes [<data pool>]
     cephfs-data-scan scan_links
 
 'scan_extents' and 'scan_inodes' commands may take a *very long* time
@@ -166,22 +166,22 @@ The example below shows how to run 4 workers simultaneously:
 ::
 
     # Worker 0
-    cephfs-data-scan scan_extents --worker_n 0 --worker_m 4 <data pool>
+    cephfs-data-scan scan_extents --worker_n 0 --worker_m 4
     # Worker 1
-    cephfs-data-scan scan_extents --worker_n 1 --worker_m 4 <data pool>
+    cephfs-data-scan scan_extents --worker_n 1 --worker_m 4
     # Worker 2
-    cephfs-data-scan scan_extents --worker_n 2 --worker_m 4 <data pool>
+    cephfs-data-scan scan_extents --worker_n 2 --worker_m 4
     # Worker 3
-    cephfs-data-scan scan_extents --worker_n 3 --worker_m 4 <data pool>
+    cephfs-data-scan scan_extents --worker_n 3 --worker_m 4
 
     # Worker 0
-    cephfs-data-scan scan_inodes --worker_n 0 --worker_m 4 <data pool>
+    cephfs-data-scan scan_inodes --worker_n 0 --worker_m 4
     # Worker 1
-    cephfs-data-scan scan_inodes --worker_n 1 --worker_m 4 <data pool>
+    cephfs-data-scan scan_inodes --worker_n 1 --worker_m 4
     # Worker 2
-    cephfs-data-scan scan_inodes --worker_n 2 --worker_m 4 <data pool>
+    cephfs-data-scan scan_inodes --worker_n 2 --worker_m 4
     # Worker 3
-    cephfs-data-scan scan_inodes --worker_n 3 --worker_m 4 <data pool>
+    cephfs-data-scan scan_inodes --worker_n 3 --worker_m 4
 
 It is **important** to ensure that all workers have completed the
 scan_extents phase before any workers enter the scan_inodes phase.
@@ -191,8 +191,13 @@ operation to delete ancillary data generated during recovery.
 
 ::
 
-    cephfs-data-scan cleanup <data pool>
+    cephfs-data-scan cleanup [<data pool>]
 
+Note, the data pool parameters for 'scan_extents', 'scan_inodes' and
+'cleanup' commands are optional, and usually the tool will be able to
+detect the pools automatically. Still you may override this. The
+'scan_extents' command needs all data pools to be specified, while
+'scan_inodes' and 'cleanup' commands need only the main data pool.
 
 
 Using an alternate metadata pool for recovery
@@ -255,8 +260,8 @@ Now perform the recovery of the metadata pool from the data pool:
 ::
 
     cephfs-data-scan init --force-init --filesystem cephfs_recovery --alternate-pool cephfs_recovery_meta
-    cephfs-data-scan scan_extents --alternate-pool cephfs_recovery_meta --filesystem <fs_name> <data_pool>
-    cephfs-data-scan scan_inodes --alternate-pool cephfs_recovery_meta --filesystem <fs_name> --force-corrupt <data_pool>
+    cephfs-data-scan scan_extents --alternate-pool cephfs_recovery_meta --filesystem <fs_name>
+    cephfs-data-scan scan_inodes --alternate-pool cephfs_recovery_meta --filesystem <fs_name> --force-corrupt
     cephfs-data-scan scan_links --filesystem cephfs_recovery
 
 .. note::

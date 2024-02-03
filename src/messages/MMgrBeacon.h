@@ -24,7 +24,7 @@
 
 class MMgrBeacon final : public PaxosServiceMessage {
 private:
-  static constexpr int HEAD_VERSION = 10;
+  static constexpr int HEAD_VERSION = 11;
   static constexpr int COMPAT_VERSION = 8;
 
 protected:
@@ -45,7 +45,7 @@ protected:
 
   std::map<std::string,std::string> metadata; ///< misc metadata about this osd
 
-  std::vector<entity_addrvec_t> clients;
+  std::multimap<std::string, entity_addrvec_t> clients;
 
   uint64_t mgr_features = 0;   ///< reporting mgr's features
 
@@ -53,20 +53,23 @@ public:
   MMgrBeacon()
     : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
       gid(0), available(false)
-  {}
+  {
+    set_priority(CEPH_MSG_PRIO_HIGH);
+  }
 
   MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
              entity_addrvec_t server_addrs_, bool available_,
 	     std::vector<MgrMap::ModuleInfo>&& modules_,
 	     std::map<std::string,std::string>&& metadata_,
-             std::vector<entity_addrvec_t> clients,
+             std::multimap<std::string, entity_addrvec_t>&& clients_,
 	     uint64_t feat)
     : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
       gid(gid_), server_addrs(server_addrs_), available(available_), name(name_),
       fsid(fsid_), modules(std::move(modules_)), metadata(std::move(metadata_)),
-      clients(std::move(clients)),
+      clients(std::move(clients_)),
       mgr_features(feat)
   {
+    set_priority(CEPH_MSG_PRIO_HIGH);
   }
 
   uint64_t get_gid() const { return gid; }
@@ -147,7 +150,17 @@ public:
 
     encode(modules, payload);
     encode(mgr_features, payload);
-    encode(clients, payload, features);
+
+    std::vector<std::string> clients_names;
+    std::vector<entity_addrvec_t> clients_addrs;
+    for (const auto& i : clients) {
+      clients_names.push_back(i.first);
+      clients_addrs.push_back(i.second);
+    }
+    // The address vector needs to be encoded first to produce a
+    // backwards compatible messsage for older monitors.
+    encode(clients_addrs, payload, features);
+    encode(clients_names, payload, features);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -169,7 +182,26 @@ public:
       decode(mgr_features, p);
     }
     if (header.version >= 10) {
-      decode(clients, p);
+      std::vector<entity_addrvec_t> clients_addrs;
+      decode(clients_addrs, p);
+      clients.clear();
+      if (header.version >= 11) {
+	std::vector<std::string> clients_names;
+	decode(clients_names, p);
+	if (clients_names.size() != clients_addrs.size()) {
+	  throw ceph::buffer::malformed_input(
+	    "clients_names.size() != clients_addrs.size()");
+	}
+	auto cn = clients_names.begin();
+	auto ca = clients_addrs.begin();
+	for(; cn != clients_names.end(); ++cn, ++ca) {
+	  clients.emplace(*cn, *ca);
+	}
+      } else {
+	for (const auto& i : clients_addrs) {
+	  clients.emplace("", i);
+	}
+      }
     }
   }
 private:

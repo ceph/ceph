@@ -4,8 +4,8 @@
 MGR Service
 ===========
 
-The cephadm MGR service is hosting different modules, like the :ref:`mgr-dashboard`
-and the cephadm manager module.
+The cephadm MGR service hosts multiple modules. These include the
+:ref:`mgr-dashboard` and the cephadm manager module.
 
 .. _cephadm-mgr-networks:
 

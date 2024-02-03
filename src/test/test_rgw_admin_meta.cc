@@ -460,7 +460,7 @@ int compare_access_keys(RGWAccessKey& k1, RGWAccessKey& k2) {
 int compare_user_info(RGWUserInfo& i1, RGWUserInfo& i2) {
   int rv;
 
-  if ((rv = i1.user_id.compare(i2.user_id)) != 0)
+  if ((rv = i1.user_id.id.compare(i2.user_id.id)) != 0)
     return rv;
   if ((rv = i1.display_name.compare(i2.display_name)) != 0)
     return rv;
@@ -697,7 +697,7 @@ TEST(TestRGWAdmin, meta_get){
   p2 = RGW_CAP_WRITE;
   EXPECT_TRUE (obt_info.caps.check_cap(meta_caps, p2) != 0);
 
-  /*Version and tag infromation*/
+  /*Version and tag information*/
   EXPECT_TRUE(objv1->ver > objv->ver);
   EXPECT_EQ(objv1->tag, objv->tag);
   

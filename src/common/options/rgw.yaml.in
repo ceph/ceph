@@ -3,41 +3,41 @@
 
 options:
 # According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html),
-# An ACL can have up to 100 grants.
+# An ACL may have up to 100 grants.
 - name: rgw_acl_grants_max_num
   type: int
   level: advanced
-  desc: Max number of ACL grants in a single request
+  desc: The maximum number of ACL grants in a single request.
   default: 100
   services:
   - rgw
   with_legacy: true
-# An user can have up to 100 IAM user policies.
+# A user may have up to 100 IAM user policies.
 - name: rgw_user_policies_max_num
   type: int
   level: advanced
-  desc: Max number of IAM user policies on a single user
+  desc: The maximum number of IAM user policies for a single user.
   default: 100
   services:
   - rgw
   with_legacy: true
-# According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html),
-# An cors can have up to 100 rules.
+# According to AWS S3 (http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html),
+# A CORS request may have up to 100 rules.
 - name: rgw_cors_rules_max_num
   type: int
   level: advanced
-  desc: Max number of cors rules in a single request
+  desc: The maximum number of CORS rules in a single request.
   default: 100
   services:
   - rgw
   with_legacy: true
-# According to AWS S3(https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html),
+# According to AWS S3 (https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html),
 # Amazon S3 also provides the Multi-Object Delete API that you can use to delete up to 1000
 # objects in a single HTTP request.
 - name: rgw_delete_multi_obj_max_num
   type: int
   level: advanced
-  desc: Max number of objects in a single multi-object delete request
+  desc: The maximum number of objects in a single multi-object delete request.
   default: 1000
   services:
   - rgw
@@ -46,7 +46,7 @@ options:
 - name: rgw_website_routing_rules_max_num
   type: int
   level: advanced
-  desc: Max number of website routing rules in a single request
+  desc: The maximum number of website routing rules in a single request.
   default: 50
   services:
   - rgw
@@ -54,21 +54,21 @@ options:
 - name: rgw_rados_tracing
   type: bool
   level: advanced
-  desc: true if LTTng-UST tracepoints should be enabled
+  desc: Enables LTTng-UST tracepoints.
   default: false
   services:
   - rgw
 - name: rgw_op_tracing
   type: bool
   level: advanced
-  desc: true if LTTng-UST tracepoints should be enabled
+  desc: Enables LTTng-UST operator tracepoints.
   default: false
   services:
   - rgw
 - name: rgw_max_chunk_size
   type: size
   level: advanced
-  desc: Set RGW max chunk size
+  desc: The maximum RGW chunk size.
   long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
     accessing data objects. RGW read and write operations will never request more than
     this amount in a single request. This also defines the RGW head object size, as
@@ -111,7 +111,7 @@ options:
 - name: rgw_max_put_size
   type: size
   level: advanced
-  desc: Max size (in bytes) of regular (non multi-part) object upload.
+  desc: The maximum size (in bytes) of regular (non multi-part) object upload.
   long_desc: Plain object upload is capped at this amount of data. In order to upload
     larger objects, a special upload mechanism is required. The S3 API provides the
     multi-part upload, and Swift provides DLO and SLO.
@@ -359,7 +359,11 @@ options:
   type: str
   level: advanced
   desc: Lifecycle allowed work time
-  long_desc: Local time window in which the lifecycle maintenance thread can work.
+  long_desc: Local time window in which the lifecycle maintenance thread can work. It expects
+    24-hour time notation. For example, "00:00-23:59" means starting at midnight lifecycle
+    is allowed to run for the whole day (24 hours). When lifecycle completes, it waits for the
+    next maintenance window. In this example, if it completes at 01:00, it will resume processing
+    23 hours later at the following midnight.
   default: 00:00-06:00
   services:
   - rgw
@@ -794,6 +798,13 @@ options:
   type: str
   level: advanced
   desc: List of roles allowing user to gain admin privileges (Keystone).
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_accepted_reader_roles
+  type: str
+  level: advanced
+  desc: List of roles that can only be used for reads (Keystone).
   services:
   - rgw
   with_legacy: true
@@ -1951,6 +1962,17 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_curl_tcp_keepalive
+  type: int
+  level: advanced
+  long_desc: Enable TCP keepalive on the HTTP client sockets managed by libcurl. This does not apply to connections received by the HTTP frontend, but only to HTTP requests sent by radosgw. Examples include requests to Keystone for authentication, sync requests from multisite, and requests to key management servers for SSE.
+  enum_values:
+  - 0
+  - 1
+  default: 0
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_copy_obj_progress
   type: bool
   level: advanced
@@ -2620,6 +2642,36 @@ options:
   - rgw
   - rgw
   min: 30
+- name: rgw_debug_inject_latency_bi_unlink
+  type: uint
+  level: dev
+  desc: Latency (in seconds) injected before rgw bucket index unlink op calls to simulate
+    queueing latency and validate behavior of simultaneuous delete requests which
+    target the same object.
+  default: 0
+  with_legacy: true
+  services:
+  - rgw
+- name: rgw_debug_inject_set_olh_err
+  type: uint
+  level: dev
+  desc: Whether to inject errors between rados olh modification initialization and
+    bucket index instance linking. The value determines the error code. This exists
+    for development and testing purposes to help simulate cases where bucket index
+    entries aren't cleaned up by the request thread after an error scenario.
+  default: 0
+  with_legacy: true
+  services:
+  - rgw
+- name: rgw_debug_inject_olh_cancel_modification_err
+  type: bool
+  level: dev
+  desc: Whether to inject an error to simulate a failure to cancel olh
+    modification. This exists for development and testing purposes.
+  default: false
+  with_legacy: true
+  services:
+  - rgw
 - name: rgw_reshard_batch_size
   type: uint
   level: advanced
@@ -3119,6 +3171,16 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_torrent_max_size
+  type: size
+  level: advanced
+  desc: Objects over this size will not store torrent info.
+  default: 5_G
+  services:
+  - rgw
+  see_also:
+  - rgw_torrent_flag
+  with_legacy: true
 - name: rgw_dynamic_resharding
   type: bool
   level: basic
@@ -3210,7 +3272,7 @@ options:
     is very heavily loaded. Beware that increasing this value may cause some operations
     to take longer in exceptional cases and thus may, rarely, cause clients to time
     out.
-  default: 3
+  default: 10
   tags:
   - error recovery
   services:
@@ -3247,8 +3309,11 @@ options:
   type: uint
   level: advanced
   desc: Session token max duration
-  long_desc: Max duration in seconds for which the session token is valid.
+  long_desc: This option can be used to configure the upper limit of the
+    durationSeconds of temporary credentials returned by 'GetSessionToken'.
   default: 43200
+  see_also:
+  - rgw_sts_min_session_duration
   services:
   - rgw
   with_legacy: true
@@ -3256,10 +3321,14 @@ options:
   type: uint
   level: advanced
   desc: Minimum allowed duration of a session
+  long_desc: This option can be used to configure the lower limit of
+    durationSeconds of temporary credentials returned by 'AssumeRole*' calls.
   default: 900
   services:
   - rgw
   with_legacy: true
+  see_also:
+  - rgw_sts_max_session_duration
 - name: rgw_max_listing_results
   type: uint
   level: advanced
@@ -3562,14 +3631,15 @@ options:
   type: str
   level: advanced
   desc: experimental Option to set a filter
-  long_desc: defaults to none. Other valid values are base and trace (both experimental).
+  long_desc: defaults to none. Other valid values are base and d4n (both experimental).
   default: none
   services:
   - rgw
   enum_values:
   - none
   - base
-  - trace
+  - d4n
+  - posix
 - name: dbstore_db_dir
   type: str
   level: advanced
@@ -3618,6 +3688,22 @@ options:
   default: 0x7200000000000001:0x0
   services:
   - rgw
+- name: motr_admin_fid
+  type: str
+  level: advanced
+  desc: Admin Tool Motr FID for admin-level access.
+  long_desc: example value 0x7200000000000001:0x2c
+  default: 0x7200000000000001:0x0
+  services:
+  - rgw
+- name: motr_admin_endpoint
+  type: str
+  level: advanced
+  desc:  experimental Option to set Admin Motr endpoint address
+  long_desc: example value 192.168.180.182@tcp:12345:4:1
+  default: 192.168.180.182@tcp:12345:4:1
+  services:
+  - rgw
 - name: motr_my_endpoint
   type: str
   level: advanced
@@ -3641,11 +3727,56 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_posix_base_path
+  type: str
+  level: advanced
+  desc: experimental Option to set base path for POSIX Driver
+  long_desc: Base path for the POSIX driver.  All operations are relative to this path.
+    Defaults to /tmp/rgw_posix_driver
+  default: /tmp/rgw_posix_driver
+  services:
+  - rgw
+- name: rgw_posix_database_root
+  type: str
+  level: advanced
+  desc: experimental Path to parent of POSIX Driver LMDB bucket listing cache
+  long_desc: Parent directory of LMDB bucket listing cache databases.
+  default: /var/lib/ceph/radosgw
+  services:
+  - rgw
+- name: rgw_posix_cache_max_buckets
+  type: int
+  level: advanced
+  desc: experimental Number of buckets to maintain in the ordered listing cache
+  default: 100
+  services:
+  - rgw
+- name: rgw_posix_cache_lanes
+  type: int
+  level: advanced
+  desc: experimental Number of lanes in cache LRU
+  default: 3
+  services:
+  - rgw
+- name: rgw_posix_cache_partitions
+  type: int
+  level: advanced
+  desc: experimental Number of partitions in cache AVL
+  default: 3
+  services:
+  - rgw
+- name: rgw_posix_cache_lmdb_count
+  type: int
+  level: advanced
+  desc: experimental Number of lmdb partitions in the ordered listing cache
+  default: 3
+  services:
+  - rgw
 - name: rgw_luarocks_location
   type: str
   level: advanced
   desc: Directory where luarocks install packages from allowlist
-  default: @rgw_luarocks_location@
+  default: /tmp/rgw_luarocks/$name
   services:
   - rgw
   flags:
@@ -3721,3 +3852,150 @@ options:
   default: true
   services:
   - rgw
+- name: rgw_d4n_host
+  type: str
+  level: advanced
+  desc: The rgw directory host
+  default: 127.0.0.1
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_port
+  type: int
+  level: advanced
+  desc: The rgw directory port
+  default: 6379
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_topic_persistency_time_to_live
+  type: uint
+  level: advanced
+  desc: The rgw retention of persistent topics by time (seconds)
+  default: 0
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_topic_persistency_max_retries
+  type: uint
+  level: advanced
+  desc: The maximum number sending a persistent notification would be tried.
+    Note that the value of one would mean no retries,
+    and the value of zero would mean that the notification would be tried indefinitely
+  default: 0
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_topic_persistency_sleep_duration
+  type: uint
+  level: advanced
+  desc: The minimum time (in seconds) between two tries of the same persistent notification.
+    note that the actual time between the tries may be longer
+  default: 0
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_lua_max_memory_per_state
+  type: uint
+  level: advanced
+  desc: Max size of memory used by a single lua state
+  long_desc: This is the maximum size in bytes that a lua state can allocate for its own use.
+    Note that this does not include any memory that can be accessed from lua, but managed by the RGW.
+    If not set, it would use a default of 128K. If set to zero, the amount of memory would 
+    only be limited by the system.
+  default: 128000
+  services:
+  - rgw
+  with_legacy: true
+- name: mandatory_topic_permissions
+  type: bool
+  level: basic
+  desc: Whether to validate user permissions to access notification topics.
+  long_desc: If true, all users (other then the owner of the topic) will need
+    to have a policy to access topics.
+    The topic policy can be set by owner via CreateTopic() or SetTopicAttribute().
+    Following permissions can be granted "sns:Publish", "sns:GetTopicAttributes",
+    "sns:SetTopicAttributes" and "sns:DeleteTopic" via Policy.
+    NOTE that even if set to "false" topics will still follow the policies if set on them.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_user_counters_cache
+  type: bool
+  level: dev
+  default: false
+  desc: enable a rgw perf counters cache for counters with user label
+  long desc: If set to true, rgw creates perf counters with a label for the user and stores them
+    in a perf counters cache. This perf counters cache contains only perf counters labeled by user.
+  see_also:
+  - rgw_user_counters_cache_size
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_user_counters_cache_size
+  type: uint
+  level: advanced
+  desc: Number of labeled perf counters the user perf counters cache can store
+  default: 10000
+  services:
+  - rgw
+  see_also:
+  - rgw_user_counters_cache
+  with_legacy: true
+- name: rgw_bucket_counters_cache
+  type: bool
+  level: dev
+  default: false
+  desc: enable a rgw perf counters cache for counters with bucket label
+  long desc: If set to true, rgw creates perf counters with a label for the bucket and stores them
+    in a perf counters cache. This perf counters cache contains only perf counters labeled by bucket.
+  see_also:
+  - rgw_bucket_counters_cache_size
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_bucket_counters_cache_size
+  type: uint
+  level: advanced
+  desc: Number of labeled perf counters the bucket perf counters cache can store
+  default: 10000
+  services:
+  - rgw
+  see_also:
+  - rgw_bucket_counters_cache
+  with_legacy: true
+- name: rgw_kafka_connection_idle
+  type: uint 
+  level: advanced
+  desc: Time in seconds to delete idle kafka connections
+  long_desc: A conection will be considered "idle" if no messages
+    are sent to it for more than the time defined.
+    Note that the connection will not be considered idle, even if it is down,
+    as long as there are attempts to send messages to it.
+  default: 30
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_kafka_sleep_timeout
+  type: uint 
+  level: advanced
+  desc: Time in milliseconds to sleep while polling for kafka replies
+  long_desc: This will be used to prevent busy waiting for the kafka replies
+    As well as for the cases where the broker is down and we try to reconnect.
+    The same values times 3 will be used to sleep if there were no messages
+    sent or received across all kafka connections
+  default: 10
+  services:
+  - rgw
+  with_legacy: true

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_XML_H
-#define CEPH_RGW_XML_H
+#pragma once
 
 #include <map>
 #include <stdexcept>
@@ -122,7 +121,7 @@ private:
 protected:
   // if objects are created while parsing, this should be implemented in the derived class
   // and be a factory for creating the classes derived from XMLObj
-  // note that not all sub-tags has to be constructed here, any such tag which is not 
+  // note that not all sub-tags has to be constructed here, any such tag which is not
   // constructed will be lazily created when decode_xml() is invoked on it
   //
   // note that in case of different tags sharing the same name at different levels
@@ -332,6 +331,7 @@ static void encode_xml(const char *name, const char *ns, const T& val, ceph::For
 }
 
 void encode_xml(const char *name, const std::string& val, ceph::Formatter *f);
+void encode_xml(const char *name, const std::string_view& val, ceph::Formatter *f);
 void encode_xml(const char *name, const char *val, ceph::Formatter *f);
 void encode_xml(const char *name, bool val, ceph::Formatter *f);
 void encode_xml(const char *name, int val, ceph::Formatter *f);
@@ -370,6 +370,3 @@ static void encode_xml(const char *name, const std::optional<T>& o, ceph::Format
 
   encode_xml(name, *o, f);
 }
-
-
-#endif

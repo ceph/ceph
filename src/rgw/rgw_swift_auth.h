@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_SWIFT_AUTH_H
-#define CEPH_RGW_SWIFT_AUTH_H
+#pragma once
 
 #include "rgw_common.h"
 #include "rgw_user.h"
@@ -12,6 +11,7 @@
 #include "rgw_auth_keystone.h"
 #include "rgw_auth_filters.h"
 #include "rgw_sal.h"
+#include "rgw_b64.h"
 
 #define RGW_SWIFT_TOKEN_EXPIRATION (15 * 60)
 
@@ -40,6 +40,7 @@ public:
 
 /* TempURL: engine */
 class TempURLEngine : public rgw::auth::Engine {
+  friend class TempURLSignature;
   using result_t = rgw::auth::Engine::result_t;
 
   CephContext* const cct;
@@ -47,7 +48,7 @@ class TempURLEngine : public rgw::auth::Engine {
   const TempURLApplier::Factory* const apl_factory;
 
   /* Helper methods. */
-  void get_owner_info(const DoutPrefixProvider* dpp, 
+  void get_owner_info(const DoutPrefixProvider* dpp,
                       const req_state* s,
                       RGWUserInfo& owner_info,
 		      optional_yield y) const;
@@ -304,6 +305,120 @@ public:
   }
 };
 
+// shared logic for swift tempurl and formpost signatures
+template <class HASHFLAVOR>
+inline constexpr uint32_t signature_hash_size = -1;
+template <>
+inline constexpr uint32_t signature_hash_size<ceph::crypto::HMACSHA1> = CEPH_CRYPTO_HMACSHA1_DIGESTSIZE;
+template<>
+inline constexpr uint32_t signature_hash_size<ceph::crypto::HMACSHA256> = CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
+template<>
+inline constexpr uint32_t signature_hash_size<ceph::crypto::HMACSHA512> = CEPH_CRYPTO_HMACSHA512_DIGESTSIZE;
+
+const char sha1_name[] = "sha1";
+const char sha256_name[] = "sha256";
+const char sha512_name[] = "sha512";
+
+template <class HASHFLAVOR>
+const char * signature_hash_name;
+template<>
+inline constexpr const char * signature_hash_name<ceph::crypto::HMACSHA1> = sha1_name;;
+template<>
+inline constexpr const char * signature_hash_name<ceph::crypto::HMACSHA256> = sha256_name;
+template<>
+inline constexpr const char * signature_hash_name<ceph::crypto::HMACSHA512> = sha512_name;
+
+template <class HASHFLAVOR>
+inline const uint32_t signature_hash_name_size = -1;
+template<>
+inline constexpr uint32_t signature_hash_name_size<ceph::crypto::HMACSHA1> = sizeof sha1_name;;
+template<>
+inline constexpr uint32_t signature_hash_name_size<ceph::crypto::HMACSHA256> = sizeof sha256_name;
+template<>
+inline constexpr uint32_t signature_hash_name_size<ceph::crypto::HMACSHA512> = sizeof sha512_name;
+
+template <class HASHFLAVOR>
+class SignatureHelperT {
+protected:
+  static constexpr uint32_t hash_size = signature_hash_size<HASHFLAVOR>;
+  static constexpr uint32_t output_size = hash_size * 2 + 1;
+  const char * signature_name = signature_hash_name<HASHFLAVOR>;
+  uint32_t signature_name_size = signature_hash_name_size<HASHFLAVOR>;
+  char dest_str[output_size];
+  uint32_t dest_size = 0;
+  unsigned char dest[hash_size];
+
+public:
+  ~SignatureHelperT() { };
+
+  void Update(const unsigned char *input, size_t length);
+
+  const char* get_signature() const {
+    return dest_str;
+  }
+
+  bool is_equal_to(const std::string& rhs) const {
+    /* never allow out-of-range exception */
+    if (!dest_size || rhs.size() < dest_size) {
+      return false;
+    }
+    return rhs.compare(0 /* pos */,  dest_size + 1, dest_str) == 0;
+  }
+};
+
+enum class SignatureFlavor {
+  BARE_HEX,
+  NAMED_BASE64
+};
+
+template <typename HASHFLAVOR, SignatureFlavor SIGNATUREFLAVOR>
+class FormatSignature {
+};
+
+// hexadecimal
+template <typename HASHFLAVOR>
+class FormatSignature<HASHFLAVOR, SignatureFlavor::BARE_HEX> : public SignatureHelperT<HASHFLAVOR> {
+  using UCHARPTR = const unsigned char*;
+  using base_t = SignatureHelperT<HASHFLAVOR>;
+public:
+  const char *result() {
+    buf_to_hex((UCHARPTR) base_t::dest,
+      signature_hash_size<HASHFLAVOR>,
+      base_t::dest_str);
+    base_t::dest_size = strlen(base_t::dest_str);
+    return base_t::dest_str;
+  };
+};
+
+// prefix:base64
+template <typename HASHFLAVOR>
+class FormatSignature<HASHFLAVOR, SignatureFlavor::NAMED_BASE64> : public SignatureHelperT<HASHFLAVOR> {
+  using UCHARPTR = const unsigned char*;
+  using base_t = SignatureHelperT<HASHFLAVOR>;
+public:
+  char * const result() {
+    const char *prefix = base_t::signature_name;
+    const int prefix_size = base_t::signature_name_size;
+    std::string_view dest_view((char*)base_t::dest, sizeof base_t::dest);
+    auto b { rgw::to_base64(dest_view) };
+    for (auto &v: b ) {	// translate to "url safe" (rfc 4648 section 5)
+      switch(v) {
+      case '+': v = '-'; break;
+      case '/': v = '_'; break;
+      }
+    }
+    base_t::dest_size = prefix_size + b.length();
+    if (base_t::dest_size < base_t::output_size) {
+      ::memcpy(base_t::dest_str, prefix, prefix_size - 1);
+      base_t::dest_str[prefix_size-1] = ':';
+      ::strcpy(base_t::dest_str + prefix_size, b.c_str());
+    } else {
+      base_t::dest_size = 0;
+    }
+    return base_t::dest_str;
+  };
+};
+
 } /* namespace swift */
 } /* namespace auth */
 } /* namespace rgw */
@@ -353,6 +468,3 @@ public:
     return new RGWHandler_SWIFT_Auth;
   }
 };
-
-
-#endif

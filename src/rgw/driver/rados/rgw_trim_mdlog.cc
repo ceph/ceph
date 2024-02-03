@@ -565,7 +565,7 @@ class MetaPeerTrimShardCollectCR : public RGWShardCollectCR {
       env(env), mdlog(mdlog), period_id(env.current.get_period().get_id())
   {
     meta_env.init(env.dpp, cct, env.store, env.store->svc()->zone->get_master_conn(),
-                  env.store->svc()->rados->get_async_processor(), env.http, nullptr,
+                  env.store->svc()->async_processor, env.http, nullptr,
                   env.store->getRados()->get_sync_tracer());
   }
 
@@ -668,8 +668,12 @@ int MetaTrimPollCR::operate(const DoutPrefixProvider *dpp)
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->svc()->rados->get_async_processor(), store,
-                                          obj, name, cookie, interval.sec()));
+
+      yield call(new RGWSimpleRadosLockCR(store->svc()->async_processor, store,
+                                          obj, name, cookie, 
+                                          // interval is a small number and unlikely to overflow
+                                          // coverity[store_truncates_time_t:SUPPRESS]
+                                          interval.sec()));
       if (retcode < 0) {
         ldout(cct, 4) << "failed to lock: " << cpp_strerror(retcode) << dendl;
         continue;
@@ -681,7 +685,7 @@ int MetaTrimPollCR::operate(const DoutPrefixProvider *dpp)
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
-        yield call(new RGWSimpleRadosUnlockCR(store->svc()->rados->get_async_processor(), store,
+        yield call(new RGWSimpleRadosUnlockCR(store->svc()->async_processor, store,
                                               obj, name, cookie));
       }
     }
@@ -726,8 +730,8 @@ bool sanity_check_endpoints(const DoutPrefixProvider *dpp, rgw::sal::RadosStore*
 	<< __PRETTY_FUNCTION__ << ":" << __LINE__
 	<< " WARNING: Cluster is is misconfigured! "
 	<< " Zonegroup " << zonegroup.get_name()
-	<< " (" << zonegroup.get_id() << ") in Realm "
-	<< period.get_realm_name() << " ( " << period.get_realm() << ") "
+	<< " (" << zonegroup.get_id() << ") in Realm id ( "
+  << period.get_realm() << ") "
 	<< " has no endpoints!" << dendl;
     }
     for (const auto& [_, zone] : zonegroup.zones) {
@@ -737,8 +741,7 @@ bool sanity_check_endpoints(const DoutPrefixProvider *dpp, rgw::sal::RadosStore*
 	  << " ERROR: Cluster is is misconfigured! "
 	  << " Zone " << zone.name << " (" << zone.id << ") in Zonegroup "
 	  << zonegroup.get_name() << " ( " << zonegroup.get_id()
-	  << ") in Realm " << period.get_realm_name()
-	  << " ( " << period.get_realm() << ") "
+	  << ") in Realm id ( " << period.get_realm() << ") "
 	  << " has no endpoints! Trimming is impossible." << dendl;
 	retval = false;
       }

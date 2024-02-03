@@ -149,7 +149,7 @@ template <typename I>
 void ImageWatcher<I>::notify_async_complete(const AsyncRequestId &request,
                                             int r) {
   ldout(m_image_ctx.cct, 20) << this << " remote async request finished: "
-			     << request << " = " << r << dendl;
+			     << request << "=" << r << dendl;
 
   send_notify(new AsyncCompletePayload(request, r),
     new LambdaContext(boost::bind(&ImageWatcher<I>::handle_async_complete,
@@ -393,37 +393,35 @@ void ImageWatcher<I>::notify_quiesce(uint64_t *request_id,
 
   AsyncRequestId async_request_id(get_client_id(), *request_id);
 
-  auto attempts = m_image_ctx.config.template get_val<uint64_t>(
+  auto total_attempts = m_image_ctx.config.template get_val<uint64_t>(
     "rbd_quiesce_notification_attempts");
 
-  notify_quiesce(async_request_id, attempts, prog_ctx, on_finish);
+  notify_quiesce(async_request_id, 1, total_attempts, prog_ctx, on_finish);
 }
 
 template <typename I>
 void ImageWatcher<I>::notify_quiesce(const AsyncRequestId &async_request_id,
-                                     size_t attempts, ProgressContext &prog_ctx,
+                                     size_t attempt, size_t total_attempts,
+                                     ProgressContext &prog_ctx,
                                      Context *on_finish) {
+  ceph_assert(attempt <= total_attempts);
   ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": async_request_id="
-                             << async_request_id << " attempts=" << attempts
-                             << dendl;
+                             << async_request_id << " attempts @ "
+                             << attempt << "/" << total_attempts << dendl;
 
-  ceph_assert(attempts > 0);
   auto notify_response = new watcher::NotifyResponse();
   auto on_notify = new LambdaContext(
     [notify_response=std::unique_ptr<watcher::NotifyResponse>(notify_response),
-     this, async_request_id, &prog_ctx, on_finish, attempts=attempts-1](int r) {
-      auto total_attempts = m_image_ctx.config.template get_val<uint64_t>(
-        "rbd_quiesce_notification_attempts");
-      if (total_attempts < attempts) {
-        total_attempts = attempts;
-      }
-      prog_ctx.update_progress(total_attempts - attempts, total_attempts);
-
+     this, async_request_id, attempt, total_attempts, &prog_ctx,
+     on_finish](int r) {
+      prog_ctx.update_progress(attempt, total_attempts);
       if (r == -ETIMEDOUT) {
-        ldout(m_image_ctx.cct, 10) << this << " " << __func__ << ": async_request_id="
-                                   << async_request_id << " timed out" << dendl;
-        if (attempts > 0) {
-          notify_quiesce(async_request_id, attempts, prog_ctx, on_finish);
+        ldout(m_image_ctx.cct, 10) << this << " " << __func__
+                                   << ": async_request_id=" << async_request_id
+                                   << " timed out" << dendl;
+        if (attempt < total_attempts) {
+          notify_quiesce(async_request_id, attempt + 1, total_attempts,
+                         prog_ctx, on_finish);
           return;
         }
       } else if (r == 0) {
@@ -578,8 +576,7 @@ void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
     return;
   }
 
-  std::shared_lock watch_locker{this->m_watch_lock};
-  if (this->is_registered(this->m_watch_lock)) {
+  if (is_registered()) {
     ldout(m_image_ctx.cct, 15) << this << " requesting exclusive lock" << dendl;
 
     auto ctx = new LambdaContext([this](int r) {

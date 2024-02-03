@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_AUTH_S3_H
-#define CEPH_RGW_AUTH_S3_H
+#pragma once
 
 #include <array>
 #include <memory>
@@ -332,6 +331,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
   bool is_signature_mismatched();
   std::string calc_chunk_signature(const std::string& payload_hash) const;
+  size_t recv_chunk(char* buf, size_t max, bool& eof);
 
 public:
   /* We need the constructor to be public because of the std::make_shared that
@@ -603,6 +603,8 @@ std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
 std::string gen_v4_canonical_qs(const req_info& info, bool is_non_s3_op);
 
+std::string get_v4_canonical_method(const req_state* s);
+
 boost::optional<std::string>
 get_v4_canonical_headers(const req_info& info,
                          const std::string_view& signedheaders,
@@ -645,5 +647,3 @@ get_v2_signature(CephContext*,
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */
-
-#endif

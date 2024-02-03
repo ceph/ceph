@@ -14,6 +14,9 @@ using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
 
+const uint64_t page_size = 4096;
+const uint64_t large_chunk_size = 1ul << 22;
+
 int queue_write_head(cls_method_context_t hctx, cls_queue_head& head)
 {
   bufferlist bl;
@@ -43,7 +46,7 @@ int queue_write_head(cls_method_context_t hctx, cls_queue_head& head)
 
 int queue_read_head(cls_method_context_t hctx, cls_queue_head& head)
 {
-  uint64_t chunk_size = 1024, start_offset = 0;
+  uint64_t chunk_size = page_size, start_offset = 0;
 
   bufferlist bl_head;
   const auto  ret = cls_cxx_read(hctx, start_offset, chunk_size, &bl_head);
@@ -281,7 +284,6 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   }
 
   op_ret.is_truncated = true;
-  uint64_t chunk_size = 1024;
   uint64_t contiguous_data_size = 0, size_to_read = 0;
   bool wrap_around = false;
 
@@ -310,11 +312,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   
     bufferlist bl_chunk;
     //Read chunk size at a time, if it is less than contiguous data size, else read contiguous data size
-    if (contiguous_data_size > chunk_size) {
-      size_to_read = chunk_size;
-    } else {
-      size_to_read = contiguous_data_size;
-    }
+    size_to_read = std::min(contiguous_data_size, large_chunk_size);
     CLS_LOG(10, "INFO: queue_list_entries(): size_to_read is %lu", size_to_read);
     if (size_to_read == 0) {
       next_marker = head.tail;
@@ -402,6 +400,10 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
         CLS_LOG(10, "INFO: queue_list_entries(): not enough data to read data, breaking out!");
         break;
       }
+      if (!op.end_marker.empty() && entry.marker == op.end_marker) {
+        last_marker = entry.marker;
+        break;
+      }
       op_ret.entries.emplace_back(entry);
       // Resetting some values
       offset_populated = false;
@@ -416,11 +418,17 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
       }
     } while(index < bl_chunk.length());
 
-    CLS_LOG(10, "INFO: num_ops: %lu and op.max is %lu\n", num_ops, op.max);
+    CLS_LOG(10, "INFO: num_ops: %lu and op.max is %lu, last_marker: %s and op.end_marker is %s\n",
+            num_ops, op.max, last_marker.c_str(), op.end_marker.c_str());
 
-    if (num_ops == op.max) {
-      next_marker = cls_queue_marker{(entry_start_offset + index), gen};
-      CLS_LOG(10, "INFO: queue_list_entries(): num_ops is same as op.max, hence breaking out from outer loop with next offset: %lu", next_marker.offset);
+    if (num_ops == op.max || (!op.end_marker.empty() && op.end_marker == last_marker)) {
+      if (!op.end_marker.empty()) {
+        next_marker.from_str(op.end_marker.c_str());
+      } else {
+        next_marker = cls_queue_marker{(entry_start_offset + index), gen};
+      }
+      CLS_LOG(10, "INFO: queue_list_entries(): either num_ops is same as op.max or last_marker is same as op.end_marker, "
+                  "hence breaking out from outer loop with next offset: %lu", next_marker.offset);
       break;
     }
 

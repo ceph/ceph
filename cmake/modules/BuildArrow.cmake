@@ -42,6 +42,15 @@ function(build_arrow)
   list(APPEND arrow_CMAKE_ARGS -DARROW_WITH_SNAPPY=ON) # required
   list(APPEND arrow_INTERFACE_LINK_LIBRARIES snappy::snappy)
 
+  if(WITH_RADOSGW_ARROW_FLIGHT)
+    message("building arrow flight; make sure grpc-plugins is installed on the system")
+    list(APPEND arrow_CMAKE_ARGS
+      -DARROW_FLIGHT=ON -DARROW_WITH_RE2=OFF)
+    find_package(gRPC REQUIRED)
+    find_package(Protobuf REQUIRED)
+    find_package(c-ares 1.13.0 QUIET REQUIRED)
+  endif(WITH_RADOSGW_ARROW_FLIGHT)
+
   list(APPEND arrow_CMAKE_ARGS -DARROW_WITH_ZLIB=ON) # required
   list(APPEND arrow_INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
 
@@ -77,6 +86,9 @@ function(build_arrow)
   else()
     list(APPEND arrow_CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release)
   endif()
+  # don't add -Werror or debug package builds fail with:
+  #warning _FORTIFY_SOURCE requires compiling with optimization (-O)
+  list(APPEND arrow_CMAKE_ARGS -DBUILD_WARNING_LEVEL=PRODUCTION)
 
   # we use an external project and copy the sources to bin directory to ensure
   # that object files are built outside of the source tree.
@@ -101,6 +113,11 @@ function(build_arrow)
 
   set(arrow_BYPRODUCTS ${arrow_LIBRARY})
   list(APPEND arrow_BYPRODUCTS ${parquet_LIBRARY})
+
+  if(WITH_RADOSGW_ARROW_FLIGHT)
+    set(arrow_flight_LIBRARY "${arrow_LIBRARY_DIR}/libarrow_flight.a")
+    list(APPEND arrow_BYPRODUCTS ${arrow_flight_LIBRARY})
+  endif(WITH_RADOSGW_ARROW_FLIGHT)
 
   if(CMAKE_MAKE_PROGRAM MATCHES "make")
     # try to inherit command line arguments passed by parent "make" job
@@ -140,4 +157,14 @@ function(build_arrow)
   set_target_properties(Arrow::Parquet PROPERTIES
     IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
     IMPORTED_LOCATION "${parquet_LIBRARY}")
+
+  if(WITH_RADOSGW_ARROW_FLIGHT)
+    add_library(Arrow::Flight STATIC IMPORTED)
+    add_dependencies(Arrow::Flight arrow_ext)
+    target_link_libraries(Arrow::Flight INTERFACE Arrow::Arrow gRPC::grpc++)
+    set_target_properties(Arrow::Flight PROPERTIES
+      INTERFACE_INCLUDE_DIRECTORIES "${arrow_INCLUDE_DIR}" # flight is accessed via "arrow/flight"
+      IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
+      IMPORTED_LOCATION "${arrow_flight_LIBRARY}")
+  endif(WITH_RADOSGW_ARROW_FLIGHT)
 endfunction()

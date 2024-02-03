@@ -25,4 +25,14 @@ describe('StatefulTabDirective', () => {
     directive.onNavChange(event);
     expect(window.localStorage.getItem('tabset_bar')).toBe('xyz');
   });
+
+  it('should select the default tab if provided', () => {
+    const nav = new NgbNav('tablist', new NgbNavConfig(new NgbConfig()), <any>null, null);
+    spyOn(nav, 'select');
+    const directive = new StatefulTabDirective(nav);
+    directive.cdStatefulTab = 'bar';
+    directive.cdStatefulTabDefault = 'defaultTab';
+    directive.ngOnInit();
+    expect(nav.select).toHaveBeenCalledWith('defaultTab');
+  });
 });

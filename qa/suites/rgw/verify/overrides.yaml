@@ -8,6 +8,11 @@ overrides:
         rgw crypt s3 kms backend: testing
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl: false
+        rgw torrent flag: true
+        rgw user counters cache: true
+        rgw bucket counters cache: true
   rgw:
     compression type: random
+    storage classes: LUKEWARM, FROZEN
+  s3tests:
     storage classes: LUKEWARM, FROZEN

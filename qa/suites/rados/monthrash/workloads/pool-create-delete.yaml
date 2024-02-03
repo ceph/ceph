@@ -3,7 +3,6 @@ overrides:
     log-ignorelist:
       - slow request
       - overall HEALTH_
-      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - exec:
     client.0:

@@ -15,6 +15,12 @@
 
 #include <errno.h>
 
+// these strand headers declare static variables that need to be shared between
+// librbd.so and librados.so. referencing them here causes librbd.so to link
+// their symbols as 'global unique'. see https://tracker.ceph.com/issues/63682
+#include <boost/asio/strand.hpp>
+#include <boost/asio/io_context_strand.hpp>
+
 #include "common/deleter.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -2401,7 +2407,7 @@ namespace librbd {
     return exists;
   }
 
-  // A safer verion of snap_exists.
+  // A safer version of snap_exists.
   int Image::snap_exists2(const char *snap_name, bool *exists)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;

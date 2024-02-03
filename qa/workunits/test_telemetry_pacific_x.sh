@@ -35,11 +35,15 @@ ceph telemetry preview-all
 ceph telemetry on --license sharing-1-0
 ceph telemetry enable channel perf
 
-# Check the warning (should be gone after 2 seconds):
-sleep 2
+# Check the warning:
+timeout=60
 STATUS=$(ceph -s)
-if [[ $STATUS == *"Telemetry requires re-opt-in"* ]]
-then
+until [[ $STATUS != *"Telemetry requires re-opt-in"* ]] || [ $timeout -le 0 ]; do
+    STATUS=$(ceph -s)
+    sleep 1
+    timeout=$(( timeout - 1 ))
+done
+if [ $timeout -le 0 ]; then
     echo "STATUS should not contain re-opt-in warning at this point"
     exit 1
 fi

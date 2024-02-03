@@ -1,0 +1,10 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph config set mgr mgr/balancer/log_level debug
+      - ceph balancer status
+      - ceph osd set-require-min-compat-client reef
+      - ceph balancer mode read
+      - ceph balancer on
+      - ceph balancer status
+      - ceph balancer status detail

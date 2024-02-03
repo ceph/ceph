@@ -35,7 +35,8 @@ export class RbdSnapshotActionsModel {
       permission: 'update',
       icon: Icons.edit,
       name: actionLabels.RENAME,
-      disable: (selection: CdTableSelection) => this.disableForMirrorSnapshot(selection)
+      disable: (selection: CdTableSelection) =>
+        this.disableForMirrorSnapshot(selection) || !selection.hasSingleSelection
     };
     this.protect = {
       permission: 'update',
@@ -43,7 +44,9 @@ export class RbdSnapshotActionsModel {
       visible: (selection: CdTableSelection) =>
         selection.hasSingleSelection && !selection.first().is_protected,
       name: actionLabels.PROTECT,
-      disable: (selection: CdTableSelection) => this.disableForMirrorSnapshot(selection)
+      disable: (selection: CdTableSelection) =>
+        this.disableForMirrorSnapshot(selection) ||
+        this.getProtectDisableDesc(selection, this.featuresName)
     };
     this.unprotect = {
       permission: 'update',
@@ -57,8 +60,7 @@ export class RbdSnapshotActionsModel {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
-        this.getCloneDisableDesc(selection, this.featuresName) ||
-        this.disableForMirrorSnapshot(selection),
+        this.getCloneDisableDesc(selection) || this.disableForMirrorSnapshot(selection),
       icon: Icons.clone,
       name: actionLabels.CLONE
     };
@@ -76,7 +78,8 @@ export class RbdSnapshotActionsModel {
       permission: 'update',
       icon: Icons.undo,
       name: actionLabels.ROLLBACK,
-      disable: (selection: CdTableSelection) => this.disableForMirrorSnapshot(selection)
+      disable: (selection: CdTableSelection) =>
+        this.disableForMirrorSnapshot(selection) || !selection.hasSingleSelection
     };
     this.deleteSnap = {
       permission: 'delete',
@@ -105,19 +108,23 @@ export class RbdSnapshotActionsModel {
     ];
   }
 
-  getCloneDisableDesc(selection: CdTableSelection, featuresName: string[]): boolean | string {
+  getProtectDisableDesc(selection: CdTableSelection, featuresName: string[]): boolean | string {
     if (selection.hasSingleSelection && !selection.first().cdExecuting) {
       if (!featuresName?.includes('layering')) {
-        return $localize`Parent image must support Layering`;
+        return $localize`The layering feature needs to be enabled on parent image`;
       }
+      return false;
+    }
+    return true;
+  }
 
+  getCloneDisableDesc(selection: CdTableSelection): boolean | string {
+    if (selection.hasSingleSelection && !selection.first().cdExecuting) {
       if (this.cloneFormatVersion === 1 && !selection.first().is_protected) {
         return $localize`Snapshot must be protected in order to clone.`;
       }
-
       return false;
     }
-
     return true;
   }
 

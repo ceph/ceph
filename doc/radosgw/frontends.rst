@@ -127,15 +127,6 @@ Options
 :Type: Integer
 :Default: ``65000``
 
-``rgw_thread_pool_size``
-
-:Description: Sets the number of threads spawned by Beast to handle
-              incoming HTTP connections. This effectively limits the number
-              of concurrent connections that the frontend can service.
-
-:Type: Integer
-:Default: ``512``
-
 ``max_header_size``
 
 :Description: The maximum number of header bytes available for a single request.

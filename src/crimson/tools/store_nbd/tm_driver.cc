@@ -27,7 +27,7 @@ seastar::future<> TMDriver::write(
         "write",
         [this, offset, &ptr](auto& t)
       {
-        return tm->dec_ref(t, offset
+        return tm->remove(t, offset
         ).si_then([](auto){}).handle_error_interruptible(
           crimson::ct_error::enoent::handle([](auto) { return seastar::now(); }),
           crimson::ct_error::pass_further_all{}
@@ -71,7 +71,7 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	      "read_extents: get_extent {}~{}",
 	      pin->get_val(),
 	      pin->get_length());
-	    return tm->pin_to_extent<TestBlock>(
+	    return tm->read_pin<TestBlock>(
 	      t,
 	      std::move(pin)
 	    ).si_then([&ret](auto ref) mutable {

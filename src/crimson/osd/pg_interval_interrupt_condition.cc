@@ -6,6 +6,13 @@
 
 #include "crimson/common/log.h"
 
+SET_SUBSYS(osd);
+
+namespace crimson::interruptible {
+template thread_local interrupt_cond_t<crimson::osd::IOInterruptCondition>
+interrupt_cond<crimson::osd::IOInterruptCondition>;
+}
+
 namespace crimson::osd {
 
 IOInterruptCondition::IOInterruptCondition(Ref<PG>& pg)
@@ -17,17 +24,20 @@ IOInterruptCondition::~IOInterruptCondition() {
 }
 
 bool IOInterruptCondition::new_interval_created() {
-  bool ret = e < pg->get_interval_start_epoch();
-  if (ret)
-    ::crimson::get_logger(ceph_subsys_osd).debug(
-      "{} new interval, should interrupt, e{}", *pg, e);
+  LOG_PREFIX(IOInterruptCondition::new_interval_created);
+  const epoch_t interval_start = pg->get_interval_start_epoch();
+  bool ret = e < interval_start;
+  if (ret) {
+    DEBUGDPP("stored interval e{} < interval_start e{}", *pg, e, interval_start);
+  }
   return ret;
 }
 
 bool IOInterruptCondition::is_stopping() {
-  if (pg->stopping)
-    ::crimson::get_logger(ceph_subsys_osd).debug(
-      "{} shutting down, should interrupt", *pg);
+  LOG_PREFIX(IOInterruptCondition::is_stopping);
+  if (pg->stopping) {
+    DEBUGDPP("pg stopping", *pg);
+  }
   return pg->stopping;
 }
 

@@ -67,14 +67,14 @@ RGWSI_User_RADOS::RGWSI_User_RADOS(CephContext *cct): RGWSI_User(cct) {
 RGWSI_User_RADOS::~RGWSI_User_RADOS() {
 }
 
-void RGWSI_User_RADOS::init(RGWSI_RADOS *_rados_svc,
+void RGWSI_User_RADOS::init(librados::Rados* rados_,
                             RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
                             RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
                             RGWSI_MetaBackend *_meta_be_svc,
                             RGWSI_SyncModules *_sync_modules_svc)
 {
   svc.user = this;
-  svc.rados = _rados_svc;
+  rados = rados_;
   svc.zone = _zone_svc;
   svc.sysobj = _sysobj_svc;
   svc.cache = _cache_svc;
@@ -602,8 +602,8 @@ int RGWSI_User_RADOS::get_user_info_by_access_key(RGWSI_MetaBackend::Context *ct
 
 int RGWSI_User_RADOS::cls_user_update_buckets(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add, optional_yield y)
 {
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open(dpp);
+  rgw_rados_ref rados_obj;
+  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
   if (r < 0) {
     return r;
   }
@@ -628,8 +628,8 @@ int RGWSI_User_RADOS::cls_user_add_bucket(const DoutPrefixProvider *dpp, rgw_raw
 
 int RGWSI_User_RADOS::cls_user_remove_bucket(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, const cls_user_bucket& bucket, optional_yield y)
 {
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open(dpp);
+  rgw_rados_ref rados_obj;
+  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
   if (r < 0) {
     return r;
   }
@@ -716,8 +716,8 @@ int RGWSI_User_RADOS::cls_user_list_buckets(const DoutPrefixProvider *dpp,
                                             bool * const truncated,
 					    optional_yield y)
 {
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open(dpp);
+  rgw_rados_ref rados_obj;
+  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
   if (r < 0) {
     return r;
   }
@@ -804,11 +804,13 @@ int RGWSI_User_RADOS::reset_bucket_stats(const DoutPrefixProvider *dpp,
 int RGWSI_User_RADOS::cls_user_reset_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y)
 {
   rgw_raw_obj obj = get_buckets_obj(user);
-  auto rados_obj = svc.rados->obj(obj);
-  int rval, r = rados_obj.open(dpp);
+  rgw_rados_ref rados_obj;
+  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
   if (r < 0) {
     return r;
   }
+
+  int rval;
 
   cls_user_reset_stats2_op call;
   cls_user_reset_stats2_ret ret;
@@ -841,11 +843,12 @@ int RGWSI_User_RADOS::complete_flush_stats(const DoutPrefixProvider *dpp,
                                            const rgw_user& user, optional_yield y)
 {
   rgw_raw_obj obj = get_buckets_obj(user);
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open(dpp);
+  rgw_rados_ref rados_obj;
+  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
   if (r < 0) {
     return r;
   }
+
   librados::ObjectWriteOperation op;
   ::cls_user_complete_stats_sync(op);
   return rados_obj.operate(dpp, &op, y);
@@ -856,8 +859,8 @@ int RGWSI_User_RADOS::cls_user_get_header(const DoutPrefixProvider *dpp,
 					  optional_yield y)
 {
   rgw_raw_obj obj = get_buckets_obj(user);
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open(dpp);
+  rgw_rados_ref rados_obj;
+  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
   if (r < 0) {
     return r;
   }
@@ -871,15 +874,13 @@ int RGWSI_User_RADOS::cls_user_get_header(const DoutPrefixProvider *dpp,
 int RGWSI_User_RADOS::cls_user_get_header_async(const DoutPrefixProvider *dpp, const string& user_str, RGWGetUserHeader_CB *cb)
 {
   rgw_raw_obj obj = get_buckets_obj(rgw_user(user_str));
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open(dpp);
+  rgw_rados_ref ref;
+  int r = rgw_get_rados_ref(dpp, rados, obj, &ref);
   if (r < 0) {
     return r;
   }
 
-  auto& ref = rados_obj.get_ref();
-
-  r = ::cls_user_get_header_async(ref.pool.ioctx(), ref.obj.oid, cb);
+  r = ::cls_user_get_header_async(ref.ioctx, ref.obj.oid, cb);
   if (r < 0) {
     return r;
   }
@@ -898,7 +899,7 @@ int RGWSI_User_RADOS::read_stats(const DoutPrefixProvider *dpp,
 
   RGWUserInfo info;
   real_time mtime;
-  int ret = read_user_info(ctx, user, &info, nullptr, &mtime, nullptr, nullptr, null_yield, dpp);
+  int ret = read_user_info(ctx, user, &info, nullptr, &mtime, nullptr, nullptr, y, dpp);
   if (ret < 0)
   {
     return ret;
@@ -927,36 +928,32 @@ int RGWSI_User_RADOS::read_stats(const DoutPrefixProvider *dpp,
 }
 
 class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
-  RGWGetUserStats_CB *cb;
+  boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb;
 
 public:
-  explicit RGWGetUserStatsContext(RGWGetUserStats_CB * const cb)
-    : cb(cb) {}
+  explicit RGWGetUserStatsContext(boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb)
+    : cb(std::move(cb)) {}
 
   void handle_response(int r, cls_user_header& header) override {
     const cls_user_stats& hs = header.stats;
-    if (r >= 0) {
-      RGWStorageStats stats;
+    RGWStorageStats stats;
 
-      stats.size = hs.total_bytes;
-      stats.size_rounded = hs.total_bytes_rounded;
-      stats.num_objects = hs.total_entries;
+    stats.size = hs.total_bytes;
+    stats.size_rounded = hs.total_bytes_rounded;
+    stats.num_objects = hs.total_entries;
 
-      cb->set_response(stats);
-    }
-
-    cb->handle_response(r);
-
-    cb->put();
+    cb->handle_response(r, stats);
+    cb.reset();
   }
 };
 
 int RGWSI_User_RADOS::read_stats_async(const DoutPrefixProvider *dpp,
-                                       const rgw_user& user, RGWGetUserStats_CB *_cb)
+                                       const rgw_user& user,
+                                       boost::intrusive_ptr<rgw::sal::ReadStatsCB> _cb)
 {
   string user_str = user.to_str();
 
-  RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(_cb);
+  RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(std::move(_cb));
   int r = cls_user_get_header_async(dpp, user_str, cb);
   if (r < 0) {
     delete cb;

@@ -154,18 +154,18 @@ int RGWUsage::show(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 
 int RGWUsage::trim(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 		   rgw::sal::User* user , rgw::sal::Bucket* bucket,
-		   uint64_t start_epoch, uint64_t end_epoch)
+		   uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
 {
   if (bucket) {
-    return bucket->trim_usage(dpp, start_epoch, end_epoch);
+    return bucket->trim_usage(dpp, start_epoch, end_epoch, y);
   } else if (user) {
-    return user->trim_usage(dpp, start_epoch, end_epoch);
+    return user->trim_usage(dpp, start_epoch, end_epoch, y);
   } else {
-    return driver->trim_all_usage(dpp, start_epoch, end_epoch);
+    return driver->trim_all_usage(dpp, start_epoch, end_epoch, y);
   }
 }
 
-int RGWUsage::clear(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver)
+int RGWUsage::clear(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y)
 {
-  return driver->clear_usage(dpp);
+  return driver->clear_usage(dpp, y);
 }

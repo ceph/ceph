@@ -34,27 +34,8 @@ export class HealthComponent implements OnInit, OnDestroy {
   icons = Icons;
   color: string;
 
-  clientStatsConfig = {
-    colors: [
-      {
-        backgroundColor: [
-          this.cssHelper.propertyValue('chart-color-cyan'),
-          this.cssHelper.propertyValue('chart-color-purple')
-        ]
-      }
-    ]
-  };
-
-  rawCapacityChartConfig = {
-    colors: [
-      {
-        backgroundColor: [
-          this.cssHelper.propertyValue('chart-color-blue'),
-          this.cssHelper.propertyValue('chart-color-gray')
-        ]
-      }
-    ]
-  };
+  clientStatsConfig: any = {};
+  rawCapacityChartConfig: any = {};
 
   pgStatusChartConfig = {
     options: {
@@ -78,6 +59,27 @@ export class HealthComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    this.clientStatsConfig = {
+      dataset: [
+        {
+          backgroundColor: [
+            this.cssHelper.propertyValue('chart-color-cyan'),
+            this.cssHelper.propertyValue('chart-color-purple')
+          ]
+        }
+      ]
+    };
+
+    this.rawCapacityChartConfig = {
+      dataset: [
+        {
+          backgroundColor: [
+            this.cssHelper.propertyValue('chart-color-blue'),
+            this.cssHelper.propertyValue('chart-color-gray')
+          ]
+        }
+      ]
+    };
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
     });
@@ -169,7 +171,7 @@ export class HealthComponent implements OnInit, OnDestroy {
     } else {
       this.color = 'chart-color-blue';
     }
-    this.rawCapacityChartConfig.colors[0].backgroundColor[0] = this.cssHelper.propertyValue(
+    this.rawCapacityChartConfig.dataset[0].backgroundColor[0] = this.cssHelper.propertyValue(
       this.color
     );
 

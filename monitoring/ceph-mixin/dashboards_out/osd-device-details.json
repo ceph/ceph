@@ -63,6 +63,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "s"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -87,7 +96,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -127,7 +136,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -161,6 +170,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "short"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -185,7 +203,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -225,7 +243,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -259,6 +277,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "bytes"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -283,7 +310,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -323,7 +350,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -376,6 +403,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "s"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -400,7 +436,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -440,7 +476,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -474,6 +510,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "short"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -498,7 +543,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -538,7 +583,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -572,6 +617,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "Bps"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -596,7 +650,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -636,7 +690,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -670,6 +724,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "percentunit"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -722,7 +785,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",

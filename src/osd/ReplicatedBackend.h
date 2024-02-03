@@ -91,19 +91,15 @@ public:
   void dump_recovery_info(ceph::Formatter *f) const override {
     {
       f->open_array_section("pull_from_peer");
-      for (std::map<pg_shard_t, std::set<hobject_t> >::const_iterator i = pull_from_peer.begin();
-	   i != pull_from_peer.end();
-	   ++i) {
+      for (const auto& i : pull_from_peer) {
 	f->open_object_section("pulling_from");
-	f->dump_stream("pull_from") << i->first;
+	f->dump_stream("pull_from") << i.first;
 	{
 	  f->open_array_section("pulls");
-	  for (std::set<hobject_t>::const_iterator j = i->second.begin();
-	       j != i->second.end();
-	       ++j) {
+	  for (const auto& j : i.second) {
 	    f->open_object_section("pull_info");
-	    ceph_assert(pulling.count(*j));
-	    pulling.find(*j)->second.dump(f);
+	    ceph_assert(pulling.count(j));
+	    pulling.find(j)->second.dump(f);
 	    f->close_section();
 	  }
 	  f->close_section();
@@ -114,22 +110,17 @@ public:
     }
     {
       f->open_array_section("pushing");
-      for (std::map<hobject_t, std::map<pg_shard_t, PushInfo>>::const_iterator i =
-	     pushing.begin();
-	   i != pushing.end();
-	   ++i) {
+      for(const auto& i : pushing) {
 	f->open_object_section("object");
-	f->dump_stream("pushing") << i->first;
+	f->dump_stream("pushing") << i.first;
 	{
 	  f->open_array_section("pushing_to");
-	  for (std::map<pg_shard_t, PushInfo>::const_iterator j = i->second.begin();
-	       j != i->second.end();
-	       ++j) {
+	  for (const auto& j : i.second) {
 	    f->open_object_section("push_progress");
-	    f->dump_stream("pushing_to") << j->first;
+	    f->dump_stream("pushing_to") << j.first;
 	    {
 	      f->open_object_section("push_info");
-	      j->second.dump(f);
+	      j.second.dump(f);
 	      f->close_section();
 	    }
 	    f->close_section();
@@ -151,7 +142,7 @@ public:
 
   int objects_readv_sync(
     const hobject_t &hoid,
-    std::map<uint64_t, uint64_t>&& m,
+    std::map<uint64_t, uint64_t>& m,
     uint32_t op_flags,
     ceph::buffer::list *bl) override;
 
@@ -164,7 +155,7 @@ public:
 
 private:
   // push
-  struct PushInfo {
+  struct push_info_t {
     ObjectRecoveryProgress recovery_progress;
     ObjectRecoveryInfo recovery_info;
     ObjectContextRef obc;
@@ -184,10 +175,10 @@ private:
       }
     }
   };
-  std::map<hobject_t, std::map<pg_shard_t, PushInfo>> pushing;
+  std::map<hobject_t, std::map<pg_shard_t, push_info_t>> pushing;
 
   // pull
-  struct PullInfo {
+  struct pull_info_t {
     pg_shard_t from;
     hobject_t soid;
     ObjectRecoveryProgress recovery_progress;
@@ -216,15 +207,15 @@ private:
     }
   };
 
-  std::map<hobject_t, PullInfo> pulling;
+  std::map<hobject_t, pull_info_t> pulling;
 
   // Reverse mapping from osd peer to objects being pulled from that peer
   std::map<pg_shard_t, std::set<hobject_t> > pull_from_peer;
   void clear_pull(
-    std::map<hobject_t, PullInfo>::iterator piter,
+    std::map<hobject_t, pull_info_t>::iterator piter,
     bool clear_pull_from_peer = true);
   void clear_pull_from(
-    std::map<hobject_t, PullInfo>::iterator piter);
+    std::map<hobject_t, pull_info_t>::iterator piter);
 
   void _do_push(OpRequestRef op);
   void _do_pull_response(OpRequestRef op);

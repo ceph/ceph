@@ -71,6 +71,7 @@ class Collection(str, enum.Enum):
     basic_rook_v01 = 'basic_rook_v01'
     perf_memory_metrics = 'perf_memory_metrics'
     basic_pool_options_bluestore = 'basic_pool_options_bluestore'
+    basic_pool_flags = 'basic_pool_flags'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -139,6 +140,12 @@ MODULE_COLLECTION : List[Dict] = [
         "channel": "basic",
         "nag": False
     },
+    {
+        "name": Collection.basic_pool_flags,
+        "description": "Per-pool flags",
+        "channel": "basic",
+        "nag": False
+    },
 ]
 
 ROOK_KEYS_BY_COLLECTION : List[Tuple[str, Collection]] = [
@@ -198,6 +205,9 @@ class Module(MgrModule):
         Option(name='leaderboard',
                type='bool',
                default=False),
+        Option(name='leaderboard_description',
+               type='str',
+               default=None),
         Option(name='description',
                type='str',
                default=None),
@@ -261,6 +271,7 @@ class Module(MgrModule):
             self.enabled = False
             self.last_opt_revision = 0
             self.leaderboard = ''
+            self.leaderboard_description = ''
             self.interval = 0
             self.proxy = ''
             self.channel_basic = True
@@ -790,7 +801,7 @@ class Module(MgrModule):
         return crashlist
 
     def gather_perf_counters(self, mode: str = 'separated') -> Dict[str, dict]:
-        # Extract perf counter data with get_all_perf_counters(), a method
+        # Extract perf counter data with get_unlabeled_perf_counters(), a method
         # from mgr/mgr_module.py. This method returns a nested dictionary that
         # looks a lot like perf schema, except with some additional fields.
         #
@@ -806,7 +817,7 @@ class Module(MgrModule):
         #           "value": 88814109
         #       },
         #   },
-        all_perf_counters = self.get_all_perf_counters()
+        perf_counters = self.get_unlabeled_perf_counters()
 
         # Initialize 'result' dict
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
@@ -815,7 +826,7 @@ class Module(MgrModule):
         # 'separated' mode
         anonymized_daemon_dict = {}
 
-        for daemon, all_perf_counters_by_daemon in all_perf_counters.items():
+        for daemon, perf_counters_by_daemon in perf_counters.items():
             daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
 
             if mode == 'separated':
@@ -832,7 +843,7 @@ class Module(MgrModule):
                 else:
                     result[daemon_type]['num_combined_daemons'] += 1
 
-            for collection in all_perf_counters_by_daemon:
+            for collection in perf_counters_by_daemon:
                 # Split the collection to avoid redundancy in final report; i.e.:
                 #   bluestore.kv_flush_lat, bluestore.kv_final_lat -->
                 #   bluestore: kv_flush_lat, kv_final_lat
@@ -852,12 +863,12 @@ class Module(MgrModule):
                 if mode == 'separated':
                     # Add value to result
                     result[daemon][col_0][col_1]['value'] = \
-                            all_perf_counters_by_daemon[collection]['value']
+                            perf_counters_by_daemon[collection]['value']
 
                     # Check that 'count' exists, as not all counters have a count field.
-                    if 'count' in all_perf_counters_by_daemon[collection]:
+                    if 'count' in perf_counters_by_daemon[collection]:
                         result[daemon][col_0][col_1]['count'] = \
-                                all_perf_counters_by_daemon[collection]['count']
+                                perf_counters_by_daemon[collection]['count']
                 elif mode == 'aggregated':
                     # Not every rgw daemon has the same schema. Specifically, each rgw daemon
                     # has a uniquely-named collection that starts off identically (i.e.
@@ -871,14 +882,14 @@ class Module(MgrModule):
                     # the files are of type 'pair' (real-integer-pair, integer-integer pair).
                     # In those cases, the value is a dictionary, and not a number.
                     #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
-                    if isinstance(all_perf_counters_by_daemon[collection]['value'], numbers.Number):
+                    if isinstance(perf_counters_by_daemon[collection]['value'], numbers.Number):
                         result[daemon_type][col_0][col_1]['value'] += \
-                                all_perf_counters_by_daemon[collection]['value']
+                                perf_counters_by_daemon[collection]['value']
 
                     # Check that 'count' exists, as not all counters have a count field.
-                    if 'count' in all_perf_counters_by_daemon[collection]:
+                    if 'count' in perf_counters_by_daemon[collection]:
                         result[daemon_type][col_0][col_1]['count'] += \
-                                all_perf_counters_by_daemon[collection]['count']
+                                perf_counters_by_daemon[collection]['count']
                 else:
                     self.log.error('Incorrect mode specified in gather_perf_counters: {}'.format(mode))
                     return {}
@@ -980,6 +991,7 @@ class Module(MgrModule):
             channels = self.get_active_channels()
         report = {
             'leaderboard': self.leaderboard,
+            'leaderboard_description': self.leaderboard_description,
             'report_version': 1,
             'report_timestamp': datetime.utcnow().isoformat(),
             'report_id': self.report_id,
@@ -1104,7 +1116,37 @@ class Module(MgrModule):
                         for option in bluestore_options:
                             if option in pool['options']:
                                 pool_data['options'][option] = pool['options'][option]
+
+                # basic_pool_flags collection
+                if self.is_enabled_collection(Collection.basic_pool_flags):
+                    if 'flags_names' in pool and pool['flags_names'] is not None:
+                        # flags are defined in pg_pool_t (src/osd/osd_types.h)
+                        flags_to_report = [
+                            'hashpspool',
+                            'full',
+                            'ec_overwrites',
+                            'incomplete_clones',
+                            'nodelete',
+                            'nopgchange',
+                            'nosizechange',
+                            'write_fadvise_dontneed',
+                            'noscrub',
+                            'nodeep-scrub',
+                            'full_quota',
+                            'nearfull',
+                            'backfillfull',
+                            'selfmanaged_snaps',
+                            'pool_snaps',
+                            'creating',
+                            'eio',
+                            'bulk',
+                            'crimson',
+                            ]
+
+                        pool_data['flags_names'] = [flag for flag in pool['flags_names'].split(',') if flag in flags_to_report]
+
                 cast(List[Dict[str, Any]], report['pools']).append(pool_data)
+
                 if 'rbd' in pool['application_metadata']:
                     rbd_num_pools += 1
                     ioctx = self.rados.open_ioctx(pool['pool_name'])
@@ -1540,6 +1582,8 @@ class Module(MgrModule):
         # Formatting the perf histograms so they are human-readable. This will change the
         # ranges and values, which are currently in list form, into strings so that
         # they are displayed horizontally instead of vertically.
+        if 'report' in report:
+            report = report['report']
         try:
             # Formatting ranges and values in osd_perf_histograms
             mode = 'osd_perf_histograms'
@@ -1937,10 +1981,13 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
 
         if not self.channel_device:
             # device channel is off, no need to display its report
-            return 0, json.dumps(self.get_report_locked('default'), indent=4, sort_keys=True), ''
+            report = self.get_report_locked('default')
+        else:
+            # telemetry is on and device channel is enabled, show both
+            report = self.get_report_locked('all')
 
-        # telemetry is on and device channel is enabled, show both
-        return 0, json.dumps(self.get_report_locked('all'), indent=4, sort_keys=True), ''
+        self.format_perf_histogram(report)
+        return 0, json.dumps(report, indent=4, sort_keys=True), ''
 
     @CLIReadCommand('telemetry preview-all')
     def preview_all(self) -> Tuple[int, str, str]:
@@ -1994,7 +2041,8 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         return {}
 
     def self_test(self) -> None:
-        report = self.compile_report()
+        self.opt_in_all_collections()
+        report = self.compile_report(channels=ALL_CHANNELS)
         if len(report) == 0:
             raise RuntimeError('Report is empty')
 

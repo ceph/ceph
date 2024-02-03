@@ -115,6 +115,8 @@ Null, TokenKind::cond_op, TokenID::Null, (uint64_t) Type::null, true, true
 #s3:authType, TokenKind::cond_key, TokenID::s3authType, (uint64_t) Type::string, true, false
 #s3:signatureAge, TokenKind::cond_key, TokenID::s3signatureAge, (uint64_t) Type::number, true, false
 #s3:x-amz-content-sha256, TokenKind::cond_key, TokenID::s3x_amz_content_sha256, (uint64_t) Type::string, true, false
+# RGW
+#rgw:subuser, TokenKind::cond_key, TokenID::rgwsubuser, (uint64_t) Type::string, true, false
 # STS
 #sts:authentication, TokenKind::cond_key, TokenID::stsauthentication, (uint64_t) Type::boolean, true, false
 #

@@ -1003,7 +1003,7 @@ public:
   }
 };
 
-void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
+void Migrator::dispatch_export_dir(const MDRequestRef& mdr, int count)
 {
   CDir *dir = mdr->more()->export_dir;
   dout(7) << *mdr << " " << *dir << dendl;
@@ -1905,7 +1905,6 @@ void Migrator::handle_export_ack(const cref_t<MExportDirAck> &m)
   // log completion. 
   //  include export bounds, to ensure they're in the journal.
   EExport *le = new EExport(mds->mdlog, dir, it->second.peer);;
-  mds->mdlog->start_entry(le);
 
   le->metablob.add_dir_context(dir, EMetaBlob::TO_ROOT);
   le->metablob.add_dir(dir, false);
@@ -2670,7 +2669,6 @@ void Migrator::handle_export_dir(const cref_t<MExportDir> &m)
 
   // start the journal entry
   EImportStart *le = new EImportStart(mds->mdlog, dir->dirfrag(), m->bounds, oldauth);
-  mds->mdlog->start_entry(le);
 
   le->metablob.add_dir_context(dir);
   
@@ -2910,7 +2908,7 @@ void Migrator::import_reverse(CDir *dir)
   }
 	 
   // log our failure
-  mds->mdlog->start_submit_entry(new EImportFinish(dir, false));	// log failure
+  mds->mdlog->submit_entry(new EImportFinish(dir, false));	// log failure
 
   mdcache->trim(num_dentries); // try trimming dentries
 
@@ -3129,7 +3127,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   MutationRef mut = it->second.mut;
   import_state.erase(it);
 
-  mds->mdlog->start_submit_entry(new EImportFinish(dir, true));
+  mds->mdlog->submit_entry(new EImportFinish(dir, true));
 
   // process delayed expires
   mdcache->process_delayed_expire(dir);
@@ -3378,8 +3376,6 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
   // add to journal entry
   if (le) 
     le->metablob.add_import_dir(dir);
-
-  int num_imported = 0;
 
   // take all waiters on this dir
   // NOTE: a pass of imported data is guaranteed to get all of my waiters because
@@ -3640,7 +3636,7 @@ void Migrator::handle_export_caps(const cref_t<MExportCaps> &ex)
   // journal open client sessions
   ESessions *le = new ESessions(pv, std::move(client_map),
 				std::move(client_metadata_map));
-  mds->mdlog->start_submit_entry(le, finish);
+  mds->mdlog->submit_entry(le, finish);
   mds->mdlog->flush();
 }
 

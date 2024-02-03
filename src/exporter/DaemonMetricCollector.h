@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include <boost/asio.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/json/object.hpp>
 #include <filesystem>
 #include <map>
@@ -34,6 +34,7 @@ class DaemonMetricCollector {
 public:
   void main();
   std::string get_metrics();
+  labels_t get_extra_labels(std::string daemon_name);
 
 private:
   std::map<std::string, AdminSocketClient> clients;
@@ -47,8 +48,7 @@ private:
   void dump_asok_metric(boost::json::object perf_info,
                         boost::json::value perf_values, std::string name,
                         labels_t labels);
-  std::pair<labels_t, std::string>
-  get_labels_and_metric_name(std::string daemon_name, std::string metric_name);
+  std::pair<labels_t, std::string> add_fixed_name_metrics(std::string metric_name);
   void get_process_metrics(std::vector<std::pair<std::string, int>> daemon_pids);
   std::string asok_request(AdminSocketClient &asok, std::string command, std::string daemon_name);
 };

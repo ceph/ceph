@@ -301,7 +301,7 @@ int StoreTool::copy_store_to(const string& type, const string& other_path,
     return -EINVAL;
   }
 
-  // open or create a leveldb store at @p other_path
+  // open or create a RocksDB store at @p other_path
   boost::scoped_ptr<KeyValueDB> other;
   KeyValueDB *other_ptr = KeyValueDB::create(g_ceph_context,
 					     other_type,

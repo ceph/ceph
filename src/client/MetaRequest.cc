@@ -46,11 +46,14 @@ void MetaRequest::dump(Formatter *f) const
   f->dump_unsigned("oldest_client_tid", head.oldest_client_tid);
   f->dump_unsigned("mdsmap_epoch", head.mdsmap_epoch);
   f->dump_unsigned("flags", head.flags);
-  f->dump_unsigned("num_retry", head.num_retry);
-  f->dump_unsigned("num_fwd", head.num_fwd);
+  f->dump_unsigned("num_retry", head.ext_num_retry);
+  f->dump_unsigned("num_fwd", head.ext_num_fwd);
   f->dump_unsigned("num_releases", head.num_releases);
 
   f->dump_int("abort_rc", abort_rc);
+
+  f->dump_unsigned("owner_uid", head.owner_uid);
+  f->dump_unsigned("owner_gid", head.owner_gid);
 }
 
 MetaRequest::~MetaRequest()

@@ -367,6 +367,27 @@ void WnbdHandler::LogMessage(
           << WnbdLogLevelToStr(LogLevel) << " " << Message << dendl;
 }
 
+int WnbdHandler::resize(uint64_t new_size)
+{
+  int err = 0;
+  
+  uint64_t new_block_count = new_size / block_size;
+
+  dout(5) << "Resizing disk. Block size: " << block_size
+          << ". New block count: " << new_block_count
+          << ". Old block count: "
+          << wnbd_disk->Properties.BlockCount << "." << dendl;
+  err = WnbdSetDiskSize(wnbd_disk, new_block_count);
+  if (err) {
+    derr << "WNBD: Setting disk size failed with error: "
+         << win32_strerror(err) << dendl;
+    return -EINVAL;
+  }
+
+  dout(5) << "Successfully resized disk to: " << new_block_count << " blocks"
+          << dendl;
+  return 0;
+}
 
 int WnbdHandler::start()
 {
@@ -388,7 +409,8 @@ int WnbdHandler::start()
     wnbd_props.Flags.FlushSupported = 1;
   }
 
-  err = WnbdCreate(&wnbd_props, &RbdWnbdInterface, this, &wnbd_disk);
+  err = WnbdCreate(&wnbd_props, (const PWNBD_INTERFACE) &RbdWnbdInterface,
+                   this, &wnbd_disk);
   if (err)
     goto exit;
 

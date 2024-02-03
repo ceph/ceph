@@ -10,7 +10,8 @@ tasks:
         - \(PG_
         - replacing it with standby
         - No standby daemons available
+        - \(POOL_APP_NOT_ENABLED\)
   - workunit:
       clients:
         client.0:
-          - mgr
+          - mgr/test_localpool.sh

@@ -8,6 +8,7 @@ import {
   ViewChild
 } from '@angular/core';
 
+import { BaseChartDirective } from 'ng2-charts';
 import { ChartTooltip } from '~/app/shared/models/chart-tooltip';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 
@@ -21,6 +22,7 @@ export class SparklineComponent implements OnInit, OnChanges {
   chartCanvasRef: ElementRef;
   @ViewChild('sparkTooltip', { static: true })
   chartTooltipRef: ElementRef;
+  @ViewChild(BaseChartDirective) chart: BaseChartDirective;
 
   @Input()
   data: any;
@@ -32,8 +34,52 @@ export class SparklineComponent implements OnInit, OnChanges {
   @Input()
   isBinary: boolean;
 
-  public colors: Array<any> = [
+  options: Record<string, any> = {
+    plugins: {
+      legend: {
+        display: false
+      },
+      tooltip: {
+        enabled: false,
+        mode: 'index',
+        intersect: false,
+        custom: undefined,
+        callbacks: {
+          label: (tooltipItem: any) => {
+            if (!tooltipItem.parsed) return;
+            if (this.isBinary) {
+              return this.dimlessBinaryPipe.transform(tooltipItem.parsed.y);
+            } else {
+              return tooltipItem.parsed.y;
+            }
+          },
+          title: () => ''
+        }
+      }
+    },
+    animation: {
+      duration: 0
+    },
+    responsive: true,
+    maintainAspectRatio: false,
+    elements: {
+      line: {
+        borderWidth: 1
+      }
+    },
+    scales: {
+      y: {
+        display: false
+      },
+      x: {
+        display: false
+      }
+    }
+  };
+
+  public datasets: Array<any> = [
     {
+      data: [],
       backgroundColor: 'rgba(40,140,234,0.2)',
       borderColor: 'rgba(40,140,234,1)',
       pointBackgroundColor: 'rgba(40,140,234,1)',
@@ -43,63 +89,21 @@ export class SparklineComponent implements OnInit, OnChanges {
     }
   ];
 
-  options: Record<string, any> = {
-    animation: {
-      duration: 0
-    },
-    responsive: true,
-    maintainAspectRatio: false,
-    legend: {
-      display: false
-    },
-    elements: {
-      line: {
-        borderWidth: 1
-      }
-    },
-    tooltips: {
-      enabled: false,
-      mode: 'index',
-      intersect: false,
-      custom: undefined,
-      callbacks: {
-        label: (tooltipItem: any) => {
-          if (this.isBinary) {
-            return this.dimlessBinaryPipe.transform(tooltipItem.yLabel);
-          } else {
-            return tooltipItem.yLabel;
-          }
-        },
-        title: () => ''
-      }
-    },
-    scales: {
-      yAxes: [
-        {
-          display: false
-        }
-      ],
-      xAxes: [
-        {
-          display: false
-        }
-      ]
-    }
-  };
-
-  public datasets: Array<any> = [
-    {
-      data: []
-    }
-  ];
-
   public labels: Array<any> = [];
+
+  chartData: {
+    datasets: any[];
+    labels: any[];
+  } = {
+    datasets: this.datasets,
+    labels: this.labels
+  };
 
   constructor(private dimlessBinaryPipe: DimlessBinaryPipe) {}
 
   ngOnInit() {
     const getStyleTop = (tooltip: any) => {
-      return tooltip.caretY - tooltip.height - tooltip.yPadding - 5 + 'px';
+      return tooltip.caretY - tooltip.height - 6 - 5 + 'px';
     };
 
     const getStyleLeft = (tooltip: any, positionX: number) => {
@@ -114,17 +118,20 @@ export class SparklineComponent implements OnInit, OnChanges {
     );
 
     chartTooltip.customColors = {
-      backgroundColor: this.colors[0].pointBackgroundColor,
-      borderColor: this.colors[0].pointBorderColor
+      backgroundColor: this.datasets[0].pointBackgroundColor,
+      borderColor: this.datasets[0].pointBorderColor
     };
 
-    this.options.tooltips.custom = (tooltip: any) => {
+    this.options.plugins.tooltip.external = (tooltip: any) => {
       chartTooltip.customTooltips(tooltip);
     };
   }
 
   ngOnChanges(changes: SimpleChanges) {
-    this.datasets[0].data = changes['data'].currentValue;
-    this.labels = [...Array(changes['data'].currentValue.length)];
+    this.chartData.datasets[0].data = changes['data'].currentValue;
+    this.chartData.labels = [...Array(changes['data'].currentValue.length).fill('')];
+    if (this.chart) {
+      this.chart.chart.update();
+    }
   }
 }

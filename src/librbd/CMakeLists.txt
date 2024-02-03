@@ -58,7 +58,6 @@ set(librbd_internal_srcs
   cache/WriteAroundObjectDispatch.cc
   crypto/BlockCrypto.cc
   crypto/CryptoContextPool.cc
-  crypto/CryptoImageDispatch.cc
   crypto/CryptoObjectDispatch.cc
   crypto/FormatRequest.cc
   crypto/LoadRequest.cc
@@ -346,7 +345,7 @@ endif()
 if(ENABLE_SHARED)
   set_target_properties(librbd PROPERTIES
     OUTPUT_NAME rbd
-    VERSION 1.18.0
+    VERSION 1.19.0
     SOVERSION 1
     CXX_VISIBILITY_PRESET hidden
     VISIBILITY_INLINES_HIDDEN ON)

@@ -130,7 +130,9 @@ other daemons, please see :ref:`health-checks`.
     from properly cleaning up resources used by client requests.  This message
     appears if a client appears to have more than ``max_completed_requests``
     (default 100000) requests that are complete on the MDS side but haven't
-    yet been accounted for in the client's *oldest tid* value.
+    yet been accounted for in the client's *oldest tid* value. The last tid
+    used by the MDS to trim completed client requests (or flush) is included
+    as part of `session ls` (or `client ls`) command as a debug aid.
 
 ``MDS_DAMAGE``
 --------------
@@ -238,3 +240,15 @@ other daemons, please see :ref:`health-checks`.
   Description
     All MDS ranks are unavailable resulting in the file system to be completely
     offline.
+
+``MDS_CLIENTS_LAGGY``
+----------------------------
+  Message
+    "Client *ID* is laggy; not evicted because some OSD(s) is/are laggy"
+
+  Description
+    If OSD(s) is laggy (due to certain conditions like network cut-off, etc)
+    then it might make clients laggy(session might get idle or cannot flush
+    dirty data for cap revokes). If ``defer_client_eviction_on_laggy_osds`` is
+    set to true (default true), client eviction will not take place and thus
+    this health warning will be generated.

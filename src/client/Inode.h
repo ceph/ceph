@@ -97,9 +97,6 @@ struct CapSnap {
   bool writing = false, dirty_data = false;
   uint64_t flush_tid = 0;
 
-  int64_t cap_dirtier_uid = -1;
-  int64_t cap_dirtier_gid = -1;
-
   explicit CapSnap(Inode *i)
     : in(i)
   {}
@@ -241,8 +238,9 @@ struct Inode : RefCountedObject {
   std::map<frag_t,int> fragmap;  // known frag -> mds mappings
   std::map<frag_t, std::vector<mds_rank_t>> frag_repmap; // non-auth mds mappings
 
-  std::list<ceph::condition_variable*> waitfor_caps;
-  std::list<ceph::condition_variable*> waitfor_commit;
+  std::list<Context*> waitfor_caps;
+  std::list<Context*> waitfor_caps_pending;
+  std::list<Context*> waitfor_commit;
   std::list<ceph::condition_variable*> waitfor_deleg;
 
   Dentry *get_first_parent() {
@@ -252,6 +250,7 @@ struct Inode : RefCountedObject {
 
   void make_long_path(filepath& p);
   void make_short_path(filepath& p);
+  bool make_path_string(std::string& s);
   void make_nosnap_relative_path(filepath& p);
 
   // The ref count. 1 for each dentry, fh, inode_map,
