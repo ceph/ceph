@@ -31,7 +31,6 @@ set -e
 case "$1" in
     configure)
 	rm -f /etc/init/ceph.conf
-	[ -x /sbin/start ] && start ceph-all || :
 
         # adjust file and directory permissions
 	for DIR in /var/lib/ceph/* ; do
