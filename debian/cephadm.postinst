@@ -29,8 +29,8 @@ case "$1" in
                  --system \
                  --disabled-password \
                  --home /home/cephadm \
-                 --gecos 'cephadm user for mgr/cephadm' \
                  --shell /bin/bash cephadm 2>/dev/null || true
+         usermod --comment "cephadm user for mgr/cephadm" cephadm
          echo "..done"
        fi
 
