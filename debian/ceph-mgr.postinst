@@ -24,8 +24,6 @@ set -e
 
 case "$1" in
     configure)
-	[ -x /sbin/start ] && start ceph-mgr-all || :
-
 	if ! dpkg-statoverride --list /var/lib/ceph/mgr >/dev/null
 	then
             chown $SERVER_USER:$SERVER_GROUP /var/lib/ceph/mgr

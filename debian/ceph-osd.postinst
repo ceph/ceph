@@ -25,7 +25,6 @@ set -e
 case "$1" in
     configure)
 	[ -x /etc/init.d/procps ] && invoke-rc.d procps restart || :
-	[ -x /sbin/start ] && start ceph-osd-all || :
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:
