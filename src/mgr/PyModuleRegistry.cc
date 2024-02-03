@@ -66,6 +66,9 @@ void PyModuleRegistry::init()
   py_config.configure_c_stdio = 0;
   py_config.install_signal_handlers = 0;
   py_config.pathconfig_warnings = 0;
+  // site_import is 1 by default, but set it explicitly as we do import
+  // site packages manually for Python < 3.8
+  py_config.site_import = 1;
 
   PyStatus status;
   status = PyConfig_SetString(&py_config, &py_config.program_name, WCHAR(MGR_PYTHON_EXECUTABLE));
@@ -80,6 +83,15 @@ void PyModuleRegistry::init()
     PyImport_AppendInittab("ceph_logger", PyModule::init_ceph_logger);
   }
   PyImport_AppendInittab("ceph_module", PyModule::init_ceph_module);
+  // Configure sys.path to include mgr_module_path
+  auto pythonpath_env = g_conf().get_val<std::string>("mgr_module_path");
+  if (const char* pythonpath = getenv("PYTHONPATH")) {
+    pythonpath_env += ":";
+    pythonpath_env += pythonpath;
+  }
+  status = PyConfig_SetBytesString(&py_config, &py_config.pythonpath_env, pythonpath_env.data());
+  ceph_assertf(!PyStatus_Exception(status), "PyConfig_SetBytesString: %s:%s", status.func, status.err_msg);
+  dout(10) << "set PYTHONPATH to " << std::quoted(pythonpath_env) << dendl;
   status = Py_InitializeFromConfig(&py_config);
   ceph_assertf(!PyStatus_Exception(status), "Py_InitializeFromConfig: %s:%s", status.func, status.err_msg);
 #else
@@ -92,6 +104,14 @@ void PyModuleRegistry::init()
   Py_InitializeEx(0);
   const wchar_t *argv[] = {L"ceph-mgr"};
   PySys_SetArgv(1, (wchar_t**)argv);
+
+  std::string paths = (g_conf().get_val<std::string>("mgr_module_path") + ':' +
+		       get_site_packages() + ':');
+  std::wstring sys_path(begin(paths), end(paths));
+  sys_path += Py_GetPath();
+  PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));
+  dout(10) << "Computed sys.path '"
+	   << std::string(begin(sys_path), end(sys_path)) << "'" << dendl;
 #endif // PY_VERSION_HEX >= 0x03080000
 #undef WCHAR
 
@@ -256,6 +276,72 @@ void PyModuleRegistry::active_start(
     dout(4) << "Starting " << i.first << dendl;
     active_modules->start_one(i.second);
   }
+}
+
+std::string PyModuleRegistry::get_site_packages()
+{
+  std::stringstream site_packages;
+
+  // CPython doesn't auto-add site-packages dirs to sys.path for us,
+  // but it does provide a module that we can ask for them.
+  auto site_module = PyImport_ImportModule("site");
+  ceph_assert(site_module);
+
+  auto site_packages_fn = PyObject_GetAttrString(site_module, "getsitepackages");
+  if (site_packages_fn != nullptr) {
+    auto site_packages_list = PyObject_CallObject(site_packages_fn, nullptr);
+    ceph_assert(site_packages_list);
+
+    auto n = PyList_Size(site_packages_list);
+    for (Py_ssize_t i = 0; i < n; ++i) {
+      if (i != 0) {
+        site_packages << ":";
+      }
+      site_packages << PyUnicode_AsUTF8(PyList_GetItem(site_packages_list, i));
+    }
+
+    Py_DECREF(site_packages_list);
+    Py_DECREF(site_packages_fn);
+  } else {
+    // Fall back to generating our own site-packages paths by imitating
+    // what the standard site.py does.  This is annoying but it lets us
+    // run inside virtualenvs :-/
+
+    auto site_packages_fn = PyObject_GetAttrString(site_module, "addsitepackages");
+    ceph_assert(site_packages_fn);
+
+    auto known_paths = PySet_New(nullptr);
+    auto pArgs = PyTuple_Pack(1, known_paths);
+    PyObject_CallObject(site_packages_fn, pArgs);
+    Py_DECREF(pArgs);
+    Py_DECREF(known_paths);
+    Py_DECREF(site_packages_fn);
+
+    auto sys_module = PyImport_ImportModule("sys");
+    ceph_assert(sys_module);
+    auto sys_path = PyObject_GetAttrString(sys_module, "path");
+    ceph_assert(sys_path);
+
+    dout(1) << "sys.path:" << dendl;
+    auto n = PyList_Size(sys_path);
+    bool first = true;
+    for (Py_ssize_t i = 0; i < n; ++i) {
+      dout(1) << "  " << PyUnicode_AsUTF8(PyList_GetItem(sys_path, i)) << dendl;
+      if (first) {
+        first = false;
+      } else {
+        site_packages << ":";
+      }
+      site_packages << PyUnicode_AsUTF8(PyList_GetItem(sys_path, i));
+    }
+
+    Py_DECREF(sys_path);
+    Py_DECREF(sys_module);
+  }
+
+  Py_DECREF(site_module);
+
+  return site_packages.str();
 }
 
 std::vector<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
