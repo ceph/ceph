@@ -705,7 +705,7 @@ class NodeProxy(object):
 
     daemon_type = 'node-proxy'
     # TODO: update this if we make node-proxy an executable
-    entrypoint = 'python3'
+    entrypoint = '/usr/sbin/ceph-node-proxy'
     required_files = ['node-proxy.json']
 
     @classmethod
@@ -746,7 +746,7 @@ class NodeProxy(object):
         # the config in _get_container_mounts above. They
         # will both need to be updated when we have a proper
         # location in the container for node-proxy
-        return ['/usr/share/ceph/ceph_node_proxy/main.py', '--config', '/usr/share/ceph/node-proxy.json']
+        return ['--config', '/usr/share/ceph/node-proxy.json']
 
     def validate(self):
         # type: () -> None
