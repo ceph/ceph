@@ -1652,16 +1652,15 @@ private:
         LOG_PREFIX(Cache::read_extent);
 	if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
 	  extent->state = CachedExtent::extent_state_t::CLEAN;
-	  /* TODO: crc should be checked against LBA manager */
+	}
+	ceph_assert(extent->state == CachedExtent::extent_state_t::EXIST_CLEAN
+	  || extent->state == CachedExtent::extent_state_t::CLEAN
+	  || !extent->is_valid());
+	if (extent->is_valid()) {
+	  // crc will be checked against LBA leaf entry for logical extents,
+	  // or check against in-extent crc for physical extents.
 	  extent->last_committed_crc = extent->get_crc32c();
-
 	  extent->on_clean_read();
-	} else if (extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
-          extent->state == CachedExtent::extent_state_t::CLEAN) {
-	  /* TODO: crc should be checked against LBA manager */
-	  extent->last_committed_crc = extent->get_crc32c();
-        } else {
-	  ceph_assert(!extent->is_valid());
 	}
         extent->complete_io();
         SUBDEBUG(seastore_cache, "read extent done -- {}", *extent);
