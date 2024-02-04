@@ -75,9 +75,6 @@ public:
     std::unique_ptr<ZoneGroup> nzg = next->clone();
     return std::make_unique<FilterZoneGroup>(std::move(nzg));
   }
-  virtual bool supports_feature(std::string_view feature) const override {
-    return next->supports_feature(feature);
-  }
 };
 
 class FilterZone : public Zone {
