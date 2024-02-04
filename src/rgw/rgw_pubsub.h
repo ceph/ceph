@@ -560,7 +560,6 @@ class RGWPubSub
 
   rgw::sal::Driver* const driver;
   const std::string tenant;
-  const std::map<std::string, RGWZoneGroup>* zonegroups = nullptr;
   bool use_notification_v2 = false;
 
   int read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result, 
@@ -573,7 +572,7 @@ public:
 
  RGWPubSub(rgw::sal::Driver* _driver,
            const std::string& _tenant,
-           const std::map<std::string, RGWZoneGroup>* zonegroups);
+           const rgw::SiteConfig& site);
 
   class Bucket {
     friend class RGWPubSub;
@@ -669,9 +668,6 @@ namespace rgw::notify {
   // Used in case the topic is using the default global value for dumping in a formatter
   constexpr static const std::string_view DEFAULT_CONFIG{"None"};
 }
-
-bool do_all_zonegroups_support_notification_v2(
-    std::map<std::string, RGWZoneGroup> zonegroups);
 
 std::string topic_to_unique(const std::string& topic,
                             const std::string& notification);

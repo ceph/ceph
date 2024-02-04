@@ -1491,8 +1491,6 @@ public:
   virtual int list_zones(std::list<std::string>& zone_ids) = 0;
   /** Clone a copy of this zonegroup. */
   virtual std::unique_ptr<ZoneGroup> clone() = 0;
-  /** Determine if zonegroup |feature| is supported.*/
-  virtual bool supports_feature(std::string_view feature) const = 0;
 };
 
 /**

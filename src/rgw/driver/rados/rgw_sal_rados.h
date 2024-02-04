@@ -85,9 +85,6 @@ public:
   virtual std::unique_ptr<ZoneGroup> clone() override {
     return std::make_unique<RadosZoneGroup>(store, group);
   }
-  virtual bool supports_feature(std::string_view feature) const override {
-    return group.supports(feature);
-  }
   const RGWZoneGroup& get_group() const { return group; }
 };
 
