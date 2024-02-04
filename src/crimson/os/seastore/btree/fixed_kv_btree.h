@@ -1275,6 +1275,17 @@ private:
       init_internal
     ).si_then([FNAME, c, offset, init_internal, depth, begin, end](
               typename internal_node_t::Ref ret) {
+      if (unlikely(ret->get_in_extent_checksum()
+          != ret->get_last_committed_crc())) {
+        SUBERRORT(
+          seastore_fixedkv_tree,
+          "internal fixedkv extent checksum inconsistent, "
+          "recorded: {}, actually: {}",
+          c.trans,
+          ret->get_in_extent_checksum(),
+          ret->get_last_committed_crc());
+        ceph_abort();
+      }
       SUBTRACET(
         seastore_fixedkv_tree,
         "read internal at offset {} {}",
@@ -1349,6 +1360,16 @@ private:
       init_leaf
     ).si_then([FNAME, c, offset, init_leaf, begin, end]
       (typename leaf_node_t::Ref ret) {
+      if (unlikely(ret->get_in_extent_checksum()
+          != ret->get_last_committed_crc())) {
+        SUBERRORT(
+          seastore_fixedkv_tree,
+          "leaf fixedkv extent checksum inconsistent, recorded: {}, actually: {}",
+          c.trans,
+          ret->get_in_extent_checksum(),
+          ret->get_last_committed_crc());
+        ceph_abort();
+      }
       SUBTRACET(
         seastore_fixedkv_tree,
         "read leaf at offset {} {}",

@@ -150,6 +150,26 @@ struct btree_test_base :
 	    return cache->mkfs(t
 	    ).si_then([this, &t] {
 	      return test_structure_setup(t);
+	    }).si_then([&t] {
+	      auto chksum_func = [](auto &extent) {
+		if (!extent->is_valid()) {
+		  return;
+		}
+		if (!extent->is_logical() ||
+		    !extent->get_last_committed_crc()) {
+		  auto crc = extent->calc_crc32c();
+		  extent->set_last_committed_crc(crc);
+		  extent->update_in_extent_chksum_field(crc);
+		}
+		assert(extent->get_crc32c() == extent->get_last_committed_crc());
+	      };
+	      t.for_each_finalized_fresh_block(chksum_func);
+	      t.for_each_existing_block(chksum_func);
+	      auto pre_allocated_extents = t.get_valid_pre_alloc_list();
+	      std::for_each(
+		pre_allocated_extents.begin(),
+		pre_allocated_extents.end(),
+		chksum_func);
 	    });
 	  }).safe_then([this, &ref_t] {
 	    return submit_transaction(std::move(ref_t));
@@ -221,6 +241,27 @@ struct lba_btree_test : btree_test_base {
 		std::move(f), btree, t
 	      );
 	    });
+	}).si_then([t=tref.get()]() mutable {
+	  auto chksum_func = [](auto &extent) {
+	    if (!extent->is_valid()) {
+	      return;
+	    }
+	    if (!extent->is_logical() ||
+		!extent->get_last_committed_crc()) {
+	      auto crc = extent->calc_crc32c();
+	      extent->set_last_committed_crc(crc);
+	      extent->update_in_extent_chksum_field(crc);
+	    }
+	    assert(extent->get_crc32c() == extent->get_last_committed_crc());
+	  };
+
+	  t->for_each_finalized_fresh_block(chksum_func);
+	  t->for_each_existing_block(chksum_func);
+	  auto pre_allocated_extents = t->get_valid_pre_alloc_list();
+	  std::for_each(
+	    pre_allocated_extents.begin(),
+	    pre_allocated_extents.end(),
+	    chksum_func);
 	}).si_then([this, tref=std::move(tref)]() mutable {
 	  return submit_transaction(std::move(tref));
 	});
@@ -395,6 +436,50 @@ struct btree_lba_manager_test : btree_test_base {
   }
 
   void submit_test_transaction(test_transaction_t t) {
+    with_trans_intr(
+      *t.t,
+      [this](auto &t) {
+	return seastar::do_with(
+	  std::list<LogicalCachedExtentRef>(),
+	  std::list<CachedExtentRef>(),
+	  [this, &t](auto &lextents, auto &pextents) {
+	  auto chksum_func = [&lextents, &pextents](auto &extent) {
+	    if (!extent->is_valid()) {
+	      return;
+	    }
+	    if (extent->is_logical()) {
+	      if (!extent->get_last_committed_crc()) {
+		auto crc = extent->calc_crc32c();
+		extent->set_last_committed_crc(crc);
+		extent->update_in_extent_chksum_field(crc);
+	      }
+	      assert(extent->get_crc32c() == extent->get_last_committed_crc());
+	      lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
+	    } else {
+	      pextents.push_back(extent);
+	    }
+	  };
+
+	  t.for_each_finalized_fresh_block(chksum_func);
+	  t.for_each_existing_block(chksum_func);
+	  auto pre_allocated_extents = t.get_valid_pre_alloc_list();
+	  std::for_each(
+	    pre_allocated_extents.begin(),
+	    pre_allocated_extents.end(),
+	    chksum_func);
+
+	  return lba_manager->update_mappings(
+	    t, lextents
+	  ).si_then([&pextents] {
+	    for (auto &extent : pextents) {
+	      assert(!extent->is_logical() && extent->is_valid());
+	      auto crc = extent->calc_crc32c();
+	      extent->set_last_committed_crc(crc);
+	      extent->update_in_extent_chksum_field(crc);
+	    }
+	  });
+	});
+      }).unsafe_get0();
     submit_transaction(std::move(t.t)).get();
     test_lba_mappings.swap(t.mappings);
   }
@@ -436,7 +521,7 @@ struct btree_lba_manager_test : btree_test_base {
 	assert(extents.size() == 1);
 	auto extent = extents.front();
 	return lba_manager->alloc_extent(
-	  t, hint, len, extent->get_paddr(), *extent);
+	  t, hint, len, extent->get_paddr(), 0, *extent);
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());

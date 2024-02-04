@@ -17,6 +17,9 @@
 #include "crimson/os/seastore/seastore_types.h"
 
 struct btree_lba_manager_test;
+struct lba_btree_test;
+struct btree_test_base;
+struct cache_test_t;
 
 namespace crimson::os::seastore {
 
@@ -539,7 +542,7 @@ public:
   }
 
   /// Returns crc32c of buffer
-  uint32_t get_crc32c() {
+  virtual uint32_t get_crc32c() const {
     return ceph_crc32c(
       1,
       reinterpret_cast<const unsigned char *>(get_bptr().c_str()),
@@ -600,7 +603,9 @@ public:
   }
 
   paddr_t get_prior_paddr_and_reset() {
-    assert(prior_poffset);
+    if (!prior_poffset) {
+      return poffset;
+    }
     auto ret = *prior_poffset;
     prior_poffset.reset();
     return ret;
@@ -781,6 +786,13 @@ protected:
     prior_instance.reset();
   }
 
+  /**
+   * Called when updating extents' last_committed_crc, some extents may
+   * have in-extent checksum fields, like LBA/backref nodes, which are
+   * supposed to be updated in this method.
+   */
+  virtual void update_in_extent_chksum_field(uint32_t) {}
+
   /// Sets last_committed_crc
   void set_last_committed_crc(uint32_t crc) {
     last_committed_crc = crc;
@@ -832,6 +844,9 @@ protected:
   template <typename, typename>
   friend class BtreeNodeMapping;
   friend class ::btree_lba_manager_test;
+  friend class ::lba_btree_test;
+  friend class ::btree_test_base;
+  friend class ::cache_test_t;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);

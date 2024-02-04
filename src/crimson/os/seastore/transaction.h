@@ -333,9 +333,14 @@ public:
   }
 
   template <typename F>
-  auto for_each_fresh_block(F &&f) const {
+  auto for_each_finalized_fresh_block(F &&f) const {
     std::for_each(written_ool_block_list.begin(), written_ool_block_list.end(), f);
     std::for_each(inline_block_list.begin(), inline_block_list.end(), f);
+  }
+
+  template <typename F>
+  auto for_each_existing_block(F &&f) {
+    std::for_each(existing_block_list.begin(), existing_block_list.end(), f);
   }
 
   const io_stat_t& get_fresh_block_stats() const {
