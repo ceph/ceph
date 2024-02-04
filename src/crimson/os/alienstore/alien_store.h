@@ -117,9 +117,6 @@ private:
     });
   }
 
-  // number of cores that are PREVENTED from being scheduled
-  // to run alien store threads.
-  static constexpr int N_CORES_FOR_SEASTAR = 3;
   mutable std::unique_ptr<crimson::os::ThreadPool> tp;
   const std::string type;
   const std::string path;
