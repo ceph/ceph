@@ -163,10 +163,10 @@ public:
       assert(ref->is_logical());
       ref->set_paddr(make_delayed_temp_paddr(delayed_temp_offset));
       delayed_temp_offset += ref->get_length();
-      delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
+      delayed_alloc_list.emplace_back(ref);
       fresh_block_stats.increment(ref->get_length());
     } else if (ref->get_paddr().is_absolute()) {
-      pre_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
+      pre_alloc_list.emplace_back(ref);
       fresh_block_stats.increment(ref->get_length());
     } else {
       if (likely(ref->get_paddr() == make_record_relative_paddr(0))) {
@@ -187,7 +187,7 @@ public:
     return fresh_backref_extents;
   }
 
-  void mark_delayed_extent_inline(LogicalCachedExtentRef& ref) {
+  void mark_delayed_extent_inline(CachedExtentRef& ref) {
     write_set.erase(*ref);
     assert(ref->get_paddr().is_delayed());
     ref->set_paddr(make_record_relative_paddr(offset),
@@ -197,7 +197,7 @@ public:
     write_set.insert(*ref);
   }
 
-  void mark_delayed_extent_ool(LogicalCachedExtentRef& ref) {
+  void mark_delayed_extent_ool(CachedExtentRef& ref) {
     written_ool_block_list.push_back(ref);
   }
 
@@ -211,13 +211,13 @@ public:
     write_set.insert(*ref);
   }
 
-  void mark_allocated_extent_ool(LogicalCachedExtentRef& ref) {
+  void mark_allocated_extent_ool(CachedExtentRef& ref) {
     assert(ref->get_paddr().is_absolute());
     assert(!ref->is_inline());
     written_ool_block_list.push_back(ref);
   }
 
-  void mark_inplace_rewrite_extent_ool(LogicalCachedExtentRef& ref) {
+  void mark_inplace_rewrite_extent_ool(LogicalCachedExtentRef ref) {
     assert(ref->get_paddr().is_absolute());
     assert(!ref->is_inline());
     written_inplace_ool_block_list.push_back(ref);
@@ -269,7 +269,7 @@ public:
   }
 
   auto get_delayed_alloc_list() {
-    std::list<LogicalCachedExtentRef> ret;
+    std::list<CachedExtentRef> ret;
     for (auto& extent : delayed_alloc_list) {
       // delayed extents may be invalidated
       if (extent->is_valid()) {
@@ -283,7 +283,7 @@ public:
   }
 
   auto get_valid_pre_alloc_list() {
-    std::list<LogicalCachedExtentRef> ret;
+    std::list<CachedExtentRef> ret;
     assert(num_allocated_invalid_extents == 0);
     for (auto& extent : pre_alloc_list) {
       if (extent->is_valid()) {
@@ -551,10 +551,10 @@ private:
   uint64_t num_delayed_invalid_extents = 0;
   uint64_t num_allocated_invalid_extents = 0;
   /// fresh blocks with delayed allocation, may become inline or ool below
-  std::list<LogicalCachedExtentRef> delayed_alloc_list;
+  std::list<CachedExtentRef> delayed_alloc_list;
   /// fresh blocks with pre-allocated addresses with RBM,
   /// should be released upon conflicts, will be added to ool below
-  std::list<LogicalCachedExtentRef> pre_alloc_list;
+  std::list<CachedExtentRef> pre_alloc_list;
   /// dirty blocks for inplace rewrite with RBM, will be added to inplace ool below
   std::list<LogicalCachedExtentRef> pre_inplace_rewrite_list;
 
