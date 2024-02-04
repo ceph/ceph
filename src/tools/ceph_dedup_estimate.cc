@@ -34,6 +34,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <stdexcept>
+#include <limits>
 #include <climits>
 #include <cinttypes>
 #include <cstring>
@@ -73,12 +74,19 @@ std::mutex print_mtx;
 //#define DISABLE_CDC_CODE
 const string RAW_FP_NSPACE("RAW_FP");
 const string REDUCED_FP_NSPACE("REDUCED_FP");
+
 const char *HASH_PREFIX = "hash";
 const char *HASH_FORMAT = "hash%02hX.%08X";
 const unsigned HASH_OID_NAME_SIZE = 16;
+
+const char *REDUCED_FP_PREFIX = "rc";
+const char *REDUCED_FP_FORMAT = "rc%04hX.%08X";
+const unsigned REDUCED_FP_NAME_SIZE = 16;
+
 enum chunk_algo_t { CHUNK_ALGO_NONE, CHUNK_ALGO_FBC, CHUNK_ALGO_CDC };
 struct dedup_params_t {
-  uint32_t max_objs    = 0;
+  uint32_t dbg_max_objs   = 0;
+  uint32_t dbg_max_shards = 0;
   uint32_t chunk_size  = 2 * 1024;
   uint16_t max_threads = 16;
   uint16_t num_shards  = 1;
@@ -86,6 +94,8 @@ struct dedup_params_t {
   bool verbose = false;
   chunk_algo_t chunk_algo = CHUNK_ALGO_NONE;
   string   pool_name;
+  bool clean_raw_fp = false;
+  bool clean_reduce = false;
 };
 
 
@@ -99,6 +109,7 @@ void usage(ostream& out)
 {
   out << "\nusage: ceph-dedup-estimate-tool [options] [commands]\n\n"
     "Commands:\n"
+    "   list:    list intermediate objects created by previous runs\n"
     "   clean:   clean intermediate objects created by previous runs\n"
     "   collect: collect chunks finger prints\n"
     "   reduce:  reduce fingerprints, leaving only FP with more than N duplicates\n"
@@ -316,7 +327,7 @@ using FP_Dict = std::unordered_map<chunk_fp_t, uint32_t, chunk_fp_t::KeyHash, ch
       summery[ARR_SIZE]++;
     }
   }
-
+  cout << dec;
   unsigned sample_rate = 1;
   duplicated_data *= sample_rate;
   unique_data     *= sample_rate;
@@ -376,6 +387,7 @@ using FP_Dict = std::unordered_map<chunk_fp_t, uint32_t, chunk_fp_t::KeyHash, ch
     }
   }
 
+  cout << dec;
   std::cout << __func__ << "::After Merge-Reduce" << std::endl;
   std::cout << "We got " << unique_data_chunks << " data chunks with "
 	    << params.dedup_threshold << " or more duplications" << std::endl;
@@ -680,7 +692,7 @@ static int thread_collect(unsigned thread_id,
 			  const dedup_params_t &params)
 {
   uint64_t objs_read = 0, min_size = 0xFFFFFFFF, max_size = 0;
-  unsigned max_objs = params.max_objs;
+  unsigned dbg_max_objs = params.dbg_max_objs;
   std::vector<std::string> oid_vec;
   *p_bytes_read = 0;
   Rados rados;
@@ -756,7 +768,7 @@ static int thread_collect(unsigned thread_id,
 
     offset_in_obj = 0;
     fp_count_total += fp_count;
-    if (unlikely(max_objs && objs_read >= max_objs)) {
+    if (unlikely(dbg_max_objs && objs_read >= dbg_max_objs)) {
       //fp_buffer->flush(itr.get_cursor());
       std::unique_lock<std::mutex> lock(print_mtx);
       cout << std::dec << thread_id << "]DEBUG EXIT::Num Objects read=" << objs_read << std::endl;
@@ -835,10 +847,13 @@ static int collect_fingerprints(uint64_t *p_total_bytes_read, const dedup_params
 //================================================================================
 
 struct REDUCED_FP_HEADER {
+  static constexpr uint16_t HAS_MORE   = 0xCEA1;
+  static constexpr uint16_t LAST_ENTRY = 0x1FD0;
+
   uint16_t fp_size;
   uint16_t shard_id;
   uint16_t threshold;
-  uint16_t pad16;
+  uint16_t signature;
 
   uint32_t fp_count;
   uint32_t serial_id;
@@ -850,7 +865,7 @@ struct REDUCED_FP_HEADER {
     denc(v.fp_size, p);
     denc(v.shard_id, p);
     denc(v.threshold, p);
-    denc(v.pad16, p);
+    denc(v.signature, p);
 
     denc(v.fp_count, p);
     denc(v.serial_id, p);
@@ -862,13 +877,33 @@ WRITE_CLASS_DENC(REDUCED_FP_HEADER)
 
 std::ostream &operator<<(std::ostream &stream, const REDUCED_FP_HEADER & rfh)
 {
-  stream << "fp_size   = " << rfh.fp_size   << "\n"
-	 << "shard_id  = " << rfh.shard_id  << "\n"
-	 << "threshold = " << rfh.threshold << "\n"
-	 << "fp_count  = " << rfh.fp_count  << "\n"
-	 << "serial_id = " << rfh.serial_id << "\n"
-	 << "crc       = " << rfh.crc << std::endl;
-
+  bool need_to_set_dec_mode = false;
+  if (std::cout.flags() & std::ios_base::dec) {
+    need_to_set_dec_mode = true;
+    stream << std::hex << std::showbase;
+  }
+  stream << "fp_size   = " << rfh.fp_size   << "::"
+	 << "shard_id  = " << rfh.shard_id  << "::"
+	 << "threshold = " << rfh.threshold << "::"
+	 << "fp_count  = " << rfh.fp_count  << "::"
+	 << "serial_id = " << rfh.serial_id << "::";
+  if (rfh.signature == REDUCED_FP_HEADER::HAS_MORE) {
+    stream << "signature = HAS MORE";
+  }
+  else if (rfh.signature == REDUCED_FP_HEADER::LAST_ENTRY) {
+    stream << "signature = LAST ENTRY";
+  }
+  else {
+    // should never happend
+    stream << "\n\nBAD SIGNATURE: " << rfh.signature << "\n\n";
+  }
+  if (rfh.pad32) {
+    stream << "pad32     = " << rfh.pad32;
+  }
+  //stream << "crc       = " << rfh.crc << std::endl;
+  if (need_to_set_dec_mode) {
+    stream << std::dec << std::noshowbase;
+  }
   return stream;
 }
 
@@ -879,8 +914,11 @@ static void reduced_fp_flush(REDUCED_FP_HEADER header,
 			     uint32_t fp_size,
 			     uint32_t shard_id,
 			     uint32_t serial_id,
-			     IoCtx   &obj_ioctx)
+			     IoCtx   &obj_ioctx,
+			     bool     has_more)
 {
+  uint16_t signature = (has_more ? REDUCED_FP_HEADER::HAS_MORE : REDUCED_FP_HEADER::LAST_ENTRY);
+  header.signature = HTOCEPH_16(signature);
 #ifndef DISABLE_CDC_CODE
   header.fp_count  = HTOCEPH_32((offset - sizeof(REDUCED_FP_HEADER)) / sizeof(chunk_fp_t));
 #else
@@ -892,19 +930,19 @@ static void reduced_fp_flush(REDUCED_FP_HEADER header,
   uint32_t crc = -1;
   crc = ceph_crc32c(crc, buffer, offset);
   ((REDUCED_FP_HEADER*)buffer)->crc = HTOCEPH_32(crc);
-  if (0) {
-    std::unique_lock<std::mutex> lock(print_mtx);
-    cout << __func__ << ", byte_offset=" << offset
-	 << ", crc=0x" << hex << crc << dec << std::endl;
-  }
 
-  char name_buf[16];
+  char name_buf[REDUCED_FP_NAME_SIZE];
   // TBD: allow 0xFF server-shards each with 0xFF internal shards
-  // make sure shard_id will fit in 3 hex digits
+  // make sure shard_id will fit in 4 hex digits
   static_assert(SHARDS_COUNT_MAX < 0xFFFF);
   unsigned n = snprintf(name_buf, sizeof(name_buf),
-			"rc%04X.%08X", shard_id, serial_id);
+			REDUCED_FP_FORMAT, shard_id, serial_id);
   std::string oid(name_buf, n);
+
+  if (0) {
+    std::unique_lock<std::mutex> lock(print_mtx);
+    cout << __func__ << "::" << oid << "::" << header << std::endl;
+  }
 
   bufferlist bl = bufferlist::static_from_mem((char*)buffer, offset);
   obj_ioctx.set_namespace(REDUCED_FP_NSPACE);
@@ -925,7 +963,6 @@ static int store_reduced_fingerprints(const FP_Dict &fp_dict,
   header.fp_size   = HTOCEPH_16(fp_size);
   header.shard_id  = HTOCEPH_16(shard_id);
   header.threshold = HTOCEPH_16(params.dedup_threshold);
-  header.pad16     = 0;
   header.pad32     = 0;
 #ifndef DISABLE_CDC_CODE
   unsigned key_size = sizeof(chunk_fp_t);
@@ -934,12 +971,15 @@ static int store_reduced_fingerprints(const FP_Dict &fp_dict,
 #endif
   uint32_t serial_id = 0;
   unsigned offset    = sizeof(REDUCED_FP_HEADER);
-  for (auto const& entry : fp_dict) {
-    const chunk_fp_t & key = entry.first;
-    const unsigned count = entry.second;
+  for (auto itr = fp_dict.begin(); itr != fp_dict.end(); itr++){
+    const chunk_fp_t & key = itr->first;
+    const unsigned count = itr->second;
+
     if (count >= params.dedup_threshold) {
       if (unlikely(offset+key_size >= sizeof(buffer))) {
-	reduced_fp_flush(header, buffer, offset, fp_size, shard_id, serial_id++, obj_ioctx);
+	bool has_more = (std::next(itr) != fp_dict.end());
+	reduced_fp_flush(header, buffer, offset, fp_size, shard_id,
+			 serial_id++, obj_ioctx, has_more);
 	offset = sizeof(REDUCED_FP_HEADER);
       }
       memcpy(buffer+offset, key.get_fp_buff(), fp_size);
@@ -948,14 +988,25 @@ static int store_reduced_fingerprints(const FP_Dict &fp_dict,
       *(uint32_t*)(buffer+offset) = HTOCEPH_32(key.get_chunk_size());
       offset += sizeof(key.get_chunk_size());
 #endif
-
-      //file.write((const char*)(key.get_fp_buff()), key.FP_SIZE);
       *p_reduced_bytes += (count-1)*(key.get_chunk_size());
     }
   }
 
   if (offset > 0) {
-    reduced_fp_flush(header, buffer, offset, fp_size, shard_id, serial_id++, obj_ioctx);
+    {
+      std::unique_lock<std::mutex> lock(print_mtx);
+      if (unlikely(params.dbg_max_shards && (shard_id % 2 == 1))) {
+	cout << "==DEBUG EXIT::Skipping the last entry for shard_id "
+	     << shard_id << "=="<< std::endl;
+	return 0;
+      }
+      else {
+	cout << "Writing the last entry for shard_id " << std::hex << std::showbase
+	     << shard_id << ":" << serial_id << std::dec << std::endl;
+      }
+    }
+    reduced_fp_flush(header, buffer, offset, fp_size, shard_id,
+		     serial_id++, obj_ioctx, false);
   }
 
   return 0;
@@ -965,7 +1016,6 @@ static int store_reduced_fingerprints(const FP_Dict &fp_dict,
 static int reduce_fingerprints_single_object(FP_Dict &fp_dict,
 					     bufferlist &bl,
 					     unsigned shard_id,
-					     [[maybe_unused]]const ObjectCursor &cursor,
 					     const dedup_params_t &params)
 {
   uint64_t uniq_cnt = 0;
@@ -974,10 +1024,9 @@ static int reduce_fingerprints_single_object(FP_Dict &fp_dict,
   auto bl_itr = bl.cbegin();
   decode(fp_header, bl_itr);
 
-  if (params.verbose) {
+  if (params.verbose && 0) {
     std::unique_lock<std::mutex> lock(print_mtx);
-    std::string_view cursor(fp_header.cursor, fp_header.cursor_len);
-    cout << __func__ << "::" << ", cursor=" << cursor
+    cout << __func__ << "::"
 	 << ", offset_in_object=" << fp_header.offset_in_obj
 	 << ", fp_count=" << fp_header.fp_count << std::endl;
   }
@@ -992,7 +1041,6 @@ static int reduce_fingerprints_single_object(FP_Dict &fp_dict,
   unsigned fp_count = 0;
   for (unsigned fp_idx = 0; fp_idx < fp_header.fp_count; fp_idx++) {
     chunk_fp_t key(bl_itr);
-    ceph_assert(key.get_shard(params.num_shards) == shard_id);
     if (key.get_shard(params.num_shards) == shard_id) {
       fp_count ++;
       auto dict_itr = fp_dict.find(key);
@@ -1014,21 +1062,20 @@ static int reduce_shard_fingerprints(unsigned shard_id,
 				     uint64_t *p_reduced_bytes,
 				     const dedup_params_t &params)
 {
+  FP_Dict fp_dict;
   Rados rados;
   IoCtx itr_ioctx, obj_ioctx;
   if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, params.pool_name.c_str()) != 0) {
     return -1;
   }
   itr_ioctx.set_namespace(RAW_FP_NSPACE);
-  FP_Dict fp_dict;
   uint64_t count, objs_read = 0, chunks_read = 0;
-  uint64_t min_size = 0xFFFFFFFF, max_size = 0;
   auto start_itr = itr_ioctx.nobjects_begin();
   auto end_itr   = itr_ioctx.nobjects_end();
   for (auto itr = start_itr; itr != end_itr; ++itr) {
     string oid = itr->get_oid();
     ceph_assert(oid.starts_with(HASH_PREFIX));
-    if(params.verbose) {
+    if(params.verbose && 0) {
       std::unique_lock<std::mutex> lock(print_mtx);
       std::cout << itr.get_cursor() << " || " << oid << std::endl;
     }
@@ -1042,19 +1089,12 @@ static int reduce_shard_fingerprints(unsigned shard_id,
       return ret;
     }
     objs_read++;
-    count = reduce_fingerprints_single_object(fp_dict, bl, shard_id, itr.get_cursor(), params);
-    min_size = std::min(min_size, count);
-    max_size = std::max(max_size, count);
+    count = reduce_fingerprints_single_object(fp_dict, bl, shard_id, params);
     chunks_read += count;
   }
   if (params.num_shards == 1) {
     cout << __func__ << "::single shard mode" << std::endl;
-    cout << "Num Objects read=" << objs_read
-	 << ", Max-FP=" << max_size
-	 << ", Min-FP=" << min_size
-	 << ", chunks-read=" << chunks_read
-	 << std::endl;
-
+    cout << "Num Objects read=" << objs_read << ", chunks-read=" << chunks_read << std::endl;
     print_report_reduce(fp_dict, true, params);
   }
   store_reduced_fingerprints(fp_dict, shard_id, p_reduced_bytes, obj_ioctx, params);
@@ -1066,8 +1106,14 @@ static int reduce_fingerprints(uint64_t *p_reduced_bytes, const dedup_params_t &
 {
   cout << "reduce fingerprints, leaving only FP with "
        << params.dedup_threshold << " or more duplicates" << std::endl;
+  unsigned dbg_max_shards = params.dbg_max_shards;
   for (unsigned shard_id = 0; shard_id < params.num_shards; shard_id++) {
     reduce_shard_fingerprints(shard_id, p_reduced_bytes, params);
+    if (unlikely(dbg_max_shards && shard_id >= dbg_max_shards)) {
+      std::unique_lock<std::mutex> lock(print_mtx);
+      cout << "DEBUG EXIT::Breaking after shard_id = " << shard_id << std::endl;
+      return 0;
+    }
   }
 
   return 0;
@@ -1087,7 +1133,9 @@ static int merge_fingerprints_single_object(FP_Dict &fp_dict,
   REDUCED_FP_HEADER header;
   bufferlist::const_iterator bl_itr = bl.cbegin();
   decode(header, bl_itr);
-  assert(header.pad16 == 0 && header.pad32 == 0);
+  ceph_assert(header.signature == REDUCED_FP_HEADER::HAS_MORE ||
+	      header.signature == REDUCED_FP_HEADER::LAST_ENTRY);
+  ceph_assert(header.pad32 == 0);
 
 #if 0
   uint32_t buffer_crc = header.crc;
@@ -1128,7 +1176,7 @@ static int merge_reduced_fingerprints(const dedup_params_t &params)
   auto end_itr   = itr_ioctx.nobjects_end();
   for (auto itr = start_itr; itr != end_itr; ++itr) {
     string oid = itr->get_oid();
-    ceph_assert(oid.starts_with("rc"));
+    ceph_assert(oid.starts_with(REDUCED_FP_PREFIX));
 
     if (params.verbose ) {
       cout << oid << std::endl;
@@ -1151,59 +1199,52 @@ static int merge_reduced_fingerprints(const dedup_params_t &params)
 }
 
 //===========================================================================
-
 //---------------------------------------------------------------------------
-static int recover_reduce_fingerprints_step(IoCtx *p_itr_ioctx,
-					    IoCtx *p_obj_ioctx,
-					    const dedup_params_t &params)
+static bool need_to_repeat_reduce_shard_step(uint16_t shard_id,
+					     uint16_t last_part_num,
+					     IoCtx *p_obj_ioctx,
+					     const dedup_params_t &params)
 {
-  return 0;
-}
-
-//---------------------------------------------------------------------------
-static int parse_hash_object_name(const string &oid,
-				  uint16_t *p_thread_id,
-				  uint32_t *p_part_num,
-				  bool verbose)
-{
-  // convert CPP string to c style string without dynamic allocation
-  size_t size = oid.length();
-  char buff[size + 1];
-  strncpy(buff, oid.data(), size);
-  buff[size] = '\0';
-
-  sscanf(buff, HASH_FORMAT, p_thread_id, p_part_num);
-  if (verbose) {
-    cout << std::hex << "thread_id=" << *p_thread_id
-	 << ", part_number=" << *p_part_num << std::endl;
+  char name_buf[REDUCED_FP_NAME_SIZE];
+  unsigned n = snprintf(name_buf, sizeof(name_buf), REDUCED_FP_FORMAT,
+			shard_id, last_part_num);
+  std::string oid(name_buf, n);
+  bufferlist bl;
+  // Read only the HEADER section from the object
+  int len = sizeof(REDUCED_FP_HEADER);
+  int ret = p_obj_ioctx->read(oid, bl, len, 0);
+  if (ret != len) {
+    std::cerr << __func__ << "::failed obj_ioctx.read(" << oid << ")"
+	      << ", error = " << cpp_strerror(ret) << std::endl;
+    // if no valid object was found start the dedup from the beginning
+    return true;
   }
-  return 0;
-}
+  struct REDUCED_FP_HEADER header;
+  auto bl_itr = bl.cbegin();
+  decode(header, bl_itr);
 
-//---------------------------------------------------------------------------
-static void find_max_part_number_per_thread(IoCtx *p_itr_ioctx,
-					    uint32_t *max_part_num_table,
-					    uint16_t *p_max_thread_id,
-					    bool verbose)
-{
-  p_itr_ioctx->set_namespace(RAW_FP_NSPACE);
-  auto start_itr = p_itr_ioctx->nobjects_begin();
-  auto end_itr   = p_itr_ioctx->nobjects_end();
+  if (params.verbose ) {
+    cout << header << std::endl;
+  }
 
-  for (auto itr = start_itr; itr != end_itr; ++itr) {
-    string oid = itr->get_oid();
-    if (verbose ) {
-      cout << __func__ << "::oid = " << oid << std::endl;
+  if (header.signature == REDUCED_FP_HEADER::LAST_ENTRY &&
+      header.pad32 == 0 &&
+      header.shard_id == shard_id) {
+    // this shard was completed -> nothing to do
+    if (params.verbose ) {
+      std::cout << "shard_id: " << shard_id
+		<< " was successfully validated using oid: " << oid << std::endl;
     }
-    ceph_assert(oid.starts_with(HASH_PREFIX));
-
-    uint16_t thread_id;
-    uint32_t part_num;
-    parse_hash_object_name(oid, &thread_id, &part_num, verbose);
-    ceph_assert(thread_id < THREAD_LIMIT_STRICT);
-    *p_max_thread_id = std::max(*p_max_thread_id, thread_id);
-    max_part_num_table[thread_id] = std::max(max_part_num_table[thread_id], part_num);
+    return false;
   }
+
+  // If arrived here it is either not the last-entry or it is corrupted
+  // Repeat the reduce step for the whole shard
+  if (params.verbose ) {
+    std::cout << "shard_id: " << shard_id
+	      << " failed validation from oid: " << oid << std::endl;
+  }
+  return true;
 }
 
 //---------------------------------------------------------------------------
@@ -1227,6 +1268,8 @@ static int resume_thread_collect(uint16_t thread_id,
   if (ret != FP_HEADER_LEN) {
     std::cerr << __func__ << "::failed obj_ioctx.read(" << oid << ")"
 	      << ", error = " << cpp_strerror(ret) << std::endl;
+    // TBD: maybe move to the prev obj until a valid one is found
+    // if no valid object was found start the dedup from the beginning
     return ret;
   }
   FP_BUFFER::FP_BUFFER_HEADER fp_header;
@@ -1246,18 +1289,119 @@ static int resume_thread_collect(uint16_t thread_id,
 }
 
 //---------------------------------------------------------------------------
+static int parse_object_name(const string &oid,
+			     const char *fmt,
+			     uint16_t *p_id,
+			     uint32_t *p_part_num,
+			     bool verbose)
+{
+  // convert CPP string to c style string without dynamic allocation
+  size_t size = oid.length();
+  char buff[size + 1];
+  strncpy(buff, oid.data(), size);
+  buff[size] = '\0';
+
+  sscanf(buff, fmt, p_id, p_part_num);
+  if (verbose) {
+    cout << std::hex << "id=" << *p_id << ", part_number="
+	 << *p_part_num << std::endl;
+  }
+  return 0;
+}
+
+//---------------------------------------------------------------------------
+static void find_last_part_number_per_id(IoCtx *p_itr_ioctx,
+					 const char *fmt,
+					 uint32_t *table,
+					 unsigned max_id,
+					 uint16_t *p_highest_id,
+					 bool verbose)
+{
+  *p_highest_id = 0;
+  memset(table, 0x0, sizeof(uint32_t) * max_id);
+  auto start_itr = p_itr_ioctx->nobjects_begin();
+  auto end_itr   = p_itr_ioctx->nobjects_end();
+
+  for (auto itr = start_itr; itr != end_itr; ++itr) {
+    string oid = itr->get_oid();
+    if (verbose ) {
+      cout << __func__ << "::oid = " << oid << std::endl;
+    }
+    //ceph_assert(oid.starts_with(REDUCED_FP_PREFIX));
+
+    uint16_t id;
+    uint32_t part_num;
+    parse_object_name(oid, fmt, &id, &part_num, verbose);
+    if (id < max_id) {
+      table[id] = std::max(table[id], part_num);
+      *p_highest_id = std::max(*p_highest_id, id);
+    }
+    else {
+      std::cerr << "bad id was found in oid = " << oid << std::endl;
+      // skip this entry
+    }
+  }
+}
+
+//---------------------------------------------------------------------------
+static int recover_reduce_fingerprints_step(IoCtx *p_itr_ioctx,
+					    IoCtx *p_obj_ioctx,
+					    const dedup_params_t &params)
+{
+  uint32_t last_part_num_table[UINT16_MAX];
+  uint16_t highest_shard_id = 0;
+
+  p_itr_ioctx->set_namespace(REDUCED_FP_NSPACE);
+  p_obj_ioctx->set_namespace(REDUCED_FP_NSPACE);
+  cout << __func__ << "::Start Recovery...\n" << std::endl;
+  find_last_part_number_per_id(p_itr_ioctx, REDUCED_FP_FORMAT, last_part_num_table,
+			       UINT16_MAX, &highest_shard_id, params.verbose);
+
+  bool shards_to_process[highest_shard_id+1];
+  for (uint16_t shard_id = 0; shard_id <= highest_shard_id; shard_id++) {
+    uint32_t last_part_num = last_part_num_table[shard_id];
+    shards_to_process[shard_id] = need_to_repeat_reduce_shard_step(shard_id, last_part_num,
+								   p_obj_ioctx, params);
+    if (params.verbose) {
+      if (shards_to_process[shard_id]) {
+	cout << __func__ << "::Adding shard_id " << shard_id << " to process list" << std::endl;
+      }
+    }
+  }
+
+  uint16_t shard_id = 0;
+  for ( ; shard_id <= highest_shard_id; shard_id++) {
+    if (shards_to_process[shard_id]) {
+      cout << __func__ << "::shard_id " << shard_id << " starts recovery" << std::endl;
+      uint64_t dummy;
+      reduce_shard_fingerprints(shard_id, &dummy, params);
+    }
+  }
+
+  for ( ; shard_id < params.num_shards; shard_id++) {
+    cout << __func__ << "::shard_id " << shard_id << " starts recovery" << std::endl;
+    uint64_t dummy;
+    reduce_shard_fingerprints(shard_id, &dummy, params);
+  }
+  return 0;
+}
+
+//---------------------------------------------------------------------------
 static int recover_collect_fingerprints_step(IoCtx *p_itr_ioctx,
 					     IoCtx *p_obj_ioctx,
 					     uint64_t *p_total_bytes_read,
 					     const dedup_params_t &params)
 {
   uint32_t last_part_num_table[THREAD_LIMIT_STRICT];
-  memset(last_part_num_table, 0x0, sizeof(last_part_num_table));
-  uint16_t max_thread_id = 0;
-  find_max_part_number_per_thread(p_itr_ioctx, last_part_num_table,
-				  &max_thread_id, params.verbose);
-  ceph_assert(max_thread_id < THREAD_LIMIT_STRICT);
+  uint16_t highest_thread_id = 0;
+
+  p_itr_ioctx->set_namespace(RAW_FP_NSPACE);
   p_obj_ioctx->set_namespace(RAW_FP_NSPACE);
+
+  cout << __func__ << "::Start Recovery...\n" << std::endl;
+  find_last_part_number_per_id(p_itr_ioctx, HASH_FORMAT, last_part_num_table,
+			       THREAD_LIMIT_STRICT, &highest_thread_id, params.verbose);
+  ceph_assert(highest_thread_id < THREAD_LIMIT_STRICT);
 
   std::thread* thread_arr[THREAD_LIMIT_STRICT];
   memset(thread_arr, 0, sizeof(thread_arr));
@@ -1265,13 +1409,13 @@ static int recover_collect_fingerprints_step(IoCtx *p_itr_ioctx,
   uint64_t bytes_read_arr[THREAD_LIMIT_STRICT];
   memset(bytes_read_arr, 0, sizeof(bytes_read_arr));
 
-  for (unsigned thread_id = 0; thread_id <= max_thread_id; thread_id++) {
+  for (unsigned thread_id = 0; thread_id <= highest_thread_id; thread_id++) {
     uint32_t last_part_num = last_part_num_table[thread_id];
     thread_arr[thread_id] = new std::thread(resume_thread_collect, thread_id, last_part_num,
 					    p_obj_ioctx, bytes_read_arr+thread_id, params);
   }
 
-  for (unsigned thread_id = 0; thread_id <= max_thread_id; thread_id++ ) {
+  for (unsigned thread_id = 0; thread_id <= highest_thread_id; thread_id++ ) {
     if( thread_arr[thread_id] != nullptr ) {
       thread_arr[thread_id]->join();
       delete thread_arr[thread_id];
@@ -1291,16 +1435,15 @@ static bool namespace_exists(IoCtx *p_itr_ioctx, const string &nspace, bool verb
   auto end_itr   = p_itr_ioctx->nobjects_end();
   for (auto itr = start_itr; itr != end_itr; ++itr) {
     string oid = itr->get_oid();
-    ceph_assert(oid.starts_with(HASH_PREFIX) || oid.starts_with("rc"));
-
+    ceph_assert(oid.starts_with(HASH_PREFIX) ||
+		oid.starts_with(REDUCED_FP_PREFIX));
     if (verbose ) {
       cout << __func__ << "::first oid = " << oid << std::endl;
     }
-
     return true;
   }
 
-  return 0;
+  return false;
 }
 
 //---------------------------------------------------------------------------
@@ -1311,52 +1454,70 @@ static int resume_operation(const dedup_params_t &params)
   if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, params.pool_name.c_str()) != 0) {
     return -1;
   }
-
+  bool verbose = params.verbose;
+  // clear all debug setting
+  dedup_params_t params_dup = params;
+  params_dup.dbg_max_objs    = 0;
+  params_dup.dbg_max_shards  = 0;
   // check if we have any work done from before
-  if (namespace_exists(&itr_ioctx, RAW_FP_NSPACE, params.verbose) == false) {
+  if (namespace_exists(&itr_ioctx, RAW_FP_NSPACE, verbose) == false) {
     // nothing was done, start from the beginning
-    run_full_scan(params);
+    run_full_scan(params_dup);
     return 0;
   }
-
 
   // check if the collect-fingerprints step was completed
-  if (namespace_exists(&itr_ioctx, REDUCED_FP_NSPACE, params.verbose) == false) {
+  if (namespace_exists(&itr_ioctx, REDUCED_FP_NSPACE, verbose) == false) {
     uint64_t total_bytes_before = 0;
     uint64_t reduced_bytes = 0;
-    recover_collect_fingerprints_step(&itr_ioctx, &obj_ioctx, &total_bytes_before, params);
-    reduce_fingerprints(&reduced_bytes, params);
-    merge_reduced_fingerprints(params);
-    return 0;
+    recover_collect_fingerprints_step(&itr_ioctx, &obj_ioctx, &total_bytes_before, params_dup);
+    reduce_fingerprints(&reduced_bytes, params_dup);
+  }
+  else {
+    recover_reduce_fingerprints_step(&itr_ioctx, &obj_ioctx, params_dup);
   }
 
-  return recover_reduce_fingerprints_step(&itr_ioctx, &obj_ioctx, params);
+  params_dup.verbose = false;
+  merge_reduced_fingerprints(params_dup);
+  return 0;
 }
 
 //===========================================================================
+enum scan_namespace_op_t {
+  SCAN_NAMESPACE_OP_LIST,
+  SCAN_NAMESPACE_OP_CLEAN
+};
+
 //---------------------------------------------------------------------------
-static int clean_namespace(IoCtx *p_itr_ioctx,
-			   IoCtx *p_obj_ioctx,
-			   const string &nspace,
-			   bool verbose)
+static int scan_namespace(IoCtx *p_itr_ioctx,
+			  IoCtx *p_obj_ioctx,
+			  const string &nspace,
+			  scan_namespace_op_t op,
+			  bool verbose)
 {
   p_itr_ioctx->set_namespace(nspace);
   auto start_itr = p_itr_ioctx->nobjects_begin();
   auto end_itr   = p_itr_ioctx->nobjects_end();
   for (auto itr = start_itr; itr != end_itr; ++itr) {
     string oid = itr->get_oid();
-    ceph_assert(oid.starts_with(HASH_PREFIX) || oid.starts_with("rc"));
-
-    if (verbose ) {
-      cout << "removing " << oid << std::endl;
+    if (op == SCAN_NAMESPACE_OP_LIST) {
+      cout << oid << std::endl;
+      continue;
     }
-    p_obj_ioctx->set_namespace(itr->get_nspace());
-    p_obj_ioctx->locator_set_key(itr->get_locator());
-    int ret = p_obj_ioctx->remove(oid);
-    if (ret != 0) {
-      cerr << "failed to remove obj: " << oid
-	   << ", error = " << cpp_strerror(ret) << std::endl;
-      return ret;
+    ceph_assert(oid.starts_with(HASH_PREFIX) ||
+		oid.starts_with(REDUCED_FP_PREFIX));
+    if (op == SCAN_NAMESPACE_OP_CLEAN) {
+      if (verbose ) {
+	cout << "removing " << oid << std::endl;
+      }
+      p_obj_ioctx->set_namespace(itr->get_nspace());
+      p_obj_ioctx->locator_set_key(itr->get_locator());
+      int ret = p_obj_ioctx->remove(oid);
+      if (ret != 0) {
+	cerr << "failed to remove obj: " << oid
+	     << ", error = " << cpp_strerror(ret) << std::endl;
+	return ret;
+      }
     }
   }
 
@@ -1364,17 +1525,41 @@ static int clean_namespace(IoCtx *p_itr_ioctx,
 }
 
 //---------------------------------------------------------------------------
-static int clean_intermediate_objs(const string &pool_name, bool verbose)
+static int list_intermediate_objs(const string &pool_name, bool verbose)
 {
   Rados rados;
   IoCtx itr_ioctx, obj_ioctx;
   if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, pool_name.c_str()) != 0) {
     return -1;
   }
-  if (clean_namespace(&itr_ioctx, &obj_ioctx, RAW_FP_NSPACE, verbose) != 0) {
+  scan_namespace_op_t op = SCAN_NAMESPACE_OP_LIST;
+  if (scan_namespace(&itr_ioctx, &obj_ioctx, RAW_FP_NSPACE, op, verbose) != 0) {
     return -1;
   }
-  return clean_namespace(&itr_ioctx, &obj_ioctx, REDUCED_FP_NSPACE, verbose);
+  return scan_namespace(&itr_ioctx, &obj_ioctx, REDUCED_FP_NSPACE, op, verbose);
+}
+
+//---------------------------------------------------------------------------
+static int clean_intermediate_objs(const string &pool_name,
+				   bool clean_raw_fp,
+				   bool clean_reduce,
+				   bool verbose)
+{
+  Rados rados;
+  IoCtx itr_ioctx, obj_ioctx;
+  if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, pool_name.c_str()) != 0) {
+    return -1;
+  }
+  scan_namespace_op_t op = SCAN_NAMESPACE_OP_CLEAN;
+  if (clean_raw_fp) {
+    if (scan_namespace(&itr_ioctx, &obj_ioctx, RAW_FP_NSPACE, op, verbose) != 0) {
+      return -1;
+    }
+  }
+  if (clean_reduce) {
+    return scan_namespace(&itr_ioctx, &obj_ioctx, REDUCED_FP_NSPACE, op, verbose);
+  }
+  return 0;
 }
 
 //---------------------------------------------------------------------------
@@ -1383,7 +1568,7 @@ static void run_full_scan(const dedup_params_t &params)
   uint64_t total_bytes_before = 0;
   uint64_t reduced_bytes = 0;
 
-  clean_intermediate_objs(params.pool_name, params.verbose);
+  clean_intermediate_objs(params.pool_name, true, true, params.verbose);
   collect_fingerprints(&total_bytes_before, params);
   reduce_fingerprints(&reduced_bytes, params);
   merge_reduced_fingerprints(params);
@@ -1414,6 +1599,13 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
     } else if (ceph_argparse_flag(args, i, "--verbose", (char*)NULL)) {
       cout << "set verbose mode" << std::endl;
       params.verbose = true;
+    } else if (ceph_argparse_flag(args, i, "--clean_raw", (char*)NULL)) {
+      params.clean_raw_fp = true;
+    } else if (ceph_argparse_flag(args, i, "--clean_reduce", (char*)NULL)) {
+      params.clean_reduce = true;
+    } else if (ceph_argparse_flag(args, i, "--clean_all", (char*)NULL)) {
+      params.clean_raw_fp = true;
+      params.clean_reduce = true;
     }else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
       opts["pool"] = val;
       params.pool_name =  val;
@@ -1424,8 +1616,13 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
     } else if (ceph_argparse_witharg(args, i, &val, "--max-objs", (char*)NULL)) {
       int count = atoi(val.c_str());
       if (count > 0) {
-	cout << "Max-Objs was set to " << count << std::endl;
-	params.max_objs = count;
+	cout << "Debug Mode!!! Max-Objs was set to " << count << std::endl;
+	params.dbg_max_objs = count;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-shards", (char*)NULL)) {
+      int count = atoi(val.c_str());
+      if (count > 0) {
+	params.dbg_max_shards = count;
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--chunk_algo", (char*)NULL)) {
       if (val == "FBC") {
@@ -1512,8 +1709,24 @@ int main(int argc, char **argv)
     cerr << "Missing command argument" << std::endl;
     usage_exit();
   }
+
+  // clear collect debug-mode if not in collect mode
+  if (strncmp(args[0], "collect", strlen("collect")) != 0) {
+    params.dbg_max_objs = 0;
+  }
+
+  // clear reduce debug-mode if not in reduce mode
+  if (strncmp(args[0], "reduce", strlen("reduce")) != 0) {
+    params.dbg_max_shards = 0;
+  }
+
+  if (strncmp(args[0], "list", strlen("list")) == 0) {
+    list_intermediate_objs(params.pool_name, params.verbose);
+  }
   else if (strncmp(args[0], "clean", strlen("clean")) == 0) {
-    clean_intermediate_objs(params.pool_name, params.verbose);
+    bool clean_raw_fp = params.clean_raw_fp;
+    bool clean_reduce = params.clean_reduce;
+    clean_intermediate_objs(params.pool_name, clean_raw_fp, clean_reduce, params.verbose);
   }
   else if (strncmp(args[0], "resume", strlen("resume")) == 0) {
     resume_operation(params);
@@ -1528,10 +1741,14 @@ int main(int argc, char **argv)
   }
   else if (strncmp(args[0], "collect", strlen("collect")) == 0) {
     uint64_t total_bytes_before = 0;
-    clean_intermediate_objs(params.pool_name, params.verbose);
+    clean_intermediate_objs(params.pool_name, true, true, params.verbose);
     collect_fingerprints(&total_bytes_before, params);
   }
   else if (strncmp(args[0], "reduce", strlen("reduce")) == 0) {
+    if (params.dbg_max_shards) {
+      cout << "Debug Mode!!! Max-Shards was set to "
+	   << params.dbg_max_shards << std::endl;
+    }
     uint64_t reduced_bytes = 0;
     reduce_fingerprints(&reduced_bytes, params);
   }
