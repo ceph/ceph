@@ -3927,11 +3927,10 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
 extern "C" {
 
-void* newRadosStore(void* io_context, const void* site_config)
+void* newRadosStore(void* io_context)
 {
   rgw::sal::RadosStore* store = new rgw::sal::RadosStore(
-    *static_cast<boost::asio::io_context*>(io_context),
-    *static_cast<const rgw::SiteConfig*>(site_config));
+    *static_cast<boost::asio::io_context*>(io_context));
   if (store) {
     RGWRados* rados = new RGWRados();
 
