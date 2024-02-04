@@ -41,7 +41,7 @@ public:
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
   virtual alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<LogicalCachedExtentRef> &extents) = 0;
+    std::list<CachedExtentRef> &extents) = 0;
 
   using close_ertr = base_ertr;
   virtual close_ertr::future<> close() = 0;
@@ -74,7 +74,7 @@ public:
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<LogicalCachedExtentRef> &extents) final;
+    std::list<CachedExtentRef> &extents) final;
 
   close_ertr::future<> close() final {
     return write_guard.close().then([this] {
@@ -100,7 +100,7 @@ public:
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
-    std::list<LogicalCachedExtentRef> &extent);
+    std::list<CachedExtentRef> &extent);
 
   alloc_write_ertr::future<> write_record(
     Transaction& t,
@@ -126,7 +126,7 @@ public:
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<LogicalCachedExtentRef> &extents) final;
+    std::list<CachedExtentRef> &extents) final;
 
   close_ertr::future<> close() final {
     return write_guard.close().then([this] {
@@ -166,7 +166,7 @@ public:
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
-    std::list<LogicalCachedExtentRef> &extent);
+    std::list<CachedExtentRef> &extent);
 
   RBMCleaner* rb_cleaner;
   seastar::gate write_guard;
@@ -407,10 +407,10 @@ public:
    * usage is used to reserve projected space
    */
   using extents_by_writer_t =
-    std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>;
+    std::map<ExtentOolWriter*, std::list<CachedExtentRef>>;
   struct dispatch_result_t {
     extents_by_writer_t alloc_map;
-    std::list<LogicalCachedExtentRef> delayed_extents;
+    std::list<CachedExtentRef> delayed_extents;
     io_usage_t usage;
   };
 
@@ -439,7 +439,7 @@ public:
    */
   alloc_paddr_iertr::future<> write_preallocated_ool_extents(
     Transaction &t,
-    std::list<LogicalCachedExtentRef> extents);
+    std::list<CachedExtentRef> extents);
 
   seastar::future<> stop_background() {
     return background_process.stop_background();
@@ -562,7 +562,7 @@ private:
    * Specify the extent inline or ool
    * return true indicates inline otherwise ool
    */
-  bool dispatch_delayed_extent(LogicalCachedExtentRef& extent) {
+  bool dispatch_delayed_extent(CachedExtentRef& extent) {
     // TODO: all delayed extents are ool currently
     boost::ignore_unused(extent);
     return false;
