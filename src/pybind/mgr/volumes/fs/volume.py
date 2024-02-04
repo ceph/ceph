@@ -28,6 +28,7 @@ from .exception import VolumeException, ClusterError, ClusterTimeout, \
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
+from .stats_util import CloneProgressBar
 
 if TYPE_CHECKING:
     from volumes import Module
@@ -799,7 +800,10 @@ class VolumeClient(CephfsClient["Module"]):
                     t_subvolume.attach_snapshot(s_snapname, t_subvolume)
                 else:
                     s_subvolume.attach_snapshot(s_snapname, t_subvolume)
+
                 self.cloner.queue_job(volname)
+                CloneProgressBar(self, volname, t_subvolume.subvolname,
+                                 s_subvolume.base_path, t_subvolume.base_path)
             except VolumeException as ve:
                 try:
                     t_subvolume.remove()
