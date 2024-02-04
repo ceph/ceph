@@ -120,12 +120,14 @@ struct RGWServices_Def
   void shutdown();
 };
 
+namespace rgw { class SiteConfig; }
 
 struct RGWServices
 {
   RGWServices_Def _svc;
 
   CephContext *cct;
+  const rgw::SiteConfig* site{nullptr};
 
   RGWSI_Finisher *finisher{nullptr};
   RGWSI_Bucket *bucket{nullptr};
@@ -159,17 +161,19 @@ struct RGWServices
 
   int do_init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
 	      bool raw_storage, bool run_sync, optional_yield y,
-	      const DoutPrefixProvider *dpp);
+	      const DoutPrefixProvider *dpp, const rgw::SiteConfig& site);
 
   int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
-	   bool run_sync, optional_yield y, const DoutPrefixProvider *dpp) {
-    return do_init(cct, store, have_cache, false, run_sync, y, dpp);
+	   bool run_sync, optional_yield y, const DoutPrefixProvider *dpp,
+	   const rgw::SiteConfig& site) {
+    return do_init(cct, store, have_cache, false, run_sync, y, dpp, site);
   }
 
   int init_raw(CephContext *cct, rgw::sal::RadosStore* store,
 	       bool have_cache, optional_yield y,
-	       const DoutPrefixProvider *dpp) {
-    return do_init(cct, store, have_cache, true, false, y, dpp);
+	       const DoutPrefixProvider *dpp,
+	       const rgw::SiteConfig& site) {
+    return do_init(cct, store, have_cache, true, false, y, dpp, site);
   }
   void shutdown() {
     _svc.shutdown();

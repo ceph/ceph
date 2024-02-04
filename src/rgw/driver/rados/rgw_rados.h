@@ -58,6 +58,7 @@ struct RGWZoneGroup;
 struct RGWZoneParams;
 class RGWReshard;
 class RGWReshardWait;
+namespace rgw { class SiteConfig; }
 
 struct get_obj_data;
 
@@ -593,15 +594,11 @@ public:
 
   CephContext *ctx() { return cct; }
   /** do all necessary setup of the storage device */
-  int init_begin(CephContext *_cct, const DoutPrefixProvider *dpp) {
-    set_context(_cct);
-    return init_begin(dpp);
-  }
+  int init_begin(CephContext *_cct, const DoutPrefixProvider *dpp,
+                         const rgw::SiteConfig& site);
   /** Initialize the RADOS instance and prepare to do other ops */
-  int init_svc(bool raw, const DoutPrefixProvider *dpp);
-  int init_ctl(const DoutPrefixProvider *dpp);
+  int init_svc(bool raw, const DoutPrefixProvider *dpp, const rgw::SiteConfig& site);
   virtual int init_rados();
-  int init_begin(const DoutPrefixProvider *dpp);
   int init_complete(const DoutPrefixProvider *dpp, optional_yield y);
   void finalize();
 
