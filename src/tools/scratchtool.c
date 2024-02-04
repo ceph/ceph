@@ -25,7 +25,7 @@ static int do_rados_setxattr(rados_ioctx_t io_ctx, const char *oid,
 {
 	int ret = rados_setxattr(io_ctx, oid, key, val, strlen(val) + 1);
 	if (ret < 0) {
-		printf("rados_setxattr failed with error %d\n", ret);
+		perror("rados_setxattr failed with error %d\n", ret);
 		return 1;
 	}
 	printf("rados_setxattr %s=%s\n", key, val);
@@ -40,11 +40,11 @@ static int do_rados_getxattr(rados_ioctx_t io_ctx, const char *oid,
 	memset(buf, 0, sizeof(buf));
 	int r = rados_getxattr(io_ctx, oid, key, buf, blen);
 	if (r < 0) {
-		printf("rados_getxattr(%s) failed with error %d\n", key, r);
+		perror("rados_getxattr(%s) failed with error %d\n", key, r);
 		return 1;
 	}
 	if (strcmp(buf, expected) != 0) {
-		printf("rados_getxattr(%s) got wrong result! "
+		perror("rados_getxattr(%s) got wrong result! "
 		       "expected: '%s'. got '%s'\n", key, expected, buf);
 		return 1;
 	}
@@ -63,7 +63,7 @@ static int do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 	}
 	r = rados_getxattrs(io_ctx, oid, &iter);
 	if (r) {
-		printf("rados_getxattrs(%s) failed with error %d\n", oid, r);
+		perror("rados_getxattrs(%s) failed with error %d\n", oid, r);
 		return 1;
 	}
 	while (1) {
@@ -71,7 +71,7 @@ static int do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 	        const char *key, *val;
 		r = rados_getxattrs_next(iter, &key, &val, &len);
 		if (r) {
-			printf("rados_getxattrs(%s): rados_getxattrs_next "
+			perror("rados_getxattrs(%s): rados_getxattrs_next "
 				"returned error %d\n", oid, r);
 			goto out_err;
 		}
@@ -84,14 +84,14 @@ static int do_rados_getxattrs(rados_ioctx_t io_ctx, const char *oid,
 				nfound++;
 				break;
 			}
-			printf("rados_getxattrs(%s): got key %s, but the "
+			perror("rados_getxattrs(%s): got key %s, but the "
 				"value was %s rather than %s.\n",
 				oid, key, val, exvals[i]);
 			goto out_err;
 		}
 	}
 	if (nfound != nval) {
-		printf("rados_getxattrs(%s): only found %d extended attributes. "
+		perror("rados_getxattrs(%s): only found %d extended attributes. "
 			"Expected %d\n", oid, nfound, nval);
 		goto out_err;
 	}
@@ -114,12 +114,12 @@ static int testrados(void)
 	const char *exvals[] = { "1", "2", "3", NULL };
 
 	if (rados_create(&cl, NULL) < 0) {
-		printf("error initializing\n");
+		perror("error initializing\n");
 		return 1;
 	}
 
 	if (rados_conf_read_file(cl, NULL)) {
-		printf("error reading configuration file\n");
+		perror("error reading configuration file\n");
 		goto out_err;
 	}
 
@@ -127,35 +127,35 @@ static int testrados(void)
 	// This should fail.
 	if (!rados_conf_set(cl, "config option that doesn't exist",
 			"some random value")) {
-		printf("error: succeeded in setting nonexistent config option\n");
+		perror("error: succeeded in setting nonexistent config option\n");
 		goto out_err;
 	}
 
 	if (rados_conf_get(cl, "log to stderr", tmp, sizeof(tmp))) {
-		printf("error: failed to read log_to_stderr from config\n");
+		perror("error: failed to read log_to_stderr from config\n");
 		goto out_err;
 	}
 
 	// Can we change it?
 	if (rados_conf_set(cl, "log to stderr", "true")) {
-		printf("error: error setting log_to_stderr\n");
+		perror("error: error setting log_to_stderr\n");
 		goto out_err;
 	}
 	if (rados_conf_get(cl, "log to stderr", tmp, sizeof(tmp))) {
-		printf("error: failed to read log_to_stderr from config\n");
+		perror("error: failed to read log_to_stderr from config\n");
 		goto out_err;
 	}
 	if (strcmp(tmp, "true")) {
-		printf("error: new setting for log_to_stderr failed to take effect.\n");
+		perror("error: new setting for log_to_stderr failed to take effect.\n");
 		goto out_err;
 	}
 
 	if (rados_connect(cl)) {
-		printf("error connecting\n");
+		perror("error connecting\n");
 		goto out_err;
 	}
 	if (rados_connect(cl) == 0) {
-		printf("second connect attempt didn't return an error\n");
+		perror("second connect attempt didn't return an error\n");
 		goto out_err;
 	}
 
@@ -166,7 +166,7 @@ static int testrados(void)
 	rados_ioctx_t io_ctx;
 	r = rados_ioctx_create(cl, "foo", &io_ctx);
 	if (r < 0) {
-		printf("error creating ioctx\n");
+		perror("error creating ioctx\n");
 		goto out_err;
 	}
 	printf("rados_ioctx_create = %d, io_ctx = %p\n", r, io_ctx);
@@ -178,7 +178,7 @@ static int testrados(void)
 		char buf[buf_sz];
 		int r = rados_pool_list(cl, buf, buf_sz);
 		if (r != buf_sz) {
-			printf("buffer size mismatch: got %d the first time, but %d "
+			perror("buffer size mismatch: got %d the first time, but %d "
 			"the second.\n", buf_sz, r);
 			goto out_err_cleanup;
 		}
