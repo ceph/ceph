@@ -4701,10 +4701,10 @@ void BlueStore::Onode::calc_omap_header(
 {
   if (!bluestore_onode_t::is_pgmeta_omap(flags)) {
     if (bluestore_onode_t::is_perpg_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
+      _key_encode_u64(o->oid.hobj.pool, out);
       _key_encode_u32(o->oid.hobj.get_bitwise_key_u32(), out);
     } else if (bluestore_onode_t::is_perpool_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
+      _key_encode_u64(o->oid.hobj.pool, out);
     }
   }
   _key_encode_u64(o->onode.nid, out);
@@ -4718,10 +4718,10 @@ void BlueStore::Onode::calc_omap_key(uint8_t flags,
 {
   if (!bluestore_onode_t::is_pgmeta_omap(flags)) {
     if (bluestore_onode_t::is_perpg_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
+      _key_encode_u64(o->oid.hobj.pool, out);
       _key_encode_u32(o->oid.hobj.get_bitwise_key_u32(), out);
     } else if (bluestore_onode_t::is_perpool_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
+      _key_encode_u64(o->oid.hobj.pool, out);
     }
   }
   _key_encode_u64(o->onode.nid, out);
@@ -4736,10 +4736,10 @@ void BlueStore::Onode::calc_omap_tail(
 {
   if (!bluestore_onode_t::is_pgmeta_omap(flags)) {
     if (bluestore_onode_t::is_perpg_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
+      _key_encode_u64(o->oid.hobj.pool, out);
       _key_encode_u32(o->oid.hobj.get_bitwise_key_u32(), out);
     } else if (bluestore_onode_t::is_perpool_omap(flags)) {
-      _key_encode_u64(o->c->pool(), out);
+      _key_encode_u64(o->oid.hobj.pool, out);
     }
   }
   _key_encode_u64(o->onode.nid, out);
