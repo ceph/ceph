@@ -150,6 +150,14 @@ struct btree_test_base :
 	    return cache->mkfs(t
 	    ).si_then([this, &t] {
 	      return test_structure_setup(t);
+	    }).si_then([&t] {
+	      t.for_each_fresh_block_pre_submit([](auto &extent) {
+		if (!extent->is_logical() ||
+		    !extent->get_last_committed_crc()) {
+		  extent->update_checksum();
+		}
+		assert(extent->get_crc32c() == extent->get_last_committed_crc());
+	      });
 	    });
 	  }).safe_then([this, &ref_t] {
 	    return submit_transaction(std::move(ref_t));
@@ -221,6 +229,14 @@ struct lba_btree_test : btree_test_base {
 		std::move(f), btree, t
 	      );
 	    });
+	}).si_then([t=tref.get()]() mutable {
+	  t->for_each_fresh_block_pre_submit([](auto &extent) {
+	    if (!extent->is_logical() ||
+		!extent->get_last_committed_crc()) {
+	      extent->update_checksum();
+	    }
+	    assert(extent->get_crc32c() == extent->get_last_committed_crc());
+	  });
 	}).si_then([this, tref=std::move(tref)]() mutable {
 	  return submit_transaction(std::move(tref));
 	});
@@ -395,6 +411,35 @@ struct btree_lba_manager_test : btree_test_base {
   }
 
   void submit_test_transaction(test_transaction_t t) {
+    with_trans_intr(
+      *t.t,
+      [this](auto &t) {
+	return seastar::do_with(
+	  std::list<LogicalCachedExtentRef>(),
+	  std::list<CachedExtentRef>(),
+	  [this, &t](auto &lextents, auto &pextents) {
+	  t.for_each_fresh_block_pre_submit(
+	    [&lextents, &pextents](auto &extent) {
+	    if (extent->is_logical()) {
+	      if (!extent->get_last_committed_crc()) {
+		extent->update_checksum();
+	      }
+	      assert(extent->get_crc32c() == extent->get_last_committed_crc());
+	      lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
+	    } else {
+	      pextents.push_back(extent);
+	    }
+	  });
+	  return lba_manager->update_mappings(
+	    t, lextents
+	  ).si_then([&pextents] {
+	    for (auto &extent : pextents) {
+	      assert(!extent->is_logical() && extent->is_valid());
+	      extent->update_checksum();
+	    }
+	  });
+	});
+      }).unsafe_get0();
     submit_transaction(std::move(t.t)).get();
     test_lba_mappings.swap(t.mappings);
   }
@@ -436,7 +481,7 @@ struct btree_lba_manager_test : btree_test_base {
 	assert(extents.size() == 1);
 	auto extent = extents.front();
 	return lba_manager->alloc_extent(
-	  t, hint, len, extent->get_paddr(), *extent);
+	  t, hint, len, extent->get_paddr(), 0, *extent);
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());

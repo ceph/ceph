@@ -87,6 +87,7 @@ public:
     laddr_t hint,
     extent_len_t len,
     paddr_t addr,
+    uint32_t checksum,
     LogicalCachedExtent &nextent) = 0;
 
   virtual alloc_extent_ret clone_mapping(
@@ -195,6 +196,7 @@ public:
     paddr_t prev_addr,
     extent_len_t len,
     paddr_t paddr,
+    uint32_t checksum,
     LogicalCachedExtent *nextent) = 0;
 
   /**

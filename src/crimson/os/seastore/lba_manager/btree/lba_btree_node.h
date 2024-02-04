@@ -64,7 +64,7 @@ using lba_node_meta_le_t = fixed_kv_node_meta_le_t<laddr_le_t>;
  *
  * Layout (4k):
  *   size       : uint32_t[1]                4b
- *   (padding)  :                            4b
+ *   checksum   :                            4b
  *   meta       : lba_node_meta_le_t[3]      (1*24)b
  *   keys       : laddr_t[255]               (254*8)b
  *   values     : paddr_t[255]               (254*8)b
@@ -102,7 +102,7 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  *
  * Layout (4k):
  *   size       : uint32_t[1]                4b
- *   (padding)  :                            4b
+ *   checksum   :                            4b
  *   meta       : lba_node_meta_le_t[3]      (1*24)b
  *   keys       : laddr_t[170]               (140*8)b
  *   values     : lba_map_val_t[170]         (140*21)b

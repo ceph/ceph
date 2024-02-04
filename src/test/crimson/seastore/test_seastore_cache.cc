@@ -30,6 +30,13 @@ struct cache_test_t : public seastar_test_suite_t {
 
   seastar::future<paddr_t> submit_transaction(
     TransactionRef t) {
+    t->for_each_fresh_block_pre_submit([](auto &extent) {
+      if (!extent->is_logical() ||
+	  !extent->get_last_committed_crc()) {
+	extent->update_checksum();
+      }
+      assert(extent->get_crc32c() == extent->get_last_committed_crc());
+    });
     auto record = cache->prepare_record(*t, JOURNAL_SEQ_NULL, JOURNAL_SEQ_NULL);
 
     bufferlist bl;

@@ -663,6 +663,18 @@ struct FixedKVInternalNode
     return this->get_size();
   }
 
+  uint32_t get_crc32c() const final {
+    return this->calc_phy_checksum();
+  }
+
+  void update_in_extent_chksum_field(uint32_t crc) final {
+    this->set_phy_checksum(crc);
+  }
+
+  uint32_t get_in_extent_checksum() const {
+    return this->get_phy_checksum();
+  }
+
   typename node_layout_t::delta_buffer_t delta_buffer;
   typename node_layout_t::delta_buffer_t *maybe_get_delta_buffer() {
     return this->is_mutation_pending() 
@@ -888,7 +900,7 @@ struct FixedKVInternalNode
     typename node_layout_t::delta_buffer_t buffer;
     buffer.copy_in(bl.front().c_str(), bl.front().length());
     buffer.replay(*this);
-    this->set_last_committed_crc(this->get_crc32c());
+    this->update_checksum();
     resolve_relative_addrs(base);
   }
 
@@ -1104,6 +1116,18 @@ struct FixedKVLeafNode
     return this->get_size();
   }
 
+  uint32_t get_crc32c() const final {
+    return this->calc_phy_checksum();
+  }
+
+  void update_in_extent_chksum_field(uint32_t crc) final {
+    this->set_phy_checksum(crc);
+  }
+
+  uint32_t get_in_extent_checksum() const {
+    return this->get_phy_checksum();
+  }
+
   typename node_layout_t::delta_buffer_t delta_buffer;
   virtual typename node_layout_t::delta_buffer_t *maybe_get_delta_buffer() {
     return this->is_mutation_pending() ? &delta_buffer : nullptr;
@@ -1207,7 +1231,7 @@ struct FixedKVLeafNode
     typename node_layout_t::delta_buffer_t buffer;
     buffer.copy_in(bl.front().c_str(), bl.front().length());
     buffer.replay(*this);
-    this->set_last_committed_crc(this->get_crc32c());
+    this->update_checksum();
     this->resolve_relative_addrs(base);
   }
 

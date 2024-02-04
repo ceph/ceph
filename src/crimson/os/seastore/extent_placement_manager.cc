@@ -335,6 +335,14 @@ ExtentPlacementManager::write_delayed_ool_extents(
   return trans_intr::do_for_each(alloc_map, [&t](auto& p) {
     auto writer = p.first;
     auto& extents = p.second;
+#ifndef NDEBUG
+    std::for_each(
+      extents.begin(),
+      extents.end(),
+      [](auto &extent) {
+      assert(extent->is_valid());
+    });
+#endif
     return writer->alloc_write_ool_extents(t, extents);
   });
 }

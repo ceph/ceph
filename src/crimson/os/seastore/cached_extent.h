@@ -17,6 +17,9 @@
 #include "crimson/os/seastore/seastore_types.h"
 
 struct btree_lba_manager_test;
+struct lba_btree_test;
+struct btree_test_base;
+struct cache_test_t;
 
 namespace crimson::os::seastore {
 
@@ -389,6 +392,8 @@ public:
     return complete_load_ertr::now();
   }
 
+  virtual void update_in_extent_chksum_field(uint32_t) {}
+
   /**
    * cast
    *
@@ -536,7 +541,7 @@ public:
   }
 
   /// Returns crc32c of buffer
-  uint32_t get_crc32c() {
+  virtual uint32_t get_crc32c() const {
     return ceph_crc32c(
       1,
       reinterpret_cast<const unsigned char *>(get_bptr().c_str()),
@@ -597,7 +602,9 @@ public:
   }
 
   paddr_t get_prior_paddr_and_reset() {
-    assert(prior_poffset);
+    if (!prior_poffset) {
+      return poffset;
+    }
     auto ret = *prior_poffset;
     prior_poffset.reset();
     return ret;
@@ -783,6 +790,12 @@ protected:
     prior_instance.reset();
   }
 
+  void update_checksum() {
+    auto crc = get_crc32c();
+    set_last_committed_crc(crc);
+    update_in_extent_chksum_field(crc);
+  }
+
   /// Sets last_committed_crc
   void set_last_committed_crc(uint32_t crc) {
     last_committed_crc = crc;
@@ -829,6 +842,9 @@ protected:
   template <typename, typename>
   friend class BtreeNodeMapping;
   friend class ::btree_lba_manager_test;
+  friend class ::lba_btree_test;
+  friend class ::btree_test_base;
+  friend class ::cache_test_t;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);

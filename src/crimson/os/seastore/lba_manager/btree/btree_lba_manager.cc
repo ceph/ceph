@@ -307,6 +307,7 @@ BtreeLBAManager::_alloc_extent(
   extent_len_t len,
   pladdr_t addr,
   paddr_t actual_addr,
+  uint32_t checksum,
   LogicalCachedExtent* nextent)
 {
   struct state_t {
@@ -330,7 +331,7 @@ BtreeLBAManager::_alloc_extent(
     c,
     hint,
     [this, FNAME, c, hint, len, addr, lookup_attempts,
-    &t, nextent](auto &btree, auto &state) {
+    &t, nextent, checksum](auto &btree, auto &state) {
       return LBABtree::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, hint),
@@ -366,12 +367,13 @@ BtreeLBAManager::_alloc_extent(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::no);
 	  }
-	}).si_then([FNAME, c, addr, len, hint, &btree, &state, nextent] {
+	}).si_then([FNAME, c, addr, len, hint, &btree,
+		    &state, nextent, checksum] {
 	  return btree.insert(
 	    c,
 	    *state.insert_iter,
 	    state.last_end,
-	    lba_map_val_t{len, pladdr_t(addr), 1, 0},
+	    lba_map_val_t{len, pladdr_t(addr), 1, checksum},
 	    nextent
 	  ).si_then([&state, FNAME, c, addr, len, hint, nextent](auto &&p) {
 	    auto [iter, inserted] = std::move(p);
@@ -534,6 +536,7 @@ BtreeLBAManager::update_mapping(
   paddr_t prev_addr,
   extent_len_t len,
   paddr_t addr,
+  uint32_t checksum,
   LogicalCachedExtent *nextent)
 {
   LOG_PREFIX(BtreeLBAManager::update_mapping);
@@ -541,7 +544,7 @@ BtreeLBAManager::update_mapping(
   return _update_mapping(
     t,
     laddr,
-    [prev_addr, addr, prev_len, len](
+    [prev_addr, addr, prev_len, len, checksum](
       const lba_map_val_t &in) {
       assert(!addr.is_null());
       lba_map_val_t ret = in;
@@ -550,6 +553,7 @@ BtreeLBAManager::update_mapping(
       ceph_assert(in.len == prev_len);
       ret.pladdr = addr;
       ret.len = len;
+      ret.checksum = checksum;
       return ret;
     },
     nextent

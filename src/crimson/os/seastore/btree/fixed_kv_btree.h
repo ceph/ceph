@@ -1293,6 +1293,8 @@ private:
       ceph_assert(depth == meta.depth);
       ceph_assert(begin == meta.begin);
       ceph_assert(end == meta.end);
+      ceph_assert(ret->get_in_extent_checksum()
+        == ret->get_last_committed_crc());
       return get_internal_node_ret(
         interruptible::ready_future_marker{},
         ret);
@@ -1367,6 +1369,8 @@ private:
       ceph_assert(1 == meta.depth);
       ceph_assert(begin == meta.begin);
       ceph_assert(end == meta.end);
+      ceph_assert(ret->get_in_extent_checksum()
+        == ret->get_last_committed_crc());
       return get_leaf_node_ret(
         interruptible::ready_future_marker{},
         ret);
