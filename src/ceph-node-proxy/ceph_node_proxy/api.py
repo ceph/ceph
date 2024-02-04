@@ -1,15 +1,15 @@
-import cherrypy
+import cherrypy  # type: ignore
 from urllib.error import HTTPError
-from cherrypy._cpserver import Server
+from cherrypy._cpserver import Server  # type: ignore
 from threading import Thread, Event
 from typing import Dict, Any, List
-from ceph_node_proxy.util import Config, Logger, write_tmp_file
+from ceph_node_proxy.util import Config, get_logger, write_tmp_file
 from ceph_node_proxy.basesystem import BaseSystem
 from ceph_node_proxy.reporter import Reporter
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from ceph_node_proxy.main import NodeProxy
+    from ceph_node_proxy.main import NodeProxyManager
 
 
 @cherrypy.tools.auth_basic(on=True)
@@ -21,8 +21,7 @@ class Admin():
 
     @cherrypy.expose
     def start(self) -> Dict[str, str]:
-        self.api.backend.start_client()
-        # self.backend.start_update_loop()
+        self.api.backend.start()
         self.api.reporter.run()
         return {'ok': 'node-proxy daemon started'}
 
@@ -32,9 +31,8 @@ class Admin():
         return {'ok': 'node-proxy config reloaded'}
 
     def _stop(self) -> None:
-        self.api.backend.stop_update_loop()
-        self.api.backend.client.logout()
-        self.api.reporter.stop()
+        self.api.backend.shutdown()
+        self.api.reporter.shutdown()
 
     @cherrypy.expose
     def stop(self) -> Dict[str, str]:
@@ -61,11 +59,11 @@ class API(Server):
                  addr: str = '0.0.0.0',
                  port: int = 0) -> None:
         super().__init__()
-        self.log = Logger(__name__)
+        self.log = get_logger(__name__)
         self.backend = backend
         self.reporter = reporter
         self.config = config
-        self.socket_port = self.config.__dict__['server']['port'] if not port else port
+        self.socket_port = self.config.__dict__['api']['port'] if not port else port
         self.socket_host = addr
         self.subscribe()
 
@@ -134,10 +132,10 @@ class API(Server):
 
         if 'force' not in data.keys():
             msg = "The key 'force' wasn't passed."
-            self.log.logger.debug(msg)
+            self.log.debug(msg)
             raise cherrypy.HTTPError(400, msg)
         try:
-            result: int = self.backend.shutdown(force=data['force'])
+            result: int = self.backend.shutdown_host(force=data['force'])
         except HTTPError as e:
             raise cherrypy.HTTPError(e.code, e.reason)
         return result
@@ -167,14 +165,14 @@ class API(Server):
 
         if not led_type:
             msg = "the led type must be provided (either 'chassis' or 'drive')."
-            self.log.logger.debug(msg)
+            self.log.debug(msg)
             raise cherrypy.HTTPError(400, msg)
 
         if led_type == 'drive':
             id_drive_required = not id_drive
             if id_drive_required or id_drive not in self.backend.get_storage():
                 msg = 'A valid device ID must be provided.'
-                self.log.logger.debug(msg)
+                self.log.debug(msg)
                 raise cherrypy.HTTPError(400, msg)
 
         try:
@@ -183,7 +181,7 @@ class API(Server):
 
                 if 'state' not in data or data['state'] not in ['on', 'off']:
                     msg = "Invalid data. 'state' must be provided and have a valid value (on|off)."
-                    self.log.logger.error(msg)
+                    self.log.error(msg)
                     raise cherrypy.HTTPError(400, msg)
 
                 func: Any = (self.backend.device_led_on if led_type == 'drive' and data['state'] == 'on' else
@@ -228,34 +226,30 @@ class API(Server):
 
 
 class NodeProxyApi(Thread):
-    def __init__(self,
-                 node_proxy: 'NodeProxy',
-                 username: str,
-                 password: str,
-                 ssl_crt: str,
-                 ssl_key: str) -> None:
+    def __init__(self, node_proxy_mgr: 'NodeProxyManager') -> None:
         super().__init__()
-        self.log = Logger(__name__)
+        self.log = get_logger(__name__)
         self.cp_shutdown_event = Event()
-        self.node_proxy = node_proxy
-        self.username = username
-        self.password = password
-        self.ssl_crt = ssl_crt
-        self.ssl_key = ssl_key
-        self.api = API(self.node_proxy.system,
-                       self.node_proxy.reporter_agent,
-                       self.node_proxy.config)
+        self.node_proxy_mgr = node_proxy_mgr
+        self.username = self.node_proxy_mgr.username
+        self.password = self.node_proxy_mgr.password
+        self.ssl_crt = self.node_proxy_mgr.api_ssl_crt
+        self.ssl_key = self.node_proxy_mgr.api_ssl_key
+        self.system = self.node_proxy_mgr.system
+        self.reporter_agent = self.node_proxy_mgr.reporter_agent
+        self.config = self.node_proxy_mgr.config
+        self.api = API(self.system, self.reporter_agent, self.config)
 
     def check_auth(self, realm: str, username: str, password: str) -> bool:
         return self.username == username and \
             self.password == password
 
     def shutdown(self) -> None:
-        self.log.logger.info('Stopping node-proxy API...')
+        self.log.info('Stopping node-proxy API...')
         self.cp_shutdown_event.set()
 
     def run(self) -> None:
-        self.log.logger.info('node-proxy API configuration...')
+        self.log.info('node-proxy API configuration...')
         cherrypy.config.update({
             'environment': 'production',
             'engine.autoreload.on': False,
@@ -281,11 +275,11 @@ class NodeProxyApi(Thread):
         cherrypy.server.unsubscribe()
         try:
             cherrypy.engine.start()
-            self.log.logger.info('node-proxy API started.')
+            self.log.info('node-proxy API started.')
             self.cp_shutdown_event.wait()
             self.cp_shutdown_event.clear()
-            cherrypy.engine.stop()
+            cherrypy.engine.exit()
             cherrypy.server.httpserver = None
-            self.log.logger.info('node-proxy API shutdown.')
+            self.log.info('node-proxy API shutdown.')
         except Exception as e:
-            self.log.logger.error(f'node-proxy API error: {e}')
+            self.log.error(f'node-proxy API error: {e}')

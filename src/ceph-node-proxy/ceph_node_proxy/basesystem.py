@@ -1,14 +1,21 @@
 import socket
-from ceph_node_proxy.util import Config
+from threading import Lock
+from ceph_node_proxy.util import Config, get_logger, BaseThread
 from typing import Dict, Any
 from ceph_node_proxy.baseclient import BaseClient
 
 
-class BaseSystem:
+class BaseSystem(BaseThread):
     def __init__(self, **kw: Any) -> None:
+        super().__init__()
+        self.lock: Lock = Lock()
         self._system: Dict = {}
-        self.config: Config = kw['config']
+        self.config: Config = kw.get('config', {})
         self.client: BaseClient
+        self.log = get_logger(__name__)
+
+    def main(self) -> None:
+        raise NotImplementedError()
 
     def get_system(self) -> Dict[str, Any]:
         raise NotImplementedError()
@@ -76,19 +83,13 @@ class BaseSystem:
     def get_host(self) -> str:
         return socket.gethostname()
 
-    def start_update_loop(self) -> None:
-        raise NotImplementedError()
-
     def stop_update_loop(self) -> None:
-        raise NotImplementedError()
-
-    def start_client(self) -> None:
         raise NotImplementedError()
 
     def flush(self) -> None:
         raise NotImplementedError()
 
-    def shutdown(self, force: bool = False) -> int:
+    def shutdown_host(self, force: bool = False) -> int:
         raise NotImplementedError()
 
     def powercycle(self) -> int:

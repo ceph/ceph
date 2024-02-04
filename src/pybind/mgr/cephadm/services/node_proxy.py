@@ -105,7 +105,7 @@ class NodeProxy(CephService):
 
         try:
             headers, result, status = http_req(hostname=addr,
-                                               port='8080',
+                                               port='9456',
                                                headers=header,
                                                method=method,
                                                data=json.dumps(payload),
@@ -142,7 +142,7 @@ class NodeProxy(CephService):
 
         try:
             headers, result, status = http_req(hostname=addr,
-                                               port='8080',
+                                               port='9456',
                                                headers=header,
                                                data=json.dumps(payload),
                                                endpoint=endpoint,
@@ -165,7 +165,7 @@ class NodeProxy(CephService):
 
         try:
             headers, result, status = http_req(hostname=addr,
-                                               port='8080',
+                                               port='9456',
                                                headers=header,
                                                data="{}",
                                                endpoint=endpoint,
