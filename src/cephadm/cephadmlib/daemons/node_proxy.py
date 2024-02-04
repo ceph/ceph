@@ -24,7 +24,7 @@ class NodeProxy(ContainerDaemonForm):
 
     daemon_type = 'node-proxy'
     # TODO: update this if we make node-proxy an executable
-    entrypoint = 'python3'
+    entrypoint = '/usr/sbin/ceph-node-proxy'
     required_files = ['node-proxy.json']
 
     @classmethod
@@ -88,7 +88,7 @@ class NodeProxy(ContainerDaemonForm):
         # the config in _get_container_mounts above. They
         # will both need to be updated when we have a proper
         # location in the container for node-proxy
-        args.extend(['/usr/share/ceph/ceph_node_proxy/main.py', '--config', '/usr/share/ceph/node-proxy.json'])
+        args.extend(['--config', '/usr/share/ceph/node-proxy.json'])
 
     def validate(self):
         # type: () -> None
@@ -130,7 +130,7 @@ class NodeProxy(ContainerDaemonForm):
     def container(self, ctx: CephadmContext) -> CephContainer:
         # So the container can modprobe iscsi_target_mod and have write perms
         # to configfs we need to make this a privileged container.
-        ctr = daemon_to_container(ctx, self, privileged=True, envs=['PYTHONPATH=$PYTHONPATH:/usr/share/ceph'])
+        ctr = daemon_to_container(ctx, self, privileged=True)
         return to_deployment_container(ctx, ctr)
 
     def config_and_keyring(
