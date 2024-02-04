@@ -4086,6 +4086,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
+  std::unique_ptr<rgw::SiteConfig> site;
 
   if (args.empty()) {
     usage();
@@ -4270,8 +4271,6 @@ int main(int argc, const char **argv)
       cerr << "couldn't init config storage provider" << std::endl;
       return EIO;
     }
-
-    std::unique_ptr<rgw::SiteConfig> site;
 
     if (raw_storage_op) {
       site = rgw::SiteConfig::make_fake();
@@ -10549,12 +10548,6 @@ next:
   }
 
   if (opt_cmd == OPT::PUBSUB_TOPIC_LIST) {
-    auto site = std::make_unique<rgw::SiteConfig>();
-    ret = site->load(dpp(), null_yield, cfgstore.get());
-    if (ret < 0) {
-      std::cerr << "Unable to initialize site config." << std::endl;
-      exit(1);
-    }
     RGWPubSub ps(driver, tenant, &site->get_period()->get_map().zonegroups);
     rgw_pubsub_topics result;
     ret = ps.get_topics(dpp(), result, null_yield);
@@ -10597,12 +10590,6 @@ next:
     if (topic_name.empty()) {
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
       return EINVAL;
-    }
-    auto site = std::make_unique<rgw::SiteConfig>();
-    ret = site->load(dpp(), null_yield, cfgstore.get());
-    if (ret < 0) {
-      std::cerr << "Unable to initialize site config." << std::endl;
-      exit(1);
     }
     RGWPubSub ps(driver, tenant, &site->get_period()->get_map().zonegroups);
 
@@ -10681,12 +10668,6 @@ next:
       return -ret;
     }
 
-    auto site = std::make_unique<rgw::SiteConfig>();
-    ret = site->load(dpp(), null_yield, cfgstore.get());
-    if (ret < 0) {
-      std::cerr << "Unable to initialize site config." << std::endl;
-      exit(1);
-    }
     RGWPubSub ps(driver, tenant, &site->get_period()->get_map().zonegroups);
 
     ret = ps.remove_topic(dpp(), topic_name, null_yield);
