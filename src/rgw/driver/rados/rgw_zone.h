@@ -1009,4 +1009,7 @@ class SiteConfig {
 };
 
 
+/// Test whether all zonegroups in the realm support the given zone feature.
+bool all_zonegroups_support(const SiteConfig& site, std::string_view feature);
+
 } // namespace rgw

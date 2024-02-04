@@ -809,7 +809,7 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                   req_id, null_yield);
 
         auto notify_res = static_cast<rgw::sal::RadosNotification*>(notify.get())->get_reservation();
-        int ret = rgw::notify::publish_reserve(dpp, rgw::notify::ObjectSyncedCreate, notify_res, &obj_tags);
+        int ret = rgw::notify::publish_reserve(dpp, *store->svc()->site, rgw::notify::ObjectSyncedCreate, notify_res, &obj_tags);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: reserving notification failed, with error: " << ret << dendl;
           // no need to return, the sync already happened

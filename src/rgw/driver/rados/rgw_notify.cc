@@ -121,6 +121,7 @@ class Manager : public DoutPrefixProvider {
   const uint32_t stale_reservations_period_s;
   const uint32_t reservations_cleanup_period_s;
   queues_persistency_tracker topics_persistency_tracker;
+  const SiteConfig& site;
 public:
   rgw::sal::RadosStore& rados_store;
 
@@ -491,7 +492,7 @@ private:
           std::string tenant_name;
           // TODO: extract tenant name from queue_name once it is fixed
           uint64_t size_to_migrate = 0;
-          RGWPubSub ps(&rados_store, tenant_name);
+          RGWPubSub ps(&rados_store, tenant_name, site);
 
           rgw_pubsub_topic topic;
           auto ret_of_get_topic = ps.get_topic(this, queue_name, topic,
@@ -669,7 +670,8 @@ public:
   Manager(CephContext* _cct, uint32_t _max_queue_size, uint32_t _queues_update_period_ms, 
           uint32_t _queues_update_retry_ms, uint32_t _queue_idle_sleep_us, u_int32_t failover_time_ms, 
           uint32_t _stale_reservations_period_s, uint32_t _reservations_cleanup_period_s,
-          uint32_t _worker_count, rgw::sal::RadosStore* store) :
+          uint32_t _worker_count, rgw::sal::RadosStore* store,
+          const SiteConfig& site) :
     max_queue_size(_max_queue_size),
     queues_update_period_ms(_queues_update_period_ms),
     queues_update_retry_ms(_queues_update_retry_ms),
@@ -681,6 +683,7 @@ public:
     worker_count(_worker_count),
     stale_reservations_period_s(_stale_reservations_period_s),
     reservations_cleanup_period_s(_reservations_cleanup_period_s),
+    site(site),
     rados_store(*store)
     {
       spawn::spawn(io_context, [this](spawn::yield_context yield) {
@@ -753,7 +756,8 @@ constexpr uint32_t WORKER_COUNT = 1;                 // 1 worker thread
 constexpr uint32_t STALE_RESERVATIONS_PERIOD_S = 120;   // cleanup reservations that are more than 2 minutes old
 constexpr uint32_t RESERVATIONS_CLEANUP_PERIOD_S = 30; // reservation cleanup every 30 seconds
 
-bool init(CephContext* cct, rgw::sal::RadosStore* store, const DoutPrefixProvider *dpp) {
+bool init(CephContext* cct, rgw::sal::RadosStore* store,
+          const SiteConfig& site, const DoutPrefixProvider *dpp) {
   if (s_manager) {
     return false;
   }
@@ -763,7 +767,7 @@ bool init(CephContext* cct, rgw::sal::RadosStore* store, const DoutPrefixProvide
       IDLE_TIMEOUT_USEC, FAILOVER_TIME_MSEC, 
       STALE_RESERVATIONS_PERIOD_S, RESERVATIONS_CLEANUP_PERIOD_S,
       WORKER_COUNT,
-      store);
+      store, site);
   return true;
 }
 
@@ -978,13 +982,13 @@ static inline bool notification_match(reservation_t& res,
 }
 
   int publish_reserve(const DoutPrefixProvider* dpp,
+		      const SiteConfig& site,
 		      EventType event_type,
 		      reservation_t& res,
 		      const RGWObjTags* req_tags)
 {
   rgw_pubsub_bucket_topics bucket_topics;
-  if (do_all_zonegroups_support_notification_v2(
-          res.store->svc()->zone->get_current_period().get_map().zonegroups)) {
+  if (all_zonegroups_support(site, zone_features::notification_v2)) {
     auto ret = 0;
     if (!res.s) {
       //  for non S3-request caller (e.g., lifecycle, ObjectSync), bucket attrs
@@ -1004,7 +1008,7 @@ static inline bool notification_match(reservation_t& res,
       return ret;
     }
   } else {
-    const RGWPubSub ps(res.store, res.user_tenant);
+    const RGWPubSub ps(res.store, res.user_tenant, site);
     const RGWPubSub::Bucket ps_bucket(ps, res.bucket);
     auto rc = ps_bucket.get_topics(res.dpp, bucket_topics, res.yield);
     if (rc < 0) {
@@ -1054,9 +1058,7 @@ static inline bool notification_match(reservation_t& res,
     // load the topic,if there is change in topic config while it's stored in
     // notification.
     rgw_pubsub_topic result;
-    const RGWPubSub ps(
-        res.store, res.user_tenant,
-        &res.store->svc()->zone->get_current_period().get_map().zonegroups);
+    const RGWPubSub ps(res.store, res.user_tenant, site);
     auto ret = ps.get_topic(res.dpp, topic_cfg.name, result, res.yield, nullptr);
     if (ret < 0) {
       ldpp_dout(res.dpp, 1)

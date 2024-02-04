@@ -10633,8 +10633,7 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    if (driver->get_zone()->get_zonegroup().supports_feature(
-            rgw::zone_features::notification_v2)) {
+    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
       ret = get_bucket_notifications(dpp(), bucket.get(), result);
       if (ret < 0) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret)
@@ -10642,7 +10641,7 @@ next:
         return -ret;
       }
     } else {
-      RGWPubSub ps(driver, tenant);
+      RGWPubSub ps(driver, tenant, *site);
       const RGWPubSub::Bucket b(ps, bucket.get());
       ret = b.get_topics(dpp(), result, null_yield);
       if (ret < 0 && ret != -ENOENT) {
@@ -10655,7 +10654,7 @@ next:
   }
 
   if (opt_cmd == OPT::PUBSUB_TOPIC_LIST) {
-    RGWPubSub ps(driver, tenant, &site->get_period()->get_map().zonegroups);
+    RGWPubSub ps(driver, tenant, *site);
     rgw_pubsub_topics result;
     ret = ps.get_topics(dpp(), result, null_yield);
     if (ret < 0 && ret != -ENOENT) {
@@ -10672,8 +10671,7 @@ next:
         }
       }
     }
-    if (driver->get_zone()->get_zonegroup().supports_feature(
-            rgw::zone_features::notification_v2)) {
+    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
       Formatter::ObjectSection top_section(*formatter, "result");
       Formatter::ArraySection s(*formatter, "topics");
       for (const auto& [_, topic] : result.topics) {
@@ -10698,7 +10696,7 @@ next:
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
       return EINVAL;
     }
-    RGWPubSub ps(driver, tenant, &site->get_period()->get_map().zonegroups);
+    RGWPubSub ps(driver, tenant, *site);
 
     rgw_pubsub_topic topic;
     std::set<std::string> subscribed_buckets;
@@ -10708,8 +10706,7 @@ next:
       cerr << "ERROR: could not get topic: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    if (driver->get_zone()->get_zonegroup().supports_feature(
-            rgw::zone_features::notification_v2)) {
+    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
       show_topics_info_v2(topic, subscribed_buckets, formatter.get());
     } else {
       encode_json("topic", topic, formatter.get());
@@ -10733,8 +10730,7 @@ next:
       return -ret;
     }
     rgw_pubsub_bucket_topics bucket_topics;
-    if (driver->get_zone()->get_zonegroup().supports_feature(
-            rgw::zone_features::notification_v2)) {
+    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
       ret = get_bucket_notifications(dpp(), bucket.get(), bucket_topics);
       if (ret < 0) {
         cerr << "ERROR: could not get bucket notifications: "
@@ -10742,7 +10738,7 @@ next:
         return -ret;
       }
     } else {
-      RGWPubSub ps(driver, tenant);
+      RGWPubSub ps(driver, tenant, *site);
       const RGWPubSub::Bucket b(ps, bucket.get());
       ret = b.get_topics(dpp(), bucket_topics, null_yield);
       if (ret < 0 && ret != -ENOENT) {
@@ -10775,7 +10771,7 @@ next:
       return -ret;
     }
 
-    RGWPubSub ps(driver, tenant, &site->get_period()->get_map().zonegroups);
+    RGWPubSub ps(driver, tenant, *site);
 
     ret = ps.remove_topic(dpp(), topic_name, null_yield);
     if (ret < 0) {
@@ -10799,12 +10795,11 @@ next:
       return -ret;
     }
 
-    if (driver->get_zone()->get_zonegroup().supports_feature(
-            rgw::zone_features::notification_v2)) {
+    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
       ret = remove_notification_v2(dpp(), driver, bucket.get(), notification_id,
                                    null_yield);
     } else {
-      RGWPubSub ps(driver, tenant);
+      RGWPubSub ps(driver, tenant, *site);
 
       rgw_pubsub_bucket_topics bucket_topics;
       const RGWPubSub::Bucket b(ps, bucket.get());
