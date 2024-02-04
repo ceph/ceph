@@ -8,7 +8,6 @@
 #include "rgw_lua_request.h"
 #include "rgw_lua_background.h"
 #include "rgw_lua_data_filter.h"
-#include "driver/rados/rgw_zone.h"
 #include "rgw_sal_config.h"
 
 using namespace std;
@@ -165,23 +164,17 @@ tracing::Tracer tracer;
 inline std::unique_ptr<sal::RadosStore> make_store() {
   auto context_pool = std::make_unique<ceph::async::io_context_pool>(
     g_cct->_conf->rgw_thread_pool_size);
-  std::unique_ptr<rgw::SiteConfig> site = rgw::SiteConfig::make_fake();
-
 
   struct StoreBundle : public sal::RadosStore {
     std::unique_ptr<ceph::async::io_context_pool> context_pool;
-    std::unique_ptr<rgw::SiteConfig> site;
-    StoreBundle(std::unique_ptr<ceph::async::io_context_pool> context_pool_,
-                std::unique_ptr<rgw::SiteConfig> site_)
-      : sal::RadosStore(*context_pool_.get(), *site_),
-        context_pool(std::move(context_pool_)),
-        site(std::move(site_)) {
+    StoreBundle(std::unique_ptr<ceph::async::io_context_pool> context_pool_)
+      : sal::RadosStore(*context_pool_.get()),
+        context_pool(std::move(context_pool_)) {
       setRados(new RGWRados);
     }
     virtual ~StoreBundle() = default;
   };
-  return std::make_unique<StoreBundle>(std::move(context_pool),
-                                       std::move(site));
+  return std::make_unique<StoreBundle>(std::move(context_pool));
 };
 
 #define DEFINE_REQ_STATE RGWProcessEnv pe; \

@@ -120,7 +120,6 @@ class RadosZone : public StoreZone {
 class RadosStore : public StoreDriver {
   private:
     boost::asio::io_context& io_context;
-    const rgw::SiteConfig& site_config;
     RGWRados* rados;
     RGWUserCtl* user_ctl;
     std::unique_ptr<RadosZone> zone;
@@ -128,9 +127,8 @@ class RadosStore : public StoreDriver {
     std::string topics_oid(const std::string& tenant) const;
 
   public:
-    RadosStore(boost::asio::io_context& io_context,
-	       const rgw::SiteConfig& site_config)
-      : io_context(io_context), site_config(site_config), rados(nullptr) {
+    RadosStore(boost::asio::io_context& io_context)
+      : io_context(io_context), rados(nullptr) {
       }
     ~RadosStore() {
       delete rados;
@@ -285,7 +283,6 @@ class RadosStore : public StoreDriver {
     void setRados(RGWRados * st) { rados = st; }
     RGWRados* getRados(void) { return rados; }
     boost::asio::io_context& get_io_context() { return io_context; }
-    const rgw::SiteConfig& get_siteconfig() { return site_config; }
     neorados::RADOS& get_neorados() { return *neorados; }
 
     RGWServices* svc() { return &rados->svc; }
