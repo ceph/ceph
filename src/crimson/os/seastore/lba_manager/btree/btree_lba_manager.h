@@ -221,6 +221,7 @@ public:
       len,
       P_ADDR_ZERO,
       P_ADDR_NULL,
+      0,
       nullptr,
       EXTENT_DEFAULT_REF_COUNT);
   }
@@ -241,6 +242,8 @@ public:
       len,
       intermediate_key,
       actual_addr,
+      0,	// crc will only be used and checked with LBA direct mappings
+		// also see pin_to_extent(_by_type)
       nullptr,
       EXTENT_DEFAULT_REF_COUNT
     ).si_then([&t, this, intermediate_base](auto indirect_mapping) {
@@ -267,6 +270,7 @@ public:
     laddr_t hint,
     extent_len_t len,
     paddr_t addr,
+    uint32_t checksum,
     LogicalCachedExtent &ext,
     extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) final
   {
@@ -276,6 +280,7 @@ public:
       len,
       addr,
       P_ADDR_NULL,
+      checksum,
       &ext,
       refcount);
   }
@@ -341,6 +346,7 @@ public:
     paddr_t prev_addr,
     extent_len_t len,
     paddr_t paddr,
+    uint32_t checksum,
     LogicalCachedExtent*) final;
 
   get_physical_extent_if_live_ret get_physical_extent_if_live(
@@ -410,6 +416,7 @@ private:
     extent_len_t len,
     pladdr_t addr,
     paddr_t actual_addr,
+    uint32_t checksum,
     LogicalCachedExtent*,
     extent_ref_count_t refcount);
 

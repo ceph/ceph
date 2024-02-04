@@ -309,6 +309,67 @@ TransactionManager::submit_transaction_direct(
     trim_alloc_to);
 }
 
+TransactionManager::update_lba_mappings_ret
+TransactionManager::update_lba_mappings(
+  Transaction &t,
+  std::list<CachedExtentRef> &pre_allocated_extents)
+{
+  LOG_PREFIX(TransactionManager::update_lba_mappings);
+  SUBTRACET(seastore_t, "update extent lba mappings", t);
+  return seastar::do_with(
+    std::list<LogicalCachedExtentRef>(),
+    std::list<CachedExtentRef>(),
+    [this, &t, &pre_allocated_extents](auto &lextents, auto &pextents) {
+    auto chksum_func = [&lextents, &pextents](auto &extent) {
+      if (!extent->is_valid() ||
+          !extent->is_fully_loaded() ||
+          // EXIST_MUTATION_PENDING extents' crc will be calculated when
+          // preparing records
+          extent->is_exist_mutation_pending()) {
+        return;
+      }
+      if (extent->is_logical()) {
+        // for rewritten extents, last_committed_crc should have been set
+        // because the crc of the original extent may be reused.
+        // also see rewrite_logical_extent()
+        if (!extent->get_last_committed_crc()) {
+          extent->set_last_committed_crc(extent->calc_crc32c());
+        }
+        assert(extent->get_crc32c() == extent->get_last_committed_crc());
+        lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
+      } else {
+        pextents.emplace_back(extent);
+      }
+    };
+
+    // For delayed-ool fresh logical extents, update lba-leaf crc and paddr.
+    // For other fresh logical extents, update lba-leaf crc.
+    t.for_each_finalized_fresh_block(chksum_func);
+    // For existing-clean logical extents, update lba-leaf crc.
+    t.for_each_existing_block(chksum_func);
+    // For pre-allocated fresh logical extents, update lba-leaf crc.
+    // For inplace-rewrite dirty logical extents, update lba-leaf crc.
+    std::for_each(
+      pre_allocated_extents.begin(),
+      pre_allocated_extents.end(),
+      chksum_func);
+
+    return lba_manager->update_mappings(
+      t, lextents
+    ).si_then([&pextents] {
+      for (auto &extent : pextents) {
+        assert(!extent->is_logical() && extent->is_valid());
+        // for non-logical extents, we update its last_committed_crc
+        // and in-extent checksum fields
+        // For pre-allocated fresh physical extents, update in-extent crc.
+        auto crc = extent->calc_crc32c();
+        extent->set_last_committed_crc(crc);
+        extent->update_in_extent_chksum_field(crc);
+      }
+    });
+  });
+}
+
 TransactionManager::submit_transaction_direct_ret
 TransactionManager::do_submit_transaction(
   Transaction &tref,
@@ -318,29 +379,32 @@ TransactionManager::do_submit_transaction(
   LOG_PREFIX(TransactionManager::do_submit_transaction);
   SUBTRACET(seastore_t, "start", tref);
   return trans_intr::make_interruptible(
-    tref.get_handle().enter(write_pipeline.ool_writes)
-  ).then_interruptible([this, FNAME, &tref,
+    tref.get_handle().enter(write_pipeline.ool_writes_and_lba_updates)
+  ).then_interruptible([this, &tref,
 			dispatch_result = std::move(dispatch_result)] {
     return seastar::do_with(std::move(dispatch_result),
-			    [this, FNAME, &tref](auto &dispatch_result) {
+			    [this, &tref](auto &dispatch_result) {
       return epm->write_delayed_ool_extents(tref, dispatch_result.alloc_map
-      ).si_then([this, FNAME, &tref, &dispatch_result] {
-        SUBTRACET(seastore_t, "update delayed extent mappings", tref);
-        return lba_manager->update_mappings(tref, dispatch_result.delayed_extents);
-      }).handle_error_interruptible(
+      ).handle_error_interruptible(
         crimson::ct_error::input_output_error::pass_further(),
         crimson::ct_error::assert_all("invalid error")
       );
     });
-  }).si_then([this, FNAME, &tref] {
-    auto allocated_extents = tref.get_valid_pre_alloc_list();
-    auto num_extents = allocated_extents.size();
-    SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
-    return epm->write_preallocated_ool_extents(tref, allocated_extents
-    ).handle_error_interruptible(
-      crimson::ct_error::input_output_error::pass_further(),
-      crimson::ct_error::assert_all("invalid error")
-    );
+  }).si_then([&tref, FNAME, this] {
+    return seastar::do_with(
+      tref.get_valid_pre_alloc_list(),
+      [this, FNAME, &tref](auto &allocated_extents) {
+      return update_lba_mappings(tref, allocated_extents
+      ).si_then([this, FNAME, &tref, &allocated_extents] {
+        auto num_extents = allocated_extents.size();
+        SUBTRACET(seastore_t, "process {} allocated extents", tref, num_extents);
+        return epm->write_preallocated_ool_extents(tref, allocated_extents
+        ).handle_error_interruptible(
+          crimson::ct_error::input_output_error::pass_further(),
+          crimson::ct_error::assert_all("invalid error")
+        );
+      });
+    });
   }).si_then([this, FNAME, &tref] {
     SUBTRACET(seastore_t, "about to prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
@@ -403,7 +467,7 @@ seastar::future<> TransactionManager::flush(OrderingHandle &handle)
   SUBDEBUG(seastore_t, "H{} start", (void*)&handle);
   return handle.enter(write_pipeline.reserve_projected_usage
   ).then([this, &handle] {
-    return handle.enter(write_pipeline.ool_writes);
+    return handle.enter(write_pipeline.ool_writes_and_lba_updates);
   }).then([this, &handle] {
     return handle.enter(write_pipeline.prepare);
   }).then([this, &handle] {
@@ -456,6 +520,8 @@ TransactionManager::rewrite_logical_extent(
 
     DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
+    assert(lextent->get_last_committed_crc() == lextent->calc_crc32c());
+    nlextent->set_last_committed_crc(lextent->get_last_committed_crc());
     /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
      * extents since we're going to do it again once we either do the ool write
      * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
@@ -467,6 +533,7 @@ TransactionManager::rewrite_logical_extent(
       lextent->get_paddr(),
       nlextent->get_length(),
       nlextent->get_paddr(),
+      nlextent->get_last_committed_crc(),
       nlextent.get()).discard_result();
   } else {
     assert(get_extent_category(lextent->get_type()) == data_category_t::DATA);
@@ -496,6 +563,7 @@ TransactionManager::rewrite_logical_extent(
           nlextent->get_bptr().c_str());
         nlextent->set_laddr(lextent->get_laddr() + off);
         nlextent->set_modify_time(lextent->get_modify_time());
+        nlextent->set_last_committed_crc(nlextent->calc_crc32c());
         DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
         /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
@@ -511,6 +579,7 @@ TransactionManager::rewrite_logical_extent(
             lextent->get_paddr(),
             nlextent->get_length(),
             nlextent->get_paddr(),
+            nlextent->get_last_committed_crc(),
             nlextent.get()
 	  ).si_then([&refcount](auto c) {
 	    refcount = c;
@@ -522,6 +591,7 @@ TransactionManager::rewrite_logical_extent(
             lextent->get_laddr() + off,
             nlextent->get_length(),
             nlextent->get_paddr(),
+            nlextent->get_last_committed_crc(),
             *nlextent,
 	    refcount
           ).si_then([lextent, nlextent, off](auto mapping) {
