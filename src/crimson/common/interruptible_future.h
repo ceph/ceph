@@ -694,6 +694,12 @@ struct interruptible_errorator {
 	Errorator::template make_ready_future<ValueT>(
 	  std::forward<A>(value)...));
   }
+
+  template <template <typename> typename FutureType, typename ValueT>
+  static future<ValueT> make_interruptible(FutureType<ValueT> &&fut) {
+    return std::move(fut);
+  }
+
   static interruptible_future_detail<
     InterruptCond,
     typename Errorator::template future<>> now() {
