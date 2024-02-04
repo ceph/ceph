@@ -1110,18 +1110,12 @@ start_osd() {
     local osds_wait
     for osd in `seq $start $end`
     do
-	local extra_seastar_args
 	if [ "$ceph_osd" == "crimson-osd" ]; then
         bottom_cpu=$(( osd * crimson_smp ))
         top_cpu=$(( bottom_cpu + crimson_smp - 1 ))
-	    # set a single CPU nodes for each osd
-	    extra_seastar_args="--cpuset $bottom_cpu-$top_cpu"
-	    if [ "$debug" -ne 0 ]; then
-		extra_seastar_args+=" --debug"
-	    fi
-            if [ "$trace" -ne 0 ]; then
-                extra_seastar_args+=" --trace"
-            fi
+	    # set exclusive CPU nodes for each osd
+	    echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_seastar_cpu_cores $bottom_cpu-$top_cpu"
+	    $CEPH_BIN/ceph -c $conf_fn config set "osd.$osd" crimson_seastar_cpu_cores "$bottom_cpu-$top_cpu"
 	fi
 	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
             wconf <<EOF
@@ -1665,7 +1659,18 @@ EOF
 fi
 
 if [ "$ceph_osd" == "crimson-osd" ]; then
-    $CEPH_BIN/ceph -c $conf_fn config set osd crimson_seastar_smp $crimson_smp
+     if [ "$debug" -ne 0 ]; then
+        extra_seastar_args=" --debug"
+    fi
+    if [ "$trace" -ne 0 ]; then
+        extra_seastar_args=" --trace"
+    fi
+    if [ "$(expr $(nproc) - 1)" -gt "$(($CEPH_NUM_OSD * crimson_smp))" ]; then
+      echo "crimson_alien_thread_cpu_cores:" $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
+      $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_thread_cpu_cores $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
+    else
+      echo "No alien thread cpu core isolation"
+    fi
 fi
 
 if [ $CEPH_NUM_MGR -gt 0 ]; then
