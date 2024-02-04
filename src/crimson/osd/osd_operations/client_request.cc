@@ -105,9 +105,6 @@ seastar::future<> ClientRequest::with_pg_int(Ref<PG> pgref)
   LOG_PREFIX(ClientRequest::with_pg_int);
   epoch_t same_interval_since = pgref->get_interval_start_epoch();
   DEBUGDPP("{}: same_interval_since: {}", *pgref, *this, same_interval_since);
-  if (m->finish_decode()) {
-    m->clear_payload();
-  }
   const auto this_instance_id = instance_id++;
   OperationRef opref{this};
   auto instance_handle = get_instance_handle();
@@ -184,6 +181,11 @@ seastar::future<> ClientRequest::with_pg(
 {
   shard_services = &_shard_services;
   pgref->client_request_orderer.add_request(*this);
+
+  if (m->finish_decode()) {
+    m->clear_payload();
+  }
+
   auto ret = on_complete.get_future();
   std::ignore = with_pg_int(std::move(pgref));
   return ret;
