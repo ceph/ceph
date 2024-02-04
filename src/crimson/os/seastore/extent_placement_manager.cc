@@ -70,7 +70,7 @@ SegmentedOolWriter::write_record(
 SegmentedOolWriter::alloc_write_iertr::future<>
 SegmentedOolWriter::do_write(
   Transaction& t,
-  std::list<LogicalCachedExtentRef>& extents)
+  std::list<CachedExtentRef>& extents)
 {
   LOG_PREFIX(SegmentedOolWriter::do_write);
   assert(!extents.empty());
@@ -89,7 +89,9 @@ SegmentedOolWriter::do_write(
   auto commit_time = seastar::lowres_system_clock::now();
 
   for (auto it = extents.begin(); it != extents.end();) {
-    auto& extent = *it;
+    auto& ext = *it;
+    assert(ext->is_logical());
+    auto extent = ext->template cast<LogicalCachedExtent>();
     record_size_t wouldbe_rsize = record.size;
     wouldbe_rsize.account_extent(extent->get_bptr().length());
     using action_t = journal::RecordSubmitter::action_t;
@@ -167,7 +169,7 @@ SegmentedOolWriter::do_write(
 SegmentedOolWriter::alloc_write_iertr::future<>
 SegmentedOolWriter::alloc_write_ool_extents(
   Transaction& t,
-  std::list<LogicalCachedExtentRef>& extents)
+  std::list<CachedExtentRef>& extents)
 {
   if (extents.empty()) {
     return alloc_write_iertr::now();
@@ -340,14 +342,14 @@ ExtentPlacementManager::write_delayed_ool_extents(
 ExtentPlacementManager::alloc_paddr_iertr::future<>
 ExtentPlacementManager::write_preallocated_ool_extents(
     Transaction &t,
-    std::list<LogicalCachedExtentRef> extents)
+    std::list<CachedExtentRef> extents)
 {
   LOG_PREFIX(ExtentPlacementManager::write_preallocated_ool_extents);
   DEBUGT("start with {} allocated extents",
          t, extents.size());
   assert(writer_refs.size());
   return seastar::do_with(
-      std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>(),
+      std::map<ExtentOolWriter*, std::list<CachedExtentRef>>(),
       [this, &t, extents=std::move(extents)](auto& alloc_map) {
     for (auto& extent : extents) {
       auto writer_ptr = get_writer(
@@ -758,7 +760,7 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics()
 RandomBlockOolWriter::alloc_write_iertr::future<>
 RandomBlockOolWriter::alloc_write_ool_extents(
   Transaction& t,
-  std::list<LogicalCachedExtentRef>& extents)
+  std::list<CachedExtentRef>& extents)
 {
   if (extents.empty()) {
     return alloc_write_iertr::now();
@@ -771,7 +773,7 @@ RandomBlockOolWriter::alloc_write_ool_extents(
 RandomBlockOolWriter::alloc_write_iertr::future<>
 RandomBlockOolWriter::do_write(
   Transaction& t,
-  std::list<LogicalCachedExtentRef>& extents)
+  std::list<CachedExtentRef>& extents)
 {
   LOG_PREFIX(RandomBlockOolWriter::do_write);
   assert(!extents.empty());
@@ -793,7 +795,8 @@ RandomBlockOolWriter::do_write(
     extent_len_t offset = 0;
     bufferptr bp;
     if (can_inplace_rewrite(t, ex)) {
-      auto r = ex->get_modified_region();
+      assert(ex->is_logical());
+      auto r = ex->template cast<LogicalCachedExtent>()->get_modified_region();
       ceph_assert(r.has_value());
       offset = p2align(r->offset, rbm->get_block_size());
       extent_len_t len =
@@ -816,7 +819,9 @@ RandomBlockOolWriter::do_write(
       if (ex->is_initial_pending()) {
 	t.mark_allocated_extent_ool(ex);
       } else if (can_inplace_rewrite(t, ex)) {
-	t.mark_inplace_rewrite_extent_ool(ex);
+        assert(ex->is_logical());
+	t.mark_inplace_rewrite_extent_ool(
+          ex->template cast<LogicalCachedExtent>());
       } else {
 	ceph_assert("impossible");
       }
