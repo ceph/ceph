@@ -314,9 +314,10 @@ void RGWServices_Def::shutdown()
   has_shutdown = true;
 }
 
-int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp)
+int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp, const rgw::SiteConfig& _site)
 {
   cct = _cct;
+  site = &_site;
 
   int r = _svc.init(cct, driver, have_cache, raw, run_sync, y, dpp);
   if (r < 0) {
