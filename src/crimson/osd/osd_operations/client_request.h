@@ -253,7 +253,7 @@ public:
     r_conn = make_local_shared_foreign(std::move(conn));
   }
 
-  seastar::future<> with_pg_int(Ref<PG> pg);
+  seastar::future<> with_pg_process(Ref<PG> pg);
 
 public:
   seastar::future<> with_pg(
