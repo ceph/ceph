@@ -135,16 +135,16 @@ int RGWTopicMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op* op,
   std::string topic_name;
   std::string tenant;
   parse_topic_entry(entry, &tenant, &topic_name);
-  RGWPubSub ps(driver, tenant,
-               &topic_svc->svc.zone->get_current_period().get_map().zonegroups);
-  int ret = ps.get_topic(dpp, topic_name, result, y, nullptr);
+  RGWObjVersionTracker objv;
+  // TODO: read metadata directly from rados, without calling through
+  // sal::Driver::read_topic_v2()
+  int ret = driver->read_topic_v2(topic_name, tenant, result, &objv, y, dpp);
   if (ret < 0) {
     return ret;
   }
   ceph::real_time mtime;
-  obj_version ver;
   RGWTopicMetadataObject* rdo =
-      new RGWTopicMetadataObject(result, ver, mtime, driver);
+      new RGWTopicMetadataObject(result, objv.read_version, mtime, driver);
   *obj = rdo;
   return 0;
 }
@@ -161,9 +161,9 @@ int RGWTopicMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op* op,
   std::string topic_name;
   std::string tenant;
   parse_topic_entry(entry, &tenant, &topic_name);
-  RGWPubSub ps(driver, tenant,
-               &topic_svc->svc.zone->get_current_period().get_map().zonegroups);
-  return ps.remove_topic(dpp, topic_name, y);
+  // TODO: remove metadata directly from rados, without calling through
+  // sal::Driver::remove_topic_v2()
+  return driver->remove_topic_v2(topic_name, tenant, &objv_tracker, y, dpp);
 }
 
 class RGWMetadataHandlerPut_Topic : public RGWMetadataHandlerPut_SObj {
@@ -191,6 +191,8 @@ class RGWMetadataHandlerPut_Topic : public RGWMetadataHandlerPut_SObj {
       return ret;
     }
     RGWObjVersionTracker objv_tracker;
+    // TODO: write metadata directly from rados, without calling through
+    // sal::Driver::write_topic_v2()
     ret = driver->write_topic_v2(topic, &objv_tracker, y, dpp);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to write topic info: ret=" << ret
