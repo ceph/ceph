@@ -25,7 +25,7 @@ void ClientRequest::Orderer::requeue(Ref<PG> pg)
   for (auto &req: list) {
     DEBUGDPP("requeueing {}", *pg, req);
     req.reset_instance_handle();
-    std::ignore = req.with_pg_int(pg);
+    std::ignore = req.with_pg_process(pg);
   }
 }
 
@@ -98,11 +98,11 @@ bool ClientRequest::is_pg_op() const
     [](auto& op) { return ceph_osd_op_type_pg(op.op.op); });
 }
 
-seastar::future<> ClientRequest::with_pg_int(Ref<PG> pgref)
+seastar::future<> ClientRequest::with_pg_process(Ref<PG> pgref)
 {
   ceph_assert_always(shard_services);
+  LOG_PREFIX(ClientRequest::with_pg_process);
 
-  LOG_PREFIX(ClientRequest::with_pg_int);
   epoch_t same_interval_since = pgref->get_interval_start_epoch();
   DEBUGDPP("{}: same_interval_since: {}", *pgref, *this, same_interval_since);
   const auto this_instance_id = instance_id++;
@@ -187,7 +187,7 @@ seastar::future<> ClientRequest::with_pg(
   }
 
   auto ret = on_complete.get_future();
-  std::ignore = with_pg_int(std::move(pgref));
+  std::ignore = with_pg_process(std::move(pgref));
   return ret;
 }
 
