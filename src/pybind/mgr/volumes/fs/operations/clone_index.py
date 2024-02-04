@@ -8,14 +8,16 @@ import cephfs
 
 from .index import Index
 from ..exception import IndexException, VolumeException
-from ..fs_util import list_one_entry_at_a_time
+from ..fs_util import list_one_entry_at_a_time, listdir
 
 log = logging.getLogger(__name__)
 
 
+PATH_MAX = 4096
+
+
 class CloneIndex(Index):
     SUB_GROUP_NAME = "clone"
-    PATH_MAX = 4096
 
     @property
     def path(self):
@@ -47,6 +49,26 @@ class CloneIndex(Index):
         except cephfs.Error as e:
             raise IndexException(-e.args[0], e.args[1])
 
+    def list_entries_by_ctime_order(self):
+        entry_names = listdir(self.fs, self.path, filter_files=False)
+        if not entry_names:
+            return []
+
+        # clone entries with ctime obtained by statig them. basically,
+        # following is a list of tuples where each tuple has 2 memebers.
+        ens_with_ctime = []
+        for en in entry_names:
+            d_path = os.path.join(self.path, en)
+            stb = self.fs.lstat(d_path)
+
+            # add ctime next to clone entry
+            ens_with_ctime.append((en, stb.st_ctime))
+
+        ens_with_ctime.sort(key=lambda ctime: en[1])
+
+        # remove ctime and return list of clone entries sorted by ctime.
+        return [i[0] for i in ens_with_ctime]
+
     def get_oldest_clone_entry(self, exclude=[]):
         try:
             min_ctime_entry = None
@@ -61,7 +83,7 @@ class CloneIndex(Index):
                         min_ctime_entry = (dname, st)
             if min_ctime_entry:
                 linklen = min_ctime_entry[1].st_size
-                sink_path = self.fs.readlink(os.path.join(self.path, min_ctime_entry[0]), CloneIndex.PATH_MAX)
+                sink_path = self.fs.readlink(os.path.join(self.path, min_ctime_entry[0]), PATH_MAX)
                 return (min_ctime_entry[0], sink_path[:linklen])
             return None
         except cephfs.Error as e:
@@ -76,7 +98,7 @@ class CloneIndex(Index):
                 dpath = os.path.join(self.path, dname)
                 st = self.fs.lstat(dpath)
                 if stat.S_ISLNK(st.st_mode):
-                    target_path = self.fs.readlink(dpath, CloneIndex.PATH_MAX)
+                    target_path = self.fs.readlink(dpath, PATH_MAX)
                     if sink_path == target_path[:st.st_size]:
                         return dname
             return None
