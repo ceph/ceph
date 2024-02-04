@@ -259,9 +259,6 @@ protected:
       std::unique_ptr<RGWZoneGroup>zg = std::make_unique<RGWZoneGroup>(*group.get());
       return std::make_unique<DBZoneGroup>(store, std::move(zg));
     }
-    virtual bool supports_feature(std::string_view feature) const override {
-      return group->supports(feature);
-    }
   };
 
   class DBZone : public StoreZone {

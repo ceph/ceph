@@ -1357,7 +1357,7 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (run_notification_thread) {
-    ret = rgw::notify::init(cct, driver, dpp);
+    ret = rgw::notify::init(cct, driver, *svc.site, dpp);
     if (ret < 0 ) {
       ldpp_dout(dpp, 1) << "ERROR: failed to initialize notification manager" << dendl;
     }

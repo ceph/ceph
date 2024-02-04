@@ -12,6 +12,7 @@
 #include "rgw_pubsub.h"
 
 // forward declarations
+namespace rgw { class SiteConfig; }
 namespace rgw::sal {
     class RadosStore;
     class RGWObject;
@@ -25,7 +26,8 @@ namespace rgw::notify {
 // initialize the notification manager
 // notification manager is dequeuing the 2-phase-commit queues
 // and send the notifications to the endpoints
-bool init(CephContext* cct, rgw::sal::RadosStore* store, const DoutPrefixProvider *dpp);
+bool init(CephContext* cct, rgw::sal::RadosStore* store,
+          const rgw::SiteConfig& site, const DoutPrefixProvider *dpp);
 
 // shutdown the notification manager
 void shutdown();
@@ -110,6 +112,7 @@ struct rgw_topic_stats {
 
 // create a reservation on the 2-phase-commit queue
 int publish_reserve(const DoutPrefixProvider *dpp,
+		      const SiteConfig& site,
 		      EventType event_type,
 		      reservation_t& reservation,
 		      const RGWObjTags* req_tags);

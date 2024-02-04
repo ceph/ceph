@@ -197,8 +197,7 @@ class RGWPSCreateTopicOp : public RGWOp {
       return ret;
     }
 
-    const RGWPubSub ps(driver, s->owner.id.tenant,
-                       &s->penv.site->get_period()->get_map().zonegroups);
+    const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
     rgw_pubsub_topic result;
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret == -ENOENT) {
@@ -278,8 +277,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant,
-                     &s->penv.site->get_period()->get_map().zonegroups);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            s->owner.id, policy_text, y);
   if (op_ret < 0) {
@@ -334,8 +332,7 @@ public:
 };
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
-  const RGWPubSub ps(driver, s->owner.id.tenant,
-                     &s->penv.site->get_period()->get_map().zonegroups);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
   op_ret = ps.get_topics(this, result, y);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
@@ -422,8 +419,7 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant,
-                     &s->penv.site->get_period()->get_map().zonegroups);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
   op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -507,8 +503,7 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant,
-                     &s->penv.site->get_period()->get_map().zonegroups);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
   op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -636,8 +631,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       return ret;
     }
     rgw_pubsub_topic result;
-    const RGWPubSub ps(driver, s->owner.id.tenant,
-                       &s->penv.site->get_period()->get_map().zonegroups);
+    const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 1) << "failed to get topic '" << topic_name
@@ -715,8 +709,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant,
-                     &s->penv.site->get_period()->get_map().zonegroups);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            topic_owner, policy_text, y);
   if (op_ret < 0) {
@@ -797,8 +790,7 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant,
-                     &s->penv.site->get_period()->get_map().zonegroups);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
 
   rgw_pubsub_topic result;
   op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
@@ -991,8 +983,7 @@ public:
 };
 
 void RGWPSCreateNotifOp::execute(optional_yield y) {
-  if (do_all_zonegroups_support_notification_v2(
-          s->penv.site->get_period()->get_map().zonegroups)) {
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
     return execute_v2(y);
   }
   op_ret = verify_params();
@@ -1174,8 +1165,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
         << "' , ret = " << op_ret << dendl;
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant,
-                     &s->penv.site->get_period()->get_map().zonegroups);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
   std::unordered_map<std::string, rgw_pubsub_topic> topics;
   for (const auto& c : configurations.list) {
     const auto& notif_name = c.id;
@@ -1295,8 +1285,7 @@ class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
 };
 
 void RGWPSDeleteNotifOp::execute(optional_yield y) {
-  if (do_all_zonegroups_support_notification_v2(
-          s->penv.site->get_period()->get_map().zonegroups)) {
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
     return execute_v2(y);
   }
   std::string notif_name;
@@ -1457,8 +1446,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
 
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
-  if (do_all_zonegroups_support_notification_v2(
-          s->penv.site->get_period()->get_map().zonegroups)) {
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
     op_ret = get_bucket_notifications(this, bucket.get(), bucket_topics);
   } else {
     const RGWPubSub ps(driver, s->owner.id.tenant);

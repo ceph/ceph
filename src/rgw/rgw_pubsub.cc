@@ -504,9 +504,10 @@ RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver, const std::string& _tenant)
 
 RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver,
                      const std::string& _tenant,
-                     const std::map<std::string, RGWZoneGroup>* _zonegroups)
-    : driver(_driver), tenant(_tenant), zonegroups(_zonegroups) {
-  use_notification_v2 = do_all_zonegroups_support_notification_v2(*zonegroups);
+                     const rgw::SiteConfig& site)
+    : driver(_driver), tenant(_tenant),
+      use_notification_v2(rgw::all_zonegroups_support(site, rgw::zone_features::notification_v2))
+{
 }
 
 int RGWPubSub::read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result,
@@ -649,16 +650,6 @@ int get_bucket_notifications(const DoutPrefixProvider* dpp,
     return -EIO;
   }
   return 0;
-}
-
-bool do_all_zonegroups_support_notification_v2(
-    std::map<std::string, RGWZoneGroup> zonegroups) {
-  for (const auto& [_, zonegroup] : zonegroups) {
-    if (!zonegroup.supports(rgw::zone_features::notification_v2)) {
-      return false;
-    }
-  }
-  return true;
 }
 
 std::string topic_to_unique(const std::string& topic,

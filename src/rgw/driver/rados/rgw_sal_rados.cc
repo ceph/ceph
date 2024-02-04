@@ -367,7 +367,7 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
 
   // if bucket has notification definitions associated with it
   // they should be removed (note that any pending notifications on the bucket are still going to be sent)
-  const RGWPubSub ps(store, info.owner.tenant);
+  const RGWPubSub ps(store, info.owner.tenant, *store->svc()->site);
   const RGWPubSub::Bucket ps_bucket(ps, this);
   const auto ps_ret = ps_bucket.remove_notifications(dpp, y);
   if (ps_ret < 0 && ps_ret != -ENOENT) {
@@ -3061,7 +3061,7 @@ std::unique_ptr<LCSerializer> RadosLifecycle::get_serializer(const std::string& 
 
 int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags)
 {
-  return rgw::notify::publish_reserve(dpp, event_type, res, obj_tags);
+  return rgw::notify::publish_reserve(dpp, *store->svc()->site, event_type, res, obj_tags);
 }
 
 int RadosNotification::publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
