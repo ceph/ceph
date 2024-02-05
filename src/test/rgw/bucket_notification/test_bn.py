@@ -4429,8 +4429,13 @@ def test_ps_s3_topic_permissions():
         # 2nd user tries to set the attribute
         status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
         assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
     except Exception as err:
-        print(err)
+        print('unexpected error type: '+type(err).__name__)
 
     # create bucket for conn2 and try publishing notification to topic
     _ = conn2.create_bucket(bucket_name)
@@ -4442,8 +4447,13 @@ def test_ps_s3_topic_permissions():
         s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
         _, status = s3_notification_conf2.set_config()
         assert False, "'AccessDenied' error is expected"
-    except ClientError as error:
-        assert_equal(error.response['Error']['Code'], 'AccessDenied')
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
 
     # Topic policy is now added by the 1st user to allow 2nd user.
     topic_policy  = topic_policy.replace("Deny", "Allow")
