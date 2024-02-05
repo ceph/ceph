@@ -24,32 +24,16 @@ using namespace std;
 
 int RGWRestOIDCProvider::verify_permission(optional_yield y)
 {
-  if (s->auth.identity->is_anonymous()) {
-    return -EACCES;
+  if (verify_user_permission(this, s, resource, action)) {
+    return 0;
   }
 
-  provider_arn = s->info.args.get("OpenIDConnectProviderArn");
-  if (provider_arn.empty()) {
-    ldpp_dout(this, 20) << "ERROR: Provider ARN is empty"<< dendl;
-    return -EINVAL;
-  }
+  return RGWRESTOp::verify_permission(y);
+}
 
-  auto ret = check_caps(s->user->get_caps());
-  if (ret == 0) {
-    return ret;
-  }
-
-  uint64_t op = get_op();
-  auto rgw_arn = rgw::ARN::parse(provider_arn, true);
-  if (rgw_arn) {
-    if (!verify_user_permission(this, s, *rgw_arn, op)) {
-      return -EACCES;
-    }
-  } else {
-      return -EACCES;
-  }
-
-  return 0;
+int RGWRestOIDCProvider::check_caps(const RGWUserCaps& caps)
+{
+  return caps.check_cap("roles", perm);
 }
 
 void RGWRestOIDCProvider::send_response()
@@ -61,42 +45,19 @@ void RGWRestOIDCProvider::send_response()
   end_header(s, this);
 }
 
-int RGWRestOIDCProviderRead::check_caps(const RGWUserCaps& caps)
+
+RGWCreateOIDCProvider::RGWCreateOIDCProvider()
+  : RGWRestOIDCProvider(rgw::IAM::iamCreateOIDCProvider, RGW_CAP_WRITE)
 {
-    return caps.check_cap("oidc-provider", RGW_CAP_READ);
 }
 
-int RGWRestOIDCProviderWrite::check_caps(const RGWUserCaps& caps)
-{
-    return caps.check_cap("oidc-provider", RGW_CAP_WRITE);
-}
-
-int RGWCreateOIDCProvider::verify_permission(optional_yield y)
-{
-  if (s->auth.identity->is_anonymous()) {
-    return -EACCES;
-  }
-
-  auto ret = check_caps(s->user->get_caps());
-  if (ret == 0) {
-    return ret;
-  }
-
-  string idp_url = url_remove_prefix(provider_url);
-  if (!verify_user_permission(this,
-                              s,
-                              rgw::ARN(idp_url,
-                                        "oidc-provider",
-                                         s->user->get_tenant(), true),
-                                         get_op())) {
-    return -EACCES;
-  }
-  return 0;
-}
-
-int RGWCreateOIDCProvider::get_params()
+int RGWCreateOIDCProvider::init_processing(optional_yield y)
 {
   provider_url = s->info.args.get("Url");
+  if (provider_url.empty()) {
+    s->err.message = "Missing required element Url";
+    return -EINVAL;
+  }
 
   auto val_map = s->info.args.get_params();
   for (auto& it : val_map) {
@@ -108,21 +69,18 @@ int RGWCreateOIDCProvider::get_params()
       }
   }
 
-  if (provider_url.empty() || thumbprints.empty()) {
-    ldpp_dout(this, 20) << "ERROR: one of url or thumbprints is empty" << dendl;
+  if (thumbprints.empty()) {
+    s->err.message = "Missing required element ThumbprintList";
     return -EINVAL;
   }
 
+  string idp_url = url_remove_prefix(provider_url);
+  resource = rgw::ARN(idp_url, "oidc-provider/", s->user->get_tenant(), true);
   return 0;
 }
 
 void RGWCreateOIDCProvider::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
   std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
   provider->set_url(provider_url);
   provider->set_tenant(s->user->get_tenant());
@@ -140,7 +98,36 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
     s->formatter->close_section();
     s->formatter->close_section();
   }
+}
 
+
+static int validate_provider_arn(const std::string& provider_arn,
+                                 rgw::ARN& resource, std::string& message)
+{
+  if (provider_arn.empty()) {
+    message = "Missing required element OpenIDConnectProviderArn";
+    return -EINVAL;
+  }
+
+  auto arn = rgw::ARN::parse(provider_arn, true);
+  if (!arn) {
+    message = "Invalid value for OpenIDConnectProviderArn";
+    return -EINVAL;
+  }
+  resource = std::move(*arn);
+  return 0;
+}
+
+
+RGWDeleteOIDCProvider::RGWDeleteOIDCProvider()
+  : RGWRestOIDCProvider(rgw::IAM::iamDeleteOIDCProvider, RGW_CAP_WRITE)
+{
+}
+
+int RGWDeleteOIDCProvider::init_processing(optional_yield y)
+{
+  provider_arn = s->info.args.get("OpenIDConnectProviderArn");
+  return validate_provider_arn(provider_arn, resource, s->err.message);
 }
 
 void RGWDeleteOIDCProvider::execute(optional_yield y)
@@ -161,6 +148,17 @@ void RGWDeleteOIDCProvider::execute(optional_yield y)
     s->formatter->close_section();
     s->formatter->close_section();
   }
+}
+
+RGWGetOIDCProvider::RGWGetOIDCProvider()
+  : RGWRestOIDCProvider(rgw::IAM::iamGetOIDCProvider, RGW_CAP_READ)
+{
+}
+
+int RGWGetOIDCProvider::init_processing(optional_yield y)
+{
+  provider_arn = s->info.args.get("OpenIDConnectProviderArn");
+  return validate_provider_arn(provider_arn, resource, s->err.message);
 }
 
 void RGWGetOIDCProvider::execute(optional_yield y)
@@ -186,24 +184,10 @@ void RGWGetOIDCProvider::execute(optional_yield y)
   }
 }
 
-int RGWListOIDCProviders::verify_permission(optional_yield y)
+
+RGWListOIDCProviders::RGWListOIDCProviders()
+  : RGWRestOIDCProvider(rgw::IAM::iamListOIDCProviders, RGW_CAP_READ)
 {
-  if (s->auth.identity->is_anonymous()) {
-    return -EACCES;
-  }
-
-  if (int ret = check_caps(s->user->get_caps()); ret == 0) {
-    return ret;
-  }
-
-  if (!verify_user_permission(this, 
-                              s,
-                              rgw::ARN(),
-                              get_op())) {
-    return -EACCES;
-  }
-
-  return 0;
 }
 
 void RGWListOIDCProviders::execute(optional_yield y)
