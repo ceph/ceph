@@ -144,6 +144,9 @@ void usage()
   cout << "  user check                       check user info\n";
   cout << "  user stats                       show user stats as accounted by quota subsystem\n";
   cout << "  user list                        list users\n";
+  cout << "  user policy attach               attach a managed policy\n";
+  cout << "  user policy detach               detach a managed policy\n";
+  cout << "  user policy list attached        list attached managed policies\n";
   cout << "  caps add                         add user capabilities\n";
   cout << "  caps rm                          remove user capabilities\n";
   cout << "  subuser create                   create a new subuser\n" ;
@@ -301,6 +304,9 @@ void usage()
   cout << "  role-policy list                 list policies attached to a role\n";
   cout << "  role-policy get                  get the specified inline policy document embedded with the given role\n";
   cout << "  role-policy delete               remove policy attached to a role\n";
+  cout << "  role policy attach               attach a managed policy\n";
+  cout << "  role policy detach               detach a managed policy\n";
+  cout << "  role policy list attached        list attached managed policies\n";
   cout << "  role update                      update max_session_duration of a role\n";
   cout << "  reshard add                      schedule a resharding of a bucket\n";
   cout << "  reshard list                     list all bucket resharding or scheduled to be resharded\n";
@@ -485,6 +491,7 @@ void usage()
   cout << "   --policy-doc                  permission policy document\n";
   cout << "   --path-prefix                 path prefix for filtering roles\n";
   cout << "   --description                 Role description\n";
+  cout << "   --policy-arn                  ARN of a managed policy\n";
   cout << "\nMFA options:\n";
   cout << "   --totp-serial                 a string that represents the ID of a TOTP token\n";
   cout << "   --totp-seed                   the secret seed that is used to calculate the TOTP\n";
@@ -659,6 +666,9 @@ enum class OPT {
   USER_CHECK,
   USER_STATS,
   USER_LIST,
+  USER_POLICY_ATTACH,
+  USER_POLICY_DETACH,
+  USER_POLICY_LIST_ATTACHED,
   SUBUSER_CREATE,
   SUBUSER_MODIFY,
   SUBUSER_RM,
@@ -833,6 +843,9 @@ enum class OPT {
   ROLE_POLICY_LIST,
   ROLE_POLICY_GET,
   ROLE_POLICY_DELETE,
+  ROLE_POLICY_ATTACH,
+  ROLE_POLICY_DETACH,
+  ROLE_POLICY_LIST_ATTACHED,
   ROLE_UPDATE,
   RESHARD_ADD,
   RESHARD_LIST,
@@ -884,6 +897,9 @@ static SimpleCmd::Commands all_cmds = {
   { "user check", OPT::USER_CHECK },
   { "user stats", OPT::USER_STATS },
   { "user list", OPT::USER_LIST },
+  { "user policy attach", OPT::USER_POLICY_ATTACH },
+  { "user policy detach", OPT::USER_POLICY_DETACH },
+  { "user policy list attached", OPT::USER_POLICY_LIST_ATTACHED },
   { "subuser create", OPT::SUBUSER_CREATE },
   { "subuser modify", OPT::SUBUSER_MODIFY },
   { "subuser rm", OPT::SUBUSER_RM },
@@ -1072,6 +1088,9 @@ static SimpleCmd::Commands all_cmds = {
   { "role-policy get", OPT::ROLE_POLICY_GET },
   { "role policy delete", OPT::ROLE_POLICY_DELETE },
   { "role-policy delete", OPT::ROLE_POLICY_DELETE },
+  { "role policy attach", OPT::ROLE_POLICY_ATTACH },
+  { "role policy detach", OPT::ROLE_POLICY_DETACH },
+  { "role policy list attached", OPT::ROLE_POLICY_LIST_ATTACHED },
   { "role update", OPT::ROLE_UPDATE },
   { "reshard bucket", OPT::BUCKET_RESHARD },
   { "reshard add", OPT::RESHARD_ADD },
@@ -1154,7 +1173,7 @@ static void show_perm_policy(string perm_policy, Formatter* formatter)
   formatter->flush(cout);
 }
 
-static void show_policy_names(std::vector<string> policy_names, Formatter* formatter)
+static void show_policy_names(const std::vector<string>& policy_names, Formatter* formatter)
 {
   formatter->open_array_section("PolicyNames");
   for (const auto& it : policy_names) {
@@ -1162,6 +1181,16 @@ static void show_policy_names(std::vector<string> policy_names, Formatter* forma
   }
   formatter->close_section();
   formatter->flush(cout);
+}
+
+static void show_policy_arns(const boost::container::flat_set<std::string>& arns,
+                             Formatter* formatter)
+{
+  formatter->open_array_section("AttachedPolicies");
+  for (const auto& arn : arns) {
+    formatter->dump_string("PolicyArn", arn);
+  }
+  formatter->close_section();
 }
 
 static void show_reshard_status(
@@ -3355,6 +3384,7 @@ int main(int argc, const char **argv)
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix, max_session_duration;
   std::string description;
+  std::string policy_arn;
   std::string redirect_zone;
   bool redirect_zone_set = false;
   list<string> endpoints;
@@ -4008,6 +4038,8 @@ int main(int argc, const char **argv)
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
       path_prefix = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--policy-arn", (char*)NULL)) {
+      policy_arn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-session-duration", (char*)NULL)) {
       max_session_duration = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--description", (char*)NULL)) {
@@ -4223,6 +4255,8 @@ int main(int argc, const char **argv)
     std::set<OPT> readonly_ops_list = {
                          OPT::USER_INFO,
 			 OPT::USER_STATS,
+			 OPT::USER_LIST,
+			 OPT::USER_POLICY_LIST_ATTACHED,
 			 OPT::ACCOUNT_GET,
 			 OPT::ACCOUNT_STATS,
 			 OPT::ACCOUNT_LIST,
@@ -4284,6 +4318,7 @@ int main(int argc, const char **argv)
 			 OPT::ROLE_LIST,
 			 OPT::ROLE_POLICY_LIST,
 			 OPT::ROLE_POLICY_GET,
+			 OPT::ROLE_POLICY_LIST_ATTACHED,
 			 OPT::RESHARD_LIST,
 			 OPT::RESHARD_STATUS,
 			 OPT::PUBSUB_TOPIC_LIST,
@@ -4377,6 +4412,9 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::ROLE_POLICY_LIST
                           && opt_cmd != OPT::ROLE_POLICY_GET
                           && opt_cmd != OPT::ROLE_POLICY_DELETE
+                          && opt_cmd != OPT::ROLE_POLICY_ATTACH
+                          && opt_cmd != OPT::ROLE_POLICY_DETACH
+                          && opt_cmd != OPT::ROLE_POLICY_LIST_ATTACHED
                           && opt_cmd != OPT::ROLE_UPDATE
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
@@ -6428,7 +6466,9 @@ int main(int argc, const char **argv)
                                         OPT::MFA_REMOVE, OPT::MFA_RESYNC,
                                         OPT::CAPS_ADD, OPT::CAPS_RM,
                                         OPT::ROLE_CREATE, OPT::ROLE_DELETE,
-                                        OPT::ROLE_POLICY_PUT, OPT::ROLE_POLICY_DELETE};
+                                        OPT::ROLE_POLICY_PUT, OPT::ROLE_POLICY_DELETE,
+                                        OPT::ROLE_POLICY_ATTACH, OPT::ROLE_POLICY_DETACH,
+                                        OPT::USER_POLICY_ATTACH, OPT::USER_POLICY_DETACH};
 
   bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
                                 non_master_cmd);
@@ -7023,7 +7063,97 @@ int main(int argc, const char **argv)
       cout << "Policy: " << policy_name << " successfully deleted for role: "
            << role_name << std::endl;
       return 0;
-  }
+    }
+  case OPT::ROLE_POLICY_ATTACH:
+    {
+      if (role_name.empty()) {
+        cerr << "role name is empty" << std::endl;
+        return EINVAL;
+      }
+      if (policy_arn.empty()) {
+        cerr << "policy arn is empty" << std::endl;
+        return EINVAL;
+      }
+      try {
+        if (!rgw::IAM::get_managed_policy(g_ceph_context, policy_arn)) {
+          cerr << "unrecognized policy arn " << policy_arn << std::endl;
+          return ENOENT;
+        }
+      } catch (rgw::IAM::PolicyParseException& e) {
+        cerr << "failed to parse managed policy: " << e.what() << std::endl;
+        return EINVAL;
+      }
+
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
+      ret = role->get(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      if (role->get_info().account_id.empty()) {
+        std::cerr << "Managed policies are only supported for account roles" << std::endl;
+        return EINVAL;
+      }
+
+      auto &policies = role->get_info().managed_policies;
+      const bool inserted = policies.arns.insert(policy_arn).second;
+      if (!inserted) {
+        cout << "That managed policy is already attached." << std::endl;
+        return EEXIST;
+      }
+      ret = role->update(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "Managed policy attached successfully" << std::endl;
+      return 0;
+    }
+  case OPT::ROLE_POLICY_DETACH:
+    {
+      if (role_name.empty()) {
+        cerr << "role name is empty" << std::endl;
+        return EINVAL;
+      }
+      if (policy_arn.empty()) {
+        cerr << "policy arn is empty" << std::endl;
+        return EINVAL;
+      }
+
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
+      ret = role->get(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      // insert the policy arn. if it's already there, just return success
+      auto &policies = role->get_info().managed_policies;
+      auto i = policies.arns.find(policy_arn);
+      if (i == policies.arns.end()) {
+        cout << "That managed policy is not attached." << std::endl;
+        return ENOENT;
+      }
+      policies.arns.erase(i);
+
+      ret = role->update(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "Managed policy detached successfully" << std::endl;
+      return 0;
+    }
+  case OPT::ROLE_POLICY_LIST_ATTACHED:
+    {
+      if (role_name.empty()) {
+        cerr << "ERROR: Role name is empty" << std::endl;
+        return EINVAL;
+      }
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
+      ret = role->get(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      show_policy_arns(role->get_info().managed_policies.arns, formatter.get());
+      formatter->flush(cout);
+      return 0;
+    }
   case OPT::ROLE_UPDATE:
     {
       if (role_name.empty()) {
@@ -8957,6 +9087,115 @@ next:
       encode_json("last_stats_update", last_update_ut, formatter.get());
     }
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT::USER_POLICY_ATTACH) {
+    if (rgw::sal::User::empty(user)) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return EINVAL;
+    }
+    if (policy_arn.empty()) {
+      cerr << "policy arn is empty" << std::endl;
+      return EINVAL;
+    }
+    ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      return -ret;
+    }
+    if (user->get_info().account_id.empty()) {
+      std::cerr << "Managed policies are only supported for account users" << std::endl;
+      return EINVAL;
+    }
+
+    try {
+      if (!rgw::IAM::get_managed_policy(g_ceph_context, policy_arn)) {
+        cerr << "unrecognized policy arn " << policy_arn << std::endl;
+        return ENOENT;
+      }
+    } catch (rgw::IAM::PolicyParseException& e) {
+      cerr << "failed to parse managed policy: " << e.what() << std::endl;
+      return EINVAL;
+    }
+
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+    const bool inserted = policies.arns.insert(policy_arn).second;
+    if (!inserted) {
+      cout << "That managed policy is already attached." << std::endl;
+      return EEXIST;
+    }
+
+    bufferlist in_bl;
+    encode(policies, in_bl);
+    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
+
+    ret = user->store_user(dpp(), null_yield, false);
+    if (ret < 0) {
+      return -ret;
+    }
+    cout << "Managed policy attached successfully" << std::endl;
+    return 0;
+  }
+  if (opt_cmd == OPT::USER_POLICY_DETACH) {
+    if (rgw::sal::User::empty(user)) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return EINVAL;
+    }
+    if (policy_arn.empty()) {
+      cerr << "policy arn is empty" << std::endl;
+      return EINVAL;
+    }
+    ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+
+    auto i = policies.arns.find(policy_arn);
+    if (i == policies.arns.end()) {
+      cout << "That managed policy is not attached." << std::endl;
+      return ENOENT;
+    }
+    policies.arns.erase(i);
+
+    bufferlist in_bl;
+    encode(policies, in_bl);
+    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
+
+    ret = user->store_user(dpp(), null_yield, false);
+    if (ret < 0) {
+      return -ret;
+    }
+    cout << "Managed policy detached successfully" << std::endl;
+    return 0;
+  }
+  if (opt_cmd == OPT::USER_POLICY_LIST_ATTACHED) {
+    if (rgw::sal::User::empty(user)) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return -EINVAL;
+    }
+    ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+
+    show_policy_arns(policies.arns, formatter.get());
+    formatter->flush(cout);
+    return 0;
   }
 
   if (opt_cmd == OPT::METADATA_GET) {
