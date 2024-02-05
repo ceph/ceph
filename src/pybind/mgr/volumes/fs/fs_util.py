@@ -143,6 +143,25 @@ def listsnaps(fs, volspec, snapdirpath, filter_inherited_snaps=False):
         raise VolumeException(-e.args[0], e.args[1])
     return snaps
 
+def get_all_dir_entries(fs, dirpath):
+    '''
+    Get all entries in given directory on given CephFS.
+    '''
+    dir_entries = []
+
+    try:
+        with fs.opendir(dirpath) as dir_handle:
+            # de = dir entry
+            de = fs.readdir(dir_handle)
+            while de:
+                if de.d_name not in (b".", b".."):
+                    dir_entries.append(de)
+                de = fs.readdir(dir_handle)
+    except cephfs.Error as e:
+        raise VolumeException(-e.args[0], e.args[1])
+
+    return dir_entries
+
 def list_one_entry_at_a_time(fs, dirpath):
     """
     Get a directory entry (one entry a time)
