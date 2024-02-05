@@ -61,6 +61,16 @@ def start_rgw(ctx, config, clients):
         log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
 
         endpoint = ctx.rgw.role_endpoints[client]
+
+        # create a file with rgw endpoint in it for test_awssdkv4 workunit
+        url = endpoint.url()
+        # remove trailing slash from the url
+        if url[-1] == '/':
+            url = url[:-1]
+        url_file = '{tdir}/url_file'.format(tdir=testdir)
+        ctx.cluster.only(client).run(args=['sudo', 'echo', '-n', '{url}'.format(url=url), run.Raw('|'), 'sudo', 'tee', url_file])
+        ctx.cluster.only(client).run(args=['sudo', 'chown', 'ceph', url_file])
+
         frontends = ctx.rgw.frontend
         frontend_prefix = client_config.get('frontend_prefix', None)
         if frontend_prefix:
@@ -239,6 +249,7 @@ def start_rgw(ctx, config, clients):
                     ],
                 )
             ctx.cluster.only(client).run(args=['sudo', 'rm', '-f', token_path])
+            ctx.cluster.only(client).run(args=['sudo', 'rm', '-f', url_file])
             rgwadmin(ctx, client, cmd=['gc', 'process', '--include-all'], check_status=True)
 
 def assign_endpoints(ctx, config, default_cert):
