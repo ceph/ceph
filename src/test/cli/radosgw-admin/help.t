@@ -11,6 +11,9 @@
     user check                       check user info
     user stats                       show user stats as accounted by quota subsystem
     user list                        list users
+    user policy attach               attach a managed policy
+    user policy detach               detach a managed policy
+    user policy list attached        list attached managed policies
     caps add                         add user capabilities
     caps rm                          remove user capabilities
     subuser create                   create a new subuser
@@ -168,6 +171,9 @@
     role-policy list                 list policies attached to a role
     role-policy get                  get the specified inline policy document embedded with the given role
     role-policy delete               remove policy attached to a role
+    role policy attach               attach a managed policy
+    role policy detach               detach a managed policy
+    role policy list attached        list attached managed policies
     role update                      update max_session_duration of a role
     reshard add                      schedule a resharding of a bucket
     reshard list                     list all bucket resharding or scheduled to be resharded
@@ -357,6 +363,7 @@
      --policy-doc                  permission policy document
      --path-prefix                 path prefix for filtering roles
      --description                 Role description
+     --policy-arn                  ARN of a managed policy
   
   MFA options:
      --totp-serial                 a string that represents the ID of a TOTP token
