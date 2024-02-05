@@ -1222,12 +1222,15 @@ int SiteConfig::load(const DoutPrefixProvider* dpp, optional_yield y,
   if (realm && !force_local_zonegroup) {
     // try to load the realm's period
     r = load_period_zonegroup(dpp, y, cfgstore, *realm, zone_params.id);
-  } else {
-    // fall back to a local zonegroup
-    r = load_local_zonegroup(dpp, y, cfgstore, zone_params.id);
+    if (r != -ENOENT) {
+      return r;
+    }
+    ldpp_dout(dpp, 10) << "cannot find current period zonegroup, "
+        "using local zonegroup configuration" << dendl;
   }
 
-  return r;
+  // fall back to a local zonegroup
+  return load_local_zonegroup(dpp, y, cfgstore, zone_params.id);
 }
 
 std::unique_ptr<SiteConfig> SiteConfig::make_fake() {
@@ -1284,6 +1287,9 @@ int SiteConfig::load_local_zonegroup(const DoutPrefixProvider* dpp,
   std::string zonegroup_name = dpp->get_cct()->_conf->rgw_zonegroup;
   if (!zonegroup_name.empty()) {
     r = cfgstore->read_zonegroup_by_name(dpp, y, zonegroup_name,
+                                         *local_zonegroup, nullptr);
+  } else if (realm) {
+    r = cfgstore->read_default_zonegroup(dpp, y, realm->id,
                                          *local_zonegroup, nullptr);
   } else {
     r = read_or_create_default_zonegroup(dpp, y, cfgstore, zone_params,
