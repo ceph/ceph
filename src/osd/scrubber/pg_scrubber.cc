@@ -606,11 +606,12 @@ scrub_level_t PgScrubber::scrub_requested(
   const bool deep_requested = (scrub_level == scrub_level_t::deep) ||
 			      (scrub_type == scrub_type_t::do_repair);
   dout(10) << fmt::format(
-		  "{}: {} {} scrub requested. Prev stamp: {}. Registered? {}",
+		  "{}: {}{} scrub requested. "
+		  "@entry:{},last-stamp:{:s},Registered?{}",
 		  __func__,
-		  (scrub_type == scrub_type_t::do_repair ? " repair + "
-							 : " not-repair + "),
-		  (deep_requested ? "deep" : "shallow"),
+		  (scrub_type == scrub_type_t::do_repair ? "repair + "
+							 : "not-repair + "),
+		  (deep_requested ? "deep" : "shallow"), req_flags,
 		  m_scrub_job->get_sched_time(), registration_state())
 	   << dendl;
 
@@ -620,7 +621,6 @@ scrub_level_t PgScrubber::scrub_requested(
   // User might intervene, so clear this
   req_flags.need_auto = false;
   req_flags.req_scrub = true;
-
   dout(20) << fmt::format("{}: planned scrub:{}", __func__, req_flags) << dendl;
 
   update_scrub_job(req_flags);
