@@ -860,18 +860,21 @@ private:
       pref.is_indirect() ?
 	pref.get_intermediate_length() :
 	pref.get_length(),
-      [pin=std::move(pin)]
+      [&pref]
       (T &extent) mutable {
 	assert(!extent.has_laddr());
 	assert(!extent.has_been_invalidated());
-	assert(!pin->has_been_invalidated());
-	assert(pin->get_parent());
-	pin->link_child(&extent);
-	extent.maybe_set_intermediate_laddr(*pin);
+	assert(!pref.has_been_invalidated());
+	assert(pref.get_parent());
+	pref.link_child(&extent);
+	extent.maybe_set_intermediate_laddr(pref);
       }
-    ).si_then([FNAME, &t](auto ref) mutable -> ret {
+    ).si_then([FNAME, &t, pin=std::move(pin)](auto ref) mutable -> ret {
       SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
       assert(ref->is_fully_loaded());
+      ceph_assert(pin->get_checksum() == 0 || // TODO: remapped extents may
+					      // not have recorded chksums
+	pin->get_checksum() == ref->get_crc32c());
       return pin_to_extent_ret<T>(
 	interruptible::ready_future_marker{},
 	std::move(ref));
@@ -902,19 +905,22 @@ private:
       pref.is_indirect() ?
 	pref.get_intermediate_length() :
 	pref.get_length(),
-      [pin=std::move(pin)](CachedExtent &extent) mutable {
+      [&pref](CachedExtent &extent) mutable {
 	auto &lextent = static_cast<LogicalCachedExtent&>(extent);
 	assert(!lextent.has_laddr());
 	assert(!lextent.has_been_invalidated());
-	assert(!pin->has_been_invalidated());
-	assert(pin->get_parent());
-	assert(!pin->get_parent()->is_pending());
-	pin->link_child(&lextent);
-	lextent.maybe_set_intermediate_laddr(*pin);
+	assert(!pref.has_been_invalidated());
+	assert(pref.get_parent());
+	assert(!pref.get_parent()->is_pending());
+	pref.link_child(&lextent);
+	lextent.maybe_set_intermediate_laddr(pref);
       }
-    ).si_then([FNAME, &t](auto ref) {
+    ).si_then([FNAME, &t, pin=std::move(pin)](auto ref) {
       SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
       assert(ref->is_fully_loaded());
+      ceph_assert(pin->get_checksum() == 0 || // TODO: remapped extents may
+					      // not have recorded chksums
+	pin->get_checksum() == ref->get_crc32c());
       return pin_to_extent_by_type_ret(
 	interruptible::ready_future_marker{},
 	std::move(ref->template cast<LogicalCachedExtent>()));

@@ -141,6 +141,10 @@ public:
     return get_map_val().refcount > 1;
   }
 
+  uint32_t get_checksum() const final {
+    return get_map_val().checksum;
+  }
+
 protected:
   std::unique_ptr<BtreeNodeMapping<laddr_t, paddr_t>> _duplicate(
     op_context_t<laddr_t> ctx) const final {

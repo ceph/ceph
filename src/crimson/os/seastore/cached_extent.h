@@ -1065,6 +1065,10 @@ public:
   virtual key_t get_intermediate_key() const { return min_max_t<key_t>::null; }
   virtual key_t get_intermediate_base() const { return min_max_t<key_t>::null; }
   virtual extent_len_t get_intermediate_length() const { return 0; }
+  virtual uint32_t get_checksum() const {
+    ceph_abort("impossible");
+    return 0;
+  }
   // The start offset of the pin, must be 0 if the pin is not indirect
   virtual extent_len_t get_intermediate_offset() const {
     return std::numeric_limits<extent_len_t>::max();
