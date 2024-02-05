@@ -183,7 +183,7 @@ class D4NFilterFixture : public ::testing::Test {
                        &if_match, &if_nomatch,
                        &user_data,
                        &zones_trace, &canceled,
-                       rctx, true);
+                       rctx, rgw::sal::FLAG_LOG_OP);
 
       return ret;
     }
@@ -443,7 +443,7 @@ TEST_F(D4NFilterFixture, CopyObjectReplace) {
 		   &if_match, &if_nomatch,
 		   &user_data,
 		   &zones_trace, &canceled,
-		   rctx, true), 0);
+		   rctx, rgw::sal::FLAG_LOG_OP), 0);
 
   unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
 
@@ -568,7 +568,7 @@ TEST_F(D4NFilterFixture, CopyObjectMerge) {
 		   &if_match, &if_nomatch,
 		   &user_data,
 		   &zones_trace, &canceled,
-		   rctx, true), 0);
+		   rctx, rgw::sal::FLAG_LOG_OP), 0);
 
   unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
 
@@ -1895,7 +1895,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 		 &if_match, &if_nomatch,
 		 &user_data,
 		 &zones_trace, &canceled,
-		 rctx, true), 0);
+		 rctx, rgw::sal::FLAG_LOG_OP), 0);
  
   client.hget("rgw-object:test_object_DataCheck:cache", "data", [&data](cpp_redis::reply& reply) {
     if (reply.is_string()) {
@@ -1920,7 +1920,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 		 &if_match, &if_nomatch,
 		 &user_data,
 		 &zones_trace, &canceled,
-		 rctx, true), 0);
+		 rctx, rgw::sal::FLAG_LOG_OP), 0);
 
   client.hget("rgw-object:test_object_DataCheck:cache", "data", [&dataNew](cpp_redis::reply& reply) {
     if (reply.is_string()) {
