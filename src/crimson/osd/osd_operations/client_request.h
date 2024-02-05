@@ -253,6 +253,9 @@ public:
     r_conn = make_local_shared_foreign(std::move(conn));
   }
 
+  interruptible_future<> with_pg_process_interruptible(
+    Ref<PG> pgref, const unsigned instance_id, instance_handle_t &ihref);
+
   seastar::future<> with_pg_process(Ref<PG> pg);
 
 public:
