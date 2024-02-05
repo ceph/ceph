@@ -10,15 +10,17 @@ namespace rgw { namespace d4n {
 // initiate a call to async_exec() on the connection's executor
 struct initiate_exec {
   std::shared_ptr<boost::redis::connection> conn;
-  boost::redis::request req;
 
   using executor_type = boost::redis::connection::executor_type;
   executor_type get_executor() const noexcept { return conn->get_executor(); }
 
   template <typename Handler, typename Response>
-  void operator()(Handler handler, Response& resp)
+  void operator()(Handler handler, const boost::redis::request& req, Response& resp)
   {
-    conn->async_exec(req, resp, boost::asio::consign(std::move(handler), conn));
+    auto h = boost::asio::consign(std::move(handler), conn);
+    return boost::asio::dispatch(get_executor(), [c=conn, &req, &resp, h=std::move(h)] {
+      c->async_exec(req, resp, std::move(h));
+    });
   }
 };
 
@@ -29,7 +31,7 @@ auto async_exec(std::shared_ptr<connection> conn,
 {
   return boost::asio::async_initiate<CompletionToken,
          void(boost::system::error_code, std::size_t)>(
-      initiate_exec{std::move(conn), req}, token, resp);
+      initiate_exec{std::move(conn)}, token, req, resp);
 }
 
 template <typename T>
