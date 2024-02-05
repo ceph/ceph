@@ -427,14 +427,6 @@ PerfCounters* OsdScrub::get_perf_counters(int pool_type, scrub_level_t level)
 // ////////////////////////////////////////////////////////////////////////// //
 // forwarders to the queue
 
-Scrub::sched_params_t OsdScrub::determine_scrub_time(
-    const requested_scrub_t& request_flags,
-    const pg_info_t& pg_info,
-    const pool_opts_t& pool_conf) const
-{
-  return m_queue.determine_scrub_time(request_flags, pg_info, pool_conf);
-}
-
 void OsdScrub::update_job(
     Scrub::ScrubJobRef sjob,
     const Scrub::sched_params_t& suggested,
