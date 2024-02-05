@@ -290,7 +290,9 @@ public:
   int build_linked_oids_index();
 
   int run(const DoutPrefixProvider *dpp,
-	  const std::string& bucket_id,
+	  const std::string& bucket_name,
+	  const std::string& object_name = std::string(),
+	  const std::string& object_version = std::string(),
 	  const bool silent_indexless = false);
   int run(const DoutPrefixProvider *dpp,
 	  const bool yes_i_really_mean_it = false);

@@ -7088,11 +7088,19 @@ int main(int argc, const char **argv)
     }
 
     if (bucket_name.empty()) {
+      if (!object.empty() || !object_version.empty()) {
+	std::cerr << "ERROR: may not specify --object or --object-version unless --bucket is also specified." << std::endl;
+	return EINVAL;
+      }
       // yes_i_really_mean_it means continue with listing even if
       // there are indexless buckets
       ret = lister.run(dpp(), yes_i_really_mean_it);
     } else {
-      ret = lister.run(dpp(), bucket_name);
+      if (object.empty() && !object_version.empty()) {
+	std::cerr << "ERROR: may not specify --object-version unless --object is also specified." << std::endl;
+	return EINVAL;
+      }
+      ret = lister.run(dpp(), bucket_name, object, object_version);
     }
 
     if (ret < 0) {
