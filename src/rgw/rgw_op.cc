@@ -4525,12 +4525,16 @@ void RGWPutObj::execute(optional_yield y)
     emplace_attr(RGW_ATTR_OBJECT_RETENTION, std::move(obj_retention_bl));
   }
 
+  // don't track the individual parts of multipart uploads. they replicate in
+  // full after CompleteMultipart
+  const uint32_t complete_flags = multipart ? 0 : rgw::sal::FLAG_LOG_OP;
+
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
   const req_context rctx{this, s->yield, s->trace.get()};
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
                                (user_data.empty() ? nullptr : &user_data), nullptr, nullptr,
-                               rctx, rgw::sal::FLAG_LOG_OP);
+                               rctx, complete_flags);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
   if (op_ret < 0) {
     return;
@@ -6798,7 +6802,7 @@ void RGWCompleteMultipart::complete()
   // when the bucket is, as that would add an unneeded delete marker
   // moved to complete to prevent segmentation fault in publish commit
   if (meta_obj.get() != nullptr) {
-    int ret = meta_obj->delete_object(this, null_yield, rgw::sal::FLAG_PREVENT_VERSIONING | rgw::sal::FLAG_LOG_OP);
+    int ret = meta_obj->delete_object(this, null_yield, rgw::sal::FLAG_PREVENT_VERSIONING);
     if (ret >= 0) {
       /* serializer's exclusive lock is released */
       serializer->clear_locked();

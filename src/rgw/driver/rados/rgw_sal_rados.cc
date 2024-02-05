@@ -2304,7 +2304,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     encode(upload_info, bl);
     obj_op.meta.data = &bl;
 
-    ret = obj_op.write_meta(bl.length(), 0, attrs, rctx);
+    ret = obj_op.write_meta(bl.length(), 0, attrs, rctx, false);
   } while (ret == -EEXIST);
 
   return ret;
@@ -2919,7 +2919,7 @@ int RadosMultipartWriter::complete(size_t accounted_size, const std::string& eta
                        uint32_t flags)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
+                            if_match, if_nomatch, user_data, zones_trace, canceled, rctx, flags);
 }
 
 bool RadosZoneGroup::placement_target_exists(std::string& target) const
