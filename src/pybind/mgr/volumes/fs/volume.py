@@ -62,6 +62,7 @@ class VolumeClient(CephfsClient["Module"]):
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
         self.cloner = Cloner(self, self.mgr.max_concurrent_clones, self.mgr.snapshot_clone_delay,
                              self.mgr.snapshot_clone_no_wait)
+        self.clone_reporter = CloneProgressBar(self)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
         # on startup, queue purge job for available volumes to kickstart
         # purge for leftover subvolume entries in trash. note that, if the
@@ -802,8 +803,9 @@ class VolumeClient(CephfsClient["Module"]):
                     s_subvolume.attach_snapshot(s_snapname, t_subvolume)
 
                 self.cloner.queue_job(volname)
-                CloneProgressBar(self, volname, t_subvolume.subvolname,
-                                 s_subvolume.base_path, t_subvolume.base_path)
+                self.clone_reporter.add_clone(volname, t_subvolume.subvolname,
+                                              s_subvolume.base_path,
+                                              t_subvolume.base_path)
             except VolumeException as ve:
                 try:
                     t_subvolume.remove()
