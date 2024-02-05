@@ -2052,6 +2052,7 @@ fi
 
 %files -n ceph-exporter
 %{_bindir}/ceph-exporter
+%{_unitdir}/ceph-exporter.service
 
 %files -n rbd-fuse
 %{_bindir}/rbd-fuse
