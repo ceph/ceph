@@ -795,7 +795,8 @@ static void send_prepare_convert(const rgw_obj& obj, string *resource)
 {
   string urlsafe_bucket, urlsafe_object;
   url_encode(obj.bucket.get_key(':', 0), urlsafe_bucket);
-  url_encode(obj.key.name, urlsafe_object);
+  // do not encode slash. It leads to 404 errors when fetching objects inside folders.
+  url_encode(obj.key.name, urlsafe_object, false);
   *resource = urlsafe_bucket + "/" + urlsafe_object;
 }
 
