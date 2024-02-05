@@ -50,6 +50,7 @@ class PutObjects {
 	
 	void generateFile(String in_file_path, String out_file_path, long length) {
 		try {
+                        System.out.println("DEBUG: Generating File");
 			Path ifp = Paths.get(in_file_path);
 			File f = ifp.toFile();
 
@@ -98,6 +99,7 @@ class PutObjects {
 			if (wch != null) {
 				wch.close();
 			}
+                        System.out.println("DEBUG: File Generated");
 		} catch (IOException e) {
             System.err.println(e.getMessage());
 		}
@@ -146,6 +148,7 @@ class PutObjects {
 		
 		/* https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/S3Client.html */
 
+    System.out.println("DEBUG: Environment Variables Read");
     try {
       client = S3Client.builder()
         .endpointOverride(http_uri)
@@ -158,7 +161,9 @@ class PutObjects {
       System.exit(1);
 		}
 
+    System.out.println("DEBUG: S3 Client Initialized");
     generateBigFiles();
+    System.out.println("DEBUG: Generated Big Files");
 
     /* create test bucket if it doesn't exist yet */
 		try {
@@ -167,6 +172,8 @@ class PutObjects {
             System.err.println(e.getMessage());
             System.exit(1);
 		}
+
+    System.out.println("DEBUG: Test Bucket Created");
   } /* setup */
 
 	/* TODO: zap */
