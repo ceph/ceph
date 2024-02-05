@@ -361,7 +361,7 @@ class NodeProxyEndpoint:
 
         try:
             headers, result, status = http_req(hostname=addr,
-                                               port='8080',
+                                               port='9456',
                                                headers=header,
                                                method=method,
                                                data=json.dumps(payload),

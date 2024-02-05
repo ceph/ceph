@@ -4,43 +4,57 @@ import os
 import time
 import re
 import ssl
+import traceback
+import threading
 from tempfile import NamedTemporaryFile, _TemporaryFileWrapper
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
-from typing import Dict, List, Callable, Any, Optional, MutableMapping, Tuple
+from typing import Dict, Callable, Any, Optional, MutableMapping, Tuple, Union
 
 
-class Logger:
-    _Logger: List['Logger'] = []
+CONFIG: Dict[str, Any] = {
+    'reporter': {
+        'check_interval': 5,
+        'push_data_max_retries': 30,
+        'endpoint': 'https://%(mgr_host):%(mgr_port)/node-proxy/data',
+    },
+    'system': {
+        'refresh_interval': 5
+    },
+    'api': {
+        'port': 9456,
+    },
+    'logging': {
+        'level': logging.INFO,
+    }
+}
 
-    def __init__(self, name: str, level: int = logging.INFO):
-        self.name = name
-        self.level = level
 
-        Logger._Logger.append(self)
-        self.logger = self.get_logger()
+def get_logger(name: str, level: Union[int, str] = logging.NOTSET) -> logging.Logger:
+    if level == logging.NOTSET:
+        log_level = CONFIG['logging']['level']
+    logger = logging.getLogger(name)
+    logger.setLevel(log_level)
+    handler = logging.StreamHandler()
+    handler.setLevel(log_level)
+    fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(fmt)
+    logger.handlers.clear()
+    logger.addHandler(handler)
+    logger.propagate = False
 
-    def get_logger(self) -> logging.Logger:
-        logger = logging.getLogger(self.name)
-        logger.setLevel(self.level)
-        handler = logging.StreamHandler()
-        handler.setLevel(self.level)
-        fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(fmt)
-        logger.handlers.clear()
-        logger.addHandler(handler)
-        logger.propagate = False
+    return logger
 
-        return logger
+
+logger = get_logger(__name__)
 
 
 class Config:
-
     def __init__(self,
                  config_file: str = '/etc/ceph/node-proxy.yaml',
-                 default_config: Dict[str, Any] = {}) -> None:
+                 config: Dict[str, Any] = {}) -> None:
         self.config_file = config_file
-        self.default_config = default_config
+        self.config = config
 
         self.load_config()
 
@@ -49,19 +63,14 @@ class Config:
             with open(self.config_file, 'r') as f:
                 self.config = yaml.safe_load(f)
         else:
-            self.config = self.default_config
+            self.config = self.config
 
-        for k, v in self.default_config.items():
+        for k, v in self.config.items():
             if k not in self.config.keys():
                 self.config[k] = v
 
         for k, v in self.config.items():
             setattr(self, k, v)
-
-        # TODO: need to be improved
-        for _l in Logger._Logger:
-            _l.logger.setLevel(self.logging['level'])  # type: ignore
-            _l.logger.handlers[0].setLevel(self.logging['level'])  # type: ignore
 
     def reload(self, config_file: str = '') -> None:
         if config_file != '':
@@ -69,7 +78,41 @@ class Config:
         self.load_config()
 
 
-log = Logger(__name__)
+class BaseThread(threading.Thread):
+    def __init__(self) -> None:
+        super().__init__()
+        self.exc: Optional[Exception] = None
+        self.stop: bool = False
+        self.daemon = True
+        self.name = self.__class__.__name__
+        self.log: logging.Logger = get_logger(__name__)
+        self.pending_shutdown: bool = False
+
+    def run(self) -> None:
+        logger.info(f'Starting {self.name}')
+        try:
+            self.main()
+        except Exception as e:
+            self.exc = e
+            return
+
+    def shutdown(self) -> None:
+        self.stop = True
+        self.pending_shutdown = True
+
+    def check_status(self) -> bool:
+        logger.debug(f'Checking status of {self.name}')
+        if self.exc:
+            traceback.print_tb(self.exc.__traceback__)
+            logger.error(f'Caught exception: {self.exc.__class__.__name__}')
+            raise self.exc
+        if not self.is_alive():
+            logger.info(f'{self.name} not alive')
+            self.start()
+        return True
+
+    def main(self) -> None:
+        raise NotImplementedError()
 
 
 def to_snake_case(name: str) -> str:
@@ -93,12 +136,12 @@ def retry(exceptions: Any = Exception, retries: int = 20, delay: int = 1) -> Cal
             _tries = retries
             while _tries > 1:
                 try:
-                    log.logger.debug('{} {} attempt(s) left.'.format(f, _tries - 1))
+                    logger.debug('{} {} attempt(s) left.'.format(f, _tries - 1))
                     return f(*args, **kwargs)
                 except exceptions:
                     time.sleep(delay)
                     _tries -= 1
-            log.logger.warn('{} has failed after {} tries'.format(f, retries))
+            logger.warn('{} has failed after {} tries'.format(f, retries))
             return f(*args, **kwargs)
         return _retry
     return decorator
