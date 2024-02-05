@@ -1023,6 +1023,9 @@ protected:
     return it->second;
   }
   int get_fd_inode(int fd, InodeRef *in);
+  bool _ll_fh_exists(Fh *f) {
+    return ll_unclosed_fh_set.count(f);
+  }
 
   // helpers
   void wake_up_session_caps(MetaSession *s, bool reconnect);
