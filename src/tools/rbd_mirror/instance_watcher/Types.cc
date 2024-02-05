@@ -237,7 +237,7 @@ void NotifyAckPayload::decode(bufferlist::const_iterator &iter) {
 void NotifyAckPayload::dump(Formatter *f) const {
   f->dump_string("instance_id", instance_id);
   f->dump_unsigned("request_id", request_id);
-  f->dump_int("request_id", ret_val);
+  f->dump_int("ret_val", ret_val);
 }
 
 } // namespace instance_watcher
