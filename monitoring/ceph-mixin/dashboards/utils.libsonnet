@@ -524,6 +524,16 @@ local timeSeries = import 'timeseries_panel.libsonnet';
       maxDataPoints: maxDataPoints,
       interval: interval,
     },
+
+  addBarGaugePanel(title='',
+                   description='',
+                   datasource='${DS_PROMETHEUS}',
+                   gridPosition={},
+                   unit='percentunit',
+                   thresholds={})::
+    g.barGaugePanel.new(title, description, datasource, unit, thresholds) + {
+      gridPos: gridPosition,
+    },
   addTableExtended(
     title='',
     datasource=null,
