@@ -106,8 +106,8 @@ export class HostsPageHelper extends PageHelper {
   @PageHelper.restrictTo(pages.index.url)
   maintenance(hostname: string, exit = false, force = false) {
     this.clearTableSearchInput();
-    this.getTableCell(this.columnIndex.hostname, hostname).click();
     if (force) {
+      this.getTableCell(this.columnIndex.hostname, hostname).click();
       this.clickActionButton('enter-maintenance');
 
       cy.get('cd-modal').within(() => {
@@ -124,6 +124,7 @@ export class HostsPageHelper extends PageHelper {
     }
     if (exit) {
       this.getTableCell(this.columnIndex.hostname, hostname)
+        .click()
         .parent()
         .find(`datatable-body-cell:nth-child(${this.columnIndex.status})`)
         .then(($ele) => {
@@ -141,6 +142,7 @@ export class HostsPageHelper extends PageHelper {
           expect(status).to.not.include('maintenance');
         });
     } else {
+      this.getTableCell(this.columnIndex.hostname, hostname).click();
       this.clickActionButton('enter-maintenance');
 
       this.getTableCell(this.columnIndex.hostname, hostname)
