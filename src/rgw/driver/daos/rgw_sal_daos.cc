@@ -2100,14 +2100,32 @@ int DaosStore::get_roles(const DoutPrefixProvider* dpp, optional_yield y,
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-std::unique_ptr<RGWOIDCProvider> DaosStore::get_oidc_provider() {
-  RGWOIDCProvider* p = nullptr;
-  return std::unique_ptr<RGWOIDCProvider>(p);
+int DaosStore::store_oidc_provider(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   const RGWOIDCProviderInfo& info,
+                                   bool exclusive) {
+  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosStore::get_oidc_providers(
-    const DoutPrefixProvider* dpp, const std::string& tenant,
-    vector<std::unique_ptr<RGWOIDCProvider>>& providers) {
+int DaosStore::load_oidc_provider(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view tenant,
+                                  std::string_view url,
+                                  RGWOIDCProviderInfo& info) {
+  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
+}
+
+int DaosStore::delete_oidc_provider(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view tenant,
+                                    std::string_view url) {
+  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
+}
+
+int DaosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view tenant,
+                                  std::vector<RGWOIDCProviderInfo>& providers) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 

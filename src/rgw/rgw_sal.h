@@ -44,6 +44,7 @@ class RGWCompressionInfo;
 struct rgw_pubsub_topics;
 struct rgw_pubsub_bucket_topics;
 class RGWZonePlacementInfo;
+struct RGWOIDCProviderInfo;
 
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
@@ -182,7 +183,6 @@ namespace rgw { namespace sal {
 
 struct MPSerializer;
 class GCChain;
-class RGWOIDCProvider;
 class RGWRole;
 
 enum AttrsMod {
@@ -390,12 +390,24 @@ class Driver {
 			  const std::string& path_prefix,
 			  const std::string& tenant,
 			  std::vector<std::unique_ptr<RGWRole>>& roles) = 0;
-    /** Get an empty Open ID Connector provider */
-    virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() = 0;
+    virtual int store_oidc_provider(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    const RGWOIDCProviderInfo& info,
+                                    bool exclusive) = 0;
+    virtual int load_oidc_provider(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view tenant,
+                                   std::string_view url,
+                                   RGWOIDCProviderInfo& info) = 0;
+    virtual int delete_oidc_provider(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view tenant,
+                                     std::string_view url) = 0;
     /** Get all Open ID Connector providers, optionally filtered by tenant  */
-    virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
-				   const std::string& tenant,
-				   std::vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y) = 0;
+    virtual int get_oidc_providers(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view tenant,
+                                   std::vector<RGWOIDCProviderInfo>& providers) = 0;
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,

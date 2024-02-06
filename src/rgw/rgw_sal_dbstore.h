@@ -16,7 +16,6 @@
 #pragma once
 
 #include "rgw_sal_store.h"
-#include "rgw_oidc_provider.h"
 #include "rgw_role.h"
 #include "rgw_lc.h"
 #include "rgw_multi.h"
@@ -337,24 +336,6 @@ protected:
     virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;
     /** Reload lua packages */
     virtual int reload_packages(const DoutPrefixProvider* dpp, optional_yield y) override;
-  };
-
-  class DBOIDCProvider : public RGWOIDCProvider {
-    DBStore* store;
-    public:
-    DBOIDCProvider(DBStore* _store) : store(_store) {}
-    ~DBOIDCProvider() = default;
-
-    virtual int store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y) override { return 0; }
-    virtual int read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant, optional_yield y) override { return 0; }
-    virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) override { return 0;}
-
-    void encode(bufferlist& bl) const {
-      RGWOIDCProvider::encode(bl);
-    }
-    void decode(bufferlist::const_iterator& bl) {
-      RGWOIDCProvider::decode(bl);
-    }
   };
 
   /*
@@ -822,10 +803,23 @@ public:
           const std::string& path_prefix,
           const std::string& tenant,
           std::vector<std::unique_ptr<RGWRole>>& roles) override;
-      virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() override;
-      virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
-          const std::string& tenant,
-          std::vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y) override;
+      int store_oidc_provider(const DoutPrefixProvider *dpp,
+                              optional_yield y,
+                              const RGWOIDCProviderInfo& info,
+                              bool exclusive) override;
+      int load_oidc_provider(const DoutPrefixProvider *dpp,
+                             optional_yield y,
+                             std::string_view tenant,
+                             std::string_view url,
+                             RGWOIDCProviderInfo& info) override;
+      int delete_oidc_provider(const DoutPrefixProvider *dpp,
+                               optional_yield y,
+                               std::string_view tenant,
+                               std::string_view url) override;
+      virtual int get_oidc_providers(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view tenant,
+          std::vector<RGWOIDCProviderInfo>& providers) override;
       virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

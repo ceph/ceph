@@ -22,7 +22,6 @@
 #include "rgw_sal_store.h"
 #include "rgw_rados.h"
 #include "rgw_notify.h"
-#include "rgw_oidc_provider.h"
 #include "rgw_role.h"
 #include "rgw_multi.h"
 #include "rgw_putobj_processor.h"
@@ -212,10 +211,23 @@ class RadosStore : public StoreDriver {
 			  const std::string& path_prefix,
 			  const std::string& tenant,
 			  std::vector<std::unique_ptr<RGWRole>>& roles) override;
-    virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() override;
-    virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
-				   const std::string& tenant,
-				   std::vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y) override;
+    int store_oidc_provider(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            const RGWOIDCProviderInfo& info,
+                            bool exclusive) override;
+    int load_oidc_provider(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           std::string_view tenant,
+                           std::string_view url,
+                           RGWOIDCProviderInfo& info) override;
+    int delete_oidc_provider(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             std::string_view tenant,
+                             std::string_view url) override;
+    int get_oidc_providers(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           std::string_view tenant,
+                           std::vector<RGWOIDCProviderInfo>& providers) override;
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
@@ -903,23 +915,6 @@ public:
   int unwatch_reload(const DoutPrefixProvider* dpp);
 };
 
-class RadosOIDCProvider : public RGWOIDCProvider {
-  RadosStore* store;
-public:
-  RadosOIDCProvider(RadosStore* _store) : store(_store) {}
-  ~RadosOIDCProvider() = default;
-
-  virtual int store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y) override;
-  virtual int read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant, optional_yield y) override;
-  virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) override;
-  void encode(bufferlist& bl) const {
-    RGWOIDCProvider::encode(bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-    RGWOIDCProvider::decode(bl);
-  }
-};
-
 class RadosRole : public RGWRole {
   RadosStore* store;
 public:
@@ -944,5 +939,3 @@ public:
   virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) override;
 };
 }} // namespace rgw::sal
-
-WRITE_CLASS_ENCODER(rgw::sal::RadosOIDCProvider)

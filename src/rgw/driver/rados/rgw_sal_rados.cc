@@ -36,6 +36,7 @@
 #include "rgw_aio.h"
 #include "rgw_aio_throttle.h"
 #include "rgw_tracer.h"
+#include "rgw_oidc_provider.h"
 
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
@@ -1360,16 +1361,82 @@ int RadosStore::get_roles(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-std::unique_ptr<RGWOIDCProvider> RadosStore::get_oidc_provider()
+static constexpr std::string_view oidc_url_oid_prefix = "oidc_url.";
+
+static std::string oidc_provider_oid(std::string_view account,
+                                     std::string_view prefix,
+                                     std::string_view url)
 {
-  return std::make_unique<RadosOIDCProvider>(this);
+  return string_cat_reserve(account, prefix, url);
 }
 
-int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
-				   const std::string& tenant,
-				   vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
+int RadosStore::store_oidc_provider(const DoutPrefixProvider *dpp,
+                                    optional_yield y,
+                                    const RGWOIDCProviderInfo& info,
+                                    bool exclusive)
 {
-  std::string prefix = tenant + RGWOIDCProvider::oidc_url_oid_prefix;
+  auto sysobj = svc()->sysobj;
+  std::string oid = oidc_provider_oid(info.tenant, oidc_url_oid_prefix,
+                                      url_remove_prefix(info.provider_url));
+
+  // TODO: add support for oidc metadata sync
+  bufferlist bl;
+  using ceph::encode;
+  encode(info, bl);
+  return rgw_put_system_obj(dpp, sysobj, svc()->zone->get_zone_params().oidc_pool, oid, bl, exclusive, nullptr, real_time(), y);
+}
+
+int RadosStore::load_oidc_provider(const DoutPrefixProvider *dpp,
+                                   optional_yield y,
+                                   std::string_view account,
+                                   std::string_view url,
+                                   RGWOIDCProviderInfo& info)
+{
+  auto sysobj = svc()->sysobj;
+  auto& pool = svc()->zone->get_zone_params().oidc_pool;
+  std::string oid = oidc_provider_oid(account, oidc_url_oid_prefix, url);
+  bufferlist bl;
+
+  int ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, nullptr, y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  try {
+    using ceph::decode;
+    auto iter = bl.cbegin();
+    decode(info, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
+                  ": " << url << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
+int RadosStore::delete_oidc_provider(const DoutPrefixProvider *dpp,
+                                     optional_yield y,
+                                     std::string_view account,
+                                     std::string_view url)
+{
+  auto& pool = svc()->zone->get_zone_params().oidc_pool;
+  std::string oid = oidc_provider_oid(account, oidc_url_oid_prefix, url);
+  int ret = rgw_delete_system_obj(dpp, svc()->sysobj, pool, oid, nullptr, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: deleting oidc url from pool: " << pool.name << ": "
+                  << url << ": " << cpp_strerror(-ret) << dendl;
+  }
+
+  return ret;
+}
+
+int RadosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
+				   optional_yield y,
+				   std::string_view tenant,
+				   vector<RGWOIDCProviderInfo>& providers)
+{
+  std::string prefix = string_cat_reserve(tenant, oidc_url_oid_prefix);
   auto pool = svc()->zone->get_zone_params().oidc_pool;
 
   //Get the filtered objects
@@ -1379,31 +1446,33 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
   do {
     list<std::string> oids;
     int r = rados->list_raw_objects(dpp, pool, prefix, 1000, ctx, oids, &is_truncated);
+    if (r == -ENOENT) {
+      return 0;
+    }
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: listing filtered objects failed: OIDC pool: "
                   << pool.name << ": " << prefix << ": " << cpp_strerror(-r) << dendl;
       return r;
     }
     for (const auto& iter : oids) {
-      std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = get_oidc_provider();
       bufferlist bl;
-
       r = rgw_get_system_obj(svc()->sysobj, pool, iter, bl, nullptr, nullptr, y, dpp);
       if (r < 0) {
         return r;
       }
 
+      RGWOIDCProviderInfo info;
       try {
         using ceph::decode;
         auto iter = bl.cbegin();
-        decode(*provider, iter);
+        decode(info, iter);
       } catch (buffer::error& err) {
         ldpp_dout(dpp, 0) << "ERROR: failed to decode oidc provider info from pool: "
 	  << pool.name << ": " << iter << dendl;
         return -EIO;
       }
 
-      providers.push_back(std::move(provider));
+      providers.push_back(std::move(info));
     }
   } while (is_truncated);
 
@@ -3376,70 +3445,6 @@ unsigned RadosLuaManager::PackagesWatcher::get_subsys() const {
 
 std::ostream& RadosLuaManager::PackagesWatcher::gen_prefix(std::ostream& out) const {
   return out << "rgw lua package reloader: ";
-}
-
-int RadosOIDCProvider::store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y)
-{
-  auto sysobj = store->svc()->sysobj;
-  std::string oid = tenant + get_url_oid_prefix() + url;
-
-  bufferlist bl;
-  using ceph::encode;
-  encode(*this, bl);
-  return rgw_put_system_obj(dpp, sysobj, store->svc()->zone->get_zone_params().oidc_pool, oid, bl, exclusive, nullptr, real_time(), y);
-}
-
-int RadosOIDCProvider::read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant, optional_yield y)
-{
-  auto sysobj = store->svc()->sysobj;
-  auto& pool = store->svc()->zone->get_zone_params().oidc_pool;
-  std::string oid = tenant + get_url_oid_prefix() + url;
-  bufferlist bl;
-
-  int ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, nullptr, y, dpp);
-  if (ret < 0) {
-    return ret;
-  }
-
-  try {
-    using ceph::decode;
-    auto iter = bl.cbegin();
-    decode(*this, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to decode oidc provider info from pool: " << pool.name <<
-                  ": " << url << dendl;
-    return -EIO;
-  }
-
-  return 0;
-}
-
-int RadosOIDCProvider::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  auto& pool = store->svc()->zone->get_zone_params().oidc_pool;
-
-  std::string url, tenant;
-  auto ret = get_tenant_url_from_arn(tenant, url);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to parse arn" << dendl;
-    return -EINVAL;
-  }
-
-  if (this->tenant != tenant) {
-    ldpp_dout(dpp, 0) << "ERROR: tenant in arn doesn't match that of user " << this->tenant << ", "
-                  << tenant << ": " << dendl;
-    return -EINVAL;
-  }
-
-  // Delete url
-  std::string oid = tenant + get_url_oid_prefix() + url;
-  ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, oid, nullptr, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: deleting oidc url from pool: " << pool.name << ": "
-                  << provider_url << ": " << cpp_strerror(-ret) << dendl;
-  }
-
-  return ret;
 }
 
 int RadosRole::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
