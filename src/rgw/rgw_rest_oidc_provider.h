@@ -22,9 +22,7 @@ public:
 };
 
 class RGWCreateOIDCProvider : public RGWRestOIDCProvider {
-  std::vector<std::string> client_ids;
-  std::vector<std::string> thumbprints;
-  std::string provider_url; //'iss' field in JWT
+  RGWOIDCProviderInfo info;
  public:
   RGWCreateOIDCProvider();
 
@@ -35,7 +33,7 @@ class RGWCreateOIDCProvider : public RGWRestOIDCProvider {
 };
 
 class RGWDeleteOIDCProvider : public RGWRestOIDCProvider {
-  std::string provider_arn;
+  std::string url;
  public:
   RGWDeleteOIDCProvider();
 
@@ -46,7 +44,7 @@ class RGWDeleteOIDCProvider : public RGWRestOIDCProvider {
 };
 
 class RGWGetOIDCProvider : public RGWRestOIDCProvider {
-  std::string provider_arn;
+  std::string url;
  public:
   RGWGetOIDCProvider();
 
