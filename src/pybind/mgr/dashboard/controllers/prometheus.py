@@ -146,6 +146,11 @@ class Prometheus(PrometheusRESTController):
     def delete_silence(self, s_id):
         return self.alert_proxy('DELETE', '/silence/' + s_id) if s_id else None
 
+    @RESTController.Collection(method='GET', path='/prometheus_query_data')
+    def get_prometeus_query_data(self, **params):
+        params['query'] = params.pop('params')
+        return self.prometheus_proxy('GET', '/query', params)
+
 
 @APIRouter('/prometheus/notifications', Scope.PROMETHEUS)
 @APIDoc("Prometheus Notifications Management API", "PrometheusNotifications")
