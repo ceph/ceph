@@ -315,8 +315,13 @@ class AlertmanagerService(CephadmService):
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
             node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
             host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-            cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(
-                host_fqdn, node_ip)
+            cert = self.mgr.cert_key_store.get_cert('alertmanager_cert', host=daemon_spec.host)
+            key = self.mgr.cert_key_store.get_key('alertmanager_key', host=daemon_spec.host)
+            if not (cert and key):
+                cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(
+                    host_fqdn, node_ip)
+                self.mgr.cert_key_store.save_cert('alertmanager_cert', cert, host=daemon_spec.host)
+                self.mgr.cert_key_store.save_key('alertmanager_key', key, host=daemon_spec.host)
             context = {
                 'alertmanager_web_user': alertmanager_user,
                 'alertmanager_web_password': password_hash(alertmanager_password),
@@ -360,6 +365,15 @@ class AlertmanagerService(CephadmService):
             'dashboard set-alertmanager-api-host',
             service_url
         )
+
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called before alertmanager daemon is removed.
+        """
+        if daemon.hostname is not None:
+            # delete cert/key entires for this grafana daemon
+            self.mgr.cert_key_store.rm_cert('alertmanager_cert', host=daemon.hostname)
+            self.mgr.cert_key_store.rm_key('alertmanager_key', host=daemon.hostname)
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
