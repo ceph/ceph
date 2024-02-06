@@ -39,7 +39,7 @@ export class CRUDTableComponent implements OnInit {
   permissions: Permissions;
   permission: Permission;
   selection = new CdTableSelection();
-  expandedRow: any = null;
+  expandedRow: { [key: string]: any } = {};
   modalRef: NgbModalRef;
   tabs = {};
   resource: string;
@@ -145,7 +145,11 @@ export class CRUDTableComponent implements OnInit {
   }
 
   setExpandedRow(event: any) {
-    this.expandedRow = event;
+    for (let i = 0; i < this.meta.detail_columns.length; i++) {
+      let column = this.meta.detail_columns[i];
+      let columnDetail = event[column];
+      this.expandedRow[column] = this.formatColumnDetails(columnDetail);
+    }
   }
 
   edit() {
@@ -175,5 +179,31 @@ export class CRUDTableComponent implements OnInit {
       this.modalState['authExportData'] = data.trim();
       this.modalRef = this.modalService.show(ConfirmationModalComponent, modalVariables);
     });
+  }
+
+  /**
+   * Custom string replacer function for JSON.stringify
+   *
+   * This is specifically for objects inside an array.
+   * The custom replacer recursively stringifies deep nested objects
+   **/
+  stringReplacer(_key: string, value: any) {
+    try {
+      const parsedValue = JSON.parse(value);
+      return parsedValue;
+    } catch (e) {
+      return value;
+    }
+  }
+
+  /**
+   * returns a json string for arrays and string
+   * returns the same value for the rest
+   **/
+  formatColumnDetails(details: any) {
+    if (Array.isArray(details) || typeof details === 'string') {
+      return JSON.stringify(details, this.stringReplacer, 2);
+    }
+    return details;
   }
 }
