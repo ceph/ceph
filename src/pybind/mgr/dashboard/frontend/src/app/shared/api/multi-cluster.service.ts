@@ -94,7 +94,9 @@ export class MultiClusterService {
     password: string,
     token = '',
     hub_url = '',
-    clusterFsid = ''
+    clusterFsid = '',
+    ssl = false,
+    cert = ''
   ) {
     return this.http.post('api/multi-cluster/auth', {
       url,
@@ -103,27 +105,46 @@ export class MultiClusterService {
       password,
       token,
       hub_url,
-      cluster_fsid: clusterFsid
+      cluster_fsid: clusterFsid,
+      ssl_verify: ssl,
+      ssl_certificate: cert
     });
   }
 
-  reConnectCluster(url: any, username: string, password: string, token = '') {
-    return this.http.put('api/multi-cluster/reconnect_cluster', {
+  reConnectCluster(
+    url: any,
+    username: string,
+    password: string,
+    token = '',
+    ssl = false,
+    cert = ''
+  ) {
+    return this.http.post('api/multi-cluster/reconnect_cluster', {
       url,
       username,
       password,
-      token
+      token,
+      ssl_verify: ssl,
+      ssl_certificate: cert
     });
   }
 
-  verifyConnection(url: string, username: string, password: string, token = ''): Observable<any> {
-    let params = new HttpParams()
-      .set('url', url)
-      .set('username', username)
-      .set('password', password)
-      .set('token', token);
-
-    return this.http.get('api/multi-cluster/verify_connection', { params });
+  verifyConnection(
+    url: string,
+    username: string,
+    password: string,
+    token = '',
+    ssl = false,
+    cert = ''
+  ): Observable<any> {
+    return this.http.post('api/multi-cluster/verify_connection', {
+      url: url,
+      username: username,
+      password: password,
+      token: token,
+      ssl_verify: ssl,
+      ssl_certificate: cert
+    });
   }
 
   private getClusterObserver() {

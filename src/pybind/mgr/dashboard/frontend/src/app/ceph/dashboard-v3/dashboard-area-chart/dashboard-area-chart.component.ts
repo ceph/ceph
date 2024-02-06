@@ -29,6 +29,8 @@ export class DashboardAreaChartComponent implements OnChanges {
   labelsArray?: string[] = []; // Array of chart labels
   @Input()
   decimals?: number = 1;
+  @Input()
+  truncateLabel = false;
 
   currentDataUnits: string;
   currentData: number;
@@ -201,8 +203,8 @@ export class DashboardAreaChartComponent implements OnChanges {
       this.currentChartData = this.chartData;
       for (let index = 0; index < this.dataArray.length; index++) {
         this.chartData.dataset[index].data = this.formatData(this.dataArray[index]);
-        let currentDataValue = this.dataArray[index][this.dataArray[index].length - 1]
-          ? this.dataArray[index][this.dataArray[index].length - 1][1]
+        let currentDataValue = this.dataArray?.[index]?.[this.dataArray[index]?.length - 1]
+          ? this.dataArray[index][this.dataArray[index]?.length - 1][1]
           : 0;
         if (currentDataValue) {
           [
