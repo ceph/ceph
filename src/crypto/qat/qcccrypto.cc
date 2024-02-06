@@ -330,7 +330,7 @@ bool QccCrypto::perform_op_batch(unsigned char* out, const unsigned char* in, si
   int avail_inst = NON_INSTANCE;
 
   if (y) {
-    yield_context yield = y.get_yield_context();
+    spawn::yield_context yield = y.get_yield_context();
     avail_inst = async_get_instance(yield);
   } else {
     auto result = async_get_instance(boost::asio::use_future);
@@ -540,7 +540,7 @@ bool QccCrypto::symPerformOp(int avail_inst,
     do {
       poll_retry_num = RETRY_MAX_NUM;
       if (y) {
-        yield_context yield = y.get_yield_context();
+        spawn::yield_context yield = y.get_yield_context();
         status = helper.async_perform_op(avail_inst, std::span<CpaCySymDpOpData*>(pOpDataVec), yield);
       } else {
         auto result = helper.async_perform_op(avail_inst, std::span<CpaCySymDpOpData*>(pOpDataVec), boost::asio::use_future);
