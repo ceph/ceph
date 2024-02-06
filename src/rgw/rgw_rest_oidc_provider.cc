@@ -13,7 +13,7 @@
 #include "rgw_common.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
-#include "rgw_role.h"
+#include "rgw_rest_iam.h"
 #include "rgw_rest_oidc_provider.h"
 #include "rgw_oidc_provider.h"
 #include "rgw_sal.h"
@@ -120,7 +120,11 @@ int RGWCreateOIDCProvider::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  info.tenant = s->user->get_tenant();
+  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    info.tenant = *id;
+  } else {
+    info.tenant = s->user->get_tenant();
+  }
   resource = rgw::ARN(url_remove_prefix(info.provider_url),
                       "oidc-provider/", info.tenant, true);
   info.arn = resource.to_string();
@@ -134,7 +138,7 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
   constexpr bool exclusive = true;
   op_ret = driver->store_oidc_provider(this, y, info, exclusive);
   if (op_ret == 0) {
-    s->formatter->open_object_section("CreateOpenIDConnectProviderResponse");
+    s->formatter->open_object_section_in_ns("CreateOpenIDConnectProviderResponse", RGW_REST_IAM_XMLNS);
     s->formatter->open_object_section("CreateOpenIDConnectProviderResult");
     encode_json("OpenIDConnectProviderArn", info.arn, s->formatter);
     s->formatter->close_section();
@@ -212,21 +216,27 @@ RGWDeleteOIDCProvider::RGWDeleteOIDCProvider()
 
 int RGWDeleteOIDCProvider::init_processing(optional_yield y)
 {
+  std::string_view account;
+  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    account = *id;
+  } else {
+    account = s->user->get_tenant();
+  }
   std::string provider_arn = s->info.args.get("OpenIDConnectProviderArn");
-  return validate_provider_arn(provider_arn, s->user->get_tenant(),
+  return validate_provider_arn(provider_arn, account,
                                resource, url, s->err.message);
 }
 
 void RGWDeleteOIDCProvider::execute(optional_yield y)
 {
-  op_ret = driver->delete_oidc_provider(this, y, s->user->get_tenant(), url);
+  op_ret = driver->delete_oidc_provider(this, y, resource.account, url);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
   }
 
   if (op_ret == 0) {
-    s->formatter->open_object_section("DeleteOpenIDConnectProviderResponse");
+    s->formatter->open_object_section_in_ns("DeleteOpenIDConnectProviderResponse", RGW_REST_IAM_XMLNS);
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
@@ -241,8 +251,14 @@ RGWGetOIDCProvider::RGWGetOIDCProvider()
 
 int RGWGetOIDCProvider::init_processing(optional_yield y)
 {
+  std::string_view account;
+  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    account = *id;
+  } else {
+    account = s->user->get_tenant();
+  }
   std::string provider_arn = s->info.args.get("OpenIDConnectProviderArn");
-  return validate_provider_arn(provider_arn, s->user->get_tenant(),
+  return validate_provider_arn(provider_arn, account,
                                resource, url, s->err.message);
 }
 
@@ -265,15 +281,14 @@ static void dump_oidc_provider(const RGWOIDCProviderInfo& info, Formatter *f)
 void RGWGetOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, s->user->get_tenant(),
-                                      url, info);
+  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
   }
 
   if (op_ret == 0) {
-    s->formatter->open_object_section("GetOpenIDConnectProviderResponse");
+    s->formatter->open_object_section_in_ns("GetOpenIDConnectProviderResponse", RGW_REST_IAM_XMLNS);
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
@@ -292,11 +307,17 @@ RGWListOIDCProviders::RGWListOIDCProviders()
 
 void RGWListOIDCProviders::execute(optional_yield y)
 {
+  std::string_view account;
+  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    account = *id;
+  } else {
+    account = s->user->get_tenant();
+  }
   vector<RGWOIDCProviderInfo> result;
-  op_ret = driver->get_oidc_providers(this, y, s->user->get_tenant(), result);
+  op_ret = driver->get_oidc_providers(this, y, account, result);
 
   if (op_ret == 0) {
-    s->formatter->open_array_section("ListOpenIDConnectProvidersResponse");
+    s->formatter->open_object_section_in_ns("ListOpenIDConnectProvidersResponse", RGW_REST_IAM_XMLNS);
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
@@ -312,4 +333,3 @@ void RGWListOIDCProviders::execute(optional_yield y)
     s->formatter->close_section();
   }
 }
-
