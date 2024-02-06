@@ -21,7 +21,6 @@
 # https://rpm-software-management.github.io/rpm/manual/conditionalbuilds.html
 #################################################################################
 %bcond_with make_check
-%bcond_with zbd
 %bcond_with cmake_verbose_logging
 %bcond_without ceph_test_package
 %ifarch s390
@@ -300,9 +299,6 @@ BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat
 BuildRequires:	python%{python3_pkgversion}-asyncssh
 BuildRequires:	python%{python3_pkgversion}-natsort
-%endif
-%if 0%{with zbd}
-BuildRequires:  libzbd-devel
 %endif
 %if 0%{?suse_version}
 BuildRequires:  libthrift-devel >= 0.13.0
@@ -1421,9 +1417,6 @@ cmake .. \
 %endif
 %if 0%{without lua_packages}
     -DWITH_RADOSGW_LUA_PACKAGES:BOOL=OFF \
-%endif
-%if 0%{with zbd}
-    -DWITH_ZBD:BOOL=ON \
 %endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \

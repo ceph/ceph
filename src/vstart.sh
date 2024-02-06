@@ -172,7 +172,6 @@ rgw_store="rados"
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 # disable SPDK by default
 pmem_enabled=0
-zoned_enabled=0
 io_uring_enabled=0
 with_jaeger=0
 force_addr=0
@@ -253,7 +252,6 @@ options:
 	--bluestore-devs: comma-separated list of blockdevs to use for bluestore
 	--bluestore-db-devs: comma-separated list of db-devs to use for bluestore
 	--bluestore-wal-devs: comma-separated list of wal-devs to use for bluestore
-	--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)
 	--bluestore-io-uring: enable io_uring backend
 	--inc-osd: append some more osds into existing vcluster
 	--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]
@@ -588,9 +586,6 @@ case $1 in
         parse_bluestore_wal_devs --bluestore-wal-devs "$2"
         shift
         ;;
-    --bluestore-zoned)
-        zoned_enabled=1
-        ;;
     --bluestore-io-uring)
         io_uring_enabled=1
         shift
@@ -853,14 +848,6 @@ EOF
                 # when use physical disk, not create file for db/wal
                 BLUESTORE_OPTS=""
             fi
-        fi
-        if [ "$zoned_enabled" -eq 1 ]; then
-            BLUESTORE_OPTS+="
-        bluestore min alloc size = 65536
-        bluestore prefer deferred size = 0
-        bluestore prefer deferred size hdd = 0
-        bluestore prefer deferred size ssd = 0
-        bluestore allocator = zoned"
         fi
         if [ "$io_uring_enabled" -eq 1 ]; then
             BLUESTORE_OPTS+="

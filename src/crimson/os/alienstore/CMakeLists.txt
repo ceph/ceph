@@ -63,11 +63,6 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/StupidAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BitmapAllocator.cc
   ${PROJECT_SOURCE_DIR}/src/os/memstore/MemStore.cc)
-if(WITH_ZBD)
-  list(APPEND alien_store_srcs
-    ${PROJECT_SOURCE_DIR}/src/os/bluestore/ZonedFreelistManager.cc
-    ${PROJECT_SOURCE_DIR}/src/os/bluestore/ZonedAllocator.cc)
-endif()
 add_library(crimson-alienstore STATIC
   ${alien_store_srcs})
 if(WITH_LTTNG)

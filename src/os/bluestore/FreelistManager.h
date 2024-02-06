@@ -26,7 +26,6 @@ public:
   static void setup_merge_operators(KeyValueDB *db, const std::string &type);
 
   virtual int create(uint64_t size, uint64_t granularity,
-		     uint64_t zone_size, uint64_t first_sequential_zone,
 		     KeyValueDB::Transaction txn) = 0;
 
   virtual int init(KeyValueDB *kvdb, bool db_in_read_only,
