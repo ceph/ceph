@@ -57,6 +57,20 @@
 
 >= 16.2.14
 ----------
+* CephFS: Command "ceph mds fail" and "ceph fs fail" now requires a
+  confirmation flag when some MDSs exhibit health warning MDS_TRIM or
+  MDS_CACHE_OVERSIZED. This is to prevent accidental MDS failover causing
+  further delays in recovery.
+* CephFS: fixes to the implementation of the ``root_squash`` mechanism enabled
+  via cephx ``mds`` caps on a client credential require a new client feature
+  bit, ``client_mds_auth_caps``. Clients using credentials with ``root_squash``
+  without this feature will trigger the MDS to raise a HEALTH_ERR on the
+  cluster, MDS_CLIENTS_BROKEN_ROOTSQUASH. See the documentation on this warning
+  and the new feature bit for more information.
+* CephFS: Expanded removexattr support for cephfs virtual extended attributes.
+  Previously one had to use setxattr to restore the default in order to "remove".
+  You may now properly use removexattr to remove. You can also now remove layout
+  on root inode, which then will restore layout to default layout.
 
 * CEPHFS: After recovering a Ceph File System post following the disaster recovery
   procedure, the recovered files under `lost+found` directory can now be deleted.
