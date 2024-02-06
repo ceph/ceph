@@ -193,7 +193,7 @@ seastar::future<> ClientRequest::with_pg(
 
 ClientRequest::interruptible_future<>
 ClientRequest::process_pg_op(
-  Ref<PG> &pg)
+  Ref<PG> pg)
 {
   return pg->do_pg_ops(
     m
@@ -219,7 +219,7 @@ auto ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
 
 ClientRequest::interruptible_future<>
 ClientRequest::process_op(
-  instance_handle_t &ihref, Ref<PG> &pg, unsigned this_instance_id)
+  instance_handle_t &ihref, Ref<PG> pg, unsigned this_instance_id)
 {
   LOG_PREFIX(ClientRequest::process_op);
   return ihref.enter_stage<interruptor>(
@@ -295,7 +295,7 @@ ClientRequest::process_op(
 ClientRequest::interruptible_future<>
 ClientRequest::do_process(
   instance_handle_t &ihref,
-  Ref<PG>& pg, crimson::osd::ObjectContextRef obc,
+  Ref<PG> pg, crimson::osd::ObjectContextRef obc,
   unsigned this_instance_id)
 {
   LOG_PREFIX(ClientRequest::do_process);
@@ -340,7 +340,7 @@ ClientRequest::do_process(
     return reply_op_error(pg, -ENOENT);
   }
 
-  SnapContext snapc = get_snapc(pg,obc);
+  SnapContext snapc = get_snapc(*pg,obc);
 
   if ((m->has_flag(CEPH_OSD_FLAG_ORDERSNAP)) &&
        snapc.seq < obc->ssc->snapset.seq) {
@@ -431,24 +431,24 @@ void ClientRequest::put_historic() const
 }
 
 const SnapContext ClientRequest::get_snapc(
-  Ref<PG>& pg,
+  PG &pg,
   crimson::osd::ObjectContextRef obc) const
 {
   LOG_PREFIX(ClientRequest::get_snapc);
   SnapContext snapc;
   if (op_info.may_write() || op_info.may_cache()) {
     // snap
-    if (pg->get_pgpool().info.is_pool_snaps_mode()) {
+    if (pg.get_pgpool().info.is_pool_snaps_mode()) {
       // use pool's snapc
-      snapc = pg->get_pgpool().snapc;
+      snapc = pg.get_pgpool().snapc;
       DEBUGDPP("{} using pool's snapc snaps={}",
-	       *pg, *this, snapc.snaps);
+	       pg, *this, snapc.snaps);
     } else {
       // client specified snapc
       snapc.seq = m->get_snap_seq();
       snapc.snaps = m->get_snaps();
       DEBUGDPP("{}: client specified snapc seq={} snaps={}",
-	       *pg, *this, snapc.seq, snapc.snaps);
+	       pg, *this, snapc.seq, snapc.snaps);
     }
   }
   return snapc;
