@@ -54,21 +54,6 @@ void rgw_get_token_id(const string& token, string& token_id)
 namespace rgw {
 namespace keystone {
 
-ApiVersion CephCtxConfig::get_api_version() const noexcept
-{
-  switch (g_ceph_context->_conf->rgw_keystone_api_version) {
-  case 3:
-    return ApiVersion::VER_3;
-  case 2:
-    return ApiVersion::VER_2;
-  default:
-    dout(0) << "ERROR: wrong Keystone API version: "
-            << g_ceph_context->_conf->rgw_keystone_api_version
-            << "; falling back to v2" <<  dendl;
-    return ApiVersion::VER_2;
-  }
-}
-
 std::string CephCtxConfig::get_endpoint_url() const noexcept
 {
   static const std::string url = g_ceph_context->_conf->rgw_keystone_url;
@@ -184,33 +169,18 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
-  const auto keystone_version = config.get_api_version();
-  if (keystone_version == ApiVersion::VER_2) {
-    AdminTokenRequestVer2 req_serializer(config);
-    req_serializer.dump(&jf);
+  AdminTokenRequest req_serializer(config);
+  req_serializer.dump(&jf);
 
-    std::stringstream ss;
-    jf.flush(ss);
-    token_req.set_post_data(ss.str());
-    token_req.set_send_length(ss.str().length());
-    token_url.append("v2.0/tokens");
-
-  } else if (keystone_version == ApiVersion::VER_3) {
-    AdminTokenRequestVer3 req_serializer(config);
-    req_serializer.dump(&jf);
-
-    std::stringstream ss;
-    jf.flush(ss);
-    token_req.set_post_data(ss.str());
-    token_req.set_send_length(ss.str().length());
-    token_url.append("v3/auth/tokens");
-  } else {
-    return -ENOTSUP;
-  }
+  std::stringstream ss;
+  jf.flush(ss);
+  token_req.set_post_data(ss.str());
+  token_req.set_send_length(ss.str().length());
+  token_url.append("v3/auth/tokens");
 
   token_req.set_url(token_url);
 
-  const int ret = token_req.process(y);
+  int ret = token_req.process(y);
 
   /* Detect rejection earlier than during the token parsing step. */
   if (token_req.get_http_status() ==
@@ -223,8 +193,8 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  if (t.parse(dpp, token_req.get_subject_token(), token_bl,
-              keystone_version) != 0) {
+  ret = t.parse(dpp, token_req.get_subject_token(), token_bl);
+  if (ret != 0) {
     return -EINVAL;
   }
 
@@ -261,34 +231,19 @@ int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
-  const auto keystone_version = config.get_api_version();
-  if (keystone_version == ApiVersion::VER_2) {
-    rgw::keystone::BarbicanTokenRequestVer2 req_serializer(cct);
-    req_serializer.dump(&jf);
+  BarbicanTokenRequest req_serializer(cct);
+  req_serializer.dump(&jf);
 
-    std::stringstream ss;
-    jf.flush(ss);
-    token_req.set_post_data(ss.str());
-    token_req.set_send_length(ss.str().length());
-    token_url.append("v2.0/tokens");
-
-  } else if (keystone_version == ApiVersion::VER_3) {
-    BarbicanTokenRequestVer3 req_serializer(cct);
-    req_serializer.dump(&jf);
-
-    std::stringstream ss;
-    jf.flush(ss);
-    token_req.set_post_data(ss.str());
-    token_req.set_send_length(ss.str().length());
-    token_url.append("v3/auth/tokens");
-  } else {
-    return -ENOTSUP;
-  }
+  std::stringstream ss;
+  jf.flush(ss);
+  token_req.set_post_data(ss.str());
+  token_req.set_send_length(ss.str().length());
+  token_url.append("v3/auth/tokens");
 
   token_req.set_url(token_url);
 
   ldpp_dout(dpp, 20) << "Requesting secret from barbican url=" << token_url << dendl;
-  const int ret = token_req.process(y);
+  int ret = token_req.process(y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
     return ret;
@@ -300,8 +255,8 @@ int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
     return -EACCES;
   }
 
-  if (t.parse(dpp, token_req.get_subject_token(), token_bl,
-              keystone_version) != 0) {
+  ret = t.parse(dpp, token_req.get_subject_token(), token_bl);
+  if (ret != 0) {
     return -EINVAL;
   }
 
@@ -324,8 +279,7 @@ bool TokenEnvelope::has_role(const std::string& r) const
 
 int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
                          const std::string& token_str,
-                         ceph::bufferlist& bl,
-                         const ApiVersion version)
+                         ceph::bufferlist& bl)
 {
   JSONParser parser;
   if (! parser.parse(bl.c_str(), bl.length())) {
@@ -334,40 +288,13 @@ int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
   }
 
   JSONObjIter token_iter = parser.find_first("token");
-  JSONObjIter access_iter = parser.find_first("access");
 
   try {
-    if (version == rgw::keystone::ApiVersion::VER_2) {
-      if (! access_iter.end()) {
-        decode_v2(*access_iter);
-      } else if (! token_iter.end()) {
-        /* TokenEnvelope structure doesn't follow Identity API v2, so let's
-         * fallback to v3. Otherwise we can assume it's wrongly formatted.
-         * The whole mechanism is a workaround for s3_token middleware that
-         * speaks in v2 disregarding the promise to go with v3. */
-        decode_v3(*token_iter);
-
-        /* Identity v3 conveys the token information not as a part of JSON but
-         * in the X-Subject-Token HTTP header we're getting from caller. */
-        token.id = token_str;
-      } else {
-        return -EINVAL;
-      }
-    } else if (version == rgw::keystone::ApiVersion::VER_3) {
-      if (! token_iter.end()) {
-        decode_v3(*token_iter);
-        /* v3 succeeded. We have to fill token.id from external input as it
-         * isn't a part of the JSON response anymore. It has been moved
-         * to X-Subject-Token HTTP header instead. */
-        token.id = token_str;
-      } else if (! access_iter.end()) {
-        /* If the token cannot be parsed according to V3, try V2. */
-        decode_v2(*access_iter);
-      } else {
-        return -EINVAL;
-      }
+    if (! token_iter.end()) {
+      decode(*token_iter);
+      token.id = token_str;
     } else {
-      return -ENOTSUP;
+      return -EINVAL;
     }
   } catch (const JSONDecoder::err& err) {
     ldpp_dout(dpp, 0) << "Keystone token parse error: " << err.what() << dendl;
@@ -537,7 +464,6 @@ void rgw::keystone::TokenEnvelope::Token::decode_json(JSONObj *obj)
   struct tm t;
 
   JSONDecoder::decode_json("id", id, obj, true);
-  JSONDecoder::decode_json("tenant", tenant_v2, obj, true);
   JSONDecoder::decode_json("expires", expires_iso8601, obj, true);
 
   if (parse_iso8601(expires_iso8601.c_str(), &t)) {
@@ -572,10 +498,9 @@ void rgw::keystone::TokenEnvelope::User::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
   JSONDecoder::decode_json("domain", domain, obj);
-  JSONDecoder::decode_json("roles", roles_v2, obj);
 }
 
-void rgw::keystone::TokenEnvelope::decode_v3(JSONObj* const root_obj)
+void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
 {
   std::string expires_iso8601;
 
@@ -594,15 +519,6 @@ void rgw::keystone::TokenEnvelope::decode_v3(JSONObj* const root_obj)
   }
 }
 
-void rgw::keystone::TokenEnvelope::decode_v2(JSONObj* const root_obj)
-{
-  JSONDecoder::decode_json("user", user, root_obj, true);
-  JSONDecoder::decode_json("token", token, root_obj, true);
-
-  roles = user.roles_v2;
-  project = token.tenant_v2;
-}
-
 /* This utility function shouldn't conflict with the overload of std::to_string
  * provided by string_ref since Boost 1.54 as it's defined outside of the std
  * namespace. I hope we'll remove it soon - just after merging the Matt's PR
@@ -612,20 +528,7 @@ static inline std::string to_string(const std::string_view& s)
   return std::string(s.data(), s.length());
 }
 
-void rgw::keystone::AdminTokenRequestVer2::dump(Formatter* const f) const
-{
-  f->open_object_section("token_request");
-    f->open_object_section("auth");
-      f->open_object_section("passwordCredentials");
-        encode_json("username", ::to_string(conf.get_admin_user()), f);
-        encode_json("password", ::to_string(conf.get_admin_password()), f);
-      f->close_section();
-      encode_json("tenantName", ::to_string(conf.get_admin_tenant()), f);
-    f->close_section();
-  f->close_section();
-}
-
-void rgw::keystone::AdminTokenRequestVer3::dump(Formatter* const f) const
+void rgw::keystone::AdminTokenRequest::dump(Formatter* const f) const
 {
   f->open_object_section("token_request");
     f->open_object_section("auth");
@@ -659,20 +562,7 @@ void rgw::keystone::AdminTokenRequestVer3::dump(Formatter* const f) const
   f->close_section();
 }
 
-void rgw::keystone::BarbicanTokenRequestVer2::dump(Formatter* const f) const
-{
-  f->open_object_section("token_request");
-    f->open_object_section("auth");
-      f->open_object_section("passwordCredentials");
-        encode_json("username", cct->_conf->rgw_keystone_barbican_user, f);
-        encode_json("password", cct->_conf->rgw_keystone_barbican_password, f);
-      f->close_section();
-      encode_json("tenantName", cct->_conf->rgw_keystone_barbican_tenant, f);
-    f->close_section();
-  f->close_section();
-}
-
-void rgw::keystone::BarbicanTokenRequestVer3::dump(Formatter* const f) const
+void rgw::keystone::BarbicanTokenRequest::dump(Formatter* const f) const
 {
   f->open_object_section("token_request");
     f->open_object_section("auth");
@@ -705,5 +595,3 @@ void rgw::keystone::BarbicanTokenRequestVer3::dump(Formatter* const f) const
     f->close_section();
   f->close_section();
 }
-
-

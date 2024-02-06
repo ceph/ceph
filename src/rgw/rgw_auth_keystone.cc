@@ -58,18 +58,13 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp,
     throw -EINVAL;
   }
 
-  const auto keystone_version = config.get_api_version();
-  if (keystone_version == rgw::keystone::ApiVersion::VER_2) {
-    url.append("v2.0/tokens/" + token);
-  } else if (keystone_version == rgw::keystone::ApiVersion::VER_3) {
-    url.append("v3/auth/tokens");
+  url.append("v3/auth/tokens");
 
-    if (allow_expired) {
-      url.append("?allow_expired=1");
-    }
-
-    validate.append_header("X-Subject-Token", token);
+  if (allow_expired) {
+    url.append("?allow_expired=1");
   }
+
+  validate.append_header("X-Subject-Token", token);
 
   std::string admin_token;
   if (rgw::keystone::Service::get_admin_token(dpp, token_cache, config,
@@ -110,7 +105,7 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp,
                  << ", body=" << token_body_bl.c_str() << dendl;
 
   TokenEngine::token_envelope_t token_body;
-  ret = token_body.parse(dpp, token, token_body_bl, config.get_api_version());
+  ret = token_body.parse(dpp, token, token_body_bl);
   if (ret < 0) {
     throw ret;
   }
@@ -395,12 +390,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
     throw -EINVAL;
   }
 
-  const auto api_version = config.get_api_version();
-  if (api_version == rgw::keystone::ApiVersion::VER_3) {
-    keystone_url.append("v3/s3tokens");
-  } else {
-    keystone_url.append("v2.0/s3tokens");
-  }
+  keystone_url.append("v3/s3tokens");
 
   /* get authentication token for Keystone. */
   std::string admin_token;
@@ -462,7 +452,7 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   /* now parse response */
   rgw::keystone::TokenEnvelope token_envelope;
-  ret = token_envelope.parse(dpp, std::string(), token_body_bl, api_version);
+  ret = token_envelope.parse(dpp, std::string(), token_body_bl);
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: token parsing failed, ret=0" << ret
                   << dendl;
@@ -487,12 +477,7 @@ auto EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
     return make_pair(boost::none, -EINVAL);
   }
 
-  const auto api_version = config.get_api_version();
-  if (api_version == rgw::keystone::ApiVersion::VER_3) {
-    keystone_url.append("v3/");
-  } else {
-    keystone_url.append("v2.0/");
-  }
+  keystone_url.append("v3/");
   keystone_url.append("users/");
   keystone_url.append(user_id);
   keystone_url.append("/credentials/OS-EC2/");
