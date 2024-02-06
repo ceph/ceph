@@ -37,6 +37,7 @@ import { TruncatePipe } from './truncate.pipe';
 import { UpperFirstPipe } from './upper-first.pipe';
 import { OctalToHumanReadablePipe } from './octal-to-human-readable.pipe';
 import { PathPipe } from './path.pipe';
+import { PluralizePipe } from './pluralize.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -76,7 +77,8 @@ import { PathPipe } from './path.pipe';
     MdsSummaryPipe,
     OsdSummaryPipe,
     OctalToHumanReadablePipe,
-    PathPipe
+    PathPipe,
+    PluralizePipe
   ],
   exports: [
     ArrayPipe,
@@ -114,7 +116,8 @@ import { PathPipe } from './path.pipe';
     MdsSummaryPipe,
     OsdSummaryPipe,
     OctalToHumanReadablePipe,
-    PathPipe
+    PathPipe,
+    PluralizePipe
   ],
   providers: [
     ArrayPipe,
