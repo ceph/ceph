@@ -628,8 +628,13 @@ class NodeExporterService(CephadmService):
         if self.mgr.secure_monitoring_stack:
             node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
             host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
-            cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(
-                host_fqdn, node_ip)
+            cert = self.mgr.cert_key_store.get_cert('node_exporter_cert', host=daemon_spec.host)
+            key = self.mgr.cert_key_store.get_key('node_exporter_key', host=daemon_spec.host)
+            if not (cert and key):
+                cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(
+                    host_fqdn, node_ip)
+                self.mgr.cert_key_store.save_cert('node_exporter_cert', cert, host=daemon_spec.host)
+                self.mgr.cert_key_store.save_key('node_exporter_key', key, host=daemon_spec.host)
             r = {
                 'files': {
                     'web.yml': self.mgr.template.render('services/node-exporter/web.yml.j2', {}),
@@ -643,6 +648,15 @@ class NodeExporterService(CephadmService):
             r = {}
 
         return r, deps
+
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        """
+        Called before node-exporter daemon is removed.
+        """
+        if daemon.hostname is not None:
+            # delete cert/key entires for this node-exporter daemon
+            self.mgr.cert_key_store.rm_cert('node_exporter_cert', host=daemon.hostname)
+            self.mgr.cert_key_store.rm_key('node_exporter_key', host=daemon.hostname)
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
