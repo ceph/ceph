@@ -230,11 +230,7 @@ int RGWDeleteOIDCProvider::init_processing(optional_yield y)
 void RGWDeleteOIDCProvider::execute(optional_yield y)
 {
   op_ret = driver->delete_oidc_provider(this, y, resource.account, url);
-
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
-    op_ret = ERR_INTERNAL_ERROR;
-  }
-
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("DeleteOpenIDConnectProviderResponse", RGW_REST_IAM_XMLNS);
     s->formatter->open_object_section("ResponseMetadata");

@@ -987,6 +987,24 @@ public:
                                std::string_view url) override;
       virtual int get_oidc_providers(const DoutPrefixProvider* dpp,
           optional_yield y,
+          const std::string& path_prefix,
+          const std::string& tenant,
+          std::vector<std::unique_ptr<RGWRole>>& roles) override;
+      int store_oidc_provider(const DoutPrefixProvider *dpp,
+                              optional_yield y,
+                              const RGWOIDCProviderInfo& info,
+                              bool exclusive) override;
+      int load_oidc_provider(const DoutPrefixProvider *dpp,
+                             optional_yield y,
+                             std::string_view tenant,
+                             std::string_view url,
+                             RGWOIDCProviderInfo& info) override;
+      int delete_oidc_provider(const DoutPrefixProvider *dpp,
+                               optional_yield y,
+                               std::string_view tenant,
+                               std::string_view url) override;
+      virtual int get_oidc_providers(const DoutPrefixProvider* dpp,
+          optional_yield y,
           std::string_view tenant,
           std::vector<RGWOIDCProviderInfo>& providers) override;
       virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,

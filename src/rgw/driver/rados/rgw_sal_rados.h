@@ -1209,5 +1209,4 @@ public:
   int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) override;
   int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) override;
 };
-
 }} // namespace rgw::sal
