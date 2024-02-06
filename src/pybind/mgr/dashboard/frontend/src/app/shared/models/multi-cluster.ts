@@ -5,4 +5,6 @@ export interface MultiCluster {
   token: string;
   cluster_alias: string;
   cluster_connection_status: number;
+  ssl_verify: boolean;
+  ssl_certificate: string;
 }

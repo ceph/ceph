@@ -8,6 +8,13 @@ export class NavigationPageHelper extends PageHelper {
   navigations = [
     { menu: 'Dashboard', component: 'cd-dashboard' },
     {
+      menu: 'Multi-Cluster',
+      submenus: [
+        { menu: 'Overview', component: 'cd-multi-cluster' },
+        { menu: 'Manage Clusters', component: 'cd-multi-cluster-list' }
+      ]
+    },
+    {
       menu: 'Cluster',
       submenus: [
         { menu: 'Pools', component: 'cd-pool-list' },
@@ -78,7 +85,11 @@ export class NavigationPageHelper extends PageHelper {
     cy.intercept('/ui-api/block/rbd/status', { fixture: 'block-rbd-status.json' });
 
     navs.forEach((nav: any) => {
-      cy.contains('.simplebar-content li.nav-item a', nav.menu).click();
+      cy.get('.simplebar-content li.nav-item a').each(($link) => {
+        if ($link.text().trim() === nav.menu.trim()) {
+          cy.wrap($link).click();
+        }
+      });
       if (nav.submenus) {
         this.checkNavSubMenu(nav.menu, nav.submenus);
       } else {
@@ -89,8 +100,10 @@ export class NavigationPageHelper extends PageHelper {
 
   checkNavSubMenu(menu: any, submenu: any) {
     submenu.forEach((nav: any) => {
-      cy.contains('.simplebar-content li.nav-item', menu).within(() => {
-        cy.contains(`ul.list-unstyled li a`, nav.menu).click();
+      cy.get('.simplebar-content li.nav-item a').each(($link) => {
+        if ($link.text().trim() === menu.trim()) {
+          cy.contains(`ul.list-unstyled li a`, nav.menu).click();
+        }
       });
     });
   }

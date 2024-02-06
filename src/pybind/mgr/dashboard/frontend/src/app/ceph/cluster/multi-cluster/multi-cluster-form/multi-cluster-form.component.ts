@@ -1,5 +1,5 @@
 import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { AbstractControl, FormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
@@ -50,6 +50,8 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
       this.remoteClusterForm.get('remoteClusterUrl').setValue(this.cluster.url);
       this.remoteClusterForm.get('remoteClusterUrl').disable();
       this.remoteClusterForm.get('clusterAlias').setValue(this.cluster.cluster_alias);
+      this.remoteClusterForm.get('ssl').setValue(this.cluster.ssl_verify);
+      this.remoteClusterForm.get('ssl_cert').setValue(this.cluster.ssl_certificate);
     }
     if (this.action === 'reconnect') {
       this.remoteClusterForm.get('remoteClusterUrl').setValue(this.cluster.url);
@@ -60,6 +62,8 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
       this.remoteClusterForm.get('username').disable();
       this.remoteClusterForm.get('clusterFsid').setValue(this.cluster.name);
       this.remoteClusterForm.get('clusterFsid').disable();
+      this.remoteClusterForm.get('ssl').setValue(this.cluster.ssl_verify);
+      this.remoteClusterForm.get('ssl_cert').setValue(this.cluster.ssl_certificate);
     }
     [this.clusterAliasNames, this.clusterUrls, this.clusterUsers] = [
       'cluster_alias',
@@ -128,6 +132,14 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
             );
           })
         ]
+      }),
+      ssl: new FormControl(false),
+      ssl_cert: new FormControl('', {
+        validators: [
+          CdValidators.requiredIf({
+            ssl: true
+          })
+        ]
       })
     });
   }
@@ -144,6 +156,8 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     const password = this.remoteClusterForm.getValue('password');
     const token = this.remoteClusterForm.getValue('apiToken');
     const clusterFsid = this.remoteClusterForm.getValue('clusterFsid');
+    const ssl = this.remoteClusterForm.getValue('ssl');
+    const ssl_certificate = this.remoteClusterForm.getValue('ssl_cert')?.trim();
 
     if (this.action === 'edit') {
       this.subs.add(
@@ -167,19 +181,21 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
 
     if (this.action === 'reconnect') {
       this.subs.add(
-        this.multiClusterService.reConnectCluster(updatedUrl, username, password, token).subscribe({
-          error: () => {
-            this.remoteClusterForm.setErrors({ cdSubmitButton: true });
-          },
-          complete: () => {
-            this.notificationService.show(
-              NotificationType.success,
-              $localize`Cluster reconnected successfully`
-            );
-            this.submitAction.emit();
-            this.activeModal.close();
-          }
-        })
+        this.multiClusterService
+          .reConnectCluster(updatedUrl, username, password, token, ssl, ssl_certificate)
+          .subscribe({
+            error: () => {
+              this.remoteClusterForm.setErrors({ cdSubmitButton: true });
+            },
+            complete: () => {
+              this.notificationService.show(
+                NotificationType.success,
+                $localize`Cluster reconnected successfully`
+              );
+              this.submitAction.emit();
+              this.activeModal.close();
+            }
+          })
       );
     }
 
@@ -193,7 +209,9 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
             password,
             token,
             window.location.origin,
-            clusterFsid
+            clusterFsid,
+            ssl,
+            ssl_certificate
           )
           .subscribe({
             error: () => {
@@ -217,10 +235,12 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     const username = this.remoteClusterForm.getValue('username');
     const password = this.remoteClusterForm.getValue('password');
     const token = this.remoteClusterForm.getValue('apiToken');
+    const ssl = this.remoteClusterForm.getValue('ssl');
+    const ssl_certificate = this.remoteClusterForm.getValue('ssl_cert')?.trim();
 
     this.subs.add(
       this.multiClusterService
-        .verifyConnection(url, username, password, token)
+        .verifyConnection(url, username, password, token, ssl, ssl_certificate)
         .subscribe((resp: string) => {
           switch (resp) {
             case 'Connection successful':
@@ -258,5 +278,18 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
 
   toggleToken() {
     this.showToken = !this.showToken;
+  }
+
+  fileUpload(files: FileList, controlName: string) {
+    const file: File = files[0];
+    const reader = new FileReader();
+    reader.addEventListener('load', (event: ProgressEvent<FileReader>) => {
+      const control: AbstractControl = this.remoteClusterForm.get(controlName);
+      control.setValue(event.target.result);
+      control.markAsDirty();
+      control.markAsTouched();
+      control.updateValueAndValidity();
+    });
+    reader.readAsText(file, 'utf8');
   }
 }

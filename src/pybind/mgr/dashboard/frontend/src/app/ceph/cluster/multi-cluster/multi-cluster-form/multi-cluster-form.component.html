@@ -117,15 +117,25 @@
                  i18n>Password
           </label>
           <div class="cd-col-form-input">
-            <input id="password"
-                   name="password"
-                   class="form-control"
-                   type="password"
-                   formControlName="password">
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('password', frm, 'required')"
-                  i18n>This field is required.
-            </span>
+            <div class="input-group">
+              <input id="password"
+                     name="password"
+                     class="form-control"
+                     type="password"
+                     formControlName="password">
+              <span class="input-group-button">
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="password">
+                </button>
+                <cd-copy-2-clipboard-button source="password">
+                </cd-copy-2-clipboard-button>
+              </span>
+              <span class="invalid-feedback"
+                    *ngIf="remoteClusterForm.showError('password', frm, 'required')"
+                    i18n>This field is required.
+              </span>
+            </div>
           </div>
         </div>
         <div class="form-group row"
@@ -161,6 +171,45 @@
             </div>
           </div>
         </div>
+        <!-- ssl -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="ssl"
+                     type="checkbox"
+                     formControlName="ssl">
+              <label class="custom-control-label"
+                     for="ssl"
+                     i18n>SSL</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- ssl_cert -->
+          <div *ngIf="remoteClusterForm.controls.ssl.value"
+               class="form-group row">
+            <label class="cd-col-form-label"
+                   for="ssl_cert">
+              <span i18n>Certificate</span>
+              <cd-helper i18n>The SSL certificate in PEM format.</cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <textarea id="ssl_cert"
+                        class="form-control resize-vertical text-monospace text-pre"
+                        formControlName="ssl_cert"
+                        rows="5">
+              </textarea>
+              <input type="file"
+                     (change)="fileUpload($event.target.files, 'ssl_cert')">
+              <span class="invalid-feedback"
+                    *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'pattern')"
+                    i18n>Invalid SSL certificate.</span>
+            </div>
+          </div>
         <div class="form-group row"
              *ngIf="!showCrossOriginError && action !== 'edit' && !remoteClusterForm.getValue('showToken')">
           <div class="cd-col-form-offset">

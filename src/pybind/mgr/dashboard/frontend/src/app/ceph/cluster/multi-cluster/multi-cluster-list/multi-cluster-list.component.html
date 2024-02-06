@@ -29,7 +29,7 @@
              let-row="row">
   <a target="_blank"
      [href]="row.url">
-      {{ row.url.endsWith('/') ? row.url.slice(0, -1) : row.url }}
+      {{ row?.url?.endsWith('/') ? row?.url?.slice(0, -1) : row.url }}
     <i class="fa fa-external-link"></i>
   </a>
 </ng-template>
