@@ -371,7 +371,7 @@ int CrushWrapper::remove_root(CephContext *cct, int item)
     // e.g.: we use 'crush link' to link same host into
     // different roots, which as a result can cause different
     // shadow trees reference same hosts too. This means
-    // we may need to destory the same buckets(hosts, racks, etc.)
+    // we may need to destroy the same buckets(hosts, racks, etc.)
     // multiple times during rebuilding all shadow trees.
     return 0;
   }
@@ -3154,7 +3154,7 @@ void CrushWrapper::decode(bufferlist::const_iterator& blp)
     }
 
     // name info
-    // NOTE: we had a bug where we were incoding int instead of int32, which means the
+    // NOTE: we had a bug where we were encoding int instead of int32, which means the
     // 'key' field for these maps may be either 32 or 64 bits, depending.  tolerate
     // both by assuming the string is always non-empty.
     decode_32_or_64_string_map(type_map, blp);

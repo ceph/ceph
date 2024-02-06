@@ -1101,7 +1101,7 @@ PyObject *ActivePyModules::get_foreign_config(
     return get_python_typed_option_value(opt->type, cmd.outbl.to_str());
   }
 
-  // mimic the behavor of mon/ConfigMonitor's 'config get' command
+  // mimic the behavior of mon/ConfigMonitor's 'config get' command
   EntityName entity;
   if (!entity.from_str(who) &&
       !entity.from_str(who + ".")) {
@@ -1172,11 +1172,11 @@ void ActivePyModules::set_health_checks(const std::string& module_name,
   lock.unlock();
 
   // immediately schedule a report to be sent to the monitors with the new
-  // health checks that have changed. This is done asynchronusly to avoid
+  // health checks that have changed. This is done asynchronously to avoid
   // blocking python land. ActivePyModules::lock needs to be dropped to make
   // lockdep happy:
   //
-  //   send_report callers: DaemonServer::lock -> PyModuleRegistery::lock
+  //   send_report callers: DaemonServer::lock -> PyModuleRegistry::lock
   //   active_start: PyModuleRegistry::lock -> ActivePyModules::lock
   //
   // if we don't release this->lock before calling schedule_tick a cycle is

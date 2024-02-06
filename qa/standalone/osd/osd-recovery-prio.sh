@@ -116,7 +116,7 @@ function TEST_recovery_priority() {
 
     if [ "$pool2" = "" -o "pool3" = "" ];
     then
-      echo "Failure to find appropirate PGs"
+      echo "Failure to find appropriate PGs"
       return 1
     fi
 
@@ -230,7 +230,7 @@ function TEST_recovery_priority() {
     fi
     flush_pg_stats || return 1
 
-    # 4. Item is in progress, if higher priority items waiting prempt item
+    # 4. Item is in progress, if higher priority items waiting preempt item
     #ceph osd unset norecover
     ceph pg cancel-force-recovery $PG3 || return 1
     sleep 2
@@ -316,7 +316,7 @@ function TEST_recovery_priority() {
 #
 # Show that pool recovery_priority is added to recovery priority
 #
-# Create 2 pools with 2 OSDs with different primarys
+# Create 2 pools with 2 OSDs with different primaries
 # pool 1 with recovery_priority 1
 # pool 2 with recovery_priority 2
 #
@@ -387,7 +387,7 @@ function TEST_recovery_pool_priority() {
 
     if [ "$pool2" = "" ];
     then
-      echo "Failure to find appropirate PGs"
+      echo "Failure to find appropriate PGs"
       return 1
     fi
 

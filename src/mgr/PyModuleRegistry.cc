@@ -253,7 +253,7 @@ int PyModuleRegistry::handle_command(
                                           inbuf, ds, ss);
   } else {
     // We do not expect to be called before active modules is up, but
-    // it's straightfoward to handle this case so let's do it.
+    // it's straightforward to handle this case so let's do it.
     return -EAGAIN;
   }
 }

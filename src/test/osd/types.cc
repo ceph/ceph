@@ -1210,7 +1210,7 @@ TEST(pg_missing_t, revise_have)
 {
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
-  // a non existing entry means noop
+  // a nonexistent entry means noop
   EXPECT_FALSE(missing.is_missing(oid));
   eversion_t have(1,1);
   missing.revise_have(oid, have);
@@ -1443,7 +1443,7 @@ TEST(coll_t, temp) {
   ASSERT_EQ(pgid, pgid2);
 }
 
-TEST(coll_t, assigment) {
+TEST(coll_t, assignment) {
   spg_t pgid;
   coll_t right(pgid);
   ASSERT_EQ(right.to_str(), string("0.0_head"));

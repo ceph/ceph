@@ -24,7 +24,7 @@
 #include "common/debug.h"
 #include "common/ref.h"
 #include "common/ceph_mutex.h"
-#include "include/ceph_assert.h" // Because intusive_ptr clobbers our assert...
+#include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
 #include "common/item_history.h"

@@ -132,7 +132,7 @@ bool ServiceMap::Service::has_running_tasks() const
 
 std::string ServiceMap::Service::get_task_summary(const std::string_view task_prefix) const
 {
-  // contruct a map similar to:
+  // construct a map similar to:
   //     {"service1 status" -> {"service1.0" -> "running"}}
   //     {"service2 status" -> {"service2.0" -> "idle"},
   //                           {"service2.1" -> "running"}}

@@ -1345,7 +1345,7 @@ public:
 // given that the majority of entries are appended in a proper id-sorted
 // order. Hence one can keep them in a regular vector and apply binary search
 // whenever specific entry to be found.
-// For the rare occasions when out-of-order append takes place - an auxilliary
+// For the rare occasions when out-of-order append takes place - an auxiliary
 // regular map is used.
 struct sb_info_space_efficient_map_t {
   // large array sorted by the user

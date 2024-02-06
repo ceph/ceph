@@ -13,7 +13,7 @@
  * Represents the objects in a range [begin, end)
  *
  * Possible states:
- * 1) begin == end == hobject_t() indicates the the interval is unpopulated
+ * 1) begin == end == hobject_t() indicates the interval is unpopulated
  * 2) Else, objects contains all objects in [begin, end)
  */
 struct BackfillInterval {

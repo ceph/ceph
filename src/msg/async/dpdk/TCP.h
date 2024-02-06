@@ -126,7 +126,7 @@ struct tcp_option {
   uint8_t fill(tcp_hdr* th, uint8_t option_size);
   uint8_t get_size(bool syn_on, bool ack_on);
 
-  // For option negotiattion
+  // For option negotiation
   bool _mss_received = false;
   bool _win_scale_received = false;
   bool _timestamps_received = false;
@@ -360,7 +360,7 @@ class tcp {
     } _rcv;
     EventCenter *center;
     int fd;
-    // positive means no errno, 0 means eof, nagetive means error
+    // positive means no errno, 0 means eof, negative means error
     int16_t _errno = 1;
     tcp_option _option;
     EventCallbackRef delayed_ack_event;

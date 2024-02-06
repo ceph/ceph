@@ -1347,7 +1347,7 @@ void Journaler::_trim()
   uint64_t period = get_layout_period();
   uint64_t trim_to = last_committed.expire_pos;
   trim_to -= trim_to % period;
-  ldout(cct, 10) << "trim last_commited head was " << last_committed
+  ldout(cct, 10) << "trim last_committed head was " << last_committed
 	   << ", can trim to " << trim_to
 	   << dendl;
   if (trim_to == 0 || trim_to == trimming_pos) {

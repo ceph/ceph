@@ -746,10 +746,10 @@ bool spg_t::parse(const char *s)
   return true;
 }
 
-char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
+char *spg_t::calc_name(char *buf, const char *suffix_backwards) const
 {
-  while (*suffix_backwords)
-    *--buf = *suffix_backwords++;
+  while (*suffix_backwards)
+    *--buf = *suffix_backwards++;
 
   if (!is_no_shard()) {
     buf = ritoa<uint8_t, 10>((uint8_t)shard.id, buf);
@@ -759,7 +759,7 @@ char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
   return pgid.calc_name(buf, "");
 }
 
-std::string spg_t::calc_name_sring() const
+std::string spg_t::calc_name_string() const
 {
   char buf[spg_t::calc_name_buf_size];
   buf[spg_t::calc_name_buf_size - 1] = '\0';
@@ -908,10 +908,10 @@ void pg_t::generate_test_instances(list<pg_t*>& o)
   o.push_back(new pg_t(131223, 4));
 }
 
-char *pg_t::calc_name(char *buf, const char *suffix_backwords) const
+char *pg_t::calc_name(char *buf, const char *suffix_backwards) const
 {
-  while (*suffix_backwords)
-    *--buf = *suffix_backwords++;
+  while (*suffix_backwards)
+    *--buf = *suffix_backwards++;
 
   buf = ritoa<uint32_t, 16>(m_seed, buf);
 
@@ -1748,7 +1748,7 @@ uint64_t pg_pool_t::add_unmanaged_snap(bool preoctopus_compat)
     if (preoctopus_compat) {
       // kludge for pre-mimic tracking of pool vs selfmanaged snaps.  after
       // mimic this field is not decoded but our flag is set; pre-mimic, we
-      // have a non-empty removed_snaps to signifiy a non-pool-snaps pool.
+      // have a non-empty removed_snaps to signify a non-pool-snaps pool.
       removed_snaps.insert(snapid_t(1));
     }
     snap_seq = 1;
@@ -1907,7 +1907,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     // we simply added last_force_op_resend here, which is a fully
     // backward compatible change.  however, encoding the same map
     // differently between monitors triggers scrub noise (even though
-    // they are decodable without the feature), so let's be pendantic
+    // they are decodable without the feature), so let's be pedantic
     // about it.
     ENCODE_START(14, 5, bl);
     encode(type, bl);
@@ -6130,7 +6130,7 @@ void object_manifest_t::calc_refs_to_inc_on_set(
    * head: [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
    * 20:   [0, 2) aaa, <- set_chunk
    * 30:   [0, 2) abc, [6, 2) bbb, [8, 2) ccc
-   * --> incremnt the reference
+   * --> increment the reference
    *
    * head: [0, 2) ccc, [6, 2) bbb, [8, 2) ccc
    * 20:   [0, 2) ccc, <- set_chunk
@@ -6228,7 +6228,7 @@ void object_manifest_t::calc_refs_to_drop_on_removal(
    *
    * current will always be derived from the min of *giter, *iter, and
    * *liter on each cycle, so the result will be that each loop iteration
-   * will pick up all chunks at the offest being considered, each offset
+   * will pick up all chunks at the offset being considered, each offset
    * will be considered once, and all offsets will be considered.
    */
   auto get_chunk = [](

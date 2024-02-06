@@ -67,7 +67,7 @@ function wait_for_health_string() {
 function TEST_check_version_health_1() {
     local dir=$1
 
-    # Asssume MON_A is leader?
+    # Assume MON_A is leader?
     CEPH_ARGS="$ORIG_CEPH_ARGS --mon-host=$CEPH_MON_A "
     # setup
     setup $dir || return 1
@@ -113,7 +113,7 @@ function TEST_check_version_health_1() {
 function TEST_check_version_health_2() {
     local dir=$1
 
-    # Asssume MON_A is leader?
+    # Assume MON_A is leader?
     CEPH_ARGS="$ORIG_CEPH_ARGS --mon-host=$CEPH_MON_A "
     # setup
     setup $dir || return 1
@@ -169,7 +169,7 @@ function TEST_check_version_health_2() {
 function TEST_check_version_health_3() {
     local dir=$1
 
-    # Asssume MON_A is leader?
+    # Assume MON_A is leader?
     CEPH_ARGS="$ORIG_CEPH_ARGS --mon-host=$CEPH_MON_A "
     # setup
     setup $dir || return 1

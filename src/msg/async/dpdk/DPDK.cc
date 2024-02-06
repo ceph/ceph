@@ -55,7 +55,7 @@ void* as_cookie(struct rte_pktmbuf_pool_private& p) {
   return &p;
 };
 
-/******************* Net device related constatns *****************************/
+/******************* Net device related constants *****************************/
 static constexpr uint16_t default_ring_size      = 512;
 
 //
@@ -949,7 +949,7 @@ void DPDKQueuePair::process_packets(
     nr_frags += m->nb_segs;
     bytes    += m->pkt_len;
 
-    // Set stipped VLAN value if available
+    // Set stripped VLAN value if available
     if ((_dev->_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_VLAN_STRIP) &&
         (m->ol_flags & PKT_RX_VLAN_STRIPPED)) {
       oi.vlan_tci = m->vlan_tci;

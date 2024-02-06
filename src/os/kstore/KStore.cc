@@ -789,7 +789,7 @@ int KStore::_open_db(bool create)
   } else {
     r = read_meta("kv_backend", &kv_backend);
     if (r < 0) {
-      derr << __func__ << " uanble to read 'kv_backend' meta" << dendl;
+      derr << __func__ << " unable to read 'kv_backend' meta" << dendl;
       return -EIO;
     }
   }

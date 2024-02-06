@@ -39,12 +39,12 @@ Gil::Gil(SafeThreadState &ts, bool new_thread) : pThreadState(ts)
 
   //
   // If called from a separate OS thread (i.e. a thread not created
-  // by Python, that does't already have a python thread state that
+  // by Python, that doesn't already have a python thread state that
   // was created when that thread was active), we need to manually
   // create and switch to a python thread state specifically for this
   // OS thread.
   //
-  // Note that instead of requring the caller to set new_thread == true
+  // Note that instead of requiring the caller to set new_thread == true
   // when calling this from a separate OS thread, we could figure out
   // if this was necessary automatically, as follows:
   //

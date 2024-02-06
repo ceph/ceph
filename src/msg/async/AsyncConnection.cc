@@ -471,7 +471,7 @@ void AsyncConnection::process() {
     case STATE_CONNECTION_ESTABLISHED: {
       if (pendingReadLen) {
         ssize_t r = read(*pendingReadLen, read_buffer, readCallback);
-        if (r <= 0) { // read all bytes, or an error occured
+        if (r <= 0) { // read all bytes, or an error occurred
           pendingReadLen.reset();
           char *buf_tmp = read_buffer;
           read_buffer = nullptr;

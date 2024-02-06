@@ -485,7 +485,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
             // Signal the waiter of this event
             signal_all_data_acked();
           } else {
-            // Restart the timer becasue new data is acked.
+            // Restart the timer because new data is acked.
             start_retransmit_timer();
           }
         };
@@ -526,7 +526,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
           // any intervening ACKs which move SND.UNA) as an
           // indication that a segment has been lost.
           //
-          // So, here we reset dupacks to zero becasue this ACK moves
+          // So, here we reset dupacks to zero because this ACK moves
           // SND.UNA.
           exit_fast_recovery();
           set_retransmit_timer();
@@ -631,7 +631,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
     if (p.len()) {
       // Once the TCP takes responsibility for the data it advances
       // RCV.NXT over the data accepted, and adjusts RCV.WND as
-      // apporopriate to the current buffer availability.  The total of
+      // appropriate to the current buffer availability.  The total of
       // RCV.NXT and RCV.WND should not be reduced.
       _rcv.data.push_back(std::move(p));
       _rcv.next += seg_len;
@@ -669,7 +669,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
       _rcv.next = fin_seq + 1;
 
       // If this <FIN> packet contains data as well, we can ACK both data
-      // and <FIN> in a single packet, so canncel the previous ACK.
+      // and <FIN> in a single packet, so cancel the previous ACK.
       clear_delayed_ack();
       do_output = false;
       // Send ACK for the FIN!
@@ -698,7 +698,7 @@ void tcp<InetTraits>::tcb::input_handle_other_state(tcp_hdr* th, Packet p)
     }
   }
   if (do_output || (do_output_data && can_send())) {
-    // Since we will do output, we can canncel scheduled delayed ACK.
+    // Since we will do output, we can cancel scheduled delayed ACK.
     clear_delayed_ack();
     output();
   }
