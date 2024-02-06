@@ -130,7 +130,7 @@ ECBackend::ECBackend(
   : PGBackend(cct, pg, store, coll, ch),
     read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener()),
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
-    recovery_backend(cct, coll, ec_impl, this->sinfo, read_pipeline, unstable_hashinfo_registry, get_parent()),
+    recovery_backend(cct, coll, ec_impl, this->sinfo, read_pipeline, unstable_hashinfo_registry, get_parent(), this),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width),
     unstable_hashinfo_registry(cct, ec_impl) {
@@ -150,14 +150,16 @@ ECBackend::RecoveryBackend::RecoveryBackend(
   const ECUtil::stripe_info_t& sinfo,
   ReadPipeline& read_pipeline,
   UnstableHashInfoRegistry& unstable_hashinfo_registry,
-  ECListener* parent)
+  ECListener* parent,
+  ECBackend* ecbackend)
   : cct(cct),
     coll(coll),
     ec_impl(std::move(ec_impl)),
     sinfo(sinfo),
     read_pipeline(read_pipeline),
     unstable_hashinfo_registry(unstable_hashinfo_registry),
-    parent(parent) {
+    parent(parent),
+    ecbackend(ecbackend) {
 }
 
 PGBackend::RecoveryHandle *ECBackend::RecoveryBackend::open_recovery_op()
@@ -575,8 +577,12 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       uint64_t amount = get_recovery_chunk_size();
 
       if (op.recovery_progress.first && op.obc) {
-	/* We've got the attrs and the hinfo, might as well use them */
-	op.hinfo = unstable_hashinfo_registry.get_hash_info(op.hoid, false, op.obc->attr_cache, op.obc->obs.oi.size);
+        if (auto [r, attrs, size] = ecbackend->get_attrs_n_size_from_disk(op.hoid);
+	    r >= 0 || r == -ENOENT) {
+          op.hinfo = unstable_hashinfo_registry.get_hash_info(op.hoid, false, attrs, size);
+        } else {
+          derr << __func__ << ": can't stat-or-getattr on " << op.hoid << dendl;
+	}
 	if (!op.hinfo) {
           derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
                << dendl;

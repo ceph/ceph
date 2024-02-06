@@ -198,6 +198,7 @@ public:
     UnstableHashInfoRegistry& unstable_hashinfo_registry;
     // TODO: lay an interface down here
     ECListener* parent;
+    ECBackend* ecbackend;
 
     ECListener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
@@ -212,7 +213,8 @@ public:
 		    const ECUtil::stripe_info_t& sinfo,
 		    ReadPipeline& read_pipeline,
 		    UnstableHashInfoRegistry& unstable_hashinfo_registry,
-		    ECListener* parent);
+		    ECListener* parent,
+		    ECBackend* ecbackend);
   struct RecoveryOp {
     hobject_t hoid;
     eversion_t v;
@@ -307,8 +309,9 @@ public:
 		      const ECUtil::stripe_info_t& sinfo,
 		      ReadPipeline& read_pipeline,
 		      UnstableHashInfoRegistry& unstable_hashinfo_registry,
-		      Listener* parent)
-      : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline, unstable_hashinfo_registry, parent->get_eclistener()),
+		      Listener* parent,
+		      ECBackend* ecbackend)
+      : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline, unstable_hashinfo_registry, parent->get_eclistener(), ecbackend),
 	parent(parent) {
     }
 
