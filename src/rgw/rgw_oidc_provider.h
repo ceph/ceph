@@ -15,7 +15,7 @@ struct RGWOIDCProviderInfo
   std::string provider_url;
   std::string arn;
   std::string creation_date;
-  std::string tenant;
+  std::string tenant; // tenant-name or account-id
   std::vector<std::string> client_ids;
   std::vector<std::string> thumbprints;
 
