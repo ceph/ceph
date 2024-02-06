@@ -6,6 +6,7 @@ import time
 
 import requests
 
+from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..settings import Settings
@@ -51,10 +52,10 @@ class MultiCluster(RESTController):
     @Endpoint('POST')
     @CreatePermission
     @EndpointDoc("Authenticate to a remote cluster")
-    def auth(self, url: str, cluster_alias: str, username=None,
-             password=None, token=None, hub_url=None, cluster_fsid=None):
-
-        if username and password:
+    def auth(self, url: str, cluster_alias: str, username: str,
+             password=None, token=None, hub_url=None, cluster_fsid=None,
+             prometheus_api_url=None):
+        if password:
             payload = {
                 'username': username,
                 'password': password
@@ -70,15 +71,24 @@ class MultiCluster(RESTController):
 
             self._proxy('PUT', url, 'ui-api/multi-cluster/set_cors_endpoint',
                         payload={'url': hub_url}, token=cluster_token)
-
             fsid = self._proxy('GET', url, 'api/health/get_cluster_fsid', token=cluster_token)
 
-            self.set_multi_cluster_config(fsid, username, url, cluster_alias, cluster_token)
+            # add prometheus targets
+            prometheus_url = self._proxy('GET', url, 'api/settings/PROMETHEUS_API_HOST',
+                                         token=cluster_token)
+            _set_prometheus_targets(prometheus_url['value'])
 
-        if token and cluster_fsid and username:
-            self.set_multi_cluster_config(cluster_fsid, username, url, cluster_alias, token)
+            self.set_multi_cluster_config(fsid, username, url, cluster_alias,
+                                          cluster_token, prometheus_url['value'])
+            return
 
-    def set_multi_cluster_config(self, fsid, username, url, cluster_alias, token):
+        if token and cluster_fsid and prometheus_api_url:
+            _set_prometheus_targets(prometheus_api_url)
+            self.set_multi_cluster_config(cluster_fsid, username, url,
+                                          cluster_alias, token, prometheus_api_url)
+
+    def set_multi_cluster_config(self, fsid, username, url, cluster_alias, token,
+                                 prometheus_url=None):
         multi_cluster_config = self.load_multi_cluster_config()
         if fsid in multi_cluster_config['config']:
             existing_entries = multi_cluster_config['config'][fsid]
@@ -89,6 +99,7 @@ class MultiCluster(RESTController):
                     "cluster_alias": cluster_alias,
                     "user": username,
                     "token": token,
+                    "prometheus_url": prometheus_url if prometheus_url else ''
                 })
         else:
             multi_cluster_config['current_user'] = username
@@ -98,6 +109,7 @@ class MultiCluster(RESTController):
                 "cluster_alias": cluster_alias,
                 "user": username,
                 "token": token,
+                "prometheus_url": prometheus_url if prometheus_url else ''
             }]
         Settings.MULTICLUSTER_CONFIG = multi_cluster_config
 
@@ -168,17 +180,22 @@ class MultiCluster(RESTController):
     def delete_cluster(self, cluster_name, cluster_user):
         multicluster_config = self.load_multi_cluster_config()
         if "config" in multicluster_config:
-            keys_to_remove = []
-            for key, cluster_details in multicluster_config["config"].items():
-                cluster_details_copy = list(cluster_details)
-                for cluster in cluster_details_copy:
-                    if cluster["name"] == cluster_name and cluster["user"] == cluster_user:
-                        cluster_details.remove(cluster)
-                        if not cluster_details:
-                            keys_to_remove.append(key)
+            for key, value in list(multicluster_config['config'].items()):
+                if value[0]['name'] == cluster_name and value[0]['user'] == cluster_user:
 
-            for key in keys_to_remove:
-                del multicluster_config["config"][key]
+                    orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+                    try:
+                        if orch_backend == 'cephadm':
+                            cmd = {
+                                'prefix': 'orch prometheus remove-target',
+                                'url': value[0]['prometheus_url'].replace('http://', '').replace('https://', '')  # noqa E501 #pylint: disable=line-too-long
+                            }
+                            mgr.mon_command(cmd)
+                    except KeyError:
+                        pass
+
+                    del multicluster_config['config'][key]
+                    break
 
         Settings.MULTICLUSTER_CONFIG = multicluster_config
         return Settings.MULTICLUSTER_CONFIG
@@ -266,3 +283,13 @@ class MultiClusterUi(RESTController):
     @UpdatePermission
     def set_cors_endpoint(self, url: str):
         configure_cors(url)
+
+
+def _set_prometheus_targets(prometheus_url: str):
+    orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+    if orch_backend == 'cephadm':
+        cmd = {
+            'prefix': 'orch prometheus set-target',
+            'url': prometheus_url.replace('http://', '').replace('https://', '')
+        }
+        mgr.mon_command(cmd)
