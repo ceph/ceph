@@ -151,7 +151,8 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                    const std::string_view& access_key_id,
                    const std::string& string_to_sign,
                    const std::string_view& signature,
-		   const signature_factory_t& signature_factory) const;
+		   const signature_factory_t& signature_factory,
+                   bool ignore_signature) const;
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string_view& access_key_id,
                         const std::string_view& signature,
