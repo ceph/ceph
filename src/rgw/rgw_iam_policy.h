@@ -145,7 +145,8 @@ static constexpr std::uint64_t snsGetTopicAttributes = stsAll + 1;
 static constexpr std::uint64_t snsDeleteTopic = stsAll + 2;
 static constexpr std::uint64_t snsPublish = stsAll + 3;
 static constexpr std::uint64_t snsSetTopicAttributes = stsAll + 4;
-static constexpr std::uint64_t snsAll = stsAll + 5;
+static constexpr std::uint64_t snsCreateTopic = stsAll + 5;
+static constexpr std::uint64_t snsAll = stsAll + 6;
 
 static constexpr std::uint64_t s3Count = s3All;
 static constexpr std::uint64_t allCount = snsAll + 1;
