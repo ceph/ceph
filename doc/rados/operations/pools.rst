@@ -94,19 +94,12 @@ To get even more information, you can execute this command with the ``--format``
 Creating a Pool
 ===============
 
-Before creating a pool, consult `Pool, PG and CRUSH Config Reference`_.  Your
-Ceph configuration file contains a setting (namely, ``pg_num``) that determines
-the number of PGs.  However, this setting's default value is NOT appropriate
-for most systems.  In most cases, you should override this default value when
-creating your pool.  For details on PG numbers, see `setting the number of
-placement groups`_
-
-For example:
-
-.. prompt:: bash $
-
-    osd_pool_default_pg_num = 128
-    osd_pool_default_pgp_num = 128
+Before creating a pool, consult `Pool, PG and CRUSH Config Reference`_. The
+Ceph central configuration database in the monitor cluster contains a setting
+(namely, ``pg_num``) that determines the number of PGs per pool when a pool has
+been created and no per-pool value has been specified. It is possible to change
+this value from its default. For more on the subject of setting the number of
+PGs per pool, see `setting the number of placement groups`_.
 
 .. note:: In Luminous and later releases, each pool must be associated with the
    application that will be using the pool. For more information, see
