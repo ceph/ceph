@@ -69,7 +69,7 @@ struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
 
 // reserved for standalone DB volume:
 // label (4k) + bluefs super (4k), which means we start at 8k.
-#define DB_SUPER_RESERVED  (BDEV_LABEL_BLOCK_SIZE + 4096)
+#define SUPER_RESERVED  (BDEV_LABEL_BLOCK_SIZE + 4096)
 
 
 #endif
