@@ -3,9 +3,6 @@
 
 #include "FreelistManager.h"
 #include "BitmapFreelistManager.h"
-#ifdef HAVE_LIBZBD
-#include "ZonedFreelistManager.h"
-#endif
 
 FreelistManager *FreelistManager::create(
   CephContext* cct,
@@ -27,27 +24,11 @@ FreelistManager *FreelistManager::create(
     return fm;
   }
 
-#ifdef HAVE_LIBZBD
-  // With zoned drives there is only one FreelistManager implementation that we
-  // can use, and we also know if a drive is zoned right after opening it
-  // (BlueStore::_open_bdev).  Hence, we set freelist_type to "zoned" whenever
-  // we open the device and it turns out to be is zoned.  We ignore |prefix|
-  // passed to create and use the prefixes defined for zoned devices at the top
-  // of BlueStore.cc.
-  if (type == "zoned")
-    return new ZonedFreelistManager(cct, "Z", "z");
-#endif
-
   return NULL;
 }
 
 void FreelistManager::setup_merge_operators(KeyValueDB *db,
 					    const std::string& type)
 {
-#ifdef HAVE_LIBZBD
-  if (type == "zoned")
-    ZonedFreelistManager::setup_merge_operator(db, "z");
-  else
-#endif
-    BitmapFreelistManager::setup_merge_operator(db, "b");
+  BitmapFreelistManager::setup_merge_operator(db, "b");
 }

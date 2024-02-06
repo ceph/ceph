@@ -8,9 +8,6 @@
 #include "AvlAllocator.h"
 #include "BtreeAllocator.h"
 #include "HybridAllocator.h"
-#ifdef HAVE_LIBZBD
-#include "ZonedAllocator.h"
-#endif
 #include "common/debug.h"
 #include "common/admin_socket.h"
 #define dout_subsys ceph_subsys_bluestore
@@ -173,8 +170,6 @@ Allocator *Allocator::create(
   std::string_view type,
   int64_t size,
   int64_t block_size,
-  int64_t zone_size,
-  int64_t first_sequential_zone,
   std::string_view name)
 {
   Allocator* alloc = nullptr;
@@ -190,11 +185,6 @@ Allocator *Allocator::create(
     return new HybridAllocator(cct, size, block_size,
       cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
       name);
-#ifdef HAVE_LIBZBD
-  } else if (type == "zoned") {
-    return new ZonedAllocator(cct, size, block_size, zone_size, first_sequential_zone,
-			      name);
-#endif
   }
   if (alloc == nullptr) {
     lderr(cct) << "Allocator::" << __func__ << " unknown alloc type "
