@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <boost/tokenizer.hpp>
 #include <optional>
+#include "rgw_iam_policy.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_pubsub.h"
@@ -75,8 +76,8 @@ std::optional<rgw::IAM::Policy> get_policy_from_text(req_state* const s,
         s->cct, s->owner.id.tenant, bl,
         s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   } catch (rgw::IAM::PolicyParseException& e) {
-    ldout(s->cct, 1) << "failed to parse policy:' " << policy_text
-                     << " ' with error: " << e.what() << dendl;
+    ldout(s->cct, 1) << "failed to parse policy: '" << policy_text
+                     << "' with error: " << e.what() << dendl;
     s->err.message = e.what();
     return std::nullopt;
   }
@@ -91,13 +92,18 @@ int verify_topic_owner_or_policy(req_state* const s,
   }
   // no policy set.
   if (topic.policy_text.empty()) {
-    // if mandatory_topic_permissions is true, then validate all users for
-    // permission.
-    if (s->cct->_conf->mandatory_topic_permissions) {
-      return -EACCES;
-    } else {
+    // if rgw_topic_require_publish_policy is "false" dont validate "publish" policies
+    if (op == rgw::IAM::snsPublish && !s->cct->_conf->rgw_topic_require_publish_policy) {
       return 0;
     }
+    if (topic.user.empty()) {
+      // if we don't know the original user and there is no policy
+      // we will not reject the request.
+      // this is for compatibility with versions that did not store the user in the topic
+      return 0;
+    }
+    s->err.message = "Topic was created by another user.";
+    return -EACCES;
   }
   // bufferlist::static_from_string wants non const string
   std::string policy_text(topic.policy_text);
@@ -107,7 +113,7 @@ int verify_topic_owner_or_policy(req_state* const s,
                      s->user->get_tenant(), topic.name);
   if (!p || p->eval(s->env, *s->auth.identity, op, arn, princ_type) !=
                 rgw::IAM::Effect::Allow) {
-    ldout(s->cct, 1) << "topic_policy failed validation, topic_policy: " << p
+    ldout(s->cct, 1) << "topic policy failed validation, topic policy: " << p
                      << dendl;
     return -EACCES;
   }
@@ -195,13 +201,17 @@ class RGWPSCreateTopicOp : public RGWOp {
       return 0;
     }
     if (ret == 0) {
-      if (result.user == s->owner.id ||
-          !s->cct->_conf->mandatory_topic_permissions) {
+      ret = verify_topic_owner_or_policy(
+          s, result, driver->get_zone()->get_zonegroup().get_name(),
+          rgw::IAM::snsCreateTopic);
+      if (ret == 0)
+      {
         return 0;
       }
-      ldpp_dout(this, 1) << "failed to create topic '" << topic_name
+
+      ldpp_dout(this, 1) << "no permission to modify topic '" << topic_name
                          << "', topic already exist." << dendl;
-      return -EPERM;
+      return -EACCES;
     }
     ldpp_dout(this, 1) << "failed to read topic '" << topic_name
                        << "', with error:" << ret << dendl;
@@ -408,8 +418,8 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
       s, result, driver->get_zone()->get_zonegroup().get_name(),
       rgw::IAM::snsGetTopicAttributes);
   if (op_ret != 0) {
-    ldpp_dout(this, 1) << "failed to get topic '" << topic_name
-                       << "', topic owned by other user" << dendl;
+    ldpp_dout(this, 1) << "no permission to get topic '" << topic_name
+                       << "'" << dendl;
     return;
   }
   ldpp_dout(this, 1) << "successfully got topic '" << topic_name << "'" << dendl;
@@ -492,8 +502,8 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
       s, result, driver->get_zone()->get_zonegroup().get_name(),
       rgw::IAM::snsGetTopicAttributes);
   if (op_ret != 0) {
-    ldpp_dout(this, 1) << "failed to get topic '" << topic_name
-                       << "', topic owned by other user" << dendl;
+    ldpp_dout(this, 1) << "no permission to get topic '" << topic_name
+                       << "'" << dendl;
     return;
   }
   ldpp_dout(this, 1) << "successfully got topic '" << topic_name << "'" << dendl;
@@ -617,8 +627,8 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
         s, result, driver->get_zone()->get_zonegroup().get_name(),
         rgw::IAM::snsSetTopicAttributes);
     if (ret != 0) {
-      ldpp_dout(this, 1) << "failed to set attributes for topic '" << topic_name
-                         << "', topic owned by other user" << dendl;
+      ldpp_dout(this, 1) << "no permission to set attributes for topic '" << topic_name
+                         << "'" << dendl;
       return ret;
     }
 
@@ -750,8 +760,8 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
         s, result, driver->get_zone()->get_zonegroup().get_name(),
         rgw::IAM::snsDeleteTopic);
     if (op_ret != 0) {
-      ldpp_dout(this, 1) << "failed to remove topic '" << topic_name
-                         << "' topic owned by other user" << dendl;
+      ldpp_dout(this, 1) << "no permission to remove topic '" << topic_name
+                         << "'" << dendl;
       return;
     }
   } else {
@@ -1025,9 +1035,8 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
         s, topic_info, driver->get_zone()->get_zonegroup().get_name(),
         rgw::IAM::snsPublish);
     if (op_ret != 0) {
-      ldpp_dout(this, 1) << "failed to create notification for topic '"
-                         << topic_name << "' topic owned by other user"
-                         << dendl;
+      ldpp_dout(this, 1) << "no permission to create notification for topic '"
+                         << topic_name << "'" << dendl;
       return;
     }
     // make sure that full topic configuration match
