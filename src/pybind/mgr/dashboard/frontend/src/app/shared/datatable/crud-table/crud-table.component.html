@@ -36,7 +36,7 @@
           <tr *ngFor="let column of meta.detail_columns">
             <td i18n
                 class="bold">{{ column }}</td>
-            <td> {{ expandedRow[column] }} </td>
+            <td><pre>{{ expandedRow[column] }}</pre></td>
           </tr>
         </tbody>
       </table>
