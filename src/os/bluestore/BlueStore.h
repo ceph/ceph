@@ -3381,6 +3381,9 @@ public:
   KeyValueDB* get_kv() {
     return db;
   }
+  BlockDevice* get_bdev() {
+    return bdev;
+  }
 
   int queue_transactions(
     CollectionHandle& ch,
