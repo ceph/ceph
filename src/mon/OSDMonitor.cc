@@ -2326,11 +2326,18 @@ version_t OSDMonitor::get_trim_to() const
   return 0;
 }
 
+/* There are two constraints on trimming:
+ * 1. we must not trim past the last_epoch_clean for any pg
+ * 2. we must not trim past the last reported epoch for any up
+ *    osds.
+ *
+ * LastEpochClean::get_lower_bound_by_pool gives a value <= constraint 1.
+ * For constraint 2, we take the min over osd_epochs, which is populated with
+ * MOSDBeacon::version, see OSDMonitor::prepare_beacon
+ */
 epoch_t OSDMonitor::get_min_last_epoch_clean() const
 {
   auto floor = last_epoch_clean.get_lower_bound_by_pool(osdmap);
-  // also scan osd epochs
-  // don't trim past the oldest reported osd epoch
   for (auto [osd, epoch] : osd_epochs) {
     if (epoch < floor) {
       ceph_assert(osdmap.is_up(osd));
