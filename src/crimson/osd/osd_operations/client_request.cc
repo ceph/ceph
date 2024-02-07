@@ -203,12 +203,10 @@ ClientRequest::interruptible_future<>
 ClientRequest::process_pg_op(
   Ref<PG> pg)
 {
-  return pg->do_pg_ops(
-    m
-  ).then_interruptible([this, pg=std::move(pg)](MURef<MOSDOpReply> reply) {
-    // TODO: gate the crosscore sending
-    return get_foreign_connection().send_with_throttling(std::move(reply));
-  });
+  auto reply = co_await pg->do_pg_ops(m);
+  // TODO: gate the crosscore sending
+  co_await interruptor::make_interruptible(
+    get_foreign_connection().send_with_throttling(std::move(reply)));
 }
 
 auto ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
