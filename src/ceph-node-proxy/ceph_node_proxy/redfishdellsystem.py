@@ -1,12 +1,12 @@
 from ceph_node_proxy.baseredfishsystem import BaseRedfishSystem
-from ceph_node_proxy.util import Logger, normalize_dict, to_snake_case
+from ceph_node_proxy.util import get_logger, normalize_dict, to_snake_case
 from typing import Dict, Any, List
 
 
 class RedfishDellSystem(BaseRedfishSystem):
     def __init__(self, **kw: Any) -> None:
         super().__init__(**kw)
-        self.log = Logger(__name__)
+        self.log = get_logger(__name__)
         self.job_service_endpoint: str = '/redfish/v1/Managers/iDRAC.Embedded.1/Oem/Dell/DellJobService'
         self.create_reboot_job_endpoint: str = f'{self.job_service_endpoint}/Actions/DellJobService.CreateRebootJob'
         self.setup_job_queue_endpoint: str = f'{self.job_service_endpoint}/Actions/DellJobService.SetupJobQueue'
@@ -23,7 +23,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                 try:
                     result[member_id][to_snake_case(field)] = member_info[field]
                 except KeyError:
-                    self.log.logger.warning(f'Could not find field: {field} in member_info: {member_info}')
+                    self.log.warning(f'Could not find field: {field} in member_info: {member_info}')
 
         return normalize_dict(result)
 
@@ -41,7 +41,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                     try:
                         result[_id][to_snake_case(field)] = member_elt[field]
                     except KeyError:
-                        self.log.logger.warning(f'Could not find field: {field} in data: {data[elt]}')
+                        self.log.warning(f'Could not find field: {field} in data: {data[elt]}')
         return normalize_dict(result)
 
     def get_sn(self) -> str:
@@ -73,7 +73,7 @@ class RedfishDellSystem(BaseRedfishSystem):
 
     def _update_network(self) -> None:
         fields = ['Description', 'Name', 'SpeedMbps', 'Status']
-        self.log.logger.debug('Updating network')
+        self.log.debug('Updating network')
         self._sys['network'] = self.build_common_data(data=self._system['Systems'],
                                                       fields=fields,
                                                       path='EthernetInterfaces')
@@ -86,7 +86,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                   'Model',
                   'Status',
                   'Manufacturer']
-        self.log.logger.debug('Updating processors')
+        self.log.debug('Updating processors')
         self._sys['processors'] = self.build_common_data(data=self._system['Systems'],
                                                          fields=fields,
                                                          path='Processors')
@@ -100,7 +100,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                   'PhysicalLocation']
         entities = self.get_members(data=self._system['Systems'],
                                     path='Storage')
-        self.log.logger.debug('Updating storage')
+        self.log.debug('Updating storage')
         result: Dict[str, Dict[str, Dict]] = dict()
         for entity in entities:
             for drive in entity['Drives']:
@@ -115,7 +115,7 @@ class RedfishDellSystem(BaseRedfishSystem):
         self._sys['storage'] = normalize_dict(result)
 
     def _update_sn(self) -> None:
-        self.log.logger.debug('Updating serial number')
+        self.log.debug('Updating serial number')
         self._sys['SKU'] = self._system['Systems']['SKU']
 
     def _update_memory(self) -> None:
@@ -123,7 +123,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                   'MemoryDeviceType',
                   'CapacityMiB',
                   'Status']
-        self.log.logger.debug('Updating memory')
+        self.log.debug('Updating memory')
         self._sys['memory'] = self.build_common_data(data=self._system['Systems'],
                                                      fields=fields,
                                                      path='Memory')
@@ -137,7 +137,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                 'Status'
             ]
         }
-        self.log.logger.debug('Updating powersupplies')
+        self.log.debug('Updating powersupplies')
         self._sys['power'] = self.build_chassis_data(fields, 'Power')
 
     def _update_fans(self) -> None:
@@ -148,7 +148,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                 'Status'
             ],
         }
-        self.log.logger.debug('Updating fans')
+        self.log.debug('Updating fans')
         self._sys['fans'] = self.build_chassis_data(fields, 'Thermal')
 
     def _update_firmwares(self) -> None:
@@ -160,7 +160,7 @@ class RedfishDellSystem(BaseRedfishSystem):
             'Updateable',
             'Status',
         ]
-        self.log.logger.debug('Updating firmwares')
+        self.log.debug('Updating firmwares')
         self._sys['firmwares'] = self.build_common_data(data=self._system['UpdateService'],
                                                         fields=fields,
                                                         path='FirmwareInventory')
