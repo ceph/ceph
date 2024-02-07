@@ -335,17 +335,10 @@ public:
         // to throwing an exception by the handler.
         std::invoke(std::forward<ErrorVisitorT>(errfunc),
                     ErrorT::error_t::from_exception_ptr(std::move(ep)));
-      } else if constexpr (seastar::Future<decltype(result)>) {
-        // result is seastar::future but return_t is e.g. int. If so,
-        // the else clause cannot be used as seastar::future lacks
-        // errorator_type member.
-        result = seastar::make_ready_future<return_t>(
-          std::invoke(std::forward<ErrorVisitorT>(errfunc),
-                      ErrorT::error_t::from_exception_ptr(std::move(ep))));
       } else {
-        result = FuturatorT::type::errorator_type::template make_ready_future<return_t>(
-          std::invoke(std::forward<ErrorVisitorT>(errfunc),
-                      ErrorT::error_t::from_exception_ptr(std::move(ep))));
+        result = FuturatorT::invoke(
+	  std::forward<ErrorVisitorT>(errfunc),
+	  ErrorT::error_t::from_exception_ptr(std::move(ep)));
       }
     }
   }
