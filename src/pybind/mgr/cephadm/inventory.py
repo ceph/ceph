@@ -18,6 +18,7 @@ from ceph.deployment.service_spec import (
     TunedProfileSpec,
     IngressSpec,
     RGWSpec,
+    IscsiServiceSpec,
 )
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
@@ -361,6 +362,20 @@ class SpecStore():
                     cert_str,
                     service_name=rgw_spec.service_name(),
                     user_made=True)
+        elif spec.service_type == 'iscsi':
+            iscsi_spec = cast(IscsiServiceSpec, spec)
+            if iscsi_spec.ssl_cert:
+                self.mgr.cert_key_store.save_cert(
+                    'iscsi_ssl_cert',
+                    iscsi_spec.ssl_cert,
+                    service_name=iscsi_spec.service_name(),
+                    user_made=True)
+            if iscsi_spec.ssl_key:
+                self.mgr.cert_key_store.save_key(
+                    'iscsi_ssl_key',
+                    iscsi_spec.ssl_key,
+                    service_name=iscsi_spec.service_name(),
+                    user_made=True)
 
     def rm(self, service_name: str) -> bool:
         if service_name not in self._specs:
@@ -393,6 +408,9 @@ class SpecStore():
     def _rm_certs_and_keys(self, spec: ServiceSpec) -> None:
         if spec.service_type == 'rgw':
             self.mgr.cert_key_store.rm_cert('rgw_frontend_ssl_cert', service_name=spec.service_name())
+        if spec.service_type == 'iscsi':
+            self.mgr.cert_key_store.rm_cert('iscsi_ssl_cert', service_name=spec.service_name())
+            self.mgr.cert_key_store.rm_key('iscsi_ssl_key', service_name=spec.service_name())
 
     def get_created(self, spec: ServiceSpec) -> Optional[datetime.datetime]:
         return self.spec_created.get(spec.service_name())
