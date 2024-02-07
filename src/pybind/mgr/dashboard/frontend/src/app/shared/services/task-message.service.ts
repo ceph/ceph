@@ -69,7 +69,17 @@ export class TaskMessageService {
     delete: new TaskMessageOperation($localize`Deleting`, $localize`delete`, $localize`Deleted`),
     add: new TaskMessageOperation($localize`Adding`, $localize`add`, $localize`Added`),
     remove: new TaskMessageOperation($localize`Removing`, $localize`remove`, $localize`Removed`),
-    import: new TaskMessageOperation($localize`Importing`, $localize`import`, $localize`Imported`)
+    import: new TaskMessageOperation($localize`Importing`, $localize`import`, $localize`Imported`),
+    activate: new TaskMessageOperation(
+      $localize`Importing`,
+      $localize`activate`,
+      $localize`Activated`
+    ),
+    deactivate: new TaskMessageOperation(
+      $localize`Importing`,
+      $localize`deactivate`,
+      $localize`Deactivated`
+    )
   };
 
   rbd = {
@@ -393,6 +403,18 @@ export class TaskMessageService {
     ),
     'cephfs/snapshot/schedule/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.snapshotSchedule(metadata)
+    ),
+    'cephfs/snapshot/schedule/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => this.snapshotSchedule(metadata)
+    ),
+    'cephfs/snapshot/schedule/activate': this.newTaskMessage(
+      this.commonOperations.activate,
+      (metadata) => this.snapshotSchedule(metadata)
+    ),
+    'cephfs/snapshot/schedule/deactivate': this.newTaskMessage(
+      this.commonOperations.deactivate,
+      (metadata) => this.snapshotSchedule(metadata)
     )
   };
 
