@@ -22,6 +22,14 @@ source src/script/run-make.sh
 
 set -e
 
+function gen_ctest_resource_file() {
+    local file_name=$(mktemp /tmp/ctest-resource-XXXXXX)
+    local max_cpuid=$(($(nproc) - 1))
+    jq -n '$ARGS.positional | map({id:., slots:1}) | {cpus:.} | {version: {major:1, minor:0}, local:[.]}' \
+        --args $(seq 0 $max_cpuid) > $file_name
+    echo "$file_name"
+}
+
 function run() {
     # to prevent OSD EMFILE death on tests, make sure ulimit >= 1024
     $DRY_RUN ulimit -n $(ulimit -Hn)
@@ -43,14 +51,16 @@ function run() {
     fi
 
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
+    CTEST_RESOURCE_FILE=$(gen_ctest_resource_file)
+    CHECK_MAKEOPTS+=" --resource-spec-file ${CTEST_RESOURCE_FILE}"
     if in_jenkins; then
         if ! ctest $CHECK_MAKEOPTS --no-compress-output --output-on-failure --test-output-size-failed 1024000 -T Test; then
             # do not return failure, as the jenkins publisher will take care of this
-            rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
+            rm -fr ${TMPDIR:-/tmp}/ceph-asok.* ${CTEST_RESOURCE_FILE}
         fi
     else
         if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
-            rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
+            rm -fr ${TMPDIR:-/tmp}/ceph-asok.* ${CTEST_RESOURCE_FILE}
             return 1
         fi
     fi
