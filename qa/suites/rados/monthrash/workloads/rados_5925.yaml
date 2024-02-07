@@ -1,0 +1,8 @@
+overrides:
+  ceph:
+     log-ignorelist:
+       - overall HEALTH_
+tasks:
+- exec:
+    client.0:
+      - ceph_test_rados_delete_pools_parallel --debug_objecter 20 --debug_ms 1 --debug_rados 20 --debug_monc 20
