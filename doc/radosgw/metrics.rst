@@ -75,8 +75,15 @@ The following metrics related to S3 or Swift operations are tracked per Ceph Obj
      - Guage
      - Total latency of list bucket operations
 
-More information about op metrics can be seen in the ``rgw_op`` section of the output of the ``counter schema`` command.
-To view op metrics in the Ceph Object Gateway go to the ``rgw_op`` section of the output of the ``counter dump`` command::
+There are three different sections in the output of the ``counter dump`` and ``counter schema`` commands that show the op metrics and their information.
+The sections are ``rgw_op``, ``rgw_op_per_user``, and ``rgw_op_per_bucket``.
+
+The counters in the ``rgw_op`` section reflect the totals of each op metric for a given Ceph Object Gateway.
+The counters in the ``rgw_op_per_user`` and ``rgw_op_per_bucket`` sections are labeled counters of op metrics for a user or bucket respectively.
+
+Information about op metrics can be seen in the ``rgw_op`` sections of the output of the ``counter schema`` command.
+
+To view op metrics in the Ceph Object Gateway go to the ``rgw_op`` sections of the output of the ``counter dump`` command::
 
     "rgw_op": [
         {
@@ -112,7 +119,7 @@ Op Metrics Labels
 
 Op metrics can also be tracked per-user or per-bucket. These metrics are exported to Prometheus with labels like Bucket = {name} or User = {userid}::
 
-    "rgw_op": [
+    "rgw_op_per_bucket": [
         ...
         {
             "labels": {
