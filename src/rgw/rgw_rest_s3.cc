@@ -463,6 +463,15 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       }
     } catch (const buffer::error&) {} // omit x-rgw-replicated-from headers
   }
+  if (auto i = attrs.find(RGW_ATTR_OBJ_REPLICATION_TIMESTAMP);
+      i != attrs.end()) {
+    try {
+      ceph::real_time replicated_time;
+      decode(replicated_time, i->second);
+      dump_time(s, "x-rgw-replicated-at", replicated_time);
+    } catch (const buffer::error&) {}
+  }
+
   if (multipart_parts_count) {
     dump_header(s, "x-amz-mp-parts-count", *multipart_parts_count);
   }
