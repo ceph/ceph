@@ -112,11 +112,14 @@ namespace rgw::op_counters {
 ceph::perf_counters::PerfCountersCache *user_counters_cache = NULL;
 ceph::perf_counters::PerfCountersCache *bucket_counters_cache = NULL;
 PerfCounters *global_op_counters = NULL;
-const std::string rgw_op_counters_key = "rgw_op";
+const std::string rgw_global_op_counters_key = "rgw_op";
+const std::string rgw_user_op_counters_key = "rgw_op_per_user";
+const std::string rgw_bucket_op_counters_key = "rgw_op_per_bucket";
 
 std::shared_ptr<PerfCounters> create_rgw_op_counters(const std::string& name, CephContext *cct) {
   std::string_view key = ceph::perf_counters::key_name(name);
-  ceph_assert(rgw_op_counters_key == key);
+  ceph_assert(rgw_global_op_counters_key == key ||
+              rgw_user_op_counters_key == key || rgw_bucket_op_counters_key == key);
   PerfCountersBuilder pcb(cct, name, l_rgw_op_first, l_rgw_op_last);
   add_rgw_op_counters(&pcb);
   std::shared_ptr<PerfCounters> new_counters(pcb.create_perf_counters());
@@ -125,7 +128,7 @@ std::shared_ptr<PerfCounters> create_rgw_op_counters(const std::string& name, Ce
 }
 
 void global_op_counters_init(CephContext *cct) {
-  PerfCountersBuilder pcb(cct, rgw_op_counters_key, l_rgw_op_first, l_rgw_op_last);
+  PerfCountersBuilder pcb(cct, rgw_global_op_counters_key, l_rgw_op_first, l_rgw_op_last);
   add_rgw_op_counters(&pcb);
   PerfCounters *new_counters = pcb.create_perf_counters();
   cct->get_perfcounters_collection()->add(new_counters);
@@ -138,18 +141,18 @@ CountersContainer get(req_state *s) {
 
   if (user_counters_cache && !s->user->get_id().id.empty()) {
     if (s->user->get_tenant().empty()) {
-      key = ceph::perf_counters::key_create(rgw_op_counters_key, {{"User", s->user->get_id().id}});
+      key = ceph::perf_counters::key_create(rgw_user_op_counters_key, {{"user", s->user->get_id().id}});
     } else {
-      key = ceph::perf_counters::key_create(rgw_op_counters_key, {{"User", s->user->get_id().id}, {"Tenant", s->user->get_tenant()}});
+      key = ceph::perf_counters::key_create(rgw_user_op_counters_key, {{"user", s->user->get_id().id}, {"tenant", s->user->get_tenant()}});
     }
     counters.user_counters = user_counters_cache->get(key);
   }
 
   if (bucket_counters_cache && !s->bucket_name.empty()) {
     if (s->bucket_tenant.empty()) {
-      key = ceph::perf_counters::key_create(rgw_op_counters_key, {{"Bucket", s->bucket_name}});
+      key = ceph::perf_counters::key_create(rgw_bucket_op_counters_key, {{"bucket", s->bucket_name}});
     } else {
-      key = ceph::perf_counters::key_create(rgw_op_counters_key, {{"Bucket", s->bucket_name}, {"Tenant", s->bucket_tenant}});
+      key = ceph::perf_counters::key_create(rgw_bucket_op_counters_key, {{"bucket", s->bucket_name}, {"tenant", s->bucket_tenant}});
     }
     counters.bucket_counters = bucket_counters_cache->get(key);
   }
@@ -208,7 +211,7 @@ const std::string rgw_topic_counters_key = "rgw_topic";
 CountersManager::CountersManager(const std::string& topic_name, CephContext *cct)
     : cct(cct)
 {
-  const std::string topic_key = ceph::perf_counters::key_create(rgw_topic_counters_key, {{"Topic", topic_name}});
+  const std::string topic_key = ceph::perf_counters::key_create(rgw_topic_counters_key, {{"topic", topic_name}});
   PerfCountersBuilder pcb(cct, topic_key, l_rgw_topic_first, l_rgw_topic_last);
   add_rgw_topic_counters(&pcb);
   topic_counters = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
