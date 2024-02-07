@@ -265,7 +265,7 @@ public:
 private:
   template <typename FuncT>
   interruptible_future<> with_sequencer(FuncT&& func);
-  auto reply_op_error(const Ref<PG>& pg, int err);
+  interruptible_future<> reply_op_error(const Ref<PG>& pg, int err);
 
   interruptible_future<> do_process(
     instance_handle_t &ihref,
