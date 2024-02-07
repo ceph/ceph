@@ -21,6 +21,25 @@ function(add_ceph_test test_name test_path)
     CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV})
   set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
+  # Crimson seastar unittest always run with --smp N to start N threads. By default, crimson seastar unittest
+  # will take cpu cores[0, N), starting one thread per core. When running many crimson seastar unittests
+  # parallely, the front N cpu cores are shared, and the left cpu cores are idle. Lots of cpu cores are wasted.
+  # Using CTest resource allocation feature(https://cmake.org/cmake/help/latest/manual/ctest.1.html#resource-allocation),
+  # ctest can specify cpu cores resources to crimson seastar unittests.
+  # 3 steps to enable CTest resource allocation feature:
+  #  Step 1: Generate a resource specification file to describe available resource, $(nproc) CPUs with id 0 to $(nproc) - 1
+  #  Step 2: Set RESOURCE_GROUPS property to a test with value "${smp_count},cpus:1"
+  #  Step 3: Read a series of environment variables CTEST_RESOURCE_GROUP_* and set seastar smp_opts while running a test
+  list(FIND ARGV "--smp" smp_pos)
+  if(smp_pos GREATER -1)
+    if(smp_pos EQUAL ARGC)
+      message(FATAL_ERROR "${test_name} --smp requires an argument")
+    endif()
+    math(EXPR i "${smp_pos} + 1")
+    list(GET ARGV ${i} smp_count)
+    set_property(TEST ${test_name}
+      PROPERTY RESOURCE_GROUPS "${smp_count},cpus:1")
+  endif()
 endfunction()
 
 option(WITH_GTEST_PARALLEL "Enable running gtest based tests in parallel" OFF)
