@@ -3909,16 +3909,18 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   // when there is no change in osdmap,
   // update info.stats.reported_epoch by the number of time seconds.
   utime_t cutoff_time = now;
-  cutoff_time -= cct->_conf->osd_pg_stat_report_interval_max_seconds;
-  bool is_time_expired = cutoff_time > info.stats.last_fresh ? true : false;
+  cutoff_time -=
+      cct->_conf.get_val<int64_t>("osd_pg_stat_report_interval_max_seconds");
+  const bool is_time_expired = cutoff_time > info.stats.last_fresh;
 
   // 500 epoch osdmaps are also the minimum number of osdmaps that mon must retain.
   // if info.stats.reported_epoch less than current osdmap epoch exceeds 500 osdmaps,
   // it can be considered that the one reported by pgid is too old and needs to be updated.
   // to facilitate mon trim osdmaps
   epoch_t cutoff_epoch = info.stats.reported_epoch;
-  cutoff_epoch += cct->_conf->osd_pg_stat_report_interval_max_epochs;
-  bool is_epoch_behind = cutoff_epoch < get_osdmap_epoch() ? true : false;
+  cutoff_epoch +=
+      cct->_conf.get_val<int64_t>("osd_pg_stat_report_interval_max_epochs");
+  const bool is_epoch_behind = cutoff_epoch < get_osdmap_epoch();
 
   if (pg_stats_publish && pre_publish == *pg_stats_publish &&
       (!is_epoch_behind && !is_time_expired)) {
