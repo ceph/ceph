@@ -176,6 +176,61 @@ Alternatively, you may want to create a new account for each existing user. In
 that case, you may want to add the ``--account-root`` option to make each user
 the root user of their account.
 
+Account Root example
+--------------------
+
+The account root user's credentials unlock the `Ceph Object Gateway IAM API`_.
+
+This example uses `awscli`_ to create an IAM user for S3 operations.
+
+1. Create a profile for the account root user::
+
+	$ aws --profile rgwroot configure set endpoint_url http://localhost:8000
+	$ aws --profile rgwroot configure
+	AWS Access Key ID [None]: {root access key}
+	AWS Secret Access Key [None]: {root secret key}
+	Default region name [None]: default
+	Default output format [None]:
+
+2. Create an IAM user, add credentials, and attach a policy for S3 access::
+
+	$ aws --profile rgwroot iam create-user --user-name Alice
+	{
+	    "User": {
+	        "Path": "/",
+	        "UserName": "Alice",
+	        "UserId": "b580aa8e-14c7-4b6a-9dac-a30c640244b6",
+	        "Arn": "arn:aws:iam::RGW63136524507535818:user/Alice",
+	        "CreateDate": "2024-02-07T00:15:45.162786+00:00"
+	    }
+	}
+	$ aws --profile rgwroot iam create-access-key --user-name Alice
+	{
+	    "AccessKey": {
+	        "UserName": "Alice",
+	        "AccessKeyId": "JBNLYD5BDNRVV64J02E8",
+	        "Status": "Active",
+	        "SecretAccessKey": "SnHoE700kdNuT22K8Bhy2iL3DwZU0sUSDI1gUXHr",
+	        "CreateDate": "2024-02-07T00:16:34.679316+00:00"
+	    }
+	}
+	$ aws --profile rgwroot iam attach-user-policy --user-name Alice \
+	      --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+3. Create a profile for the S3 user::
+
+	$ aws --profile rgws3 configure set endpoint_url http://localhost:8000
+	$ aws --profile rgws3 configure
+	AWS Access Key ID [None]: JBNLYD5BDNRVV64J02E8
+	AWS Secret Access Key [None]: SnHoE700kdNuT22K8Bhy2iL3DwZU0sUSDI1gUXHr
+	Default region name [None]: default
+	Default output format [None]:
+
+4. Use the S3 user profile to create a bucket::
+
+	$ aws --profile rgws3 s3 mb s3://testbucket
+	make_bucket: testbucket
+
 
 .. _Roles: ../role/
 .. _AWS Identity and Access Management: https://aws.amazon.com/iam/
@@ -185,3 +240,4 @@ the root user of their account.
 .. _Amazon Resource Names: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html
 .. _Evaluating policies within a single account: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic.html#policy-eval-basics
 .. _Cross-account policy evaluation logic: https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_evaluation-logic-cross-account.html
+.. _awscli: https://docs.aws.amazon.com/cli/latest/
