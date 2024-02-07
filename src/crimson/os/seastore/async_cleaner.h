@@ -1156,6 +1156,10 @@ public:
 
   virtual std::size_t get_reclaim_size_per_cycle() const = 0;
 
+#ifdef UNIT_TESTS_BUILT
+  virtual void prefill_fragmented_devices() {}
+#endif
+
   // test only
   virtual bool check_usage() = 0;
 
@@ -1677,6 +1681,17 @@ public:
     return 0;
   }
 
+#ifdef UNIT_TESTS_BUILT
+  void prefill_fragmented_devices() final {
+    LOG_PREFIX(RBMCleaner::prefill_fragmented_devices);
+    SUBDEBUG(seastore_cleaner, "");
+    auto rbs = rb_group->get_rb_managers();
+    for (auto p : rbs) {
+      p->prefill_fragmented_device();
+    }
+  }
+#endif
+
   RandomBlockManager* get_rbm(paddr_t paddr) {
     auto rbs = rb_group->get_rb_managers();
     for (auto p : rbs) {
@@ -1693,6 +1708,14 @@ public:
     auto paddr = rbs[0]->alloc_extent(length);
     stats.used_bytes += length;
     return paddr;
+  }
+
+  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) {
+    // TODO: implement allocation strategy (dirty metadata and multiple devices)
+    auto rbs = rb_group->get_rb_managers();
+    auto ret = rbs[0]->alloc_extents(length);
+    stats.used_bytes += length;
+    return ret;
   }
 
   size_t get_total_bytes() const {

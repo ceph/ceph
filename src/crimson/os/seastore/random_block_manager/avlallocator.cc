@@ -87,6 +87,33 @@ rbm_abs_addr AvlAllocator::find_block(size_t size)
   return total_size;
 }
 
+extent_len_t AvlAllocator::find_block(
+  size_t size,
+  rbm_abs_addr &start)
+{
+  uint64_t max_size = 0;
+  auto p = extent_size_tree.rbegin();
+  if (p != extent_size_tree.rend()) {
+    max_size = p->end - p->start;
+  }
+
+  assert(max_size);
+  if (max_size <= size) {
+    start = p->start;
+    return max_size;
+  }
+
+  const auto comp = extent_size_tree.key_comp();
+  auto iter = extent_size_tree.lower_bound(
+    extent_range_t{base_addr, base_addr + size}, comp);
+  ceph_assert(iter != extent_size_tree.end());
+  ceph_assert(is_aligned(iter->start, block_size));
+  ceph_assert(size <= iter->length());
+  start = iter->start;
+  return size;
+}
+
+
 void AvlAllocator::_add_to_tree(rbm_abs_addr start, rbm_abs_addr size)
 {
   LOG_PREFIX(AvlAllocator::_add_to_tree);
@@ -164,6 +191,50 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extent(
 
   assert(!result.empty());
   assert(result.num_intervals() == 1);
+  for (auto p : result) {
+    INFO("result start: {}, end: {}", p.first, p.first + p.second);
+    if (detailed) {
+      assert(!reserved_extent_tracker.contains(p.first, p.second));
+      reserved_extent_tracker.insert(p.first, p.second);
+    }
+  }
+  return result;
+}
+
+std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extents(
+  size_t size)
+{
+  LOG_PREFIX(AvlAllocator::alloc_extents);
+  if (available_size < size) {
+    return std::nullopt;
+  }
+  if (extent_size_tree.empty()) {
+    return std::nullopt;
+  }
+  ceph_assert(size > 0);
+  ceph_assert(is_aligned(size, block_size));
+
+  interval_set<rbm_abs_addr> result;
+
+  auto try_to_alloc_block = [this, &result, FNAME] (uint64_t alloc_size)
+  {
+    while (alloc_size) {
+      rbm_abs_addr start = 0;
+      extent_len_t len = find_block(alloc_size, start);
+      ceph_assert(len);
+      _remove_from_tree(start, len);
+      DEBUG("allocate addr: {}, allocate size: {}, available size: {}",
+	start, len, available_size);
+      result.insert(start, len);
+      alloc_size -= len;
+    }
+    return 0;
+  };
+  
+  auto alloc = std::min(max_alloc_size, size);
+  try_to_alloc_block(alloc);
+
+  assert(!result.empty());
   for (auto p : result) {
     INFO("result start: {}, end: {}", p.first, p.first + p.second);
     if (detailed) {

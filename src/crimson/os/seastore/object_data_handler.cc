@@ -526,24 +526,32 @@ ObjectDataHandler::write_ret do_insertions(
 	       ctx.t,
 	       region.addr,
 	       region.len);
-	return ctx.tm.alloc_extent<ObjectDataBlock>(
+	return ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	  ctx.t,
 	  region.addr,
 	  region.len
-	).si_then([&region](auto extent) {
-	  if (extent->get_laddr() != region.addr) {
-	    logger().debug(
-	      "object_data_handler::do_insertions alloc got addr {},"
-	      " should have been {}",
-	      extent->get_laddr(),
-	      region.addr);
-	  }
-	  ceph_assert(extent->get_laddr() == region.addr);
-	  ceph_assert(extent->get_length() == region.len);
+        ).si_then([&region](auto extents) {
+          auto off = region.addr;
+          auto left = region.len;
 	  auto iter = region.bl->cbegin();
-	  iter.copy(region.len, extent->get_bptr().c_str());
+          for (auto &extent : extents) {
+            ceph_assert(left >= extent->get_length());
+            if (extent->get_laddr() != off) {
+              logger().debug(
+                "object_data_handler::do_insertions alloc got addr {},"
+                " should have been {}",
+                extent->get_laddr(),
+                off);
+            }
+            iter.copy(extent->get_length(), extent->get_bptr().c_str());
+            off += extent->get_length();
+            left -= extent->get_length();
+          }
 	  return ObjectDataHandler::write_iertr::now();
-	});
+	}).handle_error_interruptible(
+	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	  ObjectDataHandler::write_iertr::pass_further{}
+	);
       } else if (region.is_zero()) {
 	DEBUGT("reserving: {}~{}",
 	       ctx.t,
@@ -564,7 +572,10 @@ ObjectDataHandler::write_ret do_insertions(
 	  }
 	  ceph_assert(pin->get_key() == region.addr);
 	  return ObjectDataHandler::write_iertr::now();
-	});
+	}).handle_error_interruptible(
+	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	  ObjectDataHandler::write_iertr::pass_further{}
+	);
       } else {
 	ceph_abort("impossible");
 	return ObjectDataHandler::write_iertr::now();
@@ -1057,7 +1068,10 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
 	pin->get_key(),
 	pin->get_length());
       return write_iertr::now();
-    });
+    }).handle_error_interruptible(
+      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      write_iertr::pass_further{}
+    );
   }
 }
 
@@ -1677,12 +1691,12 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	  return TransactionManager::reserve_extent_iertr::now();
 	});
       });
-    },
+    }
+  ).handle_error_interruptible(
     ObjectDataHandler::write_iertr::pass_further{},
     crimson::ct_error::assert_all{
       "object_data_handler::clone invalid error"
-    }
-  );
+  });
 }
 
 ObjectDataHandler::clone_ret ObjectDataHandler::clone(
