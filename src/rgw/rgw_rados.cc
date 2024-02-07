@@ -4412,6 +4412,12 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (lh != attrs.end())
     src_attrs[RGW_ATTR_OBJECT_LEGAL_HOLD] = lh->second;
 
+  if (dest_bucket_info.flags & BUCKET_VERSIONS_SUSPENDED) {
+    src_attrs.erase(RGW_ATTR_OLH_ID_TAG);
+    src_attrs.erase(RGW_ATTR_OLH_INFO);
+    src_attrs.erase(RGW_ATTR_OLH_VER);
+  }
+
   set_copy_attrs(src_attrs, attrs, attrs_mod);
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_PG_VER);
