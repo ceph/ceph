@@ -2920,8 +2920,8 @@ options:
   level: advanced
   desc: The maximum interval seconds for update pg's reported_epoch,
         benefit for osdmap trim when osdmap not change frequently.
-  default: 500
   with_legacy: true
+  default: 5
 - name: osd_pg_stat_report_interval_max_epochs
   type: int
   level: advanced
