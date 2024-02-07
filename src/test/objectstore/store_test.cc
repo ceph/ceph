@@ -197,6 +197,13 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     store->umount();
     mounted = false;
   }
+  bool bdev_supports_label() {
+    BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+    if (!bstore) return false;
+    auto bdev = bstore->get_bdev();
+    if (!bdev) return false;
+    return bdev->supported_bdev_label();
+  }
   bool corrupt_disk_at(uint64_t position) {
     int fd = -1;
     auto close_fd = make_scope_guard([&] {
@@ -10553,20 +10560,26 @@ TEST_P(MultiLabelTest, MultiSelectableOff) {
   SetVal(g_conf(), "bluestore_bdev_label_multi", "false");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
-  store->umount();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
   bluestore_bdev_label_t label;
   int r = BlueStore::_read_bdev_label(
     g_ceph_context, get_data_dir() + "/block", &label, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(label.meta.end(), label.meta.find("multi"));
-  store->mount();
+  mount();
 }
 
 TEST_P(MultiLabelTest, MultiSelectableOn) {
   SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
-  store->umount();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
   bluestore_bdev_label_t label;
   int r = BlueStore::_read_bdev_label(
     g_ceph_context, get_data_dir() + "/block", &label, 0);
@@ -10574,7 +10587,7 @@ TEST_P(MultiLabelTest, MultiSelectableOn) {
   auto it = label.meta.find("multi");
   ASSERT_NE(label.meta.end(), it);
   ASSERT_EQ(it->second, "yes");
-  store->mount();
+  mount();
 }
 
 TEST_P(MultiLabelTest, DetectCorruptedFirst) {
@@ -10583,6 +10596,9 @@ TEST_P(MultiLabelTest, DetectCorruptedFirst) {
   SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
   umount();
   bool corrupt = corrupt_disk_at(0);
   ASSERT_EQ(corrupt, true);
@@ -10596,6 +10612,9 @@ TEST_P(MultiLabelTest, FixCorruptedFirst) {
   SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
   umount();
   bool corrupt = corrupt_disk_at(0);
   ASSERT_EQ(corrupt, true);
@@ -10611,6 +10630,9 @@ TEST_P(MultiLabelTest, FixCorruptedTwo) {
   SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
   umount();
   bool corrupt = corrupt_disk_at(0);
   ASSERT_EQ(corrupt, true);
@@ -10628,6 +10650,9 @@ TEST_P(MultiLabelTest, FixCorruptedThree) {
   SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
   umount();
   bool corrupt = corrupt_disk_at(0);
   ASSERT_EQ(corrupt, true);
@@ -10647,6 +10672,9 @@ TEST_P(MultiLabelTest, CantFixCorruptedAll) {
   SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
   umount();
   bool corrupt = corrupt_disk_at(0);
   ASSERT_EQ(corrupt, true);
@@ -10667,6 +10695,9 @@ TEST_P(MultiLabelTest, SelectNewestLabel) {
   SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
   umount();
   bluestore_bdev_label_t label;
   int r = BlueStore::_read_bdev_label(
@@ -10694,6 +10725,9 @@ TEST_P(MultiLabelTest, UpgradeToMultiLabel) {
   SetVal(g_conf(), "bluestore_bdev_label_multi_upgrade", "true");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
   umount();
   ASSERT_EQ(store->repair(false), 0);
   ASSERT_EQ(store->fsck(false), 0);
@@ -10715,6 +10749,9 @@ TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithBlueFS) {
   SetVal(g_conf(), "bluestore_bdev_label_multi_upgrade", "true");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
   //fill BlueFS with data
   BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
   ceph_assert(bstore);
@@ -10745,6 +10782,9 @@ TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionObjects) {
   SetVal(g_conf(), "bluestore_bdev_label_multi_upgrade", "true");
   g_conf().apply_changes(nullptr);
   DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
   //fill with object data
   coll_t cid;
   auto ch = store->create_new_collection(cid);
