@@ -92,8 +92,8 @@ seastar::future<> CrushLocation::update_from_hook()
         local_conf().get_val<std::string>("crush_location_hook"),
         std::move(params)
       ).then([this] (auto process) {
-        auto stdout = process.stdout();
-        return do_with(
+        auto stdout = process.cout();
+        return seastar::do_with(
           std::move(process),
           std::move(stdout),
           [this](auto& process, auto& stdout)

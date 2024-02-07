@@ -342,6 +342,8 @@ BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  libubsan
 BuildRequires:  libasan
+BuildRequires:  protobuf-devel
+BuildRequires:  protobuf-compiler
 %if 0%{?rhel} == 8
 BuildRequires:  %{gts_prefix}-annobin
 BuildRequires:  %{gts_prefix}-annobin-plugin-gcc
