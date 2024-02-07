@@ -6,6 +6,7 @@
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/alienstore/thread_pool.h"
 #include "include/msgr.h"
+#include "test/crimson/ctest_utils.h"
 
 using namespace std::chrono_literals;
 using ThreadPool = crimson::os::ThreadPool;
@@ -37,7 +38,7 @@ seastar::future<> test_void_return(ThreadPool& tp) {
 
 int main(int argc, char** argv)
 {
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   return app.run(argc, argv, [] {
     std::vector<const char*> args;
     std::string cluster;
