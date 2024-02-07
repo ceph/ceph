@@ -530,7 +530,9 @@ BtreeLBAManager::update_mapping_ret
 BtreeLBAManager::update_mapping(
   Transaction& t,
   laddr_t laddr,
+  extent_len_t prev_len,
   paddr_t prev_addr,
+  extent_len_t len,
   paddr_t addr,
   LogicalCachedExtent *nextent)
 {
@@ -539,13 +541,15 @@ BtreeLBAManager::update_mapping(
   return _update_mapping(
     t,
     laddr,
-    [prev_addr, addr](
+    [prev_addr, addr, prev_len, len](
       const lba_map_val_t &in) {
       assert(!addr.is_null());
       lba_map_val_t ret = in;
       ceph_assert(in.pladdr.is_paddr());
       ceph_assert(in.pladdr.get_paddr() == prev_addr);
+      ceph_assert(in.len == prev_len);
       ret.pladdr = addr;
+      ret.len = len;
       return ret;
     },
     nextent
