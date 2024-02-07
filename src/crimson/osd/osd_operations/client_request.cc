@@ -217,7 +217,8 @@ ClientRequest::process_pg_op(
     get_foreign_connection().send_with_throttling(std::move(reply)));
 }
 
-auto ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
+ClientRequest::interruptible_future<>
+ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
 {
   LOG_PREFIX(ClientRequest::reply_op_error);
   DEBUGDPP("{}: replying with error {}", *pg, *this, err);
@@ -228,7 +229,9 @@ auto ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
   reply->set_reply_versions(eversion_t(), 0);
   reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
   // TODO: gate the crosscore sending
-  return get_foreign_connection().send_with_throttling(std::move(reply));
+  return interruptor::make_interruptible(
+    get_foreign_connection().send_with_throttling(std::move(reply))
+  );
 }
 
 ClientRequest::interruptible_future<>
