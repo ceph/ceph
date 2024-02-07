@@ -444,11 +444,11 @@ Running repeated debugging sessions
 When using ``cephadm shell``, as in the example above, any changes made to the
 container that is spawned by the shell command are ephemeral. After the shell
 session exits, the files that were downloaded and installed cease to be
-available. You can simply re-run the same commands every time ``cephadm
-shell`` is invoked, but in order to save time and resources one can create a
-new container image and use it for repeated debugging sessions.
+available. You can simply re-run the same commands every time ``cephadm shell``
+is invoked, but to save time and resources you can create a new container image
+and use it for repeated debugging sessions.
 
-In the following example, we create a simple file that will construct the
+In the following example, we create a simple file that constructs the
 container image. The command below uses podman but it is expected to work
 correctly even if ``podman`` is replaced with ``docker``::
 
@@ -463,14 +463,14 @@ correctly even if ``podman`` is replaced with ``docker``::
 
 The above file creates a new local image named ``ceph:debugging``. This image
 can be used on the same machine that built it. The image can also be pushed to
-a container repository or saved and copied to a node runing other Ceph
-containers. Consult the ``podman`` or ``docker`` documentation for more
+a container repository or saved and copied to a node that is running other Ceph
+containers. See the ``podman`` or ``docker`` documentation for more
 information about the container workflow.
 
 After the image has been built, it can be used to initiate repeat debugging
 sessions. By using an image in this way, you avoid the trouble of having to
-re-install the debug tools and debuginfo packages every time you need to run a
-debug session. To debug a core file using this image, in the same way as
+re-install the debug tools and the debuginfo packages every time you need to
+run a debug session. To debug a core file using this image, in the same way as
 previously described, run:
 
 .. prompt:: bash #
