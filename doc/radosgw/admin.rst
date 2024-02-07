@@ -541,11 +541,11 @@ Quota statistics are cached by each RGW instance. If multiple RGW instances are
 deployed, then this cache may prevent quotas from being perfectly enforced,
 because each instance may have a different set of quota settings.  
 
-The options that control this behavior are 
+Here are the options that control this behavior: 
 
-#. ``rgw_bucket_quota_ttl``
-#. ``rgw_user_quota_bucket_sync_interval`` and 
-#. ``rgw_user_quota_sync_interval``.
+:confval:`rgw_bucket_quota_ttl`
+:confval:`rgw_user_quota_bucket_sync_interval`
+:confval:`rgw_user_quota_sync_interval`
 
 Increasing these values will make quota operations more efficient at the cost
 of increasing the likelihood that the multiple RGW instances may not
