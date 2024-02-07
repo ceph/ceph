@@ -418,7 +418,6 @@ class MDCache {
     return active_requests.count(rid);
   }
   MDRequestRef request_get(metareqid_t rid);
-  void request_pin_ref(const MDRequestRef& r, CInode *ref, std::vector<CDentry*>& trace);
   void request_finish(const MDRequestRef& mdr);
   void request_forward(const MDRequestRef& mdr, mds_rank_t mds, int port=0);
   void dispatch_request(const MDRequestRef& mdr);
