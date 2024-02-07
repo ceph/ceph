@@ -2564,7 +2564,6 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   int rs;
   JSONDecoder::decode_json("reshard_status", rs, obj);
   reshard_status = (cls_rgw_reshard_status)rs;
-
   rgw_sync_policy_info sp;
   JSONDecoder::decode_json("sync_policy", sp, obj);
   if (!sp.empty()) {

@@ -716,8 +716,9 @@ inline bool operator!=(const rgw_bucket_category_stats& lhs,
 
 enum class cls_rgw_reshard_status : uint8_t {
   NOT_RESHARDING  = 0,
-  IN_PROGRESS     = 1,
-  DONE            = 2
+  IN_LOGRECORD    = 1,
+  IN_PROGRESS     = 2,
+  DONE            = 3
 };
 std::ostream& operator<<(std::ostream&, cls_rgw_reshard_status);
 
@@ -726,6 +727,8 @@ inline std::string to_string(const cls_rgw_reshard_status status)
   switch (status) {
   case cls_rgw_reshard_status::NOT_RESHARDING:
     return "not-resharding";
+  case cls_rgw_reshard_status::IN_LOGRECORD:
+    return "in-logrecord";
   case cls_rgw_reshard_status::IN_PROGRESS:
     return "in-progress";
   case cls_rgw_reshard_status::DONE:
@@ -778,6 +781,10 @@ struct cls_rgw_bucket_instance_entry {
 
   bool resharding() const {
     return reshard_status != RESHARD_STATUS::NOT_RESHARDING;
+  }
+
+  bool resharding_in_logrecord() const {
+    return reshard_status == RESHARD_STATUS::IN_LOGRECORD;
   }
 
   bool resharding_in_progress() const {
@@ -848,9 +855,15 @@ struct rgw_bucket_dir_header {
   bool resharding() const {
     return new_instance.resharding();
   }
+
+  bool resharding_in_logrecord() const {
+    return new_instance.resharding_in_logrecord();
+  }
+
   bool resharding_in_progress() const {
     return new_instance.resharding_in_progress();
   }
+
 };
 WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
