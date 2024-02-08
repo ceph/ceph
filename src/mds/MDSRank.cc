@@ -1448,15 +1448,15 @@ private:
 };
 
 
-void MDSRank::send_message_mds(const ref_t<Message>& m, mds_rank_t mds)
+int MDSRank::send_message_mds(const ref_t<Message>& m, mds_rank_t mds)
 {
   if (!mdsmap->is_up(mds)) {
     dout(10) << "send_message_mds mds." << mds << " not up, dropping " << *m << dendl;
-    return;
+    return ENOENT;
   } else if (mdsmap->is_bootstrapping(mds)) {
     dout(5) << __func__ << "mds." << mds << " is bootstrapping, deferring " << *m << dendl;
     wait_for_bootstrapped_peer(mds, new C_MDS_RetrySendMessageMDS(this, mds, m));
-    return;
+    return 0;
   }
 
   // send mdsmap first?
@@ -1468,12 +1468,12 @@ void MDSRank::send_message_mds(const ref_t<Message>& m, mds_rank_t mds)
   }
 
   // send message
-  send_message_mds(m, addrs);
+  return send_message_mds(m, addrs);
 }
 
-void MDSRank::send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr)
+int MDSRank::send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr)
 {
-  messenger->send_to_mds(ref_t<Message>(m).detach(), addr);
+  return messenger->send_to_mds(ref_t<Message>(m).detach(), addr);
 }
 
 void MDSRank::forward_message_mds(MDRequestRef& mdr, mds_rank_t mds)
