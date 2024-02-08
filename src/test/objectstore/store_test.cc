@@ -10647,7 +10647,7 @@ TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithBlueFS) {
   ASSERT_EQ(label.meta["multi"], "yes");
 }
 
-TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionObjects) {
+TEST_P(MultiLabelTest, UpgradeToMultiLabelCollisionWithObjects) {
   static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
   static constexpr uint64_t _1M = uint64_t(1)*1024*1024;
   SetVal(g_conf(), "bluestore_block_db_create", "true");

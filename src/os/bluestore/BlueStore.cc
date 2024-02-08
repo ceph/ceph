@@ -136,7 +136,7 @@ const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 // were already used so labels won't exist there.
 static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
 const vector<uint64_t> bdev_label_positions = {
-  BDEV_LABEL_POSITION,
+  BDEV_FIRST_LABEL_POSITION,
   _1G,
   10*_1G,
   100*_1G,
@@ -6527,15 +6527,25 @@ int BlueStore::_write_bdev_label(
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return r;
   }
+  int failed_r = 0;
+  bool wrote_at_least_one = false;
   for (uint64_t position : locations) {
     if (int64_t(position + BDEV_LABEL_BLOCK_SIZE) <= st.st_size) {
       r = bl.write_fd(fd, position);
-      if (r < 0) {
+      if (r == 0) {
+        wrote_at_least_one = true;
+      } else {
         derr << __func__ << " failed to write to " << path
+          << " at location 0x" << std::hex << position << std::dec
           << ": " << cpp_strerror(r) << dendl;
-        goto out;
+        failed_r = r;
       }
     }
+  }
+  if (!wrote_at_least_one) {
+    derr << __func__ << " failed to write to any bdev of locations" << dendl;
+    r = failed_r;
+    goto out;
   }
   r = ::fsync(fd);
   if (r < 0) {
@@ -6651,7 +6661,7 @@ int BlueStore::_read_main_bdev_label(
     if (r == 0 && (fsid.is_zero() || label.osd_uuid == fsid)) {
       auto i = label.meta.find("multi");
       bool is_multi = i != label.meta.end() && i->second == "yes";
-      if (position == BDEV_LABEL_POSITION && !is_multi) {
+      if (position == BDEV_FIRST_LABEL_POSITION && !is_multi) {
         // we have a single-label case
         *out_label = label;
         is_multi = false;
@@ -6738,6 +6748,10 @@ void BlueStore::_main_bdev_label_try_reserve()
       }
     }
   };
+  // Iterating over free is very inefficient.
+  // We can do it here only because its only on init, otherwise it would be unacceptable.
+  // Here we could use some API like: alloc->allocate_at().
+  // When we create it, replace code.
   alloc->foreach(look_for_bdev);
   for (auto& location : accepted_positions) {
     alloc->init_rm_free(location, lsize);
@@ -6755,15 +6769,14 @@ void BlueStore::_main_bdev_label_remove(Allocator* an_alloc)
 {
   ceph_assert(bdev_label_multi == true);
   uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-
   for (size_t location : bdev_label_valid_locations) {
-    if (location != BDEV_LABEL_POSITION)
+    if (location != BDEV_FIRST_LABEL_POSITION)
       an_alloc->init_add_free(location, lsize);
   }
 }
 
 int BlueStore::_check_or_set_bdev_label(
-  const string& path, uint64_t size, string desc, bool create)
+  const string& path, uint64_t size, const string& desc, bool create)
 {
   bluestore_bdev_label_t label;
   if (create) {
@@ -6810,7 +6823,7 @@ int BlueStore::_set_main_bdev_label()
       }
     }
   } else {
-    bdev_label_valid_locations.push_back(BDEV_LABEL_POSITION);
+    bdev_label_valid_locations.push_back(BDEV_FIRST_LABEL_POSITION);
   }
   int r = _write_bdev_label(cct, path + "/block", label, bdev_label_valid_locations);
   if (r < 0)
@@ -6833,11 +6846,9 @@ int BlueStore::_check_main_bdev_label()
       << " does not match our fsid " << fsid << dendl;
     return -EIO;
   }
-  if (bluestore_bdev_label_require_all) {
-    if (r != 0) {
-      derr << __func__ << "not all labels read properly" << dendl;
-      return -EIO;
-    }
+  if (bluestore_bdev_label_require_all && r != 0) {
+    derr << __func__ << " not all labels read properly" << dendl;
+    return -EIO;
   }
   return 0;
 }
@@ -6994,7 +7005,7 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
       fm->allocate(0, bdev->get_size(), t);
     } else {
       // allocate bdev label + bluefs superblock reserved space.
-      fm->allocate(BDEV_LABEL_POSITION, reserved, t);
+      fm->allocate(BDEV_FIRST_LABEL_POSITION, reserved, t);
       // we do not mark other label positions
     }
     r = _write_out_fm_meta(0);
@@ -8381,7 +8392,7 @@ int BlueStore::mkfs()
   // full free
   alloc->init_add_free(0, p2align(bdev->get_size(), min_alloc_size));
   // allocate bdev label + bluefs superblock reserved space.
-  alloc->init_rm_free(BDEV_LABEL_POSITION, reserved);
+  alloc->init_rm_free(BDEV_FIRST_LABEL_POSITION, reserved);
 
   // take possible bdev locations, so it will not be used
   if (cct->_conf.get_val<bool>("bluestore_bdev_label_multi")) {
@@ -10376,7 +10387,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     bdev_label.meta["multi"] = "yes";
     bdev_label.meta["epoch"] = "1";
     bdev_label_multi = true;
-    bdev_labels_broken.push_back(BDEV_LABEL_POSITION);
+    bdev_labels_broken.push_back(BDEV_FIRST_LABEL_POSITION);
     errors++;
   }
   if (bdev->supported_bdev_label() && bdev_label_multi) {
@@ -10433,7 +10444,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       bool is_taken_by_bluefs = false;
       apply_for_bitset_range(position, length, alloc_size, bluefs_used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset& bs) {
-          is_taken_by_bluefs |= bs.test_set(pos);
+          is_taken_by_bluefs |= bs.test(pos);
         }
       );
       if (is_taken_by_bluefs) {
@@ -10447,7 +10458,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         }
       }
     }
-    // Mark bits or locations of all bdev labels.
+    // Mark locations of those bdev labels that are not taken by bluefs.
     for (size_t i = 0; i < bdev_label_positions.size(); i++) {
       uint64_t position = bdev_label_positions[i];
       uint64_t length = std::max<uint64_t>(BDEV_LABEL_BLOCK_SIZE, alloc_size);
@@ -10462,7 +10473,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   }
 
   apply_for_bitset_range(
-    BDEV_LABEL_POSITION, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), alloc_size, used_blocks,
+    BDEV_FIRST_LABEL_POSITION, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), alloc_size, used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
       bs.set(pos);
     }
@@ -11030,7 +11041,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       //unmark extra bdev copies, will collide with the check
       for (uint64_t location : bdev_label_valid_locations) {
         uint64_t length = std::max<uint64_t>(BDEV_LABEL_BLOCK_SIZE, alloc_size);
-        if (location != BDEV_LABEL_POSITION) {
+        if (location != BDEV_FIRST_LABEL_POSITION) {
           apply_for_bitset_range(location, length, alloc_size, used_blocks,
             [&](uint64_t pos, mempool_dynamic_bitset& bs) {
               bs.reset(pos);
@@ -13322,9 +13333,9 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
 // write helpers
 
 uint64_t BlueStore::_get_ondisk_reserved() const {
-  static_assert(BDEV_LABEL_POSITION == 0);
+  static_assert(BDEV_FIRST_LABEL_POSITION == 0);
   ceph_assert(min_alloc_size);
-  uint64_t size = p2roundup(BDEV_LABEL_BLOCK_SIZE + BLUEFS_SUPER_BLOCK_SIZE, min_alloc_size);
+  uint64_t size = p2roundup(SUPER_RESERVED, min_alloc_size);
   return size;
 }
 
