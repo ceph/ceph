@@ -1,11 +1,14 @@
 tasks:
 - ceph:
     fs: xfs
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
 - rgw: [client.0]
 - tox: [client.0]
 - s3tests:
     client.0:
       force-branch: ceph-master
+      unit_test_scan: True
       rgw_server: client.0
 overrides:
   ceph:

@@ -181,9 +181,8 @@ export class RgwMultisiteMigrateComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          $localize`${this.actionLabels.MIGRATE} done successfully`
+          $localize`Migration done successfully`
         );
-        this.notificationService.show(NotificationType.success, `Daemon restart scheduled`);
         this.submitAction.emit();
         this.activeModal.close();
       },

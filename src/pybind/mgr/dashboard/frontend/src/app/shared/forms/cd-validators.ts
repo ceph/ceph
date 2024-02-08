@@ -18,7 +18,7 @@ export function isEmptyInputValue(value: any): boolean {
   return value == null || value.length === 0;
 }
 
-export type existsServiceFn = (value: any, args?: any) => Observable<boolean>;
+export type existsServiceFn = (value: any, ...args: any[]) => Observable<boolean>;
 
 export class CdValidators {
   /**
@@ -359,7 +359,7 @@ export class CdValidators {
     serviceFnThis: any = null,
     usernameFn?: Function,
     uidField = false,
-    extraArgs = ''
+    ...extraArgs: any[]
   ): AsyncValidatorFn {
     let uName: string;
     return (control: AbstractControl): Observable<ValidationErrors | null> => {
@@ -378,7 +378,7 @@ export class CdValidators {
       }
 
       return observableTimer().pipe(
-        switchMapTo(serviceFn.call(serviceFnThis, uName, extraArgs)),
+        switchMapTo(serviceFn.call(serviceFnThis, uName, ...extraArgs)),
         map((resp: boolean) => {
           if (!resp) {
             return null;
@@ -608,6 +608,18 @@ export class CdValidators {
             existenceResult === requiredExistenceResult ? null : { bucketNameNotAllowed: true }
           )
         );
+    };
+  }
+
+  static json(): ValidatorFn {
+    return (control: AbstractControl): Record<string, any> | null => {
+      if (!control.value) return null;
+      try {
+        JSON.parse(control.value);
+        return null;
+      } catch (e) {
+        return { invalidJson: true };
+      }
     };
   }
 }

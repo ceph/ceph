@@ -135,12 +135,6 @@ class PgAutoscaler(MgrModule):
                        '`PG_NUM` before being accepted. Cannot be less than 1.0'),
             default=3.0,
             min=1.0),
-        Option(
-            name='noautoscale',
-            type='bool',
-            desc='global autoscale flag',
-            long_desc=('Option to turn on/off the autoscaler for all pools'),
-            default=False),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -155,7 +149,6 @@ class PgAutoscaler(MgrModule):
             self.sleep_interval = 60
             self.mon_target_pg_per_osd = 0
             self.threshold = 3.0
-            self.noautoscale = False
 
     def config_notify(self) -> None:
         for opt in self.NATIVE_OPTIONS:
@@ -238,7 +231,7 @@ class PgAutoscaler(MgrModule):
                     p['pg_num_target'],
 #                    p['pg_num_ideal'],
                     final,
-                    p['pg_autoscale_mode'],
+                    'off' if self.has_noautoscale_flag() else p['pg_autoscale_mode'],
                     str(p['bulk'])
                 ])
             return 0, table.get_string(), ''
@@ -260,16 +253,20 @@ class PgAutoscaler(MgrModule):
             self.remote('progress', 'complete', ev.ev_id)
             del self._event[pool_id]
 
-    def set_autoscale_mode_all_pools(self, status: str) -> None:
-        osdmap = self.get_osdmap()
-        pools = osdmap.get_pools_by_name()
-        for pool_name, _ in pools.items():
-            self.mon_command({
-                'prefix': 'osd pool set',
-                'pool': pool_name,
-                'var': 'pg_autoscale_mode',
-                'val': status
-            })
+    def has_noautoscale_flag(self) -> bool:
+        flags = self.get_osdmap().dump().get('flags', '')
+        if 'noautoscale' in flags:
+            return True
+        else:
+            return False
+
+    def has_norecover_flag(self) -> bool:
+        flags = self.get_osdmap().dump().get('flags', '')
+        if 'norecover' in flags:
+            return True
+        else:
+            return False
+
     @CLIWriteCommand("osd pool get noautoscale")
     def get_noautoscale(self) -> Tuple[int, str, str]:
         """
@@ -277,10 +274,7 @@ class PgAutoscaler(MgrModule):
         are setting the autoscaler on or off as well
         as newly created pools in the future.
         """
-
-        if self.noautoscale == None:
-            raise TypeError("noautoscale cannot be None")
-        elif self.noautoscale:
+        if self.has_noautoscale_flag():
             return 0, "", "noautoscale is on"
         else:
             return 0, "", "noautoscale is off"
@@ -289,21 +283,23 @@ class PgAutoscaler(MgrModule):
     def unset_noautoscale(self) -> Tuple[int, str, str]:
         """
         Unset the noautoscale flag so all pools will
-        have autoscale enabled (including newly created
-        pools in the future).
+        go back to its previous mode. Newly created
+        pools in the future will autoscaler on by default.
         """
-        if not self.noautoscale:
+        if not self.has_noautoscale_flag():
             return 0, "", "noautoscale is already unset!"
         else:
-            self.set_module_option("noautoscale", False)
             self.mon_command({
                 'prefix': 'config set',
                 'who': 'global',
                 'name': 'osd_pool_default_pg_autoscale_mode',
                 'value': 'on'
             })
-            self.set_autoscale_mode_all_pools("on")
-            return 0, "", "noautoscale is unset, all pools now have autoscale on"
+            self.mon_command({
+                'prefix': 'osd unset',
+                'key': 'noautoscale'
+            })
+            return 0, "", "noautoscale is unset, all pools now back to its previous mode"
 
     @CLIWriteCommand("osd pool set noautoscale")
     def set_noautoscale(self) -> Tuple[int, str, str]:
@@ -313,24 +309,26 @@ class PgAutoscaler(MgrModule):
         and complete all on-going progress events
         regarding PG-autoscaling.
         """
-        if self.noautoscale:
+        if self.has_noautoscale_flag():
             return 0, "", "noautoscale is already set!"
         else:
-            self.set_module_option("noautoscale", True)
             self.mon_command({
                 'prefix': 'config set',
                 'who': 'global',
                 'name': 'osd_pool_default_pg_autoscale_mode',
                 'value': 'off'
             })
-            self.set_autoscale_mode_all_pools("off")
+            self.mon_command({
+                'prefix': 'osd set',
+                'key': 'noautoscale'
+            })
             self.complete_all_progress_events()
             return 0, "", "noautoscale is set, all pools now have autoscale off"
 
     def serve(self) -> None:
         self.config_notify()
         while not self._shutdown.is_set():
-            if not self.noautoscale:
+            if not self.has_noautoscale_flag() and not self.has_norecover_flag():
                 osdmap = self.get_osdmap()
                 pools = osdmap.get_pools_by_name()
                 self._maybe_adjust(osdmap, pools)
@@ -567,7 +565,6 @@ class PgAutoscaler(MgrModule):
 
             raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
 
-            pool_logical_used = pool_stats[pool_id]['stored']
             bias = p['options'].get('pg_autoscale_bias', 1.0)
             target_bytes = 0
             # ratio takes precedence if both are set
@@ -575,10 +572,10 @@ class PgAutoscaler(MgrModule):
                 target_bytes = p['options'].get('target_size_bytes', 0)
 
             # What proportion of space are we using?
-            actual_raw_used = pool_logical_used * raw_used_rate
+            actual_raw_used = pool_stats[pool_id]['bytes_used']
             actual_capacity_ratio = float(actual_raw_used) / capacity
 
-            pool_raw_used = max(pool_logical_used, target_bytes) * raw_used_rate
+            pool_raw_used = max(actual_raw_used, target_bytes * raw_used_rate)
             capacity_ratio = float(pool_raw_used) / capacity
 
             self.log.info("effective_target_ratio {0} {1} {2} {3}".format(
@@ -622,7 +619,7 @@ class PgAutoscaler(MgrModule):
                 'crush_root_id': root_id,
                 'pg_autoscale_mode': p['pg_autoscale_mode'],
                 'pg_num_target': p['pg_num_target'],
-                'logical_used': pool_logical_used,
+                'logical_used': float(actual_raw_used)/raw_used_rate,
                 'target_bytes': target_bytes,
                 'raw_used_rate': raw_used_rate,
                 'subtree_capacity': capacity,
@@ -689,6 +686,9 @@ class PgAutoscaler(MgrModule):
                                 osdmap: OSDMap,
                                 pools: Dict[str, Dict[str, Any]]) -> None:
         # Update progress events if necessary
+        if self.has_noautoscale_flag():
+            self.log.debug("noautoscale_flag is set.")
+            return
         for pool_id in list(self._event):
             ev = self._event[pool_id]
             pool_data = self._get_pool_by_id(pools, pool_id)
@@ -708,7 +708,9 @@ class PgAutoscaler(MgrModule):
                       pools: Dict[str, Dict[str, Any]]) -> None:
         # Figure out which pool needs pg adjustments
         self.log.info('_maybe_adjust')
-
+        if self.has_noautoscale_flag():
+            self.log.debug("noautoscale_flag is set.")
+            return
         if osdmap.get_require_osd_release() < 'nautilus':
             return
 
@@ -747,7 +749,7 @@ class PgAutoscaler(MgrModule):
                     p['pg_num_final'])
                 if p['pg_num_final'] > p['pg_num_target']:
                     too_few.append(msg)
-                else:
+                elif p['pg_num_final'] < p['pg_num_target']:
                     too_many.append(msg)
             if not p['would_adjust']:
                 continue

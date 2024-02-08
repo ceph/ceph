@@ -198,8 +198,16 @@ public:
   void print(std::ostream& out) const;
 
   bool is_upgradeable() const {
-    return (mds_map.allows_standby_replay() && mds_map.get_num_in_mds() == 0)
-       || (!mds_map.allows_standby_replay() && mds_map.get_num_in_mds() <= 1);
+    bool asr = mds_map.allows_standby_replay();
+    auto in_mds = mds_map.get_num_in_mds();
+    auto up_mds = mds_map.get_num_up_mds();
+    return
+              /* fs was "down" */
+              (in_mds == 0)
+              /* max_mds was set to 1; asr must be disabled */
+           || (!asr && in_mds == 1)
+              /* max_mds any value and all MDS were failed; asr must be disabled */
+           || (!asr && up_mds == 0);
   }
 
   /**
@@ -245,6 +253,10 @@ public:
   }
 
 private:
+  void set_fscid(fs_cluster_id_t new_fscid) {
+    fscid = new_fscid;
+  }
+
   friend class FSMap;
 
   fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
@@ -471,6 +483,11 @@ public:
     fs.mds_map.epoch = epoch;
     fs.mds_map.modified = ceph_clock_now();
   }
+
+  /* This is method is written for the option of "ceph fs swap" commmand
+   * that intiates swap of FSCIDs.
+   */
+  void swap_fscids(fs_cluster_id_t fscid1, fs_cluster_id_t fscid2);
 
   /**
    * Apply a mutation to the mds_info_t structure for a particular

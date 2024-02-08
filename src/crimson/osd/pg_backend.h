@@ -149,8 +149,10 @@ public:
   remove_iertr::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats,
-    bool whiteout);
+    bool whiteout,
+    int num_bytes);
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
@@ -197,12 +199,14 @@ public:
       rollback_ertr>;
   rollback_iertr::future<> rollback(
     ObjectState& os,
+    const SnapSet &ss,
     const OSDOp& osd_op,
     ceph::os::Transaction& txn,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats,
     crimson::osd::ObjectContextRef head,
-    crimson::osd::ObjectContextLoader& obc_loader);
+    crimson::osd::ObjectContextLoader& obc_loader,
+    const SnapContext &snapc);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -430,6 +434,7 @@ private:
     ceph::os::Transaction& txn,
     object_stat_sum_t& delta_stats);
   void update_size_and_usage(object_stat_sum_t& delta_stats,
+    interval_set<uint64_t>& modified,
     object_info_t& oi, uint64_t offset,
     uint64_t length, bool write_full = false);
   void truncate_update_size_and_usage(

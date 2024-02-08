@@ -23,7 +23,7 @@
 // (2) check performance of emptying queue to local list, and go over the list and publish
 // (3) use std::shared_mutex (c++17) or equivalent for the connections lock
 
-// cmparisson operator between topic pointer and name
+// comparison operator between topic pointer and name
 bool operator==(const rd_kafka_topic_t* rkt, const std::string& name) {
     return name == std::string_view(rd_kafka_topic_name(rkt)); 
 }
@@ -69,7 +69,7 @@ struct connection_t {
   CallbackList callbacks;
   const std::string broker;
   const bool use_ssl;
-  const bool verify_ssl; // TODO currently iognored, not supported in librdkafka v0.11.6
+  const bool verify_ssl; // TODO currently ignored, not supported in librdkafka v0.11.6
   const boost::optional<std::string> ca_location;
   const std::string user;
   const std::string password;
@@ -100,8 +100,9 @@ struct connection_t {
     // fire all remaining callbacks (if not fired by rd_kafka_flush)
     std::for_each(callbacks.begin(), callbacks.end(), [this](auto& cb_tag) {
         cb_tag.cb(status);
-        ldout(cct, 20) << "Kafka destroy: invoking callback with tag=" << cb_tag.tag << 
-          " for: " << broker << dendl;
+        ldout(cct, 20) << "Kafka destroy: invoking callback with tag="
+                       << cb_tag.tag << " for: " << broker
+                       << " with status: " << status << dendl;
       });
     callbacks.clear();
     delivery_tag = 1;
@@ -209,7 +210,7 @@ bool new_producer(connection_t* conn) {
     return false;
   }
 
-  // get list of brokers based on the bootsrap broker
+  // get list of brokers based on the bootstrap broker
   if (rd_kafka_conf_set(conn->temp_conf, "bootstrap.servers", conn->broker.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
   if (conn->use_ssl) {
@@ -325,7 +326,6 @@ public:
   const size_t max_connections;
   const size_t max_inflight;
   const size_t max_queue;
-  const size_t max_idle_time;
 private:
   std::atomic<size_t> connection_count;
   bool stopped;
@@ -418,7 +418,9 @@ private:
     if (tag) {
       auto const q_len = conn->callbacks.size();
       if (q_len < max_inflight) {
-        ldout(conn->cct, 20) << "Kafka publish (with callback, tag=" << *tag << "): OK. Queue has: " << q_len << " callbacks" << dendl;
+        ldout(conn->cct, 20)
+            << "Kafka publish (with callback, tag=" << *tag
+            << "): OK. Queue has: " << q_len + 1 << " callbacks" << dendl;
         conn->callbacks.emplace_back(*tag, message->cb);
       } else {
         // immediately invoke callback with error - this is not a connection error
@@ -454,15 +456,18 @@ private:
         conn_it = connections.begin();
         end_it = connections.end();
       }
+
+      const auto read_timeout = cct->_conf->rgw_kafka_sleep_timeout;
       // loop over all connections to read acks
       for (;conn_it != end_it;) {
         
         auto& conn = conn_it->second;
 
-        // Checking the connection idlesness
-        if(conn->timestamp.sec() + max_idle_time < ceph_clock_now()) {
+        // Checking the connection idleness
+        if(conn->timestamp.sec() + conn->cct->_conf->rgw_kafka_connection_idle < ceph_clock_now()) {
           ldout(conn->cct, 20) << "kafka run: deleting a connection due to idle behaviour: " << ceph_clock_now() << dendl;
           std::lock_guard lock(connections_lock);
+          conn->status = STATUS_CONNECTION_IDLE;
           conn_it = connections.erase(conn_it);
           --connection_count; \
           continue;
@@ -478,21 +483,20 @@ private:
             // TODO: add error counter for failed retries
             // TODO: add exponential backoff for retries
           } else {
-            ldout(conn->cct, 10) << "Kafka run: connection (" << broker << ") retry successfull" << dendl;
+            ldout(conn->cct, 10) << "Kafka run: connection (" << broker << ") retry successful" << dendl;
           }
           ++conn_it;
           continue;
         }
 
-        reply_count += rd_kafka_poll(conn->producer, read_timeout_ms);
+        reply_count += rd_kafka_poll(conn->producer, read_timeout);
 
         // just increment the iterator
         ++conn_it;
       }
-      // if no messages were received or published
-      // across all connection, sleep for 100ms
+      // sleep if no messages were received or published across all connection
       if (send_count == 0 && reply_count == 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(read_timeout*3));
       }
     }
   }
@@ -506,15 +510,12 @@ public:
   Manager(size_t _max_connections,
       size_t _max_inflight,
       size_t _max_queue, 
-      int _read_timeout_ms,
       CephContext* _cct) : 
     max_connections(_max_connections),
     max_inflight(_max_inflight),
     max_queue(_max_queue),
-    max_idle_time(30),
     connection_count(0),
     stopped(false),
-    read_timeout_ms(_read_timeout_ms),
     connections(_max_connections),
     messages(max_queue),
     queued(0),
@@ -570,7 +571,7 @@ public:
 
     std::lock_guard lock(connections_lock);
     const auto it = connections.find(broker);
-    // note that ssl vs. non-ssl connection to the same host are two separate conenctions
+    // note that ssl vs. non-ssl connection to the same host are two separate connections
     if (it != connections.end()) {
       // connection found - return even if non-ok
       ldout(cct, 20) << "Kafka connect: connection found" << dendl;
@@ -669,14 +670,13 @@ static Manager* s_manager = nullptr;
 static const size_t MAX_CONNECTIONS_DEFAULT = 256;
 static const size_t MAX_INFLIGHT_DEFAULT = 8192; 
 static const size_t MAX_QUEUE_DEFAULT = 8192;
-static const int READ_TIMEOUT_MS_DEFAULT = 500;
 
 bool init(CephContext* cct) {
   if (s_manager) {
     return false;
   }
   // TODO: take conf from CephContext
-  s_manager = new Manager(MAX_CONNECTIONS_DEFAULT, MAX_INFLIGHT_DEFAULT, MAX_QUEUE_DEFAULT, READ_TIMEOUT_MS_DEFAULT, cct);
+  s_manager = new Manager(MAX_CONNECTIONS_DEFAULT, MAX_INFLIGHT_DEFAULT, MAX_QUEUE_DEFAULT, cct);
   return true;
 }
 

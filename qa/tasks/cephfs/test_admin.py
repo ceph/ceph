@@ -1,10 +1,10 @@
 import errno
 import json
 import logging
-import time
 import uuid
 from io import StringIO
 from os.path import join as os_path_join
+from time import sleep
 
 from teuthology.exceptions import CommandFailedError
 
@@ -627,7 +627,13 @@ class TestRenameCommand(TestAdminCommands):
         new_fs_name = 'new_cephfs'
         client_id = 'test_new_cephfs'
 
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
+        sleep(5)
         self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'fs set {new_fs_name} joinable true')
+        self.run_ceph_cmd(f'fs set {new_fs_name} refuse_client_session false')
+        sleep(5)
 
         # authorize a cephx ID access to the renamed file system.
         # use the ID to write to the file system.
@@ -660,8 +666,14 @@ class TestRenameCommand(TestAdminCommands):
         orig_fs_name = self.fs.name
         new_fs_name = 'new_cephfs'
 
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
+        sleep(5)
         self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
         self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'fs set {new_fs_name} joinable true')
+        self.run_ceph_cmd(f'fs set {new_fs_name} refuse_client_session false')
+        sleep(5)
 
         # original file system name does not appear in `fs ls` command
         self.assertFalse(self.fs.exists())
@@ -680,7 +692,13 @@ class TestRenameCommand(TestAdminCommands):
         new_fs_name = 'new_cephfs'
         data_pool = self.fs.get_data_pool_name()
         metadata_pool = self.fs.get_metadata_pool_name()
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
+        sleep(5)
         self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'fs set {new_fs_name} joinable true')
+        self.run_ceph_cmd(f'fs set {new_fs_name} refuse_client_session false')
+        sleep(5)
 
         try:
             self.run_ceph_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool}")
@@ -717,6 +735,9 @@ class TestRenameCommand(TestAdminCommands):
         """
         That renaming a file system without '--yes-i-really-mean-it' flag fails.
         """
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
+        sleep(5)
         try:
             self.run_ceph_cmd(f"fs rename {self.fs.name} new_fs")
         except CommandFailedError as ce:
@@ -726,11 +747,16 @@ class TestRenameCommand(TestAdminCommands):
         else:
             self.fail("expected renaming of file system without the "
                       "'--yes-i-really-mean-it' flag to fail ")
+        self.run_ceph_cmd(f'fs set {self.fs.name} joinable true')
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session false')
 
     def test_fs_rename_fails_for_non_existent_fs(self):
         """
         That renaming a non-existent file system fails.
         """
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
+        sleep(5)
         try:
             self.run_ceph_cmd("fs rename non_existent_fs new_fs --yes-i-really-mean-it")
         except CommandFailedError as ce:
@@ -744,6 +770,9 @@ class TestRenameCommand(TestAdminCommands):
         """
         self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
 
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
+        sleep(5)
         try:
             self.run_ceph_cmd(f"fs rename {self.fs.name} {self.fs2.name} --yes-i-really-mean-it")
         except CommandFailedError as ce:
@@ -751,6 +780,8 @@ class TestRenameCommand(TestAdminCommands):
                              "invalid error code on renaming to a fs name that is already in use")
         else:
             self.fail("expected renaming to a new file system name that is already in use to fail.")
+        self.run_ceph_cmd(f'fs set {self.fs.name} joinable true')
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session false')
 
     def test_fs_rename_fails_with_mirroring_enabled(self):
         """
@@ -760,6 +791,9 @@ class TestRenameCommand(TestAdminCommands):
         new_fs_name = 'new_cephfs'
 
         self.run_ceph_cmd(f'fs mirror enable {orig_fs_name}')
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
+        sleep(5)
         try:
             self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
         except CommandFailedError as ce:
@@ -767,6 +801,57 @@ class TestRenameCommand(TestAdminCommands):
         else:
             self.fail("expected renaming of a mirrored file system to fail")
         self.run_ceph_cmd(f'fs mirror disable {orig_fs_name}')
+        self.run_ceph_cmd(f'fs set {self.fs.name} joinable true')
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session false')
+
+    def test_rename_when_fs_is_online(self):
+        '''
+        Test that the command "ceph fs swap" command fails when first of the
+        two of FSs isn't failed/down.
+        '''
+        client_id = 'test_new_cephfs'
+        new_fs_name = 'new_cephfs'
+
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
+        self.negtest_ceph_cmd(
+            args=(f'fs rename {self.fs.name} {new_fs_name} '
+                   '--yes-i-really-mean-it'),
+            errmsgs=(f"CephFS '{self.fs.name}' is not offline. Before "
+                      "renaming a CephFS, it must be marked as down. See "
+                      "`ceph fs fail`."),
+            retval=errno.EPERM)
+        self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session false')
+
+        self.fs.getinfo()
+        keyring = self.fs.authorize(client_id, ('/', 'rw'))
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/',
+                             cephfs_name=self.fs.name)
+
+        self.check_pool_application_metadata_key_value(
+            self.fs.get_data_pool_name(), 'cephfs', 'data', self.fs.name)
+        self.check_pool_application_metadata_key_value(
+            self.fs.get_metadata_pool_name(), 'cephfs', 'metadata',
+            self.fs.name)
+
+    def test_rename_when_clients_not_refused(self):
+        '''
+        Test that "ceph fs rename" fails when client_refuse_session is not
+        set.
+        '''
+        self.mount_a.umount_wait(require_clean=True)
+
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        self.negtest_ceph_cmd(
+            args=f"fs rename {self.fs.name} new_fs --yes-i-really-mean-it",
+            errmsgs=(f"CephFS '{self.fs.name}' doesn't refuse clients. "
+                      "Before renaming a CephFS, flag "
+                      "'refuse_client_session' must be set. See "
+                      "`ceph fs set`."),
+            retval=errno.EPERM)
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
 
 
 class TestDump(CephFSTestCase):
@@ -802,7 +887,7 @@ class TestDump(CephFSTestCase):
             self.fs.set_joinable(b)
             b = not b
 
-        time.sleep(10) # for tick/compaction
+        sleep(10) # for tick/compaction
 
         try:
             self.fs.status(epoch=epoch)
@@ -826,7 +911,7 @@ class TestDump(CephFSTestCase):
 
         # force a new fsmap
         self.fs.set_joinable(False)
-        time.sleep(10) # for tick/compaction
+        sleep(10) # for tick/compaction
 
         status = self.fs.status()
         log.debug(f"new epoch is {status['epoch']}")
@@ -1249,6 +1334,10 @@ class TestFsAuthorize(CephFSTestCase):
         self.captester.run_cap_tests(self.fs, self.client_id, PERM)
 
     def test_single_path_rootsquash(self):
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
         PERM = 'rw'
         FS_AUTH_CAPS = (('/', PERM, 'root_squash'),)
         self.captester = CapTester(self.mount_a, '/')
@@ -1259,7 +1348,36 @@ class TestFsAuthorize(CephFSTestCase):
         # Since root_squash is set in client caps, client can read but not
         # write even thought access level is set to "rw".
         self.captester.conduct_pos_test_for_read_caps()
+        self.captester.conduct_pos_test_for_open_caps()
         self.captester.conduct_neg_test_for_write_caps(sudo_write=True)
+        self.captester.conduct_neg_test_for_chown_caps()
+        self.captester.conduct_neg_test_for_truncate_caps()
+
+    def test_single_path_rootsquash_issue_56067(self):
+        """
+        That a FS client using root squash MDS caps allows non-root user to write data
+        to a file. And after client remount, the non-root user can read the data that
+        was previously written by it. https://tracker.ceph.com/issues/56067
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
+        keyring = self.fs.authorize(self.client_id, ('/', 'rw', 'root_squash'))
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/')
+        filedata, filename = 'some data on fs 1', 'file_on_fs1'
+        filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
+        self.mount_a.write_file(filepath, filedata)
+
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/')
+        if filepath.find(self.mount_a.hostfs_mntpt) != -1:
+            contents = self.mount_a.read_file(filepath)
+            self.assertEqual(filedata, contents)
 
     def test_single_path_authorize_on_nonalphanumeric_fsname(self):
         """
@@ -1765,3 +1883,78 @@ class TestFsBalRankMask(CephFSTestCase):
             self.fs.set_bal_rank_mask(bal_rank_mask)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
+
+
+class TestPermErrMsg(CephFSTestCase):
+
+    CLIENT_NAME = 'client.testuser'
+    FS1_NAME, FS2_NAME, FS3_NAME = 'abcd', 'efgh', 'ijkl'
+
+    EXPECTED_ERRNO = 22
+    EXPECTED_ERRMSG = ("Permission flags in MDS capability string must be '*' "
+                       "or 'all' or must start with 'r'")
+
+    MONCAP = f'allow r fsname={FS1_NAME}'
+    OSDCAP = f'allow rw tag cephfs data={FS1_NAME}'
+    MDSCAPS = [
+        'allow w',
+        f'allow w fsname={FS1_NAME}',
+
+        f'allow rw fsname={FS1_NAME}, allow w fsname={FS2_NAME}',
+        f'allow w fsname={FS1_NAME}, allow rw fsname={FS2_NAME}',
+        f'allow w fsname={FS1_NAME}, allow w fsname={FS2_NAME}',
+
+        (f'allow rw fsname={FS1_NAME}, allow rw fsname={FS2_NAME}, allow '
+         f'w fsname={FS3_NAME}'),
+
+        # without space after comma
+        f'allow rw fsname={FS1_NAME},allow w fsname={FS2_NAME}',
+
+
+        'allow wr',
+        f'allow wr fsname={FS1_NAME}',
+
+        f'allow rw fsname={FS1_NAME}, allow wr fsname={FS2_NAME}',
+        f'allow wr fsname={FS1_NAME}, allow rw fsname={FS2_NAME}',
+        f'allow wr fsname={FS1_NAME}, allow wr fsname={FS2_NAME}',
+
+        (f'allow rw fsname={FS1_NAME}, allow rw fsname={FS2_NAME}, allow '
+         f'wr fsname={FS3_NAME}'),
+
+        # without space after comma
+        f'allow rw fsname={FS1_NAME},allow wr fsname={FS2_NAME}']
+
+    def _negtestcmd(self, SUBCMD, MDSCAP):
+        return self.negtest_ceph_cmd(
+            args=(f'{SUBCMD} {self.CLIENT_NAME} '
+                  f'mon "{self.MONCAP}" osd "{self.OSDCAP}" mds "{MDSCAP}"'),
+            retval=self.EXPECTED_ERRNO, errmsgs=self.EXPECTED_ERRMSG)
+
+    def test_auth_add(self):
+        for mdscap in self.MDSCAPS:
+            self._negtestcmd('auth add', mdscap)
+
+    def test_auth_caps(self):
+        for mdscap in self.MDSCAPS:
+            self.fs.mon_manager.run_cluster_cmd(
+                args=f'auth add {self.CLIENT_NAME}')
+
+            self._negtestcmd('auth caps', mdscap)
+
+            self.fs.mon_manager.run_cluster_cmd(
+                args=f'auth rm {self.CLIENT_NAME}')
+
+    def test_auth_get_or_create(self):
+        for mdscap in self.MDSCAPS:
+            self._negtestcmd('auth get-or-create', mdscap)
+
+    def test_auth_get_or_create_key(self):
+        for mdscap in self.MDSCAPS:
+            self._negtestcmd('auth get-or-create-key', mdscap)
+
+    def test_fs_authorize(self):
+        for wrong_perm in ('w', 'wr'):
+            self.negtest_ceph_cmd(
+                args=(f'fs authorize {self.fs.name} {self.CLIENT_NAME} / '
+                      f'{wrong_perm}'), retval=self.EXPECTED_ERRNO,
+                errmsgs=self.EXPECTED_ERRMSG)

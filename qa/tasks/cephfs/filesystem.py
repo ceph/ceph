@@ -272,8 +272,14 @@ class CephCluster(RunCephCmd):
                      "-Infinity": -float("inf")}
                 return c[value]
 
-            j = json.loads(response_data.replace('inf', 'Infinity'),
-                           parse_constant=get_nonnumeric_values)
+            
+            j = {}
+            try:
+                j = json.loads(response_data.replace('inf', 'Infinity'),
+                            parse_constant=get_nonnumeric_values)
+            except json.decoder.JSONDecodeError:
+                raise RuntimeError(response_data) # assume it is an error message, pass it up
+            
             pretty = json.dumps(j, sort_keys=True, indent=2)
             log.debug(f"_json_asok output\n{pretty}")
             return j
@@ -773,17 +779,30 @@ class Filesystem(MDSCluster):
                 assert(isinstance(subvols['create'], int))
                 assert(subvols['create'] > 0)
 
+                self.run_ceph_cmd('fs', 'subvolumegroup', 'create', self.name, 'qa')
+                subvol_options = self.fs_config.get('subvol_options', '')
+
                 for sv in range(0, subvols['create']):
                     sv_name = f'sv_{sv}'
-                    self.run_ceph_cmd('fs', 'subvolume', 'create', self.name,
-                                      sv_name,
-                                      self.fs_config.get('subvol_options', ''))
+                    cmd = [
+                      'fs',
+                      'subvolume',
+                      'create',
+                      self.name,
+                      sv_name,
+                      '--group_name', 'qa',
+                    ]
+                    if subvol_options:
+                        cmd.append(subvol_options)
+                    self.run_ceph_cmd(*cmd)
 
                     if self.name not in self._ctx.created_subvols:
                         self._ctx.created_subvols[self.name] = []
                     
                     subvol_path = self.get_ceph_cmd_stdout(
-                        'fs', 'subvolume', 'getpath', self.name, sv_name)
+                        'fs', 'subvolume', 'getpath', self.name,
+                        '--group_name', 'qa',
+                        sv_name)
                     subvol_path = subvol_path.strip()
                     self._ctx.created_subvols[self.name].append(subvol_path)
             else:
@@ -1295,9 +1314,9 @@ class Filesystem(MDSCluster):
         info = self.get_rank(rank=rank, status=status)
         return self.json_asok(command, 'mds', info['name'], timeout=timeout)
 
-    def rank_tell(self, command, rank=0, status=None):
+    def rank_tell(self, command, rank=0, status=None, timeout=120):
         try:
-            out = self.get_ceph_cmd_stdout("tell", f"mds.{self.id}:{rank}", *command)
+            out = self.get_ceph_cmd_stdout("tell", f"mds.{self.id}:{rank}", *command, timeout=timeout)
             return json.loads(out)
         except json.decoder.JSONDecodeError:
             log.error("could not decode: {}".format(out))
@@ -1712,11 +1731,11 @@ class Filesystem(MDSCluster):
         self.set_max_mds(new_max_mds)
         return self.wait_for_daemons()
 
-    def run_scrub(self, cmd, rank=0):
-        return self.rank_tell(["scrub"] + cmd, rank)
+    def run_scrub(self, cmd, rank=0, timeout=300):
+        return self.rank_tell(["scrub"] + cmd, rank=rank, timeout=timeout)
 
     def get_scrub_status(self, rank=0):
-        return self.run_scrub(["status"], rank)
+        return self.run_scrub(["status"], rank=rank, timeout=300)
 
     def flush(self, rank=0):
         return self.rank_tell(["flush", "journal"], rank=rank)
@@ -1728,7 +1747,7 @@ class Filesystem(MDSCluster):
             result = "no active scrubs running"
         with contextutil.safe_while(sleep=sleep, tries=timeout//sleep) as proceed:
             while proceed():
-                out_json = self.rank_tell(["scrub", "status"], rank=rank)
+                out_json = self.rank_tell(["scrub", "status"], rank=rank, timeout=timeout)
                 assert out_json is not None
                 if not reverse:
                     if result in out_json['status']:

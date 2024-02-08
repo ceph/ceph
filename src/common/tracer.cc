@@ -17,7 +17,7 @@
 namespace tracing {
 
 const opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> Tracer::noop_tracer = opentelemetry::trace::Provider::GetTracerProvider()->GetTracer("no-op", OPENTELEMETRY_SDK_VERSION);
-const jspan Tracer::noop_span = noop_tracer->StartSpan("noop");
+const jspan_ptr Tracer::noop_span = noop_tracer->StartSpan("noop");
 
 using bufferlist = ceph::buffer::list;
 
@@ -38,7 +38,7 @@ void Tracer::init(CephContext* _cct, opentelemetry::nostd::string_view service_n
   }
 }
 
-jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
+jspan_ptr Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
   ceph_assert(cct);
   if (is_enabled()) {
     ceph_assert(tracer);
@@ -48,7 +48,7 @@ jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
   return noop_span;
 }
 
-jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool trace_is_enabled) {
+jspan_ptr Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool trace_is_enabled) {
   ceph_assert(cct);
   ldout(cct, 20) << "start trace enabled " << trace_is_enabled << " " << dendl;
   if (trace_is_enabled) {
@@ -59,9 +59,8 @@ jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool tra
   return noop_tracer->StartSpan(trace_name);
 }
 
-jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan& parent_span) {
-  ceph_assert(cct);
-  if (is_enabled() && parent_span->IsRecording()) {
+jspan_ptr Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_ptr& parent_span) {
+  if (parent_span && parent_span->IsRecording()) {
     ceph_assert(tracer);
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_span->GetContext();
@@ -71,9 +70,8 @@ jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan&
   return noop_span;
 }
 
-jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx) {
-  ceph_assert(cct);
-  if (is_enabled() && parent_ctx.IsValid()) {
+jspan_ptr Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx) {
+  if (parent_ctx.IsValid()) {
     ceph_assert(tracer);
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_ctx;

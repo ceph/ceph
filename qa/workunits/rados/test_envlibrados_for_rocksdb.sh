@@ -26,7 +26,7 @@ case $(distro_id) in
         case $(distro_id) in
             rhel)
                 # RHEL needs CRB repo for snappy-devel
-                sudo subscription-manager repos --enable "codeready-builder-for-rhel-8-x86_64-rpms"
+                sudo dnf config-manager --set-enabled "codeready-builder-for-rhel-8-x86_64-rpms" 
                 ;;
         esac
         install git gcc-c++.x86_64 snappy-devel zlib zlib-devel bzip2 bzip2-devel libradospp-devel.x86_64 cmake libarchive-3.3.3
@@ -58,7 +58,7 @@ if [ -e rocksdb ]; then
 fi
 
 pushd $(dirname /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/bash.sh)/../../../
-git submodule update --init src/rocksdb
+git submodule update --init --progress src/rocksdb
 popd
 git clone $(dirname /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/bash.sh)/../../../src/rocksdb rocksdb
 

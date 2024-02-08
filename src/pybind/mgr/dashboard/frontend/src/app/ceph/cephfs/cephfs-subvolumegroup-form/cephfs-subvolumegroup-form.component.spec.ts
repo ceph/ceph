@@ -7,23 +7,22 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CephfsSubvolumegroupFormComponent', () => {
   let component: CephfsSubvolumegroupFormComponent;
   let fixture: ComponentFixture<CephfsSubvolumegroupFormComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [CephfsSubvolumegroupFormComponent],
-      providers: [NgbActiveModal],
-      imports: [
-        SharedModule,
-        ToastrModule.forRoot(),
-        ReactiveFormsModule,
-        HttpClientTestingModule,
-        RouterTestingModule
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [CephfsSubvolumegroupFormComponent],
+    providers: [NgbActiveModal],
+    imports: [
+      SharedModule,
+      ToastrModule.forRoot(),
+      ReactiveFormsModule,
+      HttpClientTestingModule,
+      RouterTestingModule
+    ]
   });
 
   beforeEach(() => {

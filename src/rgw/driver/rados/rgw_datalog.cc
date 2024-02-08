@@ -618,7 +618,7 @@ void RGWDataChangesLog::update_renewed(const rgw_bucket_shard& bs,
   auto status = _get_change(bs, gen);
   l.unlock();
 
-  ldout(cct, 20) << "RGWDataChangesLog::update_renewd() bucket_name="
+  ldout(cct, 20) << "RGWDataChangesLog::update_renewed() bucket_name="
 		 << bs.bucket.name << " shard_id=" << bs.shard_id
 		 << " expiration=" << expiration << dendl;
 

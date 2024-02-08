@@ -278,5 +278,14 @@ inline uint32_t current_num_shards(const BucketLayout& layout) {
 inline bool is_layout_indexless(const bucket_index_layout_generation& layout) {
   return layout.layout.type == BucketIndexType::Indexless;
 }
+inline bool is_layout_reshardable(const bucket_index_layout_generation& layout) {
+  return layout.layout.type == BucketIndexType::Normal;
+}
+inline bool is_layout_reshardable(const BucketLayout& layout) {
+  return is_layout_reshardable(layout.current_index);
+}
+inline std::string_view current_layout_desc(const BucketLayout& layout) {
+  return rgw::to_string(layout.current_index.layout.type);
+}
 
 } // namespace rgw

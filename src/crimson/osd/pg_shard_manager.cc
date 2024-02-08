@@ -23,7 +23,7 @@ seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
         auto[coll, shard_core] = coll_core;
 	spg_t pgid;
 	if (coll.is_pg(&pgid)) {
-          return get_pg_to_shard_mapping().maybe_create_pg(
+          return get_pg_to_shard_mapping().get_or_create_pg_mapping(
             pgid, shard_core
           ).then([this, pgid] (auto core) {
             return this->template with_remote_shard_state(
@@ -103,6 +103,15 @@ seastar::future<> PGShardManager::set_up_epoch(epoch_t e) {
       local_service.local_state.set_up_epoch(e);
       return seastar::now();
     });
+}
+
+seastar::future<> PGShardManager::set_superblock(OSDSuperblock superblock) {
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  get_osd_singleton_state().set_singleton_superblock(superblock);
+  return shard_services.invoke_on_all(
+  [superblock = std::move(superblock)](auto &local_service) {
+    return local_service.local_state.update_shard_superblock(superblock);
+  });
 }
 
 }

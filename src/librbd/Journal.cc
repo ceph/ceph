@@ -39,6 +39,7 @@ using util::create_async_context_callback;
 using util::create_context_callback;
 using journal::util::C_DecodeTag;
 using journal::util::C_DecodeTags;
+using io::Extents;
 
 namespace {
 
@@ -760,36 +761,87 @@ void Journal<I>::user_flushed() {
 }
 
 template <typename I>
-uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
-                                        const bufferlist &bl,
-                                        bool flush_entry) {
+void Journal<I>::add_write_event_entries(uint64_t offset, size_t length,
+                                         const bufferlist &bl,
+                                         uint64_t buffer_offset,
+                                         Bufferlists *bufferlists) {
   ceph_assert(m_max_append_size > journal::AioWriteEvent::get_fixed_size());
-  uint64_t max_write_data_size =
+  const uint64_t max_write_data_size =
     m_max_append_size - journal::AioWriteEvent::get_fixed_size();
 
   // ensure that the write event fits within the journal entry
-  Bufferlists bufferlists;
   uint64_t bytes_remaining = length;
   uint64_t event_offset = 0;
   do {
     uint64_t event_length = std::min(bytes_remaining, max_write_data_size);
 
     bufferlist event_bl;
-    event_bl.substr_of(bl, event_offset, event_length);
+    event_bl.substr_of(bl, buffer_offset + event_offset, event_length);
     journal::EventEntry event_entry(journal::AioWriteEvent(offset + event_offset,
                                                            event_length,
                                                            event_bl),
                                     ceph_clock_now());
 
-    bufferlists.emplace_back();
-    encode(event_entry, bufferlists.back());
+    bufferlists->emplace_back();
+    encode(event_entry, bufferlists->back());
 
     event_offset += event_length;
     bytes_remaining -= event_length;
   } while (bytes_remaining > 0);
+}
 
-  return append_io_events(journal::EVENT_TYPE_AIO_WRITE, bufferlists, offset,
-                          length, flush_entry, 0);
+template <typename I>
+uint64_t Journal<I>::append_write_event(const Extents &image_extents,
+                                        const bufferlist &bl,
+                                        bool flush_entry) {
+  Bufferlists bufferlists;
+  uint64_t buffer_offset = 0;
+  for (auto &extent : image_extents) {
+    add_write_event_entries(extent.first, extent.second, bl, buffer_offset,
+                            &bufferlists);
+
+    buffer_offset += extent.second;
+  }
+
+  return append_io_events(journal::EVENT_TYPE_AIO_WRITE, bufferlists,
+                          image_extents, flush_entry, 0);
+}
+
+template <typename I>
+uint64_t Journal<I>::append_write_same_event(const Extents &image_extents,
+                                             const bufferlist &bl,
+                                             bool flush_entry) {
+  Bufferlists bufferlists;
+  for (auto &extent : image_extents) {
+    journal::EventEntry event_entry(
+      journal::AioWriteSameEvent(extent.first, extent.second, bl),
+      ceph_clock_now());
+
+    bufferlists.emplace_back();
+    encode(event_entry, bufferlists.back());
+  }
+
+  return append_io_events(journal::EVENT_TYPE_AIO_WRITESAME, bufferlists,
+                          image_extents, flush_entry, 0);
+}
+
+template <typename I>
+uint64_t Journal<I>::append_discard_event(const Extents &image_extents,
+                                          uint32_t discard_granularity_bytes,
+                                          bool flush_entry) {
+  Bufferlists bufferlists;
+  for (auto &extent : image_extents) {
+    journal::EventEntry event_entry(
+      journal::AioDiscardEvent(extent.first, extent.second,
+                               discard_granularity_bytes),
+      ceph_clock_now());
+
+    bufferlists.emplace_back();
+    encode(event_entry, bufferlists.back());
+  }
+
+  return append_io_events(journal::EVENT_TYPE_AIO_DISCARD, bufferlists,
+                          image_extents, flush_entry, 0);
 }
 
 template <typename I>
@@ -832,7 +884,8 @@ uint64_t Journal<I>::append_compare_and_write_event(uint64_t offset,
   } while (bytes_remaining > 0);
 
   return append_io_events(journal::EVENT_TYPE_AIO_COMPARE_AND_WRITE,
-                          bufferlists, offset, length, flush_entry, -EILSEQ);
+                          bufferlists, {{offset, length}}, flush_entry,
+                          -EILSEQ);
 }
 
 template <typename I>
@@ -842,14 +895,14 @@ uint64_t Journal<I>::append_io_event(journal::EventEntry &&event_entry,
   bufferlist bl;
   event_entry.timestamp = ceph_clock_now();
   encode(event_entry, bl);
-  return append_io_events(event_entry.get_event_type(), {bl}, offset, length,
-                          flush_entry, filter_ret_val);
+  return append_io_events(event_entry.get_event_type(), {bl},
+                          {{offset, length}}, flush_entry, filter_ret_val);
 }
 
 template <typename I>
 uint64_t Journal<I>::append_io_events(journal::EventType event_type,
                                       const Bufferlists &bufferlists,
-                                      uint64_t offset, size_t length,
+                                      const Extents &image_extents,
                                       bool flush_entry, int filter_ret_val) {
   ceph_assert(!bufferlists.empty());
 
@@ -870,14 +923,13 @@ uint64_t Journal<I>::append_io_events(journal::EventType event_type,
 
   {
     std::lock_guard event_locker{m_event_lock};
-    m_events[tid] = Event(futures, offset, length, filter_ret_val);
+    m_events[tid] = Event(futures, image_extents, filter_ret_val);
   }
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": "
                  << "event=" << event_type << ", "
-                 << "offset=" << offset << ", "
-                 << "length=" << length << ", "
+                 << "image_extents=" << image_extents << ", "
                  << "flush=" << flush_entry << ", tid=" << tid << dendl;
 
   Context *on_safe = create_async_context_callback(

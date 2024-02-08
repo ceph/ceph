@@ -246,7 +246,8 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 	}
       }
       assert(found == true);
-      return Journal::replay_ertr::make_ready_future<bool>(true);
+      return Journal::replay_ertr::make_ready_future<
+	std::pair<bool, CachedExtentRef>>(true, nullptr);
     });
   }
 
@@ -576,7 +577,8 @@ TEST_F(cbjournal_test_t, multiple_submit_at_end)
 	     auto &dirty_seq,
 	     auto &alloc_seq,
 	     auto last_modified) {
-      return Journal::replay_ertr::make_ready_future<bool>(true);
+      return Journal::replay_ertr::make_ready_future<
+	std::pair<bool, CachedExtentRef>>(true, nullptr);
     }).unsafe_get0();
     assert(get_written_to() == old_written_to);
   });

@@ -32,6 +32,12 @@ export class PrometheusService {
 
   constructor(private http: HttpClient) {}
 
+  unsubscribe() {
+    if (this.timerGetPrometheusDataSub) {
+      this.timerGetPrometheusDataSub.unsubscribe();
+    }
+  }
+
   getPrometheusData(params: any): any {
     return this.http.get<any>(`${this.baseURL}/data`, { params });
   }
@@ -148,6 +154,8 @@ export class PrometheusService {
             }).subscribe((data: any) => {
               if (data.result.length) {
                 queriesResults[queryName] = data.result[0].values;
+              } else {
+                queriesResults[queryName] = [];
               }
               if (
                 queriesResults[queryName] !== undefined &&

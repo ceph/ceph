@@ -5,11 +5,13 @@
 /**
  * \file the PgScrubber interface used by the scrub FSM
  */
+#include "common/LogClient.h"
 #include "common/version.h"
 #include "include/Context.h"
 #include "osd/osd_types.h"
+#include "osd/scrubber_common.h"
 
-struct ScrubMachineListener;
+class PG;
 
 namespace Scrub {
 
@@ -48,10 +50,17 @@ struct preemption_t {
 }  // namespace Scrub
 
 struct ScrubMachineListener {
-  virtual CephContext *get_cct() const = 0;
+  virtual CephContext *get_pg_cct() const = 0;
   virtual LogChannelRef &get_clog() const = 0;
   virtual int get_whoami() const = 0;
   virtual spg_t get_spgid() const = 0;
+  virtual PG* get_pg() const = 0;
+
+  /**
+   * access the set of performance counters relevant to this scrub
+   * (one of the four sets of counters maintained by the OSD)
+   */
+  virtual PerfCounters& get_counters_set() const = 0;
 
   using scrubber_callback_t = std::function<void(void)>;
   using scrubber_callback_cancel_token_t = Context*;
@@ -72,9 +81,9 @@ struct ScrubMachineListener {
   /**
    * cancel_callback
    *
-   * Attempts to cancel the callback to whcih the passed token is associated.
+   * Attempts to cancel the callback to which the passed token is associated.
    * cancel_callback is best effort, the callback may still fire.
-   * cancel_callback guarrantees that exactly one of the two things will happen:
+   * cancel_callback guarantees that exactly one of the two things will happen:
    * - the callback is destroyed and will not be invoked
    * - the callback will be invoked
    */
@@ -93,7 +102,19 @@ struct ScrubMachineListener {
   /// state.
   virtual void set_state_name(const char* name) = 0;
 
+  /// access the text specifying scrub level and whether it is a repair
+  virtual std::string_view get_op_mode_text() const = 0;
+
   [[nodiscard]] virtual bool is_primary() const = 0;
+
+  /// dequeue this PG from the OSD's scrub-queue
+  virtual void rm_from_osd_scrubbing() = 0;
+
+  /**
+   * the FSM has entered the PrimaryActive state. That happens when
+   * peered as a Primary, and achieving the 'active' state.
+   */
+  virtual void schedule_scrub_with_osd() = 0;
 
   virtual void select_range_n_notify() = 0;
 
@@ -114,8 +135,15 @@ struct ScrubMachineListener {
 
   virtual void replica_handling_done() = 0;
 
-  /// the version of 'scrub_clear_state()' that does not try to invoke FSM
-  /// services (thus can be called from FSM reactions)
+  /**
+   * clears both internal scrub state, and some PG-visible flags:
+   * - the two scrubbing PG state flags;
+   * - primary/replica scrub position (chunk boundaries);
+   * - primary/replica interaction state;
+   * - the backend state;
+   * Also runs pending callbacks, and clears the active flags.
+   * Does not try to invoke FSM events.
+   */
   virtual void clear_pgscrub_state() = 0;
 
   /// Get time to sleep before next scrub
@@ -133,6 +161,10 @@ struct ScrubMachineListener {
 
   /// the part that actually finalizes a scrub
   virtual void scrub_finish() = 0;
+
+  /// notify the scrubber about a scrub failure
+  /// (note: temporary implementation)
+  virtual void penalize_next_scrub(Scrub::delay_cause_t cause) = 0;
 
   /**
    * Prepare a MOSDRepScrubMap message carrying the requested scrub map
@@ -171,27 +203,18 @@ struct ScrubMachineListener {
    */
   virtual void maps_compare_n_cleanup() = 0;
 
-  /**
-   * order the PgScrubber to initiate the process of reserving replicas' scrub
-   * resources.
-   */
-  virtual void reserve_replicas() = 0;
-
-  virtual void unreserve_replicas() = 0;
-
-  virtual void on_replica_reservation_timeout() = 0;
-
-  virtual void set_scrub_begin_time() = 0;
-
-  virtual void set_scrub_duration() = 0;
+  virtual void set_scrub_duration(std::chrono::milliseconds duration) = 0;
 
   /**
    * No new scrub session will start while a scrub was initiate on a PG,
    * and that PG is trying to acquire replica resources.
    * set_reserving_now()/clear_reserving_now() let's the OSD scrub-queue know
    * we are busy reserving.
+   *
+   * set_reserving_now() returns 'false' if there already is a PG in the
+   * reserving stage of the scrub session.
    */
-  virtual void set_reserving_now() = 0;
+  virtual bool set_reserving_now() = 0;
   virtual void clear_reserving_now() = 0;
 
   /**
@@ -200,11 +223,8 @@ struct ScrubMachineListener {
   virtual void set_queued_or_active() = 0;
   virtual void clear_queued_or_active() = 0;
 
-  /// Release remote scrub reservation
-  virtual void dec_scrubs_remote() = 0;
-
-  /// Advance replica token
-  virtual void advance_token() = 0;
+  /// note the epoch when the scrub session started
+  virtual void reset_epoch() = 0;
 
   /**
    * Our scrubbing is blocked, waiting for an excessive length of time for
@@ -235,4 +255,10 @@ struct ScrubMachineListener {
 
   /// sending cluster-log warnings
   virtual void log_cluster_warning(const std::string& msg) const = 0;
+
+  /// delay next retry of this PG after a replica reservation failure
+  virtual void flag_reservations_failure() = 0;
+
+  /// is this scrub more than just regular periodic scrub?
+  [[nodiscard]] virtual bool is_high_priority() const = 0;
 };

@@ -5,7 +5,6 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 include /usr/share/dpkg/default.mk
 
-extraopts += -DCMAKE_C_COMPILER=gcc-11 -DCMAKE_CXX_COMPILER=g++-11
 ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # dh_auto_build sets LDFLAGS with `dpkg-buildflags --get LDFLAGS` on ubuntu,
   # which makes the application aborts when the shared library throws
@@ -59,19 +58,15 @@ py3_overrides_packages := $(basename $(notdir $(wildcard debian/*.requires)))
 py3_packages := cephfs-shell cephfs-top cephadm
 
 %:
-	dh $@ --buildsystem=cmake --with javahelper,python3,systemd --parallel
+	dh $@ --buildsystem=cmake --with javahelper,python3 --parallel
 
 override_dh_auto_configure:
 	env | sort
 	dh_auto_configure --buildsystem=cmake -- $(extraopts) $(CEPH_EXTRA_CMAKE_ARGS)
 
-override_dh_auto_build:
-	dh_auto_build --buildsystem=cmake
-	cp src/init-radosgw debian/radosgw.init
-
 override_dh_auto_clean:
 	dh_auto_clean --buildsystem=cmake
-	rm -f debian/radosgw.init debian/ceph.logrotate
+	rm -f debian/radosgw.init debian/ceph.logrotate debian/ceph-base.docs
 
 override_dh_auto_install:
 	dh_auto_install --buildsystem=cmake --destdir=$(DESTDIR)
@@ -87,13 +82,12 @@ override_dh_auto_install:
 override_dh_installchangelogs:
 	dh_installchangelogs --exclude doc/changelog
 
-override_dh_installdocs:
-
 override_dh_installlogrotate:
 	cp src/logrotate.conf debian/ceph-common.logrotate
 	dh_installlogrotate -pceph-common
 
 override_dh_installinit:
+	cp src/init-radosgw debian/radosgw.init
 	# install the systemd stuff manually since we have funny service names
 	install -d -m0755 debian/ceph-common/etc/default
 	install -m0644 etc/default/ceph debian/ceph-common/etc/default/
@@ -103,15 +97,9 @@ override_dh_installinit:
 	dh_installinit -p ceph-base --name ceph --no-start
 	dh_installinit -p radosgw --no-start
 
-	# NOTE: execute systemd helpers so they pickup dh_install'ed units and targets
-	dh_systemd_enable
-	dh_systemd_start --no-restart-on-upgrade
-
-override_dh_systemd_enable:
-	# systemd enable done as part of dh_installinit
-
-override_dh_systemd_start:
-	# systemd start done as part of dh_installinit
+override_dh_installsystemd:
+	# Only enable and start systemd targets
+	dh_installsystemd --no-stop-on-upgrade --no-restart-after-upgrade -Xceph-mon.service -Xceph-osd.service -X ceph-mds.service
 
 override_dh_strip:
 	dh_strip -pceph-mds --dbg-package=ceph-mds-dbg
@@ -152,8 +140,12 @@ override_dh_python3:
 	@for pkg in $(py3_packages); do \
 	  dh_python3 -p $$pkg;          \
 	done
+	dh_python3 -p ceph-base --shebang=/usr/bin/python3
+	dh_python3 -p ceph-common --shebang=/usr/bin/python3
+	dh_python3 -p ceph-fuse --shebang=/usr/bin/python3
+	dh_python3 -p ceph-volume --shebang=/usr/bin/python3
 
 # do not run tests
 override_dh_auto_test:
 
-.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_build override_dh_auto_clean override_dh_auto_install override_dh_installdocs override_dh_installlogrotate override_dh_installinit override_dh_systemd_start override_dh_strip override_dh_auto_test
+.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_clean override_dh_auto_install override_dh_installlogrotate override_dh_installinit override_dh_strip override_dh_auto_test

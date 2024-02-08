@@ -1,0 +1,58 @@
+teuthology:
+  premerge: |
+            local branch = yaml.teuthology.branch
+            yaml_fragment['tasks'][0]['install']['branch'] = tostring(branch)
+            print_branch = "**** done installing "..tostring(branch)
+            yaml_fragment['tasks'][1]['print'] = print_branch
+            local exec = yaml_fragment['tasks'][3]['exec']['osd.0']
+            local set_compat = "ceph osd set-require-min-compat-client "..tostring(branch)
+            py_attrgetter(exec).append(set_compat)
+tasks:
+- install:
+    branch: []
+    exclude_packages:
+      - cephadm
+      - ceph-mgr-cephadm
+      - ceph-immutable-object-cache
+      - python3-rados
+      - python3-rgw
+      - python3-rbd
+      - python3-cephfs
+      - ceph-volume
+    extra_packages:
+      - python-rados
+      - python-rgw
+      - python-rbd
+      - python-cephfs
+    # For kernel_untar_build workunit
+    extra_system_packages:
+      - bison
+      - flex
+      - elfutils-libelf-devel
+      - openssl-devel
+      - NetworkManager
+      - iproute
+      - util-linux
+- print: []
+- ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(FS_
+      - \(MDS_
+      - \(OSD_
+      - \(MON_DOWN\)
+      - \(CACHE_POOL_
+      - \(POOL_
+      - \(MGR_DOWN\)
+      - \(PG_
+      - \(SMALLER_PGP_NUM\)
+      - Monitor daemon marked osd
+      - Behind on trimming
+      - Manager daemon
+    conf:
+      global:
+        mon warn on pool no app: false
+        ms bind msgr2: false
+- exec:
+    osd.0: []
+- print: "**** done ceph"

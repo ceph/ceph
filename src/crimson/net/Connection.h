@@ -81,10 +81,35 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
    *
    * Send a message over a connection that has completed its handshake.
    *
-   * May be invoked from any core, but that requires to chain the returned
-   * future to preserve ordering.
+   * May be invoked from any core, and the send order will be preserved upon
+   * the call.
+   *
+   * The returned future will be resolved only after the message is enqueued
+   * remotely.
    */
-  virtual seastar::future<> send(MessageURef msg) = 0;
+  virtual seastar::future<> send(
+      MessageURef msg) = 0;
+
+  /**
+   * send_with_throttling
+   *
+   * Send a message over a connection that has completed its handshake.
+   *
+   * May be invoked from any core, and the send order will be preserved upon
+   * the call.
+   *
+   * TODO:
+   *
+   * The returned future is reserved for throttling.
+   *
+   * Gating is needed for graceful shutdown, to wait until the message is
+   * enqueued remotely.
+   */
+  seastar::future<> send_with_throttling(
+      MessageURef msg /* , seastar::gate & */) {
+    std::ignore = send(std::move(msg));
+    return seastar::now();
+  }
 
   /**
    * send_keepalive
@@ -92,8 +117,8 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
    * Send a keepalive message over a connection that has completed its
    * handshake.
    *
-   * May be invoked from any core, but that requires to chain the returned
-   * future to preserve ordering.
+   * May be invoked from any core, and the send order will be preserved upon
+   * the call.
    */
   virtual seastar::future<> send_keepalive() = 0;
 

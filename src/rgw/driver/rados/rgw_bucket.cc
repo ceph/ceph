@@ -13,6 +13,7 @@
 #include "services/svc_user.h"
 
 #include "rgw_reshard.h"
+#include "rgw_pubsub.h"
 
 // stolen from src/cls/version/cls_version.cc
 #define VERSION_ATTR "ceph.objclass.version"
@@ -27,6 +28,14 @@
 constexpr uint64_t BUCKET_TAG_QUICK_TIMEOUT = 30;
 
 using namespace std;
+
+// these values are copied from cls/rgw/cls_rgw.cc
+static const string BI_OLH_ENTRY_NS_START = "\x80" "1001_";
+static const string BI_INSTANCE_ENTRY_NS_START = "\x80" "1000_";
+
+// number of characters that we should allow to be buffered by the formatter
+// before flushing (used by index check methods with dump_keys=true)
+static constexpr int FORMATTER_LEN_FLUSH_THRESHOLD = 4 * 1024 * 1024;
 
 // default number of entries to list with each bucket listing call
 // (use marker to bridge between calls)
@@ -86,51 +95,40 @@ void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& use
 				   optional_yield y,
                                    const DoutPrefixProvider *dpp)
 {
-  rgw::sal::BucketList user_buckets;
-  string marker;
+  size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
 
-  CephContext *cct = driver->ctx();
-
-  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
-
+  rgw::sal::BucketList listing;
   do {
-    int ret = user.list_buckets(dpp, marker, string(), max_entries, false, user_buckets, y);
+    int ret = user.list_buckets(dpp, listing.next_marker, string(),
+                                max_entries, false, listing, y);
     if (ret < 0) {
-      ldout(driver->ctx(), 0) << "failed to read user buckets: "
-			     << cpp_strerror(-ret) << dendl;
+      ldpp_dout(dpp, 0) << "failed to read user buckets: "
+          << cpp_strerror(-ret) << dendl;
       return;
     }
 
-    map<string, std::unique_ptr<rgw::sal::Bucket>>& buckets = user_buckets.get_buckets();
-    for (auto i = buckets.begin();
-         i != buckets.end();
-         ++i) {
-      marker = i->first;
-
-      auto& bucket = i->second;
-
-      std::unique_ptr<rgw::sal::Bucket> actual_bucket;
-      int r = driver->get_bucket(dpp, &user, user.get_tenant(), bucket->get_name(), &actual_bucket, y);
+    for (const auto& ent : listing.buckets) {
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      int r = driver->load_bucket(dpp, rgw_bucket(user.get_tenant(), ent.bucket.name),
+                                  &bucket, y);
       if (r < 0) {
-        ldout(driver->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
+        ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket << dendl;
         continue;
       }
 
-      if (actual_bucket->get_name().compare(bucket->get_name()) != 0 ||
-          actual_bucket->get_tenant().compare(bucket->get_tenant()) != 0 ||
-          actual_bucket->get_marker().compare(bucket->get_marker()) != 0 ||
-          actual_bucket->get_bucket_id().compare(bucket->get_bucket_id()) != 0) {
-        cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
+      if (ent.bucket != bucket->get_key()) {
+        cout << "bucket info mismatch: expected " << ent.bucket
+            << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-	  r = actual_bucket->chown(dpp, user, y);
+	  r = bucket->chown(dpp, user.get_id(), y);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
         }
       }
     }
-  } while (user_buckets.is_truncated());
+  } while (!listing.next_marker.empty());
 }
 
 // returns true if entry is in the empty namespace. note: function
@@ -150,7 +148,7 @@ int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, r
 
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 
-  return object->delete_object(dpp, y);
+  return object->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
@@ -184,7 +182,8 @@ int RGWBucket::init(rgw::sal::Driver* _driver, RGWBucketAdminOpState& op_state,
     bucket_name = bucket_name.substr(pos + 1);
   }
 
-  int r = driver->get_bucket(dpp, user.get(), tenant, bucket_name, &bucket, y);
+  int r = driver->load_bucket(dpp, rgw_bucket(tenant, bucket_name),
+                              &bucket, y);
   if (r < 0) {
       set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket_name);
       return r;
@@ -246,11 +245,6 @@ bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw:
 int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
                      optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
 {
-  /* User passed in by rgw_admin is the new user; get the current user and set it in
-   * the bucket */
-  std::unique_ptr<rgw::sal::User> old_user = driver->get_user(bucket->get_info().owner);
-  bucket->set_owner(old_user.get());
-
   return rgw_chown_bucket_and_objects(driver, bucket.get(), user.get(), marker, err_msg, dpp, y);
 }
 
@@ -463,6 +457,380 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+/**
+ * Loops over all olh entries in a bucket shard and finds ones with
+ * exists=false and pending_removal=true. If the pending log is empty on
+ * these entries, they were left behind after the last remaining version of
+ * an object was deleted or after an incomplete upload. This was known to
+ * happen historically due to concurrency conflicts among requests referencing
+ * the same object key. If op_state.fix_index is true, we continue where the
+ * request left off by calling RGWRados::clear_olh. If the pending log is not
+ * empty, we attempt to apply it.
+ */
+static int check_index_olh(rgw::sal::RadosStore* const rados_store,
+                           rgw::sal::Bucket* const bucket,
+                           const DoutPrefixProvider *dpp,
+                           RGWBucketAdminOpState& op_state,
+                           RGWFormatterFlusher& flusher,
+                           const int shard, 
+                           uint64_t* const count_out,
+                           optional_yield y)
+{
+  string marker = BI_OLH_ENTRY_NS_START;
+  bool is_truncated = true;
+  list<rgw_cls_bi_entry> entries;
+
+  RGWObjectCtx obj_ctx(rados_store);
+  RGWRados* store = rados_store->getRados();
+  RGWRados::BucketShard bs(store);
+
+  int ret = bs.init(dpp, bucket->get_info(), bucket->get_info().layout.current_index, shard, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR bs.init(bucket=" << bucket << "): " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  
+  *count_out = 0;
+  do {
+    entries.clear();
+    ret = store->bi_list(bs, "", marker, -1, &entries, &is_truncated, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR bi_list(): " << cpp_strerror(-ret) << dendl;
+      break;
+    }
+    list<rgw_cls_bi_entry>::iterator iter;
+    for (iter = entries.begin(); iter != entries.end(); ++iter) {
+      rgw_cls_bi_entry& entry = *iter;
+      marker = entry.idx;
+      if (entry.type != BIIndexType::OLH) {
+        is_truncated = false;
+        break;
+      }
+      rgw_bucket_olh_entry olh_entry;
+      auto iiter = entry.data.cbegin();
+      try {
+        decode(olh_entry, iiter);
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, -1) << "ERROR failed to decode olh entry for key: " << entry.idx << dendl;
+        continue;
+      }
+      if (olh_entry.exists || !olh_entry.pending_removal) {
+        continue;
+      }
+      if (op_state.will_fix_index()) {
+        rgw_obj obj(bucket->get_key(), olh_entry.key.name);
+        if (olh_entry.pending_log.empty()) {
+          ret = store->clear_olh(dpp, obj_ctx, obj, bucket->get_info(), olh_entry.tag, olh_entry.epoch, y);
+          if (ret < 0) {
+            ldpp_dout(dpp, -1) << "ERROR failed to clear olh for: " << olh_entry.key.name << " clear_olh(): " << cpp_strerror(-ret) << dendl;
+            continue;
+          }
+        } else {
+          std::unique_ptr<rgw::sal::Object> object = bucket->get_object({olh_entry.key.name});
+          RGWObjState *state;
+          ret = object->get_obj_state(dpp, &state, y, false);
+          if (ret < 0) {
+            ldpp_dout(dpp, -1) << "ERROR failed to get state for: " << olh_entry.key.name << " get_obj_state(): " << cpp_strerror(-ret) << dendl;
+            continue;
+          }
+          ret = store->update_olh(dpp, obj_ctx, state, bucket->get_info(), obj, y);
+          if (ret < 0) {
+            ldpp_dout(dpp, -1) << "ERROR failed to update olh for: " << olh_entry.key.name << " update_olh(): " << cpp_strerror(-ret) << dendl;
+            continue;
+          }
+        }
+      }
+      if (op_state.dump_keys) {
+        flusher.get_formatter()->dump_string("", olh_entry.key.name);
+        if (flusher.get_formatter()->get_len() > FORMATTER_LEN_FLUSH_THRESHOLD) {
+          flusher.flush();
+        }
+      }
+      *count_out += 1;
+    }
+  } while (is_truncated);
+  flusher.flush();
+  return 0;
+}
+
+
+/**
+ * Spawns separate coroutines to check each bucket shard for leftover
+ * olh entries (and remove them if op_state.fix_index is true).
+ */
+int RGWBucket::check_index_olh(rgw::sal::RadosStore* const rados_store,
+                               const DoutPrefixProvider *dpp,
+                               RGWBucketAdminOpState& op_state,
+                               RGWFormatterFlusher& flusher)
+{
+  const RGWBucketInfo& bucket_info = get_bucket_info();
+  if ((bucket_info.versioning_status() & BUCKET_VERSIONED) == 0) {
+    ldpp_dout(dpp, 0) << "WARNING: this command is only applicable to versioned buckets" << dendl;
+    return 0;
+  }
+  
+  Formatter* formatter = flusher.get_formatter();
+  if (op_state.dump_keys) {
+    formatter->open_array_section("");
+  }
+
+  const int max_shards = rgw::num_shards(bucket_info.layout.current_index);
+  std::string verb = op_state.will_fix_index() ? "removed" : "found";
+  uint64_t count_out = 0;
+  
+  boost::asio::io_context context;
+  int next_shard = 0;
+  
+  const int max_aio = std::max(1, op_state.get_max_aio());
+
+  for (int i=0; i<max_aio; i++) {
+    spawn::spawn(context, [&](spawn::yield_context yield) {
+      while (true) {
+        int shard = next_shard;
+        next_shard += 1;
+        if (shard >= max_shards) {
+          return;
+        }
+        optional_yield y(context, yield);
+        uint64_t shard_count;
+        int r = ::check_index_olh(rados_store, &*bucket, dpp, op_state, flusher, shard, &shard_count, y);
+        if (r < 0) {
+          ldpp_dout(dpp, -1) << "NOTICE: error processing shard " << shard << 
+            " check_index_olh(): " << r << dendl;
+        }
+        count_out += shard_count;
+        if (!op_state.hide_progress) {
+          ldpp_dout(dpp, 1) << "NOTICE: finished shard " << shard << " (" << shard_count <<
+            " entries " << verb << ")" << dendl;
+        }
+      }
+    });
+  }
+  try {
+    context.run();
+  } catch (const std::system_error& e) {
+    return -e.code().value();
+  }
+  if (!op_state.hide_progress) {
+    ldpp_dout(dpp, 1) << "NOTICE: finished all shards (" << count_out <<
+      " entries " << verb << ")" << dendl;
+  }
+  if (op_state.dump_keys) {
+    formatter->close_section();
+    flusher.flush();
+  }
+  return 0;
+}
+
+/**
+ * Indicates whether a versioned bucket instance entry is listable in the
+ * index. It does this by looping over all plain entries with prefix equal to
+ * the key name, and checking whether any have an instance ID matching the one
+ * on the specified key. The existence of an instance entry without a matching
+ * plain entry indicates that the object was uploaded successfully, but the
+ * request exited prior to linking the object into the index (via the creation
+ * of a plain entry).
+ */
+static int is_versioned_instance_listable(const DoutPrefixProvider *dpp,
+                                          RGWRados::BucketShard& bs,
+                                          const cls_rgw_obj_key& key,
+                                          bool& listable,
+                                          optional_yield y)
+{
+  const std::string empty_delim;
+  cls_rgw_obj_key marker;
+  rgw_cls_list_ret result;
+  listable = false;
+
+  do {
+    librados::ObjectReadOperation op;
+    cls_rgw_bucket_list_op(op, marker, key.name, empty_delim, 1000,
+                           true, &result);
+    bufferlist ibl;
+    int r = bs.bucket_obj.operate(dpp, &op, &ibl, y);
+    if (r < 0) {
+      return r;
+    }
+
+    for (auto const& entry : result.dir.m) {
+      if (entry.second.key == key) {
+        listable = true;
+        return 0;
+      }
+      marker = entry.second.key;
+    }
+  } while (result.is_truncated);
+  return 0;
+}
+
+/**
+ * Loops over all instance entries in a bucket shard and finds ones with
+ * versioned_epoch=0 and an mtime that is earlier than op_state.min_age
+ * relative to the current time. These entries represent objects that were
+ * uploaded successfully but were not successfully linked into the object
+ * index. As an extra precaution, we also verify that these entries are indeed
+ * non listable (have no corresponding plain entry in the index). We can assume
+ * that clients received an error response for the associated upload requests
+ * since the bucket index linking transaction did not complete. Therefore, if
+ * op_state.fix_index is true, we remove the object that is associated with the
+ * instance entry.
+ */
+static int check_index_unlinked(rgw::sal::RadosStore* const rados_store,
+                                rgw::sal::Bucket* const bucket,
+                                const DoutPrefixProvider *dpp,
+                                RGWBucketAdminOpState& op_state,
+                                RGWFormatterFlusher& flusher,
+                                const int shard, 
+                                uint64_t* const count_out,
+                                optional_yield y)
+{
+  string marker = BI_INSTANCE_ENTRY_NS_START;
+  bool is_truncated = true;
+  list<rgw_cls_bi_entry> entries;
+
+  RGWObjectCtx obj_ctx(rados_store);
+  RGWRados* store = rados_store->getRados();
+  RGWRados::BucketShard bs(store);
+
+  int ret = bs.init(dpp, bucket->get_info(), bucket->get_info().layout.current_index, shard, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR bs.init(bucket=" << bucket << "): " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  ceph::real_clock::time_point now = ceph::real_clock::now();
+  ceph::real_clock::time_point not_after = now - op_state.min_age;
+  
+  *count_out = 0;
+  do {
+    entries.clear();
+    ret = store->bi_list(bs, "", marker, -1, &entries, &is_truncated, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR bi_list(): " << cpp_strerror(-ret) << dendl;
+      break;
+    }
+    list<rgw_cls_bi_entry>::iterator iter;
+    for (iter = entries.begin(); iter != entries.end(); ++iter) {
+      rgw_cls_bi_entry& entry = *iter;
+      marker = entry.idx;
+      if (entry.type != BIIndexType::Instance) {
+        is_truncated = false;
+        break;
+      }
+      rgw_bucket_dir_entry dir_entry;
+      auto iiter = entry.data.cbegin();
+      try {
+        decode(dir_entry, iiter);
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, -1) << "ERROR failed to decode instance entry for key: " <<
+          entry.idx << dendl;
+        continue;
+      }
+      if (dir_entry.versioned_epoch != 0 || dir_entry.meta.mtime > not_after) {
+        continue;
+      }
+      bool listable;
+      ret = is_versioned_instance_listable(dpp, bs, dir_entry.key, listable, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, -1) << "ERROR is_versioned_instance_listable(key='" <<
+          dir_entry.key << "'): " << cpp_strerror(-ret) << dendl;
+        continue;
+      }
+      if (listable) {
+        continue;
+      }
+      if (op_state.will_fix_index()) {
+        rgw_obj_key key(dir_entry.key.name, dir_entry.key.instance);
+        ret = rgw_remove_object(dpp, rados_store, bucket, key, y);
+        if (ret < 0) {
+          ldpp_dout(dpp, -1) << "ERROR rgw_remove_obj(key='" <<
+            dir_entry.key << "'): " << cpp_strerror(-ret) << dendl;
+          continue;
+        }
+      }
+      if (op_state.dump_keys) {
+        Formatter* const formatter = flusher.get_formatter();
+        formatter->open_object_section("object_instance");
+        formatter->dump_string("name", dir_entry.key.name);
+        formatter->dump_string("instance", dir_entry.key.instance);
+        formatter->close_section();
+        if (formatter->get_len() > FORMATTER_LEN_FLUSH_THRESHOLD) {
+          flusher.flush();
+        }
+      }
+      *count_out += 1;
+    }
+  } while (is_truncated);
+  flusher.flush();
+  return 0;
+}
+
+/**
+ * Spawns separate coroutines to check each bucket shard for unlinked
+ * instance entries (and remove them if op_state.fix_index is true).
+ */
+int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
+                                    const DoutPrefixProvider *dpp,
+                                    RGWBucketAdminOpState& op_state,
+                                    RGWFormatterFlusher& flusher)
+{
+  const RGWBucketInfo& bucket_info = get_bucket_info();
+  if ((bucket_info.versioning_status() & BUCKET_VERSIONED) == 0) {
+    ldpp_dout(dpp, 0) << "WARNING: this command is only applicable to versioned buckets" << dendl;
+    return 0;
+  }
+  
+  Formatter* formatter = flusher.get_formatter();
+  if (op_state.dump_keys) {
+    formatter->open_array_section("");
+  }
+
+  const int max_shards = rgw::num_shards(bucket_info.layout.current_index);
+  std::string verb = op_state.will_fix_index() ? "removed" : "found";
+  uint64_t count_out = 0;
+  
+  int max_aio = std::max(1, op_state.get_max_aio());
+  int next_shard = 0;
+  boost::asio::io_context context;
+  for (int i=0; i<max_aio; i++) {
+    spawn::spawn(context, [&](spawn::yield_context yield) {
+      while (true) {
+        int shard = next_shard;
+        next_shard += 1;
+        if (shard >= max_shards) {
+          return;
+        }
+        uint64_t shard_count;
+        optional_yield y {context, yield};
+        int r = ::check_index_unlinked(rados_store, &*bucket, dpp, op_state, flusher, shard, &shard_count, y);
+        if (r < 0) {
+          ldpp_dout(dpp, -1) << "ERROR: error processing shard " << shard << 
+            " check_index_unlinked(): " << r << dendl;
+        }
+        count_out += shard_count;
+        if (!op_state.hide_progress) {
+          ldpp_dout(dpp, 1) << "NOTICE: finished shard " << shard << " (" << shard_count <<
+            " entries " << verb << ")" << dendl;
+        }
+      }
+    });
+  }
+  try {
+    context.run();
+  } catch (const std::system_error& e) {
+    return -e.code().value();
+  }
+
+  if (!op_state.hide_progress) {
+    ldpp_dout(dpp, 1) << "NOTICE: finished all shards (" << count_out <<
+      " entries " << verb << ")" << dendl;
+  }
+  if (op_state.dump_keys) {
+    formatter->close_section();
+    flusher.flush();
+  }
+  return 0;
+}
 
 int RGWBucket::check_index(const DoutPrefixProvider *dpp,
         RGWBucketAdminOpState& op_state,
@@ -513,17 +881,6 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
   return 0;
 }
 
-
-int RGWBucket::policy_bl_to_stream(bufferlist& bl, ostream& o)
-{
-  RGWAccessControlPolicy_S3 policy(g_ceph_context);
-  int ret = decode_bl(bl, policy);
-  if (ret < 0) {
-    ldout(driver->ctx(),0) << "failed to decode RGWAccessControlPolicy" << dendl;
-  }
-  policy.to_xml(o);
-  return 0;
-}
 
 int rgw_object_get_attr(const DoutPrefixProvider *dpp,
 			rgw::sal::Driver* driver, rgw::sal::Object* obj,
@@ -593,7 +950,7 @@ int RGWBucketAdminOp::get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState
 int RGWBucketAdminOp::get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y)
 {
-  RGWAccessControlPolicy policy(driver->ctx());
+  RGWAccessControlPolicy policy;
 
   int ret = get_policy(driver, op_state, policy, dpp, y);
   if (ret < 0)
@@ -615,13 +972,13 @@ int RGWBucketAdminOp::get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState
 int RGWBucketAdminOp::dump_s3_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   ostream& os, const DoutPrefixProvider *dpp, optional_yield y)
 {
-  RGWAccessControlPolicy_S3 policy(driver->ctx());
+  RGWAccessControlPolicy policy;
 
   int ret = get_policy(driver, op_state, policy, dpp, y);
   if (ret < 0)
     return ret;
 
-  policy.to_xml(os);
+  rgw::s3::write_policy_xml(policy, os);
 
   return 0;
 }
@@ -700,9 +1057,9 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
     return -EIO;
   }
 
-  int r = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->unlink_bucket(owner.get_id(), old_bucket->get_info().bucket, y, dpp, false);
+  int r = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->unlink_bucket(owner.id, old_bucket->get_info().bucket, y, dpp, false);
   if (r < 0) {
-    set_err_msg(err, "could not unlink policy from user " + owner.get_id().to_str());
+    set_err_msg(err, "could not unlink policy from user " + owner.id.to_str());
     return r;
   }
 
@@ -783,6 +1140,46 @@ int RGWBucketAdminOp::chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_
 
 }
 
+int RGWBucketAdminOp::check_index_olh(rgw::sal::RadosStore* store, RGWBucketAdminOpState& op_state,
+                  RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp)
+{
+  RGWBucket bucket;
+  int ret = bucket.init(store, op_state, null_yield, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "bucket.init(): " << ret << dendl;
+    return ret;
+  }
+  flusher.start(0);
+  ret = bucket.check_index_olh(store, dpp, op_state, flusher);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "check_index_olh(): " << ret << dendl;
+    return ret;
+  }
+  flusher.flush();
+  return 0;
+}
+
+int RGWBucketAdminOp::check_index_unlinked(rgw::sal::RadosStore* store,
+                                           RGWBucketAdminOpState& op_state,
+                                           RGWFormatterFlusher& flusher,
+                                           const DoutPrefixProvider *dpp)
+{
+  flusher.start(0);
+  RGWBucket bucket;
+  int ret = bucket.init(store, op_state, null_yield, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "bucket.init(): " << ret << dendl;
+    return ret;
+  }
+  ret = bucket.check_index_unlinked(store, dpp, op_state, flusher);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "check_index_unlinked(): " << ret << dendl;
+    return ret;
+  }
+  flusher.flush();
+  return 0;
+}
+
 int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp)
 {
@@ -800,19 +1197,25 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver, RGWBucketAdminOpStat
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
+  formatter->open_object_section("bucket_check");
+
   ret = bucket.check_bad_index_multipart(op_state, flusher, dpp, y);
   if (ret < 0)
     return ret;
 
-  ret = bucket.check_object_index(dpp, op_state, flusher, y);
-  if (ret < 0)
-    return ret;
+  if (op_state.will_check_objects()) {
+    ret = bucket.check_object_index(dpp, op_state, flusher, y);
+    if (ret < 0)
+      return ret;
+  }
 
   ret = bucket.check_index(dpp, op_state, existing_stats, calculated_stats);
   if (ret < 0)
     return ret;
 
   dump_index_check(existing_stats, calculated_stats, formatter);
+  
+  formatter->close_section();
   flusher.flush();
 
   return 0;
@@ -823,18 +1226,17 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpSt
                                     bool bypass_gc, bool keep_index_consistent)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(op_state.get_user_id());
 
-  int ret = driver->get_bucket(dpp, user.get(), user->get_tenant(), op_state.get_bucket_name(),
-			      &bucket, y);
+  int ret = driver->load_bucket(dpp, rgw_bucket(op_state.get_tenant(),
+                                                op_state.get_bucket_name()),
+                                &bucket, y);
   if (ret < 0)
     return ret;
 
   if (bypass_gc)
-    ret = bucket->remove_bucket_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
+    ret = bucket->remove_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
   else
-    ret = bucket->remove_bucket(dpp, op_state.will_delete_children(),
-				false, nullptr, y);
+    ret = bucket->remove(dpp, op_state.will_delete_children(), y);
 
   return ret;
 }
@@ -862,18 +1264,19 @@ int RGWBucketAdminOp::sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpStat
 }
 
 static int bucket_stats(rgw::sal::Driver* driver,
-			const std::string& tenant_name,
-			const std::string& bucket_name,
-			Formatter *formatter,
-                        const DoutPrefixProvider *dpp, optional_yield y)
-{
+                        const std::string& tenant_name,
+                        const std::string& bucket_name, Formatter* formatter,
+                        const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
 
-  int ret = driver->get_bucket(dpp, nullptr, tenant_name, bucket_name, &bucket, y);
+  int ret = driver->load_bucket(dpp, rgw_bucket(tenant_name, bucket_name),
+                                &bucket, y);
   if (ret < 0) {
     return ret;
   }
+
+  const RGWBucketInfo& bucket_info = bucket->get_info();
 
   const auto& index = bucket->get_info().get_current_index();
   if (is_layout_indexless(index)) {
@@ -895,16 +1298,22 @@ static int bucket_stats(rgw::sal::Driver* driver,
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket->get_name());
-  formatter->dump_int("num_shards",
-		      bucket->get_info().layout.current_index.layout.normal.num_shards);
   formatter->dump_string("tenant", bucket->get_tenant());
-  formatter->dump_string("versioning", bucket->versioned() ? (bucket->versioning_enabled() ? "enabled" : "suspended") : "off");
+  formatter->dump_string("versioning",
+			 bucket->versioned()
+			 ? (bucket->versioning_enabled() ? "enabled" : "suspended")
+			 : "off");
   formatter->dump_string("zonegroup", bucket->get_info().zonegroup);
   formatter->dump_string("placement_rule", bucket->get_info().placement_rule.to_str());
   ::encode_json("explicit_placement", bucket->get_key().explicit_placement, formatter);
   formatter->dump_string("id", bucket->get_bucket_id());
   formatter->dump_string("marker", bucket->get_marker());
   formatter->dump_stream("index_type") << bucket->get_info().layout.current_index.layout.type;
+  formatter->dump_int("index_generation", bucket->get_info().layout.current_index.gen);
+  formatter->dump_int("num_shards",
+		      bucket->get_info().layout.current_index.layout.normal.num_shards);
+  formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
+  formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
   ::encode_json("owner", bucket->get_info().owner, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
@@ -926,6 +1335,17 @@ static int bucket_stats(rgw::sal::Driver* driver,
       cerr << "ERROR: caught buffer:error, couldn't decode TagSet" << std::endl;
     }
   }
+
+  // bucket notifications
+  RGWPubSub ps(driver, tenant_name);
+  rgw_pubsub_bucket_topics result;
+  const RGWPubSub::Bucket b(ps, bucket.get());
+  ret = b.get_topics(dpp, result, y);
+  if (ret < 0 && ret != -ENOENT) {
+    cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  result.dump(formatter);
 
   // TODO: bucket CORS
   // TODO: bucket LC
@@ -959,32 +1379,24 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
   formatter->open_array_section("users");
 
   for (const auto& user_id : user_ids) {
+    std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_id));
 
     formatter->open_object_section("user");
     formatter->dump_string("user_id", user_id);
     formatter->open_array_section("buckets");
 
-    string marker;
-    rgw::sal::BucketList buckets;
+    rgw::sal::BucketList listing;
     do {
-      std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_id));
-
-      ret = user->list_buckets(dpp, marker, string(), max_entries, false, buckets, y);
-
+      ret = user->list_buckets(dpp, listing.next_marker, string(),
+                               max_entries, false, listing, y);
       if (ret < 0)
         return ret;
 
-      map<string, std::unique_ptr<rgw::sal::Bucket>>& m_buckets = buckets.get_buckets();
-
-      for (const auto& iter : m_buckets) {
-	auto& bucket = iter.second;
+      for (const auto& ent : listing.buckets) {
 	uint64_t num_objects = 0;
 
-	marker = bucket->get_name(); /* Casey's location for marker update,
-				     * as we may now not reach the end of
-				     * the loop body */
-
-	ret = bucket->load_bucket(dpp, y);
+	std::unique_ptr<rgw::sal::Bucket> bucket;
+	ret = driver->load_bucket(dpp, ent.bucket, &bucket, y);
 	if (ret < 0)
 	  continue;
 
@@ -1036,7 +1448,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 	}
       }
       formatter->flush(cout);
-    } while (buckets.is_truncated()); /* foreach: bucket */
+    } while (!listing.next_marker.empty()); /* foreach: bucket */
 
     formatter->close_section();
     formatter->close_section();
@@ -1070,58 +1482,42 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
-  CephContext *cct = driver->ctx();
-
-  const size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
-
   const bool show_stats = op_state.will_fetch_stats();
   const rgw_user& user_id = op_state.get_user_id();
-  if (op_state.is_user_op()) {
-    formatter->open_array_section("buckets");
-
-    rgw::sal::BucketList buckets;
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(op_state.get_user_id());
-    std::string marker;
-    const std::string empty_end_marker;
-    constexpr bool no_need_stats = false; // set need_stats to false
-
-    do {
-      ret = user->list_buckets(dpp, marker, empty_end_marker, max_entries,
-			      no_need_stats, buckets, y);
-      if (ret < 0) {
-        return ret;
-      }
-
-      const std::string* marker_cursor = nullptr;
-      map<string, std::unique_ptr<rgw::sal::Bucket>>& m = buckets.get_buckets();
-
-      for (const auto& i : m) {
-        const std::string& obj_name = i.first;
-        if (!bucket_name.empty() && bucket_name != obj_name) {
-          continue;
-        }
-
-        if (show_stats) {
-          bucket_stats(driver, user_id.tenant, obj_name, formatter, dpp, y);
-	} else {
-          formatter->dump_string("bucket", obj_name);
-	}
-
-        marker_cursor = &obj_name;
-      } // for loop
-      if (marker_cursor) {
-	marker = *marker_cursor;
-      }
-
-      flusher.flush();
-    } while (buckets.is_truncated());
-
-    formatter->close_section();
-  } else if (!bucket_name.empty()) {
+  if (!bucket_name.empty()) {
     ret = bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp, y);
     if (ret < 0) {
       return ret;
     }
+  } else if (op_state.is_user_op()) {
+    formatter->open_array_section("buckets");
+
+    std::unique_ptr<rgw::sal::User> user = driver->get_user(op_state.get_user_id());
+    const std::string empty_end_marker;
+    const size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+    constexpr bool no_need_stats = false; // set need_stats to false
+
+    rgw::sal::BucketList listing;
+    listing.next_marker = op_state.marker;
+    do {
+      ret = user->list_buckets(dpp, listing.next_marker, empty_end_marker,
+                               max_entries, no_need_stats, listing, y);
+      if (ret < 0) {
+        return ret;
+      }
+
+      for (const auto& ent : listing.buckets) {
+        if (show_stats) {
+          bucket_stats(driver, user_id.tenant, ent.bucket.name, formatter, dpp, y);
+	} else {
+          formatter->dump_string("bucket", ent.bucket.name);
+	}
+      } // for loop
+
+      flusher.flush();
+    } while (!listing.next_marker.empty());
+
+    formatter->close_section();
   } else {
     void *handle = nullptr;
     bool truncated = true;
@@ -1184,7 +1580,7 @@ void get_stale_instances(rgw::sal::Driver* driver, const std::string& bucket_nam
     std::unique_ptr<rgw::sal::Bucket> bucket;
     rgw_bucket rbucket;
     rgw_bucket_parse_bucket_key(driver->ctx(), bucket_instance, &rbucket, nullptr);
-    int r = driver->get_bucket(dpp, nullptr, rbucket, &bucket, y);
+    int r = driver->load_bucket(dpp, rbucket, &bucket, y);
     if (r < 0){
       // this can only happen if someone deletes us right when we're processing
       ldpp_dout(dpp, -1) << "Bucket instance is invalid: " << bucket_instance
@@ -1204,7 +1600,8 @@ void get_stale_instances(rgw::sal::Driver* driver, const std::string& bucket_nam
   auto [tenant, bname] = split_tenant(bucket_name);
   RGWBucketInfo cur_bucket_info;
   std::unique_ptr<rgw::sal::Bucket> cur_bucket;
-  int r = driver->get_bucket(dpp, nullptr, tenant, bname, &cur_bucket, y);
+  int r = driver->load_bucket(dpp, rgw_bucket(tenant, bname),
+                              &cur_bucket, y);
   if (r < 0) {
     if (r == -ENOENT) {
       // bucket doesn't exist, everything is stale then
@@ -1338,8 +1735,7 @@ int RGWBucketAdminOp::clear_stale_instances(rgw::sal::Driver* driver,
                       Formatter *formatter,
                       rgw::sal::Driver* driver){
                      for (const auto &binfo: lst) {
-		       std::unique_ptr<rgw::sal::Bucket> bucket;
-		       driver->get_bucket(nullptr, binfo, &bucket);
+		       auto bucket = driver->get_bucket(binfo);
 		       int ret = bucket->purge_instance(dpp, y);
                        if (ret == 0){
                          auto md_key = "bucket.instance:" + binfo.bucket.get_key();
@@ -1361,7 +1757,8 @@ static int fix_single_bucket_lc(rgw::sal::Driver* driver,
                                 const DoutPrefixProvider *dpp, optional_yield y)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = driver->get_bucket(dpp, nullptr, tenant_name, bucket_name, &bucket, y);
+  int ret = driver->load_bucket(dpp, rgw_bucket(tenant_name, bucket_name),
+                                &bucket, y);
   if (ret < 0) {
     // TODO: Should we handle the case where the bucket could've been removed between
     // listing and fetching?
@@ -1531,11 +1928,7 @@ int RGWBucketAdminOp::fix_obj_expiry(rgw::sal::Driver* driver,
     ldpp_dout(dpp, -1) << "failed to initialize bucket" << dendl;
     return ret;
   }
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = driver->get_bucket(nullptr, admin_bucket.get_bucket_info(), &bucket);
-  if (ret < 0) {
-    return ret;
-  }
+  auto bucket = driver->get_bucket(admin_bucket.get_bucket_info());
 
   return fix_bucket_obj_expiry(dpp, driver, bucket.get(), flusher, dry_run, y);
 }
@@ -1663,7 +2056,7 @@ public:
                                RGWSI_MetaBackend_Handler::Op *op, string& entry,
                                RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
 			       optional_yield y,
-                               RGWMDLogSyncType type, bool from_remote_zone) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, y, type, from_remote_zone),
+                               RGWMDLogSyncType type, bool from_remote_zone) : RGWMetadataHandlerPut_SObj(_handler, op, entry, _obj, objv_tracker, y, type, from_remote_zone),
                                                         bhandler(_handler) {
     obj = static_cast<RGWBucketEntryMetadataObject *>(_obj);
   }
@@ -2098,7 +2491,6 @@ int RGWBucketInstanceMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
 
 void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
 				const RGWZone& zone,
-				std::optional<uint32_t> shards,
 				std::optional<rgw::BucketIndexType> type) {
   layout.current_index.gen = 0;
   layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
@@ -2106,9 +2498,7 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
   layout.current_index.layout.type =
     type.value_or(rgw::BucketIndexType::Normal);
 
-  if (shards) {
-    layout.current_index.layout.normal.num_shards = *shards;
-  } else if (cct->_conf->rgw_override_bucket_index_max_shards > 0) {
+  if (cct->_conf->rgw_override_bucket_index_max_shards > 0) {
     layout.current_index.layout.normal.num_shards =
       cct->_conf->rgw_override_bucket_index_max_shards;
   } else {
@@ -2140,7 +2530,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
       bci.info.layout = rgw::BucketLayout{};
       init_default_bucket_layout(cct, bci.info.layout,
 				 bihandler->svc.zone->get_zone(),
-				 std::nullopt, std::nullopt);
+				 std::nullopt);
     } else {
       bci.info.layout = old_bci->info.layout;
     }
@@ -2167,13 +2557,14 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
     }
     bci.info.layout.current_index.layout.type = rule_info.index_type;
   } else {
-    /* always keep bucket versioning enabled on archive zone */
-    if (bihandler->driver->get_zone()->get_tier_type() == "archive") {
-      bci.info.flags = (bci.info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
-    }
     /* existing bucket, keep its placement */
     bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
     bci.info.placement_rule = old_bci->info.placement_rule;
+  }
+
+  //always keep bucket versioning enabled on archive zone
+  if (bihandler->driver->get_zone()->get_tier_type() == "archive") {
+    bci.info.flags = (bci.info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
   }
 
   /* record the read version (if any), store the new version */
@@ -2219,14 +2610,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
 
   /* update lifecyle policy */
   {
-    std::unique_ptr<rgw::sal::Bucket> bucket;
-    ret = bihandler->driver->get_bucket(nullptr, bci.info, &bucket);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << __func__ << " failed to get_bucket(...) for "
-			<< bci.info.bucket.name
-			<< dendl;
-      return ret;
-    }
+    auto bucket = bihandler->driver->get_bucket(bci.info);
 
     auto lc = bihandler->driver->get_rgwlc();
 

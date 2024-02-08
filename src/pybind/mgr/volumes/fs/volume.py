@@ -1,7 +1,6 @@
 import json
 import errno
 import logging
-import os
 import mgr_util
 from typing import TYPE_CHECKING
 
@@ -17,7 +16,6 @@ from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, get_pending_subvol_deletions_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
-from .operations.trash import Trash
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, EvictionError
@@ -338,7 +336,7 @@ class VolumeClient(CephfsClient["Module"]):
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.EVICT) as subvolume:
-                        key = subvolume.evict(volname, authid)
+                        subvolume.evict(volname, authid)
                         ret = 0, "", ""
         except (VolumeException, ClusterTimeout, ClusterError, EvictionError) as e:
             if isinstance(e, VolumeException):
@@ -424,6 +422,7 @@ class VolumeClient(CephfsClient["Module"]):
 
                         subvol_info_dict = subvolume.info()
                         subvol_info_dict["mon_addrs"] = mon_addr_lst
+                        subvol_info_dict["flavor"] = subvolume.VERSION
                         ret = 0, json.dumps(subvol_info_dict, indent=4, sort_keys=True), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
@@ -695,7 +694,7 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_PROTECT) as subvolume:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_PROTECT):
                         log.warning("snapshot protect call is deprecated and will be removed in a future release")
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
@@ -710,7 +709,7 @@ class VolumeClient(CephfsClient["Module"]):
         try:
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
-                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_UNPROTECT) as subvolume:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.SNAP_UNPROTECT):
                         log.warning("snapshot unprotect call is deprecated and will be removed in a future release")
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
@@ -962,7 +961,7 @@ class VolumeClient(CephfsClient["Module"]):
 
         try:
             with open_volume(self, volname) as fs_handle:
-                with open_group(fs_handle, self.volspec, groupname) as group:
+                with open_group(fs_handle, self.volspec, groupname):
                     # as subvolumes are marked with the vxattr ceph.dir.subvolume deny snapshots
                     # at the subvolume group (see: https://tracker.ceph.com/issues/46074)
                     # group.create_snapshot(snapname)

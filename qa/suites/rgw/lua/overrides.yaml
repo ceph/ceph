@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        setuser: ceph
+        setgroup: ceph
+        debug rgw: 20
+  rgw:
+    storage classes: LUKEWARM, FROZEN

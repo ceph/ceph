@@ -38,7 +38,7 @@ export class RgwUserListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[] = [];
   users: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
-  staleTimeout: number;
+  declare staleTimeout: number;
 
   constructor(
     private authStorageService: AuthStorageService,

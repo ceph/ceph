@@ -356,7 +356,7 @@ public:
   using mkfs_ret = phy_tree_root_t;
   static mkfs_ret mkfs(RootBlockRef &root_block, op_context_t<node_key_t> c) {
     assert(root_block->is_mutation_pending());
-    auto root_leaf = c.cache.template alloc_new_extent<leaf_node_t>(
+    auto root_leaf = c.cache.template alloc_new_non_data_extent<leaf_node_t>(
       c.trans,
       node_size,
       placement_hint_t::HOT,
@@ -505,13 +505,15 @@ public:
           i->get_val().maybe_relative_to(node->get_paddr()),
           &child_node);
       } else {
-        assert(i->get_val().pladdr.is_paddr());
+        if (i->get_val().pladdr.is_laddr()) {
+          continue;
+        }
         ret = c.trans.get_extent(
           i->get_val().pladdr.get_paddr().maybe_relative_to(node->get_paddr()),
           &child_node);
       }
       if (ret == Transaction::get_extent_ret::PRESENT) {
-        if (child_node->is_stable()) {
+        if (child_node->is_stable_written()) {
           assert(child_node->is_valid());
           auto cnode = child_node->template cast<child_node_t>();
           assert(cnode->has_parent_tracker());
@@ -1020,7 +1022,7 @@ public:
     assert(is_lba_backref_node(e->get_type()));
     
     auto do_rewrite = [&](auto &fixed_kv_extent) {
-      auto n_fixed_kv_extent = c.cache.template alloc_new_extent<
+      auto n_fixed_kv_extent = c.cache.template alloc_new_non_data_extent<
         std::remove_reference_t<decltype(fixed_kv_extent)>
         >(
         c.trans,
@@ -1779,7 +1781,7 @@ private:
     SUBTRACET(seastore_fixedkv_tree, "split_from {}, depth {}", c.trans, split_from, iter.get_depth());
 
     if (split_from == iter.get_depth()) {
-      auto nroot = c.cache.template alloc_new_extent<internal_node_t>(
+      auto nroot = c.cache.template alloc_new_non_data_extent<internal_node_t>(
         c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
       fixed_kv_node_meta_t<node_key_t> meta{
         min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, iter.get_depth() + 1};

@@ -467,7 +467,8 @@ public:
             ret->cast<T>());
         });
       } else {
-        touch_extent(*ret);
+	assert(!ret->is_mutable());
+	touch_extent(*ret);
         SUBDEBUGT(seastore_cache, "{} {}~{} is present on t without been \
           fully loaded, reading ... {}", t, T::TYPE, offset, length, *ret);
         auto bp = alloc_cache_buf(ret->get_length());
@@ -566,6 +567,7 @@ public:
     // user should not see RETIRED_PLACEHOLDER extents
     ceph_assert(p_extent->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
     if (!p_extent->is_fully_loaded()) {
+      assert(!p_extent->is_mutable());
       touch_extent(*p_extent);
       LOG_PREFIX(Cache::get_extent_viewable_by_trans);
       SUBDEBUG(seastore_cache,
@@ -661,7 +663,8 @@ private:
 	  return seastar::make_ready_future<CachedExtentRef>(ret);
         });
       } else {
-        touch_extent(*ret);
+	assert(!ret->is_mutable());
+	touch_extent(*ret);
         SUBDEBUGT(seastore_cache, "{} {}~{} {} is present on t without been \
                   fully loaded, reading ...", t, type, offset, length, laddr);
         auto bp = alloc_cache_buf(ret->get_length());
@@ -856,13 +859,13 @@ public:
   }
 
   /**
-   * alloc_new_extent
+   * alloc_new_non_data_extent
    *
    * Allocates a fresh extent. if delayed is true, addr will be alloc'd later.
    * Note that epaddr can only be fed by the btree lba unittest for now
    */
   template <typename T>
-  TCachedExtentRef<T> alloc_new_extent(
+  TCachedExtentRef<T> alloc_new_non_data_extent(
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
     placement_hint_t hint,  ///< [in] user hint
@@ -873,26 +876,72 @@ public:
     rewrite_gen_t gen
 #endif
   ) {
-    LOG_PREFIX(Cache::alloc_new_extent);
+    LOG_PREFIX(Cache::alloc_new_non_data_extent);
     SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
               t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
 #ifdef UNIT_TESTS_BUILT
-    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen, epaddr);
+    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen, epaddr);
 #else
-    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen);
+    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen);
 #endif
-    auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
+    if (!result) {
+      return nullptr;
+    }
+    auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result->bp));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
-              result.paddr,
+              result->paddr,
               hint,
-              result.gen,
+              result->gen,
 	      t.get_trans_id());
     t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache,
               "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
-              t, T::TYPE, length, result.paddr,
-              hint, rewrite_gen_printer_t{result.gen}, *ret);
+              t, T::TYPE, length, result->paddr,
+              hint, rewrite_gen_printer_t{result->gen}, *ret);
     return ret;
+  }
+  /**
+   * alloc_new_data_extents
+   *
+   * Allocates a fresh extent. if delayed is true, addr will be alloc'd later.
+   * Note that epaddr can only be fed by the btree lba unittest for now
+   */
+  template <typename T>
+  std::vector<TCachedExtentRef<T>> alloc_new_data_extents(
+    Transaction &t,         ///< [in, out] current transaction
+    extent_len_t length,    ///< [in] length
+    placement_hint_t hint,  ///< [in] user hint
+#ifdef UNIT_TESTS_BUILT
+    rewrite_gen_t gen,      ///< [in] rewrite generation
+    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
+#else
+    rewrite_gen_t gen
+#endif
+  ) {
+    LOG_PREFIX(Cache::alloc_new_data_extents);
+    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
+              t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
+#ifdef UNIT_TESTS_BUILT
+    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen, epaddr);
+#else
+    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen);
+#endif
+    std::vector<TCachedExtentRef<T>> extents;
+    for (auto &result : results) {
+      auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
+      ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
+                result.paddr,
+                hint,
+                result.gen,
+                t.get_trans_id());
+      t.add_fresh_extent(ret);
+      SUBDEBUGT(seastore_cache,
+                "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
+                t, T::TYPE, length, result.paddr,
+                hint, rewrite_gen_printer_t{result.gen}, *ret);
+      extents.emplace_back(std::move(ret));
+    }
+    return extents;
   }
 
   /**
@@ -943,6 +992,19 @@ public:
    * Allocates a fresh extent.  addr will be relative until commit.
    */
   CachedExtentRef alloc_new_extent_by_type(
+    Transaction &t,        ///< [in, out] current transaction
+    extent_types_t type,   ///< [in] type tag
+    extent_len_t length,   ///< [in] length
+    placement_hint_t hint, ///< [in] user hint
+    rewrite_gen_t gen      ///< [in] rewrite generation
+    );
+
+  /**
+   * alloc_new_extent
+   *
+   * Allocates a fresh extent.  addr will be relative until commit.
+   */
+  std::vector<CachedExtentRef> alloc_new_data_extents_by_type(
     Transaction &t,        ///< [in, out] current transaction
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
@@ -1036,7 +1098,8 @@ public:
    */
   using replay_delta_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  using replay_delta_ret = replay_delta_ertr::future<bool>;
+  using replay_delta_ret = replay_delta_ertr::future<
+    std::pair<bool, CachedExtentRef>>;
   replay_delta_ret replay_delta(
     journal_seq_t seq,
     paddr_t record_block_base,
@@ -1281,7 +1344,7 @@ public:
   {
     if (p_src && is_background_transaction(*p_src))
       return;
-    if (ext.is_clean() && !ext.is_placeholder()) {
+    if (ext.is_stable_clean() && !ext.is_placeholder()) {
       lru.move_to_top(ext);
     }
   }
@@ -1361,7 +1424,7 @@ private:
     }
 
     void add_to_lru(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean() && !extent.is_placeholder());
       
       if (!extent.primary_ref_list_hook.is_linked()) {
 	contents += extent.get_length();
@@ -1387,7 +1450,7 @@ private:
     }
 
     void remove_from_lru(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
 	lru.erase(lru.s_iterator_to(extent));
@@ -1398,7 +1461,7 @@ private:
     }
 
     void move_to_top(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
 	lru.erase(lru.s_iterator_to(extent));

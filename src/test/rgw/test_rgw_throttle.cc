@@ -16,6 +16,10 @@
 
 #include <optional>
 #include <thread>
+#include <boost/asio/basic_waitable_timer.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/io_context.hpp>
 #include "include/scope_guard.h"
 
 #include <spawn/spawn.hpp>
@@ -140,7 +144,7 @@ TEST(Aio_Throttle, YieldCostOverWindow)
 
   boost::asio::io_context context;
   spawn::spawn(context,
-    [&] (yield_context yield) {
+    [&] (spawn::yield_context yield) {
       YieldingAioThrottle throttle(4, context, yield);
       scoped_completion op;
       auto c = throttle.get(obj, wait_on(op), 8, 0);
@@ -163,7 +167,7 @@ TEST(Aio_Throttle, YieldingThrottleOverMax)
 
   boost::asio::io_context context;
   spawn::spawn(context,
-    [&] (yield_context yield) {
+    [&] (spawn::yield_context yield) {
       YieldingAioThrottle throttle(window, context, yield);
       for (uint64_t i = 0; i < total; i++) {
         using namespace std::chrono_literals;

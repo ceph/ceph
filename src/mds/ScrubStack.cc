@@ -320,7 +320,7 @@ void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
 
   frag_vec_t frags;
   in->dirfragtree.get_leaves(frags);
-  dout(20) << __func__ << "recursive mode, frags " << frags << dendl;
+  dout(20) << __func__ << " recursive mode, frags " << frags << dendl;
   for (auto &fg : frags) {
     if (queued.contains(fg))
       continue;
@@ -366,7 +366,6 @@ void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
     scrub_r.tag = header->get_tag();
 
     for (auto& p : scrub_remote) {
-      p.second.simplify();
       dout(20) << __func__ << " forward " << p.second  << " to mds." << p.first << dendl;
       auto r = make_message<MMDSScrub>(MMDSScrub::OP_QUEUEDIR, in->ino(),
 				       std::move(p.second), header->get_tag(),
@@ -892,22 +891,30 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
 
       std::vector<CDir*> dfs;
       MDSGatherBuilder gather(g_ceph_context);
+      frag_vec_t frags;
+      diri->dirfragtree.get_leaves(frags);
       for (const auto& fg : m->get_frags()) {
-	CDir *dir = diri->get_dirfrag(fg);
-	if (!dir) {
-	  dout(10) << __func__ << " no frag " << fg << dendl;
-	  continue;
+	for (auto f : frags) {
+	  if (!fg.contains(f)) {
+	    dout(20) << __func__ << " skipping " << f << dendl;
+	    continue;
+	  }
+	  CDir *dir = diri->get_or_open_dirfrag(mdcache, f);
+	  if (!dir) {
+	    dout(10) << __func__ << " no frag " << f << dendl;
+	    continue;
+	  }
+	  if (!dir->is_auth()) {
+	    dout(10) << __func__ << " not auth " << *dir << dendl;
+	    continue;
+	  }
+	  if (!dir->can_auth_pin()) {
+	    dout(10) << __func__ << " can't auth pin " << *dir <<  dendl;
+	    dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
+	    continue;
+	  }
+	  dfs.push_back(dir);
 	}
-	if (!dir->is_auth()) {
-	  dout(10) << __func__ << " not auth " << *dir << dendl;
-	  continue;
-	}
-	if (!dir->can_auth_pin()) {
-	  dout(10) << __func__ << " can't auth pin " << *dir <<  dendl;
-	  dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
-	  continue;
-	}
-	dfs.push_back(dir);
       }
 
       if (gather.has_subs()) {

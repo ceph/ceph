@@ -54,6 +54,7 @@ class MgrCommand : public CommandOp
   bool tell = false;
 
   explicit MgrCommand(ceph_tid_t t) : CommandOp(t) {}
+  explicit MgrCommand(ceph_tid_t t, ceph_tid_t multi_id) : CommandOp(t, multi_id) {}
   MgrCommand() : CommandOp() {}
 };
 

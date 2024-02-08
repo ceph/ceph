@@ -342,6 +342,12 @@ struct PGTempMap {
       f->close_section();
     }
   }
+  static void generate_test_instances(std::list<PGTempMap*>& o) {
+    o.push_back(new PGTempMap);
+    o.push_back(new PGTempMap);
+    o.back()->set(pg_t(1, 2), { 3, 4 });
+    o.back()->set(pg_t(2, 3), { 4, 5 });
+  }
 };
 WRITE_CLASS_ENCODER(PGTempMap)
 
@@ -761,6 +767,9 @@ public:
   void get_full_osd_counts(std::set<int> *full, std::set<int> *backfill,
 			   std::set<int> *nearfull) const;
 
+  void get_out_of_subnet_osd_counts(CephContext *cct,
+                                    std::string const &public_network,
+                                    std::set<int> *unreachable) const;
 
   /***** cluster state *****/
   /* osds */
@@ -1470,17 +1479,41 @@ public:
     std::vector<int> *orig,
     std::vector<int> *out);             ///< resulting alternative mapping
 
+  enum rb_policy {
+    RB_SIMPLE = 0,
+    RB_OSDSIZEOPT
+  };
+
   int balance_primaries(
     CephContext *cct,
     int64_t pid,
     Incremental *pending_inc,
-    OSDMap& tmp_osd_map) const;
+    OSDMap& tmp_osd_map,
+    const std::optional<rb_policy>& rbp = std::nullopt) const;
+
+  void rm_all_upmap_prims(CephContext *cct, Incremental *pending_inc, uint64_t pid);
 
   int calc_desired_primary_distribution(
     CephContext *cct,
     int64_t pid, // pool id
     const std::vector<uint64_t> &osds,
-    std::map<uint64_t, float>& desired_primary_distribution) const; // vector of osd ids
+    std::map<uint64_t, float>& desired_primary_distribution, // vector of osd ids
+    const std::optional<rb_policy>& rbp = std::nullopt) const;
+
+  int calc_desired_primary_distribution_simple(
+    CephContext *cct,
+    int64_t pid, // pool id
+    const std::vector<uint64_t> &osds,
+    std::map<uint64_t, float>& desired_primary_distribution /* vector of osd ids */) const;
+
+  int calc_desired_primary_distribution_osdsize_opt(
+    CephContext *cct,
+    int64_t pid, // pool id
+    const std::vector<uint64_t> &osds,
+    std::map<uint64_t, float>& desired_primary_distribution /* vector of osd ids */) const;
+
+  float calc_desired_prims_for_osdsizeopt(int npgs, int forced_primaries, int forced_secondaries,
+                                          int iops_per_osd, int write_ratio) const;
 
   int calc_pg_upmaps(
     CephContext *cct,
@@ -1602,17 +1635,32 @@ bool try_drop_remap_underfull(
   );
 
 public:
-    typedef struct {
-      float pa_avg;
-      float pa_weighted;
-      float pa_weighted_avg;
-      float raw_score;
-      float optimal_score;  	// based on primary_affinity values
-      float adjusted_score; 	// based on raw_score and pa_avg 1 is optimal
-      float acting_raw_score;   // based on active_primaries (temporary)
-      float acting_adj_score;   // based on raw_active_score and pa_avg 1 is optimal
-      std::string  err_msg;
-    } read_balance_info_t;
+  typedef enum {
+    RBS_FAIR = 0,
+    RBS_SIZE_OPTIMAL,
+  } read_balance_score_t;
+
+  typedef struct {
+    read_balance_score_t score_type;
+    float pa_avg;
+    float pa_weighted;
+    float pa_weighted_avg;
+    float raw_score;
+    float optimal_score;  	// based on primary_affinity values
+    float adjusted_score; 	// based on raw_score and pa_avg 1 is optimal
+    float acting_raw_score;   // based on active_primaries (temporary)
+    float acting_adj_score;   // based on raw_active_score and pa_avg 1 is optimal
+    int64_t max_osd;
+    int64_t max_osd_load;
+    int64_t max_osd_pgs;
+    int64_t max_osd_prims;
+    int64_t max_acting_osd;
+    int64_t max_acting_osd_load;
+    int64_t max_acting_osd_pgs;
+    int64_t max_acting_osd_prims;
+    int64_t avg_osd_load;
+    std::string  err_msg;
+  } read_balance_info_t;
   //
   // This function calculates scores about the cluster read balance state
   // p_rb_info->acting_adj_score is the current read balance score (acting)
@@ -1626,6 +1674,20 @@ public:
     read_balance_info_t *p_rb_info) const;
 
 private:
+  int calc_rbs_fair(
+    CephContext *cct,
+    OSDMap& tmp_osd_map,
+    int64_t pool_id,
+    const pg_pool_t *pgpool,
+    read_balance_info_t &rb_info) const;
+
+  int calc_rbs_size_optimal(
+    CephContext *cct,
+    OSDMap& tmp_osd_map,
+    int64_t pool_id,
+    const pg_pool_t *pgpool,
+    read_balance_info_t &p_rb_info) const;
+
   float rbi_round(float f) const {
     return (f > 0.0) ? floor(f * 100 + 0.5) / 100 : ceil(f * 100 - 0.5) / 100;
   }
@@ -1638,7 +1700,7 @@ private:
     read_balance_info_t &rbi
   ) const;
 
-  int set_rbi(
+  int set_rbi_fair(
     CephContext *cct,
     read_balance_info_t &rbi,
     int64_t pool_id,

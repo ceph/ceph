@@ -201,7 +201,7 @@ private:
 #ifdef _ARROW_EXIST
   s3selectEngine::rgw_s3select_api m_rgw_api;
 #endif
-  //a request for range may statisfy by several calls to send_response_date;
+  //a request for range may satisfy by several calls to send_response_date;
   size_t m_request_range;
   std::string requested_buffer;
   std::string range_req_str;

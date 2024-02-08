@@ -31,7 +31,12 @@ RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs']
 CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES
 
 # these daemon types use the ceph container image
-CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs']
+CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs', 'node-proxy']
+
+# these daemons do not use the ceph image. There are other daemons
+# that also don't use the ceph image, but we only care about those
+# that are part of the upgrade order here
+NON_CEPH_IMAGE_TYPES = MONITORING_STACK_TYPES + ['nvmeof']
 
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter
 cephadmNoImage = CephadmNoImage.token

@@ -1,7 +1,42 @@
 import os
 import pytest
 from ceph_volume.util import disk
-from mock.mock import patch
+from mock.mock import patch, MagicMock
+
+
+class TestFunctions:
+    @patch('ceph_volume.util.disk.os.path.exists', MagicMock(return_value=False))
+    def test_is_device_path_does_not_exist(self):
+        assert not disk.is_device('/dev/foo')
+
+    @patch('ceph_volume.util.disk.os.path.exists', MagicMock(return_value=True))
+    def test_is_device_dev_doesnt_startswith_dev(self):
+        assert not disk.is_device('/foo')
+
+    @patch('ceph_volume.util.disk.allow_loop_devices', MagicMock(return_value=False))
+    @patch('ceph_volume.util.disk.os.path.exists', MagicMock(return_value=True))
+    def test_is_device_loop_not_allowed(self):
+        assert not disk.is_device('/dev/loop123')
+
+    @patch('ceph_volume.util.disk.lsblk', MagicMock(return_value={'NAME': 'foo', 'TYPE': 'disk'}))
+    @patch('ceph_volume.util.disk.os.path.exists', MagicMock(return_value=True))
+    def test_is_device_type_disk(self):
+        assert disk.is_device('/dev/foo')
+
+    @patch('ceph_volume.util.disk.lsblk', MagicMock(return_value={'NAME': 'foo', 'TYPE': 'mpath'}))
+    @patch('ceph_volume.util.disk.os.path.exists', MagicMock(return_value=True))
+    def test_is_device_type_mpath(self):
+        assert disk.is_device('/dev/foo')
+
+    @patch('ceph_volume.util.disk.lsblk', MagicMock(return_value={'NAME': 'foo1', 'TYPE': 'part'}))
+    @patch('ceph_volume.util.disk.os.path.exists', MagicMock(return_value=True))
+    def test_is_device_type_part(self):
+        assert not disk.is_device('/dev/foo1')
+
+    @patch('ceph_volume.util.disk.os.path.exists', MagicMock(return_value=True))
+    @patch('ceph_volume.util.disk.get_partitions', MagicMock(return_value={"sda1": "sda"}))
+    def test_is_partition(self):
+        assert disk.is_partition('sda1')
 
 
 class TestLsblkParser(object):

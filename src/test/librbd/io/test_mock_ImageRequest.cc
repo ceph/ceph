@@ -16,12 +16,15 @@ namespace {
 struct MockTestImageCtx;
 
 struct MockTestJournal : public MockJournal {
-  MOCK_METHOD4(append_write_event, uint64_t(uint64_t, size_t,
+  MOCK_METHOD3(append_write_event, uint64_t(const io::Extents&,
                                             const bufferlist &, bool));
+  MOCK_METHOD3(append_write_same_event, uint64_t(const io::Extents&,
+                                                 const bufferlist &, bool));
   MOCK_METHOD5(append_compare_and_write_event, uint64_t(uint64_t, size_t,
                                                         const bufferlist &,
                                                         const bufferlist &,
                                                         bool));
+  MOCK_METHOD3(append_discard_event, uint64_t(const io::Extents&, uint32_t, bool));
   MOCK_METHOD5(append_io_event_mock, uint64_t(const journal::EventEntry&,
                                               uint64_t, size_t, bool, int));
   uint64_t append_io_event(journal::EventEntry &&event_entry,
@@ -119,9 +122,10 @@ struct TestMockIoImageRequest : public TestMockFixture {
     }
   }
 
-  void expect_journal_append_io_event(MockTestJournal &mock_journal, uint64_t journal_tid,
-                                      uint64_t offset, size_t length) {
-    EXPECT_CALL(mock_journal, append_io_event_mock(_, offset, length, _, _))
+  void expect_journal_append_discard_event(MockTestJournal &mock_journal,
+                                           uint64_t journal_tid,
+                                           const io::Extents& extents) {
+    EXPECT_CALL(mock_journal, append_discard_event(extents, _, _))
       .WillOnce(Return(journal_tid));
   }
 
@@ -386,8 +390,8 @@ TEST_F(TestMockIoImageRequest, PartialDiscardJournalAppendEnabled) {
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
   expect_is_journal_appending(mock_journal, true);
-  expect_journal_append_io_event(mock_journal, 0, 16, 63);
-  expect_journal_append_io_event(mock_journal, 1, 84, 100);
+  expect_journal_append_discard_event(mock_journal, 0,
+                                      {{16, 63}, {84, 100}});
   expect_object_discard_request(mock_image_ctx, 0, 16, 63, 0);
   expect_object_discard_request(mock_image_ctx, 0, 84, 100, 0);
 
@@ -419,8 +423,8 @@ TEST_F(TestMockIoImageRequest, TailDiscardJournalAppendEnabled) {
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
   expect_is_journal_appending(mock_journal, true);
-  expect_journal_append_io_event(
-    mock_journal, 0, ictx->layout.object_size - 1024, 1024);
+  expect_journal_append_discard_event(
+    mock_journal, 0, {{ictx->layout.object_size - 1024, 1024}});
   expect_object_discard_request(
     mock_image_ctx, 0, ictx->layout.object_size - 1024, 1024, 0);
 
@@ -452,7 +456,7 @@ TEST_F(TestMockIoImageRequest, PruneRequiredDiscardJournalAppendEnabled) {
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
   expect_is_journal_appending(mock_journal, true);
-  EXPECT_CALL(mock_journal, append_io_event_mock(_, _, _, _, _)).Times(0);
+  EXPECT_CALL(mock_journal, append_discard_event(_, _, _)).Times(0);
   EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, send(_)).Times(0);
 
   C_SaferCond aio_comp_ctx;
@@ -482,7 +486,7 @@ TEST_F(TestMockIoImageRequest, LengthModifiedDiscardJournalAppendEnabled) {
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
   expect_is_journal_appending(mock_journal, true);
-  expect_journal_append_io_event(mock_journal, 0, 32, 32);
+  expect_journal_append_discard_event(mock_journal, 0, {{32, 32}});
   expect_object_discard_request(mock_image_ctx, 0, 32, 32, 0);
 
   C_SaferCond aio_comp_ctx;
@@ -513,10 +517,9 @@ TEST_F(TestMockIoImageRequest, DiscardGranularityJournalAppendEnabled) {
   InSequence seq;
   expect_get_modify_timestamp(mock_image_ctx, false);
   expect_is_journal_appending(mock_journal, true);
-  expect_journal_append_io_event(mock_journal, 0, 32, 32);
-  expect_journal_append_io_event(mock_journal, 1, 96, 64);
-  expect_journal_append_io_event(
-    mock_journal, 2, ictx->layout.object_size - 32, 32);
+  expect_journal_append_discard_event(
+    mock_journal, 0,
+    {{32, 32}, {96, 64}, {ictx->layout.object_size - 32, 32}});
   expect_object_discard_request(mock_image_ctx, 0, 32, 32, 0);
   expect_object_discard_request(mock_image_ctx, 0, 96, 64, 0);
   expect_object_discard_request(

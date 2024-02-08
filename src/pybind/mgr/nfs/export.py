@@ -167,9 +167,22 @@ class AppliedExportResults:
     def __init__(self) -> None:
         self.changes: List[Dict[str, str]] = []
         self.has_error = False
+        self.exceptions: List[Exception] = []
+        self.faulty_export_block_indices = ""
+        self.num_errors = 0
+        self.status = ""
 
-    def append(self, value: Dict[str, str]) -> None:
+    def append(self, value: Dict[str, Any]) -> None:
         if value.get("state", "") == "error":
+            self.num_errors += 1
+            # If there is an error then there must be an exception in the dict.
+            self.exceptions.append(value.pop("exception"))
+            # Index is for indicating at which export block in the conf/json
+            # file did the export creation/update failed.
+            if len(self.faulty_export_block_indices) == 0:
+                self.faulty_export_block_indices = str(value.pop("index"))
+            else:
+                self.faulty_export_block_indices += f", {value.pop('index')}"
             self.has_error = True
         self.changes.append(value)
 
@@ -177,7 +190,29 @@ class AppliedExportResults:
         return self.changes
 
     def mgr_return_value(self) -> int:
-        return -errno.EIO if self.has_error else 0
+        if self.has_error:
+            if len(self.exceptions) == 1:
+                ex = self.exceptions[0]
+                if isinstance(ex, NFSException):
+                    return ex.errno
+                # Some non-nfs exception occurred, this can be anything
+                # therefore return EAGAIN as a generalised errno.
+                return -errno.EAGAIN
+            # There are multiple failures so returning EIO as a generalised
+            # errno.
+            return -errno.EIO
+        return 0
+
+    def mgr_status_value(self) -> str:
+        if self.has_error:
+            if len(self.faulty_export_block_indices) == 1:
+                self.status = f"{str(self.exceptions[0])} for export block" \
+                              f" at index {self.faulty_export_block_indices}"
+            elif len(self.faulty_export_block_indices) > 1:
+                self.status = f"{self.num_errors} export blocks (at index" \
+                              f" {self.faulty_export_block_indices}) failed" \
+                              " to be created/updated"
+        return self.status
 
 
 class ExportMgr:
@@ -501,7 +536,12 @@ class ExportMgr:
 
         aeresults = AppliedExportResults()
         for export in exports:
-            aeresults.append(self._change_export(cluster_id, export))
+            changed_export = self._change_export(cluster_id, export)
+            # This will help figure out which export blocks in conf/json file
+            # are problematic.
+            if changed_export.get("state", "") == "error":
+                changed_export.update({"index": exports.index(export) + 1})
+            aeresults.append(changed_export)
         return aeresults
 
     def _read_export_config(self, cluster_id: str, export_config: str) -> List[Dict]:
@@ -525,7 +565,7 @@ class ExportMgr:
             return j  # j is already a list object
         return [j]  # return a single object list, with j as the only item
 
-    def _change_export(self, cluster_id: str, export: Dict) -> Dict[str, str]:
+    def _change_export(self, cluster_id: str, export: Dict) -> Dict[str, Any]:
         try:
             return self._apply_export(cluster_id, export)
         except NotImplementedError:
@@ -543,7 +583,8 @@ class ExportMgr:
         except Exception as ex:
             msg = f'Failed to apply export: {ex}'
             log.exception(msg)
-            return {"state": "error", "msg": msg}
+            return {"state": "error", "msg": msg, "exception": ex,
+                    "pseudo": export['pseudo']}
 
     def _update_user_id(
             self,

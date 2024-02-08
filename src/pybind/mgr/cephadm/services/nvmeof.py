@@ -2,6 +2,7 @@ import errno
 import logging
 import json
 from typing import List, cast, Optional
+from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
 from ceph.deployment.service_spec import NvmeofServiceSpec
@@ -55,8 +56,39 @@ class NvmeofService(CephService):
         return daemon_spec
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
-        # TODO: what integration do we need with the dashboard?
-        pass
+        def get_set_cmd_dicts(out: str) -> List[dict]:
+            gateways = json.loads(out)['gateways']
+            cmd_dicts = []
+
+            spec = cast(NvmeofServiceSpec,
+                        self.mgr.spec_store.all_specs.get(daemon_descrs[0].service_name(), None))
+
+            for dd in daemon_descrs:
+                assert dd.hostname is not None
+
+                if not spec:
+                    logger.warning(f'No ServiceSpec found for {dd.service_name()}')
+                    continue
+
+                ip = utils.resolve_ip(self.mgr.inventory.get_addr(dd.hostname))
+                if type(ip_address(ip)) is IPv6Address:
+                    ip = f'[{ip}]'
+                service_url = '{}:{}'.format(ip, spec.port or '5500')
+                gw = gateways.get(dd.hostname)
+                if not gw or gw['service_url'] != service_url:
+                    logger.info(f'Adding NVMeoF gateway {service_url} to Dashboard')
+                    cmd_dicts.append({
+                        'prefix': 'dashboard nvmeof-gateway-add',
+                        'inbuf': service_url,
+                        'name': dd.hostname
+                    })
+            return cmd_dicts
+
+        self._check_and_set_dashboard(
+            service_name='nvmeof',
+            get_cmd='dashboard nvmeof-gateway-list',
+            get_set_cmd_dicts=get_set_cmd_dicts
+        )
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
@@ -83,7 +115,14 @@ class NvmeofService(CephService):
         Called after the daemon is removed.
         """
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
-        # TODO: remove config for dashboard nvmeof gateways if any
+        # remove config for dashboard nvmeof gateways if any
+        ret, out, err = self.mgr.mon_command({
+            'prefix': 'dashboard nvmeof-gateway-rm',
+            'name': daemon.hostname,
+        })
+        if not ret:
+            logger.info(f'{daemon.hostname} removed from nvmeof gateways dashboard config')
+
         # and any certificates being used for mTLS
 
     def purge(self, service_name: str) -> None:

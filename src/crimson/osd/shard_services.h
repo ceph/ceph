@@ -70,8 +70,16 @@ class PerShardState {
   OSDState &osd_state;
   OSD_OSDMapGate osdmap_gate;
 
+  PerShardPipeline client_request_pipeline;
+  PerShardPipeline peering_request_pipeline;
+  PerShardPipeline replicated_request_pipeline;
+
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
+
+  const epoch_t& get_osdmap_tlb() {
+    return per_shard_superblock.cluster_osdmap_trim_lower_bound;
+  }
 
   // Op Management
   OSDOperationRegistry registry;
@@ -111,7 +119,7 @@ class PerShardState {
   PGMap pg_map;
 
   seastar::future<> stop_pgs();
-  std::map<pg_t, pg_stat_t> get_pg_stats() const;
+  std::map<pg_t, pg_stat_t> get_pg_stats();
   seastar::future<> broadcast_map_to_pgs(
     ShardServices &shard_services,
     epoch_t epoch);
@@ -177,12 +185,16 @@ class PerShardState {
   HeartbeatStampsRef get_hb_stamps(int peer);
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
+  seastar::future<> update_shard_superblock(OSDSuperblock superblock);
+
   // Time state
   const ceph::mono_time startup_time;
   ceph::signedspan get_mnow() const {
     assert_core();
     return ceph::mono_clock::now() - startup_time;
   }
+
+  OSDSuperblock per_shard_superblock;
 
 public:
   PerShardState(
@@ -206,6 +218,7 @@ class OSDSingletonState : public md_config_obs_t {
   friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
+  using read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
 
 public:
   OSDSingletonState(
@@ -224,6 +237,7 @@ private:
 
   SharedLRU<epoch_t, OSDMap> osdmaps;
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
+  SimpleLRU<epoch_t, bufferlist, false> inc_map_bl_cache;
 
   cached_map_t osdmap;
   cached_map_t &get_osdmap() { return osdmap; }
@@ -252,9 +266,13 @@ private:
   }
 
   OSDSuperblock superblock;
-  void set_superblock(OSDSuperblock _superblock) {
+  void set_singleton_superblock(OSDSuperblock _superblock) {
     superblock = std::move(_superblock);
   }
+
+  seastar::future<MURef<MOSDMap>> build_incremental_map_msg(
+    epoch_t first,
+    epoch_t last);
 
   seastar::future<> send_incremental_map(
     crimson::net::Connection &conn,
@@ -306,12 +324,16 @@ private:
   seastar::future<local_cached_map_t> get_local_map(epoch_t e);
   seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
   seastar::future<bufferlist> load_map_bl(epoch_t e);
-  seastar::future<std::map<epoch_t, bufferlist>>
+  read_errorator::future<ceph::bufferlist> load_inc_map_bl(epoch_t e);
+  seastar::future<OSDMapService::bls_map_t>
   load_map_bls(epoch_t first, epoch_t last);
   void store_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
+  void store_inc_map_bl(ceph::os::Transaction& t,
+                    epoch_t e, bufferlist&& bl);
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
+  void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
 };
 
 /**
@@ -382,7 +404,7 @@ public:
 
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
-    return pg_to_shard_mapping.remove_pg(pgid);
+    return pg_to_shard_mapping.remove_pg_mapping(pgid);
   }
 
   crimson::common::CephContext *get_cct() {
@@ -453,6 +475,18 @@ public:
     return dispatch_context({}, std::move(ctx));
   }
 
+  PerShardPipeline &get_client_request_pipeline() {
+    return local_state.client_request_pipeline;
+  }
+
+  PerShardPipeline &get_peering_request_pipeline() {
+    return local_state.peering_request_pipeline;
+  }
+
+  PerShardPipeline &get_replicated_request_pipeline() {
+    return local_state.replicated_request_pipeline;
+  }
+
   /// Return per-core tid
   ceph_tid_t get_tid() { return local_state.get_tid(); }
 
@@ -480,6 +514,7 @@ public:
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
   FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
 
+  FORWARD_TO_OSD_SINGLETON(build_incremental_map_msg)
   FORWARD_TO_OSD_SINGLETON(send_incremental_map)
   FORWARD_TO_OSD_SINGLETON(send_incremental_map_to_osd)
 
@@ -492,6 +527,8 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_pg_temp)
   FORWARD_TO_LOCAL_CONST(get_mnow)
   FORWARD_TO_LOCAL(get_hb_stamps)
+  FORWARD_TO_LOCAL(update_shard_superblock)
+  FORWARD_TO_LOCAL(get_osdmap_tlb)
 
   FORWARD(pg_created, pg_created, local_state.pg_map)
 

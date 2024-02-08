@@ -1,22 +1,31 @@
-<ng-container *ngIf="subVolumes$ | async as subVolumes">
-  <cd-table [data]="subVolumes"
-            columnMode="flex"
-            [columns]="columns"
-            selectionType="single"
-            [hasDetails]="false"
-            (fetchData)="fetchData()"
-            (updateSelection)="updateSelection($event)">
+<div class="row">
+  <div class="col-sm-1"
+       *ngIf="subVolumeGroups$ | async as subVolumeGroups">
+    <cd-vertical-navigation title="Groups"
+                            [items]="subvolumeGroupList"
+                            inputIdentifier="group-filter"
+                            (emitActiveItem)="selectSubVolumeGroup($event)"></cd-vertical-navigation>
+  </div>
+  <div class="col-11 vertical-line">
+    <cd-table [data]="subVolumes$ | async"
+              columnMode="flex"
+              [columns]="columns"
+              selectionType="single"
+              [hasDetails]="false"
+              (fetchData)="fetchData()"
+              (updateSelection)="updateSelection($event)">
 
-    <div class="table-actions btn-toolbar">
-      <cd-table-actions [permission]="permissions.cephfs"
-                        [selection]="selection"
-                        class="btn-group"
-                        id="cephfs-subvolume-actions"
-                        [tableActions]="tableActions">
-      </cd-table-actions>
-    </div>
-  </cd-table>
-</ng-container>
+      <div class="table-actions btn-toolbar">
+        <cd-table-actions [permission]="permissions.cephfs"
+                          [selection]="selection"
+                          class="btn-group"
+                          id="cephfs-subvolume-actions"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+      </div>
+    </cd-table>
+  </div>
+</div>
 
 <ng-template #quotaUsageTpl
              let-row="row">

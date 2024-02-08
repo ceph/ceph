@@ -13,7 +13,7 @@ Supported Destination
 ---------------------
 
 AWS supports: **SNS**, **SQS** and **Lambda** as possible destinations (AWS internal destinations). 
-Currently, we support: **HTTP/S**, **Kafka** and **AMQP**. And also support pulling and acking of events stored in Ceph (as an internal destination).
+Currently, we support: **HTTP/S**, **Kafka** and **AMQP**.
 
 We are using the **SNS** ARNs to represent the **HTTP/S**, **Kafka** and **AMQP** destinations.
 
@@ -91,7 +91,7 @@ Event Types
 +--------------------------------------------------------+-----------------------------------------+
 | ``s3:ObjectLifecycle:Expiration:DeleteMarker``         | Ceph extension                          |
 +--------------------------------------------------------+-----------------------------------------+
-| ``s3:ObjectLifecycle:Expiration:AbortMultipartUpload`` | Defined, Ceph extension (not generated) |
+| ``s3:ObjectLifecycle:Expiration:AbortMultipartUpload`` | Ceph extension                          |
 +--------------------------------------------------------+-----------------------------------------+
 | ``s3:ObjectLifecycle:Transition:Current``              | Ceph extension                          |
 +--------------------------------------------------------+-----------------------------------------+

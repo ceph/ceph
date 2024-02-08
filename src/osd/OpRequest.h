@@ -94,7 +94,7 @@ public:
   epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
 
   bool hitset_inserted;
-  jspan osd_parent_span;
+  jspan_ptr osd_parent_span;
 
   template<class T>
   const T* get_req() const { return static_cast<const T*>(request); }

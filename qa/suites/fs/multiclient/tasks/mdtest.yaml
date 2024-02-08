@@ -2,19 +2,33 @@
 tasks:
 - pexec:
     clients:
+      - set -x
       - cd $TESTDIR
-      - wget http://download.ceph.com/qa/mdtest-1.9.3.tgz
-      - mkdir mdtest-1.9.3
-      - cd mdtest-1.9.3
-      - tar xvfz $TESTDIR/mdtest-1.9.3.tgz
-      - rm $TESTDIR/mdtest-1.9.3.tgz
-      - MPI_CC=mpicc make
+      - sudo apt purge -y mpich
+      - sudo apt install -y mpich
+      # use ior project instead of mdtest project because latter has been
+      # merged into former. See:
+      # https://github.com/MDTEST-LANL/mdtest/blob/master/README.md
+      - wget http://download.ceph.com/qa/ior-3.3.0.tar.bz2
+      - tar xvfj ior-3.3.0.tar.bz2
+      - cd ior-3.3.0
+      # this option was set originall when mdtest binary was built using
+      # mdtest PR and not through ior project.
+      #- MPI_CC=mpicc make
+      - ./configure
+      - make
+      - make install DESTDIR=$TESTDIR/binary/
+      - cd $TESTDIR/
+      - sudo apt install -y tree
+      - tree binary/
+      - rm ior-3.3.0.tar.bz2
+      - rm -r ior-3.3.0
       - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
 - ssh_keys:
 - mpi:
-    exec: $TESTDIR/mdtest-1.9.3/mdtest -d $TESTDIR/gmnt -I 20 -z 5 -b 2 -R
+    exec: $TESTDIR/binary/usr/local/bin/mdtest -d $TESTDIR/gmnt -I 20 -z 5 -b 2 -R
 - pexec:
     clients:
+      - rm -f $TESTDIR/gmnt/ior.testfile
       - rm -f $TESTDIR/gmnt
-      - rm -rf $TESTDIR/mdtest-1.9.3
-      - rm -rf $TESTDIR/._mdtest-1.9.3
+      - rm -rf $TESTDIR/binary

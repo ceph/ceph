@@ -63,6 +63,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "s"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -87,7 +96,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -122,7 +131,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -156,6 +165,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "none"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -180,7 +198,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -208,7 +226,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -242,6 +260,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "Latencies are shown stacked, without a yaxis to provide a visual indication of GET latency imbalance across RGW hosts",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "s"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -266,7 +293,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -294,7 +321,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -328,6 +355,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "Total bytes transferred in/out of all radosgw instances within the cluster",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "bytes"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -352,7 +388,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -387,7 +423,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -421,6 +457,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "Total bytes transferred in/out through get/put operations, by radosgw instance",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "bytes"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -445,7 +490,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -473,7 +518,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -507,6 +552,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "Latencies are shown stacked, without a yaxis to provide a visual indication of PUT latency imbalance across RGW hosts",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "s"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -531,7 +585,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -559,7 +613,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -612,6 +666,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "short"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -636,7 +699,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -696,7 +759,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -730,6 +793,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "short"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -754,7 +826,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -835,7 +907,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -869,6 +941,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "short"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -893,7 +974,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -942,7 +1023,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -976,6 +1057,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "short"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -1000,7 +1090,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -1056,7 +1146,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",

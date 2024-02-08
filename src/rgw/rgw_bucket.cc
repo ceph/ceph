@@ -137,7 +137,7 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
 				 const DoutPrefixProvider *dpp, optional_yield y)
 {
   /* Chown on the bucket */
-  int ret = bucket->chown(dpp, *new_user, y);
+  int ret = bucket->chown(dpp, new_user->get_id(), y);
   if (ret < 0) {
     set_err_msg(err_msg, "Failed to change object ownership: " + cpp_strerror(-ret));
   }

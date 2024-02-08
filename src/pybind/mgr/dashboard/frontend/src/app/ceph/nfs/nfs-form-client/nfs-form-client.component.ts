@@ -21,14 +21,16 @@ export class NfsFormClientComponent implements OnInit {
 
   @ContentChild('squashHelper', { static: true }) squashHelperTpl: TemplateRef<any>;
 
-  nfsSquash: any[] = Object.keys(this.nfsService.nfsSquash);
-  nfsAccessType: any[] = this.nfsService.nfsAccessType;
+  nfsSquash: any[] = [];
+  nfsAccessType: any[] = [];
   icons = Icons;
   clientsFormArray: UntypedFormArray;
 
   constructor(private nfsService: NfsService) {}
 
   ngOnInit() {
+    this.nfsSquash = Object.keys(this.nfsService.nfsSquash);
+    this.nfsAccessType = this.nfsService.nfsAccessType;
     _.forEach(this.clients, (client) => {
       const fg = this.addClient();
       fg.patchValue(client);

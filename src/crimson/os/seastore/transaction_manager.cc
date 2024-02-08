@@ -178,6 +178,7 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
   });
 }
 
+#ifdef UNIT_TESTS_BUILT
 TransactionManager::ref_ret TransactionManager::inc_ref(
   Transaction &t,
   LogicalCachedExtentRef &ref)
@@ -209,12 +210,13 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
     return result.refcount;
   });
 }
+#endif
 
-TransactionManager::ref_ret TransactionManager::dec_ref(
+TransactionManager::ref_ret TransactionManager::remove(
   Transaction &t,
   LogicalCachedExtentRef &ref)
 {
-  LOG_PREFIX(TransactionManager::dec_ref);
+  LOG_PREFIX(TransactionManager::remove);
   TRACET("{}", t, *ref);
   return lba_manager->decref_extent(t, ref->get_laddr(), true
   ).si_then([this, FNAME, &t, ref](auto result) {
@@ -253,17 +255,17 @@ TransactionManager::ref_ret TransactionManager::_dec_ref(
   });
 }
 
-TransactionManager::refs_ret TransactionManager::dec_ref(
+TransactionManager::refs_ret TransactionManager::remove(
   Transaction &t,
   std::vector<laddr_t> offsets)
 {
-  LOG_PREFIX(TransactionManager::dec_ref);
+  LOG_PREFIX(TransactionManager::remove);
   DEBUG("{} offsets", offsets.size());
   return seastar::do_with(std::move(offsets), std::vector<unsigned>(),
       [this, &t] (auto &&offsets, auto &refcnt) {
       return trans_intr::do_for_each(offsets.begin(), offsets.end(),
         [this, &t, &refcnt] (auto &laddr) {
-        return this->dec_ref(t, laddr).si_then([&refcnt] (auto ref) {
+        return this->remove(t, laddr).si_then([&refcnt] (auto ref) {
           refcnt.push_back(ref);
           return ref_iertr::now();
         });
@@ -437,32 +439,99 @@ TransactionManager::rewrite_logical_extent(
 
   auto lextent = extent->cast<LogicalCachedExtent>();
   cache->retire_extent(t, extent);
-  auto nlextent = cache->alloc_new_extent_by_type(
-    t,
-    lextent->get_type(),
-    lextent->get_length(),
-    lextent->get_user_hint(),
-    // get target rewrite generation
-    lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
-  lextent->get_bptr().copy_out(
-    0,
-    lextent->get_length(),
-    nlextent->get_bptr().c_str());
-  nlextent->set_laddr(lextent->get_laddr());
-  nlextent->set_modify_time(lextent->get_modify_time());
+  if (get_extent_category(lextent->get_type()) == data_category_t::METADATA) {
+    auto nlextent = cache->alloc_new_extent_by_type(
+      t,
+      lextent->get_type(),
+      lextent->get_length(),
+      lextent->get_user_hint(),
+      // get target rewrite generation
+      lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
+    lextent->get_bptr().copy_out(
+      0,
+      lextent->get_length(),
+      nlextent->get_bptr().c_str());
+    nlextent->set_laddr(lextent->get_laddr());
+    nlextent->set_modify_time(lextent->get_modify_time());
 
-  DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
+    DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
-  /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
-   * extents since we're going to do it again once we either do the ool write
-   * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
-   * avoid this complication. */
-  return lba_manager->update_mapping(
-    t,
-    lextent->get_laddr(),
-    lextent->get_paddr(),
-    nlextent->get_paddr(),
-    nlextent.get());
+    /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
+     * extents since we're going to do it again once we either do the ool write
+     * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
+     * avoid this complication. */
+    return lba_manager->update_mapping(
+      t,
+      lextent->get_laddr(),
+      lextent->get_length(),
+      lextent->get_paddr(),
+      nlextent->get_length(),
+      nlextent->get_paddr(),
+      nlextent.get());
+  } else {
+    assert(get_extent_category(lextent->get_type()) == data_category_t::DATA);
+    auto extents = cache->alloc_new_data_extents_by_type(
+      t,
+      lextent->get_type(),
+      lextent->get_length(),
+      lextent->get_user_hint(),
+      // get target rewrite generation
+      lextent->get_rewrite_generation());
+    return seastar::do_with(
+      std::move(extents),
+      0,
+      lextent->get_length(),
+      [this, lextent, &t](auto &extents, auto &off, auto &left) {
+      return trans_intr::do_for_each(
+        extents,
+        [lextent, this, &t, &off, &left](auto &nextent) {
+        LOG_PREFIX(TransactionManager::rewrite_logical_extent);
+        bool first_extent = (off == 0);
+        ceph_assert(left >= nextent->get_length());
+        auto nlextent = nextent->template cast<LogicalCachedExtent>();
+        lextent->get_bptr().copy_out(
+          0,
+          nlextent->get_length(),
+          nlextent->get_bptr().c_str());
+        nlextent->set_laddr(lextent->get_laddr() + off);
+        nlextent->set_modify_time(lextent->get_modify_time());
+        DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
+
+        /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
+         * extents since we're going to do it again once we either do the ool write
+         * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
+         * avoid this complication. */
+        auto fut = base_iertr::now();
+        if (first_extent) {
+          fut = lba_manager->update_mapping(
+            t,
+            lextent->get_laddr() + off,
+            lextent->get_length(),
+            lextent->get_paddr(),
+            nlextent->get_length(),
+            nlextent->get_paddr(),
+            nlextent.get());
+        } else {
+          fut = lba_manager->alloc_extent(
+            t,
+            lextent->get_laddr() + off,
+            nlextent->get_length(),
+            nlextent->get_paddr(),
+            *nlextent
+          ).si_then([lextent, nlextent, off](auto mapping) {
+            ceph_assert(mapping->get_key() == lextent->get_laddr() + off);
+            ceph_assert(mapping->get_val() == nlextent->get_paddr());
+            return seastar::now();
+          });
+        }
+        return fut.si_then([&off, &left, nlextent] {
+          off += nlextent->get_length();
+          left -= nlextent->get_length();
+          return seastar::now();
+        });
+      });
+    });
+  }
 }
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
@@ -485,6 +554,12 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
 
   assert(extent->is_valid() && !extent->is_initial_pending());
   if (extent->is_dirty()) {
+    if (epm->can_inplace_rewrite(t, extent)) {
+      DEBUGT("delta overwriting extent -- {}", t, *extent);
+      t.add_inplace_rewrite_extent(extent);
+      extent->set_inplace_rewrite_generation();
+      return rewrite_extent_iertr::now();
+    }
     extent->set_target_rewrite_generation(INIT_GENERATION);
   } else {
     extent->set_target_rewrite_generation(target_generation);

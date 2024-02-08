@@ -35,12 +35,14 @@ mClockScheduler::mClockScheduler(CephContext *cct,
   uint32_t num_shards,
   int shard_id,
   bool is_rotational,
+  unsigned cutoff_priority,
   MonClient *monc)
   : cct(cct),
     whoami(whoami),
     num_shards(num_shards),
     shard_id(shard_id),
     is_rotational(is_rotational),
+    cutoff_priority(cutoff_priority),
     monc(monc),
     scheduler(
       std::bind(&mClockScheduler::ClientRegistry::get_info,
@@ -340,8 +342,7 @@ uint32_t mClockScheduler::calc_scaled_cost(int item_cost)
       item_cost));
   auto cost_per_io = static_cast<uint32_t>(osd_bandwidth_cost_per_io);
 
-  // Calculate total scaled cost in bytes
-  return cost_per_io + cost;
+  return std::max<uint32_t>(cost, cost_per_io);
 }
 
 void mClockScheduler::update_configuration()

@@ -7,18 +7,21 @@ import subprocess
 import socket
 import time
 import os
+import io
 import string
 import boto
 from botocore.exceptions import ClientError
 from http import server as http_server
 from random import randint
 import hashlib
+# XXX this should be converted to use pytest
 from nose.plugins.attrib import attr
 import boto3
 import datetime
 from cloudevents.http import from_http
 from dateutil import parser
 
+# XXX this should be converted to use boto3
 from boto.s3.connection import S3Connection
 
 from . import(
@@ -274,7 +277,7 @@ def stop_amqp_receiver(receiver, task):
         receiver.channel.stop_consuming()
         log.info('stopping AMQP receiver')
     except Exception as error:
-        log.info('failed to gracefuly stop AMQP receiver: %s', str(error))
+        log.info('failed to gracefully stop AMQP receiver: %s', str(error))
     task.join(5)
 
 
@@ -431,7 +434,8 @@ class KafkaReceiver(object):
                 self.consumer = KafkaConsumer(topic, 
                         bootstrap_servers = kafka_server+':'+str(port), 
                         security_protocol=security_type,
-                        consumer_timeout_ms=16000)
+                        consumer_timeout_ms=16000,
+                        auto_offset_reset='earliest')
                 print('Kafka consumer created on topic: '+topic)
                 break
             except Exception as error:
@@ -483,7 +487,7 @@ def stop_kafka_receiver(receiver, task):
         receiver.consumer.unsubscribe()
         receiver.consumer.close()
     except Exception as error:
-        log.info('failed to gracefuly stop Kafka receiver: %s', str(error))
+        log.info('failed to gracefully stop Kafka receiver: %s', str(error))
 
 
 def get_ip():
@@ -553,8 +557,17 @@ def another_user(tenant=None):
 @attr('basic_test')
 def test_ps_s3_topic_on_master():
     """ test s3 topics set/get/delete on master """
+    
+    access_key = str(time.time())
+    secret_key = str(time.time())
+    uid = 'superman' + str(time.time())
     tenant = 'kaboom'
-    conn = another_user(tenant)
+    _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
+    assert_equal(result, 0)
+    conn = S3Connection(aws_access_key_id=access_key,
+                  aws_secret_access_key=secret_key,
+                      is_secure=False, port=get_config_port(), host=get_config_host(), 
+                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
     zonegroup = 'default' 
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
@@ -625,8 +638,17 @@ def test_ps_s3_topic_on_master():
 @attr('basic_test')
 def test_ps_s3_topic_admin_on_master():
     """ test s3 topics set/get/delete on master """
+    
+    access_key = str(time.time())
+    secret_key = str(time.time())
+    uid = 'superman' + str(time.time())
     tenant = 'kaboom'
-    conn = another_user(tenant)
+    _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
+    assert_equal(result, 0)
+    conn = S3Connection(aws_access_key_id=access_key,
+                  aws_secret_access_key=secret_key,
+                      is_secure=False, port=get_config_port(), host=get_config_host(), 
+                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
     zonegroup = 'default' 
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
@@ -1216,87 +1238,6 @@ def test_ps_s3_notification_errors_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
-@attr('basic_test')
-def test_ps_s3_notification_permissions():
-    """ test s3 notification set/get/delete permissions """
-    conn1 = connection()
-    conn2 = another_user()
-    zonegroup = 'default'
-    bucket_name = gen_bucket_name()
-    # create bucket
-    bucket = conn1.create_bucket(bucket_name)
-    topic_name = bucket_name + TOPIC_SUFFIX
-    # create s3 topic
-    endpoint_address = 'amqp://127.0.0.1:7001'
-    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
-    topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args)
-    topic_arn = topic_conf.set_config()
-
-    # one user create a notification
-    notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name,
-                        'TopicArn': topic_arn,
-                        'Events': []
-                       }]
-    s3_notification_conf1 = PSNotificationS3(conn1, bucket_name, topic_conf_list)
-    _, status = s3_notification_conf1.set_config()
-    assert_equal(status, 200)
-    # another user try to fetch it
-    s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
-    try:
-        _, _ = s3_notification_conf2.get_config()
-        assert False, "'AccessDenied' error is expected"
-    except ClientError as error:
-        assert_equal(error.response['Error']['Code'], 'AccessDenied')
-    # other user try to delete the notification
-    _, status = s3_notification_conf2.del_config()
-    assert_equal(status, 403)
-
-    # bucket policy is added by the 1st user
-    client = boto3.client('s3',
-            endpoint_url='http://'+conn1.host+':'+str(conn1.port),
-            aws_access_key_id=conn1.aws_access_key_id,
-            aws_secret_access_key=conn1.aws_secret_access_key)
-    bucket_policy = json.dumps({
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Sid": "Statement",
-                "Effect": "Allow",
-                "Principal": "*",
-                "Action": ["s3:GetBucketNotification", "s3:PutBucketNotification"],
-                "Resource": f"arn:aws:s3:::{bucket_name}"
-            }
-        ]
-    })
-    response = client.put_bucket_policy(Bucket=bucket_name, Policy=bucket_policy)
-    assert_equal(int(response['ResponseMetadata']['HTTPStatusCode']/100), 2) 
-    result = client.get_bucket_policy(Bucket=bucket_name)
-    print(result['Policy'])
-    
-    # 2nd user try to fetch it again
-    _, status = s3_notification_conf2.get_config()
-    assert_equal(status, 200)
-
-    # 2nd user try to delete it again
-    result, status = s3_notification_conf2.del_config()
-    assert_equal(status, 200)
-
-    # 2nd user try to add another notification
-    topic_conf_list = [{'Id': notification_name+"2",
-                        'TopicArn': topic_arn,
-                        'Events': []
-                       }]
-    s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
-    result, status = s3_notification_conf2.set_config()
-    assert_equal(status, 200)
-
-    # cleanup
-    s3_notification_conf1.del_config()
-    s3_notification_conf2.del_config()
-    topic_conf.del_config()
-    # delete the bucket
-    conn1.delete_bucket(bucket_name)
 
 @attr('amqp_test')
 def test_ps_s3_notification_push_amqp_on_master():
@@ -1594,8 +1535,8 @@ def test_ps_s3_notification_push_kafka_on_master():
         time_diff = time.time() - start_time
         print('average time for creation + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-        print('wait for 5sec for the messages...')
-        time.sleep(5)
+        print('wait for 10sec for the messages...')
+        time.sleep(10)
         keys = list(bucket.list())
         receiver.verify_s3_events(keys, exact_match=True, etags=etags)
 
@@ -1611,12 +1552,11 @@ def test_ps_s3_notification_push_kafka_on_master():
         time_diff = time.time() - start_time
         print('average time for deletion + kafka notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-        print('wait for 5sec for the messages...')
-        time.sleep(5)
+        print('wait for 10sec for the messages...')
+        time.sleep(10)
         receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
     except Exception as e:
-        print(e)
-        assert False
+        assert False, str(e)
     finally:
         # cleanup
         if s3_notification_conf is not None:
@@ -2040,6 +1980,114 @@ def test_ps_s3_lifecycle_on_master():
     conn.delete_bucket(bucket_name)
     http_server.close()
 
+def start_and_abandon_multipart_upload(bucket, key_name, content):
+    try:
+        mp = bucket.initiate_multipart_upload(key_name)
+        part_data = io.StringIO(content)
+        mp.upload_part_from_file(part_data, 1)
+        # mp.complete_upload()
+    except Exception as e:
+        print('Error: ' + str(e))
+
+@attr('http_test')
+def test_ps_s3_lifecycle_abort_mpu_on_master():
+    """ test that when a multipart upload is aborted by lifecycle policy, notification is sent on master """
+    hostname = get_ip()
+    conn = connection()
+    zonegroup = 'default'
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    number_of_objects = 1
+    http_server = StreamingHTTPServer(host, port, num_workers=number_of_objects)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address
+    opaque_data = 'http://1.2.3.4:8888'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args, opaque_data=opaque_data)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectLifecycle:Expiration:*']
+                       }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # start and abandon a multpart upload
+    # create objects in the bucket
+    obj_prefix = 'ooo'
+    start_time = time.time()
+    content = 'bar'
+
+    key_name = obj_prefix + str(1)
+    thr = threading.Thread(target = start_and_abandon_multipart_upload, args=(bucket, key_name, content,))
+    thr.start()
+    thr.join()    
+
+    time_diff = time.time() - start_time
+    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    
+    # create lifecycle policy -- assume rgw_lc_debug_interval=10 is in effect
+    client = boto3.client('s3',
+            endpoint_url='http://'+conn.host+':'+str(conn.port),
+            aws_access_key_id=conn.aws_access_key_id,
+            aws_secret_access_key=conn.aws_secret_access_key)
+    response = client.put_bucket_lifecycle_configuration(Bucket=bucket_name, 
+            LifecycleConfiguration={'Rules': [
+                {
+                    'ID': 'abort1',
+                    'Filter': {'Prefix': obj_prefix},
+                    'Status': 'Enabled',
+                    'AbortIncompleteMultipartUpload': {'DaysAfterInitiation': 1},
+                }
+            ]
+        }
+    )
+
+    # start lifecycle processing
+    admin(['lc', 'process'])
+    print('wait for 20s (2 days) for the messages...')
+    time.sleep(20)
+
+    # check http receiver does not have messages
+    keys = list(bucket.list())
+    print('total number of objects: ' + str(len(keys)))
+    event_keys = []
+    events = http_server.get_and_reset_events()
+    for event in events:
+        # I hope Boto doesn't gak on the unknown eventName
+        assert_equal(event['Records'][0]['eventName'], 'ObjectLifecycle:Expiration:AbortMultipartUpload')
+        event_keys.append(event['Records'][0]['s3']['object']['key'])
+    for key in keys:
+        key_found = False
+        for event_key in event_keys:
+            if event_key == key:
+                key_found = True
+                break
+        if not key_found:
+            err = 'no lifecycle event found for key: ' + str(key)
+            log.error(events)
+            assert False, err
+
+    # cleanup
+    for key in keys:
+        key.delete()
+    topic_conf.del_config()
+    s3_notification_conf.del_config(notification=notification_name)
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+    http_server.close()
 
 def ps_s3_creation_triggers_on_master(external_endpoint_address=None, ca_location=None, verify_ssl='true'):
     """ test object creation s3 notifications in using put/copy/post on master"""
@@ -2347,6 +2395,70 @@ def test_http_post_object_upload():
     conn1.delete_object(Bucket=bucket_name, Key=key_name)
     # delete the bucket
     conn1.delete_bucket(Bucket=bucket_name)
+
+
+@attr('mpu_test')
+def test_ps_s3_multipart_on_master_http():
+    """ test http multipart object upload on master"""
+    conn = connection()
+    zonegroup = 'default'
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    http_server = StreamingHTTPServer(host, port, num_workers=10)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address
+    opaque_data = 'http://1.2.3.4:8888'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args, opaque_data=opaque_data)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': []
+                        }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket
+    client_threads = []
+    content = str(os.urandom(20*1024*1024))
+    key = bucket.new_key('obj')
+    thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+    thr.start()
+    client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check http receiver
+    keys = list(bucket.list())
+    print('total number of objects: ' + str(len(keys)))
+    events = http_server.get_and_reset_events()
+    for event in events:
+        assert_equal(event['Records'][0]['opaqueData'], opaque_data)
+        assert_true(event['Records'][0]['s3']['object']['eTag'] != '')
+
+    # cleanup
+    for key in keys:
+        key.delete()
+    [thr.join() for thr in client_threads]
+    topic_conf.del_config()
+    s3_notification_conf.del_config(notification=notification_name)
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+    http_server.close()
 
 
 @attr('amqp_test')
@@ -3262,8 +3374,8 @@ def test_ps_s3_persistent_topic_configs_ttl():
 @attr('basic_test')
 def test_ps_s3_persistent_topic_configs_max_retries():
     """ test persistent topic configurations with max_retries and retry_sleep_duration """
-    config_dict = {"time_to_live": "None", "max_retries": 30, "retry_sleep_duration": 1}
-    buffer = 10
+    config_dict = {"time_to_live": "None", "max_retries": 10, "retry_sleep_duration": 1}
+    buffer = 30
     persistency_time = config_dict["max_retries"]*config_dict["retry_sleep_duration"] + buffer
 
     ps_s3_persistent_topic_configs(persistency_time, config_dict)
@@ -4282,6 +4394,189 @@ def test_ps_s3_multiple_topics_notification():
         key.delete()
     conn.delete_bucket(bucket_name)
     http_server.close()
+
+
+@attr('basic_test')
+def test_ps_s3_topic_permissions():
+    """ test s3 topic set/get/delete permissions """
+    conn1 = connection()
+    conn2 = another_user()
+    zonegroup = 'default'
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name + TOPIC_SUFFIX
+    topic_policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "Statement",
+                "Effect": "Deny",
+                "Principal": "*",
+                "Action": ["sns:Publish", "sns:SetTopicAttributes", "sns:GetTopicAttributes", "sns:DeleteTopic", "sns:CreateTopic"],
+                "Resource": f"arn:aws:sns:{zonegroup}::{topic_name}"
+            }
+        ]
+    })
+    # create s3 topic with DENY policy
+    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args, policy_text=topic_policy)
+    topic_arn = topic_conf.set_config()
+
+    topic_conf2 = PSTopicS3(conn2, topic_name, zonegroup, endpoint_args=endpoint_args)
+    try:
+        # 2nd user tries to override the topic
+        topic_arn = topic_conf2.set_config()
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
+    # 2nd user tries to fetch the topic
+    _, status = topic_conf2.get_config(topic_arn=topic_arn)
+    assert_equal(status, 403)
+
+    try:
+        # 2nd user tries to set the attribute
+        status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
+    # create bucket for conn2 and try publishing notification to topic
+    _ = conn2.create_bucket(bucket_name)
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                         'Events': []
+                       }]
+    try:
+        s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
+        _, status = s3_notification_conf2.set_config()
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
+    try:
+        # 2nd user tries to delete the topic
+        status = topic_conf2.del_config(topic_arn=topic_arn)
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
+    # Topic policy is now added by the 1st user to allow 2nd user.
+    topic_policy  = topic_policy.replace("Deny", "Allow")
+    topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args, policy_text=topic_policy)
+    topic_arn = topic_conf.set_config()
+    # 2nd user try to fetch topic again
+    _, status = topic_conf2.get_config(topic_arn=topic_arn)
+    assert_equal(status, 200)
+    # 2nd user tries to set the attribute again
+    status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
+    assert_equal(status, 200)
+    # 2nd user tries to publish notification again
+    s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf2.set_config()
+    assert_equal(status, 200)
+    # 2nd user tries to delete the topic again
+    status = topic_conf2.del_config(topic_arn=topic_arn)
+    assert_equal(status, 200)
+
+    # cleanup
+    s3_notification_conf2.del_config()
+    # delete the bucket
+    conn2.delete_bucket(bucket_name)
+
+
+@attr('basic_test')
+def test_ps_s3_topic_no_permissions():
+    """ test s3 topic set/get/delete permissions """
+    conn1 = connection()
+    conn2 = another_user()
+    zonegroup = 'default'
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name + TOPIC_SUFFIX
+    
+    # create s3 topic without policy
+    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    topic_conf2 = PSTopicS3(conn2, topic_name, zonegroup, endpoint_args=endpoint_args)
+    try:
+        # 2nd user tries to override the topic
+        topic_arn = topic_conf2.set_config()
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
+    # 2nd user tries to fetch the topic
+    _, status = topic_conf2.get_config(topic_arn=topic_arn)
+    assert_equal(status, 403)
+
+    try:
+        # 2nd user tries to set the attribute
+        status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
+    # create bucket for conn2 publish notification to topic
+    # should be allowed based on the default value of rgw_topic_require_publish_policy=false
+    _ = conn2.create_bucket(bucket_name)
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                         'Events': []
+                       }]
+    s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf2.set_config()
+    assert_equal(status, 200)
+    
+    try:
+        # 2nd user tries to delete the topic
+        status = topic_conf2.del_config(topic_arn=topic_arn)
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
+    # cleanup
+    s3_notification_conf2.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn2.delete_bucket(bucket_name)
 
 
 def kafka_security(security_type, mechanism='PLAIN'):

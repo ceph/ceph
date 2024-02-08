@@ -89,7 +89,7 @@ public:
     paddr_t addr,
     LogicalCachedExtent &nextent) = 0;
 
-  virtual alloc_extent_ret clone_extent(
+  virtual alloc_extent_ret clone_mapping(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
@@ -191,7 +191,9 @@ public:
   virtual update_mapping_ret update_mapping(
     Transaction& t,
     laddr_t laddr,
+    extent_len_t prev_len,
     paddr_t prev_addr,
+    extent_len_t len,
     paddr_t paddr,
     LogicalCachedExtent *nextent) = 0;
 

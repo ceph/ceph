@@ -93,6 +93,15 @@ providing high-availability.
 .. note:: Deploying a single mirror daemon is recommended. Running multiple
    daemons is untested.
 
+The following file types are supported by the mirroring:
+
+- Regular files (-)
+- Directory files (d)
+- Symbolic link file (l)
+
+The other file types are ignored by the mirroring. So they won't be
+available on a successfully synchronized peer.
+
 The mirroring module is disabled by default. To enable the mirroring module,
 run the following command:
 

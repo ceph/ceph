@@ -49,7 +49,7 @@ bool WriteLogImageDispatch<I>::read(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
 
-  if (io_context->read_snap().value_or(CEPH_NOSNAP) != CEPH_NOSNAP) {
+  if (io_context->get_read_snap() != CEPH_NOSNAP) {
     return false;
   }
 

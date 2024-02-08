@@ -59,33 +59,11 @@ std::unique_ptr<Object> D4NFilterBucket::get_object(const rgw_obj_key& k)
   return std::make_unique<D4NFilterObject>(std::move(o), this, filter);
 }
 
-int D4NFilterUser::create_bucket(const DoutPrefixProvider* dpp,
-                              const rgw_bucket& b,
-                              const std::string& zonegroup_id,
-                              rgw_placement_rule& placement_rule,
-                              std::string& swift_ver_location,
-                              const RGWQuotaInfo * pquota_info,
-                              const RGWAccessControlPolicy& policy,
-                              Attrs& attrs,
-                              RGWBucketInfo& info,
-                              obj_version& ep_objv,
-                              bool exclusive,
-                              bool obj_lock_enabled,
-                              bool* existed,
-                              req_info& req_info,
-                              std::unique_ptr<Bucket>* bucket_out,
-                              optional_yield y)
+int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
+                            const CreateParams& params,
+                            optional_yield y)
 {
-  std::unique_ptr<Bucket> nb;
-  int ret;
-
-  ret = next->create_bucket(dpp, b, zonegroup_id, placement_rule, swift_ver_location, pquota_info, policy, attrs, info, ep_objv, exclusive, obj_lock_enabled, existed, req_info, &nb, y);
-  if (ret < 0)
-    return ret;
-
-  Bucket* fb = new D4NFilterBucket(std::move(nb), this, filter);
-  bucket_out->reset(fb);
-  return 0;
+  return next->create(dpp, params, y);
 }
 
 int D4NFilterObject::copy_object(User* user,
@@ -267,7 +245,7 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 }
 
 int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y) 
+                               optional_yield y)
 {
   std::vector<std::string> delFields;
   delFields.push_back((std::string)attr_name);
@@ -348,7 +326,6 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
   } else {
     /* Set metadata locally */
-    RGWQuotaInfo quota_info;
     RGWObjState* astate;
     source->get_obj_state(dpp, &astate, y);
 
@@ -365,20 +342,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 	source->set_instance(it->second);
       } else if (!std::strcmp(it->first.data(), "source_zone_short_id")) {
 	astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second));
-      } else if (!std::strcmp(it->first.data(), "bucket_count")) {
-	source->get_bucket()->set_count(std::stoull(it->second));
-      } else if (!std::strcmp(it->first.data(), "bucket_size")) {
-	source->get_bucket()->set_size(std::stoull(it->second));
-      } else if (!std::strcmp(it->first.data(), "user_quota.max_size")) {
-        quota_info.max_size = std::stoull(it->second);
-      } else if (!std::strcmp(it->first.data(), "user_quota.max_objects")) {
-        quota_info.max_objects = std::stoull(it->second);
-      } else if (!std::strcmp(it->first.data(), "max_buckets")) {
-        source->get_bucket()->get_owner()->set_max_buckets(std::stoull(it->second));
       }
     }
 
-    source->get_bucket()->get_owner()->set_info(quota_info);
     source->set_obj_state(*astate);
    
     /* Set attributes locally */
@@ -395,7 +361,7 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 }
 
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
-					   optional_yield y)
+                                                   optional_yield y, uint32_t flags)
 {
   int delDirReturn = source->filter->get_block_dir()->delValue(source->filter->get_cache_block());
 
@@ -413,7 +379,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     ldpp_dout(dpp, 20) << "D4N Filter: Cache delete operation succeeded." << dendl;
   }
 
-  return next->delete_obj(dpp, y);
+  return next->delete_obj(dpp, y, flags);
 }
 
 int D4NFilterWriter::prepare(optional_yield y) 
@@ -449,7 +415,8 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx,
+                       uint32_t flags)
 {
   cache_block* temp_cache_block = filter->get_cache_block();
   RGWBlockDirectory* temp_block_dir = filter->get_block_dir();
@@ -471,9 +438,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   RGWObjState* astate;
   int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, y);
-  obj->get_obj_attrs(y, save_dpp, NULL);
-  obj->get_obj_state(save_dpp, &astate, y);
+			canceled, rctx, flags);
+  obj->get_obj_attrs(rctx.y, save_dpp, NULL);
+  obj->get_obj_state(save_dpp, &astate, rctx.y);
 
   /* Append additional metadata to attributes */ 
   rgw::sal::Attrs baseAttrs = obj->get_attrs();
@@ -516,27 +483,6 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     baseAttrs.insert({"source_zone_short_id", bl});
     bl.clear();
   }
-
-  bl.append(std::to_string(obj->get_bucket()->get_count()));
-  baseAttrs.insert({"bucket_count", bl});
-  bl.clear();
-
-  bl.append(std::to_string(obj->get_bucket()->get_size()));
-  baseAttrs.insert({"bucket_size", bl});
-  bl.clear();
-
-  RGWUserInfo info = obj->get_bucket()->get_owner()->get_info();
-  bl.append(std::to_string(info.quota.user_quota.max_size));
-  baseAttrs.insert({"user_quota.max_size", bl});
-  bl.clear();
-
-  bl.append(std::to_string(info.quota.user_quota.max_objects));
-  baseAttrs.insert({"user_quota.max_objects", bl});
-  bl.clear();
-
-  bl.append(std::to_string(obj->get_bucket()->get_owner()->get_max_buckets()));
-  baseAttrs.insert({"max_buckets", bl});
-  bl.clear();
 
   baseAttrs.insert(attrs.begin(), attrs.end());
 

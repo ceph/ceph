@@ -14,6 +14,10 @@
 #ifndef CEPH_INLINE_MEMORY_H
 #define CEPH_INLINE_MEMORY_H
 
+#include <cstdint>
+#include <cstddef> // For size_t
+#include <cstring> // for memcpy
+
 #if defined(__GNUC__)
 
 // optimize for the common case, which is very small copies
@@ -25,7 +29,7 @@ void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
 			 size_t inline_len)
 {
   if (l > inline_len) {
-    return memcpy(dest, src, l);
+    return std::memcpy(dest, src, l);
   }
   switch (l) {
   case 8:
@@ -63,7 +67,7 @@ void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
 
 #else
 
-#define maybe_inline_memcpy(d, s, l, x) memcpy(d, s, l)
+#define maybe_inline_memcpy(d, s, l, x) std::memcpy(d, s, l)
 
 #endif
 
@@ -120,6 +124,49 @@ bool mem_is_zero(const char *data, size_t len)
     }
     data += sizeof(uint8_t);
   }
+  return true;
+}
+
+#elif defined(__GNUC__) && defined(__aarch64__) && defined(__ARM_NEON) // gcc and aarch64 neon
+
+#include <arm_neon.h>
+
+static inline bool mem_is_zero(const char *data, size_t len) {
+  const char *end = data + len;
+  const char *end256 = data + (len / sizeof(uint64x2x2_t)) * sizeof(uint64x2x2_t);
+  while (data < end256) {
+    uint64x2x2_t value = vld1q_u64_x2((uint64_t *)data);
+    if (value.val[0][0] != 0 || value.val[0][1] != 0 ||
+        value.val[1][0] != 0 || value.val[1][1] != 0) {
+      return false;
+    }
+    data += sizeof(uint64x2x2_t);
+  }
+
+  const char *end128 = data + sizeof(uint64x2_t);
+  if (end128 < end) {
+    uint64x2_t value = vld1q_u64((uint64_t *)data);
+    if (value[0] != 0 || value[1] != 0) {
+      return false;
+    }
+    data += sizeof(uint64x2_t);
+  }
+
+  const char *end64 = data + sizeof(uint64_t);
+  if (end64 < end) {
+    if(*(uint64_t *)data != 0) {
+      return false;
+    }
+    data += sizeof(uint64_t);
+  }
+
+  while (data < end) {
+    if (*data != 0) {
+      return false;
+    }
+    ++data;
+  }
+
   return true;
 }
 

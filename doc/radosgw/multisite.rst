@@ -464,8 +464,8 @@ For example:
 
 .. important:: The following steps assume a multi-site configuration that uses
    newly installed systems that have not yet begun storing data. **DO NOT
-   DELETE the ``default`` zone or its pools** if you are already using it to
-   store data, or the data will be irretrievably lost.
+   DELETE the** ``default`` **zone or its pools** if you are already using it
+   to store data, or the data will be irretrievably lost.
 
 Delete the default zone if needed:
 
@@ -527,6 +527,17 @@ running the following commands on the object gateway host:
 
    systemctl start ceph-radosgw@rgw.`hostname -s`
    systemctl enable ceph-radosgw@rgw.`hostname -s`
+
+If the ``cephadm`` command was used to deploy the cluster, you will not be able
+to use ``systemctl`` to start the gateway because no services will exist on
+which ``systemctl`` could operate. This is due to the containerized nature of
+the ``cephadm``-deployed Ceph cluster. If you have used the ``cephadm`` command
+and you have a containerized cluster, you must run a command of the following
+form to start the gateway:
+
+.. prompt:: bash #
+
+   ceph orch apply rgw <name> --realm=<realm> --zone=<zone> --placement --port
 
 Checking Synchronization Status
 -------------------------------

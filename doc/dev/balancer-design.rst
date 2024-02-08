@@ -55,4 +55,3 @@ Plans for the Next Version
 --------------------------
 
 1. Improve behavior for heterogeneous OSDs in a pool
-2. Offer read balancing as an online option to the balancer manager module

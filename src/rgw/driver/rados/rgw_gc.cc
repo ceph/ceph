@@ -71,17 +71,18 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const 
 
   if (cct->_conf->rgw_max_chunk_size) {
     cls_rgw_obj_chain broken_chain;
+    cls_rgw_gc_set_entry_op op;
+    op.info.tag = tag;
+    size_t base_encoded_size = op.estimate_encoded_size();
+    size_t total_encoded_size = base_encoded_size;
+
     ldpp_dout(this, 20) << "RGWGC::send_split_chain - rgw_max_chunk_size is: " << cct->_conf->rgw_max_chunk_size << dendl;
 
     for (auto it = chain.objs.begin(); it != chain.objs.end(); it++) {
       ldpp_dout(this, 20) << "RGWGC::send_split_chain - adding obj with name: " << it->key << dendl;
       broken_chain.objs.emplace_back(*it);
-      cls_rgw_gc_obj_info info;
-      info.tag = tag;
-      info.chain = broken_chain;
-      cls_rgw_gc_set_entry_op op;
-      op.info = info;
-      size_t total_encoded_size = op.estimate_encoded_size();
+      total_encoded_size += it->estimate_encoded_size();
+
       ldpp_dout(this, 20) << "RGWGC::send_split_chain - total_encoded_size is: " << total_encoded_size << dendl;
 
       if (total_encoded_size > cct->_conf->rgw_max_chunk_size) { //dont add to chain, and send to gc
@@ -95,6 +96,7 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const 
           return {ret, {broken_chain}};
         }
         broken_chain.objs.clear();
+        total_encoded_size = base_encoded_size;
       }
     }
     if (!broken_chain.objs.empty()) { //when the chain is smaller than or equal to rgw_max_chunk_size
@@ -170,9 +172,9 @@ void RGWGC::on_defer_canceled(const cls_rgw_gc_obj_info& info)
   cls_rgw_gc_queue_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
   cls_rgw_gc_remove(op, {tag});
 
-  auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-  store->gc_aio_operate(obj_names[i], c, &op);
-  c->release();
+  aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+
+  store->gc_aio_operate(obj_names[i], c.get(), &op);
 }
 
 int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
@@ -191,9 +193,9 @@ int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
     // enqueue succeeds
     cls_rgw_gc_remove(op, {tag});
 
-    auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-    int ret = store->gc_aio_operate(obj_names[i], c, &op);
-    c->release();
+    aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+
+    int ret = store->gc_aio_operate(obj_names[i], c.get(), &op);
     return ret;
   }
 
@@ -225,12 +227,11 @@ int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc
   ObjectWriteOperation op;
   cls_rgw_gc_remove(op, tags);
 
-  auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-  int ret = store->gc_aio_operate(obj_names[index], c, &op);
-  if (ret < 0) {
-    c->release();
-  } else {
-    *pc = c;
+  aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+  int ret = store->gc_aio_operate(obj_names[index], c.get(), &op);
+  if (ret >= 0) {
+    *pc = c.get();
+    c.release();
   }
   return ret;
 }
@@ -391,12 +392,13 @@ public:
       }
     }
 
-    auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-    int ret = ioctx->aio_operate(oid, c, op);
+    aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+    int ret = ioctx->aio_operate(oid, c.get(), op);
     if (ret < 0) {
       return ret;
     }
-    ios.push_back(IO{IO::TailIO, c, oid, index, tag});
+    ios.push_back(IO{IO::TailIO, c.get(), oid, index, tag});
+    c.release();
 
     return 0;
   }

@@ -398,19 +398,21 @@ struct rgw_pubsub_topic {
   rgw_pubsub_dest dest;
   std::string arn;
   std::string opaque_data;
+  std::string policy_text;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(user, bl);
     encode(name, bl);
     encode(dest, bl);
     encode(arn, bl);
     encode(opaque_data, bl);
+    encode(policy_text, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(user, bl);
     decode(name, bl);
     if (struct_v >= 2) {
@@ -419,6 +421,9 @@ struct rgw_pubsub_topic {
     }
     if (struct_v >= 3) {
       decode(opaque_data, bl);
+    }
+    if (struct_v >= 4) {
+      decode(policy_text, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -629,7 +634,7 @@ public:
   int create_topic(const DoutPrefixProvider* dpp, const std::string& name,
                    const rgw_pubsub_dest& dest, const std::string& arn,
                    const std::string& opaque_data, const rgw_user& user,
-                   optional_yield y) const;
+                   const std::string& policy_text, optional_yield y) const;
   // remove a topic according to its name
   // if the topic does not exists it is a no-op (considered success)
   // return 0 on success, error code otherwise

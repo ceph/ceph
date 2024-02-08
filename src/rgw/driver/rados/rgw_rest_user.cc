@@ -5,6 +5,7 @@
 
 #include "rgw_op.h"
 #include "rgw_user.h"
+#include "rgw_process_env.h"
 #include "rgw_rest_user.h"
 #include "rgw_sal.h"
 
@@ -19,19 +20,23 @@
 
 using namespace std;
 
-int fetch_access_keys_from_master(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, RGWUserAdminOpState &op_state, req_state *s, optional_yield y) {
-    bufferlist data;
-    JSONParser jp;
-    RGWUserInfo ui;
-    int op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, &jp, s->info, y);
-    if (op_ret < 0) {
-      ldpp_dout(dpp, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-      return op_ret;
-    }
-    ui.decode_json(&jp);
-    op_state.op_access_keys = std::move(ui.access_keys);
+int fetch_access_keys_from_master(const DoutPrefixProvider* dpp, req_state* s,
+                                  std::map<std::string, RGWAccessKey>& keys,
+                                  optional_yield y)
+{
+  bufferlist data;
+  JSONParser jp;
+  int ret = rgw_forward_request_to_master(dpp, *s->penv.site, s->user->get_id(),
+                                          &data, &jp, s->info, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "forward_request_to_master returned ret=" << ret << dendl;
+    return ret;
+  }
 
-    return 0;
+  RGWUserInfo ui;
+  ui.decode_json(&jp);
+  keys = std::move(ui.access_keys);
+  return 0;
 }
 
 class RGWOp_User_List : public RGWRESTOp {
@@ -238,15 +243,13 @@ void RGWOp_User_Create::execute(optional_yield y)
     op_state.set_placement_tags(placement_tags_list);
   }
 
-  if(!(driver->is_meta_master())) {
-    op_ret = fetch_access_keys_from_master(this, driver, op_state, s, y);
-
-    if(op_ret < 0) {
+  if (!s->penv.site->is_meta_master()) {
+    op_ret = fetch_access_keys_from_master(this, s, op_state.op_access_keys, y);
+    if (op_ret < 0) {
       return;
-    } else {
-      // set_generate_key() is not set if keys have already been fetched from master zone
-      gen_key = false;
     }
+    // set_generate_key() is not set if keys have already been fetched from master zone
+    gen_key = false;
   }
 
   if (gen_key) {
@@ -384,15 +387,13 @@ void RGWOp_User_Modify::execute(optional_yield y)
     op_state.set_placement_tags(placement_tags_list);
   }
   
-  if(!(driver->is_meta_master())) {
-    op_ret = fetch_access_keys_from_master(this, driver, op_state, s, y);
-
-    if(op_ret < 0) {
+  if (!s->penv.site->is_meta_master()) {
+    op_ret = fetch_access_keys_from_master(this, s, op_state.op_access_keys, y);
+    if (op_ret < 0) {
       return;
-    } else {
-      // set_generate_key() is not set if keys have already been fetched from master zone
-      gen_key = false;
     }
+    // set_generate_key() is not set if keys have already been fetched from master zone
+    gen_key = false;
   }
 
   if (gen_key) {
@@ -434,8 +435,8 @@ void RGWOp_User_Remove::execute(optional_yield y)
 
   op_state.set_purge_data(purge_data);
 
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -509,8 +510,8 @@ void RGWOp_Subuser_Create::execute(optional_yield y)
   }
   op_state.set_key_type(key_type);
 
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -576,8 +577,8 @@ void RGWOp_Subuser_Modify::execute(optional_yield y)
   }
   op_state.set_key_type(key_type);
 
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -619,8 +620,8 @@ void RGWOp_Subuser_Remove::execute(optional_yield y)
   if (purge_keys)
     op_state.set_purge_keys();
 
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -760,8 +761,8 @@ void RGWOp_Caps_Add::execute(optional_yield y)
   op_state.set_user_id(uid);
   op_state.set_caps(caps);
 
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -798,8 +799,8 @@ void RGWOp_Caps_Remove::execute(optional_yield y)
   op_state.set_user_id(uid);
   op_state.set_caps(caps);
 
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;

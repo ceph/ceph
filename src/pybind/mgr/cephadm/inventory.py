@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 AGENT_CACHE_PREFIX = 'agent.'
+NODE_PROXY_CACHE_PREFIX = 'node_proxy'
 
 
 class HostCacheStatus(enum.Enum):
@@ -1405,6 +1406,188 @@ class HostCache():
         return self.scheduled_daemon_actions.get(host, {}).get(daemon)
 
 
+class NodeProxyCache:
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+        self.mgr = mgr
+        self.data: Dict[str, Any] = {}
+        self.oob: Dict[str, Any] = {}
+        self.keyrings: Dict[str, str] = {}
+
+    def load(self) -> None:
+        _oob = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/oob', '{}')
+        self.oob = json.loads(_oob)
+
+        _keyrings = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/keyrings', '{}')
+        self.keyrings = json.loads(_keyrings)
+
+        for k, v in self.mgr.get_store_prefix(f'{NODE_PROXY_CACHE_PREFIX}/data').items():
+            host = k.split('/')[-1:][0]
+
+            if host not in self.mgr.inventory.keys():
+                # remove entry for host that no longer exists
+                self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/data/{host}", None)
+                try:
+                    self.oob.pop(host)
+                    self.data.pop(host)
+                    self.keyrings.pop(host)
+                except KeyError:
+                    pass
+                continue
+
+            self.data[host] = json.loads(v)
+
+    def save(self,
+             host: str = '',
+             data: Dict[str, Any] = {}) -> None:
+        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/data/{host}", json.dumps(data))
+
+    def update_oob(self, host: str, host_oob_info: Dict[str, str]) -> None:
+        self.oob[host] = host_oob_info
+        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/oob", json.dumps(self.oob))
+
+    def update_keyring(self, host: str, key: str) -> None:
+        self.keyrings[host] = key
+        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/keyrings", json.dumps(self.keyrings))
+
+    def fullreport(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves the full report for the specified hostname.
+
+        If a hostname is provided in the keyword arguments, it retrieves the full report
+        data for that specific host. If no hostname is provided, it fetches the full
+        report data for all hosts available.
+
+        :param kw: Keyword arguments including 'hostname'.
+        :type kw: dict
+
+        :return: The full report data for the specified hostname(s).
+        :rtype: dict
+        """
+        hostname = kw.get('hostname')
+        hosts = [hostname] if hostname else self.data.keys()
+        return {host: self.data[host] for host in hosts}
+
+    def summary(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Summarizes the health status of components for specified hosts or all hosts.
+
+        Generates a summary of the health status of components for given hosts. If
+        no hostname is provided, it generates the health status summary for all hosts.
+        It inspects the status of each component and categorizes it as 'ok' or 'error'
+        based on the health status of its members.
+
+        :param kw: Keyword arguments including 'hostname'.
+        :type kw: dict
+
+        :return: A dictionary containing the health status summary for each specified
+                host or all hosts and their components.
+        :rtype: Dict[str, Dict[str, str]]
+        """
+        hostname = kw.get('hostname')
+        hosts = [hostname] if hostname else self.data.keys()
+        mapper: Dict[bool, str] = {
+            True: 'error',
+            False: 'ok'
+        }
+
+        _result: Dict[str, Any] = {}
+
+        for host in hosts:
+            _result[host] = {}
+            _result[host]['status'] = {}
+            data = self.data[host]
+            for component, details in data['status'].items():
+                res = any([member['status']['health'].lower() != 'ok' for member in data['status'][component].values()])
+                _result[host]['status'][component] = mapper[res]
+            _result[host]['sn'] = data['sn']
+            _result[host]['host'] = data['host']
+            _result[host]['firmwares'] = data['firmwares']
+        return _result
+
+    def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves specific endpoint information for a specific hostname or all hosts.
+
+        Retrieves information from the specified 'endpoint' for all available hosts.
+        If 'hostname' is provided, retrieves the specified 'endpoint' information for that host.
+
+        :param endpoint: The endpoint for which information is retrieved.
+        :type endpoint: str
+        :param kw: Keyword arguments, including 'hostname' if specified.
+        :type kw: dict
+
+        :return: Endpoint information for the specified host(s).
+        :rtype: Union[Dict[str, Any], Any]
+        """
+        hostname = kw.get('hostname')
+        _result = {}
+        hosts = [hostname] if hostname else self.data.keys()
+
+        for host in hosts:
+            try:
+                _result[host] = self.data[host]['status'][endpoint]
+            except KeyError:
+                raise KeyError(f'Invalid host {host} or component {endpoint}.')
+        return _result
+
+    def firmwares(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves firmware information for a specific hostname or all hosts.
+
+        If a 'hostname' is provided in the keyword arguments, retrieves firmware
+        information for that specific host. Otherwise, retrieves firmware
+        information for all available hosts.
+
+        :param kw: Keyword arguments, including 'hostname' if specified.
+        :type kw: dict
+
+        :return: A dictionary containing firmware information for each host.
+        :rtype: Dict[str, Any]
+        """
+        hostname = kw.get('hostname')
+        hosts = [hostname] if hostname else self.data.keys()
+
+        return {host: self.data[host]['firmwares'] for host in hosts}
+
+    def get_critical_from_host(self, hostname: str) -> Dict[str, Any]:
+        results: Dict[str, Any] = {}
+        for component, data_component in self.data[hostname]['status'].items():
+            if component not in results.keys():
+                results[component] = {}
+            for member, data_member in data_component.items():
+                if component == 'power':
+                    data_member['status']['health'] = 'critical'
+                    data_member['status']['state'] = 'unplugged'
+                if component == 'memory':
+                    data_member['status']['health'] = 'critical'
+                    data_member['status']['state'] = 'errors detected'
+                if data_member['status']['health'].lower() != 'ok':
+                    results[component][member] = data_member
+        return results
+
+    def criticals(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves critical information for a specific hostname or all hosts.
+
+        If a 'hostname' is provided in the keyword arguments, retrieves critical
+        information for that specific host. Otherwise, retrieves critical
+        information for all available hosts.
+
+        :param kw: Keyword arguments, including 'hostname' if specified.
+        :type kw: dict
+
+        :return: A dictionary containing critical information for each host.
+        :rtype: List[Dict[str, Any]]
+        """
+        hostname = kw.get('hostname')
+        results: Dict[str, Any] = {}
+
+        hosts = [hostname] if hostname else self.data.keys()
+        for host in hosts:
+            results[host] = self.get_critical_from_host(host)
+        return results
+
+
 class AgentCache():
     """
     AgentCache is used for storing metadata about agent daemons that must be kept
@@ -1507,6 +1690,8 @@ class EventStore():
 
         for e in self.events[event.kind_subject()]:
             if e.message == event.message:
+                # if subject and message match, just update the timestamp
+                e.created = event.created
                 return
 
         self.events[event.kind_subject()].append(event)

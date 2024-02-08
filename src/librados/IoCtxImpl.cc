@@ -1788,9 +1788,12 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
                                                             extra_op_flags);
 
   C_SaferCond notify_finish_cond;
+  auto e = boost::asio::prefer(
+    objecter->service.get_executor(),
+    boost::asio::execution::outstanding_work.tracked);
   linger_op->on_notify_finish =
-    Objecter::LingerOp::OpComp::create(
-      objecter->service.get_executor(),
+    boost::asio::bind_executor(
+      std::move(e),
       CB_notify_Finish(client->cct, &notify_finish_cond,
                        objecter, linger_op, preply_bl,
                        preply_buf, preply_buf_len));
@@ -1844,9 +1847,12 @@ int librados::IoCtxImpl::aio_notify(const object_t& oid, AioCompletionImpl *c,
   c->io = this;
 
   C_aio_notify_Complete *oncomplete = new C_aio_notify_Complete(c, linger_op);
+  auto e = boost::asio::prefer(
+    objecter->service.get_executor(),
+    boost::asio::execution::outstanding_work.tracked);
   linger_op->on_notify_finish =
-    Objecter::LingerOp::OpComp::create(
-      objecter->service.get_executor(),
+    boost::asio::bind_executor(
+      std::move(e),
       CB_notify_Finish(client->cct, oncomplete,
                        objecter, linger_op,
                        preply_bl, preply_buf,

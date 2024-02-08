@@ -179,6 +179,7 @@ struct Mirror::C_RestartMirroring : Context {
 
   void handle_enable_mirroring(int r) {
     mirror->handle_enable_mirroring(filesystem, peers, r);
+    mirror->_unset_restarting(filesystem);
     delete this;
   }
 
@@ -195,8 +196,6 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args,
     m_monc(monc),
     m_msgr(msgr),
     m_listener(this),
-    m_last_blocklist_check(ceph_clock_now()),
-    m_last_failure_check(ceph_clock_now()),
     m_local(new librados::Rados()) {
   auto thread_pool = &(cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
                          "cephfs::mirror::thread_pool", false, cct));
@@ -319,18 +318,23 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem,
 
   std::scoped_lock locker(m_lock);
   auto &mirror_action = m_mirror_actions.at(filesystem);
-  ceph_assert(mirror_action.action_in_progress);
 
-  mirror_action.action_in_progress = false;
-  m_cond.notify_all();
   if (r < 0) {
     derr << ": failed to initialize FSMirror for filesystem=" << filesystem
          << ": " << cpp_strerror(r) << dendl;
+    // since init failed, don't assert, just unset it directly
+    mirror_action.action_in_progress = false;
+    m_cond.notify_all();
     m_service_daemon->add_or_update_fs_attribute(filesystem.fscid,
                                                  SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY,
                                                  true);
     return;
   }
+
+  ceph_assert(mirror_action.action_in_progress);
+
+  mirror_action.action_in_progress = false;
+  m_cond.notify_all();
 
   for (auto &peer : peers) {
     mirror_action.fs_mirror->add_peer(peer);
@@ -344,18 +348,23 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem, int r) {
 
   std::scoped_lock locker(m_lock);
   auto &mirror_action = m_mirror_actions.at(filesystem);
-  ceph_assert(mirror_action.action_in_progress);
-
-  mirror_action.action_in_progress = false;
-  m_cond.notify_all();
+  
   if (r < 0) {
     derr << ": failed to initialize FSMirror for filesystem=" << filesystem
          << ": " << cpp_strerror(r) << dendl;
+    // since init failed, don't assert, just unset it directly
+    mirror_action.action_in_progress = false;
+    m_cond.notify_all();
     m_service_daemon->add_or_update_fs_attribute(filesystem.fscid,
                                                  SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY,
                                                  true);
     return;
   }
+
+  ceph_assert(mirror_action.action_in_progress);
+
+  mirror_action.action_in_progress = false;
+  m_cond.notify_all();
 
   dout(10) << ": Initialized FSMirror for filesystem=" << filesystem << dendl;
 }
@@ -497,46 +506,34 @@ void Mirror::update_fs_mirrors() {
   auto now = ceph_clock_now();
   double blocklist_interval = g_ceph_context->_conf.get_val<std::chrono::seconds>
     ("cephfs_mirror_restart_mirror_on_blocklist_interval").count();
-  bool check_blocklist = blocklist_interval > 0 && ((now - m_last_blocklist_check) >= blocklist_interval);
-
   double failed_interval = g_ceph_context->_conf.get_val<std::chrono::seconds>
     ("cephfs_mirror_restart_mirror_on_failure_interval").count();
-  bool check_failure = failed_interval > 0 && ((now - m_last_failure_check) >= failed_interval);
 
   {
     std::scoped_lock locker(m_lock);
     for (auto &[filesystem, mirror_action] : m_mirror_actions) {
-      auto failed = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed();
-      auto blocklisted = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted();
+      auto failed_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed() &&
+	(failed_interval > 0 && (mirror_action.fs_mirror->get_failed_ts() - now) > failed_interval);
+      auto blocklisted_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted() &&
+	(blocklist_interval > 0 && (mirror_action.fs_mirror->get_blocklisted_ts() - now) > blocklist_interval);
 
-      if (check_failure && !mirror_action.action_in_progress && failed) {
-        // about to restart failed mirror instance -- nothing
-        // should interfere
-        dout(5) << ": filesystem=" << filesystem << " failed mirroring -- restarting" << dendl;
-        auto peers = mirror_action.fs_mirror->get_peers();
-        auto ctx =  new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
-        ctx->complete(0);
-      } else if (check_blocklist && !mirror_action.action_in_progress && blocklisted) {
-        // about to restart blocklisted mirror instance -- nothing
-        // should interfere
-        dout(5) << ": filesystem=" << filesystem << " is blocklisted -- restarting" << dendl;
-        auto peers = mirror_action.fs_mirror->get_peers();
-        auto ctx = new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
-        ctx->complete(0);
+      if (!mirror_action.action_in_progress && !_is_restarting(filesystem)) {
+	if (failed_restart || blocklisted_restart) {
+	  dout(5) << ": filesystem=" << filesystem << " failed mirroring (failed: "
+		  << failed_restart << ", blocklisted: " << blocklisted_restart << dendl;
+	  _set_restarting(filesystem);
+	  auto peers = mirror_action.fs_mirror->get_peers();
+	  auto ctx =  new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
+	  ctx->complete(0);
+	}
       }
-      if (!failed && !blocklisted && !mirror_action.action_ctxs.empty()
+
+      if (!failed_restart && !blocklisted_restart && !mirror_action.action_ctxs.empty()
           && !mirror_action.action_in_progress) {
         auto ctx = std::move(mirror_action.action_ctxs.front());
         mirror_action.action_ctxs.pop_front();
         ctx->complete(0);
       }
-    }
-
-    if (check_blocklist) {
-      m_last_blocklist_check = now;
-    }
-    if (check_failure) {
-      m_last_failure_check = now;
     }
   }
 

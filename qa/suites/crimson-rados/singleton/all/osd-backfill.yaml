@@ -26,4 +26,12 @@ tasks:
     conf:
       osd:
         osd min pg log entries: 5
+        crimson alien thread cpu cores: 6-7
+      osd.0:
+        crimson seastar cpu cores: 0-1
+      osd.1:
+        crimson seastar cpu cores: 2-3
+      osd.2:
+        crimson seastar cpu cores: 4-5
+      global:
 - osd_backfill:

@@ -577,7 +577,7 @@ int RGWSTSGetSessionToken::verify_permission(optional_yield y)
                               s,
                               rgw::ARN(partition, service, "", s->user->get_tenant(), ""),
                               rgw::IAM::stsGetSessionToken)) {
-    ldpp_dout(this, 0) << "User does not have permssion to perform GetSessionToken" << dendl;
+    ldpp_dout(this, 0) << "User does not have permission to perform GetSessionToken" << dendl;
     return -EACCES;
   }
 

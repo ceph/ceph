@@ -35,6 +35,10 @@ public:
     return type;
   }
 
+  bool is_clone() const final {
+    return false;
+  }
+
 protected:
   std::unique_ptr<BtreeNodeMapping<paddr_t, laddr_t>> _duplicate(
     op_context_t<paddr_t> ctx) const final {

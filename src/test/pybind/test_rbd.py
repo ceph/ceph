@@ -415,6 +415,18 @@ def test_remove_canceled(tmp_image):
     assert_raises(OperationCanceled, RBD().remove, ioctx, image_name,
                   on_progress=progress_cb)
 
+def test_remove_with_progress_except():
+    create_image()
+    d = {'received_callback': False}
+    def progress_cb(current, total):
+        d['received_callback'] = True
+        raise Exception()
+
+    # exception is logged and ignored with a Cython warning:
+    #   Exception ignored in: 'rbd.progress_callback'
+    RBD().remove(ioctx, image_name, on_progress=progress_cb)
+    eq(True, d['received_callback'])
+
 def test_rename(tmp_image):
     rbd = RBD()
     image_name2 = get_temp_image_name()
@@ -1251,6 +1263,16 @@ class TestImage(object):
         assert(comp.get_return_value() < 0)
         eq(sys.getrefcount(comp), 2)
 
+        # test3: except case
+        def cbex(_, buf):
+            raise KeyError()
+
+        def test3():
+            comp = self.image.aio_read(IMG_SIZE, 20, cbex)
+            comp.wait_for_complete_and_cb()
+
+        assert_raises(KeyError, test3)
+
     def test_aio_write(self):
         retval = [None]
         def cb(comp):
@@ -1449,7 +1471,7 @@ def check_diff(image, offset, length, from_snapshot, expected):
     extents = []
     def cb(offset, length, exists):
         extents.append((offset, length, exists))
-    image.diff_iterate(0, IMG_SIZE, None, cb)
+    image.diff_iterate(0, IMG_SIZE, from_snapshot, cb)
     eq(extents, expected)
 
 class TestClone(object):

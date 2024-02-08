@@ -54,7 +54,7 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
                           rgw::auth::Identity* identity)
 {
   uuid_d accessKey, secretKey;
-  char accessKeyId_str[MAX_ACCESS_KEY_LEN], secretAccessKey_str[MAX_SECRET_KEY_LEN];
+  char accessKeyId_str[MAX_ACCESS_KEY_LEN + 1], secretAccessKey_str[MAX_SECRET_KEY_LEN + 1];
 
   //AccessKeyId
   gen_rand_alphanumeric_plain(cct, accessKeyId_str, sizeof(accessKeyId_str));
@@ -72,7 +72,7 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   //Session Token - Encrypt using AES
   auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
   if (! cryptohandler) {
-    ldpp_dout(dpp, 0) << "ERROR: No AES cryto handler found !" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: No AES crypto handler found !" << dendl;
     return -EINVAL;
   }
   string secret_s = cct->_conf->rgw_sts_key;

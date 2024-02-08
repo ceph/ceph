@@ -71,7 +71,7 @@ void MDSTableServer::handle_prepare(const cref_t<MMDSTableRequest> &req)
 
 void MDSTableServer::_prepare_logged(const cref_t<MMDSTableRequest> &req, version_t tid)
 {
-  dout(7) << "_create_logged " << *req << " tid " << tid << dendl;
+  dout(7) << __func__ << ": req=" << *req << " tid " << tid << dendl;
   mds_rank_t from = mds_rank_t(req->get_source().num());
 
   ceph_assert(g_conf()->mds_kill_mdstable_at != 2);
@@ -114,6 +114,8 @@ void MDSTableServer::handle_notify_ack(const cref_t<MMDSTableRequest> &m)
       dout(0) << "got unexpected notify ack for tid " <<  tid << " from mds." << from << dendl;
     }
   } else {
+    dout(0) << __func__ << ": tid=" << tid << " from mds." << from
+	    << " not tracked in pending notifies" << dendl;
   }
 }
 

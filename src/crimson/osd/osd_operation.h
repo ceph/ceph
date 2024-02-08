@@ -27,10 +27,17 @@ struct ConnectionPipeline {
       "ConnectionPipeline::await_map";
   } await_map;
 
-  struct GetPG : OrderedExclusivePhaseT<GetPG> {
+  struct GetPGMapping : OrderedExclusivePhaseT<GetPGMapping> {
     static constexpr auto type_name =
-      "ConnectionPipeline::get_pg";
-  } get_pg;
+      "ConnectionPipeline::get_pg_mapping";
+  } get_pg_mapping;
+};
+
+struct PerShardPipeline {
+  struct CreateOrWaitPG : OrderedExclusivePhaseT<CreateOrWaitPG> {
+    static constexpr auto type_name =
+      "PerShardPipeline::create_or_wait_pg";
+  } create_or_wait_pg;
 };
 
 enum class OperationTypeCode {
@@ -47,6 +54,11 @@ enum class OperationTypeCode {
   logmissing_request_reply,
   snaptrim_event,
   snaptrimobj_subevent,
+  scrub_requested,
+  scrub_message,
+  scrub_find_range,
+  scrub_reserve_range,
+  scrub_scan,
   last_op
 };
 
@@ -64,6 +76,11 @@ static constexpr const char* const OP_NAMES[] = {
   "logmissing_request_reply",
   "snaptrim_event",
   "snaptrimobj_subevent",
+  "scrub_requested",
+  "scrub_message",
+  "scrub_find_range",
+  "scrub_reserve_range",
+  "scrub_scan",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:

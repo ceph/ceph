@@ -174,16 +174,20 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(mode, bl);
     encode(retain_until_date, bl);
+    ceph::round_trip_encode(retain_until_date, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(mode, bl);
     decode(retain_until_date, bl);
+    if (struct_v >= 2) {
+      ceph::round_trip_decode(retain_until_date, bl);
+    }
     DECODE_FINISH(bl);
   }
 

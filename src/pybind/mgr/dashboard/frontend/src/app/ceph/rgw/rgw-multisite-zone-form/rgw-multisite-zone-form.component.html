@@ -11,7 +11,7 @@
       <div class="form-group row">
         <label class="cd-col-form-label"
                for="selectedZonegroup"
-               i18n>Select Zonegroup</label>
+               i18n>Select Zone Group</label>
         <div class="cd-col-form-input">
           <select class="form-select"
                   id="selectedZonegroup"
@@ -55,7 +55,7 @@
                    for="default_zone"
                    i18n>Default</label>
             <span *ngIf="disableDefault && action === 'create'">
-              <cd-helper i18n>Default zone can only exist in a default zonegroup.
+              <cd-helper i18n>Default zone can only exist in a default zone group.
               </cd-helper>
             </span>
             <span *ngIf="isDefaultZone">
@@ -77,7 +77,7 @@
                    for="master_zone"
                    i18n>Master</label>
             <span *ngIf="disableMaster">
-              <cd-helper i18n>Master zone already exists for the selected zonegroup.
+              <cd-helper i18n>Master zone already exists for the selected zone group.
               </cd-helper>
             </span>
             <span *ngIf="isMasterZone">
@@ -112,7 +112,11 @@
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="access_key"
-               i18n>Access key</label>
+               i18n>S3 access key
+          <cd-helper>
+            <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the access key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
+          </cd-helper>
+        </label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"
@@ -125,7 +129,11 @@
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="access_key"
-               i18n>Secret key</label>
+               i18n>S3 secret key
+          <cd-helper>
+            <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the secret key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
+          </cd-helper>
+        </label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"

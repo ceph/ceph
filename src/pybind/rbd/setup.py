@@ -14,6 +14,7 @@ else:
 from distutils.ccompiler import new_compiler
 from distutils.errors import CompileError, LinkError
 from itertools import filterfalse, takewhile
+from packaging import version
 import distutils.sysconfig
 
 
@@ -148,11 +149,22 @@ else:
     sys.exit(1)
 
 cmdclass = {}
+compiler_directives={'language_level': sys.version_info.major}
 try:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
+    from Cython import __version__ as cython_version
 
     cmdclass = {'build_ext': build_ext}
+
+    # Needed for building with Cython 0.x and Cython 3 from the same file,
+    # preserving the same behavior.
+    # When Cython 0.x builds go away, replace this compiler directive with
+    # noexcept on rbd_callback_t and librbd_progress_fn_t (or consider doing
+    # something similar to except? -9000 on rbd_diff_iterate2() callback for
+    # progress callbacks to propagate exceptions).
+    if version.parse(cython_version) >= version.parse('3'):
+        compiler_directives['legacy_implicit_noexcept'] = True
 except ImportError:
     print("WARNING: Cython is not installed.")
 
@@ -197,7 +209,7 @@ setup(
                 **ext_args
             )
         ],
-        compiler_directives={'language_level': sys.version_info.major},
+        compiler_directives=compiler_directives,
         build_dir=os.environ.get("CYTHON_BUILD_DIR", None),
         **cythonize_args
     ),

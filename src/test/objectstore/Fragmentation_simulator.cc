@@ -17,6 +17,7 @@
 #include "include/buffer_fwd.h"
 #include "os/ObjectStore.h"
 #include "test/objectstore/ObjectStoreImitator.h"
+#include <fstream>
 #include <boost/random/uniform_int.hpp>
 #include <fmt/core.h>
 #include <mutex>

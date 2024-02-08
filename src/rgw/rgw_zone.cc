@@ -33,7 +33,6 @@ std::string zonegroup_names_oid_prefix = "zonegroups_names.";
 std::string RGW_DEFAULT_ZONE_ROOT_POOL = "rgw.root";
 std::string RGW_DEFAULT_ZONEGROUP_ROOT_POOL = "rgw.root";
 std::string RGW_DEFAULT_PERIOD_ROOT_POOL = "rgw.root";
-std::string avail_pools = ".pools.avail";
 std::string default_storage_pool_suffix = "rgw.buckets.data";
 
 }
@@ -412,22 +411,14 @@ int RGWZoneParams::set_as_default(const DoutPrefixProvider *dpp, optional_yield 
 
 int RGWZoneParams::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
 {
-  /* check for old pools config */
-  rgw_raw_obj obj(domain_root, avail_pools);
-  auto sysobj = sysobj_svc->get_obj(obj);
-  int r = sysobj.rop().stat(y, dpp);
-  if (r < 0) {
-    ldpp_dout(dpp, 10) << "couldn't find old data placement pools config, setting up new ones for the zone" << dendl;
-    /* a new system, let's set new placement info */
-    RGWZonePlacementInfo default_placement;
-    default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
-    rgw_pool pool = name + "." + default_storage_pool_suffix;
-    default_placement.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
-    default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
-    placement_pools["default-placement"] = default_placement;
-  }
+  RGWZonePlacementInfo default_placement;
+  default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
+  rgw_pool pool = name + "." + default_storage_pool_suffix;
+  default_placement.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
+  default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
+  placement_pools["default-placement"] = default_placement;
 
-  r = fix_pool_names(dpp, y);
+  int r = fix_pool_names(dpp, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: fix_pool_names returned r=" << r << dendl;
     return r;
@@ -1266,6 +1257,19 @@ int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   return 0;
+}
+
+std::string get_zonegroup_endpoint(const RGWZoneGroup& info)
+{
+  if (!info.endpoints.empty()) {
+    return info.endpoints.front();
+  }
+  // use zonegroup's master zone endpoints
+  auto z = info.zones.find(info.master_zone);
+  if (z != info.zones.end() && !z->second.endpoints.empty()) {
+    return z->second.endpoints.front();
+  }
+  return "";
 }
 
 int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,

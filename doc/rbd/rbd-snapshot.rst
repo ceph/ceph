@@ -10,7 +10,7 @@ you can create snapshots of images to retain point-in-time state history.  Ceph
 also supports snapshot layering, which allows you to clone images (for example,
 VM images) quickly and easily. Ceph block device snapshots are managed using
 the ``rbd`` command and several higher-level interfaces, including `QEMU`_,
-`libvirt`_, `OpenStack`_, and `CloudStack`_.
+`libvirt`_, `OpenStack`_, `OpenNebula`_ and `CloudStack`_.
 
 .. important:: To use RBD snapshots, you must have a running Ceph cluster.
 
@@ -18,14 +18,14 @@ the ``rbd`` command and several higher-level interfaces, including `QEMU`_,
 .. note:: Because RBD is unaware of any file system within an image (volume),
    snapshots are merely `crash-consistent` unless they are coordinated within
    the mounting (attaching) operating system. We therefore recommend that you
-   pause or stop I/O before taking a snapshot.  
-   
+   pause or stop I/O before taking a snapshot.
+
    If the volume contains a file system, the file system should be in an
    internally consistent state before a snapshot is taken. Snapshots taken
    without write quiescing could need an `fsck` pass before they are mounted
    again. To quiesce I/O you can use `fsfreeze` command. See the `fsfreeze(8)`
-   man page for more details. 
-   
+   man page for more details.
+
    For virtual machines, `qemu-guest-agent` can be used to automatically freeze
    file systems when creating a snapshot.
 
@@ -44,7 +44,7 @@ Cephx Notes
 
 When `cephx`_ authentication is enabled (it is by default), you must specify a
 user name or ID and a path to the keyring containing the corresponding key. See
-:ref:`User Management <user-management>` for details. 
+:ref:`User Management <user-management>` for details.
 
 .. prompt:: bash $
 
@@ -83,7 +83,7 @@ For example:
 .. prompt:: bash $
 
    rbd snap create rbd/foo@snapname
-	
+
 
 List Snapshots
 --------------
@@ -135,7 +135,7 @@ name, the image name, and the snap name:
 .. prompt:: bash $
 
    rbd snap rm {pool-name}/{image-name}@{snap-name}
-	
+
 For example:
 
 .. prompt:: bash $
@@ -186,20 +186,20 @@ snapshot simplifies semantics, making it possible to create clones rapidly.
            |             |  to Parent   |             |
            | (read only) |              | (writable)  |
            +-------------+              +-------------+
-           
+
                Parent                        Child
 
 .. note:: The terms "parent" and "child" refer to a Ceph block device snapshot
    (parent) and the corresponding image cloned from the snapshot (child).
    These terms are important for the command line usage below.
-   
+
 Each cloned image (child) stores a reference to its parent image, which enables
 the cloned image to open the parent snapshot and read it.
 
 A copy-on-write clone of a snapshot behaves exactly like any other Ceph
 block device image. You can read to, write from, clone, and resize cloned
 images. There are no special restrictions with cloned images. However, the
-copy-on-write clone of a snapshot depends on the snapshot, so you must 
+copy-on-write clone of a snapshot depends on the snapshot, so you must
 protect the snapshot before you clone it. The diagram below depicts this
 process.
 
@@ -222,7 +222,7 @@ have performed these steps, you can begin cloning the snapshot.
            |                            |        |                             |
            +----------------------------+        +-----------------------------+
                                                                 |
-                         +--------------------------------------+ 
+                         +--------------------------------------+
                          |
                          v
            +----------------------------+        +-----------------------------+
@@ -265,7 +265,7 @@ Protecting a Snapshot
 ---------------------
 
 Clones access the parent snapshots. All clones would break if a user
-inadvertently deleted the parent snapshot. To prevent data loss, you must 
+inadvertently deleted the parent snapshot. To prevent data loss, you must
 protect the snapshot before you can clone it:
 
 .. prompt:: bash $
@@ -290,13 +290,13 @@ protect the snapshot before you can clone it:
 .. prompt:: bash $
 
    rbd clone {pool-name}/{parent-image-name}@{snap-name} {pool-name}/{child-image-name}
-	
+
 For example:
 
 .. prompt:: bash $
 
    rbd clone rbd/foo@snapname rbd/bar
-	
+
 
 .. note:: You may clone a snapshot from one pool to an image in another pool.
    For example, you may maintain read-only images and snapshots as templates in
@@ -364,5 +364,6 @@ For example:
 .. _cephx: ../../rados/configuration/auth-config-ref/
 .. _QEMU: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack/
+.. _OpenNebula: https://docs.opennebula.io/stable/management_and_operations/vm_management/vm_instances.html?highlight=ceph#managing-disk-snapshots
 .. _CloudStack: ../rbd-cloudstack/
 .. _libvirt: ../libvirt/

@@ -22,6 +22,16 @@ BtreeNodeMapping<key_t, val_t>::get_logical_extent(
   return v;
 }
 
+template <typename key_t, typename val_t>
+bool BtreeNodeMapping<key_t, val_t>::is_stable() const
+{
+  assert(parent);
+  assert(parent->is_valid());
+  assert(pos != std::numeric_limits<uint16_t>::max());
+  auto &p = (FixedKVNode<key_t>&)*parent;
+  return p.is_child_stable(pos);
+}
+
 template class BtreeNodeMapping<laddr_t, paddr_t>;
 template class BtreeNodeMapping<paddr_t, laddr_t>;
 } // namespace crimson::os::seastore

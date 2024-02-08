@@ -86,8 +86,14 @@ function requestAuth(username: string, password: string, url = '') {
 }
 
 // @ts-ignore
-Cypress.Commands.add('text', { prevSubject: true }, (subject: any) => {
-  return subject.text();
+Cypress.Commands.add('text', { prevSubject: true }, ($element: JQuery<HTMLElement>) => {
+  cy.wrap($element).scrollIntoView();
+  return cy
+    .wrap($element)
+    .invoke('text')
+    .then((text: string) => {
+      return text.toString();
+    });
 });
 
 Cypress.Commands.add('logToConsole', (message: string, optional?: any) => {

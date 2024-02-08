@@ -2,7 +2,7 @@
   <ng-container i18n="form title"
                 class="modal-title">Migrate Single Site to Multi-site
     <cd-helper>
-      <span>Migrate from a single-site deployment with a default zonegroup and zone to a multi-site system</span>
+      <span>Migrate from a single-site deployment with a default zone group and zone to a multi-site system</span>
     </cd-helper>
   </ng-container>
 
@@ -34,11 +34,11 @@
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="zonegroupName"
-               i18n>Rename default zonegroup</label>
+               i18n>Rename default zone group</label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"
-                 placeholder="Zonegroup name..."
+                 placeholder="Zone group name..."
                  id="zonegroupName"
                  name="zonegroupName"
                  formControlName="zonegroupName">
@@ -47,13 +47,14 @@
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="multisiteMigrateForm.showError('zonegroupName', formDir, 'uniqueName')"
-                i18n>The chosen zonegroup name is already in use.</span>
+                i18n>The chosen zone group name is already in use.</span>
         </div>
       </div>
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="zonegroup_endpoints"
-               i18n>Zonegroup Endpoints</label>
+               i18n>Zone group Endpoints
+        </label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"
@@ -91,7 +92,8 @@
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="zone_endpoints"
-               i18n>Zone Endpoints</label>
+               i18n>Zone Endpoints
+        </label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"
@@ -110,7 +112,11 @@
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="access_key"
-               i18n>Access key</label>
+               i18n>S3 access key
+          <cd-helper>
+            <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the access key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
+          </cd-helper>
+        </label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"
@@ -123,7 +129,11 @@
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="access_key"
-               i18n>Secret key</label>
+               i18n>S3 secret key
+          <cd-helper>
+            <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the secret key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
+          </cd-helper>
+        </label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"
@@ -136,7 +146,7 @@
     </div>
     <div class="modal-footer">
       <cd-form-button-panel (submitActionEvent)="submit()"
-                            [submitText]="actionLabels.MIGRATE"
+                            [submitText]="actionLabels.MIGRATE + ' ' + 'to Multi-site'"
                             [form]="multisiteMigrateForm"></cd-form-button-panel>
     </div>
     </form>

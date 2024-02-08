@@ -284,6 +284,21 @@ void inline_data_t::decode(bufferlist::const_iterator &p)
     free_data();
 }
 
+void inline_data_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("version", version);
+  f->dump_unsigned("length", length());
+}
+
+void inline_data_t::generate_test_instances(std::list<inline_data_t*>& ls)
+{
+  ls.push_back(new inline_data_t);
+  ls.push_back(new inline_data_t);
+  bufferlist bl;
+  bl.append("inline data");
+  ls.back()->set_data(bl);
+}
+
 
 /*
  * fnode_t

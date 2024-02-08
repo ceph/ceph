@@ -5,7 +5,7 @@
 ==================
 
 You can help the Ceph project by contributing to the documentation.  Even
-small contributions help the Ceph project. 
+small contributions help the Ceph project.
 
 The easiest way to suggest a correction to the documentation is to send an
 email to `ceph-users@ceph.io`. Include the string "ATTN: DOCS" or
@@ -27,18 +27,18 @@ Location of the Documentation in the Repository
 ===============================================
 
 The Ceph documentation source is in the ``ceph/doc`` directory of the Ceph
-repository. Python Sphinx renders the source into HTML and manpages. 
+repository. Python Sphinx renders the source into HTML and manpages.
 
 Viewing Old Ceph Documentation
 ==============================
-The https://docs.ceph.com link displays the latest release branch by default
-(for example, if "Quincy" is the most recent release, then by default
-https://docs.ceph.com displays the documentation for Quincy), but you can view
-the documentation for older versions of Ceph (for example, ``pacific``) by
-replacing the version name in the url (for example, ``quincy`` in
-`https://docs.ceph.com/en/pacific <https://docs.ceph.com/en/quincy>`_) with the
-branch name you prefer (for example, ``pacific``, to create a URL that reads
-`https://docs.ceph.com/en/pacific/ <https://docs.ceph.com/en/pacific/>`_).
+The https://docs.ceph.com link displays the documentation for the latest
+release by default (for example, if "Reef" is the most recent release, then by
+default https://docs.ceph.com displays the documentation for Reef), but you can
+view the documentation for older releases of Ceph (for example, ``quincy``) by
+replacing the release name in the url (for example, ``reef`` in
+`https://docs.ceph.com/en/reef/ <https://docs.ceph.com/en/reef>`_) with the
+branch name you prefer (for example, ``quincy``, to create a URL that reads
+`https://docs.ceph.com/en/pacific/ <https://docs.ceph.com/en/quincy/>`_).
 
 .. _making_contributions:
 
@@ -113,27 +113,27 @@ this, you must:
 
 The Ceph documentation is organized by component:
 
-- **Ceph Storage Cluster:** The Ceph Storage Cluster documentation is 
+- **Ceph Storage Cluster:** The Ceph Storage Cluster documentation is
   in the ``doc/rados`` directory.
-  
-- **Ceph Block Device:** The Ceph Block Device documentation is in 
+
+- **Ceph Block Device:** The Ceph Block Device documentation is in
   the ``doc/rbd`` directory.
-  
-- **Ceph Object Storage:** The Ceph Object Storage documentation is in 
+
+- **Ceph Object Storage:** The Ceph Object Storage documentation is in
   the ``doc/radosgw`` directory.
 
-- **Ceph File System:** The Ceph File System documentation is in the 
+- **Ceph File System:** The Ceph File System documentation is in the
   ``doc/cephfs`` directory.
-  
+
 - **Installation (Quick):** Quick start documentation is in the
   ``doc/start`` directory.
-  
+
 - **Installation (Manual):** Documentaton concerning the manual installation of
   Ceph is in the ``doc/install`` directory.
-  
+
 - **Manpage:** Manpage source is in the ``doc/man`` directory.
 
-- **Developer:** Developer documentation is in the ``doc/dev`` 
+- **Developer:** Developer documentation is in the ``doc/dev``
   directory.
 
 - **Images:** Images including JPEG and PNG files are stored in the
@@ -152,7 +152,7 @@ are in the current release. ``main`` is the most commonly used branch. :
 
 	git checkout main
 
-When you make changes to documentation that affect an upcoming release, use 
+When you make changes to documentation that affect an upcoming release, use
 the ``next`` branch. ``next`` is the second most commonly used branch. :
 
 .. prompt:: bash $
@@ -206,8 +206,8 @@ or a table of contents entry. The ``index.rst`` file of a top-level directory
 usually contains a TOC, where you can add the new file name. All documents must
 have a title. See `Headings`_ for details.
 
-Your new document doesn't get tracked by ``git`` automatically. When you want 
-to add the document to the repository,  you must use ``git add 
+Your new document doesn't get tracked by ``git`` automatically. When you want
+to add the document to the repository,  you must use ``git add
 {path-to-filename}``. For example, from the top level  directory of the
 repository, adding an ``example.rst`` file to the ``rados`` subdirectory would
 look like this:
@@ -307,6 +307,7 @@ the following packages are required:
 - graphviz
 - ant
 - ditaa
+- cython3
 
 .. raw:: html
 
@@ -354,7 +355,7 @@ distributions, execute the following:
 .. prompt:: bash $
 
 	sudo apt-get install gcc python-dev python3-pip libxml2-dev libxslt-dev doxygen graphviz ant ditaa
-	sudo apt-get install python3-sphinx python3-venv
+	sudo apt-get install python3-sphinx python3-venv cython3
 
 For Fedora distributions, execute the following:
 
@@ -436,39 +437,39 @@ Ceph documentation commits are simple, but follow a strict convention:
 - A commit MUST have a comment.
 - A commit comment MUST be prepended with ``doc:``. (strict)
 - The comment summary MUST be one line only. (strict)
-- Additional comments MAY follow a blank line after the summary, 
+- Additional comments MAY follow a blank line after the summary,
   but should be terse.
 - A commit MAY include ``Fixes: https://tracker.ceph.com/issues/{bug number}``.
 - Commits MUST include ``Signed-off-by: Firstname Lastname <email>``. (strict)
 
-.. tip:: Follow the foregoing convention particularly where it says 
-   ``(strict)`` or you will be asked to modify your commit to comply with 
+.. tip:: Follow the foregoing convention particularly where it says
+   ``(strict)`` or you will be asked to modify your commit to comply with
    this convention.
 
-The following is a common commit comment (preferred):: 
+The following is a common commit comment (preferred)::
 
 	doc: Fixes a spelling error and a broken hyperlink.
-	
+
 	Signed-off-by: John Doe <john.doe@gmail.com>
 
 
-The following comment includes a reference to a bug. :: 
+The following comment includes a reference to a bug. ::
 
 	doc: Fixes a spelling error and a broken hyperlink.
 
 	Fixes: https://tracker.ceph.com/issues/1234
-	
+
 	Signed-off-by: John Doe <john.doe@gmail.com>
 
 
 The following comment includes a terse sentence following the comment summary.
-There is a carriage return between the summary line and the description:: 
+There is a carriage return between the summary line and the description::
 
 	doc: Added mon setting to monitor config reference
-	
+
 	Describes 'mon setting', which is a new setting added
 	to config_opts.h.
-	
+
 	Signed-off-by: John Doe <john.doe@gmail.com>
 
 
@@ -477,7 +478,7 @@ To commit changes, execute the following:
 .. prompt:: bash $
 
 	git commit -a
-	
+
 
 An easy way to manage your documentation commits is to use visual tools for
 ``git``. For example, ``gitk`` provides a graphical interface for viewing the
@@ -504,7 +505,7 @@ Then, execute:
 
 	cd {git-ceph-repo-path}
 	gitk
-	
+
 Finally, select **File->Start git gui** to activate the graphical user interface.
 
 
@@ -546,15 +547,15 @@ commits will be squashed into a single commit.
 #. Make the commits that you will later squash.
 
    #. Make the first commit.
-   
+
       ::
-   
+
          doc/glossary: improve "CephX" entry
-   
+
          Improve the glossary entry for "CephX".
-   
+
          Signed-off-by: Zac Dover <zac.dover@proton.me>
-   
+
          # Please enter the commit message for your changes. Lines starting
          # with '#' will be ignored, and an empty message aborts the commit.
          #
@@ -562,18 +563,18 @@ commits will be squashed into a single commit.
          # Changes to be committed:
          #       modified:   glossary.rst
          #
-   
+
    #. Make the second commit.
-   
+
       ::
-   
+
          doc/glossary: add link to architecture doc
-         
+
          Add a link to a section in the architecture document, which link
          will be used in the process of improving the "CephX" glossary entry.
-         
+
          Signed-off-by: Zac Dover <zac.dover@proton.me>
-      
+
             # Please enter the commit message for your changes. Lines starting
             # with '#' will be ignored, and an empty message aborts the commit.
             #
@@ -582,18 +583,18 @@ commits will be squashed into a single commit.
             #
             # Changes to be committed:
             #       modified:   architecture.rst
-      
+
    #. Make the third commit.
-   
+
       ::
-      
+
          doc/glossary: link to Arch doc in "CephX" glossary
-         
+
          Link to the Architecture document from the "CephX" entry in the
          Glossary.
-         
+
          Signed-off-by: Zac Dover <zac.dover@proton.me>
-         
+
          # Please enter the commit message for your changes. Lines starting
          # with '#' will be ignored, and an empty message aborts the commit.
          #
@@ -604,24 +605,24 @@ commits will be squashed into a single commit.
          #       modified:   glossary.rst
 
 #. There are now three commits in the feature branch. We will now begin the
-   process of squashing them into a single commit. 
-   
-   #. Run the command ``git rebase -i main``, which rebases the current branch 
+   process of squashing them into a single commit.
+
+   #. Run the command ``git rebase -i main``, which rebases the current branch
       (the feature branch) against the ``main`` branch:
 
       .. prompt:: bash
-   
+
          git rebase -i main
-   
+
    #. A list of the commits that have been made to the feature branch now
       appear, and looks like this:
 
       ::
-      
+
          pick d395e500883 doc/glossary: improve "CephX" entry
          pick b34986e2922 doc/glossary: add link to architecture doc
          pick 74d0719735c doc/glossary: link to Arch doc in "CephX" glossary
-         
+
          # Rebase 0793495b9d1..74d0719735c onto 0793495b9d1 (3 commands)
          #
          # Commands:
@@ -650,7 +651,7 @@ commits will be squashed into a single commit.
          #
          # If you remove a line here THAT COMMIT WILL BE LOST.
 
-      Find the part of the screen that says "pick". This is the part that you will 
+      Find the part of the screen that says "pick". This is the part that you will
       alter. There are three commits that are currently labeled "pick". We will
       choose one of them to remain labeled "pick", and we will label the other two
       commits "squash".
@@ -662,7 +663,7 @@ commits will be squashed into a single commit.
       pick d395e500883 doc/glossary: improve "CephX" entry
       squash b34986e2922 doc/glossary: add link to architecture doc
       squash 74d0719735c doc/glossary: link to Arch doc in "CephX" glossary
-      
+
       # Rebase 0793495b9d1..74d0719735c onto 0793495b9d1 (3 commands)
       #
       # Commands:
@@ -699,34 +700,34 @@ commits will be squashed into a single commit.
       like this:
 
       ::
-      
+
          # This is a combination of 3 commits.
          # This is the 1st commit message:
-      
+
          doc/glossary: improve "CephX" entry
-      
+
          Improve the glossary entry for "CephX".
-      
+
          Signed-off-by: Zac Dover <zac.dover@proton.me>
-      
+
          # This is the commit message #2:
-      
+
          doc/glossary: add link to architecture doc
-      
+
          Add a link to a section in the architecture document, which link
          will be used in the process of improving the "CephX" glossary entry.
-      
+
          Signed-off-by: Zac Dover <zac.dover@proton.me>
-      
+
          # This is the commit message #3:
-      
+
          doc/glossary: link to Arch doc in "CephX" glossary
-      
+
          Link to the Architecture document from the "CephX" entry in the
          Glossary.
-      
+
          Signed-off-by: Zac Dover <zac.dover@proton.me>
-      
+
          # Please enter the commit message for your changes. Lines starting
          # with '#' will be ignored, and an empty message aborts the commit.
          #
@@ -742,17 +743,17 @@ commits will be squashed into a single commit.
          # Changes to be committed:
          #       modified:   doc/architecture.rst
          #       modified:   doc/glossary.rst
-      
-   #. The commit messages have been revised into the simpler form presented here:   
-            
+
+   #. The commit messages have been revised into the simpler form presented here:
+
       ::
-      
+
          doc/glossary: improve "CephX" entry
-      
+
          Improve the glossary entry for "CephX".
-      
+
          Signed-off-by: Zac Dover <zac.dover@proton.me>
-      
+
          # Please enter the commit message for your changes. Lines starting
          # with '#' will be ignored, and an empty message aborts the commit.
          #
@@ -771,13 +772,13 @@ commits will be squashed into a single commit.
 
 #. Force push the squashed commit from your local working copy to the remote
    upstream branch. The force push is necessary because the newly squashed commit
-   does not have an ancestor in the remote. If that confuses you, just run this 
+   does not have an ancestor in the remote. If that confuses you, just run this
    command and don't think too much about it:
 
-   .. prompt:: bash $  
+   .. prompt:: bash $
 
       git push -f
-   
+
    ::
 
       Enumerating objects: 9, done.
@@ -821,17 +822,17 @@ Review the following style guides to maintain this consistency.
 Headings
 --------
 
-#. **Document Titles:** Document titles use the ``=`` character overline and 
-   underline with a leading and trailing space on the title text line. 
+#. **Document Titles:** Document titles use the ``=`` character overline and
+   underline with a leading and trailing space on the title text line.
    See `Document Title`_ for details.
 
 #. **Section Titles:** Section tiles use the ``=`` character underline with no
-   leading or trailing spaces for text. Two carriage returns should precede a 
+   leading or trailing spaces for text. Two carriage returns should precede a
    section title (unless an inline reference precedes it). See `Sections`_ for
    details.
 
-#. **Subsection Titles:** Subsection titles use the ``_`` character underline 
-   with no leading or trailing spaces for text.  Two carriage returns should 
+#. **Subsection Titles:** Subsection titles use the ``_`` character underline
+   with no leading or trailing spaces for text.  Two carriage returns should
    precede a subsection title (unless an inline reference precedes it).
 
 
@@ -843,18 +844,18 @@ a command line interface without leading or trailing white space. Where
 possible, we prefer to maintain this convention with text, lists, literal text
 (exceptions allowed), tables, and ``ditaa`` graphics.
 
-#. **Paragraphs**: Paragraphs have a leading and a trailing carriage return, 
-   and should be 80 characters wide or less so that the documentation can be 
+#. **Paragraphs**: Paragraphs have a leading and a trailing carriage return,
+   and should be 80 characters wide or less so that the documentation can be
    read in native format in a command line terminal.
 
 #. **Literal Text:** To create an example of literal text (e.g., command line
    usage), terminate the preceding paragraph with ``::`` or enter a carriage
    return to create an empty line after the preceding paragraph; then, enter
    ``::`` on a separate line followed by another empty line. Then, begin the
-   literal text with tab indentation (preferred) or space indentation of 3 
+   literal text with tab indentation (preferred) or space indentation of 3
    characters.
 
-#. **Indented Text:** Indented text such as bullet points 
+#. **Indented Text:** Indented text such as bullet points
    (e.g., ``- some text``) may span multiple lines. The text of subsequent
    lines should begin at the same character position as the text of the
    indented text (less numbers, bullets, etc.).
@@ -867,13 +868,13 @@ possible, we prefer to maintain this convention with text, lists, literal text
 
 #. **Numbered Lists:** Numbered lists should use autonumbering by starting
    a numbered indent with ``#.`` instead of the actual number so that
-   numbered paragraphs can be repositioned without requiring manual 
+   numbered paragraphs can be repositioned without requiring manual
    renumbering.
 
-#. **Code Examples:** Ceph supports the use of the 
-   ``.. code-block::<language>`` role, so that you can add highlighting to 
-   source examples. This is preferred for source code. However, use of this 
-   tag will cause autonumbering to restart at 1 if it is used as an example 
+#. **Code Examples:** Ceph supports the use of the
+   ``.. code-block::<language>`` role, so that you can add highlighting to
+   source examples. This is preferred for source code. However, use of this
+   tag will cause autonumbering to restart at 1 if it is used as an example
    within a numbered list. See `Showing code examples`_ for details.
 
 
@@ -894,12 +895,12 @@ The Ceph project uses `paragraph level markup`_ to highlight points.
 #. **Version Added:** Use the ``.. versionadded::`` directive for new features
    or configuration settings so that users know the minimum release for using
    a feature.
-   
+
 #. **Version Changed:** Use the ``.. versionchanged::`` directive for changes
    in usage or configuration settings.
 
-#. **Deprecated:** Use the ``.. deprecated::`` directive when CLI usage, 
-   a feature or a configuration setting is no longer preferred or will be 
+#. **Deprecated:** Use the ``.. deprecated::`` directive when CLI usage,
+   a feature or a configuration setting is no longer preferred or will be
    discontinued.
 
 #. **Topic:** Use the ``.. topic::`` directive to encapsulate text that is
@@ -917,7 +918,7 @@ Every document (every ``.rst`` file) in the Sphinx-controlled Ceph
 documentation suite must be linked either (1) from another document in the
 documentation suite or (2) from a table of contents (TOC). If any document in
 the documentation suite is not linked in this way, the ``build-doc`` script
-generates warnings when it tries to build the documentation. 
+generates warnings when it tries to build the documentation.
 
 The Ceph project uses the ``.. toctree::`` directive. See `The TOC tree`_ for
 details. When rendering a table of contents (TOC), specify the ``:maxdepth:``
@@ -943,16 +944,16 @@ to refer explicitly to the title of the section being linked to.
 
 For example, RST that links to the Sphinx Python Document Generator homepage
 and generates a sentence reading "Click here to learn more about Python
-Sphinx." looks like this: 
+Sphinx." looks like this:
 
 ::
 
     ``Click `here <https://www.sphinx-doc.org>`_ to learn more about Python
-    Sphinx.`` 
+    Sphinx.``
 
 And here it is, rendered:
 
-Click `here <https://www.sphinx-doc.org>`_ to learn more about Python Sphinx. 
+Click `here <https://www.sphinx-doc.org>`_ to learn more about Python Sphinx.
 
 Pay special attention to the underscore after the backtick. If you forget to
 include it and this is your first day working with RST, there's a chance that
@@ -998,8 +999,8 @@ addresses external to the Ceph documentation:
    `inline text <http:www.foo.com>`_
 
 .. note:: Do not fail to include the space between the inline text and the
-   less-than sign. 
-   
+   less-than sign.
+
    Do not fail to include the underscore after the final backtick.
 
    To link to addresses that are external to the Ceph documentation, include a
@@ -1041,7 +1042,7 @@ Link to target with inline text::
 
    :ref:`inline text<target>`
 
-.. note:: 
+.. note::
 
    There is no space between "inline text" and the angle bracket that
    immediately follows it. This is precisely the opposite of :ref:`the
@@ -1053,7 +1054,7 @@ Escaping Bold Characters within Words
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This section explains how to make certain letters within a word bold while
-leaving the other letters in the word regular (non-bold). 
+leaving the other letters in the word regular (non-bold).
 
 The following single-line paragraph provides an example of this:
 

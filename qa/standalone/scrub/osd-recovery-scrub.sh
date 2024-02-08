@@ -33,7 +33,7 @@ function run() {
     done
 }
 
-# Simple test for "not scheduling scrubs due to active recovery"
+# Simple test for "recovery in progress. Only high priority scrubs allowed."
 # OSD::sched_scrub() called on all OSDs during ticks
 function TEST_recovery_scrub_1() {
     local dir=$1
@@ -99,11 +99,11 @@ function TEST_recovery_scrub_1() {
     kill_daemons $dir #|| return 1
 
     declare -a err_strings
-    err_strings[0]="not scheduling scrubs due to active recovery"
+    err_strings[0]="recovery in progress. Only high priority scrubs allowed."
 
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-        grep "not scheduling scrubs" $dir/osd.${osd}.log
+        grep "recovery in progress. Only high priority scrubs allowed." $dir/osd.${osd}.log
     done
     for err_string in "${err_strings[@]}"
     do

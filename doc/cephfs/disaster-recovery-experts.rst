@@ -15,7 +15,7 @@ Advanced: Metadata repair tools
     file system before attempting to repair it.
 
     If you do not have access to professional support for your cluster,
-    consult the ceph-users mailing list or the #ceph IRC channel.
+    consult the ceph-users mailing list or the #ceph IRC/Slack channel.
 
 
 Journal export

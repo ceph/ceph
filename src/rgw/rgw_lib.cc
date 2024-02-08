@@ -114,7 +114,7 @@ namespace rgw {
   void RGWLibProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest* r)
   {
     /*
-     * invariant: valid requests are derived from RGWLibRequst
+     * invariant: valid requests are derived from RGWLibRequest
      */
     RGWLibRequest* req = static_cast<RGWLibRequest*>(r);
 
@@ -468,6 +468,7 @@ namespace rgw {
 
   int RGWLib::init(vector<const char*>& args)
   {
+    int r{0};
     /* alternative default for module */
     map<std::string,std::string> defaults = {
       { "debug_rgw", "1/5" },
@@ -524,7 +525,13 @@ namespace rgw {
     register_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
 
     main.init_tracepoints();
-    main.init_frontends2(this /* rgwlib */);
+    r = main.init_frontends2(this /* rgwlib */);
+    if (r != 0) {
+      derr << "ERROR: unable to initialize frontend, r = " << r << dendl;
+      main.shutdown();
+      return r;
+    }
+
     main.init_notification_endpoints();
     main.init_lua();
 
@@ -601,8 +608,8 @@ namespace rgw {
     s->perm_mask = RGW_PERM_FULL_CONTROL;
 
     // populate the owner info
-    s->owner.set_id(s->user->get_id());
-    s->owner.set_name(s->user->get_display_name());
+    s->owner.id = s->user->get_id();
+    s->owner.display_name = s->user->get_display_name();
 
     return 0;
   } /* RGWHandler_Lib::authorize */

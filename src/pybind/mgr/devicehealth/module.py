@@ -327,6 +327,11 @@ CREATE TABLE DeviceHealthMetrics (
                         count += 1
                 except json.decoder.JSONDecodeError:
                     pass
+                except rados.ObjectNotFound:
+                    # https://tracker.ceph.com/issues/63882
+                    # Sometimes an object appears in the pool listing but cannot be interacted with?
+                    self.log.debug(f"object {obj} does not exist because it is deleted in HEAD")
+                    pass
                 if count >= 10:
                     break
             done = count < 10
@@ -502,8 +507,8 @@ CREATE TABLE DeviceHealthMetrics (
 
     def put_device_metrics(self, devid: str, data: Any) -> None:
         SQL = """
-        INSERT INTO DeviceHealthMetrics (devid, raw_smart)
-            VALUES (?, ?);
+        INSERT OR REPLACE INTO DeviceHealthMetrics (devid, raw_smart, time)
+            VALUES (?, ?, strftime('%s', 'now'));
         """
 
         with self._db_lock, self.db:

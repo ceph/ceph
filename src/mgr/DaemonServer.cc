@@ -98,7 +98,6 @@ DaemonServer::DaemonServer(MonClient *monc_,
       audit_clog(audit_clog_),
       pgmap_ready(false),
       timer(g_ceph_context, lock),
-      shutting_down(false),
       tick_event(nullptr),
       osd_perf_metric_collector_listener(this),
       osd_perf_metric_collector(osd_perf_metric_collector_listener),
@@ -123,6 +122,16 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 			   "mgr",
 			   Messenger::get_random_nonce());
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
+  // throttle policy
+  msgr->set_policy(entity_name_t::TYPE_OSD,
+                   Messenger::Policy::stateless_server(
+                     CEPH_FEATURE_SERVER_LUMINOUS));
+  msgr->set_policy(entity_name_t::TYPE_MON,
+                   Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
+                                                   CEPH_FEATURE_PGID64));
+  msgr->set_policy(entity_name_t::TYPE_MDS,
+                   Messenger::Policy::stateless_server(
+                     CEPH_FEATURE_SERVER_LUMINOUS));
 
   msgr->set_auth_client(monc);
 
@@ -348,11 +357,6 @@ void DaemonServer::schedule_tick_locked(double delay_sec)
     tick_event = nullptr;
   }
 
-  // on shutdown start rejecting explicit requests to send reports that may
-  // originate from python land which may still be running.
-  if (shutting_down)
-    return;
-
   tick_event = timer.add_event_after(delay_sec,
     new LambdaContext([this](int r) {
       tick();
@@ -395,19 +399,6 @@ void DaemonServer::handle_mds_perf_metric_query_updated()
           }
         }
       }));
-}
-
-void DaemonServer::shutdown()
-{
-  dout(10) << "begin" << dendl;
-  msgr->shutdown();
-  msgr->wait();
-  cluster_state.shutdown();
-  dout(10) << "done" << dendl;
-
-  std::lock_guard l(lock);
-  shutting_down = true;
-  timer.shutdown();
 }
 
 static DaemonKey key_from_service(
@@ -1980,6 +1971,37 @@ bool DaemonServer::_handle_command(
       ss << "invalid daemon name: use <type>.<id>";
       cmdctx->reply(-EINVAL, ss);
       return true;
+    }
+    /*
+     *  RGW has the daemon name stored in the daemon metadata
+     *  and uses the GID as key in the service_map.
+     *  We need to match the user's query with the daemon name to
+     *  find the correct key for retrieving daemon state.
+     */
+    string daemon_name = key.name;
+    auto p = daemon_name.find("rgw");
+    if (p != daemon_name.npos) {
+      auto rgw_daemons = daemon_state.get_by_service("rgw");
+      for (auto& rgw_daemon : rgw_daemons) {
+	DaemonStatePtr daemon = rgw_daemon.second;
+	string name = daemon->metadata.find("id")->second;
+	/*
+	 * The id stored in the metadata is the port number
+	 * for the RGW daemon.
+	 * In the case of multiple RGW daemons, the user might
+	 * use the port number (rgw.8000) to specify the daemon.
+	 */
+	auto p = daemon_name.find('.');
+	if (p == key.name.npos) {
+          key = daemon->key;
+	} else {
+	  // if user has specified port number in the query
+	  if (daemon_name.substr(p + 1) == name) {
+	    key = daemon->key;
+	    break;
+	  }
+        }
+      }
     }
     DaemonStatePtr daemon = daemon_state.get(key);
     if (!daemon) {

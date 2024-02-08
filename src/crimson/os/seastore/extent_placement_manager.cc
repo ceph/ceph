@@ -790,16 +790,36 @@ RandomBlockOolWriter::do_write(
     stats.num_records += 1;
 
     ex->prepare_write();
-    return rbm->write(paddr,
-      ex->get_bptr()
-    ).handle_error(
-      alloc_write_iertr::pass_further{},
-      crimson::ct_error::assert_all{
-	"Invalid error when writing record"}
-    ).safe_then([&t, &ex, paddr, FNAME]() {
+    extent_len_t offset = 0;
+    bufferptr bp;
+    if (can_inplace_rewrite(t, ex)) {
+      auto r = ex->get_modified_region();
+      ceph_assert(r.has_value());
+      offset = p2align(r->offset, rbm->get_block_size());
+      extent_len_t len =
+	p2roundup(r->offset + r->len, rbm->get_block_size()) - offset;
+      bp = ceph::bufferptr(ex->get_bptr(), offset, len);
+    } else {
+      bp = ex->get_bptr();
+    }
+    return trans_intr::make_interruptible(
+      rbm->write(paddr + offset,
+	bp
+      ).handle_error(
+	alloc_write_iertr::pass_further{},
+	crimson::ct_error::assert_all{
+	  "Invalid error when writing record"}
+      )
+    ).si_then([this, &t, &ex, paddr, FNAME] {
       TRACET("ool extent written at {} -- {}",
 	     t, paddr, *ex);
-      t.mark_allocated_extent_ool(ex);
+      if (ex->is_initial_pending()) {
+	t.mark_allocated_extent_ool(ex);
+      } else if (can_inplace_rewrite(t, ex)) {
+	t.mark_inplace_rewrite_extent_ool(ex);
+      } else {
+	ceph_assert("impossible");
+      }
       return alloc_write_iertr::now();
     });
   });

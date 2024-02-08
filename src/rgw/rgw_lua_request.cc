@@ -260,10 +260,9 @@ struct OwnerMetaTable : public EmptyMetaTable {
     const char* index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "DisplayName") == 0) {
-      pushstring(L, owner->get_display_name());
+      pushstring(L, owner->display_name);
     } else if (strcasecmp(index, "User") == 0) {
-      create_metatable<UserMetaTable>(L, name, index, false, 
-          &(owner->get_id()));
+      create_metatable<UserMetaTable>(L, name, index, false, &owner->id);
     } else {
       return error_unknown_field(L, index, name);
     }
@@ -293,10 +292,6 @@ struct BucketMetaTable : public EmptyMetaTable {
       pushstring(L, bucket->get_marker());
     } else if (strcasecmp(index, "Id") == 0) {
       pushstring(L, bucket->get_bucket_id());
-    } else if (strcasecmp(index, "Count") == 0) {
-      lua_pushinteger(L, bucket->get_count());
-    } else if (strcasecmp(index, "Size") == 0) {
-      lua_pushinteger(L, bucket->get_size());
     } else if (strcasecmp(index, "ZoneGroupId") == 0) {
       pushstring(L, bucket->get_info().zonegroup);
     } else if (strcasecmp(index, "CreationTime") == 0) {
@@ -309,7 +304,7 @@ struct BucketMetaTable : public EmptyMetaTable {
       create_metatable<PlacementRuleMetaTable>(L, name, index, false, &(bucket->get_info().placement_rule));
     } else if (strcasecmp(index, "User") == 0) {
       create_metatable<UserMetaTable>(L, name, index, false, 
-          const_cast<rgw_user*>(&bucket->get_owner()->get_id()));
+          const_cast<rgw_user*>(&bucket->get_owner()));
     } else {
       return error_unknown_field(L, index, name);
     }
@@ -369,19 +364,26 @@ struct GrantMetaTable : public EmptyMetaTable {
     if (strcasecmp(index, "Type") == 0) {
       lua_pushinteger(L, grant->get_type().get_type());
     } else if (strcasecmp(index, "User") == 0) {
-      const auto id_ptr = grant->get_id();
-      if (id_ptr) {
+      if (const auto user = grant->get_user(); user) {
         create_metatable<UserMetaTable>(L, name, index, false, 
-            const_cast<rgw_user*>(id_ptr));
+            const_cast<rgw_user*>(&user->id));
       } else {
         lua_pushnil(L);
       }
     } else if (strcasecmp(index, "Permission") == 0) {
       lua_pushinteger(L, grant->get_permission().get_permissions());
     } else if (strcasecmp(index, "GroupType") == 0) {
-      lua_pushinteger(L, grant->get_group());
+      if (const auto group = grant->get_group(); group) {
+        lua_pushinteger(L, group->type);
+      } else {
+        lua_pushnil(L);
+      }
     } else if (strcasecmp(index, "Referer") == 0) {
-      pushstring(L, grant->get_referer());
+      if (const auto referer = grant->get_referer(); referer) {
+        pushstring(L, referer->url_spec);
+      } else {
+        lua_pushnil(L);
+      }
     } else {
       return error_unknown_field(L, index, name);
     }
@@ -716,11 +718,11 @@ struct RequestMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "ZoneGroup") == 0) {
       create_metatable<ZoneGroupMetaTable>(L, name, index, false, s);
     } else if (strcasecmp(index, "UserACL") == 0) {
-      create_metatable<ACLMetaTable>(L, name, index, false, s->user_acl);
+      create_metatable<ACLMetaTable>(L, name, index, false, &s->user_acl);
     } else if (strcasecmp(index, "BucketACL") == 0) {
-      create_metatable<ACLMetaTable>(L, name, index, false, s->bucket_acl);
+      create_metatable<ACLMetaTable>(L, name, index, false, &s->bucket_acl);
     } else if (strcasecmp(index, "ObjectACL") == 0) {
-      create_metatable<ACLMetaTable>(L, name, index, false, s->object_acl);
+      create_metatable<ACLMetaTable>(L, name, index, false, &s->object_acl);
     } else if (strcasecmp(index, "Environment") == 0) {
         create_metatable<StringMapMetaTable<rgw::IAM::Environment>>(L, name, index, false, &(s->env));
     } else if (strcasecmp(index, "Policy") == 0) {
@@ -788,7 +790,7 @@ int execute(
   int rc = 0;
   try {
     open_standard_libs(L);
-    set_package_path(L, s->penv.lua.luarocks_path);
+    set_package_path(L, s->penv.lua.manager->luarocks_path());
 
     create_debug_action(L, s->cct);  
   

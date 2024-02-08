@@ -33,6 +33,7 @@ struct state {
 
   state(Aio* aio, librados::IoCtx ctx, AioResult& r)
     : aio(aio), ctx(std::move(ctx)),
+    // coverity[ctor_dtor_leak:SUPPRESS]
       c(librados::Rados::aio_create_completion(&r, &cb)) {}
 };
 
@@ -88,12 +89,12 @@ struct Handler {
 template <typename Op>
 Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op,
                          boost::asio::io_context& context,
-                         yield_context yield) {
+                         spawn::yield_context yield) {
   return [ctx = std::move(ctx), op = std::move(op), &context, yield] (Aio* aio, AioResult& r) mutable {
       // arrange for the completion Handler to run on the yield_context's strand
       // executor so it can safely call back into Aio without locking
       using namespace boost::asio;
-      async_completion<yield_context, void()> init(yield);
+      async_completion<spawn::yield_context, void()> init(yield);
       auto ex = get_associated_executor(init.completion_handler);
 
       librados::async_operate(context, ctx, r.obj.oid, &op, 0,

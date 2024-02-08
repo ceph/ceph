@@ -8,7 +8,7 @@
 #include "librbd/migration/StreamInterface.h"
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/strand.hpp>
-#include <boost/asio/posix/basic_stream_descriptor.hpp>
+#include <boost/asio/posix/stream_descriptor.hpp>
 #include <json_spirit/json_spirit.h>
 #include <memory>
 #include <string>

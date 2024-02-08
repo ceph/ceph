@@ -1,6 +1,6 @@
 <cd-modal [modalRef]="activeModal">
   <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+                class="modal-title">{{ action | titlecase }} Zone Group</ng-container>
 
   <ng-container class="modal-content">
     <form name="multisiteZonegroupForm"
@@ -30,11 +30,11 @@
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="zonegroupName"
-               i18n>Zonegroup Name</label>
+               i18n>Zone Group Name</label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"
-                 placeholder="Zonegroup name..."
+                 placeholder="Zone group name..."
                  id="zonegroupName"
                  name="zonegroupName"
                  formControlName="zonegroupName">
@@ -43,7 +43,7 @@
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="multisiteZonegroupForm.showError('zonegroupName', formDir, 'uniqueName')"
-                i18n>The chosen zonegroup name is already in use.</span>
+                i18n>The chosen zone group name is already in use.</span>
         <div class="custom-control custom-checkbox">
           <input class="form-check-input"
                  id="default_zonegroup"
@@ -55,7 +55,7 @@
                  for="default_zonegroup"
                  i18n>Default</label>
           <span *ngIf="disableDefault && action === 'create'">
-            <cd-helper i18n>Zonegroup doesn't belong to the default realm.</cd-helper>
+            <cd-helper i18n>Zone group doesn't belong to the default realm.</cd-helper>
           </span>
           <cd-helper *ngIf="action === 'edit' && !info.data.is_default">
             <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
@@ -73,7 +73,7 @@
                  for="master_zonegroup"
                  i18n>Master</label>
           <span *ngIf="disableMaster && action === 'create'">
-            <cd-helper i18n>Multiple master zonegroups can't be configured. If you want to create a new zonegroup and make it the master zonegroup, you must delete the default zonegroup.</cd-helper>
+            <cd-helper i18n>Multiple master zone groups can't be configured. If you want to create a new zone group and make it the master zone group, you must delete the default zone group.</cd-helper>
           </span>
           <cd-helper *ngIf="action === 'edit' && !info.data.is_master">
             <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
@@ -198,7 +198,7 @@
     <div class="modal-footer">
       <cd-form-button-panel (submitActionEvent)="submit()"
                             [form]="multisiteZonegroupForm"
-                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+                            [submitText]="(action | titlecase) + ' ' + 'Zone Group'"></cd-form-button-panel>
     </div>
     </form>
   </ng-container>

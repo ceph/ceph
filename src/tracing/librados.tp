@@ -2628,7 +2628,7 @@ TRACEPOINT_EVENT(librados, rados_watch3_enter,
     TP_FIELDS(
         ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
         ctf_string(oid, oid)
-        ctf_integer_hex(uint64_t, phandle, phandle)
+        ctf_integer_hex(uint64_t*, phandle, phandle)
         ctf_integer_hex(rados_watchcb2_t, callback, callback)
         ctf_integer(uint32_t, timeout, timeout)
         ctf_integer_hex(void*, arg, arg)
@@ -2658,7 +2658,7 @@ TRACEPOINT_EVENT(librados, rados_aio_watch2_enter,
         ctf_integer_hex(rados_ioctx_t, ioctx, ioctx)
         ctf_string(oid, oid)
         ctf_integer_hex(rados_completion_t, completion, completion)
-        ctf_integer_hex(uint64_t, phandle, phandle)
+        ctf_integer_hex(uint64_t*, phandle, phandle)
         ctf_integer_hex(rados_watchcb2_t, callback, callback)
         ctf_integer(uint32_t, timeout, timeout)
         ctf_integer_hex(void*, arg, arg)

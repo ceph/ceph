@@ -819,6 +819,16 @@ options:
   services:
   - mds
   with_legacy: true
+# must be overloaded for more than these epochs before we export anything
+- name: mds_bal_overload_epochs
+  type: int
+  level: dev
+  default: 2
+  services:
+  - mds
+  fmt_desc: The number of epochs the overload lasts before Ceph migrates,
+    setting it to a higher value can avoid frequent migrations caused by load fluctuations.
+  with_legacy: true
 # if we need less than this, we don't do anything
 - name: mds_bal_min_start
   type: float
@@ -1583,6 +1593,44 @@ options:
   desc: Evict non-advancing client-tid sessions exceeding the config size.
   long_desc: Evict clients which are not advancing their request tids which causes a large buildup of session metadata (`completed_requests`) in the MDS causing the MDS to go read-only since the RADOS operation exceeds the size threashold. This config is the maximum size (in bytes) that a session metadata (encoded) can grow.
   default: 16_M
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_log_trim_threshold
+  type: size
+  level: advanced
+  desc: MDS log trim threshold
+  long_desc: The threshold of the number of log segment that can be trimmed.
+  default: 128
+  min: 1
+  services:
+  - mds
+  see_also:
+  - mds_log_max_events
+  - mds_log_max_segments
+  flags:
+  - runtime
+- name: mds_log_trim_decay_rate
+  type: float
+  level: advanced
+  desc: MDS log trim decay rate
+  long_desc: The decay rate for trimming the MDS log. Increasing this value leads to the MDS spending less time in trimming the log.
+  default: 1.0
+  min: 0.01
+  services:
+  - mds
+  see_also:
+  - mds_log_max_events
+  - mds_log_max_segments
+  flags:
+  - runtime
+- name: mds_log_trim_upkeep_interval
+  type: millisecs
+  level: advanced
+  desc: MDS log trimming interval
+  long_desc: Interval in milliseconds to trim MDS logs.
+  default: 1000
   services:
   - mds
   flags:

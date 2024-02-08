@@ -432,6 +432,7 @@ Client::~Client() = default;
 seastar::future<> Client::start() {
   entity_name = crimson::common::local_conf()->name;
   auth_registry.refresh_config();
+  sub.want("config", 0, 0);
   return load_keyring().then([this] {
     return monmap.build_initial(crimson::common::local_conf(), false);
   }).then([this] {

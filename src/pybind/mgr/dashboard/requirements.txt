@@ -1,7 +1,6 @@
 bcrypt
 CherryPy
 more-itertools
-PyJWT
 pyopenssl
 requests
 Routes
@@ -12,3 +11,5 @@ pyyaml
 natsort
 setuptools
 jsonpatch
+grpcio==1.46.5
+grpcio-tools==1.46.5

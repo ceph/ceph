@@ -743,10 +743,6 @@ void MDSRankDispatcher::tick()
   // update average session uptime
   sessionmap.update_average_session_age();
 
-  if (is_active() || is_stopping()) {
-    mdlog->trim();  // NOT during recovery!
-  }
-
   // ...
   if (is_clientreplay() || is_active() || is_stopping()) {
     server->clear_laggy_clients();
@@ -789,7 +785,6 @@ void MDSRankDispatcher::tick()
 
   // shut down?
   if (is_stopping()) {
-    mdlog->trim();
     if (mdcache->shutdown_pass()) {
       uint64_t pq_progress = 0 ;
       uint64_t pq_total = 0;
@@ -936,6 +931,12 @@ void MDSRank::respawn()
     respawn_hook->complete(0);
     respawn_hook = NULL;
   }
+}
+
+void MDSRank::abort(std::string_view msg)
+{
+  monc->flush_log();
+  ceph_abort(msg);
 }
 
 void MDSRank::damaged()
@@ -1477,7 +1478,7 @@ void MDSRank::send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &
   messenger->send_to_mds(ref_t<Message>(m).detach(), addr);
 }
 
-void MDSRank::forward_message_mds(MDRequestRef& mdr, mds_rank_t mds)
+void MDSRank::forward_message_mds(const MDRequestRef& mdr, mds_rank_t mds)
 {
   ceph_assert(mds != whoami);
 
@@ -1810,7 +1811,11 @@ public:
 
 void MDSRank::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
 {
-  if (old_read_pos < mdlog->get_journaler()->get_trimmed_pos()) {
+  auto trimmed_pos = mdlog->get_journaler()->get_trimmed_pos();
+  dout(20) << __func__ << ":"
+           << " old_read_pos=" << old_read_pos
+           << " trimmed_pos=" << trimmed_pos << dendl;
+  if (old_read_pos < trimmed_pos) {
     dout(0) << "standby MDS fell behind active MDS journal's expire_pos, restarting" << dendl;
     respawn(); /* we're too far back, and this is easier than
 		  trying to reset everything in the cache, etc */
@@ -2063,6 +2068,7 @@ bool MDSRank::queue_one_replay()
   if (!replay_queue.empty()) {
     queue_waiter(replay_queue.front());
     replay_queue.pop_front();
+    dout(10) << " queued next replay op" << dendl;
     return true;
   }
   if (!replaying_requests_done) {
@@ -2070,6 +2076,7 @@ bool MDSRank::queue_one_replay()
     mdlog->flush();
   }
   maybe_clientreplay_done();
+  dout(10) << " journaled last replay op" << dendl;
   return false;
 }
 
@@ -2301,11 +2308,11 @@ void MDSRankDispatcher::handle_mds_map(
       // "bootstrapping" state.
       usleep(sleep_rank_change);
     } if (state == MDSMap::STATE_STANDBY_REPLAY) {
-      dout(1) << "handle_mds_map i am now mds." << mds_gid << "." << incarnation
+      dout(1) << "handle_mds_map I am now mds." << mds_gid << "." << incarnation
           << " replaying mds." << whoami << "." << incarnation << dendl;
       messenger->set_myname(entity_name_t::MDS(mds_gid));
     } else {
-      dout(1) << "handle_mds_map i am now mds." << whoami << "." << incarnation << dendl;
+      dout(1) << "handle_mds_map I am now mds." << whoami << "." << incarnation << dendl;
       messenger->set_myname(entity_name_t::MDS(whoami));
     }
   }
@@ -3179,7 +3186,7 @@ void MDSRank::command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Format
   std::lock_guard l(mds_lock);
   CInode *in = mdcache->cache_traverse(filepath(root.c_str()));
   if (!in) {
-    ss << "root inode is not in cache";
+    ss << "inode for path '" << filepath(root.c_str()) << "' is not in cache";
     return;
   }
   f->open_array_section("inodes");
@@ -3541,6 +3548,9 @@ void MDSRank::create_logger()
                     PerfCountersBuilder::PRIO_INTERESTING);
     mdm_plb.add_u64(l_mdm_dn, "dn", "Dentries", "dn",
                     PerfCountersBuilder::PRIO_INTERESTING);
+    // mds rss metric is set to PRIO_USEFUL as it can be useful to detect mds cache oversizing
+    mdm_plb.add_u64(l_mdm_rss, "rss", "RSS", "rss",
+                    PerfCountersBuilder::PRIO_USEFUL);
 
     mdm_plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
     mdm_plb.add_u64_counter(l_mdm_inoa, "ino+", "Inodes opened");
@@ -3554,9 +3564,6 @@ void MDSRank::create_logger()
     mdm_plb.add_u64_counter(l_mdm_capa, "cap+", "Capabilities added");
     mdm_plb.add_u64_counter(l_mdm_caps, "cap-", "Capabilities removed");
     mdm_plb.add_u64(l_mdm_heap, "heap", "Heap size");
-
-    mdm_plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
-    mdm_plb.add_u64(l_mdm_rss, "rss", "RSS");
 
     mlogger = mdm_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(mlogger);
@@ -3868,6 +3875,8 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_session_max_caps_throttle_ratio",
     "mds_symlink_recovery",
     "mds_session_metadata_threshold",
+    "mds_log_trim_threshold",
+    "mds_log_trim_decay_rate",
     NULL
   };
   return KEYS;

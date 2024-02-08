@@ -4,7 +4,7 @@ import pytest
 
 from tests.fixtures import with_cephadm_ctx, import_cephadm
 
-_cephadm = import_cephadm()
+from cephadmlib import container_engines
 
 
 _find_program_loc = 'cephadmlib.container_engine_base.find_program'
@@ -29,7 +29,7 @@ def test_container_engine():
 def test_podman():
     with mock.patch(_find_program_loc) as find_program:
         find_program.return_value = "/usr/bin/podman"
-        pm = _cephadm.Podman()
+        pm = container_engines.Podman()
         find_program.assert_called()
         with pytest.raises(RuntimeError):
             pm.version
@@ -44,7 +44,7 @@ def test_podman():
 def test_podman_badversion():
     with mock.patch(_find_program_loc) as find_program:
         find_program.return_value = "/usr/bin/podman"
-        pm = _cephadm.Podman()
+        pm = container_engines.Podman()
         find_program.assert_called()
         with mock.patch(_call_throws_loc) as call_throws:
             call_throws.return_value = ("4.10.beta2", None, None)
@@ -56,5 +56,5 @@ def test_podman_badversion():
 def test_docker():
     with mock.patch(_find_program_loc) as find_program:
         find_program.return_value = "/usr/bin/docker"
-        docker = _cephadm.Docker()
+        docker = container_engines.Docker()
         assert str(docker) == "docker (/usr/bin/docker)"

@@ -89,6 +89,7 @@ enum {
   l_pq_executing_ops_high_water,
   l_pq_executing,
   l_pq_executing_high_water,
+  l_pq_executed_ops,
   l_pq_executed,
   l_pq_item_in_journal,
   l_pq_last

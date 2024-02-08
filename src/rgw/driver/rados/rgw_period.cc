@@ -154,7 +154,7 @@ static int read_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Driver* dri
 {
   rgw::sal::RadosStore* rados_store = static_cast<rgw::sal::RadosStore*>(driver);
   // initialize a sync status manager to read the status
-  RGWMetaSyncStatusManager mgr(rados_store, rados_store->svc()->rados->get_async_processor());
+  RGWMetaSyncStatusManager mgr(rados_store, rados_store->svc()->async_processor);
   int r = mgr.init(dpp);
   if (r < 0) {
     return r;

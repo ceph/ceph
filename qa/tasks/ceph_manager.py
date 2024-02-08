@@ -234,6 +234,8 @@ class OSDThrasher(Thrasher):
         self.chance_thrash_pg_upmap_items = self.config.get('chance_thrash_pg_upmap', 1.0)
         self.random_eio = self.config.get('random_eio')
         self.chance_force_recovery = self.config.get('chance_force_recovery', 0.3)
+        self.chance_reset_purged_snaps_last = self.config.get('chance_reset_purged_snaps_last', 0.3)
+        self.chance_trim_stale_osdmaps = self.config.get('chance_trim_stale_osdmaps', 0.3)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * len(num_osds)
@@ -779,6 +781,32 @@ class OSDThrasher(Thrasher):
         else:
            self.cancel_force_recovery()
 
+    def reset_purged_snaps_last(self):
+        """
+        Run reset_purged_snaps_last
+        """
+        self.log('reset_purged_snaps_last')
+        for osd in self.in_osds:
+            try:
+               self.ceph_manager.raw_cluster_cmd(
+               'tell', "osd.%s" % (str(osd)),
+               'reset_purged_snaps_last')
+            except CommandFailedError:
+                self.log('Failed to reset_purged_snaps_last, ignoring')
+
+    def trim_stale_osdmaps(self):
+       """
+       Trim stale osdmaps
+       """
+       self.log('trim_stale_osdmaps')
+       for osd in self.in_osds:
+           try:
+               self.ceph_manager.raw_cluster_cmd(
+               'tell', "osd.%s" % (str(osd)),
+               'trim stale osdmaps')
+           except CommandFailedError:
+               self.log('Failed to trim stale osdmaps, ignoring')
+
     def all_up(self):
         """
         Make sure all osds are up and not out.
@@ -1229,6 +1257,10 @@ class OSDThrasher(Thrasher):
             actions.append((self.thrash_pg_upmap_items, self.chance_thrash_pg_upmap_items,))
         if self.chance_force_recovery > 0:
             actions.append((self.force_cancel_recovery, self.chance_force_recovery))
+        if self.chance_reset_purged_snaps_last > 0:
+            actions.append((self.reset_purged_snaps_last, self.chance_reset_purged_snaps_last))
+        if self.chance_trim_stale_osdmaps > 0:
+            actions.append((self.trim_stale_osdmaps, self.chance_trim_stale_osdmaps))
 
         for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
             for scenario in [
@@ -1524,11 +1556,9 @@ class CephManager:
         self.cephadm = cephadm
         self.testdir = teuthology.get_testdir(self.ctx)
         # prefix args for ceph cmds to be executed
-        pre = ['adjust-ulimits', 'ceph-coverage',
-               f'{self.testdir}/archive/coverage']
-        self.CEPH_CMD = ['sudo'] + pre + ['timeout', '120', 'ceph',
-                                          '--cluster', self.cluster]
-        self.RADOS_CMD = pre + ['rados', '--cluster', self.cluster]
+        self.pre = ['adjust-ulimits', 'ceph-coverage',
+                    f'{self.testdir}/archive/coverage']
+        self.RADOS_CMD = self.pre + ['rados', '--cluster', self.cluster]
 
         pools = self.list_pools()
         self.pools = {}
@@ -1538,6 +1568,11 @@ class CephManager:
                 self.pools[pool] = self.get_pool_int_property(pool, 'pg_num')
             except CommandFailedError:
                 self.log('Failed to get pg_num from pool %s, ignoring' % pool)
+
+    def get_ceph_cmd(self, **kwargs):
+        timeout = kwargs.pop('timeout', 120)
+        return ['sudo'] + self.pre + ['timeout', f'{timeout}', 'ceph',
+                                      '--cluster', self.cluster]
 
     def ceph(self, cmd, **kwargs):
         """
@@ -1582,7 +1617,7 @@ class CephManager:
                            stdout=StringIO(),
                            check_status=kwargs.get('check_status', True))
         else:
-            kwargs['args'] = prefixcmd + self.CEPH_CMD + kwargs['args']
+            kwargs['args'] = prefixcmd + self.get_ceph_cmd(**kwargs) + kwargs['args']
             return self.controller.run(**kwargs)
 
     def raw_cluster_cmd(self, *args, **kwargs) -> str:

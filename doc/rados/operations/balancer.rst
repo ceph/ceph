@@ -21,9 +21,9 @@ To check the current status of the balancer, run the following command:
 Automatic balancing
 -------------------
 
-When the balancer is in ``upmap`` mode, the automatic balancing feature is
-enabled by default. For more details, see :ref:`upmap`.  To disable the
-balancer, run the following command:
+When the balancer is in ``upmap`` mode, which is the default, the automatic
+upmap balancing feature is enabled.  For more details, see :ref:`upmap`.
+To disable the balancer, run the following command:
 
    .. prompt:: bash $
 
@@ -34,6 +34,10 @@ The balancer mode can be changed from ``upmap`` mode to ``crush-compat`` mode.
 ``crush-compat`` mode, the balancer automatically makes small changes to the
 data distribution in order to ensure that OSDs are utilized equally.
 
+Additional modes include ``upmap-read`` and ``read``. ``upmap-read`` mode
+combines the upmap balancer with the read balancer so that both writes
+and reads are optimized. ``read`` mode can be used when only read optimization
+is desired. For more details, see :ref:`read_balancer`.
 
 Throttling
 ----------
@@ -102,7 +106,7 @@ and then run the following command:
 Modes
 -----
 
-There are two supported balancer modes:
+There are four supported balancer modes:
 
 #. **crush-compat**. This mode uses the compat weight-set feature (introduced
    in Luminous) to manage an alternative set of weights for devices in the
@@ -135,12 +139,44 @@ There are two supported balancer modes:
 
    To use ``upmap``, all clients must be Luminous or newer.
 
-The default mode is ``upmap``. The mode can be changed to ``crush-compat`` by
-running the following command:
+#. **read**. In Reef and later releases, the OSDMap can store explicit
+   mappings for individual primary OSDs as exceptions to the normal CRUSH
+   placement calculation. These ``pg-upmap-primary`` entries provide fine-grained
+   control over primary PG mappings. This mode optimizes the placement of individual
+   primary PGs in order to achieve balanced reads, or primary PGs, in a cluster.
+   In ``read`` mode, upmap behavior is not excercised, so this mode is best for
+   uses cases in which only read balancing is desired.
+
+   To use ``pg-upmap-primary``, all clients must be Reef or newer. For more
+   details about client compatibility, see :ref:`read_balancer`.
+
+#. **upmap-read**. This balancer mode combines optimization benefits of
+   both ``upmap`` and ``read`` mode. Like in ``read`` mode, ``upmap-read``
+   makes use of ``pg-upmap-primary``. As such, only Reef and later clients
+   are compatible. For more details about client compatibility, see
+   :ref:`read_balancer`.
+
+   ``upmap-read`` is highly recommended for achieving the ``upmap`` mode's
+   offering of balanced PG distribution as well as the ``read`` mode's
+   offering of balanced reads.
+
+The default mode is ``upmap``. The mode can be changed to ``crush-compat`` by running the following command:
 
    .. prompt:: bash $
 
       ceph balancer mode crush-compat
+
+The mode can be changed to ``read`` by running the following command:
+
+   .. prompt:: bash $
+
+      ceph balancer mode read
+
+The mode can be changed to ``upmap-read`` by running the following command:
+
+   .. prompt:: bash $
+
+      ceph balancer mode upmap-read
 
 Supervised optimization
 -----------------------
@@ -204,6 +240,12 @@ command:
    .. prompt:: bash $
 
       ceph balancer status
+
+To see the status in greater detail, run the following command:
+
+   .. prompt:: bash $
+
+      ceph balancer status detail
 
 To evaluate the distribution that would result from executing a specific plan,
 run the following command:

@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include "include/stringify.h"
+#include "common/async/context_pool.h"
 #include "common/code_environment.h"
 #include "common/ceph_context.h"
 #include "global/global_init.h"
@@ -29,14 +30,13 @@
 #include "rgw_op.h"
 #include "rgw_process_env.h"
 #include "rgw_sal_rados.h"
-
+#include "driver/rados/rgw_zone.h"
+#include "rgw_sal_config.h"
 
 using std::string;
-using std::vector;
 
 using boost::container::flat_set;
 using boost::intrusive_ptr;
-using boost::make_optional;
 using boost::none;
 
 using rgw::auth::Identity;
@@ -94,6 +94,7 @@ using rgw::IAM::iamCreateRole;
 using rgw::IAM::iamDeleteRole;
 using rgw::IAM::iamAll;
 using rgw::IAM::stsAll;
+using rgw::IAM::snsAll;
 using rgw::IAM::allCount;
 
 class FakeIdentity : public Identity {
@@ -642,7 +643,7 @@ TEST_F(PolicyTest, Parse6) {
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
   Action_t act;
-  for (auto i = 0U; i <= stsAll; i++)
+  for (auto i = 0U; i <= snsAll; i++)
     act[i] = 1;
   EXPECT_EQ(p->statements[0].action, act);
   EXPECT_EQ(p->statements[0].notaction, None);
@@ -911,7 +912,9 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   RGWProcessEnv penv;
   // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
   RGWEnv rgw_env;
-  rgw::sal::RadosStore store;
+  ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size); \
+  auto site = rgw::SiteConfig::make_fake();
+  rgw::sal::RadosStore store(context_pool, *site);
   std::unique_ptr<rgw::sal::User> user = store.get_user(rgw_user());
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
@@ -1258,9 +1261,8 @@ TEST(MatchWildcards, Asterisk)
                               "http://example.com/index.html"));
   EXPECT_TRUE(match_wildcards("http://example.com/*/*.jpg",
                               "http://example.com/fun/smiley.jpg"));
-  // note: parsing of * is not greedy, so * does not match 'bc' here
-  EXPECT_FALSE(match_wildcards("a*c", "abcc"));
-  EXPECT_FALSE(match_wildcards("a*c", "abcc", MATCH_CASE_INSENSITIVE));
+  EXPECT_TRUE(match_wildcards("a*c", "abcc"));
+  EXPECT_TRUE(match_wildcards("a*c", "abcc", MATCH_CASE_INSENSITIVE));
 }
 
 TEST(MatchPolicy, Action)

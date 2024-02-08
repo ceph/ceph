@@ -233,6 +233,9 @@ class RGWReadRemoteDataLogShardInfoCR : public RGWCoroutine {
   int shard_id;
   RGWDataChangesLogInfo *shard_info;
 
+  int tries{0};
+  int op_ret{0};
+
 public:
   RGWReadRemoteDataLogShardInfoCR(RGWDataSyncCtx *_sc,
                                   int _shard_id, RGWDataChangesLogInfo *_shard_info) : RGWCoroutine(_sc->cct),
@@ -243,41 +246,48 @@ public:
                                                       shard_info(_shard_info) {
   }
 
-  ~RGWReadRemoteDataLogShardInfoCR() override {
-    if (http_op) {
-      http_op->put();
-    }
-  }
-
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      yield {
-	char buf[16];
-	snprintf(buf, sizeof(buf), "%d", shard_id);
-        rgw_http_param_pair pairs[] = { { "type" , "data" },
-	                                { "id", buf },
-					{ "info" , NULL },
-	                                { NULL, NULL } };
+      static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+      for (tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
+        ldpp_dout(dpp, 20) << "read remote datalog shard info. shard_id=" << shard_id << " retries=" << tries << dendl;
 
-        string p = "/admin/log/";
+        yield {
+          char buf[16];
+          snprintf(buf, sizeof(buf), "%d", shard_id);
+          rgw_http_param_pair pairs[] = { { "type" , "data" },
+                                          { "id", buf },
+                                          { "info" , NULL },
+                                          { NULL, NULL } };
 
-        http_op = new RGWRESTReadResource(sc->conn, p, pairs, NULL, sync_env->http_manager);
+          string p = "/admin/log/";
 
-        init_new_io(http_op);
+          http_op = new RGWRESTReadResource(sc->conn, p, pairs, NULL, sync_env->http_manager);
 
-        int ret = http_op->aio_read(dpp);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "ERROR: failed to read from " << p << dendl;
-          log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
-          return set_cr_error(ret);
+          init_new_io(http_op);
+
+          int ret = http_op->aio_read(dpp);
+          if (ret < 0) {
+            ldpp_dout(dpp, 0) << "ERROR: failed to read from " << p << dendl;
+            log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+            http_op->put();
+            return set_cr_error(ret);
+          }
+
+          return io_block(0);
+        }
+        yield {
+          op_ret = http_op->wait(shard_info, null_yield);
+          http_op->put();
         }
 
-        return io_block(0);
-      }
-      yield {
-        int ret = http_op->wait(shard_info, null_yield);
-        if (ret < 0) {
-          return set_cr_error(ret);
+        if (op_ret < 0) {
+          if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+            ldpp_dout(dpp, 20) << "failed to fetch remote datalog shard info. retry. shard_id=" << shard_id << dendl;
+            continue;
+          } else {
+            return set_cr_error(op_ret);
+          }
         }
         return set_cr_done();
       }
@@ -315,6 +325,9 @@ class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
   read_remote_data_log_response response;
   std::optional<TOPNSPC::common::PerfGuard> timer;
 
+  int tries{0};
+  int op_ret{0};
+
 public:
   RGWReadRemoteDataLogShardCR(RGWDataSyncCtx *_sc, int _shard_id,
                               const std::string& marker, string *pnext_marker,
@@ -324,53 +337,62 @@ public:
       shard_id(_shard_id), marker(marker), pnext_marker(pnext_marker),
       entries(_entries), truncated(_truncated) {
   }
-  ~RGWReadRemoteDataLogShardCR() override {
-    if (http_op) {
-      http_op->put();
-    }
-  }
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
-      yield {
-	char buf[16];
-	snprintf(buf, sizeof(buf), "%d", shard_id);
-        rgw_http_param_pair pairs[] = { { "type" , "data" },
-	                                { "id", buf },
-	                                { "marker", marker.c_str() },
-	                                { "extra-info", "true" },
-	                                { NULL, NULL } };
+      static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+      for (tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
+        ldpp_dout(dpp, 20) << "read remote datalog shard. shard_id=" << shard_id << " retries=" << tries << dendl;
 
-        string p = "/admin/log/";
+        yield {
+          char buf[16];
+          snprintf(buf, sizeof(buf), "%d", shard_id);
+          rgw_http_param_pair pairs[] = { { "type" , "data" },
+                                          { "id", buf },
+                                          { "marker", marker.c_str() },
+                                          { "extra-info", "true" },
+                                          { NULL, NULL } };
 
-        http_op = new RGWRESTReadResource(sc->conn, p, pairs, NULL, sync_env->http_manager);
+          string p = "/admin/log/";
 
-        init_new_io(http_op);
+          http_op = new RGWRESTReadResource(sc->conn, p, pairs, NULL, sync_env->http_manager);
 
-        if (sync_env->counters) {
-          timer.emplace(sync_env->counters, sync_counters::l_poll);
-        }
-        int ret = http_op->aio_read(dpp);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "ERROR: failed to read from " << p << dendl;
-          log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+          init_new_io(http_op);
+
           if (sync_env->counters) {
-            sync_env->counters->inc(sync_counters::l_poll_err);
+            timer.emplace(sync_env->counters, sync_counters::l_poll);
           }
-          return set_cr_error(ret);
+          int ret = http_op->aio_read(dpp);
+          if (ret < 0) {
+            ldpp_dout(dpp, 0) << "ERROR: failed to read from " << p << dendl;
+            log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+            if (sync_env->counters) {
+              sync_env->counters->inc(sync_counters::l_poll_err);
+            }
+            http_op->put();
+            return set_cr_error(ret);
+          }
+
+          return io_block(0);
+        }
+        yield {
+          timer.reset();
+          op_ret = http_op->wait(&response, null_yield);
+          http_op->put();
         }
 
-        return io_block(0);
-      }
-      yield {
-        timer.reset();
-        int ret = http_op->wait(&response, null_yield);
-        if (ret < 0) {
-          if (sync_env->counters && ret != -ENOENT) {
-            sync_env->counters->inc(sync_counters::l_poll_err);
+        if (op_ret < 0) {
+          if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+            ldpp_dout(dpp, 20) << "failed to read remote datalog shard. retry. shard_id=" << shard_id << dendl;
+            continue;
+          } else {
+            if (sync_env->counters && op_ret != -ENOENT) {
+              sync_env->counters->inc(sync_counters::l_poll_err);
+            }
+            return set_cr_error(op_ret);
           }
-          return set_cr_error(ret);
         }
+
         entries->clear();
         entries->swap(response.entries);
         *pnext_marker = response.marker;
@@ -421,6 +443,8 @@ bool RGWReadRemoteDataLogInfoCR::spawn_next() {
 }
 
 class RGWListRemoteDataLogShardCR : public RGWSimpleCoroutine {
+  static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
   RGWRESTReadResource *http_op;
@@ -434,7 +458,7 @@ public:
   RGWListRemoteDataLogShardCR(RGWDataSyncCtx *sc, int _shard_id,
                               const string& _marker, uint32_t _max_entries,
                               rgw_datalog_shard_data *_result)
-    : RGWSimpleCoroutine(sc->cct), sc(sc), sync_env(sc->env), http_op(NULL),
+    : RGWSimpleCoroutine(sc->cct, NUM_ENPOINT_IOERROR_RETRIES), sc(sc), sync_env(sc->env), http_op(NULL),
       shard_id(_shard_id), marker(_marker), max_entries(_max_entries), result(_result) {}
 
   int send_request(const DoutPrefixProvider *dpp) override {
@@ -474,7 +498,7 @@ public:
     int ret = http_op->wait(result, null_yield);
     http_op->put();
     if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to list remote datalog shard, ret=" << ret << dendl;
+      ldpp_dout(sync_env->dpp, 5) << "ERROR: failed to list remote datalog shard, ret=" << ret << dendl;
       return ret;
     }
     return 0;
@@ -716,7 +740,6 @@ int RGWRemoteDataLog::init(const rgw_zone_id& _source_zone, RGWRESTConn *_conn, 
 
 void RGWRemoteDataLog::finish()
 {
-  http_manager.stop();
   stop();
 }
 
@@ -1458,7 +1481,7 @@ public:
         }
         if (complete->timestamp != ceph::real_time{}) {
           tn->log(10, SSTR("writing " << *complete << " to error repo for retry"));
-          yield call(rgw::error_repo::write_cr(sync_env->driver->svc()->rados, error_repo,
+          yield call(rgw::error_repo::write_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
                                               rgw::error_repo::encode_key(complete->bs, complete->gen),
                                               complete->timestamp));
           if (retcode < 0) {
@@ -1466,7 +1489,7 @@ public:
           }
         }
       } else if (complete->retry) {
-        yield call(rgw::error_repo::remove_cr(sync_env->driver->svc()->rados, error_repo,
+        yield call(rgw::error_repo::remove_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
                                               rgw::error_repo::encode_key(complete->bs, complete->gen),
                                               complete->timestamp));
         if (retcode < 0) {
@@ -1530,7 +1553,7 @@ public:
       if (retcode == -ENOENT) {
         // don't retry if bucket instance does not exist
         tn->log(10, SSTR("bucket instance or log layout does not exist on source for bucket " << source_bs.bucket));
-        yield call(rgw::error_repo::remove_cr(sync_env->driver->svc()->rados, error_repo,
+        yield call(rgw::error_repo::remove_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
                                             error_marker, timestamp));
         return set_cr_done();
       } else if (retcode < 0) {
@@ -1545,7 +1568,7 @@ public:
 	  pool = sync_env->svc->zone->get_zone_params().log_pool;
           error_repo = datalog_oid_for_error_repo(sc, sync_env->driver, pool, source_bs);
           tn->log(10, SSTR("writing shard_id " << sid << " of gen " << each->gen << " to error repo for retry"));
-          yield_spawn_window(rgw::error_repo::write_cr(sync_env->driver->svc()->rados, error_repo,
+          yield_spawn_window(rgw::error_repo::write_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
                             rgw::error_repo::encode_key(bs, each->gen),
 			    timestamp), sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window),
                             [&](uint64_t stack_id, int ret) {
@@ -1564,7 +1587,7 @@ public:
                  });
 
       // once everything succeeds, remove the full sync obligation from the error repo
-      yield call(rgw::error_repo::remove_cr(sync_env->driver->svc()->rados, error_repo,
+      yield call(rgw::error_repo::remove_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
                                             error_marker, timestamp));
       return set_cr_done();
     }
@@ -1649,7 +1672,7 @@ public:
       if (retcode < 0) {
         tn->log(10, SSTR("full sync: failed to read remote bucket info. Writing "
                         << source_bs.shard_id << " to error repo for retry"));
-        yield call(rgw::error_repo::write_cr(sync_env->driver->svc()->rados, error_repo,
+        yield call(rgw::error_repo::write_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
                                             rgw::error_repo::encode_key(source_bs, std::nullopt),
                                             timestamp));
         if (retcode < 0) {
@@ -1671,7 +1694,7 @@ public:
           timestamp = timestamp_for_bucket_shard(sync_env->driver, sync_status, source_bs);
           if (retcode < 0) {
             tn->log(10, SSTR("Write " << source_bs.shard_id << " to error repo for retry"));
-            yield_spawn_window(rgw::error_repo::write_cr(sync_env->driver->svc()->rados, error_repo,
+            yield_spawn_window(rgw::error_repo::write_cr(sync_env->driver->getRados()->get_rados_handle(), error_repo,
                 rgw::error_repo::encode_key(source_bs, each->gen),
 		timestamp), sc->lcc.adj_concurrency(cct->_conf->rgw_data_sync_spawn_window), std::nullopt);
           } else {
@@ -2017,7 +2040,7 @@ public:
             }
             if (retcode < 0) {
               tn->log(1, SSTR("failed to parse bucket shard: " << error_marker));
-              spawn(rgw::error_repo::remove_cr(sc->env->driver->svc()->rados,
+              spawn(rgw::error_repo::remove_cr(sc->env->driver->getRados()->get_rados_handle(),
 					       error_repo, error_marker,
 					       entry_timestamp),
 		    false);
@@ -2122,11 +2145,12 @@ public:
 	}
       } while (true);
 
+      drain_all();
+
       if (lost_bid) {
+        yield call(marker_tracker->flush());
         return set_cr_error(-EBUSY);
       } else if (lost_lock) {
-        drain_all();
-        yield marker_tracker->flush();
         return set_cr_error(-ECANCELED);
       }
 
@@ -2675,8 +2699,6 @@ public:
   static int policy_from_attrs(CephContext *cct,
                                const map<string, bufferlist>& attrs,
                                RGWAccessControlPolicy *acl) {
-    acl->set_ctx(cct);
-
     auto aiter = attrs.find(RGW_ATTR_ACL);
     if (aiter == attrs.end()) {
       return -ENOENT;
@@ -2727,8 +2749,8 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(int perm)
 {
   return verify_bucket_permission_no_policy(sync_env->dpp,
                                             &(*ps),
-                                            &info->user_acl,
-                                            &bucket_acl,
+                                            info->user_acl,
+                                            bucket_acl,
                                             perm);
 }
 
@@ -2744,8 +2766,8 @@ bool RGWUserPermHandler::Bucket::verify_object_permission(const map<string, buff
 
   return verify_bucket_permission_no_policy(sync_env->dpp,
                                             &(*ps),
-                                            &bucket_acl,
-                                            &obj_acl,
+                                            bucket_acl,
+                                            obj_acl,
                                             perm);
 }
 
@@ -3515,7 +3537,7 @@ class CheckBucketShardStatusIsIncremental : public RGWReadBucketPipeSyncStatusCo
 
 class CheckAllBucketShardStatusIsIncremental : public RGWShardCollectCR {
   // start with 1 shard, and only spawn more if we detect an existing shard.
-  // this makes the backward compatilibility check far less expensive in the
+  // this makes the backward compatibility check far less expensive in the
   // general case where no shards exist
   static constexpr int initial_concurrent_shards = 1;
   static constexpr int max_concurrent_shards = 16;
@@ -4320,7 +4342,7 @@ public:
    * create index from key -> <op, marker>, and from marker -> key
    * this is useful so that we can insure that we only have one
    * entry for any key that is used. This is needed when doing
-   * incremenatl sync of data, and we don't want to run multiple
+   * incremental sync of data, and we don't want to run multiple
    * concurrent sync operations for the same bucket shard 
    * Also, we should make sure that we don't run concurrent operations on the same key with
    * different ops.
@@ -5160,8 +5182,11 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
       }
       yield {
         // delete the shard status object
-        auto status_obj = sync_env->svc->rados->obj(marker_tracker.get_obj());
-        retcode = status_obj.open(dpp);
+        rgw_rados_ref status_obj;
+        retcode = rgw_get_rados_ref(dpp,
+				    sync_env->driver->getRados()->get_rados_handle(),
+				    marker_tracker.get_obj(),
+				    &status_obj);
         if (retcode < 0) {
           return set_cr_error(retcode);
         }
@@ -5911,7 +5936,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
             return set_cr_error(retcode);
           }
           if (bucket_status.state != BucketSyncState::Stopped) {
-            // make sure that state is changed to stopped localy
+            // make sure that state is changed to stopped locally
             bucket_status.state = BucketSyncState::Stopped;
             yield call(new WriteCR(dpp, env->driver, status_obj, bucket_status,
 				   &objv, false));
@@ -6009,7 +6034,7 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
 	      // use the error repo and sync status timestamp from the datalog shard corresponding to source_bs
               error_repo = datalog_oid_for_error_repo(sc, sc->env->driver,
 			   pool, source_bs);
-              yield call(rgw::error_repo::write_cr(sc->env->driver->svc()->rados, error_repo,
+              yield call(rgw::error_repo::write_cr(sc->env->driver->getRados()->get_rados_handle(), error_repo,
                                               rgw::error_repo::encode_key(source_bs, current_gen),
                                               ceph::real_clock::zero()));
               if (retcode < 0) {
@@ -6068,7 +6093,7 @@ int RGWBucketPipeSyncStatusManager::do_init(const DoutPrefixProvider *dpp,
   }
 
   sync_module.reset(new RGWDefaultSyncModuleInstance());
-  auto async_rados = driver->svc()->rados->get_async_processor();
+  auto async_rados = driver->svc()->async_processor;
 
   sync_env.init(this, driver->ctx(), driver,
                 driver->svc(), async_rados, &http_manager,
@@ -6680,7 +6705,7 @@ int rgw_read_bucket_inc_sync_status(const DoutPrefixProvider *dpp,
 
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
-  env.init(dpp, driver->ctx(), driver, driver->svc(), driver->svc()->rados->get_async_processor(),
+  env.init(dpp, driver->ctx(), driver, driver->svc(), driver->svc()->async_processor,
            nullptr, nullptr, nullptr, module, nullptr);
 
   RGWDataSyncCtx sc;

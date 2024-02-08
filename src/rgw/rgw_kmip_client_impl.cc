@@ -416,6 +416,7 @@ RGWKMIPManagerImpl::add_request(RGWKMIPTransceiver *req)
     return -ECANCELED;
   // requests is a boost::intrusive::list, which manages pointers and does not copy the instance
   // coverity[leaked_storage:SUPPRESS]
+  // coverity[uninit_use_in_call:SUPPRESS]
   requests.push_back(*new Request{*req});
   l.unlock();
   if (worker)
@@ -649,7 +650,7 @@ RGWKmipHandles::do_one_entry(RGWKMIPTransceiver &element)
       KeyBlock *kp = static_cast<SymmetricKey *>(pld->object)->key_block;
       ByteString *bp;
       if (kp->key_format_type != KMIP_KEYFORMAT_RAW) {
-	lderr(cct) << "get: expected raw key fromat got  " << kp->key_format_type << dendl;
+	lderr(cct) << "get: expected raw key format got  " << kp->key_format_type << dendl;
 	element.ret = -EINVAL;
 	goto Done;
       }

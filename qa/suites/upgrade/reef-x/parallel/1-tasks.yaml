@@ -1,0 +1,42 @@
+tasks:
+- install:
+    branch: reef
+    exclude_packages:
+      - ceph-volume
+- print: "**** done install task..."
+- print: "**** done start installing reef cephadm ..."
+- cephadm:
+    image: quay.ceph.io/ceph-ci/ceph:reef
+    compiled_cephadm_branch: reef
+    conf:
+      osd:
+        #set config option for which cls modules are allowed to be loaded / used
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+- print: "**** done end installing reef cephadm ..."
+
+- print: "**** done start cephadm.shell ceph config set mgr..."
+- cephadm.shell:
+    mon.a:
+      - ceph config set mgr mgr/cephadm/use_repo_digest true --force
+- print: "**** done cephadm.shell ceph config set mgr..."
+
+- print: "**** done start telemetry reef..."
+- workunit:
+    clients:
+      client.0:
+        - test_telemetry_reef.sh
+- print: "**** done end telemetry reef..."
+
+- print: "**** done start parallel"
+- parallel:
+    - workload
+    - upgrade-sequence
+- print: "**** done end parallel"
+
+- print: "**** done start telemetry x..."
+- workunit:
+    clients:
+      client.0:
+        - test_telemetry_reef_x.sh
+- print: "**** done end telemetry x..."

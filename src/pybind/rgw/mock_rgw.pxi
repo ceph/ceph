@@ -1,5 +1,10 @@
 # cython: embedsignature=True
 
+# Make the bool type available as libcpp.bool, for both C and C++.
+cimport libcpp
+cdef extern from "<stdbool.h>":
+    pass
+
 cdef nogil:
     ctypedef void* librgw_t
 
@@ -111,8 +116,8 @@ cdef nogil:
 
     int rgw_readdir(rgw_fs *fs,
                     rgw_file_handle *parent_fh, uint64_t *offset,
-                    bint (*cb)(const char *name, void *arg, uint64_t offset, stat *st, uint32_t st_mask, uint32_t flags) nogil except? -9000,
-                    void *cb_arg, bint *eof, uint32_t flags) except? -9000:
+                    libcpp.bool (*cb)(const char *name, void *arg, uint64_t offset, stat *st, uint32_t st_mask, uint32_t flags) nogil except? -9000,
+                    void *cb_arg, libcpp.bool *eof, uint32_t flags) except? -9000:
         pass
 
     int rgw_getattr(rgw_fs *fs,

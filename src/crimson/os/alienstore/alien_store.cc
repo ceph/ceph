@@ -57,10 +57,11 @@ public:
   }
 
   void finish(int) final {
-    return seastar::alien::submit_to(alien, cpuid, [this] {
-      alien_done.set_value();
+    std::ignore = seastar::alien::submit_to(alien, cpuid,
+        [&_alien_done=this->alien_done] {
+      _alien_done.set_value();
       return seastar::make_ready_future<>();
-    }).wait();
+    });
   }
 };
 }
@@ -102,20 +103,13 @@ seastar::future<> AlienStore::start()
   }
   auto cpu_cores = seastar::resource::parse_cpuset(
     get_conf<std::string>("crimson_alien_thread_cpu_cores"));
-  // cores except the first "N_CORES_FOR_SEASTAR" ones will
-  // be used for alien threads scheduling:
-  // 	[0, N_CORES_FOR_SEASTAR) are reserved for seastar reactors
-  // 	[N_CORES_FOR_SEASTAR, ..] are assigned to alien threads.
+  //  crimson_alien_thread_cpu_cores are assigned to alien threads.
   if (!cpu_cores.has_value()) {
-    seastar::resource::cpuset cpuset;
-    std::copy(boost::counting_iterator<unsigned>(N_CORES_FOR_SEASTAR),
-	      boost::counting_iterator<unsigned>(sysconf(_SC_NPROCESSORS_ONLN)),
-	      std::inserter(cpuset, cpuset.end()));
-    if (cpuset.empty()) {
-      logger().error("{}: unable to get nproc: {}", __func__, errno);
-    } else {
-      cpu_cores = cpuset;
-    }
+    // no core isolation by default, seastar_cpu_cores will be
+    // shared between both alien and seastar reactor threads.
+    cpu_cores = seastar::resource::parse_cpuset(
+      get_conf<std::string>("crimson_seastar_cpu_cores"));
+    ceph_assert(cpu_cores.has_value());
   }
   const auto num_threads =
     get_conf<uint64_t>("crimson_alien_op_num_threads");
@@ -202,7 +196,6 @@ AlienStore::list_objects(CollectionRef ch,
   assert(tp);
   return do_with_op_gate(std::vector<ghobject_t>(), ghobject_t(),
                          [=, this] (auto &objects, auto &next) {
-    objects.reserve(limit);
     return tp->submit(ch->get_cid().hash_to_shard(tp->size()),
       [=, this, &objects, &next] {
       auto c = static_cast<AlienCollection*>(ch.get());

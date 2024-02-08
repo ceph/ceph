@@ -1961,19 +1961,19 @@ options:
   see_also:
   - mon_debug_dump_transactions
   with_legacy: true
-- name: mon_debug_no_require_quincy
+- name: mon_debug_no_require_reef
   type: bool
   level: dev
-  desc: do not set quincy feature for new mon clusters
+  desc: do not set reef feature for new mon clusters
   default: false
   services:
   - mon
   flags:
   - cluster_create
-- name: mon_debug_no_require_reef
+- name: mon_debug_no_require_squid
   type: bool
   level: dev
-  desc: do not set reef feature for new mon clusters
+  desc: do not set squid feature for new mon clusters
   default: false
   services:
   - mon
@@ -2234,6 +2234,14 @@ options:
   level: advanced
   default: 3
   with_legacy: true
+- name: mon_client_target_rank
+  type: int
+  level: advanced
+  default: -1
+  min: -1
+  flags:
+  - runtime
+  fmt_desc: automatically target mon rank for client communication
 # try new mon every N seconds until we connect
 - name: mon_client_hunt_interval
   type: float
@@ -2538,6 +2546,18 @@ options:
   level: advanced
   desc: default erasure code profile for new erasure-coded pools
   default: plugin=jerasure technique=reed_sol_van k=2 m=2
+  services:
+  - mon
+  flags:
+  - runtime
+- name: osd_pool_default_read_ratio
+  type: uint
+  level: advanced
+  desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
+  long_desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
+    applicable to replicated pools only. This value is used to improve read balancing
+    when OSDs have different weights.
+  default: 70
   services:
   - mon
   flags:
@@ -2895,9 +2915,19 @@ options:
   default: 5_min
   with_legacy: true
 # report pg stats for any given pg at least this often
-- name: osd_pg_stat_report_interval_max
+- name: osd_pg_stat_report_interval_max_seconds
   type: int
   level: advanced
+  desc: The maximum interval seconds for update pg's reported_epoch,
+        benefit for osdmap trim when osdmap not change frequently.
+  default: 500
+  with_legacy: true
+- name: osd_pg_stat_report_interval_max_epochs
+  type: int
+  level: advanced
+  desc: The maximum interval by which pg's reported_epoch lags behind,
+        otherwise, pg's reported_epoch must be updated,
+        benefit for osdmap trim when osdmap changes frequently.
   default: 500
   with_legacy: true
 # Max number of snap intervals to report to mgr in pg_stat_t
@@ -4867,6 +4897,17 @@ options:
   flags:
   - create
   with_legacy: true
+- name: bluestore_elastic_shared_blobs
+  type: bool
+  level: advanced
+  desc: Let bluestore to reuse existing shared blobs if possible
+  long_desc: Overwrites on snapped objects cause shared blob count to grow.
+    It has a very negative performance effect. When enabled shared blob count
+    is significantly reduced.
+  default: true
+  flags:
+  - create
+  with_legacy: false
 - name: bluestore_allocator
   type: str
   level: advanced
@@ -4878,7 +4919,6 @@ options:
   - stupid
   - avl
   - hybrid
-  - zoned
   with_legacy: true
 - name: bluestore_freelist_blocks_per_key
   type: size
@@ -4913,7 +4953,7 @@ options:
   type: str
   level: advanced
   desc: Full set of rocksdb settings to override
-  default: compression=kNoCompression,max_write_buffer_number=64,min_write_buffer_number_to_merge=6,compaction_style=kCompactionStyleLevel,write_buffer_size=16777216,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0
+  default: compression=kLZ4Compression,max_write_buffer_number=64,min_write_buffer_number_to_merge=6,compaction_style=kCompactionStyleLevel,write_buffer_size=16777216,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0
   with_legacy: true
 - name: bluestore_rocksdb_options_annex
   type: str
@@ -5231,11 +5271,6 @@ options:
   type: float
   level: dev
   default: 0
-  with_legacy: true
-- name: bluestore_debug_inject_bug21040
-  type: bool
-  level: dev
-  default: false
   with_legacy: true
 - name: bluestore_debug_inject_csum_err_probability
   type: float
@@ -6312,7 +6347,6 @@ options:
   - aio
   - spdk
   - pmem
-  - hm_smr
 - name: bluestore_cleaner_sleep_interval
   type: float
   level: advanced
@@ -6343,3 +6377,9 @@ options:
   default: 0
   services:
   - mgr
+- name: objectstore_debug_throw_on_failed_txc
+  type: bool
+  level: dev
+  desc: Enables exception throwing instead of process abort on transaction submission error.
+  default: false
+  with_legacy: false

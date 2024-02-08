@@ -331,7 +331,7 @@ public:
   RGWHandler_REST* get_handler(rgw::sal::Driver* driver,
 			       req_state* const,
                                const rgw::auth::StrategyRegistry& auth_registry,
-                               const std::string& frontend_prefixs) override {
+                               const std::string& frontend_prefixes) override {
     return new RGWHandler_Log(auth_registry);
   }
 };

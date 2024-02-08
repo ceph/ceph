@@ -21,9 +21,9 @@ namespace {
 namespace crimson::osd {
 
 PGAdvanceMap::PGAdvanceMap(
-  ShardServices &shard_services, Ref<PG> pg, epoch_t to,
+  Ref<PG> pg, ShardServices &shard_services, epoch_t to,
   PeeringCtx &&rctx, bool do_init)
-  : shard_services(shard_services), pg(pg), to(to),
+  : pg(pg), shard_services(shard_services), to(to),
     rctx(std::move(rctx)), do_init(do_init)
 {
   logger().debug("{}: created", *this);
@@ -122,8 +122,12 @@ seastar::future<> PGAdvanceMap::start()
 	  return shard_services.send_pg_temp();
 	});
     });
-  }).then([this, ref=std::move(ref)] {
+  }).then([this] {
     logger().debug("{}: complete", *this);
+    return handle.complete();
+  }).finally([this, ref=std::move(ref)] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
   });
 }
 

@@ -1043,6 +1043,8 @@ operations are served from the primary OSD of each PG. For erasure-coded pools,
 however, the speed of read operations can be increased by enabling **fast
 read** (see :ref:`pool-settings`).
 
+.. _rados_ops_primary_affinity:
+
 Primary Affinity
 ----------------
 

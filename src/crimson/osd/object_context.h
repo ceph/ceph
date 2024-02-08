@@ -94,11 +94,13 @@ public:
     ceph_assert(is_head());
     obs = std::move(_obs);
     ssc = std::move(_ssc);
+    fully_loaded = true;
   }
 
   void set_clone_state(ObjectState &&_obs) {
     ceph_assert(!is_head());
     obs = std::move(_obs);
+    fully_loaded = true;
   }
 
   /// pass the provided exception to any waiting consumers of this ObjectContext
@@ -108,6 +110,10 @@ public:
     if (recovery_read_marker) {
       drop_recovery_read();
     }
+  }
+
+  bool is_loaded_and_valid() const {
+    return fully_loaded && !invalidated_by_interval_change;
   }
 
 private:
@@ -124,9 +130,13 @@ private:
     });
   }
 
-  boost::intrusive::list_member_hook<> list_hook;
+  boost::intrusive::list_member_hook<> obc_accessing_hook;
   uint64_t list_link_cnt = 0;
+  bool fully_loaded = false;
+  bool invalidated_by_interval_change = false;
 
+  friend class ObjectContextRegistry;
+  friend class ObjectContextLoader;
 public:
 
   template <typename ListType>
@@ -147,7 +157,7 @@ public:
   using obc_accessing_option_t = boost::intrusive::member_hook<
     ObjectContext,
     boost::intrusive::list_member_hook<>,
-    &ObjectContext::list_hook>;
+    &ObjectContext::obc_accessing_hook>;
 
   template<RWState::State Type, typename InterruptCond = void, typename Func>
   auto with_lock(Func&& func) {
@@ -258,6 +268,12 @@ public:
   void clear_range(const hobject_t &from,
                    const hobject_t &to) {
     obc_lru.clear_range(from, to);
+  }
+
+  void invalidate_on_interval_change() {
+    obc_lru.clear([](auto &obc) {
+      obc.invalidated_by_interval_change = true;
+    });
   }
 
   template <class F>

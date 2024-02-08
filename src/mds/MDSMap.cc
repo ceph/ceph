@@ -239,6 +239,7 @@ void MDSMap::dump_flags_state(Formatter *f) const
     f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY), allows_standby_replay());
     f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION), test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION));
     f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS), test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS));
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_BALANCE_AUTOMATE), test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE));
     f->close_section();
 }
 
@@ -383,6 +384,8 @@ void MDSMap::print_flags(std::ostream& out) const {
     out << " " << flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION);
   if (test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS))
     out << " " << flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
+  if (test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE))
+    out << " " << flag_display.at(CEPH_MDSMAP_BALANCE_AUTOMATE);
 }
 
 void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
@@ -770,7 +773,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(data_pools, bl);
   encode(cas_pool, bl);
 
-  __u16 ev = 17;
+  __u16 ev = 18;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -947,6 +950,9 @@ void MDSMap::decode(bufferlist::const_iterator& p)
 
   if (ev >= 17) {
     decode(max_xattr_size, p);
+  }
+
+  if (ev >= 18) {
     decode(bal_rank_mask, p);
   }
 

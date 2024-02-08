@@ -27,9 +27,6 @@ namespace crimson {
  */
 template <typename PtrType>
 class local_shared_foreign_ptr {
-  using element_type = typename std::pointer_traits<PtrType>::element_type;
-  using pointer = element_type*;
-
   seastar::lw_shared_ptr<seastar::foreign_ptr<PtrType>> ptr;
 
   /// Wraps a pointer object and remembers the current core.
@@ -43,6 +40,9 @@ class local_shared_foreign_ptr {
     seastar::foreign_ptr<T> &&);
 
 public:
+  using element_type = typename std::pointer_traits<PtrType>::element_type;
+  using pointer = element_type*;
+
   /// Constructs a null local_shared_foreign_ptr<>.
   local_shared_foreign_ptr() = default;
 

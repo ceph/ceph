@@ -489,7 +489,7 @@ static int put_bucket_obj(const char *obj_name, char *data, unsigned len) {
   g_test->send_request(string("PUT"), req,
                        read_bucket_object, (void *)data, (size_t)len);
   if (g_test->get_resp_code() != 200U) {
-    cout << "Errror sending object to the bucket, http_code " << g_test->get_resp_code();
+    cout << "Error sending object to the bucket, http_code " << g_test->get_resp_code();
     return -1;
   }
   return 0;
@@ -500,7 +500,7 @@ static int read_bucket_obj(const char *obj_name) {
   req.append(obj_name);
   g_test->send_request(string("GET"), req);
   if (g_test->get_resp_code() != 200U) {
-    cout << "Errror sending object to the bucket, http_code " << g_test->get_resp_code();
+    cout << "Error sending object to the bucket, http_code " << g_test->get_resp_code();
     return -1;
   }
   return 0;
@@ -511,7 +511,7 @@ static int delete_obj(const char *obj_name) {
   req.append(obj_name);
   g_test->send_request(string("DELETE"), req);
   if (g_test->get_resp_code() != 204U) {
-    cout << "Errror deleting object from bucket, http_code " << g_test->get_resp_code();
+    cout << "Error deleting object from bucket, http_code " << g_test->get_resp_code();
     return -1;
   }
   return 0;

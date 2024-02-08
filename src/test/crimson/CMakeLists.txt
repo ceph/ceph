@@ -71,6 +71,13 @@ add_ceph_unittest(unittest-seastar-lru
   --memory 256M --smp 1)
 target_link_libraries(unittest-seastar-lru crimson GTest::Main)
 
+add_executable(unittest-seastar-calc-subsets
+    ${PROJECT_SOURCE_DIR}/src/crimson/osd/object_metadata_helper.cc
+  test_calc_subsets.cc)
+add_ceph_unittest(unittest-seastar-calc-subsets
+  --memory 256M --smp 1)
+target_link_libraries(unittest-seastar-calc-subsets crimson GTest::Main)
+
 add_executable(unittest-fixed-kv-node-layout
   test_fixed_kv_node_layout.cc)
 add_ceph_unittest(unittest-fixed-kv-node-layout)
@@ -103,3 +110,13 @@ target_link_libraries(
   crimson::gtest)
 add_ceph_unittest(unittest-seastar-errorator
   --memory 256M --smp 1)
+
+add_executable(unittest-crimson-scrub
+  test_crimson_scrub.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_machine.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_validator.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
+target_link_libraries(
+  unittest-crimson-scrub
+  crimson-common
+  crimson::gtest)

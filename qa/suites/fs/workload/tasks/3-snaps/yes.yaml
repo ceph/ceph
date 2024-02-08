@@ -15,8 +15,8 @@ tasks:
       - ceph mgr module enable snap_schedule
       - ceph config set mgr mgr/snap_schedule/allow_m_granularity true
       - ceph config set mgr mgr/snap_schedule/dump_on_update true
-      - ceph fs snap-schedule add --fs=cephfs --path=/ --snap_schedule=1M
-      - ceph fs snap-schedule retention add --fs=cephfs --path=/ --retention-spec-or-period=6M3h
+      - ceph fs snap-schedule add --fs=cephfs --path=/ --snap_schedule=1m
+      - ceph fs snap-schedule retention add --fs=cephfs --path=/ --retention-spec-or-period=6m3h
       - ceph fs snap-schedule status --fs=cephfs --path=/
       - ceph fs snap-schedule list --fs=cephfs --path=/ --recursive=true
       - date +%s > START_TIME

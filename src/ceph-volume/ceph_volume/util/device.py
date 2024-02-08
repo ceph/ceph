@@ -121,13 +121,8 @@ class Device(object):
             # check if we are not a device mapper
             if "dm-" not in real_path:
                 self.path = real_path
-        if not sys_info.devices:
-            if self.path:
-                sys_info.devices = disk.get_devices(device=self.path)
-            else:
-                sys_info.devices = disk.get_devices()
-        if sys_info.devices.get(self.path, {}):
-            self.device_nodes = sys_info.devices[self.path]['device_nodes']
+        if not sys_info.devices.get(self.path):
+            sys_info.devices = disk.get_devices()
         self.sys_api = sys_info.devices.get(self.path, {})
         self.partitions = self._get_partitions()
         self.lv_api = None
@@ -143,6 +138,8 @@ class Device(object):
         self._is_lvm_member = None
         self.ceph_device = False
         self._parse()
+        if self.path in sys_info.devices.keys():
+            self.device_nodes = sys_info.devices[self.path]['device_nodes']
         self.lsm_data = self.fetch_lsm(with_lsm)
 
         self.available_lvm, self.rejected_reasons_lvm = self._check_lvm_reject_reasons()
@@ -460,11 +457,11 @@ class Device(object):
     def device_type(self):
         self.load_blkid_api()
         if 'type' in self.sys_api:
-            return self.sys_api['type']
+            return self.sys_api.get('type')
         elif self.disk_api:
-            return self.disk_api['TYPE']
+            return self.disk_api.get('TYPE')
         elif self.blkid_api:
-            return self.blkid_api['TYPE']
+            return self.blkid_api.get('TYPE')
 
     @property
     def is_mpath(self):
@@ -478,9 +475,9 @@ class Device(object):
     def is_partition(self):
         self.load_blkid_api()
         if self.disk_api:
-            return self.disk_api['TYPE'] == 'part'
+            return self.disk_api.get('TYPE') == 'part'
         elif self.blkid_api:
-            return self.blkid_api['TYPE'] == 'part'
+            return self.blkid_api.get('TYPE') == 'part'
         return False
 
     @property
@@ -594,8 +591,8 @@ class Device(object):
 
     def _check_generic_reject_reasons(self):
         reasons = [
-            ('removable', 1, 'removable'),
-            ('ro', 1, 'read-only'),
+            ('id_bus', 'usb', 'id_bus'),
+            ('ro', '1', 'read-only'),
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]

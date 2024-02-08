@@ -17,6 +17,8 @@ extern "C" {
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
 
+#include "common/async/context_pool.h"
+
 #include "common/armor.h"
 #include "common/ceph_json.h"
 #include "common/config.h"
@@ -62,6 +64,7 @@ extern "C" {
 #include "rgw_lua.h"
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"
+#include "rgw_data_access.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -83,7 +86,6 @@ using namespace std;
 
 static rgw::sal::Driver* driver = NULL;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
-
 
 static const DoutPrefixProvider* dpp() {
   struct GlobalPrefix : public DoutPrefixProvider {
@@ -131,371 +133,363 @@ void usage()
 {
   cout << "usage: radosgw-admin <cmd> [options...]" << std::endl;
   cout << "commands:\n";
-  cout << "  user create                create a new user\n" ;
-  cout << "  user modify                modify user\n";
-  cout << "  user info                  get user info\n";
-  cout << "  user rename                rename user\n";
-  cout << "  user rm                    remove user\n";
-  cout << "  user suspend               suspend a user\n";
-  cout << "  user enable                re-enable user after suspension\n";
-  cout << "  user check                 check user info\n";
-  cout << "  user stats                 show user stats as accounted by quota subsystem\n";
-  cout << "  user list                  list users\n";
-  cout << "  caps add                   add user capabilities\n";
-  cout << "  caps rm                    remove user capabilities\n";
-  cout << "  subuser create             create a new subuser\n" ;
-  cout << "  subuser modify             modify subuser\n";
-  cout << "  subuser rm                 remove subuser\n";
-  cout << "  key create                 create access key\n";
-  cout << "  key rm                     remove access key\n";
-  cout << "  bucket list                list buckets (specify --allow-unordered for\n";
-  cout << "                             faster, unsorted listing)\n";
-  cout << "  bucket limit check         show bucket sharding stats\n";
-  cout << "  bucket link                link bucket to specified user\n";
-  cout << "  bucket unlink              unlink bucket from specified user\n";
-  cout << "  bucket stats               returns bucket statistics\n";
-  cout << "  bucket rm                  remove bucket\n";
-  cout << "  bucket check               check bucket index\n";
-  cout << "  bucket chown               link bucket to specified user and update its object ACLs\n";
-  cout << "  bucket reshard             reshard bucket\n";
-  cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
-  cout << "  bucket sync checkpoint     poll a bucket's sync status until it catches up to its remote\n";
-  cout << "  bucket sync disable        disable bucket sync\n";
-  cout << "  bucket sync enable         enable bucket sync\n";
-  cout << "  bucket radoslist           list rados objects backing bucket's objects\n";
-  cout << "  bi get                     retrieve bucket index object entries\n";
-  cout << "  bi put                     store bucket index object entries\n";
-  cout << "  bi list                    list raw bucket index entries\n";
-  cout << "  bi purge                   purge bucket index entries\n";
-  cout << "  object rm                  remove object\n";
-  cout << "  object put                 put object\n";
-  cout << "  object stat                stat an object for its metadata\n";
-  cout << "  object unlink              unlink object from bucket index\n";
-  cout << "  object rewrite             rewrite the specified object\n";
-  cout << "  object reindex             reindex the object(s) indicated by --bucket and either --object or --objects-file\n";
-  cout << "  objects expire             run expired objects cleanup\n";
-  cout << "  objects expire-stale list  list stale expired objects (caused by reshard)\n";
-  cout << "  objects expire-stale rm    remove stale expired objects\n";
-  cout << "  period rm                  remove a period\n";
-  cout << "  period get                 get period info\n";
-  cout << "  period get-current         get current period info\n";
-  cout << "  period pull                pull a period\n";
-  cout << "  period push                push a period\n";
-  cout << "  period list                list all periods\n";
-  cout << "  period update              update the staging period\n";
-  cout << "  period commit              commit the staging period\n";
-  cout << "  quota set                  set quota params\n";
-  cout << "  quota enable               enable quota\n";
-  cout << "  quota disable              disable quota\n";
-  cout << "  ratelimit get              get ratelimit params\n";
-  cout << "  ratelimit set              set ratelimit params\n";
-  cout << "  ratelimit enable           enable ratelimit\n";
-  cout << "  ratelimit disable          disable ratelimit\n";
-  cout << "  global quota get           view global quota params\n";
-  cout << "  global quota set           set global quota params\n";
-  cout << "  global quota enable        enable a global quota\n";
-  cout << "  global quota disable       disable a global quota\n";
-  cout << "  global ratelimit get       view global ratelimit params\n";
-  cout << "  global ratelimit set       set global ratelimit params\n";
-  cout << "  global ratelimit enable    enable a ratelimit quota\n";
-  cout << "  global ratelimit disable   disable a ratelimit quota\n";
-  cout << "  realm create               create a new realm\n";
-  cout << "  realm rm                   remove a realm\n";
-  cout << "  realm get                  show realm info\n";
-  cout << "  realm get-default          get default realm name\n";
-  cout << "  realm list                 list realms\n";
-  cout << "  realm list-periods         list all realm periods\n";
-  cout << "  realm rename               rename a realm\n";
-  cout << "  realm set                  set realm info (requires infile)\n";
-  cout << "  realm default              set realm as default\n";
-  cout << "  realm pull                 pull a realm and its current period\n";
-  cout << "  zonegroup add              add a zone to a zonegroup\n";
-  cout << "  zonegroup create           create a new zone group info\n";
-  cout << "  zonegroup default          set default zone group\n";
-  cout << "  zonegroup delete           delete a zone group info\n";
-  cout << "  zonegroup get              show zone group info\n";
-  cout << "  zonegroup modify           modify an existing zonegroup\n";
-  cout << "  zonegroup set              set zone group info (requires infile)\n";
-  cout << "  zonegroup rm               remove a zone from a zonegroup\n";
-  cout << "  zonegroup rename           rename a zone group\n";
-  cout << "  zonegroup list             list all zone groups set on this cluster\n";
-  cout << "  zonegroup placement list   list zonegroup's placement targets\n";
-  cout << "  zonegroup placement get    get a placement target of a specific zonegroup\n";
-  cout << "  zonegroup placement add    add a placement target id to a zonegroup\n";
-  cout << "  zonegroup placement modify modify a placement target of a specific zonegroup\n";
-  cout << "  zonegroup placement rm     remove a placement target from a zonegroup\n";
-  cout << "  zonegroup placement default  set a zonegroup's default placement target\n";
-  cout << "  zone create                create a new zone\n";
-  cout << "  zone rm                    remove a zone\n";
-  cout << "  zone get                   show zone cluster params\n";
-  cout << "  zone modify                modify an existing zone\n";
-  cout << "  zone set                   set zone cluster params (requires infile)\n";
-  cout << "  zone list                  list all zones set on this cluster\n";
-  cout << "  zone rename                rename a zone\n";
-  cout << "  zone placement list        list zone's placement targets\n";
-  cout << "  zone placement get         get a zone placement target\n";
-  cout << "  zone placement add         add a zone placement target\n";
-  cout << "  zone placement modify      modify a zone placement target\n";
-  cout << "  zone placement rm          remove a zone placement target\n";
-  cout << "  metadata sync status       get metadata sync status\n";
-  cout << "  metadata sync init         init metadata sync\n";
-  cout << "  metadata sync run          run metadata sync\n";
-  cout << "  data sync status           get data sync status of the specified source zone\n";
-  cout << "  data sync init             init data sync for the specified source zone\n";
-  cout << "  data sync run              run data sync for the specified source zone\n";
-  cout << "  pool add                   add an existing pool for data placement\n";
-  cout << "  pool rm                    remove an existing pool from data placement set\n";
-  cout << "  pools list                 list placement active set\n";
-  cout << "  policy                     read bucket/object policy\n";
-  cout << "  log list                   list log objects\n";
-  cout << "  log show                   dump a log from specific object or (bucket + date\n";
-  cout << "                             + bucket-id)\n";
-  cout << "                             (NOTE: required to specify formatting of date\n";
-  cout << "                             to \"YYYY-MM-DD-hh\")\n";
-  cout << "  log rm                     remove log object\n";
-  cout << "  usage show                 show usage (by user, by bucket, date range)\n";
-  cout << "  usage trim                 trim usage (by user, by bucket, date range)\n";
-  cout << "  usage clear                reset all the usage stats for the cluster\n";
-  cout << "  gc list                    dump expired garbage collection objects (specify\n";
-  cout << "                             --include-all to list all entries, including unexpired)\n";
-  cout << "  gc process                 manually process garbage (specify\n";
-  cout << "                             --include-all to process all entries, including unexpired)\n";
-  cout << "  lc list                    list all bucket lifecycle progress\n";
-  cout << "  lc get                     get a lifecycle bucket configuration\n";
-  cout << "  lc process                 manually process lifecycle\n";
-  cout << "  lc reshard fix             fix LC for a resharded bucket\n";
-  cout << "  metadata get               get metadata info\n";
-  cout << "  metadata put               put metadata info\n";
-  cout << "  metadata rm                remove metadata info\n";
-  cout << "  metadata list              list metadata info\n";
-  cout << "  mdlog list                 list metadata log\n";
-  cout << "  mdlog autotrim             auto trim metadata log\n";
-  cout << "  mdlog trim                 trim metadata log (use marker)\n";
-  cout << "  mdlog status               read metadata log status\n";
-  cout << "  bilog list                 list bucket index log\n";
-  cout << "  bilog trim                 trim bucket index log (use start-marker, end-marker)\n";
-  cout << "  bilog status               read bucket index log status\n";
-  cout << "  bilog autotrim             auto trim bucket index log\n";
-  cout << "  datalog list               list data log\n";
-  cout << "  datalog trim               trim data log\n";
-  cout << "  datalog status             read data log status\n";
-  cout << "  datalog type               change datalog type to --log_type={fifo,omap}\n";
-  cout << "  orphans find               deprecated -- init and run search for leaked rados objects (use job-id, pool)\n";
-  cout << "  orphans finish             deprecated -- clean up search for leaked rados objects\n";
-  cout << "  orphans list-jobs          deprecated -- list the current job-ids for orphans search\n";
-  cout << "                           * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool\n";
-  cout << "  role create                create a AWS role for use with STS\n";
-  cout << "  role delete                remove a role\n";
-  cout << "  role get                   get a role\n";
-  cout << "  role list                  list roles with specified path prefix\n";
-  cout << "  role-trust-policy modify   modify the assume role policy of an existing role\n";
-  cout << "  role-policy put            add/update permission policy to role\n";
-  cout << "  role-policy list           list policies attached to a role\n";
-  cout << "  role-policy get            get the specified inline policy document embedded with the given role\n";
-  cout << "  role-policy delete         remove policy attached to a role\n";
-  cout << "  role update                update max_session_duration of a role\n";
-  cout << "  reshard add                schedule a resharding of a bucket\n";
-  cout << "  reshard list               list all bucket resharding or scheduled to be resharded\n";
-  cout << "  reshard status             read bucket resharding status\n";
-  cout << "  reshard process            process of scheduled reshard jobs\n";
-  cout << "  reshard cancel             cancel resharding a bucket\n";
-  cout << "  reshard stale-instances list list stale-instances from bucket resharding\n";
+  cout << "  user create                      create a new user\n" ;
+  cout << "  user modify                      modify user\n";
+  cout << "  user info                        get user info\n";
+  cout << "  user rename                      rename user\n";
+  cout << "  user rm                          remove user\n";
+  cout << "  user suspend                     suspend a user\n";
+  cout << "  user enable                      re-enable user after suspension\n";
+  cout << "  user check                       check user info\n";
+  cout << "  user stats                       show user stats as accounted by quota subsystem\n";
+  cout << "  user list                        list users\n";
+  cout << "  caps add                         add user capabilities\n";
+  cout << "  caps rm                          remove user capabilities\n";
+  cout << "  subuser create                   create a new subuser\n" ;
+  cout << "  subuser modify                   modify subuser\n";
+  cout << "  subuser rm                       remove subuser\n";
+  cout << "  key create                       create access key\n";
+  cout << "  key rm                           remove access key\n";
+  cout << "  bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)\n";
+  cout << "  bucket limit check               show bucket sharding stats\n";
+  cout << "  bucket link                      link bucket to specified user\n";
+  cout << "  bucket unlink                    unlink bucket from specified user\n";
+  cout << "  bucket stats                     returns bucket statistics\n";
+  cout << "  bucket rm                        remove bucket\n";
+  cout << "  bucket check                     check bucket index by verifying size and object count stats\n";
+  cout << "  bucket check olh                 check for olh index entries and objects that are pending removal\n";
+  cout << "  bucket check unlinked            check for object versions that are not visible in a bucket listing \n";
+  cout << "  bucket chown                     link bucket to specified user and update its object ACLs\n";
+  cout << "  bucket reshard                   reshard bucket\n";
+  cout << "  bucket rewrite                   rewrite all objects in the specified bucket\n";
+  cout << "  bucket sync checkpoint           poll a bucket's sync status until it catches up to its remote\n";
+  cout << "  bucket sync disable              disable bucket sync\n";
+  cout << "  bucket sync enable               enable bucket sync\n";
+  cout << "  bucket radoslist                 list rados objects backing bucket's objects\n";
+  cout << "  bi get                           retrieve bucket index object entries\n";
+  cout << "  bi put                           store bucket index object entries\n";
+  cout << "  bi list                          list raw bucket index entries\n";
+  cout << "  bi purge                         purge bucket index entries\n";
+  cout << "  object rm                        remove object\n";
+  cout << "  object put                       put object\n";
+  cout << "  object stat                      stat an object for its metadata\n";
+  cout << "  object unlink                    unlink object from bucket index\n";
+  cout << "  object rewrite                   rewrite the specified object\n";
+  cout << "  object reindex                   reindex the object(s) indicated by --bucket and either --object or --objects-file\n";
+  cout << "  objects expire                   run expired objects cleanup\n";
+  cout << "  objects expire-stale list        list stale expired objects (caused by reshard)\n";
+  cout << "  objects expire-stale rm          remove stale expired objects\n";
+  cout << "  period rm                        remove a period\n";
+  cout << "  period get                       get period info\n";
+  cout << "  period get-current               get current period info\n";
+  cout << "  period pull                      pull a period\n";
+  cout << "  period push                      push a period\n";
+  cout << "  period list                      list all periods\n";
+  cout << "  period update                    update the staging period\n";
+  cout << "  period commit                    commit the staging period\n";
+  cout << "  quota set                        set quota params\n";
+  cout << "  quota enable                     enable quota\n";
+  cout << "  quota disable                    disable quota\n";
+  cout << "  ratelimit get                    get ratelimit params\n";
+  cout << "  ratelimit set                    set ratelimit params\n";
+  cout << "  ratelimit enable                 enable ratelimit\n";
+  cout << "  ratelimit disable                disable ratelimit\n";
+  cout << "  global quota get                 view global quota params\n";
+  cout << "  global quota set                 set global quota params\n";
+  cout << "  global quota enable              enable a global quota\n";
+  cout << "  global quota disable             disable a global quota\n";
+  cout << "  global ratelimit get             view global ratelimit params\n";
+  cout << "  global ratelimit set             set global ratelimit params\n";
+  cout << "  global ratelimit enable          enable a ratelimit quota\n";
+  cout << "  global ratelimit disable         disable a ratelimit quota\n";
+  cout << "  realm create                     create a new realm\n";
+  cout << "  realm rm                         remove a realm\n";
+  cout << "  realm get                        show realm info\n";
+  cout << "  realm get-default                get default realm name\n";
+  cout << "  realm list                       list realms\n";
+  cout << "  realm list-periods               list all realm periods\n";
+  cout << "  realm rename                     rename a realm\n";
+  cout << "  realm set                        set realm info (requires infile)\n";
+  cout << "  realm default                    set realm as default\n";
+  cout << "  realm pull                       pull a realm and its current period\n";
+  cout << "  zonegroup add                    add a zone to a zonegroup\n";
+  cout << "  zonegroup create                 create a new zone group info\n";
+  cout << "  zonegroup default                set default zone group\n";
+  cout << "  zonegroup delete                 delete a zone group info\n";
+  cout << "  zonegroup get                    show zone group info\n";
+  cout << "  zonegroup modify                 modify an existing zonegroup\n";
+  cout << "  zonegroup set                    set zone group info (requires infile)\n";
+  cout << "  zonegroup rm                     remove a zone from a zonegroup\n";
+  cout << "  zonegroup rename                 rename a zone group\n";
+  cout << "  zonegroup list                   list all zone groups set on this cluster\n";
+  cout << "  zonegroup placement list         list zonegroup's placement targets\n";
+  cout << "  zonegroup placement get          get a placement target of a specific zonegroup\n";
+  cout << "  zonegroup placement add          add a placement target id to a zonegroup\n";
+  cout << "  zonegroup placement modify       modify a placement target of a specific zonegroup\n";
+  cout << "  zonegroup placement rm           remove a placement target from a zonegroup\n";
+  cout << "  zonegroup placement default      set a zonegroup's default placement target\n";
+  cout << "  zone create                      create a new zone\n";
+  cout << "  zone rm                          remove a zone\n";
+  cout << "  zone get                         show zone cluster params\n";
+  cout << "  zone modify                      modify an existing zone\n";
+  cout << "  zone set                         set zone cluster params (requires infile)\n";
+  cout << "  zone list                        list all zones set on this cluster\n";
+  cout << "  zone rename                      rename a zone\n";
+  cout << "  zone placement list              list zone's placement targets\n";
+  cout << "  zone placement get               get a zone placement target\n";
+  cout << "  zone placement add               add a zone placement target\n";
+  cout << "  zone placement modify            modify a zone placement target\n";
+  cout << "  zone placement rm                remove a zone placement target\n";
+  cout << "  metadata sync status             get metadata sync status\n";
+  cout << "  metadata sync init               init metadata sync\n";
+  cout << "  metadata sync run                run metadata sync\n";
+  cout << "  data sync status                 get data sync status of the specified source zone\n";
+  cout << "  data sync init                   init data sync for the specified source zone\n";
+  cout << "  data sync run                    run data sync for the specified source zone\n";
+  cout << "  pool add                         add an existing pool for data placement\n";
+  cout << "  pool rm                          remove an existing pool from data placement set\n";
+  cout << "  pools list                       list placement active set\n";
+  cout << "  policy                           read bucket/object policy\n";
+  cout << "  log list                         list log objects\n";
+  cout << "  log show                         dump a log from specific object or (bucket + date + bucket-id)\n";
+  cout << "                                   (NOTE: required to specify formatting of date to \"YYYY-MM-DD-hh\")\n";
+  cout << "  log rm                           remove log object\n";
+  cout << "  usage show                       show usage (by user, by bucket, date range)\n";
+  cout << "  usage trim                       trim usage (by user, by bucket, date range)\n";
+  cout << "  usage clear                      reset all the usage stats for the cluster\n";
+  cout << "  gc list                          dump expired garbage collection objects (specify\n";
+  cout << "                                   --include-all to list all entries, including unexpired)\n";
+  cout << "  gc process                       manually process garbage (specify\n";
+  cout << "                                   --include-all to process all entries, including unexpired)\n";
+  cout << "  lc list                          list all bucket lifecycle progress\n";
+  cout << "  lc get                           get a lifecycle bucket configuration\n";
+  cout << "  lc process                       manually process lifecycle\n";
+  cout << "  lc reshard fix                   fix LC for a resharded bucket\n";
+  cout << "  metadata get                     get metadata info\n";
+  cout << "  metadata put                     put metadata info\n";
+  cout << "  metadata rm                      remove metadata info\n";
+  cout << "  metadata list                    list metadata info\n";
+  cout << "  mdlog list                       list metadata log\n";
+  cout << "  mdlog autotrim                   auto trim metadata log\n";
+  cout << "  mdlog trim                       trim metadata log (use marker)\n";
+  cout << "  mdlog status                     read metadata log status\n";
+  cout << "  bilog list                       list bucket index log\n";
+  cout << "  bilog trim                       trim bucket index log (use start-marker, end-marker)\n";
+  cout << "  bilog status                     read bucket index log status\n";
+  cout << "  bilog autotrim                   auto trim bucket index log\n";
+  cout << "  datalog list                     list data log\n";
+  cout << "  datalog trim                     trim data log\n";
+  cout << "  datalog status                   read data log status\n";
+  cout << "  datalog type                     change datalog type to --log_type={fifo,omap}\n";
+  cout << "  orphans find                     deprecated -- init and run search for leaked rados objects (use job-id, pool)\n";
+  cout << "  orphans finish                   deprecated -- clean up search for leaked rados objects\n";
+  cout << "  orphans list-jobs                deprecated -- list the current job-ids for orphans search\n";
+  cout << "    * the three 'orphans' sub-commands are now deprecated; consider using the `rgw-orphan-list` tool\n";
+  cout << "  role create                      create a AWS role for use with STS\n";
+  cout << "  role delete                      remove a role\n";
+  cout << "  role get                         get a role\n";
+  cout << "  role list                        list roles with specified path prefix\n";
+  cout << "  role-trust-policy modify         modify the assume role policy of an existing role\n";
+  cout << "  role-policy put                  add/update permission policy to role\n";
+  cout << "  role-policy list                 list policies attached to a role\n";
+  cout << "  role-policy get                  get the specified inline policy document embedded with the given role\n";
+  cout << "  role-policy delete               remove policy attached to a role\n";
+  cout << "  role update                      update max_session_duration of a role\n";
+  cout << "  reshard add                      schedule a resharding of a bucket\n";
+  cout << "  reshard list                     list all bucket resharding or scheduled to be resharded\n";
+  cout << "  reshard status                   read bucket resharding status\n";
+  cout << "  reshard process                  process of scheduled reshard jobs\n";
+  cout << "  reshard cancel                   cancel resharding a bucket\n";
+  cout << "  reshard stale-instances list     list stale-instances from bucket resharding\n";
   cout << "  reshard stale-instances delete   cleanup stale-instances from bucket resharding\n";
-  cout << "  sync error list            list sync error\n";
-  cout << "  sync error trim            trim sync error\n";
-  cout << "  mfa create                 create a new MFA TOTP token\n";
-  cout << "  mfa list                   list MFA TOTP tokens\n";
-  cout << "  mfa get                    show MFA TOTP token\n";
-  cout << "  mfa remove                 delete MFA TOTP token\n";
-  cout << "  mfa check                  check MFA TOTP token\n";
-  cout << "  mfa resync                 re-sync MFA TOTP token\n";
-  cout << "  topic list                 list bucket notifications topics\n";
-  cout << "  topic get                  get a bucket notifications topic\n";
-  cout << "  topic rm                   remove a bucket notifications topic\n";
-  cout << "  script put                 upload a lua script to a context\n";
-  cout << "  script get                 get the lua script of a context\n";
-  cout << "  script rm                  remove the lua scripts of a context\n";
-  cout << "  script-package add         add a lua package to the scripts allowlist\n";
-  cout << "  script-package rm          remove a lua package from the scripts allowlist\n";
-  cout << "  script-package list        get the lua packages allowlist\n";
-  cout << "  notification list          list bucket notifications configuration\n";
-  cout << "  notification get           get a bucket notifications configuration\n";
-  cout << "  notification rm            remove a bucket notifications configuration\n";
+  cout << "  sync error list                  list sync error\n";
+  cout << "  sync error trim                  trim sync error\n";
+  cout << "  mfa create                       create a new MFA TOTP token\n";
+  cout << "  mfa list                         list MFA TOTP tokens\n";
+  cout << "  mfa get                          show MFA TOTP token\n";
+  cout << "  mfa remove                       delete MFA TOTP token\n";
+  cout << "  mfa check                        check MFA TOTP token\n";
+  cout << "  mfa resync                       re-sync MFA TOTP token\n";
+  cout << "  topic list                       list bucket notifications topics\n";
+  cout << "  topic get                        get a bucket notifications topic\n";
+  cout << "  topic rm                         remove a bucket notifications topic\n";
+  cout << "  topic stats                      get a bucket notifications persistent topic stats (i.e. reservations, entries & size)\n";
+  cout << "  script put                       upload a Lua script to a context\n";
+  cout << "  script get                       get the Lua script of a context\n";
+  cout << "  script rm                        remove the Lua scripts of a context\n";
+  cout << "  script-package add               add a Lua package to the scripts allowlist\n";
+  cout << "  script-package rm                remove a Lua package from the scripts allowlist\n";
+  cout << "  script-package list              get the Lua packages allowlist\n";
+  cout << "  script-package reload            install/remove Lua packages according to allowlist\n";
+  cout << "  notification list                list bucket notifications configuration\n";
+  cout << "  notification get                 get a bucket notifications configuration\n";
+  cout << "  notification rm                  remove a bucket notifications configuration\n";
   cout << "options:\n";
-  cout << "   --tenant=<tenant>         tenant name\n";
-  cout << "   --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)\n";
-  cout << "   --uid=<id>                user id\n";
-  cout << "   --new-uid=<id>            new user id\n";
-  cout << "   --subuser=<name>          subuser name\n";
-  cout << "   --access-key=<key>        S3 access key\n";
-  cout << "   --email=<email>           user's email address\n";
-  cout << "   --secret/--secret-key=<key>\n";
-  cout << "                             specify secret key\n";
-  cout << "   --gen-access-key          generate random access key (for S3)\n";
-  cout << "   --gen-secret              generate random secret key\n";
-  cout << "   --key-type=<type>         key type, options are: swift, s3\n";
-  cout << "   --temp-url-key[-2]=<key>  temp url key\n";
-  cout << "   --access=<access>         Set access permissions for sub-user, should be one\n";
-  cout << "                             of read, write, readwrite, full\n";
-  cout << "   --display-name=<name>     user's display name\n";
-  cout << "   --max-buckets             max number of buckets for a user\n";
-  cout << "   --admin                   set the admin flag on the user\n";
-  cout << "   --system                  set the system flag on the user\n";
-  cout << "   --op-mask                 set the op mask on the user\n";
-  cout << "   --bucket=<bucket>         Specify the bucket name. Also used by the quota command.\n";
-  cout << "   --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.\n";
-  cout << "   --object=<object>         object name\n";
-  cout << "   --objects-file=<file>     file containing a list of object names to process\n";
-  cout << "   --object-version=<version>         object version\n";
-  cout << "   --date=<date>             date in the format yyyy-mm-dd\n";
-  cout << "   --start-date=<date>       start date in the format yyyy-mm-dd\n";
-  cout << "   --end-date=<date>         end date in the format yyyy-mm-dd\n";
-  cout << "   --bucket-id=<bucket-id>   bucket id\n";
-  cout << "   --bucket-new-name=<bucket>\n";
-  cout << "                             for bucket link: optional new name\n";
-  cout << "   --shard-id=<shard-id>     optional for: \n";
-  cout << "                               mdlog list\n";
-  cout << "                               data sync status\n";
-  cout << "                             required for: \n";
-  cout << "                               mdlog trim\n";
-  cout << "   --gen=<gen-id>            optional for: \n";
-  cout << "                               bilog list\n";
-  cout << "                               bilog trim\n";
-  cout << "                               bilog status\n";
-  cout << "   --max-entries=<entries>   max entries for listing operations\n";
-  cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
-  cout << "   --remote=<remote>         zone or zonegroup id of remote gateway\n";
-  cout << "   --period=<id>             period id\n";
-  cout << "   --url=<url>               url for pushing/pulling period/realm\n";
-  cout << "   --epoch=<number>          period epoch\n";
-  cout << "   --commit                  commit the period during 'period update'\n";
-  cout << "   --staging                 get staging period info\n";
-  cout << "   --master                  set as master\n";
-  cout << "   --master-zone=<id>        master zone id\n";
-  cout << "   --rgw-realm=<name>        realm name\n";
-  cout << "   --realm-id=<id>           realm id\n";
-  cout << "   --realm-new-name=<name>   realm new name\n";
-  cout << "   --rgw-zonegroup=<name>    zonegroup name\n";
-  cout << "   --zonegroup-id=<id>       zonegroup id\n";
-  cout << "   --zonegroup-new-name=<name>\n";
-  cout << "                             zonegroup new name\n";
-  cout << "   --rgw-zone=<name>         name of zone in which radosgw is running\n";
-  cout << "   --zone-id=<id>            zone id\n";
-  cout << "   --zone-new-name=<name>    zone new name\n";
-  cout << "   --source-zone             specify the source zone (for data sync)\n";
-  cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
-  cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
-  cout << "   --redirect-zone           specify zone id to redirect when response is 404 (not found)\n";
-  cout << "   --placement-id            placement id for zonegroup placement commands\n";
-  cout << "   --storage-class           storage class for zonegroup placement commands\n";
-  cout << "   --tags=<list>             list of tags for zonegroup placement add and modify commands\n";
-  cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
-  cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
-  cout << "   --endpoints=<list>        zone endpoints\n";
-  cout << "   --index-pool=<pool>       placement target index pool\n";
-  cout << "   --data-pool=<pool>        placement target data pool\n";
-  cout << "   --data-extra-pool=<pool>  placement target data extra (non-ec) pool\n";
-  cout << "   --placement-index-type=<type>\n";
-  cout << "                             placement target index type (normal, indexless, or #id)\n";
-  cout << "   --placement-inline-data=<true>\n";
-  cout << "                             set whether the placement target is configured to store a data\n";
-  cout << "                             chunk inline in head objects\n";
-  cout << "   --compression=<type>      placement target compression type (plugin name or empty/none)\n";
-  cout << "   --tier-type=<type>        zone tier type\n";
-  cout << "   --tier-config=<k>=<v>[,...]\n";
-  cout << "                             set zone tier config keys, values\n";
-  cout << "   --tier-config-rm=<k>[,...]\n";
-  cout << "                             unset zone tier config keys\n";
-  cout << "   --sync-from-all[=false]   set/reset whether zone syncs from all zonegroup peers\n";
-  cout << "   --sync-from=[zone-name][,...]\n";
-  cout << "                             set list of zones to sync from\n";
-  cout << "   --sync-from-rm=[zone-name][,...]\n";
-  cout << "                             remove zones from list of zones to sync from\n";
-  cout << "   --bucket-index-max-shards override a zone/zonegroup's default bucket index shard count\n";
-  cout << "   --fix                     besides checking bucket index, will also fix it\n";
-  cout << "   --check-objects           bucket check: rebuilds bucket index according to\n";
-  cout << "                             actual objects state\n";
-  cout << "   --format=<format>         specify output format for certain operations: xml,\n";
-  cout << "                             json\n";
-  cout << "   --purge-data              when specified, user removal will also purge all the\n";
-  cout << "                             user data\n";
-  cout << "   --purge-keys              when specified, subuser removal will also purge all the\n";
-  cout << "                             subuser keys\n";
-  cout << "   --purge-objects           remove a bucket's objects before deleting it\n";
-  cout << "                             (NOTE: required to delete a non-empty bucket)\n";
-  cout << "   --sync-stats              option to 'user stats', update user stats with current\n";
-  cout << "                             stats reported by user's buckets indexes\n";
-  cout << "   --reset-stats             option to 'user stats', reset stats in accordance with user buckets\n";
-  cout << "   --show-config             show configuration\n";
-  cout << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
-  cout << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
-  cout << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
-  cout << "                             in one of the numeric field\n";
-  cout << "   --infile=<file>           file to read in when setting data\n";
-  cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
-  cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\")\n";
-  cout << "   --op-mask=<op-mask>       permission of user's operations (e.g., \"read, write, delete, *\")\n";
-  cout << "   --yes-i-really-mean-it    required for certain operations\n";
-  cout << "   --warnings-only           when specified with bucket limit check, list\n";
-  cout << "                             only buckets nearing or over the current max\n";
-  cout << "                             objects per shard value\n";
-  cout << "   --bypass-gc               when specified with bucket deletion, triggers\n";
-  cout << "                             object deletions by not involving GC\n";
-  cout << "   --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,\n";
-  cout << "                             ignores bucket index consistency\n";
-  cout << "   --min-rewrite-size        min object size for bucket rewrite (default 4M)\n";
-  cout << "   --max-rewrite-size        max object size for bucket rewrite (default ULLONG_MAX)\n";
-  cout << "   --min-rewrite-stripe-size min stripe size for object rewrite (default 0)\n";
-  cout << "   --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,\n";
-  cout << "                             the trimming process will sleep the specified msec for every 1000 entries trimmed\n";
-  cout << "   --max-concurrent-ios      maximum concurrent ios for bucket operations (default: 32)\n";
-  cout << "   --enable-feature          enable a zone/zonegroup feature\n";
-  cout << "   --disable-feature         disable a zone/zonegroup feature\n";
+  cout << "   --tenant=<tenant>                 tenant name\n";
+  cout << "   --user_ns=<namespace>             namespace of user (oidc in case of users authenticated with oidc provider)\n";
+  cout << "   --uid=<id>                        user id\n";
+  cout << "   --new-uid=<id>                    new user id\n";
+  cout << "   --subuser=<name>                  subuser name\n";
+  cout << "   --access-key=<key>                S3 access key\n";
+  cout << "   --email=<email>                   user's email address\n";
+  cout << "   --secret/--secret-key=<key>       specify secret key\n";
+  cout << "   --gen-access-key                  generate random access key (for S3)\n";
+  cout << "   --gen-secret                      generate random secret key\n";
+  cout << "   --key-type=<type>                 key type, options are: swift, s3\n";
+  cout << "   --temp-url-key[-2]=<key>          temp url key\n";
+  cout << "   --access=<access>                 Set access permissions for sub-user, should be one\n";
+  cout << "                                     of read, write, readwrite, full\n";
+  cout << "   --display-name=<name>             user's display name\n";
+  cout << "   --max-buckets                     max number of buckets for a user\n";
+  cout << "   --admin                           set the admin flag on the user\n";
+  cout << "   --system                          set the system flag on the user\n";
+  cout << "   --op-mask                         set the op mask on the user\n";
+  cout << "   --bucket=<bucket>                 Specify the bucket name. Also used by the quota command.\n";
+  cout << "   --pool=<pool>                     Specify the pool name. Also used to scan for leaked rados objects.\n";
+  cout << "   --object=<object>                 object name\n";
+  cout << "   --objects-file=<file>             file containing a list of object names to process\n";
+  cout << "   --object-version=<version>        object version\n";
+  cout << "   --date=<date>                     date in the format yyyy-mm-dd\n";
+  cout << "   --start-date=<date>               start date in the format yyyy-mm-dd\n";
+  cout << "   --end-date=<date>                 end date in the format yyyy-mm-dd\n";
+  cout << "   --bucket-id=<bucket-id>           bucket id\n";
+  cout << "   --bucket-new-name=<bucket>        for bucket link: optional new name\n";
+  cout << "   --shard-id=<shard-id>             optional for:\n";
+  cout << "                                       mdlog list\n";
+  cout << "                                       data sync status\n";
+  cout << "                                     required for:\n";
+  cout << "                                       mdlog trim\n";
+  cout << "   --gen=<gen-id>                    optional for:\n";
+  cout << "                                       bilog list\n";
+  cout << "                                       bilog trim\n";
+  cout << "                                       bilog status\n";
+  cout << "   --max-entries=<entries>           max entries for listing operations\n";
+  cout << "   --metadata-key=<key>              key to retrieve metadata from with metadata get\n";
+  cout << "   --remote=<remote>                 zone or zonegroup id of remote gateway\n";
+  cout << "   --period=<id>                     period id\n";
+  cout << "   --url=<url>                       url for pushing/pulling period/realm\n";
+  cout << "   --epoch=<number>                  period epoch\n";
+  cout << "   --commit                          commit the period during 'period update'\n";
+  cout << "   --staging                         get staging period info\n";
+  cout << "   --master                          set as master\n";
+  cout << "   --master-zone=<id>                master zone id\n";
+  cout << "   --rgw-realm=<name>                realm name\n";
+  cout << "   --realm-id=<id>                   realm id\n";
+  cout << "   --realm-new-name=<name>           realm new name\n";
+  cout << "   --rgw-zonegroup=<name>            zonegroup name\n";
+  cout << "   --zonegroup-id=<id>               zonegroup id\n";
+  cout << "   --zonegroup-new-name=<name>       zonegroup new name\n";
+  cout << "   --rgw-zone=<name>                 name of zone in which radosgw is running\n";
+  cout << "   --zone-id=<id>                    zone id\n";
+  cout << "   --zone-new-name=<name>            zone new name\n";
+  cout << "   --source-zone                     specify the source zone (for data sync)\n";
+  cout << "   --default                         set entity (realm, zonegroup, zone) as default\n";
+  cout << "   --read-only                       set zone as read-only (when adding to zonegroup)\n";
+  cout << "   --redirect-zone                   specify zone id to redirect when response is 404 (not found)\n";
+  cout << "   --placement-id                    placement id for zonegroup placement commands\n";
+  cout << "   --storage-class                   storage class for zonegroup placement commands\n";
+  cout << "   --tags=<list>                     list of tags for zonegroup placement add and modify commands\n";
+  cout << "   --tags-add=<list>                 list of tags to add for zonegroup placement modify command\n";
+  cout << "   --tags-rm=<list>                  list of tags to remove for zonegroup placement modify command\n";
+  cout << "   --endpoints=<list>                zone endpoints\n";
+  cout << "   --index-pool=<pool>               placement target index pool\n";
+  cout << "   --data-pool=<pool>                placement target data pool\n";
+  cout << "   --data-extra-pool=<pool>          placement target data extra (non-ec) pool\n";
+  cout << "   --placement-index-type=<type>     placement target index type (normal, indexless, or #id)\n";
+  cout << "   --placement-inline-data=<true>    set whether the placement target is configured to store a data\n";
+  cout << "                                     chunk inline in head objects\n";
+  cout << "   --compression=<type>              placement target compression type (plugin name or empty/none)\n";
+  cout << "   --tier-type=<type>                zone tier type\n";
+  cout << "   --tier-config=<k>=<v>[,...]       set zone tier config keys, values\n";
+  cout << "   --tier-config-rm=<k>[,...]        unset zone tier config keys\n";
+  cout << "   --sync-from-all[=false]           set/reset whether zone syncs from all zonegroup peers\n";
+  cout << "   --sync-from=[zone-name][,...]     set list of zones to sync from\n";
+  cout << "   --sync-from-rm=[zone-name][,...]  remove zones from list of zones to sync from\n";
+  cout << "   --bucket-index-max-shards         override a zone/zonegroup's default bucket index shard count\n";
+  cout << "   --fix                             besides checking bucket index, will also fix it\n";
+  cout << "   --check-objects                   bucket check: rebuilds bucket index according to actual objects state\n";
+  cout << "   --format=<format>                 specify output format for certain operations: xml, json\n";
+  cout << "   --purge-data                      when specified, user removal will also purge all the\n";
+  cout << "                                     user data\n";
+  cout << "   --purge-keys                      when specified, subuser removal will also purge all the\n";
+  cout << "                                     subuser keys\n";
+  cout << "   --purge-objects                   remove a bucket's objects before deleting it\n";
+  cout << "                                     (NOTE: required to delete a non-empty bucket)\n";
+  cout << "   --sync-stats                      option to 'user stats', update user stats with current\n";
+  cout << "                                     stats reported by user's buckets indexes\n";
+  cout << "   --reset-stats                     option to 'user stats', reset stats in accordance with user buckets\n";
+  cout << "   --show-config                     show configuration\n";
+  cout << "   --show-log-entries=<flag>         enable/disable dump of log entries on log show\n";
+  cout << "   --show-log-sum=<flag>             enable/disable dump of log summation on log show\n";
+  cout << "   --skip-zero-entries               log show only dumps entries that don't have zero value\n";
+  cout << "                                     in one of the numeric field\n";
+  cout << "   --infile=<file>                   file to read in when setting data\n";
+  cout << "   --categories=<list>               comma separated list of categories, used in usage show\n";
+  cout << "   --caps=<caps>                     list of caps (e.g., \"usage=read, write; user=read\")\n";
+  cout << "   --op-mask=<op-mask>               permission of user's operations (e.g., \"read, write, delete, *\")\n";
+  cout << "   --yes-i-really-mean-it            required for certain operations\n";
+  cout << "   --warnings-only                   when specified with bucket limit check, list\n";
+  cout << "                                     only buckets nearing or over the current max\n";
+  cout << "                                     objects per shard value\n";
+  cout << "   --bypass-gc                       when specified with bucket deletion, triggers\n";
+  cout << "                                     object deletions by not involving GC\n";
+  cout << "   --inconsistent-index              when specified with bucket deletion and bypass-gc set to true,\n";
+  cout << "                                     ignores bucket index consistency\n";
+  cout << "   --min-rewrite-size                min object size for bucket rewrite (default 4M)\n";
+  cout << "   --max-rewrite-size                max object size for bucket rewrite (default ULLONG_MAX)\n";
+  cout << "   --min-rewrite-stripe-size         min stripe size for object rewrite (default 0)\n";
+  cout << "   --trim-delay-ms                   time interval in msec to limit the frequency of sync error log entries trimming operations,\n";
+  cout << "                                     the trimming process will sleep the specified msec for every 1000 entries trimmed\n";
+  cout << "   --max-concurrent-ios              maximum concurrent ios for bucket operations (default: 32)\n";
+  cout << "   --enable-feature                  enable a zone/zonegroup feature\n";
+  cout << "   --disable-feature                 disable a zone/zonegroup feature\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
-  cout << "   --max-objects             specify max objects (negative value to disable)\n";
-  cout << "   --max-size                specify max size (in B/K/M/G/T, negative value to disable)\n";
-  cout << "   --quota-scope             scope of quota (bucket, user)\n";
+  cout << "   --max-objects                 specify max objects (negative value to disable)\n";
+  cout << "   --max-size                    specify max size (in B/K/M/G/T, negative value to disable)\n";
+  cout << "   --quota-scope                 scope of quota (bucket, user)\n";
   cout << "\nRate limiting options:\n";
-  cout << "   --max-read-ops            specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
-  cout << "   --max-read-bytes          specify max bytes per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
-  cout << "   --max-write-ops           specify max requests per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
-  cout << "   --max-write-bytes         specify max bytes per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
-  cout << "   --ratelimit-scope         scope of rate limiting: bucket, user, anonymous\n";
-  cout << "                             anonymous can be configured only with global rate limit\n";
+  cout << "   --max-read-ops                specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-read-bytes              specify max bytes per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-write-ops               specify max requests per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-write-bytes             specify max bytes per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
+  cout << "   --ratelimit-scope             scope of rate limiting: bucket, user, anonymous\n";
+  cout << "                                 anonymous can be configured only with global rate limit\n";
   cout << "\nOrphans search options:\n";
-  cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
-  cout << "   --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
-  cout << "   --job-id                  set the job id (for orphans find)\n";
-  cout << "   --detail                  detailed mode, log and stat head objects as well\n";
+  cout << "   --num-shards                  num of shards to use for keeping the temporary scan info\n";
+  cout << "   --orphan-stale-secs           num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
+  cout << "   --job-id                      set the job id (for orphans find)\n";
+  cout << "   --detail                      detailed mode, log and stat head objects as well\n";
   cout << "\nOrphans list-jobs options:\n";
-  cout << "   --extra-info              provide extra info in job list\n";
+  cout << "   --extra-info                  provide extra info in job list\n";
   cout << "\nRole options:\n";
-  cout << "   --role-name               name of the role to create\n";
-  cout << "   --path                    path to the role\n";
-  cout << "   --assume-role-policy-doc  the trust relationship policy document that grants an entity permission to assume the role\n";
-  cout << "   --policy-name             name of the policy document\n";
-  cout << "   --policy-doc              permission policy document\n";
-  cout << "   --path-prefix             path prefix for filtering roles\n";
+  cout << "   --role-name                   name of the role to create\n";
+  cout << "   --path                        path to the role\n";
+  cout << "   --assume-role-policy-doc      the trust relationship policy document that grants an entity permission to assume the role\n";
+  cout << "   --policy-name                 name of the policy document\n";
+  cout << "   --policy-doc                  permission policy document\n";
+  cout << "   --path-prefix                 path prefix for filtering roles\n";
   cout << "\nMFA options:\n";
-  cout << "   --totp-serial             a string that represents the ID of a TOTP token\n";
-  cout << "   --totp-seed               the secret seed that is used to calculate the TOTP\n";
-  cout << "   --totp-seconds            the time resolution that is being used for TOTP generation\n";
-  cout << "   --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token\n";
-  cout << "   --totp-pin                the valid value of a TOTP token at a certain time\n";
+  cout << "   --totp-serial                 a string that represents the ID of a TOTP token\n";
+  cout << "   --totp-seed                   the secret seed that is used to calculate the TOTP\n";
+  cout << "   --totp-seconds                the time resolution that is being used for TOTP generation\n";
+  cout << "   --totp-window                 the number of TOTP tokens that are checked before and after the current token when validating token\n";
+  cout << "   --totp-pin                    the valid value of a TOTP token at a certain time\n";
   cout << "\nBucket notifications options:\n";
-  cout << "   --topic                   bucket notifications topic name\n";
-  cout << "   --notification-id         bucket notifications id\n";
+  cout << "   --topic                       bucket notifications topic name\n";
+  cout << "   --notification-id             bucket notifications id\n";
   cout << "\nScript options:\n";
-  cout << "   --context                 context in which the script runs. one of: "+LUA_CONTEXT_LIST+"\n";
-  cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
-  cout << "   --allow-compilation       package is allowed to compile C code as part of its installation\n";
+  cout << "   --context                     context in which the script runs. one of: "+LUA_CONTEXT_LIST+"\n";
+  cout << "   --package                     name of the Lua package that should be added/removed to/from the allowlist\n";
+  cout << "   --allow-compilation           package is allowed to compile C code as part of its installation\n";
+  cout << "\nBucket check olh/unlinked options:\n";
+  cout << "   --min-age-hours               minimum age of unlinked objects to consider for bucket check unlinked (default: 1)\n";
+  cout << "   --dump-keys                   when specified, all keys identified as problematic are printed to stdout\n";
+  cout << "   --hide-progress               when specified, per-shard progress details are not printed to stderr\n";
   cout << "\nradoslist options:\n";
-  cout << "   --rgw-obj-fs              the field separator that will separate the rados\n";
-  cout << "                             object name from the rgw object name;\n";
-  cout << "                             additionally rados objects for incomplete\n";
-  cout << "                             multipart uploads will not be output\n";
+  cout << "   --rgw-obj-fs                  the field separator that will separate the rados object name from the rgw object name;\n";
+  cout << "                                 additionally rados objects for incomplete multipart uploads will not be output\n";
   cout << "\n";
   generic_client_usage();
 }
@@ -659,6 +653,8 @@ enum class OPT {
   BUCKET_LAYOUT,
   BUCKET_STATS,
   BUCKET_CHECK,
+  BUCKET_CHECK_OLH,
+  BUCKET_CHECK_UNLINKED,
   BUCKET_SYNC_CHECKPOINT,
   BUCKET_SYNC_INFO,
   BUCKET_SYNC_STATUS,
@@ -676,9 +672,6 @@ enum class OPT {
   BUCKET_OBJECT_SHARD,
   BUCKET_RESYNC_ENCRYPTED_MULTIPART,
   POLICY,
-  POOL_ADD,
-  POOL_RM,
-  POOLS_LIST,
   LOG_LIST,
   LOG_SHOW,
   LOG_RM,
@@ -847,7 +840,8 @@ enum class OPT {
   SCRIPT_RM,
   SCRIPT_PACKAGE_ADD,
   SCRIPT_PACKAGE_RM,
-  SCRIPT_PACKAGE_LIST
+  SCRIPT_PACKAGE_LIST,
+  SCRIPT_PACKAGE_RELOAD
 };
 
 }
@@ -878,6 +872,8 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket layout", OPT::BUCKET_LAYOUT },
   { "bucket stats", OPT::BUCKET_STATS },
   { "bucket check", OPT::BUCKET_CHECK },
+  { "bucket check olh", OPT::BUCKET_CHECK_OLH },
+  { "bucket check unlinked", OPT::BUCKET_CHECK_UNLINKED },
   { "bucket sync checkpoint", OPT::BUCKET_SYNC_CHECKPOINT },
   { "bucket sync info", OPT::BUCKET_SYNC_INFO },
   { "bucket sync status", OPT::BUCKET_SYNC_STATUS },
@@ -897,10 +893,6 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
   { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
   { "policy", OPT::POLICY },
-  { "pool add", OPT::POOL_ADD },
-  { "pool rm", OPT::POOL_RM },
-  { "pool list", OPT::POOLS_LIST },
-  { "pools list", OPT::POOLS_LIST },
   { "log list", OPT::LOG_LIST },
   { "log show", OPT::LOG_SHOW },
   { "log rm", OPT::LOG_RM },
@@ -1084,6 +1076,7 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
+  { "script-package reload", OPT::SCRIPT_PACKAGE_RELOAD },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -1182,20 +1175,19 @@ public:
   }
 };
 
-static int init_bucket(rgw::sal::User* user, const rgw_bucket& b,
+static int init_bucket(const rgw_bucket& b,
                        std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
-  return driver->get_bucket(dpp(), user, b, bucket, null_yield);
+  return driver->load_bucket(dpp(), b, bucket, null_yield);
 }
 
-static int init_bucket(rgw::sal::User* user,
-		       const string& tenant_name,
+static int init_bucket(const string& tenant_name,
 		       const string& bucket_name,
 		       const string& bucket_id,
                        std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
   rgw_bucket b{tenant_name, bucket_name, bucket_id};
-  return init_bucket(user, b, bucket);
+  return init_bucket(b, bucket);
 }
 
 static int read_input(const string& infile, bufferlist& bl)
@@ -1400,7 +1392,8 @@ int set_bucket_quota(rgw::sal::Driver* driver, OPT opt_cmd,
                      bool have_max_size, bool have_max_objects)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->get_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
+  int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
+                              &bucket, null_yield);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1424,7 +1417,8 @@ int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
                      bool have_max_read_bytes, bool have_max_write_bytes)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->get_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
+  int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
+                              &bucket, null_yield);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1527,7 +1521,8 @@ int show_bucket_ratelimit(rgw::sal::Driver* driver, const string& tenant_name,
                           const string& bucket_name, Formatter *formatter)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->get_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
+  int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
+                              &bucket, null_yield);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1711,7 +1706,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   f->open_object_section("bucket");
   f->dump_string("bucket", bucket_name);
-  int ret = init_bucket(nullptr, tenant_name, bucket_name, bucket_id, &bucket);
+  int ret = init_bucket(tenant_name, bucket_name, bucket_id, &bucket);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -2028,12 +2023,11 @@ static int update_period(rgw::sal::ConfigStore* cfgstore,
   return 0;
 }
 
-static int init_bucket_for_sync(rgw::sal::User* user,
-				const string& tenant, const string& bucket_name,
+static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
                                 const string& bucket_id,
 				std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
-  int ret = init_bucket(user, tenant, bucket_name, bucket_id, bucket);
+  int ret = init_bucket(tenant, bucket_name, bucket_id, bucket);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -2106,7 +2100,7 @@ stringstream& push_ss(stringstream& ss, list<string>& l, int tab = 0)
 
 static void get_md_sync_status(list<string>& status)
 {
-  RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados->get_async_processor());
+  RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
   int ret = sync.init(dpp());
   if (ret < 0) {
@@ -2262,7 +2256,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
     flush_ss(ss, status);
     return;
   }
-  RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados->get_async_processor(), source_zone, nullptr);
+  RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, source_zone, nullptr);
 
   int ret = sync.init(dpp());
   if (ret < 0) {
@@ -2394,7 +2388,7 @@ static void get_data_sync_status(const rgw_zone_id& source_zone, list<string>& s
     push_ss(ss, status, tab) << "data is caught up with source";
   } else if (total_behind > 0) {
     push_ss(ss, status, tab) << "data is behind on " << total_behind << " shards";
-    push_ss(ss, status, tab) << "behind shards: " << "[" << shards_behind_set << "]" ;
+    push_ss(ss, status, tab) << "behind shards: " << "[" << shards_behind_set << "]";
     if (oldest) {
       push_ss(ss, status, tab) << "oldest incremental change not applied: "
           << oldest->second << " [" << oldest->first << ']';
@@ -2509,7 +2503,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   }
 
   std::unique_ptr<rgw::sal::Bucket> source_bucket;
-  int r = init_bucket(nullptr, *pipe.source.bucket, &source_bucket);
+  int r = init_bucket(*pipe.source.bucket, &source_bucket);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to read source bucket info: " << cpp_strerror(r) << dendl;
     return r;
@@ -2603,7 +2597,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   }
   if (!shards_behind.empty()) {
     out << indented{width} << "bucket is behind on " << shards_behind.size() << " shards\n";
-    out << indented{width} << "behind shards: [" << shards_behind << "]\n" ;
+    out << indented{width} << "behind shards: [" << shards_behind << "]\n";
   } else {
     out << indented{width} << "bucket is caught up with source\n";
   }
@@ -2638,7 +2632,7 @@ static void get_hint_entities(const std::set<rgw_zone_id>& zones, const std::set
   for (auto& zone_id : zones) {
     for (auto& b : buckets) {
       std::unique_ptr<rgw::sal::Bucket> hint_bucket;
-      int ret = init_bucket(nullptr, b, &hint_bucket);
+      int ret = init_bucket(b, &hint_bucket);
       if (ret < 0) {
 	ldpp_dout(dpp(), 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
 	continue;
@@ -2681,7 +2675,7 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
   if (eff_bucket) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
 
-    int ret = init_bucket(nullptr, *eff_bucket, &bucket);
+    int ret = init_bucket(*eff_bucket, &bucket);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: init_bucket failed: " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -2878,11 +2872,11 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
 
   for (auto& zone_id : zone_ids) {
     auto z = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup().zones.find(zone_id.id);
-    if (z == static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup().zones.end()) { /* should't happen */
+    if (z == static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zonegroup().zones.end()) { /* shouldn't happen */
       continue;
     }
     auto c = zone_conn_map.find(zone_id.id);
-    if (c == zone_conn_map.end()) { /* should't happen */
+    if (c == zone_conn_map.end()) { /* shouldn't happen */
       continue;
     }
 
@@ -2985,10 +2979,18 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
     return -EINVAL;
   }
 
-  int ret = init_bucket(nullptr, tenant, bucket_name, bucket_id, bucket);
+  int ret = init_bucket(tenant, bucket_name, bucket_id, bucket);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return ret;
+  }
+
+  if (! is_layout_reshardable((*bucket)->get_info().layout)) {
+    std::cerr << "Bucket '" << (*bucket)->get_name() <<
+      "' currently has layout '" <<
+      current_layout_desc((*bucket)->get_info().layout) <<
+      "', which does not support resharding." << std::endl;
+    return -EINVAL;
   }
 
   int num_source_shards = rgw::current_num_shards((*bucket)->get_info().layout);
@@ -3017,19 +3019,20 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
   uint32_t max_skew = MAX_TOTP_SKEW_HOURS * 3600;
 
   while (time_ofs_abs < max_skew) {
+    // coverity supression: oath_totp_validate2 is an external library function, cannot fix internally
+    // Further, step_size is a small number and unlikely to overflow
     int rc = oath_totp_validate2(totp.seed_bin.c_str(), totp.seed_bin.length(),
                              start_time, 
+                             // coverity[store_truncates_time_t:SUPPRESS]
                              step_size,
                              time_ofs,
                              1,
                              nullptr,
                              pins[0].c_str());
     if (rc != OATH_INVALID_OTP) {
-      // oath_totp_validate2 is an external library function, cannot fix internally
-      // Further, step_size is a small number and unlikely to overflow
-      // coverity[store_truncates_time_t:SUPPRESS]
       rc = oath_totp_validate2(totp.seed_bin.c_str(), totp.seed_bin.length(),
                                start_time, 
+                               // coverity[store_truncates_time_t:SUPPRESS]
                                step_size,
                                time_ofs - step_size, /* smaller time_ofs moves time forward */
                                1,
@@ -3159,7 +3162,7 @@ public:
       return 0;
     }
 
-    ret = init_bucket(nullptr, *b, &bucket);
+    ret = init_bucket(*b, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -3290,6 +3293,9 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
   }
 }
 
+// This has an uncaught exception. Even if the exception is caught, the program
+// would need to be terminated, so the warning is simply suppressed.
+// coverity[root_function:SUPPRESS]
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);
@@ -3304,6 +3310,7 @@ int main(int argc, const char **argv)
 
   auto cct = rgw_global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			     CODE_ENVIRONMENT_UTILITY, 0);
+  ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
@@ -3447,6 +3454,9 @@ int main(int argc, const char **argv)
   std::optional<int> bucket_index_max_shards;
 
   int max_concurrent_ios = 32;
+  ceph::timespan min_age = std::chrono::hours(1);
+  bool hide_progress = false;
+  bool dump_keys = false;
   uint64_t orphan_stale_secs = (24 * 3600);
   int detail = false;
 
@@ -3711,6 +3721,8 @@ int main(int argc, const char **argv)
         cerr << "ERROR: failed to parse max concurrent ios: " << err << std::endl;
         return EINVAL;
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-age-hours", (char*)NULL)) {
+      min_age = std::chrono::hours(atoi(val.c_str()));
     } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*)NULL)) {
       orphan_stale_secs = (uint64_t)strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -3793,6 +3805,10 @@ int main(int argc, const char **argv)
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, NULL, "--inconsistent-index", (char*)NULL)) {
      // do nothing
+    } else if (ceph_argparse_flag(args, i, "--hide-progress", (char*)NULL)) {
+      hide_progress = true;
+    } else if (ceph_argparse_flag(args, i, "--dump-keys", (char*)NULL)) {
+      dump_keys = true;
     } else if (ceph_argparse_binary_flag(args, i, &placement_inline_data, NULL, "--placement-inline-data", (char*)NULL)) {
       placement_inline_data_specified = true;
      // do nothing
@@ -4113,6 +4129,11 @@ int main(int argc, const char **argv)
     // not a raw op if 'period pull' needs to read zone/period configuration
     bool raw_period_pull = opt_cmd == OPT::PERIOD_PULL && !url.empty();
 
+    // Before a period commit or pull, our zonegroup may not be in the
+    // period, causing `load_period_zonegroup` to fail.
+    bool localzonegroup_op = ((opt_cmd == OPT::PERIOD_UPDATE && commit) ||
+			      (opt_cmd == OPT::PERIOD_PULL && url.empty()));
+
     std::set<OPT> raw_storage_ops_list = {OPT::ZONEGROUP_ADD, OPT::ZONEGROUP_CREATE,
 			 OPT::ZONEGROUP_DELETE,
 			 OPT::ZONEGROUP_GET, OPT::ZONEGROUP_LIST,
@@ -4241,14 +4262,25 @@ int main(int argc, const char **argv)
       return EIO;
     }
 
+    std::unique_ptr<rgw::SiteConfig> site;
+
     if (raw_storage_op) {
-      driver = DriverManager::get_raw_storage(dpp(),
-					    g_ceph_context,
-					    cfg);
+      site = rgw::SiteConfig::make_fake();
+      driver = DriverManager::get_raw_storage(dpp(), g_ceph_context,
+					      cfg, context_pool, *site);
     } else {
+      site = std::make_unique<rgw::SiteConfig>();
+      auto r = site->load(dpp(), null_yield, cfgstore.get(), localzonegroup_op);
+      if (r < 0) {
+	std::cerr << "Unable to initialize site config." << std::endl;
+	exit(1);
+      }
+
       driver = DriverManager::get_storage(dpp(),
 					g_ceph_context,
 					cfg,
+					context_pool,
+					*site,
 					false,
 					false,
 					false,
@@ -6450,6 +6482,9 @@ int main(int argc, const char **argv)
   bucket_op.set_delete_children(delete_child_objects);
   bucket_op.set_fix_index(fix);
   bucket_op.set_max_aio(max_concurrent_ios);
+  bucket_op.set_min_age(min_age);
+  bucket_op.set_dump_keys(dump_keys);
+  bucket_op.set_hide_progress(hide_progress);
 
   // required to gather errors from operations
   std::string err_msg;
@@ -6677,7 +6712,8 @@ int main(int argc, const char **argv)
         cerr << "failed to parse policy: " << e.what() << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, path, assume_role_doc);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, path,
+                                                                 assume_role_doc, max_session_duration);
       ret = role->create(dpp(), true, "", null_yield);
       if (ret < 0) {
         return -ret;
@@ -6887,11 +6923,11 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
+      role->update_max_session_duration(max_session_duration);
       if (!role->validate_max_session_duration(dpp())) {
         ret = -EINVAL;
         return ret;
       }
-      role->update_max_session_duration(max_session_duration);
       ret = role->update(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6982,9 +7018,10 @@ int main(int argc, const char **argv)
           return -ENOENT;
         }
       }
+      bucket_op.marker = marker;
       RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     } else {
-      int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+      int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -7077,7 +7114,7 @@ int main(int argc, const char **argv)
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -7191,7 +7228,7 @@ int main(int argc, const char **argv)
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -7376,47 +7413,6 @@ next:
     }
   }
 
-  if (opt_cmd == OPT::POOL_ADD) {
-    if (pool_name.empty()) {
-      cerr << "need to specify pool to add!" << std::endl;
-      exit(1);
-    }
-
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->add_bucket_placement(dpp(), pool, null_yield);
-    if (ret < 0)
-      cerr << "failed to add bucket placement: " << cpp_strerror(-ret) << std::endl;
-  }
-
-  if (opt_cmd == OPT::POOL_RM) {
-    if (pool_name.empty()) {
-      cerr << "need to specify pool to remove!" << std::endl;
-      exit(1);
-    }
-
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->remove_bucket_placement(dpp(), pool, null_yield);
-    if (ret < 0)
-      cerr << "failed to remove bucket placement: " << cpp_strerror(-ret) << std::endl;
-  }
-
-  if (opt_cmd == OPT::POOLS_LIST) {
-    set<rgw_pool> pools;
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->list_placement_set(dpp(), pools, null_yield);
-    if (ret < 0) {
-      cerr << "could not list placement set: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    formatter->reset();
-    formatter->open_array_section("pools");
-    for (auto siter = pools.begin(); siter != pools.end(); ++siter) {
-      formatter->open_object_section("pool");
-      formatter->dump_string("name",  siter->to_str());
-      formatter->close_section();
-    }
-    formatter->close_section();
-    formatter->flush(cout);
-    cout << std::endl;
-  }
-
   if (opt_cmd == OPT::USAGE_SHOW) {
     uint64_t start_epoch = 0;
     uint64_t end_epoch = (uint64_t)-1;
@@ -7440,7 +7436,7 @@ next:
 
 
     if (!bucket_name.empty()) {
-      int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+      int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
       if (ret < 0) {
 	cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
 	return -ret;
@@ -7484,7 +7480,7 @@ next:
     }
 
     if (!bucket_name.empty()) {
-      int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+      int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
       if (ret < 0) {
 	cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
 	return -ret;
@@ -7523,7 +7519,7 @@ next:
   }
 
   if (opt_cmd == OPT::OLH_GET) {
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7540,7 +7536,7 @@ next:
   }
 
   if (opt_cmd == OPT::OLH_READLOG) {
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7578,7 +7574,7 @@ next:
       cerr << "ERROR: object not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7604,7 +7600,7 @@ next:
       cerr << "ERROR: bucket name not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7632,9 +7628,10 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      ldpp_dout(dpp(), 0) << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<
+	dendl;
       return -ret;
     }
 
@@ -7654,22 +7651,22 @@ next:
     int i = (specified_shard_id ? shard_id : 0);
     for (; i < max_shards; i++) {
       ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": starting shard=" << i << dendl;
+      marker.clear();
 
       RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(driver)->getRados());
       int ret = bs.init(dpp(), bucket->get_info(), index, i, null_yield);
-      marker.clear();
-
       if (ret < 0) {
-        cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << i << "): " << cpp_strerror(-ret) << std::endl;
+	ldpp_dout(dpp(), 0) << "ERROR: bs.init(bucket=" << bucket << ", shard=" << i <<
+	  "): " << cpp_strerror(-ret) << dendl;
         return -ret;
       }
 
       do {
         entries.clear();
-	// if object is specified, we use that as a filter to only retrieve some some entries
+	// if object is specified, we use that as a filter to only retrieve some entries
         ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bi_list(bs, object, marker, max_entries, &entries, &is_truncated, null_yield);
         if (ret < 0) {
-          cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
+          ldpp_dout(dpp(), 0) << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
           return -ret;
         }
 	ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
@@ -7701,14 +7698,14 @@ next:
       cerr << "ERROR: bucket name not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
     std::unique_ptr<rgw::sal::Bucket> cur_bucket;
-    ret = init_bucket(user.get(), tenant, bucket_name, string(), &cur_bucket);
+    ret = init_bucket(tenant, bucket_name, string(), &cur_bucket);
     if (ret == -ENOENT) {
       // no bucket entrypoint
     } else if (ret < 0) {
@@ -7786,7 +7783,7 @@ next:
   }
 
   if (opt_cmd == OPT::OBJECT_RM) {
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7810,7 +7807,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7853,7 +7850,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<
 	"." << std::endl;
@@ -7946,7 +7943,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8077,7 +8074,8 @@ next:
           "have the resharding feature enabled." << std::endl;
       return ENOTSUP;
     }
-    if (!RGWBucketReshard::can_reshard(bucket->get_info(), zone_svc) &&
+
+    if (!RGWBucketReshard::should_zone_reshard_now(bucket->get_info(), zone_svc) &&
         !yes_i_really_mean_it) {
       std::cerr << "Bucket '" << bucket->get_name() << "' already has too many "
           "log generations (" << bucket->get_info().layout.logs.size() << ") "
@@ -8187,7 +8185,7 @@ next:
       return EINVAL;
     }
 
-    ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8224,7 +8222,7 @@ next:
     }
 
     bool bucket_initable = true;
-    ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       if (yes_i_really_mean_it) {
         bucket_initable = false;
@@ -8286,7 +8284,7 @@ next:
   } // OPT_RESHARD_CANCEL
 
   if (opt_cmd == OPT::OBJECT_UNLINK) {
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8306,7 +8304,7 @@ next:
   }
 
   if (opt_cmd == OPT::OBJECT_STAT) {
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8374,6 +8372,28 @@ next:
     } else {
       RGWBucketAdminOp::check_index(driver, bucket_op, stream_flusher, null_yield, dpp());
     }
+  }
+
+  if (opt_cmd == OPT::BUCKET_CHECK_OLH) {
+    rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr <<
+	      "WARNING: this command is only relevant when the cluster has a RADOS backing store." <<
+	      std::endl;
+      return 0;
+    }
+    RGWBucketAdminOp::check_index_olh(store, bucket_op, stream_flusher, dpp());
+  }
+
+  if (opt_cmd == OPT::BUCKET_CHECK_UNLINKED) {
+    rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr <<
+	      "WARNING: this command is only relevant when the cluster has a RADOS backing store." <<
+	      std::endl;
+      return 0;
+    }
+    RGWBucketAdminOp::check_index_unlinked(store, bucket_op, stream_flusher, dpp());
   }
 
   if (opt_cmd == OPT::BUCKET_RM) {
@@ -8490,7 +8510,7 @@ next:
     }
 
     RGWLifecycleConfiguration config;
-    ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8516,7 +8536,7 @@ next:
   if (opt_cmd == OPT::LC_PROCESS) {
     if ((! bucket_name.empty()) ||
 	(! bucket_id.empty())) {
-        int ret = init_bucket(nullptr, tenant, bucket_name, bucket_id, &bucket);
+        int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
 	if (ret < 0) {
 	  cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret)
 	       << std::endl;
@@ -8677,12 +8697,12 @@ next:
 
     if (sync_stats) {
       if (!bucket_name.empty()) {
-        int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+        int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
         if (ret < 0) {
           cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
-        ret = bucket->sync_user_stats(dpp(), null_yield);
+        ret = bucket->sync_user_stats(dpp(), null_yield, nullptr);
         if (ret < 0) {
           cerr << "ERROR: could not sync bucket stats: " <<
 	    cpp_strerror(-ret) << std::endl;
@@ -8997,7 +9017,7 @@ next:
   }
 
   if (opt_cmd == OPT::METADATA_SYNC_STATUS) {
-    RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados->get_async_processor());
+    RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp());
     if (ret < 0) {
@@ -9041,7 +9061,7 @@ next:
   }
 
   if (opt_cmd == OPT::METADATA_SYNC_INIT) {
-    RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados->get_async_processor());
+    RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp());
     if (ret < 0) {
@@ -9057,7 +9077,7 @@ next:
 
 
   if (opt_cmd == OPT::METADATA_SYNC_RUN) {
-    RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados->get_async_processor());
+    RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp());
     if (ret < 0) {
@@ -9077,7 +9097,7 @@ next:
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
     }
-    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados->get_async_processor(), source_zone, nullptr);
+    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, source_zone, nullptr);
 
     int ret = sync.init(dpp());
     if (ret < 0) {
@@ -9147,7 +9167,7 @@ next:
       return EINVAL;
     }
 
-    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados->get_async_processor(), source_zone, nullptr);
+    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, source_zone, nullptr);
 
     int ret = sync.init(dpp());
     if (ret < 0) {
@@ -9176,7 +9196,7 @@ next:
       return ret;
     }
 
-    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados->get_async_processor(), source_zone, nullptr, sync_module);
+    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, source_zone, nullptr, sync_module);
 
     ret = sync.init(dpp());
     if (ret < 0) {
@@ -9200,7 +9220,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9208,7 +9228,7 @@ next:
     if (opt_sb && opt_sb->bucket_id.empty()) {
       string sbid;
       std::unique_ptr<rgw::sal::Bucket> sbuck;
-      int ret = init_bucket_for_sync(user.get(), opt_sb->tenant, opt_sb->name, sbid, &sbuck);
+      int ret = init_bucket_for_sync(opt_sb->tenant, opt_sb->name, sbid, &sbuck);
       if (ret < 0) {
         return -ret;
       }
@@ -9239,7 +9259,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9291,7 +9311,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9303,7 +9323,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9319,7 +9339,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9352,7 +9372,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9377,7 +9397,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9520,12 +9540,15 @@ next:
       return -EINVAL;
     }
     if (!start_marker.empty()) {
-      std::cerr << "end-date not allowed." << std::endl;
+      std::cerr << "start-marker not allowed." << std::endl;
       return -EINVAL;
     }
     if (!end_marker.empty()) {
-      std::cerr << "end-date not allowed." << std::endl;
+      std::cerr << "end_marker not allowed." << std::endl;
       return -EINVAL;
+    }
+    if (marker.empty()) {
+      marker = "9"; // trims everything
     }
 
     if (shard_id < 0) {
@@ -9884,7 +9907,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9907,7 +9930,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -10492,7 +10515,7 @@ next:
     RGWPubSub ps(driver, tenant);
 
     rgw_pubsub_bucket_topics result;
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -10516,6 +10539,16 @@ next:
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
       return -ret;
+    }
+    if (!rgw::sal::User::empty(user)) {
+      for (auto it = result.topics.cbegin(); it != result.topics.cend();) {
+        const auto& topic = it->second;
+        if (user->get_id() != topic.user) {
+          result.topics.erase(it++);
+        } else {
+          ++it;
+        }
+      }
     }
     encode_json("result", result, formatter.get());
     formatter->flush(cout);
@@ -10549,7 +10582,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -10603,7 +10636,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -10675,7 +10708,7 @@ next:
       cerr << "ERROR: cannot specify tenant in background context" << std::endl;
       return EINVAL;
     }
-    auto lua_manager = driver->get_lua_manager();
+    auto lua_manager = driver->get_lua_manager("");
     rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
@@ -10693,7 +10726,7 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
-    auto lua_manager = driver->get_lua_manager();
+    auto lua_manager = driver->get_lua_manager("");
     std::string script;
     const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
     if (rc == -ENOENT) {
@@ -10717,7 +10750,7 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
-    auto lua_manager = driver->get_lua_manager();
+    auto lua_manager = driver->get_lua_manager("");
     const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
@@ -10728,16 +10761,16 @@ next:
   if (opt_cmd == OPT::SCRIPT_PACKAGE_ADD) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     if (!script_package) {
-      cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
+      cerr << "ERROR: Lua package name was not provided (via --package)" << std::endl;
       return EINVAL;
     }
     const auto rc = rgw::lua::add_package(dpp(), driver, null_yield, *script_package, bool(allow_compilation));
     if (rc < 0) {
-      cerr << "ERROR: failed to add lua package: " << script_package << " .error: " << rc << std::endl;
+      cerr << "ERROR: failed to add Lua package: " << script_package << " .error: " << rc << std::endl;
       return -rc;
     }
 #else
-    cerr << "ERROR: adding lua packages is not permitted" << std::endl;
+    cerr << "ERROR: adding Lua packages is not permitted" << std::endl;
     return EPERM;
 #endif
   }
@@ -10745,7 +10778,7 @@ next:
   if (opt_cmd == OPT::SCRIPT_PACKAGE_RM) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     if (!script_package) {
-      cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
+      cerr << "ERROR: Lua package name was not provided (via --package)" << std::endl;
       return EINVAL;
     }
     const auto rc = rgw::lua::remove_package(dpp(), driver, null_yield, *script_package);
@@ -10754,11 +10787,11 @@ next:
       return 0;
     }
     if (rc < 0) {
-      cerr << "ERROR: failed to remove lua package: " << script_package << " .error: " << rc << std::endl;
+      cerr << "ERROR: failed to remove Lua package: " << script_package << " .error: " << rc << std::endl;
       return -rc;
     }
 #else
-    cerr << "ERROR: removing lua packages in not permitted" << std::endl;
+    cerr << "ERROR: removing Lua packages in not permitted" << std::endl;
     return EPERM;
 #endif
   }
@@ -10768,9 +10801,9 @@ next:
     rgw::lua::packages_t packages;
     const auto rc = rgw::lua::list_packages(dpp(), driver, null_yield, packages);
     if (rc == -ENOENT) {
-      std::cout << "no lua packages in allowlist" << std::endl;
+      std::cout << "no Lua packages in allowlist" << std::endl;
     } else if (rc < 0) {
-      cerr << "ERROR: failed to read lua packages allowlist. error: " << rc << std::endl;
+      cerr << "ERROR: failed to read Lua packages allowlist. error: " << rc << std::endl;
       return rc;
     } else {
       for (const auto& package : packages) {
@@ -10778,11 +10811,23 @@ next:
       }
     }
 #else
-    cerr << "ERROR: listing lua packages in not permitted" << std::endl;
+    cerr << "ERROR: listing Lua packages in not permitted" << std::endl;
     return EPERM;
 #endif
   }
 
+  if (opt_cmd == OPT::SCRIPT_PACKAGE_RELOAD) {
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+    const auto rc = rgw::lua::reload_packages(dpp(), driver, null_yield);
+    if (rc < 0) {
+      cerr << "ERROR: failed to reload Lua packages. error: " << rc << std::endl;
+      return rc;
+    }
+#else
+    cerr << "ERROR: reloading Lua packages in not permitted" << std::endl;
+    return EPERM;
+#endif
+  }
   return 0;
 }
 

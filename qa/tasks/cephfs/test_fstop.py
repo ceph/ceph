@@ -66,7 +66,7 @@ class TestFSTop(CephFSTestCase):
         Tests 'cephfs-top --dump' output is valid
         """
         def verify_fstop_metrics(metrics):
-            clients = metrics.get(self.fs.name, {})
+            clients = metrics.get('filesystems').get(self.fs.name, {})
             if str(self.mount_a.get_global_id()) in clients and \
                str(self.mount_b.get_global_id()) in clients:
                 return True

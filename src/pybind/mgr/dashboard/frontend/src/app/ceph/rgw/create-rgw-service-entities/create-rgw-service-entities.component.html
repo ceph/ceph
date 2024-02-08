@@ -1,6 +1,6 @@
 <cd-modal [modalRef]="activeModal">
   <ng-container i18n="form title"
-                class="modal-title">Create Realm/Zonegroup/Zone
+                class="modal-title">Create Realm/Zone Group/Zone
   </ng-container>
 
   <ng-container class="modal-content">
@@ -10,7 +10,7 @@
           novalidate>
     <div class="modal-body">
       <cd-alert-panel type="info"
-                      spacingClass="mb-3">The realm/zonegroup/zone created will be set as default and master.
+                      spacingClass="mb-3">The realm/zone group/zone created will be set as default and master.
       </cd-alert-panel>
       <div class="form-group row">
         <label class="cd-col-form-label required"
@@ -31,11 +31,11 @@
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="zonegroupName"
-               i18n>Zonegroup Name</label>
+               i18n>Zone Group Name</label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"
-                 placeholder="Zonegroup name..."
+                 placeholder="Zone group name..."
                  id="zonegroupName"
                  name="zonegroupName"
                  formControlName="zonegroupName">

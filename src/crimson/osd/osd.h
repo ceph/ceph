@@ -61,7 +61,8 @@ class PG;
 
 class OSD final : public crimson::net::Dispatcher,
 		  private crimson::common::AuthHandler,
-		  private crimson::mgr::WithStats {
+		  private crimson::mgr::WithStats,
+		  public md_config_obs_t {
   const int whoami;
   const uint32_t nonce;
   seastar::abort_source& abort_source;
@@ -106,8 +107,11 @@ class OSD final : public crimson::net::Dispatcher,
   // pg statistics including osd ones
   osd_stat_t osd_stat;
   uint32_t osd_stat_seq = 0;
+  epoch_t min_last_epoch_clean = 0;
+  // which pgs were scanned for min_lec
+  std::vector<pg_t> min_last_epoch_clean_pgs;
   void update_stats();
-  seastar::future<MessageURef> get_stats() const final;
+  seastar::future<MessageURef> get_stats() final;
 
   // AuthHandler methods
   void handle_authentication(const EntityName& name,
@@ -122,6 +126,10 @@ class OSD final : public crimson::net::Dispatcher,
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
+
+  const char** get_tracked_conf_keys() const final;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set<std::string> &changed) final;
 
   // admin-socket
   seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok;
@@ -198,8 +206,10 @@ private:
                                       Ref<MOSDPeeringOp> m);
   seastar::future<> handle_recovery_subreq(crimson::net::ConnectionRef conn,
                                            Ref<MOSDFastDispatchOp> m);
-  seastar::future<> handle_scrub(crimson::net::ConnectionRef conn,
-                                 Ref<MOSDScrub2> m);
+  seastar::future<> handle_scrub_command(crimson::net::ConnectionRef conn,
+					 Ref<MOSDScrub2> m);
+  seastar::future<> handle_scrub_message(crimson::net::ConnectionRef conn,
+					 Ref<MOSDFastDispatchOp> m);
   seastar::future<> handle_mark_me_down(crimson::net::ConnectionRef conn,
                                         Ref<MOSDMarkMeDown> m);
 

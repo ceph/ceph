@@ -27,6 +27,9 @@
             <span class="invalid-feedback"
                   *ngIf="subvolumeForm.showError('subvolumeName', formDir, 'notUnique')"
                   i18n>The subvolume already exists.</span>
+            <span *ngIf="subvolumeForm.showError('subvolumeName', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>Subvolume name can only contain letters, numbers, '.', '-' or '_'</span>
           </div>
         </div>
 
@@ -42,6 +45,26 @@
                    formControlName="volumeName">
           </div>
         </div>
+
+          <!--Subvolume Group name -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="subvolumeGroupName"
+                   i18n>Subvolume group
+            </label>
+            <div class="cd-col-form-input">
+              <select class="form-select"
+                      id="subvolumeGroupName"
+                      name="subvolumeGroupName"
+                      formControlName="subvolumeGroupName"
+                      *ngIf="subVolumeGroups$ | async as subvolumeGroups">
+                <option value=""
+                        i18n>Default</option>
+                <option *ngFor="let subvolumegroup of subvolumeGroups"
+                        [value]="subvolumegroup.name">{{ subvolumegroup.name }}</option>
+              </select>
+            </div>
+          </div>
 
         <!-- Size -->
         <div class="form-group row">
@@ -61,6 +84,9 @@
                    placeholder="e.g., 10GiB"
                    defaultUnit="GiB"
                    cdDimlessBinary>
+            <span *ngIf="subvolumeForm.showError('size', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
           </div>
         </div>
 

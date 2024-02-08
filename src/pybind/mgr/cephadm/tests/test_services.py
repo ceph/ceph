@@ -375,6 +375,7 @@ class TestNVMEOFService:
 
         nvmeof_daemon_id = 'testpool.test.qwert'
         pool = 'testpool'
+        tgt_cmd_extra_args = '--cpumask=0xFF --msg-mempool-size=524288'
         default_port = 5500
         group = 'mygroup'
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
@@ -389,6 +390,9 @@ port = {default_port}
 enable_auth = False
 state_update_notify = True
 state_update_interval_sec = 5
+min_controller_id = 1
+max_controller_id = 65519
+enable_spdk_discovery_controller = False
 
 [ceph]
 pool = {pool}
@@ -408,10 +412,12 @@ timeout = 60
 log_level = WARN
 conn_retries = 10
 transports = tcp
-transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}\n"""
+transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
+tgt_cmd_extra_args = {tgt_cmd_extra_args}\n"""
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, NvmeofServiceSpec(service_id=pool,
+                                                                tgt_cmd_extra_args=tgt_cmd_extra_args,
                                                                 group=group,
                                                                 pool=pool)):
                 _run_cephadm.assert_called_with(

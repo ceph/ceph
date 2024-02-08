@@ -436,7 +436,13 @@ sudo() {
 
         usr_args, args = self._omit_cmd_args(args, omit_sudo)
 
-        log.debug('> ' + usr_args)
+        # Let's print all commands on INFO log level since some logging level
+        # might be changed to INFO from DEBUG during a vstart_runner.py's
+        # execution due to code added for teuthology. This happened for
+        # ceph_test_case.RunCephCmd.negtest_ceph_cmd(). Commands it executes
+        # weren't printed in output because logging level for
+        # ceph_test_case.py is set to INFO by default.
+        log.info('> ' + usr_args)
 
         return args, usr_args
 
@@ -734,6 +740,11 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
 
         if os.getuid() != 0:
             mount_cmd += ['--client_die_on_failed_dentry_invalidate=false']
+            # XXX: Passing ceph-fuse option above makes using sudo command
+            # redunant. Plus, we prefer that vstart_runner.py doesn't use sudo
+            # command as far as possbile.
+            mount_cmd.remove('sudo')
+
         return mount_cmd
 
     @property
@@ -793,8 +804,10 @@ class LocalCephManager(CephManager):
         self.cephadm = False
         self.rook = False
         self.testdir = None
-        self.CEPH_CMD = [CEPH_CMD]
         self.RADOS_CMD = [RADOS_CMD]
+
+    def get_ceph_cmd(self, **kwargs):
+        return [CEPH_CMD]
 
     def find_remote(self, daemon_type, daemon_id):
         """

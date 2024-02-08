@@ -9,7 +9,7 @@
 
 namespace rgw::lua {
 
-// TODO - add the folowing generic functions
+// TODO - add the following generic functions
 // lua_push(lua_State* L, const std::string& str)
 // template<typename T> lua_push(lua_State* L, const std::optional<T>& val)
 // lua_push(lua_State* L, const ceph::real_time& tp)

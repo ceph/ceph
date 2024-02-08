@@ -130,7 +130,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._load_drive_groups()
         self._shutdown = threading.Event()
-        
+
     def config_notify(self) -> None:
         """
         This method is called whenever one of our config options is changed.
@@ -147,7 +147,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         assert isinstance(self.drive_group_interval, float)
 
         if self._rook_cluster:
-            self._rook_cluster.storage_class = self.storage_class
+            self._rook_cluster.storage_class_name = self.storage_class
 
     def shutdown(self) -> None:
         self._shutdown.set()
@@ -257,6 +257,26 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         image_name = cl['spec'].get('cephVersion', {}).get('image', None)
         num_nodes = len(self.rook_cluster.get_node_names())
 
+        def sum_running_pods(service_type: str, service_name: Optional[str] = None) -> int:
+            all_pods = self.rook_cluster.describe_pods(None, None, None)
+            if service_name is None:
+                return sum(pod['phase'] == 'Running' for pod in all_pods if pod['labels']['app'] == f"rook-ceph-{service_type}")
+            else:
+                if service_type == 'mds':
+                    key = 'rook_file_system'
+                elif service_type == 'rgw':
+                    key = 'rook_object_store'
+                elif service_type == 'nfs':
+                    key = 'ceph_nfs'
+                else:
+                    self.log.error(f"Unknow service type {service_type}")
+                    return 0
+
+                return sum(pod['phase'] == 'Running' \
+                           for pod in all_pods \
+                           if pod['labels']['app'] == f"rook-ceph-{service_type}" \
+                           and service_name == pod['labels'][key])
+
         spec = {}
         if service_type == 'mon' or service_type is None:
             spec['mon'] = orchestrator.ServiceDescription(
@@ -269,6 +289,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 size=cl['spec'].get('mon', {}).get('count', 1),
                 container_image_name=image_name,
                 last_refresh=now,
+                running=sum_running_pods('mon')
             )
         if service_type == 'mgr' or service_type is None:
             spec['mgr'] = orchestrator.ServiceDescription(
@@ -279,6 +300,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 size=1,
                 container_image_name=image_name,
                 last_refresh=now,
+                running=sum_running_pods('mgr')
             )
 
         if (
@@ -293,13 +315,15 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 size=num_nodes,
                 container_image_name=image_name,
                 last_refresh=now,
+                running=sum_running_pods('crashcollector')
             )
 
         if service_type == 'mds' or service_type is None:
             # CephFilesystems
             all_fs = self.rook_cluster.get_resource("cephfilesystems")
             for fs in all_fs:
-                svc = 'mds.' + fs['metadata']['name']
+                fs_name = fs['metadata']['name']
+                svc = 'mds.' + fs_name
                 if svc in spec:
                     continue
                 # FIXME: we are conflating active (+ standby) with count
@@ -316,13 +340,15 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     size=total_mds,
                     container_image_name=image_name,
                     last_refresh=now,
+                    running=sum_running_pods('mds', fs_name)
                 )
 
         if service_type == 'rgw' or service_type is None:
             # CephObjectstores
             all_zones = self.rook_cluster.get_resource("cephobjectstores")
             for zone in all_zones:
-                svc = 'rgw.' + zone['metadata']['name']
+                zone_name = zone['metadata']['name']
+                svc = 'rgw.' + zone_name
                 if svc in spec:
                     continue
                 active = zone['spec']['gateway']['instances'];
@@ -344,6 +370,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     size=active,
                     container_image_name=image_name,
                     last_refresh=now,
+                    running=sum_running_pods('rgw', zone_name)
                 )
 
         if service_type == 'nfs' or service_type is None:
@@ -368,7 +395,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     ),
                     size=active,
                     last_refresh=now,
-                    running=len([1 for pod in nfs_pods if pod['labels']['ceph_nfs'] == nfs_name]),
+                    running=sum_running_pods('nfs', nfs_name),
                     created=creation_timestamp.astimezone(tz=datetime.timezone.utc)
                 )
         if service_type == 'osd' or service_type is None:
@@ -385,7 +412,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 ),
                 size=len(all_osds),
                 last_refresh=now,
-                running=sum(osd.status.phase == 'Running' for osd in all_osds)
+                running=sum_running_pods('osd')
             )
 
             # drivegroups
@@ -396,7 +423,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     size=0,
                     running=0,
                 )
-        
+
         if service_type == 'rbd-mirror' or service_type is None:
             # rbd-mirrors
             all_mirrors = self.rook_cluster.get_resource("cephrbdmirrors")
@@ -414,13 +441,13 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     ),
                     size=1,
                     last_refresh=now,
+                    running=sum_running_pods('rbd-mirror', mirror_name)
                 )
-        
+
         for dd in self._list_daemons():
             if dd.service_name() not in spec:
                 continue
             service = spec[dd.service_name()]
-            service.running += 1
             if not service.container_image_id:
                 service.container_image_id = dd.container_image_id
             if not service.container_image_name:
@@ -451,13 +478,37 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                       daemon_id: Optional[str] = None,
                       host: Optional[str] = None,
                       refresh: bool = False) -> List[orchestrator.DaemonDescription]:
+
+        def _pod_to_servicename(pod: Dict[str, Any]) -> Optional[str]:
+            if 'ceph_daemon_type' not in pod['labels']:
+                return None
+            daemon_type = pod['labels']['ceph_daemon_type']
+            if daemon_type in ['mds', 'rgw', 'nfs', 'rbd-mirror']:
+                if 'app.kubernetes.io/part-of' in pod['labels']:
+                    service_name = f"{daemon_type}.{pod['labels']['app.kubernetes.io/part-of']}"
+                else:
+                    service_name = f"{daemon_type}"
+            else:
+                service_name = f"{daemon_type}"
+            return service_name
+
         pods = self.rook_cluster.describe_pods(daemon_type, daemon_id, host)
-        self.log.debug('pods %s' % pods)
         result = []
         for p in pods:
-            sd = orchestrator.DaemonDescription()
+            pod_svc_name = _pod_to_servicename(p)
+            sd = orchestrator.DaemonDescription(service_name=pod_svc_name)
             sd.hostname = p['hostname']
-            sd.daemon_type = p['labels']['app'].replace('rook-ceph-', '')
+
+            # In Rook environments, the 'ceph-exporter' daemon is named 'exporter' whereas
+            # in the orchestrator interface, it is named 'ceph-exporter'. The purpose of the
+            # following adjustment is to ensure that the 'daemon_type' is correctly set.
+            # Without this adjustment, the 'service_to_daemon_types' lookup would fail, as
+            # it would be searching for a non-existent entry called 'exporter
+            if p['labels']['app'] == 'rook-ceph-exporter':
+                sd.daemon_type = 'ceph-exporter'
+            else:
+                sd.daemon_type = p['labels']['app'].replace('rook-ceph-', '')
+
             status = {
                 'Pending': orchestrator.DaemonDescriptionStatus.starting,
                 'Running': orchestrator.DaemonDescriptionStatus.running,

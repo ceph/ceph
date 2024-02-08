@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "rgw_service.h"
+#include "driver/rados/rgw_service.h" // FIXME: subclass dependency
 
 #include "svc_bucket_types.h"
 

@@ -2,7 +2,7 @@
 @use './src/styles/defaults' as *;
 
 // Angular2-Tree Component
-@import '~@circlon/angular-tree-component/css/angular-tree-component.css';
+@import '@circlon/angular-tree-component/css/angular-tree-component.css';
 
 // Fork-Awesome
 $fa-font-path: '~fork-awesome/fonts';
@@ -23,8 +23,8 @@ $grid-breakpoints: (
   2xl: 1450px
 );
 
-@import '~bootstrap/scss/bootstrap';
-@import '~fork-awesome/scss/fork-awesome';
+@import 'bootstrap/scss/bootstrap';
+@import 'fork-awesome/scss/fork-awesome';
 @import 'app/ceph/dashboard/info-card/info-card-popover.scss';
 @import 'app/ceph/rgw/rgw-overview-dashboard/rgw-overview-card-popover.scss';
 @import './src/styles/bootstrap-extends';
@@ -183,7 +183,7 @@ a.btn-light {
 
 // Overrides the badge to rounded-pill
 .badge {
-  @extend .badge, .rounded-pill, .mb-1;
+  @extend .badge, .mb-1;
 }
 
 // Overriding badges to match the class name of badges in Bootstrap v5
@@ -238,4 +238,9 @@ formly-form {
       color: $danger;
     }
   }
+}
+
+// Overriding legend css due to change in bootstrap v5 and setting it to none;
+legend {
+  float: none;
 }

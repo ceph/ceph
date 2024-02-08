@@ -45,10 +45,6 @@ class CephFS(object):
             self.cfs.mount()
         logger.debug("mounted cephfs filesystem")
 
-    def __del__(self):
-        logger.debug("shutting down cephfs filesystem")
-        self.cfs.shutdown()
-
     @contextmanager
     def opendir(self, dirpath):
         d = None

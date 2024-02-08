@@ -106,22 +106,27 @@ to be considered ``stuck`` (default: 300).
 PGs might be stuck in any of the following states:
 
 **Inactive** 
+
     PGs are unable to process reads or writes because they are waiting for an
     OSD that has the most up-to-date data to return to an ``up`` state.
 
+
 **Unclean** 
+
     PGs contain objects that have not been replicated the desired number of
     times. These PGs have not yet completed the process of recovering.
 
+
 **Stale** 
+
     PGs are in an unknown state, because the OSDs that host them have not
     reported to the monitor cluster for a certain period of time (specified by
     the ``mon_osd_report_timeout`` configuration setting).
 
 
-To delete a ``lost`` RADOS object or revert an object to its prior state
-(either by reverting it to its previous version or by deleting it because it
-was just created and has no previous version), run the following command:
+To delete a ``lost`` object or revert an object to its prior state, either by
+reverting it to its previous version or by deleting it because it was just
+created and has no previous version, run the following command:
 
 .. prompt:: bash $
 
@@ -168,10 +173,8 @@ To dump the OSD map, run the following command:
    ceph osd dump [--format {format}]
 
 The ``--format`` option accepts the following arguments: ``plain`` (default),
-``json``, ``json-pretty``, ``xml``, and ``xml-pretty``. As noted above, JSON
-format is the recommended format for consumption by tools, scripting, and other
-forms of automation. 
-
+``json``, ``json-pretty``, ``xml``, and ``xml-pretty``. As noted above, JSON is
+the recommended format for tools, scripting, and other forms of automation. 
 
 To dump the OSD map as a tree that lists one OSD per line and displays
 information about the weights and states of the OSDs, run the following
@@ -230,7 +233,7 @@ To mark an OSD as ``lost``, run the following command:
 .. warning::
    This could result in permanent data loss. Use with caution!
 
-To create an OSD in the CRUSH map, run the following command:
+To create a new OSD, run the following command:
 
 .. prompt:: bash $
 
@@ -287,47 +290,51 @@ following command:
 
    ceph osd in {osd-num}
 
-By using the ``pause`` and ``unpause`` flags in the OSD map, you can pause or
-unpause I/O requests. If the flags are set, then no I/O requests will be sent
-to any OSD. If the flags are cleared, then pending I/O requests will be resent.
-To set or clear these flags, run one of the following commands:
+By using the "pause flags" in the OSD map, you can pause or unpause I/O
+requests.  If the flags are set, then no I/O requests will be sent to any OSD.
+When the flags are cleared, then pending I/O requests will be resent. To set or
+clear pause flags, run one of the following commands:
 
 .. prompt:: bash $
 
    ceph osd pause
    ceph osd unpause
 
-You can assign an override or ``reweight`` weight value to a specific OSD
-if the normal CRUSH distribution seems to be suboptimal. The weight of an
-OSD helps determine the extent of its I/O requests and data storage: two
-OSDs with the same weight will receive approximately the same number of
-I/O requests and store approximately the same amount of data. The ``ceph
-osd reweight`` command assigns an override weight to an OSD. The weight
-value is in the range 0 to 1, and the command forces CRUSH to relocate a
-certain amount (1 - ``weight``) of the data that would otherwise be on
-this OSD. The command does not change the weights of the buckets above
-the OSD in the CRUSH map. Using the command is merely a corrective
-measure: for example, if one of your OSDs is at 90% and the others are at
-50%, you could reduce the outlier weight to correct this imbalance. To
-assign an override weight to a specific OSD, run the following command:
+You can assign an override or ``reweight`` weight value to a specific OSD if
+the normal CRUSH distribution seems to be suboptimal. The weight of an OSD
+helps determine the extent of its I/O requests and data storage: two OSDs with
+the same weight will receive approximately the same number of I/O requests and
+store approximately the same amount of data. The ``ceph osd reweight`` command
+assigns an override weight to an OSD. The weight value is in the range 0 to 1,
+and the command forces CRUSH to relocate a certain amount (1 - ``weight``) of
+the data that would otherwise be on this OSD. The command does not change the
+weights of the buckets above the OSD in the CRUSH map. Using the command is
+merely a corrective measure: for example, if one of your OSDs is at 90% and the
+others are at 50%, you could reduce the outlier weight to correct this
+imbalance. To assign an override weight to a specific OSD, run the following
+command:
 
 .. prompt:: bash $
 
    ceph osd reweight {osd-num} {weight}
 
+.. note:: Any assigned override reweight value will conflict with the balancer.
+   This means that if the balancer is in use, all override reweight values
+   should be ``1.0000`` in order to avoid suboptimal cluster behavior.
+
 A cluster's OSDs can be reweighted in order to maintain balance if some OSDs
 are being disproportionately utilized. Note that override or ``reweight``
-weights have relative values that default to 1.00000. Their values are not
-absolute, and these weights must be distinguished from CRUSH weights (which
-reflect the absolute capacity of a bucket, as measured in TiB). To reweight
-OSDs by utilization, run the following command:
+weights have values relative to one another that default to 1.00000; their
+values are not absolute, and these weights must be distinguished from CRUSH
+weights (which reflect the absolute capacity of a bucket, as measured in TiB).
+To reweight OSDs by utilization, run the following command:
 
 .. prompt:: bash $
 
    ceph osd reweight-by-utilization [threshold [max_change [max_osds]]] [--no-increasing]
 
-By default, this command adjusts the override weight of OSDs that have ±20%
-of the average utilization, but you can specify a different percentage in the
+By default, this command adjusts the override weight of OSDs that have ±20% of
+the average utilization, but you can specify a different percentage in the
 ``threshold`` argument. 
 
 To limit the increment by which any OSD's reweight is to be changed, use the
@@ -355,42 +362,38 @@ Operators of deployments that utilize Nautilus or newer (or later revisions of
 Luminous and Mimic) and that have no pre-Luminous clients might likely instead
 want to enable the `balancer`` module for ``ceph-mgr``.
 
-.. note:: The ``balancer`` module does the work for you and achieves a more
-   uniform result, shuffling less data along the way. When enabling the
-   ``balancer`` module, you will want to converge any changed override weights
-   back to 1.00000 so that the balancer can do an optimal job. If your cluster
-   is very full, reverting these override weights before enabling the balancer
-   may cause some OSDs to become full. This means that a phased approach may
-   needed.
-
-Add/remove an IP address or CIDR range to/from the blocklist.
-When adding to the blocklist,
-you can specify how long it should be blocklisted in seconds; otherwise,
-it will default to 1 hour. A blocklisted address is prevented from
-connecting to any OSD. If you blocklist an IP or range containing an OSD, be aware
-that OSD will also be prevented from performing operations on its peers where it
-acts as a client. (This includes tiering and copy-from functionality.)
-
-If you want to blocklist a range (in CIDR format), you may do so by
-including the ``range`` keyword.
-
-These commands are mostly only useful for failure testing, as
-blocklists are normally maintained automatically and shouldn't need
-manual intervention. :
+The blocklist can be modified by adding or removing an IP address or a CIDR
+range. If an address is blocklisted, it will be unable to connect to any OSD.
+If an OSD is contained within an IP address or CIDR range that has been
+blocklisted, the OSD will be unable to perform operations on its peers when it
+acts as a client: such blocked operations include tiering and copy-from
+functionality. To add or remove an IP address or CIDR range to the blocklist,
+run one of the following commands:
 
 .. prompt:: bash $
 
    ceph osd blocklist ["range"] add ADDRESS[:source_port][/netmask_bits] [TIME]
    ceph osd blocklist ["range"] rm ADDRESS[:source_port][/netmask_bits]
 
-Creates/deletes a snapshot of a pool. :
+If you add something to the blocklist with the above ``add`` command, you can
+use the ``TIME`` keyword to specify the length of time (in seconds) that it
+will remain on the blocklist (default: one hour). To add or remove a CIDR
+range, use the ``range`` keyword in the above commands.
+
+Note that these commands are useful primarily in failure testing. Under normal
+conditions, blocklists are maintained automatically and do not need any manual
+intervention.
+
+To create or delete a snapshot of a specific storage pool, run one of the
+following commands:
 
 .. prompt:: bash $
 
    ceph osd pool mksnap {pool-name} {snap-name}
    ceph osd pool rmsnap {pool-name} {snap-name}
 
-Creates/deletes/renames a storage pool. :
+To create, delete, or rename a specific storage pool, run one of the following
+commands:
 
 .. prompt:: bash $
 
@@ -398,20 +401,20 @@ Creates/deletes/renames a storage pool. :
    ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
    ceph osd pool rename {old-name} {new-name}
 
-Changes a pool setting. : 
+To change a pool setting, run the following command: 
 
 .. prompt:: bash $
 
    ceph osd pool set {pool-name} {field} {value}
 
-Valid fields are:
+The following are valid fields:
 
-	* ``size``: Sets the number of copies of data in the pool.
-	* ``pg_num``: The placement group number.
-	* ``pgp_num``: Effective number when calculating pg placement.
-	* ``crush_rule``: rule number for mapping placement.
+    * ``size``: The number of copies of data in the pool.
+    * ``pg_num``: The PG number.
+    * ``pgp_num``: The effective number of PGs when calculating placement.
+    * ``crush_rule``: The rule number for mapping placement.
 
-Get the value of a pool setting. :
+To retrieve the value of a pool setting, run the following command:
 
 .. prompt:: bash $
 
@@ -419,40 +422,43 @@ Get the value of a pool setting. :
 
 Valid fields are:
 
-	* ``pg_num``: The placement group number.
-	* ``pgp_num``: Effective number of placement groups when calculating placement.
+    * ``pg_num``: The PG number.
+    * ``pgp_num``: The effective number of PGs when calculating placement.
 
-
-Sends a scrub command to OSD ``{osd-num}``. To send the command to all OSDs, use ``*``. :
+To send a scrub command to a specific OSD, or to all OSDs (by using ``*``), run
+the following command:
 
 .. prompt:: bash $
 
    ceph osd scrub {osd-num}
 
-Sends a repair command to OSD.N. To send the command to all OSDs, use ``*``. :
+To send a repair command to a specific OSD, or to all OSDs (by using ``*``),
+run the following command:
 
 .. prompt:: bash $
 
    ceph osd repair N
 
-Runs a simple throughput benchmark against OSD.N, writing ``TOTAL_DATA_BYTES``
-in write requests of ``BYTES_PER_WRITE`` each. By default, the test
-writes 1 GB in total in 4-MB increments.
-The benchmark is non-destructive and will not overwrite existing live
-OSD data, but might temporarily affect the performance of clients
-concurrently accessing the OSD. :
+You can run a simple throughput benchmark test against a specific OSD. This
+test writes a total size of ``TOTAL_DATA_BYTES`` (default: 1 GB) incrementally,
+in multiple write requests that each have a size of ``BYTES_PER_WRITE``
+(default: 4 MB). The test is not destructive and it will not overwrite existing
+live OSD data, but it might temporarily affect the performance of clients that
+are concurrently accessing the OSD. To launch this benchmark test, run the
+following command:
 
 .. prompt:: bash $
 
    ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
 
-To clear an OSD's caches between benchmark runs, use the 'cache drop' command :
+To clear the caches of a specific OSD during the interval between one benchmark
+run and another, run the following command:
 
 .. prompt:: bash $
 
    ceph tell osd.N cache drop
 
-To get the cache statistics of an OSD, use the 'cache status' command :
+To retrieve the cache statistics of a specific OSD, run the following command:
 
 .. prompt:: bash $
 
@@ -461,31 +467,31 @@ To get the cache statistics of an OSD, use the 'cache status' command :
 MDS Subsystem
 =============
 
-Change configuration parameters on a running mds. :
+To change the configuration parameters of a running metadata server, run the
+following command:
 
 .. prompt:: bash $
 
    ceph tell mds.{mds-id} config set {setting} {value}
 
-Example:
+Example: to enable debug messages, run the following command:
 
 .. prompt:: bash $
 
    ceph tell mds.0 config set debug_ms 1
 
-Enables debug messages. :
+To display the status of all metadata servers, run the following command:
 
 .. prompt:: bash $
 
    ceph mds stat
 
-Displays the status of all metadata servers. :
+To mark the active metadata server as failed (and to trigger failover to a
+standby if a standby is present), run the following command:
 
 .. prompt:: bash $
 
    ceph mds fail 0
-
-Marks the active MDS as failed, triggering failover to a standby if present.
 
 .. todo:: ``ceph mds`` subcommands missing docs: set, dump, getmap, stop, setmap
 
@@ -493,157 +499,165 @@ Marks the active MDS as failed, triggering failover to a standby if present.
 Mon Subsystem
 =============
 
-Show monitor stats:
+To display monitor statistics, run the following command:
 
 .. prompt:: bash $
 
    ceph mon stat
 
+This command returns output similar to the following:
+
 ::
 
-	e2: 3 mons at {a=127.0.0.1:40000/0,b=127.0.0.1:40001/0,c=127.0.0.1:40002/0}, election epoch 6, quorum 0,1,2 a,b,c
+    e2: 3 mons at {a=127.0.0.1:40000/0,b=127.0.0.1:40001/0,c=127.0.0.1:40002/0}, election epoch 6, quorum 0,1,2 a,b,c
 
+There is a ``quorum`` list at the end of the output. It lists those monitor
+nodes that are part of the current quorum.
 
-The ``quorum`` list at the end lists monitor nodes that are part of the current quorum.
-
-This is also available more directly:
+To retrieve this information in a more direct way, run the following command:
 
 .. prompt:: bash $
 
    ceph quorum_status -f json-pretty
-	
-.. code-block:: javascript	
 
-	{
-	    "election_epoch": 6,
-	    "quorum": [
-		0,
-		1,
-		2
-	    ],
-	    "quorum_names": [
-		"a",
-		"b",
-		"c"
-	    ],
-	    "quorum_leader_name": "a",
-	    "monmap": {
-		"epoch": 2,
-		"fsid": "ba807e74-b64f-4b72-b43f-597dfe60ddbc",
-		"modified": "2016-12-26 14:42:09.288066",
-		"created": "2016-12-26 14:42:03.573585",
-		"features": {
-		    "persistent": [
-			"kraken"
-		    ],
-		    "optional": []
-		},
-		"mons": [
-		    {
-			"rank": 0,
-			"name": "a",
-			"addr": "127.0.0.1:40000\/0",
-			"public_addr": "127.0.0.1:40000\/0"
-		    },
-		    {
-			"rank": 1,
-			"name": "b",
-			"addr": "127.0.0.1:40001\/0",
-			"public_addr": "127.0.0.1:40001\/0"
-		    },
-		    {
-			"rank": 2,
-			"name": "c",
-			"addr": "127.0.0.1:40002\/0",
-			"public_addr": "127.0.0.1:40002\/0"
-		    }
-		]
-	    }
-	}
-	  
+This command returns output similar to the following:
+
+.. code-block:: javascript    
+
+    {
+        "election_epoch": 6,
+        "quorum": [
+        0,
+        1,
+        2
+        ],
+        "quorum_names": [
+        "a",
+        "b",
+        "c"
+        ],
+        "quorum_leader_name": "a",
+        "monmap": {
+        "epoch": 2,
+        "fsid": "ba807e74-b64f-4b72-b43f-597dfe60ddbc",
+        "modified": "2016-12-26 14:42:09.288066",
+        "created": "2016-12-26 14:42:03.573585",
+        "features": {
+            "persistent": [
+            "kraken"
+            ],
+            "optional": []
+        },
+        "mons": [
+            {
+            "rank": 0,
+            "name": "a",
+            "addr": "127.0.0.1:40000\/0",
+            "public_addr": "127.0.0.1:40000\/0"
+            },
+            {
+            "rank": 1,
+            "name": "b",
+            "addr": "127.0.0.1:40001\/0",
+            "public_addr": "127.0.0.1:40001\/0"
+            },
+            {
+            "rank": 2,
+            "name": "c",
+            "addr": "127.0.0.1:40002\/0",
+            "public_addr": "127.0.0.1:40002\/0"
+            }
+        ]
+        }
+    }
+      
 
 The above will block until a quorum is reached.
 
-For a status of just a single monitor:
+To see the status of a specific monitor, run the following command:
 
 .. prompt:: bash $
 
    ceph tell mon.[name] mon_status
-	
-where the value of ``[name]`` can be taken from ``ceph quorum_status``. Sample
-output::
-	
-	{
-	    "name": "b",
-	    "rank": 1,
-	    "state": "peon",
-	    "election_epoch": 6,
-	    "quorum": [
-		0,
-		1,
-		2
-	    ],
-	    "features": {
-		"required_con": "9025616074522624",
-		"required_mon": [
-		    "kraken"
-		],
-		"quorum_con": "1152921504336314367",
-		"quorum_mon": [
-		    "kraken"
-		]
-	    },
-	    "outside_quorum": [],
-	    "extra_probe_peers": [],
-	    "sync_provider": [],
-	    "monmap": {
-		"epoch": 2,
-		"fsid": "ba807e74-b64f-4b72-b43f-597dfe60ddbc",
-		"modified": "2016-12-26 14:42:09.288066",
-		"created": "2016-12-26 14:42:03.573585",
-		"features": {
-		    "persistent": [
-			"kraken"
-		    ],
-		    "optional": []
-		},
-		"mons": [
-		    {
-			"rank": 0,
-			"name": "a",
-			"addr": "127.0.0.1:40000\/0",
-			"public_addr": "127.0.0.1:40000\/0"
-		    },
-		    {
-			"rank": 1,
-			"name": "b",
-			"addr": "127.0.0.1:40001\/0",
-			"public_addr": "127.0.0.1:40001\/0"
-		    },
-		    {
-			"rank": 2,
-			"name": "c",
-			"addr": "127.0.0.1:40002\/0",
-			"public_addr": "127.0.0.1:40002\/0"
-		    }
-		]
-	    }
-	}
 
-A dump of the monitor state:
+Here the value of ``[name]`` can be found by consulting the output of the
+``ceph quorum_status`` command. This command returns output similar to the
+following:
+
+::
+
+    {
+        "name": "b",
+        "rank": 1,
+        "state": "peon",
+        "election_epoch": 6,
+        "quorum": [
+        0,
+        1,
+        2
+        ],
+        "features": {
+        "required_con": "9025616074522624",
+        "required_mon": [
+            "kraken"
+        ],
+        "quorum_con": "1152921504336314367",
+        "quorum_mon": [
+            "kraken"
+        ]
+        },
+        "outside_quorum": [],
+        "extra_probe_peers": [],
+        "sync_provider": [],
+        "monmap": {
+        "epoch": 2,
+        "fsid": "ba807e74-b64f-4b72-b43f-597dfe60ddbc",
+        "modified": "2016-12-26 14:42:09.288066",
+        "created": "2016-12-26 14:42:03.573585",
+        "features": {
+            "persistent": [
+            "kraken"
+            ],
+            "optional": []
+        },
+        "mons": [
+            {
+            "rank": 0,
+            "name": "a",
+            "addr": "127.0.0.1:40000\/0",
+            "public_addr": "127.0.0.1:40000\/0"
+            },
+            {
+            "rank": 1,
+            "name": "b",
+            "addr": "127.0.0.1:40001\/0",
+            "public_addr": "127.0.0.1:40001\/0"
+            },
+            {
+            "rank": 2,
+            "name": "c",
+            "addr": "127.0.0.1:40002\/0",
+            "public_addr": "127.0.0.1:40002\/0"
+            }
+        ]
+        }
+    }
+
+To see a dump of the monitor state, run the following command:
 
 .. prompt:: bash $
 
    ceph mon dump
 
+This command returns output similar to the following:
+
 ::
 
-	dumped monmap epoch 2
-	epoch 2
-	fsid ba807e74-b64f-4b72-b43f-597dfe60ddbc
-	last_changed 2016-12-26 14:42:09.288066
-	created 2016-12-26 14:42:03.573585
-	0: 127.0.0.1:40000/0 mon.a
-	1: 127.0.0.1:40001/0 mon.b
-	2: 127.0.0.1:40002/0 mon.c
-
+    dumped monmap epoch 2
+    epoch 2
+    fsid ba807e74-b64f-4b72-b43f-597dfe60ddbc
+    last_changed 2016-12-26 14:42:09.288066
+    created 2016-12-26 14:42:03.573585
+    0: 127.0.0.1:40000/0 mon.a
+    1: 127.0.0.1:40001/0 mon.b
+    2: 127.0.0.1:40002/0 mon.c

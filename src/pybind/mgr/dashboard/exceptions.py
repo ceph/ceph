@@ -121,3 +121,15 @@ class GrafanaError(Exception):
 
 class PasswordPolicyException(Exception):
     pass
+
+
+class ExpiredSignatureError(Exception):
+    pass
+
+
+class InvalidTokenError(Exception):
+    pass
+
+
+class InvalidAlgorithmError(Exception):
+    pass

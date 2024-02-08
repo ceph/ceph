@@ -232,7 +232,6 @@ public:
       delete messenger;
       messenger = nullptr;
     }
-    icp.reset();
     if (monclient) {
       delete monclient;
       monclient = nullptr;
@@ -241,6 +240,7 @@ public:
       delete client;
       client = nullptr;
     }
+    icp.reset();
   }
 
   bool is_initialized() const

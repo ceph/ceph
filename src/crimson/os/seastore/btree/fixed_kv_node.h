@@ -157,7 +157,7 @@ struct FixedKVNode : ChildableCachedExtent {
       (get_node_size() - offset - 1) * sizeof(ChildableCachedExtent*));
   }
 
-  FixedKVNode& get_stable_for_key(node_key_t key) {
+  FixedKVNode& get_stable_for_key(node_key_t key) const {
     ceph_assert(is_pending());
     if (is_mutation_pending()) {
       return (FixedKVNode&)*get_prior_instance();
@@ -228,6 +228,8 @@ struct FixedKVNode : ChildableCachedExtent {
 
   virtual get_child_ret_t<LogicalCachedExtent>
   get_logical_child(op_context_t<node_key_t> c, uint16_t pos) = 0;
+
+  virtual bool is_child_stable(uint16_t pos) const = 0;
 
   template <typename T, typename iter_t>
   get_child_ret_t<T> get_child(op_context_t<node_key_t> c, iter_t iter) {
@@ -592,6 +594,11 @@ struct FixedKVInternalNode
     return get_child_ret_t<LogicalCachedExtent>(child_pos_t(nullptr, 0));
   }
 
+  bool is_child_stable(uint16_t pos) const final {
+    ceph_abort("impossible");
+    return false;
+  }
+
   bool validate_stable_children() final {
     LOG_PREFIX(FixedKVInternalNode::validate_stable_children);
     if (this->children.empty()) {
@@ -750,9 +757,9 @@ struct FixedKVInternalNode
 
   std::tuple<Ref, Ref, NODE_KEY>
   make_split_children(op_context_t<NODE_KEY> c) {
-    auto left = c.cache.template alloc_new_extent<node_type_t>(
+    auto left = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    auto right = c.cache.template alloc_new_extent<node_type_t>(
+    auto right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     this->split_child_ptrs(*left, *right);
     auto pivot = this->split_into(*left, *right);
@@ -767,7 +774,7 @@ struct FixedKVInternalNode
   Ref make_full_merge(
     op_context_t<NODE_KEY> c,
     Ref &right) {
-    auto replacement = c.cache.template alloc_new_extent<node_type_t>(
+    auto replacement = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     replacement->merge_child_ptrs(*this, *right);
     replacement->merge_from(*this, *right->template cast<node_type_t>());
@@ -782,9 +789,9 @@ struct FixedKVInternalNode
     bool prefer_left) {
     ceph_assert(_right->get_type() == this->get_type());
     auto &right = *_right->template cast<node_type_t>();
-    auto replacement_left = c.cache.template alloc_new_extent<node_type_t>(
+    auto replacement_left = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    auto replacement_right = c.cache.template alloc_new_extent<node_type_t>(
+    auto replacement_right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
 
     auto pivot = this->balance_into_new_nodes(
@@ -984,6 +991,30 @@ struct FixedKVLeafNode
     }
   }
 
+  // children are considered stable if any of the following case is true:
+  // 1. The child extent is absent in cache
+  // 2. The child extent is stable
+  bool is_child_stable(uint16_t pos) const final {
+    auto child = this->children[pos];
+    if (is_valid_child_ptr(child)) {
+      ceph_assert(child->is_logical());
+      return child->is_stable();
+    } else if (this->is_pending()) {
+      auto key = this->iter_idx(pos).get_key();
+      auto &sparent = this->get_stable_for_key(key);
+      auto spos = sparent.child_pos_for_key(key);
+      auto child = sparent.children[spos];
+      if (is_valid_child_ptr(child)) {
+	ceph_assert(child->is_logical());
+	return child->is_stable();
+      } else {
+	return true;
+      }
+    } else {
+      return true;
+    }
+  }
+
   bool validate_stable_children() override {
     return true;
   }
@@ -1096,9 +1127,9 @@ struct FixedKVLeafNode
 
   std::tuple<Ref, Ref, NODE_KEY>
   make_split_children(op_context_t<NODE_KEY> c) {
-    auto left = c.cache.template alloc_new_extent<node_type_t>(
+    auto left = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    auto right = c.cache.template alloc_new_extent<node_type_t>(
+    auto right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     if constexpr (has_children) {
       this->split_child_ptrs(*left, *right);
@@ -1115,7 +1146,7 @@ struct FixedKVLeafNode
   Ref make_full_merge(
     op_context_t<NODE_KEY> c,
     Ref &right) {
-    auto replacement = c.cache.template alloc_new_extent<node_type_t>(
+    auto replacement = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
     if constexpr (has_children) {
       replacement->merge_child_ptrs(*this, *right);
@@ -1132,9 +1163,9 @@ struct FixedKVLeafNode
     bool prefer_left) {
     ceph_assert(_right->get_type() == this->get_type());
     auto &right = *_right->template cast<node_type_t>();
-    auto replacement_left = c.cache.template alloc_new_extent<node_type_t>(
+    auto replacement_left = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
-    auto replacement_right = c.cache.template alloc_new_extent<node_type_t>(
+    auto replacement_right = c.cache.template alloc_new_non_data_extent<node_type_t>(
       c.trans, node_size, placement_hint_t::HOT, INIT_GENERATION);
 
     auto pivot = this->balance_into_new_nodes(

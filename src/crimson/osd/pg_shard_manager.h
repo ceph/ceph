@@ -7,6 +7,7 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/sharded.hh>
 
+#include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/pg_map.h"
 
@@ -128,15 +129,16 @@ public:
   FORWARD_TO_OSD_SINGLETON(init_meta_coll)
   FORWARD_TO_OSD_SINGLETON(get_meta_coll)
 
-  FORWARD_TO_OSD_SINGLETON(set_superblock)
-
   // Core OSDMap methods
   FORWARD_TO_OSD_SINGLETON(get_local_map)
   FORWARD_TO_OSD_SINGLETON(load_map_bl)
   FORWARD_TO_OSD_SINGLETON(load_map_bls)
   FORWARD_TO_OSD_SINGLETON(store_maps)
+  FORWARD_TO_OSD_SINGLETON(trim_maps)
 
   seastar::future<> set_up_epoch(epoch_t e);
+
+  seastar::future<> set_superblock(OSDSuperblock superblock);
 
   template <typename F>
   auto with_remote_shard_state(core_id_t core, F &&f) {
@@ -149,31 +151,68 @@ public:
   }
 
   template <typename T, typename F>
+  auto process_ordered_op_remotely(
+      OSDConnectionPriv::crosscore_ordering_t::seq_t cc_seq,
+      ShardServices &target_shard_services,
+      typename T::IRef &&op,
+      F &&f) {
+    auto &crosscore_ordering = get_osd_priv(
+        &op->get_foreign_connection()).crosscore_ordering;
+    if (crosscore_ordering.proceed_or_wait(cc_seq)) {
+      return std::invoke(
+        std::move(f),
+        target_shard_services,
+        std::move(op));
+    } else {
+      auto &logger = crimson::get_logger(ceph_subsys_osd);
+      logger.debug("{} got {} at the remote pg, wait at {}",
+                   *op, cc_seq, crosscore_ordering.get_in_seq());
+      return crosscore_ordering.wait(cc_seq
+      ).then([this, cc_seq, &target_shard_services,
+              op=std::move(op), f=std::move(f)]() mutable {
+        return this->template process_ordered_op_remotely<T>(
+            cc_seq, target_shard_services, std::move(op), std::move(f));
+      });
+    }
+  }
+
+  template <typename T, typename F>
   auto with_remote_shard_state_and_op(
       core_id_t core,
       typename T::IRef &&op,
       F &&f) {
+    ceph_assert(op->use_count() == 1);
     if (seastar::this_shard_id() == core) {
+      auto f_conn = op->prepare_remote_submission();
+      op->finish_remote_submission(std::move(f_conn));
       auto &target_shard_services = shard_services.local();
       return std::invoke(
         std::move(f),
-        target_shard_services.local_state,
         target_shard_services,
         std::move(op));
     }
-    return op->prepare_remote_submission(
-    ).then([op=std::move(op), f=std::move(f), this, core
-           ](auto f_conn) mutable {
+    // Note: the ordering in only preserved until f is invoked.
+    auto &opref = *op;
+    auto &crosscore_ordering = get_osd_priv(
+        &opref.get_local_connection()).crosscore_ordering;
+    auto cc_seq = crosscore_ordering.prepare_submit(core);
+    auto &logger = crimson::get_logger(ceph_subsys_osd);
+    logger.debug("{}: send {} to the remote pg core {}",
+                 opref, cc_seq, core);
+    return opref.get_handle().complete(
+    ).then([this, core, cc_seq,
+            op=std::move(op), f=std::move(f)]() mutable {
+      get_local_state().registry.remove_from_registry(*op);
+      auto f_conn = op->prepare_remote_submission();
       return shard_services.invoke_on(
         core,
-        [f=std::move(f), op=std::move(op), f_conn=std::move(f_conn)
+        [this, cc_seq,
+         f=std::move(f), op=std::move(op), f_conn=std::move(f_conn)
         ](auto &target_shard_services) mutable {
         op->finish_remote_submission(std::move(f_conn));
-        return std::invoke(
-          std::move(f),
-          target_shard_services.local_state,
-          target_shard_services,
-          std::move(op));
+        target_shard_services.local_state.registry.add_to_registry(*op);
+        return this->template process_ordered_op_remotely<T>(
+            cc_seq, target_shard_services, std::move(op), std::move(f));
       });
     });
   }
@@ -181,86 +220,54 @@ public:
   /// Runs opref on the appropriate core, creating the pg as necessary.
   template <typename T>
   seastar::future<> run_with_pg_maybe_create(
-    typename T::IRef op
+    typename T::IRef op,
+    ShardServices &target_shard_services
   ) {
-    ceph_assert(op->use_count() == 1);
-    auto &logger = crimson::get_logger(ceph_subsys_osd);
     static_assert(T::can_create());
-    logger.debug("{}: can_create", *op);
-
-    get_local_state().registry.remove_from_registry(*op);
-    return get_pg_to_shard_mapping().maybe_create_pg(
-      op->get_pgid()
-    ).then([this, op = std::move(op)](auto core) mutable {
-      return this->template with_remote_shard_state_and_op<T>(
-        core, std::move(op),
-        [](PerShardState &per_shard_state,
-           ShardServices &shard_services,
-           typename T::IRef op) {
-	per_shard_state.registry.add_to_registry(*op);
-	auto &logger = crimson::get_logger(ceph_subsys_osd);
-	auto &opref = *op;
-	return opref.template with_blocking_event<
-	  PGMap::PGCreationBlockingEvent
-	  >([&shard_services, &opref](
-	      auto &&trigger) {
-	    return shard_services.get_or_create_pg(
-	      std::move(trigger),
-	      opref.get_pgid(),
-	      std::move(opref.get_create_info())
-	    );
-	  }).safe_then([&logger, &shard_services, &opref](Ref<PG> pgref) {
-	    logger.debug("{}: have_pg", opref);
-	    return opref.with_pg(shard_services, pgref);
-	  }).handle_error(
-	    crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
-	      logger.debug("{}: pg creation canceled, dropping", opref);
-	      return seastar::now();
-	    })
-	  ).then([op=std::move(op)] {});
-      });
-    });
+    auto &logger = crimson::get_logger(ceph_subsys_osd);
+    auto &opref = *op;
+    return opref.template with_blocking_event<
+      PGMap::PGCreationBlockingEvent
+    >([&target_shard_services, &opref](auto &&trigger) {
+      return target_shard_services.get_or_create_pg(
+        std::move(trigger),
+        opref.get_pgid(),
+        std::move(opref.get_create_info())
+      );
+    }).safe_then([&logger, &target_shard_services, &opref](Ref<PG> pgref) {
+      logger.debug("{}: have_pg", opref);
+      return opref.with_pg(target_shard_services, pgref);
+    }).handle_error(
+      crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
+        logger.debug("{}: pg creation canceled, dropping", opref);
+        return seastar::now();
+      })
+    ).then([op=std::move(op)] {});
   }
 
   /// Runs opref on the appropriate core, waiting for pg as necessary
   template <typename T>
   seastar::future<> run_with_pg_maybe_wait(
-    typename T::IRef op
+    typename T::IRef op,
+    ShardServices &target_shard_services
   ) {
-    ceph_assert(op->use_count() == 1);
-    auto &logger = crimson::get_logger(ceph_subsys_osd);
     static_assert(!T::can_create());
-    logger.debug("{}: !can_create", *op);
-
-    get_local_state().registry.remove_from_registry(*op);
-    return get_pg_to_shard_mapping().maybe_create_pg(
-      op->get_pgid()
-    ).then([this, op = std::move(op)](auto core) mutable {
-      return this->template with_remote_shard_state_and_op<T>(
-        core, std::move(op),
-        [](PerShardState &per_shard_state,
-           ShardServices &shard_services,
-           typename T::IRef op) {
-	per_shard_state.registry.add_to_registry(*op);
-	auto &logger = crimson::get_logger(ceph_subsys_osd);
-	auto &opref = *op;
-	return opref.template with_blocking_event<
-	  PGMap::PGCreationBlockingEvent
-	  >([&shard_services, &opref](
-	      auto &&trigger) {
-	    return shard_services.wait_for_pg(
-	      std::move(trigger), opref.get_pgid());
-	  }).safe_then([&logger, &shard_services, &opref](Ref<PG> pgref) {
-	    logger.debug("{}: have_pg", opref);
-	    return opref.with_pg(shard_services, pgref);
-	  }).handle_error(
-	    crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
-	      logger.debug("{}: pg creation canceled, dropping", opref);
-	      return seastar::now();
-	    })
-	  ).then([op=std::move(op)] {});
-      });
-    });
+    auto &logger = crimson::get_logger(ceph_subsys_osd);
+    auto &opref = *op;
+    return opref.template with_blocking_event<
+      PGMap::PGCreationBlockingEvent
+    >([&target_shard_services, &opref](auto &&trigger) {
+      return target_shard_services.wait_for_pg(
+        std::move(trigger), opref.get_pgid());
+    }).safe_then([&logger, &target_shard_services, &opref](Ref<PG> pgref) {
+      logger.debug("{}: have_pg", opref);
+      return opref.with_pg(target_shard_services, pgref);
+    }).handle_error(
+      crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
+        logger.debug("{}: pg creation canceled, dropping", opref);
+        return seastar::now();
+      })
+    ).then([op=std::move(op)] {});
   }
 
   seastar::future<> load_pgs(crimson::os::FuturizedStore& store);
@@ -365,19 +372,40 @@ public:
 	      &get_shard_services());
       });
     }).then([&logger, &opref](auto epoch) {
-      logger.debug("{}: got map {}, entering get_pg", opref, epoch);
+      logger.debug("{}: got map {}, entering get_pg_mapping", opref, epoch);
       return opref.template enter_stage<>(
-	opref.get_connection_pipeline().get_pg);
-    }).then([this, &logger, &opref, op=std::move(op)]() mutable {
-      logger.debug("{}: in get_pg core {}", opref, seastar::this_shard_id());
-      logger.debug("{}: in get_pg", opref);
-      if constexpr (T::can_create()) {
-	logger.debug("{}: can_create", opref);
-	return run_with_pg_maybe_create<T>(std::move(op));
-      } else {
-	logger.debug("{}: !can_create", opref);
-	return run_with_pg_maybe_wait<T>(std::move(op));
+	opref.get_connection_pipeline().get_pg_mapping);
+    }).then([this, &opref] {
+      return get_pg_to_shard_mapping().get_or_create_pg_mapping(opref.get_pgid());
+    }).then_wrapped([this, &logger, op=std::move(op)](auto fut) mutable {
+      if (unlikely(fut.failed())) {
+        logger.error("{}: failed before with_pg", *op);
+        op->get_handle().exit();
+        return seastar::make_exception_future<>(fut.get_exception());
       }
+
+      auto core = fut.get();
+      logger.debug("{}: can_create={}, target-core={}",
+                   *op, T::can_create(), core);
+      return this->template with_remote_shard_state_and_op<T>(
+        core, std::move(op),
+        [this](ShardServices &target_shard_services,
+               typename T::IRef op) {
+        auto &opref = *op;
+        auto &logger = crimson::get_logger(ceph_subsys_osd);
+        logger.debug("{}: entering create_or_wait_pg", opref);
+        return opref.template enter_stage<>(
+          opref.get_pershard_pipeline(target_shard_services).create_or_wait_pg
+        ).then([this, &target_shard_services, op=std::move(op)]() mutable {
+          if constexpr (T::can_create()) {
+            return this->template run_with_pg_maybe_create<T>(
+                std::move(op), target_shard_services);
+          } else {
+            return this->template run_with_pg_maybe_wait<T>(
+                std::move(op), target_shard_services);
+          }
+        });
+      });
     });
     return std::make_pair(id, std::move(fut));
   }

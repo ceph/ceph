@@ -6,16 +6,15 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
 import { LogsComponent } from '../../logs/logs.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('UpgradeProgressComponent', () => {
   let component: UpgradeProgressComponent;
   let fixture: ComponentFixture<UpgradeProgressComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [UpgradeProgressComponent, LogsComponent],
-      imports: [ToastrModule.forRoot(), HttpClientTestingModule, SharedModule, RouterTestingModule]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [UpgradeProgressComponent, LogsComponent],
+    imports: [ToastrModule.forRoot(), HttpClientTestingModule, SharedModule, RouterTestingModule]
   });
 
   beforeEach(() => {

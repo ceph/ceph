@@ -388,7 +388,7 @@ JournalTrimmerImpl::config_t::get_test(
     max_journal_bytes = 4 * roll_size;
   } else {
     assert(type == journal_type_t::RANDOM_BLOCK);
-    target_dirty_bytes = roll_size / 4;
+    target_dirty_bytes = roll_size / 36;
     target_alloc_bytes = roll_size / 4;
     max_journal_bytes = roll_size / 2;
   }
@@ -986,7 +986,7 @@ segment_id_t SegmentCleaner::allocate_segment(
   ERROR("out of space with {} {} {} {}",
         type, segment_seq_printer_t{seq}, category,
         rewrite_gen_printer_t{generation});
-  ceph_abort();
+  ceph_abort("seastore device size setting is too small");
   return NULL_SEG_ID;
 }
 

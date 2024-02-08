@@ -6,6 +6,7 @@
 #include "crimson/common/interruptible_future.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/recovery_backend.h"
+#include "crimson/osd/object_metadata_helper.h"
 
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPush.h"
@@ -24,7 +25,7 @@ public:
   {}
   interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
-    crimson::net::ConnectionRef conn) final;
+    crimson::net::ConnectionXcoreRef conn) final;
 
   interruptible_future<> recover_object(
     const hobject_t& soid,
@@ -48,15 +49,26 @@ protected:
     Ref<MOSDPGRecoveryDelete> m);
   interruptible_future<> handle_recovery_delete_reply(
     Ref<MOSDPGRecoveryDeleteReply> m);
-  interruptible_future<PushOp> prep_push(
+  interruptible_future<PushOp> prep_push_to_replica(
     const hobject_t& soid,
     eversion_t need,
     pg_shard_t pg_shard);
+  interruptible_future<PushOp> prep_push(
+    const hobject_t& soid,
+    eversion_t need,
+    pg_shard_t pg_shard,
+    const crimson::osd::subsets_t& subsets,
+    const SnapSet push_info_ss);
   void prepare_pull(
+    const crimson::osd::ObjectContextRef &head_obc,
     PullOp& pull_op,
     pull_info_t& pull_info,
     const hobject_t& soid,
     eversion_t need);
+  ObjectRecoveryInfo set_recovery_info(
+    const hobject_t& soid,
+    const crimson::osd::SnapSetContextRef ssc,
+    const hobject_t& last_backfill);
   std::vector<pg_shard_t> get_shards_to_push(
     const hobject_t& soid) const;
   interruptible_future<PushOp> build_push_op(
@@ -70,6 +82,9 @@ protected:
     PushOp& push_op,
     PullOp* response,
     ceph::os::Transaction* t);
+  void recalc_subsets(
+    ObjectRecoveryInfo& recovery_info,
+    crimson::osd::SnapSetContextRef ssc);
   std::pair<interval_set<uint64_t>, ceph::bufferlist> trim_pushed_data(
     const interval_set<uint64_t> &copy_subset,
     const interval_set<uint64_t> &intervals_received,
@@ -124,6 +139,7 @@ private:
       load_obc_ertr>;
 
   interruptible_future<> maybe_push_shards(
+    const crimson::osd::ObjectContextRef &head_obc,
     const hobject_t& soid,
     eversion_t need);
 

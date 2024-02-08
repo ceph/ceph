@@ -18,6 +18,7 @@
 
 #include "common/SubProcess.h"
 #include "common/errno.h"
+#include "common/win32/wstring.h"
 #include "include/ceph_assert.h"
 #include "include/compat.h"
 
@@ -174,8 +175,9 @@ int SubProcess::spawn() {
   for (auto& arg : cmd_args) {
     cmdline << " " << std::quoted(arg);
   }
+  std::wstring cmdline_w = to_wstring(cmdline.str());
 
-  STARTUPINFO si = {0};
+  STARTUPINFOW si = {0};
   PROCESS_INFORMATION pi = {0};
   SECURITY_ATTRIBUTES sa = {0};
 
@@ -224,8 +226,8 @@ int SubProcess::spawn() {
   // We've transfered ownership from those handles.
   stdin_w = stdout_r = stderr_r = INVALID_HANDLE_VALUE;
 
-  if (!CreateProcess(
-      NULL, const_cast<char*>(cmdline.str().c_str()),
+  if (!CreateProcessW(
+      NULL, const_cast<wchar_t*>(cmdline_w.c_str()),
       NULL, NULL, /* No special security attributes */
       1, /* Inherit handles marked as inheritable */
       0, /* No special flags */

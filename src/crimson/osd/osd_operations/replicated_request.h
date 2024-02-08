@@ -38,17 +38,34 @@ public:
   epoch_t get_epoch() const { return req->get_min_epoch(); }
 
   ConnectionPipeline &get_connection_pipeline();
-  seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
-    assert(conn);
-    return conn.get_foreign(
-    ).then([this](auto f_conn) {
-      conn.reset();
-      return f_conn;
-    });
+
+  PerShardPipeline &get_pershard_pipeline(ShardServices &);
+
+  crimson::net::Connection &get_local_connection() {
+    assert(l_conn);
+    assert(!r_conn);
+    return *l_conn;
+  };
+
+  crimson::net::Connection &get_foreign_connection() {
+    assert(r_conn);
+    assert(!l_conn);
+    return *r_conn;
+  };
+
+  crimson::net::ConnectionFFRef prepare_remote_submission() {
+    assert(l_conn);
+    assert(!r_conn);
+    auto ret = seastar::make_foreign(std::move(l_conn));
+    l_conn.reset();
+    return ret;
   }
-  void finish_remote_submission(crimson::net::ConnectionFRef _conn) {
-    assert(!conn);
-    conn = make_local_shared_foreign(std::move(_conn));
+
+  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
+    assert(conn);
+    assert(!l_conn);
+    assert(!r_conn);
+    r_conn = make_local_shared_foreign(std::move(conn));
   }
 
   seastar::future<> with_pg(
@@ -58,7 +75,8 @@ public:
     StartEvent,
     ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
-    ConnectionPipeline::GetPG::BlockingEvent,
+    ConnectionPipeline::GetPGMapping::BlockingEvent,
+    PerShardPipeline::CreateOrWaitPG::BlockingEvent,
     ClientRequest::PGPipeline::AwaitMap::BlockingEvent,
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGMap::PGCreationBlockingEvent,
@@ -68,7 +86,9 @@ public:
 private:
   ClientRequest::PGPipeline &client_pp(PG &pg);
 
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionRef l_conn;
+  crimson::net::ConnectionXcoreRef r_conn;
+
   PipelineHandle handle;
   Ref<MOSDRepOp> req;
 };

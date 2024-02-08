@@ -2424,6 +2424,7 @@ TEST(LibRadosAio, PoolEIOFlag) {
 
 // This test case reproduces https://tracker.ceph.com/issues/57152
 TEST(LibRadosAio, MultiReads) {
+  SKIP_IF_CRIMSON();
 
   // here we test multithreaded aio reads
 

@@ -86,24 +86,15 @@ public:
                 const DoutPrefixProvider* dpp);
   void adjust_stats(const rgw_user& user, rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
 
-  void set_stats(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, RGWStorageStats& stats);
+  void set_stats(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, const RGWStorageStats& stats);
   int async_refresh(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs);
-  void async_refresh_response(const rgw_user& user, rgw_bucket& bucket, RGWStorageStats& stats);
+  void async_refresh_response(const rgw_user& user, rgw_bucket& bucket, const RGWStorageStats& stats);
   void async_refresh_fail(const rgw_user& user, rgw_bucket& bucket);
 
-  class AsyncRefreshHandler {
-  protected:
-    rgw::sal::Driver* driver;
-    RGWQuotaCache<T> *cache;
-  public:
-    AsyncRefreshHandler(rgw::sal::Driver* _driver, RGWQuotaCache<T> *_cache) : driver(_driver), cache(_cache) {}
-    virtual ~AsyncRefreshHandler() {}
-
-    virtual int init_fetch() = 0;
-    virtual void drop_reference() = 0;
-  };
-
-  virtual AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket) = 0;
+  /// start an async refresh that will eventually call async_refresh_response or
+  /// async_refresh_fail. hold a reference to the waiter until completion
+  virtual int init_refresh(const rgw_user& user, const rgw_bucket& bucket,
+                           boost::intrusive_ptr<RefCountedWaitObject> waiter) = 0;
 };
 
 template<class T>
@@ -116,31 +107,17 @@ int RGWQuotaCache<T>::async_refresh(const rgw_user& user, const rgw_bucket& buck
     return 0;
   }
 
-  async_refcount->get();
-
-
-  AsyncRefreshHandler *handler = allocate_refresh_handler(user, bucket);
-
-  int ret = handler->init_fetch();
-  if (ret < 0) {
-    async_refcount->put();
-    handler->drop_reference();
-    return ret;
-  }
-
-  return 0;
+  return init_refresh(user, bucket, async_refcount);
 }
 
 template<class T>
 void RGWQuotaCache<T>::async_refresh_fail(const rgw_user& user, rgw_bucket& bucket)
 {
   ldout(driver->ctx(), 20) << "async stats refresh response for bucket=" << bucket << dendl;
-
-  async_refcount->put();
 }
 
 template<class T>
-void RGWQuotaCache<T>::async_refresh_response(const rgw_user& user, rgw_bucket& bucket, RGWStorageStats& stats)
+void RGWQuotaCache<T>::async_refresh_response(const rgw_user& user, rgw_bucket& bucket, const RGWStorageStats& stats)
 {
   ldout(driver->ctx(), 20) << "async stats refresh response for bucket=" << bucket << dendl;
 
@@ -149,12 +126,10 @@ void RGWQuotaCache<T>::async_refresh_response(const rgw_user& user, rgw_bucket& 
   map_find(user, bucket, qs);
 
   set_stats(user, bucket, qs, stats);
-
-  async_refcount->put();
 }
 
 template<class T>
-void RGWQuotaCache<T>::set_stats(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, RGWStorageStats& stats)
+void RGWQuotaCache<T>::set_stats(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, const RGWStorageStats& stats)
 {
   qs.stats = stats;
   qs.expiration = ceph_clock_now();
@@ -246,70 +221,6 @@ void RGWQuotaCache<T>::adjust_stats(const rgw_user& user, rgw_bucket& bucket, in
   data_modified(user, bucket);
 }
 
-class BucketAsyncRefreshHandler : public RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler,
-                                  public RGWGetBucketStats_CB {
-  rgw_user user;
-public:
-  BucketAsyncRefreshHandler(rgw::sal::Driver* _driver, RGWQuotaCache<rgw_bucket> *_cache,
-                            const rgw_user& _user, const rgw_bucket& _bucket) :
-                                      RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler(_driver, _cache),
-                                      RGWGetBucketStats_CB(_bucket), user(_user) {}
-
-  void drop_reference() override { put(); }
-  void handle_response(int r) override;
-  int init_fetch() override;
-};
-
-int BucketAsyncRefreshHandler::init_fetch()
-{
-  std::unique_ptr<rgw::sal::Bucket> rbucket;
-
-  const DoutPrefix dp(driver->ctx(), dout_subsys, "rgw bucket async refresh handler: ");
-  int r = driver->get_bucket(&dp, nullptr, bucket, &rbucket, null_yield);
-  if (r < 0) {
-    ldpp_dout(&dp, 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
-    return r;
-  }
-
-  ldpp_dout(&dp, 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
-
-  const auto& index = rbucket->get_info().get_current_index();
-  if (is_layout_indexless(index)) {
-    return 0;
-  }
-
-  r = rbucket->read_stats_async(&dp, index, RGW_NO_SHARD, this);
-  if (r < 0) {
-    ldpp_dout(&dp, 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
-
-    /* read_stats_async() dropped our reference already */
-    return r;
-  }
-
-  return 0;
-}
-
-void BucketAsyncRefreshHandler::handle_response(const int r)
-{
-  if (r < 0) {
-    ldout(driver->ctx(), 20) << "AsyncRefreshHandler::handle_response() r=" << r << dendl;
-    cache->async_refresh_fail(user, bucket);
-    return;
-  }
-
-  RGWStorageStats bs;
-
-  for (const auto& pair : *stats) {
-    const RGWStorageStats& s = pair.second;
-
-    bs.size += s.size;
-    bs.size_rounded += s.size_rounded;
-    bs.num_objects += s.num_objects;
-  }
-
-  cache->async_refresh_response(user, bucket, bs);
-}
-
 class RGWBucketStatsCache : public RGWQuotaCache<rgw_bucket> {
 protected:
   bool map_find(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs) override {
@@ -330,9 +241,8 @@ public:
   explicit RGWBucketStatsCache(rgw::sal::Driver* _driver) : RGWQuotaCache<rgw_bucket>(_driver, _driver->ctx()->_conf->rgw_bucket_quota_cache_size) {
   }
 
-  AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket) override {
-    return new BucketAsyncRefreshHandler(driver, this, user, bucket);
-  }
+  int init_refresh(const rgw_user& user, const rgw_bucket& bucket,
+                   boost::intrusive_ptr<RefCountedWaitObject> waiter) override;
 };
 
 int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_bucket& _b, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider *dpp)
@@ -340,7 +250,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_
   std::unique_ptr<rgw::sal::User> user = driver->get_user(_u);
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
-  int r = driver->get_bucket(dpp, user.get(), _b, &bucket, y);
+  int r = driver->load_bucket(dpp, _b, &bucket, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << _b << " r=" << r << dendl;
     return r;
@@ -376,48 +286,57 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_
   return 0;
 }
 
-class UserAsyncRefreshHandler : public RGWQuotaCache<rgw_user>::AsyncRefreshHandler,
-                                public RGWGetUserStats_CB {
-  const DoutPrefixProvider *dpp;
+class BucketAsyncRefreshHandler : public rgw::sal::ReadStatsCB {
+  RGWBucketStatsCache* cache;
+  boost::intrusive_ptr<RefCountedWaitObject> waiter;
+  rgw_user user;
   rgw_bucket bucket;
 public:
-  UserAsyncRefreshHandler(const DoutPrefixProvider *_dpp, rgw::sal::Driver* _driver, RGWQuotaCache<rgw_user> *_cache,
-                          const rgw_user& _user, const rgw_bucket& _bucket) :
-                          RGWQuotaCache<rgw_user>::AsyncRefreshHandler(_driver, _cache),
-                          RGWGetUserStats_CB(_user),
-                          dpp(_dpp),
-                          bucket(_bucket) {}
+  BucketAsyncRefreshHandler(RGWBucketStatsCache* cache,
+                            boost::intrusive_ptr<RefCountedWaitObject> waiter,
+                            const rgw_user& user, const rgw_bucket& bucket)
+    : cache(cache), waiter(std::move(waiter)), user(user), bucket(bucket) {}
 
-  void drop_reference() override { put(); }
-  int init_fetch() override;
-  void handle_response(int r) override;
+  void handle_response(int r, const RGWStorageStats& stats) override {
+    if (r < 0) {
+      cache->async_refresh_fail(user, bucket);
+      return;
+    }
+
+    cache->async_refresh_response(user, bucket, stats);
+  }
 };
 
-int UserAsyncRefreshHandler::init_fetch()
+
+int RGWBucketStatsCache::init_refresh(const rgw_user& user, const rgw_bucket& bucket,
+                                     boost::intrusive_ptr<RefCountedWaitObject> waiter)
 {
-  std::unique_ptr<rgw::sal::User> ruser = driver->get_user(user);
+  std::unique_ptr<rgw::sal::Bucket> rbucket;
 
-  ldpp_dout(dpp, 20) << "initiating async quota refresh for user=" << user << dendl;
-  int r = ruser->read_stats_async(dpp, this);
+  const DoutPrefix dp(driver->ctx(), dout_subsys, "rgw bucket async refresh handler: ");
+  int r = driver->load_bucket(&dp, bucket, &rbucket, null_yield);
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "could not get bucket info for user=" << user << dendl;
+    ldpp_dout(&dp, 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
+    return r;
+  }
 
-    /* get_bucket_stats_async() dropped our reference already */
+  ldpp_dout(&dp, 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
+
+  const auto& index = rbucket->get_info().get_current_index();
+  if (is_layout_indexless(index)) {
+    return 0;
+  }
+
+  boost::intrusive_ptr handler = new BucketAsyncRefreshHandler(
+      this, std::move(waiter), user, bucket);
+
+  r = rbucket->read_stats_async(&dp, index, RGW_NO_SHARD, std::move(handler));
+  if (r < 0) {
+    ldpp_dout(&dp, 0) << "could not get bucket stats for bucket=" << bucket.name << dendl;
     return r;
   }
 
   return 0;
-}
-
-void UserAsyncRefreshHandler::handle_response(int r)
-{
-  if (r < 0) {
-    ldout(driver->ctx(), 20) << "AsyncRefreshHandler::handle_response() r=" << r << dendl;
-    cache->async_refresh_fail(user, bucket);
-    return;
-  }
-
-  cache->async_refresh_response(user, bucket, stats);
 }
 
 class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
@@ -574,9 +493,8 @@ public:
     stop();
   }
 
-  AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket) override {
-    return new UserAsyncRefreshHandler(dpp, driver, this, user, bucket);
-  }
+  int init_refresh(const rgw_user& user, const rgw_bucket& bucket,
+                   boost::intrusive_ptr<RefCountedWaitObject> waiter) override;
 
   bool going_down() {
     return down_flag;
@@ -591,6 +509,49 @@ public:
     stop_thread(&user_sync_thread);
   }
 };
+
+class UserAsyncRefreshHandler : public rgw::sal::ReadStatsCB {
+  RGWUserStatsCache* cache;
+  boost::intrusive_ptr<RefCountedWaitObject> waiter;
+  rgw_bucket bucket;
+  rgw_user user;
+ public:
+  UserAsyncRefreshHandler(RGWUserStatsCache* cache,
+                          boost::intrusive_ptr<RefCountedWaitObject> waiter,
+                          const rgw_user& user, const rgw_bucket& bucket)
+      : cache(cache), waiter(std::move(waiter)), bucket(bucket), user(user)
+  {}
+
+  void handle_response(int r, const RGWStorageStats& stats) override;
+};
+
+int RGWUserStatsCache::init_refresh(const rgw_user& user, const rgw_bucket& bucket,
+                                    boost::intrusive_ptr<RefCountedWaitObject> waiter)
+{
+  boost::intrusive_ptr handler = new UserAsyncRefreshHandler(
+      this, std::move(waiter), user, bucket);
+
+  std::unique_ptr<rgw::sal::User> ruser = driver->get_user(user);
+
+  ldpp_dout(dpp, 20) << "initiating async quota refresh for user=" << user << dendl;
+  int r = ruser->read_stats_async(dpp, std::move(handler));
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "could not get bucket info for user=" << user << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+void UserAsyncRefreshHandler::handle_response(int r, const RGWStorageStats& stats)
+{
+  if (r < 0) {
+    cache->async_refresh_fail(user, bucket);
+    return;
+  }
+
+  cache->async_refresh_response(user, bucket, stats);
+}
 
 int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& _u,
 						const rgw_bucket& _b,
@@ -613,19 +574,20 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& _u, rgw_bucket& _b, optional_
   std::unique_ptr<rgw::sal::User> user = driver->get_user(_u);
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
-  int r = driver->get_bucket(dpp, user.get(), _b, &bucket, y);
+  int r = driver->load_bucket(dpp, _b, &bucket, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << _b << " r=" << r << dendl;
     return r;
   }
 
-  r = bucket->sync_user_stats(dpp, y);
+  RGWBucketEnt ent;
+  r = bucket->sync_user_stats(dpp, y, &ent);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: sync_user_stats() for user=" << _u << ", bucket=" << bucket << " returned " << r << dendl;
     return r;
   }
 
-  return bucket->check_bucket_shards(dpp, y);
+  return bucket->check_bucket_shards(dpp, ent.count, y);
 }
 
 int RGWUserStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& _u, optional_yield y)

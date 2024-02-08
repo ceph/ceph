@@ -16,8 +16,8 @@ sslDir="${depsToolsetDir}/openssl"
 sslSrcDir="${depsSrcDir}/openssl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.82.0/source/boost_1_82_0.tar.gz"
-boostSha256Sum="66a469b6e608a51f8347236f4912e27dc5c60c60d7d53ae9bfe4683316c6f04c"
+boostUrl="https://download.ceph.com/qa/boost_1_82_0.tar.bz2"
+boostSha256Sum="a6e1ab9b0860e6a2881dd7b21fe9f737a095e5f33a3a874afc6a345228597ee6"
 boostSrcDir="${depsSrcDir}/boost_1_82_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
@@ -40,8 +40,8 @@ dokanTag="v2.0.5.1000"
 dokanSrcDir="${depsSrcDir}/dokany"
 dokanLibDir="${depsToolsetDir}/dokany/lib"
 
-mingwLlvmUrl="https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/llvm-mingw-20230320-msvcrt-ubuntu-18.04-x86_64.tar.xz"
-mingwLlvmSha256Sum="bc97745e702fb9e8f2a16f7d09dd5061ceeef16554dd12e542f619ce937e8d7a"
+mingwLlvmUrl="https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/llvm-mingw-20230320-ucrt-ubuntu-18.04-x86_64.tar.xz"
+mingwLlvmSha256Sum="bc367753dea829d219be32e2e64e2d15d03158ce8e700ae5210ca3d78e6a07ea"
 mingwLlvmDir="${DEPS_DIR}/mingw-llvm"
 
 function _make() {
@@ -70,6 +70,8 @@ case "$OS" in
             libtool \
             ninja-build \
             zip \
+            bzip2 \
+            xz \
             python3-PyYAML \
             gcc \
             diffutils \
@@ -83,12 +85,12 @@ case "$OS" in
         sudo env DEBIAN_FRONTEND=noninteractive apt-get -y install \
             mingw-w64 g++ cmake pkg-config \
             python3-dev python3-yaml \
-                autoconf libtool ninja-build wget zip \
+                autoconf libtool ninja-build wget xz-utils zip bzip2 \
                 git
         ;;
     suse)
         for PKG in mingw64-cross-gcc-c++ mingw64-libgcc_s_seh1 mingw64-libstdc++6 \
-                cmake pkgconf python3-devel autoconf libtool ninja zip \
+                cmake pkgconf python3-devel autoconf libtool ninja xz zip bzip2 \
                 python3-PyYAML \
                 gcc patch wget git; do
             rpm -q $PKG >/dev/null || zypper -n install $PKG
@@ -160,14 +162,14 @@ echo "Building boost."
 cd $depsSrcDir
 if [[ ! -d $boostSrcDir ]]; then
     echo "Downloading boost."
-    wget -q -O boost.tar.gz $boostUrl
-    checksum=`sha256sum boost.tar.gz | cut -d ' ' -f 1`
+    wget -q -O boost.tar.bz2 $boostUrl
+    checksum=`sha256sum boost.tar.bz2 | cut -d ' ' -f 1`
     if [[ "$boostSha256Sum" != "$checksum" ]]; then
         echo "Invalid boost checksum: $checksum" >&2
         exit 1
     fi
-    tar xzf boost.tar.gz
-    rm boost.tar.gz
+    tar -xf boost.tar.bz2
+    rm boost.tar.bz2
 fi
 
 cd $boostSrcDir

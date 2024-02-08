@@ -9,12 +9,14 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { Pool } from '../../pool/pool';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
-import _ from 'lodash';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { CephfsSubvolumeInfo } from '~/app/shared/models/cephfs-subvolume.model';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { OctalToHumanReadablePipe } from '~/app/shared/pipes/octal-to-human-readable.pipe';
 import { CdForm } from '~/app/shared/forms/cd-form';
+import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
+import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
+import { Observable } from 'rxjs';
 
 @Component({
   selector: 'cd-cephfs-subvolume-form',
@@ -24,6 +26,7 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
   fsName: string;
   subVolumeName: string;
+  subVolumeGroupName: string;
   pools: Pool[];
   isEdit = false;
 
@@ -32,6 +35,8 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
   action: string;
   resource: string;
 
+  subVolumeGroups$: Observable<CephfsSubvolumeGroup[]>;
+  subVolumeGroups: CephfsSubvolumeGroup[];
   dataPools: Pool[];
 
   columns: CdTableColumn[];
@@ -48,6 +53,7 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
     private actionLabels: ActionLabelsI18n,
     private taskWrapper: TaskWrapperService,
     private cephFsSubvolumeService: CephfsSubvolumeService,
+    private cephFsSubvolumeGroupService: CephfsSubvolumeGroupService,
     private formatter: FormatterService,
     private dimlessBinary: DimlessBinaryPipe,
     private octalToHumanReadable: OctalToHumanReadablePipe
@@ -84,6 +90,7 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
       }
     ];
 
+    this.subVolumeGroups$ = this.cephFsSubvolumeGroupService.get(this.fsName);
     this.dataPools = this.pools.filter((pool) => pool.type === 'data');
     this.createForm();
 
@@ -94,17 +101,19 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
     this.subvolumeForm = new CdFormGroup({
       volumeName: new FormControl({ value: this.fsName, disabled: true }),
       subvolumeName: new FormControl('', {
-        validators: [Validators.required],
+        validators: [Validators.required, Validators.pattern(/^[.A-Za-z0-9_-]+$/)],
         asyncValidators: [
           CdValidators.unique(
             this.cephFsSubvolumeService.exists,
             this.cephFsSubvolumeService,
             null,
             null,
-            this.fsName
+            this.fsName,
+            this.subVolumeGroupName
           )
         ]
       }),
+      subvolumeGroupName: new FormControl(this.subVolumeGroupName),
       pool: new FormControl(this.dataPools[0]?.pool, {
         validators: [Validators.required]
       }),
@@ -121,16 +130,18 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
   populateForm() {
     this.action = this.actionLabels.EDIT;
     this.cephFsSubvolumeService
-      .info(this.fsName, this.subVolumeName)
+      .info(this.fsName, this.subVolumeName, this.subVolumeGroupName)
       .subscribe((resp: CephfsSubvolumeInfo) => {
         // Disabled these fields since its not editable
         this.subvolumeForm.get('subvolumeName').disable();
+        this.subvolumeForm.get('subvolumeGroupName').disable();
         this.subvolumeForm.get('pool').disable();
         this.subvolumeForm.get('uid').disable();
         this.subvolumeForm.get('gid').disable();
 
         this.subvolumeForm.get('isolatedNamespace').disable();
         this.subvolumeForm.get('subvolumeName').setValue(this.subVolumeName);
+        this.subvolumeForm.get('subvolumeGroupName').setValue(this.subVolumeGroupName);
         if (resp.bytes_quota !== 'infinite') {
           this.subvolumeForm.get('size').setValue(this.dimlessBinary.transform(resp.bytes_quota));
         }
@@ -145,6 +156,7 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
 
   submit() {
     const subVolumeName = this.subvolumeForm.getValue('subvolumeName');
+    const subVolumeGroupName = this.subvolumeForm.getValue('subvolumeGroupName');
     const pool = this.subvolumeForm.getValue('pool');
     const size = this.formatter.toBytes(this.subvolumeForm.getValue('size')) || 0;
     const uid = this.subvolumeForm.getValue('uid');
@@ -159,7 +171,12 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
           task: new FinishedTask('cephfs/subvolume/' + URLVerbs.EDIT, {
             subVolumeName: subVolumeName
           }),
-          call: this.cephFsSubvolumeService.update(this.fsName, subVolumeName, String(editSize))
+          call: this.cephFsSubvolumeService.update(
+            this.fsName,
+            subVolumeName,
+            String(editSize),
+            subVolumeGroupName
+          )
         })
         .subscribe({
           error: () => {
@@ -178,6 +195,7 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
           call: this.cephFsSubvolumeService.create(
             this.fsName,
             subVolumeName,
+            subVolumeGroupName,
             pool,
             String(size),
             uid,

@@ -21,7 +21,6 @@
 # https://rpm-software-management.github.io/rpm/manual/conditionalbuilds.html
 #################################################################################
 %bcond_with make_check
-%bcond_with zbd
 %bcond_with cmake_verbose_logging
 %bcond_without ceph_test_package
 %ifarch s390
@@ -98,7 +97,7 @@
 %else
 %bcond_without jaeger
 %endif
-%if 0%{?fedora} || 0%{?suse_version} >= 1500
+%if 0%{?fedora} || 0%{?suse_version} >= 1500 || 0%{?rhel} >= 9
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
 %else
@@ -124,6 +123,8 @@
 %{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
 %endif
 %endif
+%bcond_without cephadm_bundling
+%bcond_without cephadm_pip_deps
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
@@ -189,7 +190,7 @@ URL:		http://ceph.com/
 Source0:	%{?_remote_tarball_prefix}@TARBALL_BASENAME@.tar.bz2
 %if 0%{?suse_version}
 # _insert_obs_source_lines_here
-ExclusiveArch:  x86_64 aarch64 ppc64le s390x
+ExclusiveArch:  x86_64 aarch64 ppc64le s390x riscv64
 %endif
 #################################################################################
 # dependencies that apply across all distro families
@@ -211,6 +212,7 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
+BuildRequires:	git
 %if 0%{?fedora} || 0%{?suse_version} > 1500 || 0%{?rhel} == 9 || 0%{?openEuler}
 BuildRequires:	gcc-c++ >= 11
 %endif
@@ -270,6 +272,7 @@ BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	nasm
 BuildRequires:	lua-devel
+BuildRequires:  lmdb-devel
 %if 0%{with seastar} || 0%{with jaeger}
 BuildRequires:  yaml-cpp-devel >= 0.6
 %endif
@@ -280,7 +283,8 @@ BuildRequires:  librabbitmq-devel
 BuildRequires:  librdkafka-devel
 %endif
 %if 0%{with lua_packages}
-BuildRequires:  %{luarocks_package_name}
+Requires:  lua-devel
+Requires:  %{luarocks_package_name}
 %endif
 %if 0%{with make_check}
 BuildRequires:  hostname
@@ -295,9 +299,6 @@ BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat
 BuildRequires:	python%{python3_pkgversion}-asyncssh
 BuildRequires:	python%{python3_pkgversion}-natsort
-%endif
-%if 0%{with zbd}
-BuildRequires:  libzbd-devel
 %endif
 %if 0%{?suse_version}
 BuildRequires:  libthrift-devel >= 0.13.0
@@ -341,6 +342,8 @@ BuildRequires:  ragel
 BuildRequires:  systemtap-sdt-devel
 BuildRequires:  libubsan
 BuildRequires:  libasan
+BuildRequires:  protobuf-devel
+BuildRequires:  protobuf-compiler
 %if 0%{?rhel} == 8
 BuildRequires:  %{gts_prefix}-annobin
 BuildRequires:  %{gts_prefix}-annobin-plugin-gcc
@@ -410,7 +413,6 @@ BuildRequires:	xmlsec1-nss
 BuildRequires:	xmlsec1-openssl
 BuildRequires:	xmlsec1-openssl-devel
 BuildRequires:	python%{python3_pkgversion}-cherrypy
-BuildRequires:	python%{python3_pkgversion}-jwt
 BuildRequires:	python%{python3_pkgversion}-routes
 BuildRequires:	python%{python3_pkgversion}-scipy
 BuildRequires:	python%{python3_pkgversion}-werkzeug
@@ -423,7 +425,6 @@ BuildRequires:	libxmlsec1-1
 BuildRequires:	libxmlsec1-nss1
 BuildRequires:	libxmlsec1-openssl1
 BuildRequires:	python%{python3_pkgversion}-CherryPy
-BuildRequires:	python%{python3_pkgversion}-PyJWT
 BuildRequires:	python%{python3_pkgversion}-Routes
 BuildRequires:	python%{python3_pkgversion}-Werkzeug
 BuildRequires:	python%{python3_pkgversion}-numpy-devel
@@ -526,6 +527,13 @@ Requires:       which
 %if 0%{?weak_deps}
 Recommends:     podman >= 2.0.2
 %endif
+%if 0%{with cephadm_bundling}
+%if 0%{without cephadm_pip_deps}
+BuildRequires: python3-jinja2 >= 2.10
+%endif
+%else
+Requires: python3-jinja2 >= 2.10
+%endif
 %description -n cephadm
 Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed
 with systemd and podman.
@@ -616,18 +624,24 @@ Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-grafana-dashboards = %{_epoch_prefix}%{version}-%{release}
 Requires:       ceph-prometheus-alerts = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-setuptools
+%if 0%{?fedora} || 0%{?rhel} >= 9
+Requires:       python%{python3_pkgversion}-grpcio
+Requires:       python%{python3_pkgversion}-grpcio-tools
+%endif
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-cherrypy
-Requires:       python%{python3_pkgversion}-jwt
 Requires:       python%{python3_pkgversion}-routes
 Requires:       python%{python3_pkgversion}-werkzeug
 %if 0%{?weak_deps}
 Recommends:     python%{python3_pkgversion}-saml
+%if 0%{?fedora} || 0%{?rhel} <= 8
+Recommends:     python%{python3_pkgversion}-grpcio
+Recommends:     python%{python3_pkgversion}-grpcio-tools
+%endif
 %endif
 %endif
 %if 0%{?suse_version}
 Requires:       python%{python3_pkgversion}-CherryPy
-Requires:       python%{python3_pkgversion}-PyJWT
 Requires:       python%{python3_pkgversion}-Routes
 Requires:       python%{python3_pkgversion}-Werkzeug
 Recommends:     python%{python3_pkgversion}-python3-saml
@@ -895,6 +909,7 @@ Requires: parted
 Requires: util-linux
 Requires: xfsprogs
 Requires: python%{python3_pkgversion}-setuptools
+Requires: python%{python3_pkgversion}-packaging
 Requires: python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
 %description volume
 This package contains a tool to deploy OSD with different devices like
@@ -1289,6 +1304,15 @@ Group:          System/Monitoring
 %description mib
 This package provides a Ceph MIB for SNMP traps.
 
+%package node-proxy
+Summary:        hw monitoring agent for Ceph
+BuildArch:      noarch
+%if 0%{?suse_version}
+Group:          System/Monitoring
+%endif
+%description node-proxy
+This package provides a Ceph hardware monitoring agent.
+
 #################################################################################
 # common
 #################################################################################
@@ -1396,9 +1420,6 @@ cmake .. \
 %if 0%{without lua_packages}
     -DWITH_RADOSGW_LUA_PACKAGES:BOOL=OFF \
 %endif
-%if 0%{with zbd}
-    -DWITH_ZBD:BOOL=ON \
-%endif
 %if 0%{with cmake_verbose_logging}
     -DCMAKE_VERBOSE_MAKEFILE:BOOL=ON \
 %endif
@@ -1430,7 +1451,16 @@ cmake .. \
     -DWITH_SEASTAR:BOOL=ON \
     -DWITH_JAEGER:BOOL=OFF \
 %endif
-    -DWITH_GRAFANA:BOOL=ON
+    -DWITH_GRAFANA:BOOL=ON \
+%if 0%{with cephadm_bundling}
+%if 0%{with cephadm_pip_deps}
+    -DCEPHADM_BUNDLED_DEPENDENCIES=pip
+%else
+    -DCEPHADM_BUNDLED_DEPENDENCIES=rpm
+%endif
+%else
+    -DCEPHADM_BUNDLED_DEPENDENCIES=none
+%endif
 
 %if %{with cmake_verbose_logging}
 cat ./CMakeFiles/CMakeOutput.log
@@ -2621,5 +2651,12 @@ exit 0
 %files mib
 %attr(0755,root,root) %dir %{_datadir}/snmp
 %{_datadir}/snmp/mibs
+
+%files node-proxy
+%{_sbindir}/ceph-node-proxy
+%dir %{python3_sitelib}/ceph_node_proxy
+%{python3_sitelib}/ceph_node_proxy/*
+%{python3_sitelib}/ceph_node_proxy-*
+#%{_mandir}/man8/ceph-node-proxy.8*
 
 %changelog

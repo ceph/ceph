@@ -3,7 +3,6 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
-import moment from 'moment';
 
 import { HealthService } from '~/app/shared/api/health.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -24,6 +23,7 @@ import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helpe
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -44,37 +44,30 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   prometheusAlerts$: Observable<AlertmanagerAlert[]>;
 
   icons = Icons;
-  showAlerts = false;
   flexHeight = true;
   simplebar = {
-    autoHide: false
+    autoHide: true
   };
-  textClass: string;
   borderClass: string;
   alertType: string;
-  alerts: AlertmanagerAlert[];
+  alertClass = AlertClass;
   healthData: any;
   categoryPgAmount: Record<string, number> = {};
   totalPgs = 0;
-  queriesResults: any = {
-    USEDCAPACITY: '',
-    IPS: '',
-    OPS: '',
-    READLATENCY: '',
-    WRITELATENCY: '',
-    READCLIENTTHROUGHPUT: '',
-    WRITECLIENTTHROUGHPUT: '',
-    RECOVERYBYTES: ''
+  queriesResults: { [key: string]: [] } = {
+    USEDCAPACITY: [],
+    IPS: [],
+    OPS: [],
+    READLATENCY: [],
+    WRITELATENCY: [],
+    READCLIENTTHROUGHPUT: [],
+    WRITECLIENTTHROUGHPUT: [],
+    RECOVERYBYTES: [],
+    READIOPS: [],
+    WRITEIOPS: []
   };
   telemetryEnabled: boolean;
   telemetryURL = 'https://telemetry-public.ceph.com/';
-  timerGetPrometheusDataSub: Subscription;
-  timerTime = 30000;
-  readonly lastHourDateObject = {
-    start: moment().unix() - 3600,
-    end: moment().unix(),
-    step: 14
-  };
   origin = window.location.origin;
 
   constructor(
@@ -100,7 +93,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
       this.getHealth();
       this.getCapacityCardData();
     });
-    this.getPrometheusData(this.lastHourDateObject);
+    this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
     this.getTelemetryReport();
   }
@@ -114,9 +107,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   }
   ngOnDestroy() {
     this.interval.unsubscribe();
-    if (this.timerGetPrometheusDataSub) {
-      this.timerGetPrometheusDataSub.unsubscribe();
-    }
+    this.prometheusService.unsubscribe();
   }
 
   getHealth() {
@@ -125,23 +116,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     });
   }
 
-  toggleAlertsWindow(type: string, isToggleButton: boolean = false) {
-    this.triggerPrometheusAlerts();
-    if (isToggleButton) {
-      this.showAlerts = !this.showAlerts;
-      this.flexHeight = !this.flexHeight;
-    } else if (
-      !this.showAlerts ||
-      (this.alertType === type && type !== 'danger') ||
-      (this.alertType !== 'warning' && type === 'danger')
-    ) {
-      this.showAlerts = !this.showAlerts;
-      this.flexHeight = !this.flexHeight;
-    }
-
-    type === 'danger' ? (this.alertType = 'critical') : (this.alertType = type);
-    this.textClass = `text-${type}`;
-    this.borderClass = `border-${type}`;
+  toggleAlertsWindow(type: AlertClass) {
+    this.alertType === type ? (this.alertType = null) : (this.alertType = type);
   }
 
   getDetailsCardData() {
@@ -170,14 +146,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     });
   }
 
-  triggerPrometheusAlerts() {
-    this.prometheusService.ifAlertmanagerConfigured(() => {
-      this.prometheusService.getAlerts().subscribe((alerts) => {
-        this.alerts = alerts;
-      });
-    });
-  }
-
   public getPrometheusData(selectedTime: any) {
     this.queriesResults = this.prometheusService.getPrometheusQueriesData(
       selectedTime,
@@ -190,5 +158,9 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.mgrModuleService.getConfig('telemetry').subscribe((resp: any) => {
       this.telemetryEnabled = resp?.enabled;
     });
+  }
+
+  trackByFn(index: any) {
+    return index;
   }
 }

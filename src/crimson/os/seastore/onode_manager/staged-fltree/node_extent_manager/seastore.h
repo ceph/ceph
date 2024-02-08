@@ -131,7 +131,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         return alloc_iertr::make_ready_future<NodeExtentRef>();
       }
     }
-    return tm.alloc_extent<SeastoreNodeExtent>(t, hint, len
+    return tm.alloc_non_data_extent<SeastoreNodeExtent>(t, hint, len
     ).si_then([len, &t](auto extent) {
       SUBDEBUGT(seastore_onode,
           "allocated {}B at {:#x} -- {}",
@@ -145,7 +145,10 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       assert(extent->get_length() == len);
       std::ignore = len;
       return NodeExtentRef(extent);
-    });
+    }).handle_error_interruptible(
+      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      alloc_iertr::pass_further{}
+    );
   }
 
   retire_iertr::future<> retire_extent(
@@ -165,7 +168,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         return retire_iertr::now();
       }
     }
-    return tm.dec_ref(t, extent).si_then([addr, len, &t] (unsigned cnt) {
+    return tm.remove(t, extent).si_then([addr, len, &t] (unsigned cnt) {
       assert(cnt == 0);
       SUBTRACET(seastore_onode, "retired {}B at {:#x} ...", t, len, addr);
     });

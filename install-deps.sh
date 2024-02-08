@@ -36,8 +36,6 @@ ARCH=$(uname -m)
 function munge_ceph_spec_in {
     local with_seastar=$1
     shift
-    local with_zbd=$1
-    shift
     local for_make_check=$1
     shift
     local OUTFILE=$1
@@ -45,9 +43,6 @@ function munge_ceph_spec_in {
     # http://rpm.org/user_doc/conditional_builds.html
     if $with_seastar; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
-    fi
-    if $with_zbd; then
-        sed -i -e 's/%bcond_with zbd/%bcond_without zbd/g' $OUTFILE
     fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
@@ -177,6 +172,14 @@ function clean_boost_on_ubuntu {
     # so no need to spare it.
     if test -n "$installed_ver"; then
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y --fix-missing remove "ceph-libboost*"
+	# When an error occurs during `apt-get remove ceph-libboost*`, ceph-libboost* packages
+	# may be not removed, so use `dpkg` to force remove ceph-libboost*.
+	local ceph_libboost_pkgs=$(dpkg -l | grep ceph-libboost* | awk '{print $2}' |
+		                        awk -F: '{print $1}')
+	if test -n "$ceph_libboost_pkgs"; then
+	    ci_debug "Force remove ceph-libboost* packages $ceph_libboost_pkgs"
+	    $SUDO dpkg --purge --force-all $ceph_libboost_pkgs
+	fi
     fi
 }
 
@@ -216,20 +219,9 @@ function install_boost_on_ubuntu {
         ceph-libboost-system${boost_ver}-dev \
         ceph-libboost-test${boost_ver}-dev \
         ceph-libboost-thread${boost_ver}-dev \
-        ceph-libboost-timer${boost_ver}-dev
-}
+        ceph-libboost-timer${boost_ver}-dev \
+	|| ci_debug "ceph-libboost package unavailable, you can build the submodule"
 
-function install_libzbd_on_ubuntu {
-    ci_debug "Running install_libzbd_on_ubuntu() in install-deps.sh"
-    local codename=$1
-    local project=libzbd
-    local sha1=1fadde94b08fab574b17637c2bebd2b1e7f9127b
-    install_pkg_on_ubuntu \
-        $project \
-        $sha1 \
-        $codename \
-        check \
-        libzbd-dev
 }
 
 motr_pkgs_url='https://github.com/Seagate/cortx-motr/releases/download/2.0.0-rgw'
@@ -421,7 +413,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
     exit
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
-    [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     [ $WITH_RADOSGW_MOTR ] && with_rgw_motr=true || with_rgw_motr=false
     source /etc/os-release
@@ -450,12 +441,10 @@ else
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
-                $with_zbd && install_libzbd_on_ubuntu bionic
                 ;;
             *Focal*)
                 ensure_decent_gcc_on_ubuntu 11 focal
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
-                $with_zbd && install_libzbd_on_ubuntu focal
                 ;;
             *Jammy*)
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
@@ -535,6 +524,8 @@ else
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
+                elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
+                    $SUDO dnf config-manager --set-enabled crb
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
@@ -547,7 +538,7 @@ else
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             $SUDO dnf install -y $INSTALL_EXTRA_PACKAGES
         fi
-        munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out

@@ -1261,7 +1261,6 @@ test_trash_purge_schedule_recovery() {
 	jq 'select(.name == "rbd_support")' |
 	jq -r '[.addrvec[0].addr, "/", .addrvec[0].nonce|tostring] | add')
     ceph osd blocklist add $CLIENT_ADDR
-    ceph osd blocklist ls | grep $CLIENT_ADDR
 
     # Check that you can add a trash purge schedule after a few retries
     expect_fail rbd trash purge schedule add -p rbd3 10m
@@ -1420,7 +1419,6 @@ test_mirror_snapshot_schedule_recovery() {
 	jq 'select(.name == "rbd_support")' |
 	jq -r '[.addrvec[0].addr, "/", .addrvec[0].nonce|tostring] | add')
     ceph osd blocklist add $CLIENT_ADDR
-    ceph osd blocklist ls | grep $CLIENT_ADDR
 
     # Check that you can add a mirror snapshot schedule after a few retries
     expect_fail rbd mirror snapshot schedule add -p rbd3/ns1 --image test1 2m
@@ -1529,7 +1527,6 @@ test_perf_image_iostat_recovery() {
 	jq 'select(.name == "rbd_support")' |
 	jq -r '[.addrvec[0].addr, "/", .addrvec[0].nonce|tostring] | add')
     ceph osd blocklist add $CLIENT_ADDR
-    ceph osd blocklist ls | grep $CLIENT_ADDR
 
     expect_fail rbd perf image iostat --format json rbd3/ns
     sleep 10
@@ -1661,7 +1658,6 @@ test_tasks_recovery() {
 	jq 'select(.name == "rbd_support")' |
 	jq -r '[.addrvec[0].addr, "/", .addrvec[0].nonce|tostring] | add')
     ceph osd blocklist add $CLIENT_ADDR
-    ceph osd blocklist ls | grep $CLIENT_ADDR
 
     expect_fail ceph rbd task add flatten rbd2/clone1
     sleep 10

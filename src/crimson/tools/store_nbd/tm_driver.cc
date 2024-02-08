@@ -27,18 +27,26 @@ seastar::future<> TMDriver::write(
         "write",
         [this, offset, &ptr](auto& t)
       {
-        return tm->dec_ref(t, offset
+        return tm->remove(t, offset
         ).si_then([](auto){}).handle_error_interruptible(
           crimson::ct_error::enoent::handle([](auto) { return seastar::now(); }),
           crimson::ct_error::pass_further_all{}
         ).si_then([this, offset, &t, &ptr] {
           logger().debug("dec_ref complete");
-          return tm->alloc_extent<TestBlock>(t, offset, ptr.length());
-        }).si_then([this, offset, &t, &ptr](auto ext) {
-          boost::ignore_unused(offset);  // avoid clang warning;
-          assert(ext->get_laddr() == (size_t)offset);
-          assert(ext->get_bptr().length() == ptr.length());
-          ext->get_bptr().swap(ptr);
+          return tm->alloc_data_extents<TestBlock>(t, offset, ptr.length());
+        }).si_then([this, offset, &t, &ptr](auto extents) mutable {
+	  boost::ignore_unused(offset);  // avoid clang warning;
+	  auto off = offset;
+	  auto left = ptr.length();
+	  size_t written = 0;
+	  for (auto &ext : extents) {
+	    assert(ext->get_laddr() == (size_t)off);
+	    assert(ext->get_bptr().length() <= left);
+	    ptr.copy_out(written, ext->get_length(), ext->get_bptr().c_str());
+	    off += ext->get_length();
+	    left -= ext->get_length();
+	  }
+	  assert(!left);
           logger().debug("submitting transaction");
           return tm->submit_transaction(t);
         });

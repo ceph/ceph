@@ -1125,7 +1125,7 @@ TEST(BlueFS, test_shared_alloc) {
   uint64_t shared_alloc_unit = 4096;
   shared_alloc.set(
     Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
-                      size, shared_alloc_unit, 0, 0, "test shared allocator"),
+                      size, shared_alloc_unit, "test shared allocator"),
     shared_alloc_unit);
   shared_alloc.a->init_add_free(0, size);
 
@@ -1196,7 +1196,7 @@ TEST(BlueFS, test_shared_alloc_sparse) {
   bluefs_shared_alloc_context_t shared_alloc;
   shared_alloc.set(
     Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
-                      size, main_unit, 0, 0, "test shared allocator"),
+                      size, main_unit, "test shared allocator"),
     main_unit);
   // prepare sparse free space but let's have a continuous chunk at
   // the beginning to fit initial log's fnode into superblock,
@@ -1273,7 +1273,7 @@ TEST(BlueFS, test_4k_shared_alloc) {
   bluefs_shared_alloc_context_t shared_alloc;
   shared_alloc.set(
     Allocator::create(g_ceph_context, g_ceph_context->_conf->bluefs_allocator,
-                      size, main_unit, 0, 0, "test shared allocator"),
+                      size, main_unit, "test shared allocator"),
     main_unit);
   shared_alloc.a->init_add_free(bluefs_alloc_unit, size - bluefs_alloc_unit);
 
@@ -1557,6 +1557,30 @@ TEST(BlueFS, test_log_runway_3) {
     fs.stat(longdir, longfile, &file_size, &mtime);
     ASSERT_EQ(file_size, 6);
   }
+}
+
+TEST(BlueFS, test_log_runway_advance_seq) {
+  uint64_t max_log_runway = 65536;
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_alloc_size", "4096");
+  conf.SetVal("bluefs_shared_alloc_size", "4096");
+  conf.SetVal("bluefs_compact_log_sync", "false");
+  conf.SetVal("bluefs_min_log_runway", "32768");
+  conf.SetVal("bluefs_max_log_runway", std::to_string(max_log_runway).c_str());
+  conf.ApplyChanges();
+
+  uint64_t size = 1048576 * 128;
+  TempBdev bdev{size};
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
+  ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
+
+  std::string longdir(max_log_runway*2, 'A');
+  ASSERT_EQ(fs.mkdir(longdir), 0);
+  fs.compact_log();
 }
 
 int main(int argc, char **argv) {

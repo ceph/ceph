@@ -54,7 +54,7 @@ public:
 
   virtual bool is_connected() const = 0;
 
-  virtual seastar::future<> send(MessageFRef) = 0;
+  virtual seastar::future<> send(MessageURef) = 0;
 
   virtual seastar::future<> send_keepalive() = 0;
 

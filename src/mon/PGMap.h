@@ -66,6 +66,18 @@ public:
       decode(up_not_acting, p);
       decode(primary, p);
     }
+    void dump(ceph::Formatter *f) const {
+      f->dump_int("acting", acting);
+      f->dump_int("up_not_acting", up_not_acting);
+      f->dump_int("primary", primary);
+    }
+    static void generate_test_instances(std::list<pg_count*>& o) {
+      o.push_back(new pg_count);
+      o.push_back(new pg_count);
+      o.back()->acting = 1;
+      o.back()->up_not_acting = 2;
+      o.back()->primary = 3;
+    }
   };
   mempool::pgmap::unordered_map<int32_t,pg_count> num_pg_by_osd;
 

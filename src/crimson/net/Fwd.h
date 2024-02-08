@@ -21,7 +21,7 @@
 #include <seastar/core/sharded.hh>
 
 #include "msg/Connection.h"
-#include "msg/MessageRef.h"
+#include "msg/Message.h"
 #include "msg/msg_types.h"
 
 #include "crimson/common/errorator.h"
@@ -38,6 +38,8 @@ class Connection;
 using ConnectionLRef = seastar::shared_ptr<Connection>;
 using ConnectionFRef = seastar::foreign_ptr<ConnectionLRef>;
 using ConnectionRef = ::crimson::local_shared_foreign_ptr<ConnectionLRef>;
+using ConnectionFFRef = seastar::foreign_ptr<ConnectionRef>;
+using ConnectionXcoreRef = ::crimson::local_shared_foreign_ptr<ConnectionRef>;
 
 class Dispatcher;
 class ChainedDispatchers;

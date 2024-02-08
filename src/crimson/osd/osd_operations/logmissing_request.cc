@@ -16,11 +16,13 @@ namespace {
   }
 }
 
+SET_SUBSYS(osd);
+
 namespace crimson::osd {
 
 LogMissingRequest::LogMissingRequest(crimson::net::ConnectionRef&& conn,
 		       Ref<MOSDPGUpdateLogMissing> &&req)
-  : conn{std::move(conn)},
+  : l_conn{std::move(conn)},
     req{std::move(req)}
 {}
 
@@ -46,7 +48,14 @@ void LogMissingRequest::dump_detail(Formatter *f) const
 
 ConnectionPipeline &LogMissingRequest::get_connection_pipeline()
 {
-  return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
+  return get_osd_priv(&get_local_connection()
+         ).client_request_conn_pipeline;
+}
+
+PerShardPipeline &LogMissingRequest::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_replicated_request_pipeline();
 }
 
 ClientRequest::PGPipeline &LogMissingRequest::client_pp(PG &pg)
@@ -57,11 +66,13 @@ ClientRequest::PGPipeline &LogMissingRequest::client_pp(PG &pg)
 seastar::future<> LogMissingRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
-  logger().debug("{}: LogMissingRequest::with_pg", *this);
+  LOG_PREFIX(LogMissingRequest::with_pg);
+  DEBUGI("{}: LogMissingRequest::with_pg", *this);
 
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    logger().debug("{}: pg present", *this);
+    LOG_PREFIX(LogMissingRequest::with_pg);
+    DEBUGI("{}: pg present", *this);
     return this->template enter_stage<interruptor>(client_pp(*pg).await_map
     ).then_interruptible([this, pg] {
       return this->template with_blocking_event<
@@ -71,9 +82,17 @@ seastar::future<> LogMissingRequest::with_pg(
           std::move(trigger), req->min_epoch);
       });
     }).then_interruptible([this, pg](auto) {
-      return pg->do_update_log_missing(req, conn);
+      return pg->do_update_log_missing(req, r_conn);
+    }).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
     });
-  }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
+  }, [](std::exception_ptr) {
+    return seastar::now();
+  }, pg).finally([this, ref=std::move(ref)] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
+  });
 }
 
 }

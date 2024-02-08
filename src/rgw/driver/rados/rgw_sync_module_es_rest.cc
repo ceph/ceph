@@ -347,7 +347,7 @@ public:
       s->formatter->dump_format("ETag", "\"%s\"", e.meta.etag.c_str());
       s->formatter->dump_string("ContentType", e.meta.content_type.c_str());
       s->formatter->dump_string("StorageClass", e.meta.storage_class.c_str());
-      dump_owner(s, e.owner.get_id(), e.owner.get_display_name());
+      dump_owner(s, e.owner.id, e.owner.display_name);
       s->formatter->open_array_section("CustomMetadata");
       for (auto& m : e.meta.custom_str) {
         s->formatter->open_object_section("Entry");

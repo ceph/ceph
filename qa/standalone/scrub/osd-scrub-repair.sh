@@ -16,6 +16,7 @@
 #
 set -x
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
+source $CEPH_ROOT/qa/standalone/scrub/scrub-helpers.sh
 
 if [ `uname` = FreeBSD ]; then
     # erasure coding overwrites are only tested on Bluestore
@@ -160,7 +161,7 @@ function scrub_and_not_schedule() {
     #
     local pg=$(get_pg $poolname SOMETHING)
     local last_scrub=$(get_last_scrub_stamp $pg)
-    ceph pg scrub $pg
+    ceph tell $pg schedule-scrub
 
     #
     # 2) Assure the scrub is not scheduled
@@ -329,8 +330,7 @@ function initiate_and_fetch_state() {
     date  --rfc-3339=ns
 
     # note: must initiate a "regular" (periodic) deep scrub - not an operator-initiated one
-    env CEPH_ARGS= ceph --format json daemon $(get_asok_path $the_osd) deep_scrub "$pgid"
-    env CEPH_ARGS= ceph --format json daemon $(get_asok_path $the_osd) scrub "$pgid"
+    env CEPH_ARGS= ceph --format json daemon $(get_asok_path $the_osd) schedule-deep-scrub "$pgid"
 
     # wait for 'scrubbing' to appear
     for ((i=0; i < 80; i++)); do
@@ -436,19 +436,17 @@ function TEST_auto_repair_bluestore_tag() {
 
 function TEST_auto_repair_bluestore_basic() {
     local dir=$1
-    local poolname=testpool
+    local -A cluster_conf=(
+        ['osds_num']="3" 
+        ['pgs_in_pool']="1"
+        ['pool_name']="testpool"
+        ['extras']=" --osd_scrub_auto_repair=true"
+    )
+    local extr_dbg=3
+    standard_scrub_cluster $dir cluster_conf
+    local poolid=${cluster_conf['pool_id']}
+    local poolname=${cluster_conf['pool_name']}
 
-    # Launch a cluster with 5 seconds scrub interval
-    run_mon $dir a || return 1
-    run_mgr $dir x || return 1
-    local ceph_osd_args="--osd-scrub-auto-repair=true \
-            --osd_deep_scrub_randomize_ratio=0 \
-            --osd-scrub-interval-randomize-ratio=0"
-    for id in $(seq 0 2) ; do
-        run_osd $dir $id $ceph_osd_args || return 1
-    done
-
-    create_pool $poolname 1 1 || return 1
     ceph osd pool set $poolname size 2
     wait_for_clean || return 1
 
@@ -460,12 +458,14 @@ function TEST_auto_repair_bluestore_basic() {
     # Remove the object from one shard physically
     # Restarted osd get $ceph_osd_args passed
     objectstore_tool $dir $(get_not_primary $poolname SOMETHING) SOMETHING remove || return 1
+    ceph tell osd.* config set osd_scrub_auto_repair true
 
     local pgid=$(get_pg $poolname SOMETHING)
     local primary=$(get_primary $poolname SOMETHING)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    ceph tell $pgid deep_scrub
-    ceph tell $pgid scrub
+    # note: the scrub initiated must be a "regular" (periodic) deep scrub - not an
+    # operator-initiated one (as there's no 'auto-repair' for the latter)
+    ceph tell $pgid schedule-deep-scrub
 
     # Wait for auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -510,12 +510,16 @@ function TEST_auto_repair_bluestore_scrub() {
     local pgid=$(get_pg $poolname SOMETHING)
     local primary=$(get_primary $poolname SOMETHING)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    ceph tell $pgid scrub
+    ceph tell $pgid schedule-scrub
 
     # Wait for scrub -> auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
     ceph pg dump pgs
     # Actually this causes 2 scrubs, so we better wait a little longer
+    sleep 2
+    ceph pg dump pgs
+    sleep 2
+    ceph pg dump pgs
     sleep 5
     wait_for_clean || return 1
     ceph pg dump pgs
@@ -567,8 +571,7 @@ function TEST_auto_repair_bluestore_failed() {
     local pgid=$(get_pg $poolname obj1)
     local primary=$(get_primary $poolname obj1)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    ceph tell $pgid deep_scrub
-    ceph tell $pgid scrub
+    ceph tell $pgid schedule-deep-scrub
 
     # Wait for auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -631,12 +634,12 @@ function TEST_auto_repair_bluestore_failed_norecov() {
     # obj2 can't be repaired
     objectstore_tool $dir $(get_not_primary $poolname SOMETHING) obj2 remove || return 1
     objectstore_tool $dir $(get_primary $poolname SOMETHING) obj2 rm-attr _ || return 1
+    ceph tell osd.* config set osd_scrub_auto_repair true
 
     local pgid=$(get_pg $poolname obj1)
     local primary=$(get_primary $poolname obj1)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    ceph tell $pgid deep_scrub
-    ceph tell $pgid scrub
+    ceph tell $pgid schedule-deep-scrub
 
     # Wait for auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -5793,7 +5796,7 @@ function TEST_periodic_scrub_replicated() {
     flush_pg_stats
     local last_scrub=$(get_last_scrub_stamp $pg)
     # Fake a schedule scrub
-    ceph tell $pg scrub || return 1
+    ceph tell $pg schedule-scrub || return 1
     # Wait for schedule regular scrub
     wait_for_scrub $pg "$last_scrub"
 
@@ -5811,7 +5814,7 @@ function TEST_periodic_scrub_replicated() {
     sleep 5
 
     # Fake a schedule scrub
-    ceph tell $pg scrub || return 1
+    ceph tell $pg schedule-scrub || return 1
     # Wait for schedule regular scrub
     # to notice scrub and skip it
     local found=false
@@ -5828,7 +5831,7 @@ function TEST_periodic_scrub_replicated() {
 
     flush_pg_stats
     # Request a regular scrub and it will be done
-    pg_scrub $pg
+    pg_schedule_scrub $pg
     grep -q "Regular scrub request, deep-scrub details will be lost" $dir/osd.${primary}.log || return 1
 
     # deep-scrub error is no longer present
@@ -5885,7 +5888,7 @@ function TEST_scrub_warning() {
       else
         overdue_seconds=$conf_overdue_seconds
       fi
-      ceph tell ${i}.0 scrub $(expr ${overdue_seconds} + ${i}00) || return 1
+      ceph tell ${i}.0 schedule-scrub $(expr ${overdue_seconds} + ${i}00) || return 1
     done
     # Fake schedule deep scrubs
     for i in $(seq $(expr $scrubs + 1) $(expr $scrubs + $deep_scrubs))
@@ -5896,7 +5899,7 @@ function TEST_scrub_warning() {
       else
         overdue_seconds=$conf_overdue_seconds
       fi
-      ceph tell ${i}.0 deep_scrub $(expr ${overdue_seconds} + ${i}00) || return 1
+      ceph tell ${i}.0 schedule-deep-scrub $(expr ${overdue_seconds} + ${i}00) || return 1
     done
     flush_pg_stats
 
@@ -5905,7 +5908,7 @@ function TEST_scrub_warning() {
     ceph health | grep -q " pgs not deep-scrubbed in time" || return 1
     ceph health | grep -q " pgs not scrubbed in time" || return 1
 
-    # note that the 'ceph tell pg deep_scrub' command now also sets the regular scrub
+    # note that the 'ceph tell pg deep-scrub' command now also sets the regular scrub
     # time-stamp. I.e. - all 'late for deep scrubbing' pgs are also late for
     # regular scrubbing. For now, we'll allow both responses.
     COUNT=$(ceph health detail | grep "not scrubbed since" | wc -l)
@@ -6222,15 +6225,15 @@ function TEST_request_scrub_priority() {
         otherpgs="${otherpgs}${opg} "
         local other_last_scrub=$(get_last_scrub_stamp $pg)
         # Fake a schedule scrub
-        ceph tell $opg scrub $opg || return 1
+        ceph tell $opg schedule-scrub $opg || return 1
     done
 
     sleep 15
     flush_pg_stats
 
-    # Request a regular scrub and it will be done
+    # Force a shallow scrub and it will be done
     local last_scrub=$(get_last_scrub_stamp $pg)
-    ceph pg scrub $pg
+    ceph tell $pg scrub || return 1
 
     ceph osd unset noscrub || return 1
     ceph osd unset nodeep-scrub || return 1

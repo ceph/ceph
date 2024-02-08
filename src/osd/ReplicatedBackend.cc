@@ -275,7 +275,7 @@ int ReplicatedBackend::objects_read_sync(
 
 int ReplicatedBackend::objects_readv_sync(
   const hobject_t &hoid,
-  map<uint64_t, uint64_t>&& m,
+  map<uint64_t, uint64_t>& m,
   uint32_t op_flags,
   bufferlist *bl)
 {

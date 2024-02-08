@@ -484,7 +484,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'snapshot_clone_delay',
             type='int',
             default=0,
-            desc='Delay clone begin operation by snapshot_clone_delay seconds')
+            desc='Delay clone begin operation by snapshot_clone_delay seconds'),
+        Option(
+            'periodic_async_work',
+            type='bool',
+            default=False,
+            desc='Periodically check for async work')
     ]
 
     def __init__(self, *args, **kwargs):
@@ -492,6 +497,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         # for mypy
         self.max_concurrent_clones = None
         self.snapshot_clone_delay = None
+        self.periodic_async_work = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -499,9 +505,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         with self.lock:
             self.vc = VolumeClient(self)
             self.inited = True
-
-    def __del__(self):
-        self.vc.shutdown()
 
     def shutdown(self):
         self.vc.shutdown()
@@ -522,6 +525,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         self.vc.cloner.reconfigure_max_concurrent_clones(self.max_concurrent_clones)
                     elif opt['name'] == "snapshot_clone_delay":
                         self.vc.cloner.reconfigure_snapshot_clone_delay(self.snapshot_clone_delay)
+                    elif opt['name'] == "periodic_async_work":
+                        if self.periodic_async_work:
+                            self.vc.cloner.set_wakeup_timeout()
+                            self.vc.purge_queue.set_wakeup_timeout()
+                        else:
+                            self.vc.cloner.unset_wakeup_timeout()
+                            self.vc.purge_queue.unset_wakeup_timeout()
 
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
@@ -845,3 +855,19 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))
+
+    # remote method
+    def subvolume_getpath(self, vol_name, subvol, group_name):
+        return self.vc.subvolume_getpath(vol_name=vol_name,
+                                         sub_name=subvol,
+                                         group_name=group_name)
+
+    # remote method
+    def subvolume_ls(self, vol_name, group_name):
+        return self.vc.list_subvolumes(vol_name=vol_name, group_name=group_name)
+
+    # remote method
+    def subvolume_info(self, vol_name, subvol, group_name):
+        return self.vc.subvolume_info(vol_name=vol_name,
+                                      sub_name=subvol,
+                                      group_name=group_name)

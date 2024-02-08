@@ -7,7 +7,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule } from '@angular/forms';
-import { FormHelper } from '~/testing/unit-test-helper';
+import { FormHelper, configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 
 describe('CephfsSubvolumeFormComponent', () => {
@@ -17,18 +17,16 @@ describe('CephfsSubvolumeFormComponent', () => {
   let createSubVolumeSpy: jasmine.Spy;
   let editSubVolumeSpy: jasmine.Spy;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [CephfsSubvolumeFormComponent],
-      providers: [NgbActiveModal],
-      imports: [
-        SharedModule,
-        ToastrModule.forRoot(),
-        ReactiveFormsModule,
-        HttpClientTestingModule,
-        RouterTestingModule
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [CephfsSubvolumeFormComponent],
+    providers: [NgbActiveModal],
+    imports: [
+      SharedModule,
+      ToastrModule.forRoot(),
+      ReactiveFormsModule,
+      HttpClientTestingModule,
+      RouterTestingModule
+    ]
   });
 
   beforeEach(() => {

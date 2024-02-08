@@ -21,6 +21,7 @@ from teuthology import packaging
 from teuthology.orchestra import run
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
+from teuthology.exceptions import ConfigError
 from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.util import chacra
@@ -101,6 +102,43 @@ def update_archive_setting(ctx, key, value):
 
 
 @contextlib.contextmanager
+def nvmeof_gateway_cfg(ctx, config):
+    source_host = config.get('source')
+    target_host = config.get('target')
+    nvmeof_service = config.get('service')
+    if not (source_host and target_host and nvmeof_service):
+        raise ConfigError('nvmeof_gateway_cfg requires "source", "target", and "service"')
+    remote = list(ctx.cluster.only(source_host).remotes.keys())[0]
+    ip_address = remote.ip_address
+    gateway_name = ""
+    r = remote.run(args=[
+        'systemctl', 'list-units',
+        run.Raw('|'), 'grep', nvmeof_service
+    ], stdout=StringIO())
+    output = r.stdout.getvalue()
+    pattern_str = f"{re.escape(nvmeof_service)}(.*?)(?=\.service)"
+    pattern = re.compile(pattern_str)
+    match = pattern.search(output)
+    if match:
+        gateway_name = match.group()
+    conf_data = dedent(f"""
+        NVMEOF_GATEWAY_IP_ADDRESS={ip_address}
+        NVMEOF_GATEWAY_NAME={gateway_name}
+        """)
+    target_remote = list(ctx.cluster.only(target_host).remotes.keys())[0]
+    target_remote.write_file(
+        path='/etc/ceph/nvmeof.env',
+        data=conf_data,
+        sudo=True
+    )
+
+    try:
+        yield
+    finally:
+        pass
+
+
+@contextlib.contextmanager
 def normalize_hostnames(ctx):
     """
     Ensure we have short hostnames throughout, for consistency between
@@ -131,6 +169,8 @@ def download_cephadm(ctx, config, ref):
         # cephadm
         elif 'cephadm_git_url' in config and 'cephadm_branch' in config:
             _fetch_cephadm_from_github(ctx, config, ref)
+        elif 'compiled_cephadm_branch' in config:
+            _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name)
         else:
             _fetch_cephadm_from_chachra(ctx, config, cluster_name)
 
@@ -228,6 +268,55 @@ def _fetch_cephadm_from_chachra(ctx, config, cluster_name):
             flavor=flavor,
             branch=branch,
             sha1=sha1,
+    )
+    log.info("Discovered cachra url: %s", url)
+    ctx.cluster.run(
+        args=[
+            'curl', '--silent', '-L', url,
+            run.Raw('>'),
+            ctx.cephadm,
+            run.Raw('&&'),
+            'ls', '-l',
+            ctx.cephadm,
+        ],
+    )
+
+    # sanity-check the resulting file and set executable bit
+    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
+    ctx.cluster.run(
+        args=[
+            'test', '-s', ctx.cephadm,
+            run.Raw('&&'),
+            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
+            run.Raw('&&'),
+            'chmod', '+x', ctx.cephadm,
+        ],
+    )
+
+def _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name):
+    branch = config.get('compiled_cephadm_branch', 'reef')
+    flavor = config.get('flavor', 'default')
+
+    log.info(f'Downloading "compiled" cephadm from cachra for {branch}')
+
+    bootstrap_remote = ctx.ceph[cluster_name].bootstrap_remote
+    bp = packaging.get_builder_project()(
+        config.get('project', 'ceph'),
+        config,
+        ctx=ctx,
+        remote=bootstrap_remote,
+    )
+    log.info('builder_project result: %s' % (bp._result.json()))
+
+    # pull the cephadm binary from chacra
+    url = chacra.get_binary_url(
+            'cephadm',
+            project=bp.project,
+            distro=bp.distro.split('/')[0],
+            release=bp.distro.split('/')[1],
+            arch=bp.arch,
+            flavor=flavor,
+            branch=branch,
     )
     log.info("Discovered cachra url: %s", url)
     ctx.cluster.run(

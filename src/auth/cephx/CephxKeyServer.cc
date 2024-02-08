@@ -257,6 +257,16 @@ std::map<EntityName,CryptoKey> KeyServer::get_used_pending_keys()
   return ret;
 }
 
+void KeyServer::dump(Formatter *f) const
+{
+  f->dump_object("data", data);
+}
+
+void KeyServer::generate_test_instances(std::list<KeyServer*>& ls)
+{
+  ls.push_back(new KeyServer(nullptr, nullptr));
+}
+
 bool KeyServer::generate_secret(CryptoKey& secret)
 {
   bufferptr bp;

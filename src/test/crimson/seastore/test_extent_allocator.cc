@@ -57,6 +57,9 @@ struct allocator_test_t :
   auto allocate(size_t size) {
     return allocator->alloc_extent(size);
   }
+  auto allocates(size_t size) {
+    return allocator->alloc_extents(size);
+  }
   void free(uint64_t start, uint64_t length) {
     allocator->free_extent(start, length);
   }
@@ -98,7 +101,7 @@ TEST_P(allocator_test_t, test_init_alloc_free)
   }
 }
 
-TEST_P(allocator_test_t, test_alloc_failure)
+TEST_P(allocator_test_t, test_scattered_alloc)
 {
   uint64_t block_size = 8192;
   uint64_t capacity = 1024 * block_size;
@@ -108,13 +111,12 @@ TEST_P(allocator_test_t, test_alloc_failure)
     allocator->mark_extent_used(0, block_size * 256);
     allocator->mark_extent_used(block_size * 512, block_size * 256);
 
-    auto result = allocate(block_size * 512);
-    ASSERT_EQ(false, result.has_value());
+    auto result = allocates(block_size * 512);
+    ASSERT_EQ(true, result.has_value());
 
     free(0, block_size * 256);
-    allocator->mark_extent_used(0, block_size * 512);
 
-    result = allocate(block_size * 512);
+    result = allocates(block_size * 512);
     ASSERT_EQ(false, result.has_value());
   }
 }
@@ -142,9 +144,9 @@ TEST_P(allocator_test_t, test_random_alloc_verify)
     for (auto p : alloc_map) {
       free(p.first, p.second);
       avail += p.second;
-      alloc_map.erase(p.first, p.second);
       ASSERT_EQ(avail, allocator->get_available_size());
     }
+    alloc_map.clear();
     ASSERT_EQ(capacity, allocator->get_available_size());
 
     for (int i = 0; i < 100; i++) {

@@ -36,28 +36,21 @@ public:
 };
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
-  bool need_stats;
-  bool wants_reversed;
+  bool need_stats{true};
+  bool wants_reversed{false};
   std::string prefix;
-  std::vector<rgw::sal::BucketList> reverse_buffer;
+  std::deque<RGWBucketEnt> reverse_buffer;
 
   uint64_t get_default_max() const override {
     return 0;
   }
 
 public:
-  RGWListBuckets_ObjStore_SWIFT()
-    : need_stats(true),
-      wants_reversed(false) {
-  }
-  ~RGWListBuckets_ObjStore_SWIFT() override {}
-
   int get_params(optional_yield y) override;
-  void handle_listing_chunk(rgw::sal::BucketList&& buckets) override;
+  void handle_listing_chunk(std::span<RGWBucketEnt> buckets) override;
   void send_response_begin(bool has_buckets) override;
-  void send_response_data(rgw::sal::BucketList& buckets) override;
-  void send_response_data_reversed(rgw::sal::BucketList& buckets);
-  void dump_bucket_entry(const rgw::sal::Bucket& obj);
+  void send_response_data(std::span<const RGWBucketEnt> buckets) override;
+  void dump_bucket_entry(const RGWBucketEnt& ent);
   void send_response_end() override;
 
   bool should_get_stats() override { return need_stats; }
@@ -245,6 +238,7 @@ public:
 
   void execute(optional_yield y) override;
   void send_response() override;
+  static void list_bulk_delete(Formatter& formatter, const ConfigProxy& config, rgw::sal::Driver* driver);
   static void list_swift_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Driver* driver);
   static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Driver* driver);
   static void list_tempurl_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Driver* driver);
@@ -269,6 +263,8 @@ class RGWFormPost : public RGWPostObj_ObjStore {
   bool stream_done = false;
 
   class SignatureHelper;
+  using BadSignatureHelper = SignatureHelper;
+  template<typename HASHFLAVOR, rgw::auth::swift::SignatureFlavor SIGNATUREFLAVOR> class SignatureHelper_x;
 public:
   RGWFormPost() = default;
   ~RGWFormPost() = default;
@@ -283,64 +279,6 @@ public:
 
   static bool is_formpost_req(req_state* const s);
 };
-
-class RGWFormPost::SignatureHelper
-{
-private:
-  static constexpr uint32_t output_size =
-    CEPH_CRYPTO_HMACSHA1_DIGESTSIZE * 2 + 1;
-
-  unsigned char dest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE]; // 20
-  char dest_str[output_size];
-
-public:
-  SignatureHelper() = default;
-
-  const char* calc(const std::string& key,
-                   const std::string_view& path_info,
-                   const std::string_view& redirect,
-                   const std::string_view& max_file_size,
-                   const std::string_view& max_file_count,
-                   const std::string_view& expires) {
-    using ceph::crypto::HMACSHA1;
-    using UCHARPTR = const unsigned char*;
-
-    HMACSHA1 hmac((UCHARPTR) key.data(), key.size());
-
-    hmac.Update((UCHARPTR) path_info.data(), path_info.size());
-    hmac.Update((UCHARPTR) "\n", 1);
-
-    hmac.Update((UCHARPTR) redirect.data(), redirect.size());
-    hmac.Update((UCHARPTR) "\n", 1);
-
-    hmac.Update((UCHARPTR) max_file_size.data(), max_file_size.size());
-    hmac.Update((UCHARPTR) "\n", 1);
-
-    hmac.Update((UCHARPTR) max_file_count.data(), max_file_count.size());
-    hmac.Update((UCHARPTR) "\n", 1);
-
-    hmac.Update((UCHARPTR) expires.data(), expires.size());
-
-    hmac.Final(dest);
-
-    buf_to_hex((UCHARPTR) dest, sizeof(dest), dest_str);
-
-    return dest_str;
-  }
-
-  const char* get_signature() const {
-    return dest_str;
-  }
-
-  bool is_equal_to(const std::string& rhs) const {
-    /* never allow out-of-range exception */
-    if (rhs.size() < (output_size - 1)) {
-      return false;
-    }
-    return rhs.compare(0 /* pos */,  output_size, dest_str) == 0;
-  }
-
-}; /* RGWFormPost::SignatureHelper */
 
 
 class RGWSwiftWebsiteHandler {

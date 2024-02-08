@@ -43,6 +43,7 @@
 #include "Server.h"
 #include "MetricsHandler.h"
 #include "osdc/Journaler.h"
+#include "MDSMetaRequest.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
@@ -150,29 +151,6 @@ class MgrClient;
 class Finisher;
 class ScrubStack;
 class C_ExecAndReply;
-
-struct MDSMetaRequest {
-private:
-  int _op;
-  CDentry *_dentry;
-  ceph_tid_t _tid;
-public:
-  explicit MDSMetaRequest(int op, CDentry *dn, ceph_tid_t tid) :
-    _op(op), _dentry(dn), _tid(tid) {
-    if (_dentry) {
-      _dentry->get(CDentry::PIN_PURGING);
-    }
-  }
-  ~MDSMetaRequest() {
-    if (_dentry) {
-      _dentry->put(CDentry::PIN_PURGING);
-    }
-  }
-
-  CDentry *get_dentry() { return _dentry; }
-  int get_op() { return _op; }
-  ceph_tid_t get_tid() { return _tid; }
-};
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -296,6 +274,13 @@ class MDSRank {
     }
 
     /**
+     * Abort the MDS and flush any clog messages.
+     *
+     * Callers must already hold mds_lock.
+     */
+    void abort(std::string_view msg);
+
+    /**
      * Report state DAMAGED to the mon, and then pass on to respawn().  Call
      * this when an unrecoverable error is encountered while attempting
      * to load an MDS rank's data structures.  This is *not* for use with
@@ -322,7 +307,7 @@ class MDSRank {
 
     void send_message_mds(const ref_t<Message>& m, mds_rank_t mds);
     void send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr);
-    void forward_message_mds(MDRequestRef& mdr, mds_rank_t mds);
+    void forward_message_mds(const MDRequestRef& mdr, mds_rank_t mds);
     void send_message_client_counted(const ref_t<Message>& m, client_t client);
     void send_message_client_counted(const ref_t<Message>& m, Session* session);
     void send_message_client_counted(const ref_t<Message>& m, const ConnectionRef& connection);
@@ -439,7 +424,7 @@ class MDSRank {
     PerfCounters *logger = nullptr, *mlogger = nullptr;
     OpTracker op_tracker;
 
-    std::map<ceph_tid_t, MDSMetaRequest> internal_client_requests;
+    std::map<ceph_tid_t, std::unique_ptr<MDSMetaRequest>> internal_client_requests;
 
     // The last different state I held before current
     MDSMap::DaemonState last_state = MDSMap::STATE_BOOT;

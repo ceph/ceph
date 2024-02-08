@@ -12,8 +12,21 @@
         <cd-alert-panel type="info"
                         class="m-3"
                         spacingClass="mt-3"
-                        i18n>Orchestrator is not configured. Deploy MDS daemons manually after creating the volume.</cd-alert-panel>
+                        i18n
+                        *ngIf="!editing">Orchestrator is not configured. Deploy MDS daemons manually after creating the volume.</cd-alert-panel>
       </ng-container>
+
+      <cd-alert-panel type="info"
+                      class="m-3"
+                      spacingClass="mt-3"
+                      i18n
+                      *ngIf="editing && disableRename">
+        <p>The File System can only be renamed if it is shutdown and `refuse_client_session` is set to true.
+           Follow the steps below in the command line and refresh the page:</p>
+        <cd-code-block [codes]="[fsFailCmd]"></cd-code-block>
+        <cd-code-block [codes]="[fsSetCmd]"></cd-code-block>
+      </cd-alert-panel>
+
       <div class="card-body">
         <!-- Name -->
         <div class="form-group row">
@@ -34,13 +47,14 @@
                   i18n>This field is required!</span>
             <span *ngIf="form.showError('name', formDir, 'pattern')"
                   class="invalid-feedback"
-                  i18n>File System name can only contain letters, numbers, '.', '-' or '_'</span>
+                  i18n>File System name should start with a letter and can only contain letters, numbers, '.', '-' or '_'</span>
           </div>
         </div>
 
         <ng-container *ngIf="orchStatus.available">
           <!-- Placement -->
-          <div class="form-group row">
+          <div class="form-group row"
+               *ngIf="!editing">
             <label class="cd-col-form-label"
                    for="placement"
                    i18n>Placement</label>
@@ -57,7 +71,7 @@
           </div>
 
           <!-- Label -->
-          <div *ngIf="form.controls.placement.value === 'label'"
+          <div *ngIf="form.controls.placement.value === 'label' && !editing"
                class="form-group row">
             <label i18n
                    class="cd-col-form-label"
@@ -77,7 +91,7 @@
           </div>
 
           <!-- Hosts -->
-          <div *ngIf="form.controls.placement.value === 'hosts'"
+          <div *ngIf="form.controls.placement.value === 'hosts' && !editing"
                class="form-group row">
             <label class="cd-col-form-label"
                    for="hosts"
@@ -96,6 +110,7 @@
         <cd-form-button-panel (submitActionEvent)="submit()"
                               [form]="form"
                               [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              [disabled]="editing ? disableRename: false"
                               wrappingClass="text-right"></cd-form-button-panel>
       </div>
     </div>

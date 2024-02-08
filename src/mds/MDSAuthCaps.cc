@@ -145,7 +145,7 @@ bool MDSCapMatch::match(string_view target_path,
       bool gid_matched = false;
       if (std::find(gids.begin(), gids.end(), caller_gid) != gids.end())
 	gid_matched = true;
-      if (caller_gid_list) {
+      else if (caller_gid_list) {
 	for (auto i = caller_gid_list->begin(); i != caller_gid_list->end(); ++i) {
 	  if (std::find(gids.begin(), gids.end(), *i) != gids.end()) {
 	    gid_matched = true;
@@ -167,14 +167,29 @@ bool MDSCapMatch::match(string_view target_path,
 
 bool MDSCapMatch::match_path(string_view target_path) const
 {
-  if (path.length()) {
-    if (target_path.find(path) != 0)
+  string _path = path;
+  // drop any tailing /
+  while (_path.length() && _path[_path.length() - 1] == '/') {
+    _path = path.substr(0, _path.length() - 1);
+  }
+
+  if (_path.length()) {
+    if (target_path.find(_path) != 0)
       return false;
-    // if path doesn't already have a trailing /, make sure the target
-    // does so that path=/foo doesn't match target_path=/food
-    if (target_path.length() > path.length() &&
-	path[path.length()-1] != '/' &&
-	target_path[path.length()] != '/')
+    /* In case target_path.find(_path) == 0 && target_path.length() == _path.length():
+     *  path=/foo  _path=/foo target_path=/foo     --> match
+     *  path=/foo/ _path=/foo target_path=/foo     --> match
+     *
+     * In case target_path.find(_path) == 0 && target_path.length() > _path.length():
+     *  path=/foo/ _path=/foo target_path=/foo/    --> match
+     *  path=/foo  _path=/foo target_path=/foo/    --> match
+     *  path=/foo/ _path=/foo target_path=/foo/d   --> match
+     *  path=/foo  _path=/foo target_path=/food    --> mismatch
+     *
+     * All the other cases                         --> mismatch
+     */
+    if (target_path.length() > _path.length() &&
+	target_path[_path.length()] != '/')
       return false;
   }
 
@@ -354,10 +369,15 @@ bool MDSAuthCaps::parse(string_view str, ostream *err)
     // Make sure no grants are kept after parsing failed!
     grants.clear();
 
-    if (err)
-      *err << "mds capability parse failed, stopped at '"
-	   << string(iter, end)
-           << "' of '" << str << "'";
+    if (err) {
+      if (string(iter, end).find("allow") != string::npos) {
+       *err << "Permission flags in MDS capability string must be '*' or "
+	    << "'all' or must start with 'r'";
+      } else {
+       *err << "mds capability parse failed, stopped at '"
+            << string(iter, end) << "' of '" << str << "'";
+      }
+    }
     return false; 
   }
 }
@@ -538,3 +558,9 @@ ostream &operator<<(ostream &out, const MDSAuthCaps &cap)
   return out;
 }
 
+ostream &operator<<(ostream &out, const MDSCapAuth &auth)
+{
+  out << "MDSCapAuth(" << auth.match << "readable="
+      << auth.readable << ", writeable=" << auth.writeable << ")";
+  return out;
+}

@@ -1,5 +1,6 @@
 #include "DaemonMetricCollector.h"
 
+#include <boost/asio/io_context.hpp>
 #include <boost/json/src.hpp>
 #include <chrono>
 #include <filesystem>
@@ -43,7 +44,7 @@ void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
 void DaemonMetricCollector::main() {
   // time to wait before sending requests again
 
-  boost::asio::io_service io;
+  boost::asio::io_context io;
   boost::asio::steady_timer timer{io, std::chrono::seconds(0)};
   request_loop(timer);
   io.run();
@@ -147,15 +148,13 @@ void DaemonMetricCollector::dump_asok_metrics() {
           std::string counter_name = perf_group + "_" + counter_name_init;
           promethize(counter_name);
 
-          if (counters_labels.empty()) {
-            auto labels_and_name = get_labels_and_metric_name(daemon_name, counter_name);
-            if (labels_and_name.first.empty()) {
-              dout(1) << "Unable to parse instance_id from daemon_name: " << daemon_name << dendl;
-              continue;
-            }
-            labels = labels_and_name.first;
-            counter_name = labels_and_name.second;
+          auto extra_labels = get_extra_labels(daemon_name);
+          if (extra_labels.empty()) {
+            dout(1) << "Unable to parse instance_id from daemon_name: " << daemon_name << dendl;
+            continue;
           }
+          labels.insert(extra_labels.begin(), extra_labels.end());
+
           // For now this is only required for rgw multi-site metrics
           auto multisite_labels_and_name = add_fixed_name_metrics(counter_name);
           if (!multisite_labels_and_name.first.empty()) {
@@ -289,12 +288,8 @@ std::string DaemonMetricCollector::asok_request(AdminSocketClient &asok,
   return response;
 }
 
-std::pair<labels_t, std::string>
-DaemonMetricCollector::get_labels_and_metric_name(std::string daemon_name,
-                                                  std::string metric_name) {
-  std::string new_metric_name;
+labels_t DaemonMetricCollector::get_extra_labels(std::string daemon_name) {
   labels_t labels;
-  new_metric_name = metric_name;
   const std::string ceph_daemon_prefix = "ceph-";
   const std::string ceph_client_prefix = "client.";
   if (daemon_name.rfind(ceph_daemon_prefix, 0) == 0) {
@@ -321,24 +316,12 @@ DaemonMetricCollector::get_labels_and_metric_name(std::string daemon_name,
     if (elems.size() >= 4) {
       labels["instance_id"] = quote(elems[3]);
     } else {
-      return std::make_pair(labels_t(), "");
+      return labels_t();
     }
   } else {
     labels.insert({"ceph_daemon", quote(daemon_name)});
   }
-  if (daemon_name.find("rbd-mirror") != std::string::npos) {
-    std::regex re(
-        "^rbd_mirror_image_([^/]+)/(?:(?:([^/]+)/"
-        ")?)(.*)\\.(replay(?:_bytes|_latency)?)$");
-    std::smatch match;
-    if (std::regex_search(daemon_name, match, re) == true) {
-      new_metric_name = "ceph_rbd_mirror_image_" + match.str(4);
-      labels["pool"] = quote(match.str(1));
-      labels["namespace"] = quote(match.str(2));
-      labels["image"] = quote(match.str(3));
-    }
-  }
-  return {labels, new_metric_name};
+  return labels;
 }
 
 // Add fixed name metrics from existing ones that have details in their names

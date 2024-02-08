@@ -2,12 +2,18 @@
  The Ceph Community
 ====================
 
-The Ceph community is an excellent source of information and help. For
-operational issues with Ceph releases we recommend you `subscribe to the
-ceph-users email list`_. When you no longer want to receive emails, you can
-`unsubscribe from the ceph-users email list`_.
+Ceph-users email list
+=====================
 
-You may also `subscribe to the ceph-devel email list`_. You should do so if
+The Ceph community is an excellent source of information and help. For
+operational issues with Ceph we recommend that you `subscribe to the ceph-users
+email list`_. When you no longer want to receive emails, you can `unsubscribe
+from the ceph-users email list`_.
+
+Ceph-devel email list
+=====================
+
+You can also `subscribe to the ceph-devel email list`_. You should do so if
 your issue is:
 
 - Likely related to a bug
@@ -16,11 +22,14 @@ your issue is:
 - Related to your own builds
 
 If you no longer want to receive emails from the ``ceph-devel`` email list, you
-may `unsubscribe from the ceph-devel email list`_.
+can `unsubscribe from the ceph-devel email list`_.
 
-.. tip:: The Ceph community is growing rapidly, and community members can help
-   you if you provide them with detailed information about your problem. You
-   can attach the output of the ``ceph report`` command to help people understand your issues.
+Ceph report
+===========
+
+.. tip:: Community members can help you if you provide them with detailed
+   information about your problem. Attach the output of the ``ceph report``
+   command to help people understand your issues.
 
 .. _subscribe to the ceph-devel email list: mailto:dev-join@ceph.io
 .. _unsubscribe from the ceph-devel email list: mailto:dev-leave@ceph.io

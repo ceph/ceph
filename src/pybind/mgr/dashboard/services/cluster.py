@@ -56,10 +56,10 @@ class ClusterModel:
         for pool in df['pools']:
             pool_name = str(pool['name'])
             if pool_name in rgw_pools_data:
-                objects = pool['stats']['objects']
-                pool_bytes_used = pool['stats']['bytes_used']
-                total_pool_bytes_used += pool_bytes_used
                 if pool_name.endswith('.data'):
+                    objects = pool['stats']['objects']
+                    pool_bytes_used = pool['stats']['bytes_used']
+                    total_pool_bytes_used += pool_bytes_used
                     total_data_pool_objects += objects
                     replica = rgw_pools_data[pool_name]
                     total_data_pool_bytes_used += pool_bytes_used / replica

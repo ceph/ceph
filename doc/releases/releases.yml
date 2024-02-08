@@ -17,9 +17,13 @@ releases:
     releases:
       - version: 18.2.0
         released: 2023-08-07
+      - version: 18.2.1
+        released: 2023-12-18
   quincy:
     target_eol: 2024-06-01
     releases:
+      - version: 17.2.7
+        released: 2023-10-30
       - version: 17.2.6
         released: 2023-04-10
       - version: 17.2.5

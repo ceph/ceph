@@ -30,9 +30,9 @@ assumed to be keyword arguments too.
 Snapshot schedules are identified by path, their repeat interval and their start
 time. The
 repeat interval defines the time between two subsequent snapshots. It is
-specified by a number and a period multiplier, one of `h(our)`, `d(ay)` and
-`w(eek)`. E.g. a repeat interval of `12h` specifies one snapshot every 12
-hours.
+specified by a number and a period multiplier, one of `h(our)`, `d(ay)`,
+`w(eek)`, `M(onth)` and `Y(ear)`. E.g. a repeat interval of `12h` specifies one
+snapshot every 12 hours.
 The start time is specified as a time string (more details about passing times
 below). By default
 the start time is last midnight. So when a snapshot schedule with repeat
@@ -52,8 +52,8 @@ space or concatenated pairs of `<number><time period>`.
 The semantics are that a spec will ensure `<number>` snapshots are kept that are
 at least `<time period>` apart. For Example `7d` means the user wants to keep 7
 snapshots that are at least one day (but potentially longer) apart from each other.
-The following time periods are recognized: `h(our), d(ay), w(eek), m(onth),
-y(ear)` and `n`. The latter is a special modifier where e.g. `10n` means keep
+The following time periods are recognized: `h(our)`, `d(ay)`, `w(eek)`, `M(onth)`, 
+`Y(ear)` and `n`. The latter is a special modifier where e.g. `10n` means keep
 the last 10 snapshots regardless of timing,
 
 All subcommands take optional `fs` argument to specify paths in

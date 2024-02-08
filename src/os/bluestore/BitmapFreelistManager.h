@@ -63,7 +63,6 @@ public:
   static void setup_merge_operator(KeyValueDB *db, std::string prefix);
 
   int create(uint64_t size, uint64_t granularity,
-	     uint64_t zone_size, uint64_t first_sequential_zone,
 	     KeyValueDB::Transaction txn) override;
 
   int init(KeyValueDB *kvdb, bool db_in_read_only,

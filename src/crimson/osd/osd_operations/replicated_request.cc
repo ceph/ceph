@@ -16,11 +16,13 @@ namespace {
   }
 }
 
+SET_SUBSYS(osd);
+
 namespace crimson::osd {
 
 RepRequest::RepRequest(crimson::net::ConnectionRef&& conn,
 		       Ref<MOSDRepOp> &&req)
-  : conn{std::move(conn)},
+  : l_conn{std::move(conn)},
     req{std::move(req)}
 {}
 
@@ -46,7 +48,14 @@ void RepRequest::dump_detail(Formatter *f) const
 
 ConnectionPipeline &RepRequest::get_connection_pipeline()
 {
-  return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
+  return get_osd_priv(&get_local_connection()
+         ).client_request_conn_pipeline;
+}
+
+PerShardPipeline &RepRequest::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_replicated_request_pipeline();
 }
 
 ClientRequest::PGPipeline &RepRequest::client_pp(PG &pg)
@@ -57,10 +66,12 @@ ClientRequest::PGPipeline &RepRequest::client_pp(PG &pg)
 seastar::future<> RepRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
-  logger().debug("{}: RepRequest::with_pg", *this);
+  LOG_PREFIX(RepRequest::with_pg);
+  DEBUGI("{}: RepRequest::with_pg", *this);
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    logger().debug("{}: pg present", *this);
+    LOG_PREFIX(RepRequest::with_pg);
+    DEBUGI("{}: pg present", *this);
     return this->template enter_stage<interruptor>(client_pp(*pg).await_map
     ).then_interruptible([this, pg] {
       return this->template with_blocking_event<
@@ -71,10 +82,16 @@ seastar::future<> RepRequest::with_pg(
       });
     }).then_interruptible([this, pg] (auto) {
       return pg->handle_rep_op(req);
+    }).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
     });
-  }, [ref](std::exception_ptr) {
+  }, [](std::exception_ptr) {
     return seastar::now();
-  }, pg);
+  }, pg).finally([this, ref=std::move(ref)] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
+  });
 }
 
 }

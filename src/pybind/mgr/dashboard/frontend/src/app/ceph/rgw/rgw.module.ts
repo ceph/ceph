@@ -28,8 +28,6 @@ import { RgwUserTabsComponent } from './rgw-user-tabs/rgw-user-tabs.component';
 import { RgwMultisiteDetailsComponent } from './rgw-multisite-details/rgw-multisite-details.component';
 import { TreeModule } from '@circlon/angular-tree-component';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
-import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
-import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-multisite-realm-form.component';
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
 import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form/rgw-multisite-zone-form.component';
@@ -46,6 +44,7 @@ import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-primary-zone.component';
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
+import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
 
 @NgModule({
   imports: [
@@ -102,7 +101,8 @@ import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-inf
     RgwOverviewDashboardComponent,
     RgwSyncPrimaryZoneComponent,
     RgwSyncMetadataInfoComponent,
-    RgwSyncDataInfoComponent
+    RgwSyncDataInfoComponent,
+    BucketTagModalComponent
   ]
 })
 export class RgwModule {}
@@ -158,6 +158,13 @@ const routes: Routes = [
         data: {
           breadcrumbs: ActionLabels.CREATE
         }
+      },
+      {
+        path: URLVerbs.EDIT,
+        component: CrudFormComponent,
+        data: {
+          breadcrumbs: ActionLabels.EDIT
+        }
       }
     ]
   },
@@ -185,22 +192,7 @@ const routes: Routes = [
   },
   {
     path: 'multisite',
-    canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],
-    data: {
-      moduleStatusGuardConfig: {
-        uiApiPath: 'rgw/multisite',
-        redirectTo: 'error',
-        header: 'Multi-site not configured',
-        button_name: 'Add Multi-site Configuration',
-        button_route: '/rgw/multisite/create',
-        button_title: 'Add multi-site configuration (realms/zonegroups/zones)',
-        secondary_button_name: 'Import Multi-site Configuration',
-        secondary_button_route: 'rgw/multisite/import',
-        secondary_button_title:
-          'Import multi-site configuration (import realm token from a secondary cluster)'
-      },
-      breadcrumbs: 'Multisite'
-    },
+    data: { breadcrumbs: 'Multi-site' },
     children: [{ path: '', component: RgwMultisiteDetailsComponent }]
   }
 ];

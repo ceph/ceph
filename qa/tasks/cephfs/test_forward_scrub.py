@@ -9,6 +9,7 @@ how the functionality responds to damaged metadata.
 """
 import logging
 import json
+import errno
 
 from collections import namedtuple
 from io import BytesIO
@@ -45,6 +46,9 @@ class TestForwardScrub(CephFSTestCase):
             inos[path] = self.mount_a.path_to_ino(path)
 
         return inos
+
+    def _is_MDS_damage(self):
+        return "MDS_DAMAGE" in self.mds_cluster.mon_manager.get_mon_health()['checks']
 
     def test_apply_tag(self):
         self.mount_a.run_shell(["mkdir", "parentdir"])
@@ -305,3 +309,207 @@ class TestForwardScrub(CephFSTestCase):
         backtrace = self.fs.read_backtrace(file_ino)
         self.assertEqual(['alpha', 'parent_a'],
                          [a['dname'] for a in backtrace['ancestors']])
+
+    def test_health_status_after_dentry_repair(self):
+        """
+        Test that the damage health status is cleared
+        after the damaged dentry is repaired
+        """
+        # Create a file for checks
+        self.mount_a.run_shell(["mkdir", "subdir/"])
+
+        self.mount_a.run_shell(["touch", "subdir/file_undamaged"])
+        self.mount_a.run_shell(["touch", "subdir/file_to_be_damaged"])
+
+        subdir_ino = self.mount_a.path_to_ino("subdir")
+
+        self.mount_a.umount_wait()
+        for mds_name in self.fs.get_active_names():
+            self.fs.mds_asok(["flush", "journal"], mds_name)
+
+        self.fs.fail()
+
+        # Corrupt a dentry
+        junk = "deadbeef" * 10
+        dirfrag_obj = "{0:x}.00000000".format(subdir_ino)
+        self.fs.radosm(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
+
+        # Start up and try to list it
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+        self.mount_a.mount_wait()
+        dentries = self.mount_a.ls("subdir/")
+
+        # The damaged guy should have disappeared
+        self.assertEqual(dentries, ["file_undamaged"])
+
+        # I should get ENOENT if I try and read it normally, because
+        # the dir is considered complete
+        try:
+            self.mount_a.stat("subdir/file_to_be_damaged", wait=True)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.ENOENT)
+        else:
+            raise AssertionError("Expected ENOENT")
+
+        nfiles = self.mount_a.getfattr("./subdir", "ceph.dir.files")
+        self.assertEqual(nfiles, "2")
+
+        self.mount_a.umount_wait()
+
+        out_json = self.fs.run_scrub(["start", "/subdir", "recursive"])
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
+        # Check that an entry for dentry damage is created in the damage table
+        damage = json.loads(
+            self.fs.mon_manager.raw_cluster_cmd(
+                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+                "damage", "ls", '--format=json-pretty'))
+        self.assertEqual(len(damage), 1)
+        self.assertEqual(damage[0]['damage_type'], "dentry")
+        self.wait_until_true(lambda: self._is_MDS_damage(), timeout=100)
+
+        out_json = self.fs.run_scrub(["start", "/subdir", "repair,recursive"])
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
+        # Check that the entry is cleared from the damage table
+        damage = json.loads(
+            self.fs.mon_manager.raw_cluster_cmd(
+                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+                "damage", "ls", '--format=json-pretty'))
+        self.assertEqual(len(damage), 0)
+        self.wait_until_true(lambda: not self._is_MDS_damage(), timeout=100)
+
+        self.mount_a.mount_wait()
+
+        # Check that the file count is now correct
+        nfiles = self.mount_a.getfattr("./subdir", "ceph.dir.files")
+        self.assertEqual(nfiles, "1")
+
+        # Clean up the omap object
+        self.fs.radosm(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
+
+    def test_health_status_after_dirfrag_repair(self):
+        """
+        Test that the damage health status is cleared
+        after the damaged dirfrag is repaired
+        """
+        self.mount_a.run_shell(["mkdir", "dir"])
+        self.mount_a.run_shell(["touch", "dir/file"])
+        self.mount_a.run_shell(["mkdir", "testdir"])
+        self.mount_a.run_shell(["ln", "dir/file", "testdir/hardlink"])
+
+        dir_ino = self.mount_a.path_to_ino("dir")
+
+        # Ensure everything is written to backing store
+        self.mount_a.umount_wait()
+        self.fs.mds_asok(["flush", "journal"])
+
+        # Drop everything from the MDS cache
+        self.fs.fail()
+
+        self.fs.radosm(["rm", "{0:x}.00000000".format(dir_ino)])
+
+        self.fs.journal_tool(['journal', 'reset'], 0)
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        self.mount_a.mount_wait()
+
+        # Check that touching the hardlink gives EIO
+        ran = self.mount_a.run_shell(["stat", "testdir/hardlink"], wait=False)
+        try:
+            ran.wait()
+        except CommandFailedError:
+            self.assertTrue("Input/output error" in ran.stderr.getvalue())
+
+        out_json = self.fs.run_scrub(["start", "/dir", "recursive"])
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
+        # Check that an entry is created in the damage table
+        damage = json.loads(
+            self.fs.mon_manager.raw_cluster_cmd(
+                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+                "damage", "ls", '--format=json-pretty'))
+        self.assertEqual(len(damage), 3)
+        damage_types = set()
+        for i in range(0, 3):
+            damage_types.add(damage[i]['damage_type'])
+        self.assertIn("dir_frag", damage_types)
+        self.wait_until_true(lambda: self._is_MDS_damage(), timeout=100)
+
+        out_json = self.fs.run_scrub(["start", "/dir", "recursive,repair"])
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
+        # Check that the entry is cleared from the damage table
+        damage = json.loads(
+            self.fs.mon_manager.raw_cluster_cmd(
+                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+                "damage", "ls", '--format=json-pretty'))
+        self.assertEqual(len(damage), 1)
+        self.assertNotEqual(damage[0]['damage_type'], "dir_frag")
+
+        self.mount_a.umount_wait()
+        self.fs.mds_asok(["flush", "journal"])
+        self.fs.fail()
+
+        # Run cephfs-data-scan
+        self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()])
+        self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()])
+        self.fs.data_scan(["scan_links"])
+
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+        self.mount_a.mount_wait()
+
+        out_json = self.fs.run_scrub(["start", "/dir", "recursive,repair"])
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+        damage = json.loads(
+            self.fs.mon_manager.raw_cluster_cmd(
+                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+                "damage", "ls", '--format=json-pretty'))
+        self.assertEqual(len(damage), 0)
+        self.wait_until_true(lambda: not self._is_MDS_damage(), timeout=100)
+
+    def test_health_status_after_backtrace_repair(self):
+        """
+        Test that the damage health status is cleared
+        after the damaged backtrace is repaired
+        """
+        # Create a file for checks
+        self.mount_a.run_shell(["mkdir", "dir_test"])
+        self.mount_a.run_shell(["touch", "dir_test/file"])
+        file_ino = self.mount_a.path_to_ino("dir_test/file")
+
+        # That backtrace and layout are written after initial flush
+        self.fs.mds_asok(["flush", "journal"])
+        backtrace = self.fs.read_backtrace(file_ino)
+        self.assertEqual(['file', 'dir_test'],
+                         [a['dname'] for a in backtrace['ancestors']])
+
+        # Corrupt the backtrace
+        self.fs._write_data_xattr(file_ino, "parent",
+                                  "The backtrace is corrupted")
+
+        out_json = self.fs.run_scrub(["start", "/", "recursive"])
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+        
+        # Check that an entry for backtrace damage is created in the damage table
+        damage = json.loads(
+            self.fs.mon_manager.raw_cluster_cmd(
+                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+                "damage", "ls", '--format=json-pretty'))
+        self.assertEqual(len(damage), 1)
+        self.assertEqual(damage[0]['damage_type'], "backtrace")
+        self.wait_until_true(lambda: self._is_MDS_damage(), timeout=100)
+
+        out_json = self.fs.run_scrub(["start", "/", "repair,recursive,force"])
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
+        # Check that the entry is cleared from the damage table
+        damage = json.loads(
+            self.fs.mon_manager.raw_cluster_cmd(
+                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+                "damage", "ls", '--format=json-pretty'))
+        self.assertEqual(len(damage), 0)
+        self.wait_until_true(lambda: not self._is_MDS_damage(), timeout=100)

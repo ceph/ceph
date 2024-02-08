@@ -172,6 +172,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_PURGED_SNAPDIRS  (1<<20) /* osds have converted snapsets */
 #define CEPH_OSDMAP_NOSNAPTRIM       (1<<21) /* disable snap trimming */
 #define CEPH_OSDMAP_PGLOG_HARDLIMIT  (1<<22) /* put a hard limit on pg log length */
+#define CEPH_OSDMAP_NOAUTOSCALE      (1<<23)  /* block pg autoscale */
 
 /* these are hidden in 'ceph status' view */
 #define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
@@ -206,7 +207,8 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_RELEASE_PACIFIC    16
 #define CEPH_RELEASE_QUINCY     17
 #define CEPH_RELEASE_REEF       18
-#define CEPH_RELEASE_MAX        19  /* highest + 1 */
+#define CEPH_RELEASE_SQUID      19
+#define CEPH_RELEASE_MAX        20  /* highest + 1 */
 
 /*
  * The error code to return when an OSD can't handle a write

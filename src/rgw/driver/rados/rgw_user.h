@@ -30,8 +30,6 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWUserBuckets;
 
-class RGWGetUserStats_CB;
-
 /**
  * A string wrapper that includes encode/decode functions
  * for easily accessing a UID in all forms
@@ -312,6 +310,10 @@ struct RGWUserAdminOpState {
     max_buckets = mb;
     max_buckets_specified = true;
   }
+
+  rgw::sal::Attrs get_attrs();
+
+  void set_attrs(rgw::sal::Attrs& attrs);
 
   void set_gen_access() {
     gen_access = true;

@@ -256,7 +256,93 @@
         }
       ],
       "title": "OSDs",
-      "type": "stat"
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [],
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "All"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Out"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "percentage",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0.1
+                    },
+                    {
+                      "value": 10,
+                      "color": "red"
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Down"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "percentage",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 0.1
+                    },
+                    {
+                      "value": 10,
+                      "color": "red"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "clusterName": "",
@@ -340,7 +426,7 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Annotation",
           "displayValueWithAlias": "Never",
-          "expr": "count(ceph_mon_quorum_status) / sum(ceph_mon_quorum_status)",
+          "expr": "count(ceph_mon_quorum_status) - sum(ceph_mon_quorum_status)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "MONs out of Quorum",
@@ -517,6 +603,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "short"
+        }
+      },
       "fill": 0,
       "gridPos": {
         "h": 6,
@@ -640,7 +735,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -673,6 +768,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "ms"
+        }
+      },
       "fill": 0,
       "gridPos": {
         "h": 6,
@@ -746,7 +850,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -779,6 +883,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "Bps"
+        }
+      },
       "fill": 1,
       "gridPos": {
         "h": 9,
@@ -838,7 +951,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -871,6 +984,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "Bps"
+        }
+      },
       "fill": 1,
       "gridPos": {
         "h": 9,
@@ -917,7 +1039,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -1073,6 +1195,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "ops"
+        }
+      },
       "fill": 0,
       "gridPos": {
         "h": 9,
@@ -1120,7 +1251,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -1276,4 +1407,4 @@
   "timezone": "",
   "title": "Ceph - Cluster",
   "version": 13
-    }
+}

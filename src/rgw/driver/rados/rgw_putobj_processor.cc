@@ -126,8 +126,8 @@ void RadosWriter::add_write_hint(librados::ObjectWriteOperation& op) {
 
 int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
 {
-  stripe_obj = store->svc.rados->obj(raw_obj);
-  return stripe_obj.open(dpp);
+  return rgw_get_rados_ref(dpp, store->get_rados_handle(), raw_obj,
+			   &stripe_obj);
 }
 
 int RadosWriter::process(bufferlist&& bl, uint64_t offset)
@@ -145,8 +145,9 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
     op.write(offset, data);
   }
   constexpr uint64_t id = 0; // unused
-  auto& ref = stripe_obj.get_ref();
-  auto c = aio->get(ref.obj, Aio::librados_op(ref.pool.ioctx(), std::move(op), y), cost, id);
+  auto c = aio->get(stripe_obj.obj, Aio::librados_op(stripe_obj.ioctx,
+						     std::move(op), y),
+		    cost, id);
   return process_completed(c, &written);
 }
 
@@ -160,8 +161,9 @@ int RadosWriter::write_exclusive(const bufferlist& data)
   op.write_full(data);
 
   constexpr uint64_t id = 0; // unused
-  auto& ref = stripe_obj.get_ref();
-  auto c = aio->get(ref.obj, Aio::librados_op(ref.pool.ioctx(), std::move(op), y), cost, id);
+  auto c = aio->get(stripe_obj.obj, Aio::librados_op(stripe_obj.ioctx,
+						     std::move(op), y),
+		    cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);
@@ -189,7 +191,7 @@ RadosWriter::~RadosWriter()
    * Such race condition is caused by the fact that the multipart object is the gatekeeper of a multipart
    * upload, when it is deleted, a second upload would start with the same suffix("2/"), therefore, objects
    * written by the second upload may be deleted by the first upload.
-   * details is describled on #11749
+   * details is described on #11749
    *
    * The above comment still stands, but instead of searching for a specific object in the multipart
    * namespace, we just make sure that we remove the object that is marked as the head object after
@@ -341,7 +343,9 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     const char *if_nomatch,
                                     const std::string *user_data,
                                     rgw_zone_set *zones_trace,
-                                    bool *pcanceled, optional_yield y)
+                                    bool *pcanceled, 
+                                    const req_context& rctx,
+                                    uint32_t flags)
 {
   int r = writer.drain();
   if (r < 0) {
@@ -378,7 +382,8 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
 
   read_cloudtier_info_from_attrs(attrs, obj_op.meta.category, manifest);
 
-  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
+  r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
+                        flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0) {
     if (r == -ETIMEDOUT) {
       // The head object write may eventually succeed, clear the set of objects for deletion. if it
@@ -482,7 +487,9 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
                                        const char *if_nomatch,
                                        const std::string *user_data,
                                        rgw_zone_set *zones_trace,
-                                       bool *pcanceled, optional_yield y)
+                                       bool *pcanceled, 
+                                       const req_context& rctx,
+                                       uint32_t flags)
 {
   int r = writer.drain();
   if (r < 0) {
@@ -506,7 +513,8 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
 
-  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
+  r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
+                        flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0)
     return r;
 
@@ -531,7 +539,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   bool compressed;
   r = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);
   if (r < 0) {
-    ldpp_dout(dpp, 1) << "cannot get compression info" << dendl;
+    ldpp_dout(rctx.dpp, 1) << "cannot get compression info" << dendl;
     return r;
   }
 
@@ -543,16 +551,16 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   store->obj_to_raw(bucket_info.placement_rule, meta_obj, &meta_raw_obj); 
 
   rgw_rados_ref meta_obj_ref;
-  r = store->get_raw_obj_ref(dpp, meta_raw_obj, &meta_obj_ref);
+  r = store->get_raw_obj_ref(rctx.dpp, meta_raw_obj, &meta_obj_ref);
   if (r < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to get obj ref of meta obj with ret=" << r << dendl;
+    ldpp_dout(rctx.dpp, -1) << "ERROR: failed to get obj ref of meta obj with ret=" << r << dendl;
     return r;
   }
 
   librados::ObjectWriteOperation op;
   cls_rgw_mp_upload_part_info_update(op, p, info);
-  r = rgw_rados_operate(dpp, meta_obj_ref.pool.ioctx(), meta_obj_ref.obj.oid, &op, y);
-  ldpp_dout(dpp, 20) << "Update meta: " << meta_obj_ref.obj.oid << " part " << p << " prefix " << info.manifest.get_prefix() << " return " << r << dendl;
+  r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, &op, rctx.y);
+  ldpp_dout(rctx.dpp, 20) << "Update meta: " << meta_obj_ref.obj.oid << " part " << p << " prefix " << info.manifest.get_prefix() << " return " << r << dendl;
 
   if (r == -EOPNOTSUPP) {
     // New CLS call to update part info is not yet supported. Fall back to the old handling.
@@ -565,7 +573,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     op = librados::ObjectWriteOperation{};
     op.assert_exists(); // detect races with abort
     op.omap_set(m);
-    r = rgw_rados_operate(dpp, meta_obj_ref.pool.ioctx(), meta_obj_ref.obj.oid, &op, y);
+    r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, &op, rctx.y);
   }
   if (r < 0) {
     return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
@@ -593,9 +601,10 @@ int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::sal::Data
 
 int AppendObjectProcessor::prepare(optional_yield y)
 {
-  RGWObjState *astate;
+  RGWObjState *astate = nullptr;
+  constexpr bool follow_olh = true;
   int r = store->get_obj_state(dpp, &obj_ctx, bucket_info, head_obj,
-                               &astate, &cur_manifest, y);
+                               &astate, &cur_manifest, follow_olh, y);
   if (r < 0) {
     return r;
   }
@@ -686,7 +695,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
                                     ceph::real_time set_mtime, rgw::sal::Attrs& attrs,
                                     ceph::real_time delete_at, const char *if_match, const char *if_nomatch,
                                     const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
-                                    optional_yield y)
+                                    const req_context& rctx, uint32_t flags)
 {
   int r = writer.drain();
   if (r < 0)
@@ -742,9 +751,9 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
     etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
     attrs[RGW_ATTR_ETAG] = etag_bl;
   }
-  r = obj_op.write_meta(dpp, actual_size + cur_size,
+  r = obj_op.write_meta(actual_size + cur_size,
 			accounted_size + *cur_accounted_size,
-			attrs, y);
+			attrs, rctx, flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0) {
     return r;
   }

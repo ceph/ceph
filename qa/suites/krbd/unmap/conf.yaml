@@ -1,5 +1,7 @@
 overrides:
   ceph:
     conf:
+      global:
+        mon warn on pool no app: false
       client:
         rbd default features: 1 # pre-single-major is v3.13, so layering only

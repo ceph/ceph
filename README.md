@@ -40,7 +40,7 @@ following commands to move into the cloned `ceph/ceph` repository and to check
 out the git submodules associated with it:
 
     cd ceph
-	git submodule update --init --recursive
+	git submodule update --init --recursive --progress
 
 
 ## Build Prerequisites
@@ -184,8 +184,8 @@ cluster:
 
 Most Ceph commands are available in the `bin/` directory. For example:
 
-	./bin/rados -p rbd bench 30 write
 	./bin/rbd create foo --size 1000
+	./bin/rados -p foo bench 30 write
 
 To shut down the test cluster, run the following command from the `build/`
 directory:

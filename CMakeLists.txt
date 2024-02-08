@@ -1,20 +1,9 @@
 cmake_minimum_required(VERSION 3.16)
 
 project(ceph
-  VERSION 18.0.0
+  VERSION 19.0.0
   LANGUAGES CXX C ASM)
 
-cmake_policy(SET CMP0028 NEW)
-cmake_policy(SET CMP0046 NEW)
-cmake_policy(SET CMP0048 NEW)
-cmake_policy(SET CMP0051 NEW)
-cmake_policy(SET CMP0054 NEW)
-cmake_policy(SET CMP0056 NEW)
-cmake_policy(SET CMP0065 NEW)
-cmake_policy(SET CMP0074 NEW)
-cmake_policy(SET CMP0075 NEW)
-cmake_policy(SET CMP0093 NEW)
-cmake_policy(SET CMP0094 NEW)
 foreach(policy CMP0127 CMP0135)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
@@ -23,10 +12,15 @@ endforeach()
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
-if(NOT CMAKE_BUILD_TYPE AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
-  set(default_build_type "Debug")
-  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
-      STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
+if(NOT CMAKE_BUILD_TYPE)
+  if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    message(WARNING "CMAKE_BUILD_TYPE not specified, assuming CMAKE_BUILD_TYPE=Debug because .git exists.")
+    set(default_build_type "Debug")
+    set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+        STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
+  else()
+    message(WARNING "CMAKE_BUILD_TYPE not specified, leaving unset because .git does NOT exist.")
+  endif()
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -239,19 +233,23 @@ endif()
 
 include(CMakeDependentOption)
 
-CMAKE_DEPENDENT_OPTION(WITH_ZBD "Enable libzbd bluestore backend" OFF
-  "WITH_BLUESTORE" OFF)
-if(WITH_ZBD)
-  find_package(zbd REQUIRED)
-  set(HAVE_LIBZBD ${ZBD_FOUND})
-endif()
-
 CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring bluestore backend" ON
   "WITH_BLUESTORE;HAVE_LIBAIO" OFF)
 set(HAVE_LIBURING ${WITH_LIBURING})
 
 CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_LIBURING "Require and build with system liburing" OFF
   "HAVE_LIBAIO;WITH_BLUESTORE" OFF)
+
+if(WITH_LIBURING)
+  if(WITH_SYSTEM_LIBURING)
+    find_package(uring REQUIRED)
+  else()
+    include(Builduring)
+    build_uring()
+  endif()
+  # enable uring in boost::asio
+  add_compile_definitions("BOOST_ASIO_HAS_IO_URING")
+endif()
 
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
   "WITH_BLUESTORE" OFF)
@@ -454,6 +452,7 @@ option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
+option(WITH_RADOSGW_POSIX "POSIX backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
@@ -686,7 +685,7 @@ else()
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 
-if(Boost_VERSION VERSION_EQUAL 1.81 OR Boost_VERSION VERSION_EQUAL 1.82)
+if(Boost_VERSION VERSION_LESS 1.84)
   # This is a workaround for https://github.com/boostorg/phoenix/issues/111
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DBOOST_PHOENIX_STL_TUPLE_H_>)
 endif()

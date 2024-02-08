@@ -11,13 +11,10 @@ import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { NotificationType } from '~/app/shared/enum/notification-type.enum';
-import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -45,7 +42,6 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
   constructor(
     private authStorageService: AuthStorageService,
     private cephfsService: CephfsService,
-    private cdDatePipe: CdDatePipe,
     public actionLabels: ActionLabelsI18n,
     private router: Router,
     private urlBuilder: URLBuilderService,
@@ -75,7 +71,6 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
         name: $localize`Created`,
         prop: 'mdsmap.created',
         flexGrow: 1,
-        pipe: this.cdDatePipe,
         cellTransformation: CellTemplate.timeAgo
       }
     ];
@@ -91,7 +86,8 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
         name: this.actionLabels.EDIT,
         permission: 'update',
         icon: Icons.edit,
-        click: () => this.editAction()
+        click: () =>
+          this.router.navigate([this.urlBuilder.getEdit(String(this.selection.first().id))])
       },
       {
         permission: 'delete',
@@ -153,31 +149,5 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
     }
 
     return true;
-  }
-
-  editAction() {
-    const selectedVolume = this.selection.first().mdsmap['fs_name'];
-
-    this.modalService.show(FormModalComponent, {
-      titleText: $localize`Edit File System: ${selectedVolume}`,
-      fields: [
-        {
-          type: 'text',
-          name: 'name',
-          value: selectedVolume,
-          label: $localize`Name`,
-          required: true
-        }
-      ],
-      submitButtonText: $localize`Edit File System`,
-      onSubmit: (values: any) => {
-        this.cephfsService.rename(selectedVolume, values.name).subscribe(() => {
-          this.notificationService.show(
-            NotificationType.success,
-            $localize`Updated File System '${selectedVolume}'`
-          );
-        });
-      }
-    });
   }
 }

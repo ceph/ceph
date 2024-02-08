@@ -16,7 +16,7 @@ with buckets it owns.
 
 A notification entity must be created in order to send event notifications for
 a specific bucket. A notification entity can be created either for a subset
-of event types or for all event types (which is the default). The
+of event types or for all "Removed" and "Created" event types (which is the default). The
 notification may also filter out events based on matches of the prefixes and
 suffixes of (1) the keys, (2) the metadata attributes attached to the object,
 or (3) the object tags. Regular-expression matching can also be used on these
@@ -78,7 +78,7 @@ following command:
 
 .. prompt:: bash #
 
-   radosgw-admin topic list [--tenant={tenant}]
+   radosgw-admin topic list [--tenant={tenant}]  [--uid={user}]
 
 
 Fetch the configuration of a specific topic by running the following command:
@@ -159,6 +159,7 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.12.key=time_to_live&Attributes.entry.12.value=<seconds to live>]
    [&Attributes.entry.13.key=max_retries&Attributes.entry.13.value=<retries number>]
    [&Attributes.entry.14.key=retry_sleep_duration&Attributes.entry.14.value=<sleep seconds>]
+   [&Attributes.entry.15.key=Policy&Attributes.entry.15.value=<policy-JSON-string>]
 
 Request parameters:
 
@@ -179,6 +180,25 @@ Request parameters:
   default value is taken from `rgw_topic_persistency_sleep_duration`.
   providing a value overrides the global value.
   zero value mean there is no delay between retries.
+- Policy: This will control who can access the topic in addition to the owner of the topic.
+  The policy passed needs to be a JSON string similar to bucket policy.
+  For example, one can send a policy string as follows::
+
+    {
+      "Version": "2012-10-17",
+      "Statement": [{
+        "Effect": "Allow",
+        "Principal": {"AWS": ["arn:aws:iam::usfolks:user/fred:subuser"]},
+        "Action": ["sns:GetTopicAttributes","sns:Publish"],
+        "Resource": ["arn:aws:sns:default::mytopic"],
+      }]
+    }
+
+  Currently, we support only the following actions:
+  - sns:GetTopicAttributes  To list or get existing topics
+  - sns:SetTopicAttributes  To set attributes for the existing topic
+  - sns:DeleteTopic         To delete the existing topic
+  - sns:Publish             To be able to create/subscribe notification on existing topic
 
 - HTTP endpoint
 
@@ -340,6 +360,7 @@ The response has the following format:
 - TopicArn: topic `ARN
   <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_.
 - OpaqueData: The opaque data set on the topic.
+- Policy: Any access permission set on the topic.
 
 Get Topic Information
 `````````````````````
@@ -393,6 +414,7 @@ The response has the following format:
 - TopicArn: topic `ARN
   <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_.
 - OpaqueData: the opaque data set on the topic.
+- Policy: Any access permission set on the topic.
 
 Delete Topic
 ````````````
@@ -462,6 +484,61 @@ The response has the following format:
 - If the endpoint URL contains user/password information in any part of the
   topic, the request must be made over HTTPS. The "topic list" request will
   otherwise be rejected.
+
+Set Topic Attributes
+````````````````````
+
+::
+
+   POST
+
+   Action=SetTopicAttributes
+   &TopicArn=<topic-arn>&AttributeName=<attribute-name>&AttributeValue=<attribute-value>
+
+This allows to set/modify existing attributes on the specified topic.
+
+.. note::
+
+  - The AttributeName passed will either be updated or created (if not exist) with AttributeValue passed.
+  - Any unsupported AttributeName passed will result in error 400.
+
+The response has the following format:
+
+::
+
+    <SetTopicAttributesResponse xmlns="https://sns.amazonaws.com/doc/2010-03-31/">
+        <ResponseMetadata>
+            <RequestId></RequestId>
+        </ResponseMetadata>
+    </SetTopicAttributesResponse>
+
+Valid AttributeName that can be passed:
+
+  - push-endpoint: This is the URI of an endpoint to send push notifications to.
+  - OpaqueData: Opaque data is set in the topic configuration and added to all
+    notifications that are triggered by the topic.
+  - persistent: This indicates whether notifications to this endpoint are
+    persistent (=asynchronous) or not persistent. (This is "false" by default.)
+  - time_to_live: This will limit the time (in seconds) to retain the notifications.
+  - max_retries: This will limit the max retries before expiring notifications.
+  - retry_sleep_duration: This will control the frequency of retrying the notifications.
+  - Policy: This will control who can access the topic other than owner of the topic.
+  - verify-ssl: This indicates whether the server certificates must be validated by
+    the client. This is "true" by default.
+  - ``use-ssl``: If this is set to "true", a secure connection is used to
+    connect to the broker. This is "false" by default.
+  - cloudevents: This indicates whether the HTTP header should contain
+    attributes according to the `S3 CloudEvents Spec`_. 
+  - amqp-exchange: The exchanges must exist and must be able to route messages
+    based on topics.
+  - amqp-ack-level: No end2end acknowledgement is required. Messages may persist in the
+    broker before being delivered to their final destinations. 
+  - ``ca-location``: If this is provided and a secure connection is used, the
+    specified CA will be used instead of the default CA to authenticate the
+    broker. 
+  - mechanism: may be provided together with user/password (default: ``PLAIN``).
+  - kafka-ack-level: No end2end acknowledgement is required. Messages may persist in the
+    broker before being delivered to their final destinations. 
 
 Notifications
 ~~~~~~~~~~~~~

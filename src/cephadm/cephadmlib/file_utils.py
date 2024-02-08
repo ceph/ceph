@@ -1,6 +1,7 @@
 # file_utils.py - generic file and directory utility functions
 
 
+import datetime
 import logging
 import os
 import tempfile
@@ -9,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, Any, Union, Tuple, Optional, Generator, IO, List
 
-from .constants import DEFAULT_MODE
+from .constants import DEFAULT_MODE, DATEFMT
 from .data_utils import dict_get_join
 
 logger = logging.getLogger()
@@ -121,3 +122,42 @@ def read_file(path_list, file_name=''):
                 else:
                     return content
     return 'Unknown'
+
+
+def pathify(p):
+    # type: (str) -> str
+    p = os.path.expanduser(p)
+    return os.path.abspath(p)
+
+
+def get_file_timestamp(fn):
+    # type: (str) -> Optional[str]
+    try:
+        mt = os.path.getmtime(fn)
+        return datetime.datetime.fromtimestamp(
+            mt, tz=datetime.timezone.utc
+        ).strftime(DATEFMT)
+    except Exception:
+        return None
+
+
+def make_run_dir(fsid: str, uid: int, gid: int) -> None:
+    makedirs(f'/var/run/ceph/{fsid}', uid, gid, 0o770)
+
+
+def unlink_file(
+    path: Union[str, Path],
+    missing_ok: bool = False,
+    ignore_errors: bool = False,
+) -> None:
+    """Wrapper around unlink that can either ignore missing files or all
+    errors.
+    """
+    try:
+        Path(path).unlink()
+    except FileNotFoundError:
+        if not missing_ok and not ignore_errors:
+            raise
+    except Exception:
+        if not ignore_errors:
+            raise

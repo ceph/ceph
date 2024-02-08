@@ -110,6 +110,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/mds/FSMap.cc
   ${PROJECT_SOURCE_DIR}/src/mds/FSMapUser.cc
   ${PROJECT_SOURCE_DIR}/src/mds/MDSMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mds/MDSAuthCaps.cc
   ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
   ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc
@@ -120,6 +121,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/HitSet.cc
   ${PROJECT_SOURCE_DIR}/src/osd/OSDMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
+  ${PROJECT_SOURCE_DIR}/src/common/scrub_types.cc
   ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
   ${crimson_common_srcs}
   $<TARGET_OBJECTS:common_mountcephfs_objs>

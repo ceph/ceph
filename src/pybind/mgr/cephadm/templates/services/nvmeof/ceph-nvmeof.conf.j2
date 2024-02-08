@@ -1,12 +1,15 @@
 # {{ cephadm_managed }}
 [gateway]
 name = {{ name }}
-group = {{ spec.group }}
+group = {{ spec.group if spec.group is not none else '' }}
 addr = {{ addr }}
 port = {{ port }}
 enable_auth = {{ spec.enable_auth }}
 state_update_notify = True
 state_update_interval_sec = 5
+min_controller_id = {{ spec.min_controller_id }}
+max_controller_id = {{ spec.max_controller_id }}
+enable_spdk_discovery_controller = {{ spec.enable_spdk_discovery_controller }}
 
 [ceph]
 pool = {{ spec.pool }}
@@ -30,5 +33,5 @@ transports = {{ spec.transports }}
 transport_tcp_options = {{ transport_tcp_options }}
 {% endif %}
 {% if spec.tgt_cmd_extra_args %}
-tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args | tojson }}
+tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 {% endif %}

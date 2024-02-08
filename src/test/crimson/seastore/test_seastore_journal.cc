@@ -218,7 +218,8 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
 	  delta_checker = std::nullopt;
 	  advance();
 	}
-	return Journal::replay_ertr::make_ready_future<bool>(true);
+	return Journal::replay_ertr::make_ready_future<
+	  std::pair<bool, CachedExtentRef>>(true, nullptr);
       }).unsafe_get0();
     ASSERT_EQ(record_iter, records.end());
     for (auto &i : records) {

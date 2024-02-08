@@ -1,7 +1,6 @@
 import os
 import errno
 import logging
-import sys
 import threading
 import configparser
 import re
@@ -59,6 +58,7 @@ class MetadataManager(object):
     GLOBAL_META_KEY_TYPE    = "type"
     GLOBAL_META_KEY_PATH    = "path"
     GLOBAL_META_KEY_STATE   = "state"
+    GLOBAL_META_KEY_ALLOW_SUBVOLUME_UPGRADE   = "allow_subvolume_upgrade"
 
     CLONE_FAILURE_SECTION = "CLONE_FAILURE"
     CLONE_FAILURE_META_KEY_ERRNO = "errno"

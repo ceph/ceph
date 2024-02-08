@@ -41,28 +41,20 @@
 
 using namespace TOPNSPC::common;
 
-using std::dec;
-using std::hex;
 using std::list;
 using std::map;
-using std::make_pair;
 using std::ostream;
 using std::ostringstream;
-using std::pair;
 using std::set;
 using std::string;
 using std::string_view;
 using std::stringstream;
-using std::to_string;
 using std::vector;
 
 using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
-using ceph::ErasureCodeInterfaceRef;
-using ceph::ErasureCodeProfile;
 using ceph::Formatter;
-using ceph::JSONFormatter;
 using ceph::make_message;
 using ceph::mono_clock;
 using ceph::mono_time;
@@ -70,7 +62,8 @@ using ceph::mono_time;
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_fsmap())
-static ostream& _prefix(std::ostream *_dout, Monitor &mon, const FSMap& fsmap) {
+
+static ostream& _prefix(ostream *_dout, Monitor &mon, const FSMap& fsmap) {
   return *_dout << "mon." << mon.name << "@" << mon.rank
 		<< "(" << mon.get_state_name()
 		<< ").mds e" << fsmap.get_epoch() << " ";
@@ -86,19 +79,19 @@ static const string MDS_HEALTH_PREFIX("mds_health");
  */
 namespace TOPNSPC::common {
 template<> bool cmd_getval(const cmdmap_t& cmdmap,
-			   std::string_view k, mds_gid_t &val)
+			   string_view k, mds_gid_t &val)
 {
   return cmd_getval(cmdmap, k, (int64_t&)val);
 }
 
 template<> bool cmd_getval(const cmdmap_t& cmdmap,
-			   std::string_view k, mds_rank_t &val)
+			   string_view k, mds_rank_t &val)
 {
   return cmd_getval(cmdmap, k, (int64_t&)val);
 }
 
 template<> bool cmd_getval(const cmdmap_t& cmdmap,
-			   std::string_view k, MDSMap::DaemonState &val)
+			   string_view k, MDSMap::DaemonState &val)
 {
   return cmd_getval(cmdmap, k, (int64_t&)val);
 }
@@ -119,7 +112,7 @@ void MDSMonitor::create_initial()
   dout(10) << "create_initial" << dendl;
 }
 
-void MDSMonitor::get_store_prefixes(std::set<string>& s) const
+void MDSMonitor::get_store_prefixes(set<string>& s) const
 {
   s.insert(service_name);
   s.insert(MDS_METADATA_PREFIX);
@@ -136,6 +129,7 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
 	   << ", my e " << get_fsmap().get_epoch() << dendl;
   ceph_assert(version > get_fsmap().get_epoch());
 
+  load_metadata(pending_metadata);
   load_health();
 
   // read and decode
@@ -203,14 +197,14 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   put_last_committed(t, pending.get_epoch());
 
   // Encode MDSHealth data
-  for (std::map<uint64_t, MDSHealth>::iterator i = pending_daemon_health.begin();
+  for (map<uint64_t, MDSHealth>::iterator i = pending_daemon_health.begin();
       i != pending_daemon_health.end(); ++i) {
     bufferlist bl;
     i->second.encode(bl);
     t->put(MDS_HEALTH_PREFIX, stringify(i->first), bl);
   }
 
-  for (std::set<uint64_t>::iterator i = pending_daemon_health_rm.begin();
+  for (set<uint64_t>::iterator i = pending_daemon_health_rm.begin();
       i != pending_daemon_health_rm.end(); ++i) {
     t->erase(MDS_HEALTH_PREFIX, stringify(*i));
   }
@@ -596,12 +590,12 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   const auto &old_health = pending_daemon_health[gid].metrics;
   const auto &new_health = m->get_health().metrics;
 
-  std::set<mds_metric_t> old_types;
+  set<mds_metric_t> old_types;
   for (const auto &i : old_health) {
     old_types.insert(i.type);
   }
 
-  std::set<mds_metric_t> new_types;
+  set<mds_metric_t> new_types;
   for (const auto &i : new_health) {
     if (i.type == MDS_HEALTH_DUMMY) {
       continue;
@@ -1081,7 +1075,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
 
         f->open_object_section("mds");
         f->dump_string("name", info.name);
-        std::ostringstream get_err;
+        ostringstream get_err;
         r = dump_metadata(fsmap, info.name, f.get(), get_err);
         if (r == -EINVAL || r == -ENOENT) {
           // Drop error, list what metadata we do have
@@ -1290,11 +1284,11 @@ bool MDSMonitor::fail_mds_gid(FSMap &fsmap, mds_gid_t gid)
   return blocklist_epoch != 0;
 }
 
-mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const std::string &arg, std::ostream &ss)
+mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const string &arg, ostream &ss)
 {
   // Try parsing as a role
   mds_role_t role;
-  std::ostringstream ignore_err;  // Don't spam 'ss' with parse_role errors
+  ostringstream ignore_err;  // Don't spam 'ss' with parse_role errors
   int r = fsmap.parse_role(arg, &role, ignore_err);
   if (r == 0) {
     // See if a GID is assigned to this role
@@ -1308,7 +1302,7 @@ mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const std::string &arg, s
   }
 
   // Try parsing as a gid
-  std::string err;
+  string err;
   unsigned long long maybe_gid = strict_strtoll(arg.c_str(), 10, &err);
   if (!err.empty()) {
     // Not a role or a GID, try as a daemon name
@@ -1336,8 +1330,8 @@ mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const std::string &arg, s
   return MDS_GID_NONE;
 }
 
-int MDSMonitor::fail_mds(FSMap &fsmap, std::ostream &ss,
-    const std::string &arg, MDSMap::mds_info_t *failed_info)
+int MDSMonitor::fail_mds(FSMap &fsmap, ostream &ss,
+    const string &arg, MDSMap::mds_info_t *failed_info)
 {
   ceph_assert(failed_info != nullptr);
 
@@ -1435,7 +1429,7 @@ out:
 
   if (r >= 0) {
     // success.. delay reply
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
     return true;
   } else {
@@ -1448,9 +1442,9 @@ out:
 int MDSMonitor::filesystem_command(
     FSMap &fsmap,
     MonOpRequestRef op,
-    std::string const &prefix,
+    string const &prefix,
     const cmdmap_t& cmdmap,
-    std::stringstream &ss)
+    stringstream &ss)
 {
   dout(4) << __func__ << " prefix='" << prefix << "'" << dendl;
   op->mark_mdsmon_event(__func__);
@@ -1548,7 +1542,7 @@ int MDSMonitor::filesystem_command(
          return -EPERM;
     }
     
-    std::string role_str;
+    string role_str;
     cmd_getval(cmdmap, "role", role_str);
     mds_role_t role;
     const auto fs_names = op->get_session()->get_allowed_fs_names();
@@ -1604,7 +1598,7 @@ int MDSMonitor::filesystem_command(
     }
     r = 0;
   } else if (prefix == "mds repaired") {
-    std::string role_str;
+    string role_str;
     cmd_getval(cmdmap, "role", role_str);
     mds_role_t role;
     const auto fs_names = op->get_session()->get_allowed_fs_names();
@@ -1627,7 +1621,7 @@ int MDSMonitor::filesystem_command(
 
     r = 0;
   } else if (prefix == "mds freeze") {
-    std::string who;
+    string who;
     cmd_getval(cmdmap, "role_or_gid", who);
     mds_gid_t gid = gid_from_arg(fsmap, who, ss);
     if (gid == MDS_GID_NONE) {
@@ -1642,7 +1636,7 @@ int MDSMonitor::filesystem_command(
 
     bool freeze = false;
     {
-      std::string str;
+      string str;
       cmd_getval(cmdmap, "val", str);
       if ((r = parse_bool(str, &freeze, ss)) != 0) {
         return r;
@@ -1674,7 +1668,7 @@ void MDSMonitor::check_subs()
   // filesystems.  Build a list of all the types we service
   // subscriptions for.
 
-  std::vector<std::string> types = {
+  vector<string> types = {
     "fsmap",
     "fsmap.user",
     "mdsmap",
@@ -1683,7 +1677,7 @@ void MDSMonitor::check_subs()
   for (const auto& [fscid, fs] : get_fsmap()) {
     CachedStackStringStream cos;
     *cos << "mdsmap." << fscid;
-    types.push_back(std::string(cos->strv()));
+    types.push_back(string(cos->strv()));
   }
 
   for (const auto &type : types) {
@@ -1752,9 +1746,9 @@ void MDSMonitor::check_sub(Subscription *sub)
       // You're a client.  Did you request a particular
       // namespace?
       if (sub->type.compare(0, 7, "mdsmap.") == 0) {
-        auto namespace_id_str = sub->type.substr(std::string("mdsmap.").size());
+        auto namespace_id_str = sub->type.substr(string("mdsmap.").size());
         dout(10) << __func__ << ": namespace_id " << namespace_id_str << dendl;
-        std::string err;
+        string err;
         fscid = strict_strtoll(namespace_id_str.c_str(), 10, &err);
         if (!err.empty()) {
           // Client asked for a non-existent namespace, send them nothing
@@ -1876,7 +1870,7 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
   return 0;
 }
 
-void MDSMonitor::count_metadata(const std::string &field, map<string,int> *out)
+void MDSMonitor::count_metadata(const string &field, map<string,int> *out)
 {
   map<mds_gid_t,Metadata> meta;
   load_metadata(meta);
@@ -1890,7 +1884,7 @@ void MDSMonitor::count_metadata(const std::string &field, map<string,int> *out)
   }
 }
 
-void MDSMonitor::count_metadata(const std::string &field, Formatter *f)
+void MDSMonitor::count_metadata(const string &field, Formatter *f)
 {
   map<string,int> by_val;
   count_metadata(field, &by_val);
@@ -1901,12 +1895,12 @@ void MDSMonitor::count_metadata(const std::string &field, Formatter *f)
   f->close_section();
 }
 
-void MDSMonitor::get_versions(std::map<string, list<string> > &versions)
+void MDSMonitor::get_versions(map<string, list<string> > &versions)
 {
   map<mds_gid_t,Metadata> meta;
   load_metadata(meta);
   const auto &fsmap = get_fsmap();
-  std::map<mds_gid_t, mds_info_t> map = fsmap.get_mds_info();
+  map<mds_gid_t, mds_info_t> map = fsmap.get_mds_info();
   dout(10) << __func__ << " mds meta=" << meta << dendl;
   for (auto& p : meta) {
     auto q = p.second.find("ceph_version_short");
@@ -1915,7 +1909,7 @@ void MDSMonitor::get_versions(std::map<string, list<string> > &versions)
   }
 }
 
-int MDSMonitor::dump_metadata(const FSMap& fsmap, const std::string &who,
+int MDSMonitor::dump_metadata(const FSMap& fsmap, const string &who,
     Formatter *f, ostream& err)
 {
   ceph_assert(f);
@@ -2134,7 +2128,7 @@ bool MDSMonitor::check_health(FSMap& fsmap, bool* propose_osdmap)
       std::max(g_conf()->mds_beacon_interval, g_conf()->mds_beacon_grace * 0.5);
 
   // check beacon timestamps
-  std::vector<mds_gid_t> to_remove;
+  vector<mds_gid_t> to_remove;
   const bool mon_down = mon.is_mon_down();
   const auto mds_beacon_mon_down_grace =
       g_conf().get_val<std::chrono::seconds>("mds_beacon_mon_down_grace");

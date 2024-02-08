@@ -48,7 +48,6 @@ set(librgw_common_srcs
   services/svc_otp.cc
   services/svc_quota.cc
   services/svc_sync_modules.cc
-  services/svc_rados.cc
   services/svc_role_rados.cc
   services/svc_sys_obj.cc
   services/svc_sys_obj_cache.cc
@@ -148,6 +147,7 @@ set(librgw_common_srcs
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc
+  rgw_data_access.cc
   driver/rados/cls_fifo_legacy.cc
   driver/rados/rgw_bucket.cc
   driver/rados/rgw_bucket_sync.cc
@@ -217,15 +217,24 @@ if(WITH_RADOSGW_DBSTORE)
   list(APPEND librgw_common_srcs rgw_sal_dbstore.cc)
 endif()
 if(WITH_RADOSGW_MOTR)
-  list(APPEND librgw_common_srcs rgw_sal_motr.cc)
+  list(APPEND librgw_common_srcs driver/motr/rgw_sal_motr.cc)
 endif()
 if(WITH_RADOSGW_DAOS)
-  list(APPEND librgw_common_srcs rgw_sal_daos.cc)
+  list(APPEND librgw_common_srcs driver/motr/rgw_sal_daos.cc)
 endif()
 if(WITH_RADOSGW_D4N)
   list(APPEND librgw_common_srcs driver/d4n/d4n_directory.cc)
   list(APPEND librgw_common_srcs driver/d4n/d4n_datacache.cc)
   list(APPEND librgw_common_srcs driver/d4n/rgw_sal_d4n.cc)
+endif()
+if(WITH_RADOSGW_POSIX)
+  #add_subdirectory(driver/posix)
+  find_package(LMDB REQUIRED)
+  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+  list(APPEND librgw_common_srcs
+	      driver/posix/rgw_sal_posix.cc
+	      driver/posix/lmdb-safe.cc
+	      driver/posix/notify.cpp)
 endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
@@ -235,7 +244,6 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   # list(APPEND radosgw_srcs rgw_flight.cc rgw_flight_frontend.cc)
   list(APPEND librgw_common_srcs rgw_flight.cc rgw_flight_frontend.cc)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
-
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
 
@@ -262,6 +270,7 @@ target_link_libraries(rgw_common
     cls_user_client
     cls_version_client
     librados
+    libneorados
     rt
     ICU::uc
     OATH::OATH
@@ -270,15 +279,14 @@ target_link_libraries(rgw_common
     ${EXPAT_LIBRARIES}
     ${ARROW_LIBRARIES}
     ${ARROW_FLIGHT_LIBRARIES}
-    ${ALLOC_LIBS}
+    ${LMDB_LIBRARIES}
   PUBLIC
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     spawn
-    fmt::fmt)
+    ${FMT_LIB})
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
   PUBLIC "${LUA_INCLUDE_DIR}")
 
@@ -450,7 +458,12 @@ target_include_directories(radosgw
 
 target_include_directories(radosgw SYSTEM PUBLIC "../rapidjson/include")
 
-target_link_libraries(radosgw PRIVATE ${rgw_libs} rgw_schedulers kmip)
+target_link_libraries(radosgw PRIVATE
+  ${rgw_libs}
+  rgw_schedulers
+  kmip
+  ${ALLOC_LIBS})
+
 if(WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
@@ -500,7 +513,7 @@ set(radosgw_token_srcs
   rgw_token.cc)
 add_executable(radosgw-token ${radosgw_token_srcs})
 target_link_libraries(radosgw-token librados
-  global ${ALLOC_LIBS})
+  global)
 install(TARGETS radosgw-token DESTINATION bin)
 
 set(radosgw_object_expirer_srcs

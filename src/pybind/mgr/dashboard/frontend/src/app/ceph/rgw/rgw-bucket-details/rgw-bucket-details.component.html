@@ -1,94 +1,140 @@
 <ng-container *ngIf="selection">
-  <table class="table table-striped table-bordered">
-    <tbody>
-      <tr>
-        <td i18n
-            class="bold w-25">Versioning</td>
-        <td class="w-75">{{ selection.versioning }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold">Encryption</td>
-        <td>{{ selection.encryption }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold">MFA Delete</td>
-        <td>{{ selection.mfa_delete }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold">Index type</td>
-        <td>{{ selection.index_type }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold">Placement rule</td>
-        <td>{{ selection.placement_rule }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold">Last modification time</td>
-        <td>{{ selection.mtime | cdDate }}</td>
-      </tr>
-    </tbody>
-  </table>
+  <nav ngbNav
+       #nav="ngbNav"
+       class="nav-tabs"
+       cdStatefulTab="rgw-bucket-details">
+    <ng-container ngbNavItem="details">
+      <a ngbNavLink
+         i18n>Details</a>
+      <ng-template ngbNavContent>
 
-  <!-- Bucket quota -->
-  <div>
-    <legend i18n>Bucket quota</legend>
-    <table class="table table-striped table-bordered">
-      <tbody>
-        <tr>
-          <td i18n
-              class="bold w-25">Enabled</td>
-          <td class="w-75">{{ selection.bucket_quota.enabled | booleanText }}</td>
-        </tr>
-        <ng-container *ngIf="selection.bucket_quota.enabled">
-          <tr>
-            <td i18n
-                class="bold">Maximum size</td>
-            <td *ngIf="selection.bucket_quota.max_size <= -1"
-                i18n>Unlimited</td>
-            <td *ngIf="selection.bucket_quota.max_size > -1">
-              {{ selection.bucket_quota.max_size | dimless }}
-            </td>
-          </tr>
-          <tr>
-            <td i18n
-                class="bold">Maximum objects</td>
-            <td *ngIf="selection.bucket_quota.max_objects <= -1"
-                i18n>Unlimited</td>
-            <td *ngIf="selection.bucket_quota.max_objects > -1">
-              {{ selection.bucket_quota.max_objects }}
-            </td>
-          </tr>
-        </ng-container>
-      </tbody>
-    </table>
-  </div>
+        <table class="table table-striped table-bordered">
+          <tbody>
+            <tr>
+              <td i18n
+                  class="bold w-25">Versioning</td>
+              <td class="w-75">{{ selection.versioning }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Encryption</td>
+              <td>{{ selection.encryption }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">MFA Delete</td>
+              <td>{{ selection.mfa_delete }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Index type</td>
+              <td>{{ selection.index_type }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Placement rule</td>
+              <td>{{ selection.placement_rule }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold">Last modification time</td>
+              <td>{{ selection.mtime | cdDate }}</td>
+            </tr>
+          </tbody>
+        </table>
 
-  <!-- Locking -->
-  <legend i18n>Locking</legend>
-  <table class="table table-striped table-bordered">
-    <tbody>
-      <tr>
-        <td i18n
-            class="bold w-25">Enabled</td>
-        <td class="w-75">{{ selection.lock_enabled | booleanText }}</td>
-      </tr>
-      <ng-container *ngIf="selection.lock_enabled">
-        <tr>
-          <td i18n
-              class="bold">Mode</td>
-          <td>{{ selection.lock_mode }}</td>
-        </tr>
-        <tr>
-          <td i18n
-              class="bold">Days</td>
-          <td>{{ selection.lock_retention_period_days }}</td>
-        </tr>
+        <!-- Bucket quota -->
+        <div>
+          <legend i18n>Bucket quota</legend>
+          <table class="table table-striped table-bordered">
+            <tbody>
+              <tr>
+                <td i18n
+                    class="bold w-25">Enabled</td>
+                <td class="w-75">{{ selection.bucket_quota.enabled | booleanText }}</td>
+              </tr>
+              <ng-container *ngIf="selection.bucket_quota.enabled">
+                <tr>
+                  <td i18n
+                      class="bold">Maximum size</td>
+                  <td *ngIf="selection.bucket_quota.max_size <= -1"
+                      i18n>Unlimited</td>
+                  <td *ngIf="selection.bucket_quota.max_size > -1">
+                    {{ selection.bucket_quota.max_size | dimless }}
+                  </td>
+                </tr>
+                <tr>
+                  <td i18n
+                      class="bold">Maximum objects</td>
+                  <td *ngIf="selection.bucket_quota.max_objects <= -1"
+                      i18n>Unlimited</td>
+                  <td *ngIf="selection.bucket_quota.max_objects > -1">
+                    {{ selection.bucket_quota.max_objects }}
+                  </td>
+                </tr>
+              </ng-container>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Locking -->
+        <legend i18n>Locking</legend>
+        <table class="table table-striped table-bordered">
+          <tbody>
+            <tr>
+              <td i18n
+                  class="bold w-25">Enabled</td>
+              <td class="w-75">{{ selection.lock_enabled | booleanText }}</td>
+            </tr>
+            <ng-container *ngIf="selection.lock_enabled">
+              <tr>
+                <td i18n
+                    class="bold">Mode</td>
+                <td>{{ selection.lock_mode }}</td>
+              </tr>
+              <tr>
+                <td i18n
+                    class="bold">Days</td>
+                <td>{{ selection.lock_retention_period_days }}</td>
+              </tr>
+            </ng-container>
+          </tbody>
+        </table>
+
+      <!-- Tags -->
+      <ng-container *ngIf="(selection.tagset | keyvalue)?.length">
+        <legend i18n>Tags</legend>
+        <table class="table table-striped table-bordered">
+          <tbody>
+            <tr *ngFor="let tag of selection.tagset | keyvalue">
+              <td i18n
+                  class="bold w-25">{{tag.key}}</td>
+              <td class="w-75">{{ tag.value }}</td>
+            </tr>
+          </tbody>
+        </table>
       </ng-container>
-    </tbody>
-  </table>
+
+      </ng-template>
+    </ng-container>
+
+    <ng-container ngbNavItem="permissions">
+      <a ngbNavLink
+         i18n>Policies</a>
+      <ng-template ngbNavContent>
+
+        <table class="table table-striped table-bordered">
+          <tbody>
+            <tr>
+              <td i18n
+                  class="bold w-25">Bucket policy</td>
+              <td><pre>{{ selection.bucket_policy | json}}</pre></td>
+            </tr>
+          </tbody>
+        </table>
+      </ng-template>
+    </ng-container>
+  </nav>
+
+  <div [ngbNavOutlet]="nav"></div>
 </ng-container>

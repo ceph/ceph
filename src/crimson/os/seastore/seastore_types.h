@@ -210,7 +210,7 @@ constexpr segment_id_t NULL_SEG_ID = MAX_SEG_ID;
 
 /* Monotonically increasing segment seq, uniquely identifies
  * the incarnation of a segment */
-using segment_seq_t = uint32_t;
+using segment_seq_t = uint64_t;
 static constexpr segment_seq_t MAX_SEG_SEQ =
   std::numeric_limits<segment_seq_t>::max();
 static constexpr segment_seq_t NULL_SEG_SEQ = MAX_SEG_SEQ;
@@ -1306,6 +1306,8 @@ constexpr data_category_t get_extent_category(extent_types_t type) {
     return data_category_t::METADATA;
   }
 }
+
+bool can_inplace_rewrite(extent_types_t type);
 
 // type for extent modification time, milliseconds since the epoch
 using sea_time_point = seastar::lowres_system_clock::time_point;

@@ -18,26 +18,24 @@ Background
 
 Ceph Monitors maintain a "master copy" of the :term:`Cluster Map`. 
 
-The maintenance by Ceph Monitors of a :term:`Cluster Map` makes it possible for
-a :term:`Ceph Client` to determine the location of all Ceph Monitors, Ceph OSD
-Daemons, and Ceph Metadata Servers by connecting to one Ceph Monitor and
-retrieving a current cluster map. Before Ceph Clients can read from or write to
-Ceph OSD Daemons or Ceph Metadata Servers, they must connect to a Ceph Monitor.
-When a Ceph client has a current copy of the cluster map and the CRUSH
-algorithm, it can compute the location for any RADOS object within in the
-cluster. This ability to compute the locations of objects makes it possible for
-Ceph Clients to talk directly to Ceph OSD Daemons. This direct communication
-with Ceph OSD Daemons represents an improvment upon traditional storage
-architectures in which clients were required to communicate with a central
-component, and that improvment contributes to Ceph's high scalability and
-performance. See `Scalability and High Availability`_ for additional details.
+The :term:`Cluster Map` makes it possible for :term:`Ceph client`\s to
+determine the location of all Ceph Monitors, Ceph OSD Daemons, and Ceph
+Metadata Servers. Clients do this by connecting to one Ceph Monitor and
+retrieving a current cluster map. Ceph clients must connect to a Ceph Monitor
+before they can read from or write to Ceph OSD Daemons or Ceph Metadata
+Servers. A Ceph client that has a current copy of the cluster map and the CRUSH
+algorithm can compute the location of any RADOS object within the cluster. This
+makes it possible for Ceph clients to talk directly to Ceph OSD Daemons. Direct
+communication between clients and Ceph OSD Daemons improves upon traditional
+storage architectures that required clients to communicate with a central
+component.  See `Scalability and High Availability`_ for more on this subject.
 
 The Ceph Monitor's primary function is to maintain a master copy of the cluster
 map. Monitors also provide authentication and logging services. All changes in
 the monitor services are written by the Ceph Monitor to a single Paxos
-instance, and Paxos writes the changes to a key/value store for strong
-consistency. Ceph Monitors are able to query the most recent version of the
-cluster map during sync operations, and they use the key/value store's
+instance, and Paxos writes the changes to a key/value store. This provides
+strong consistency. Ceph Monitors are able to query the most recent version of
+the cluster map during sync operations, and they use the key/value store's
 snapshots and iterators (using RocksDB) to perform store-wide synchronization.
 
 .. ditaa::
@@ -289,7 +287,6 @@ by setting it in the ``[mon]`` section of the configuration file.
 .. confval:: mon_data_size_warn
 .. confval:: mon_data_avail_warn
 .. confval:: mon_data_avail_crit
-.. confval:: mon_warn_on_cache_pools_without_hit_sets
 .. confval:: mon_warn_on_crush_straw_calc_version_zero
 .. confval:: mon_warn_on_legacy_crush_tunables
 .. confval:: mon_crush_min_required_version
@@ -539,6 +536,8 @@ Trimming requires that the placement groups are ``active+clean``.
 
 
 .. index:: Ceph Monitor; clock
+
+.. _mon-config-ref-clock:
 
 Clock
 -----

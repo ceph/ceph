@@ -4,12 +4,18 @@ Compression
 
 .. versionadded:: Kraken
 
-The Ceph Object Gateway supports server-side compression of uploaded objects,
-using any of Ceph's existing compression plugins.
+The Ceph Object Gateway supports server-side compression of uploaded objects.
+using any of the existing compression plugins.
 
 .. note:: The Reef release added a :ref:`feature_compress_encrypted` zonegroup
    feature to enable compression with `Server-Side Encryption`_.
 
+Supported compression plugins include the following:
+
+* lz4
+* snappy
+* zlib
+* zstd
 
 Configuration
 =============
@@ -18,14 +24,15 @@ Compression can be enabled on a storage class in the Zone's placement target
 by providing the ``--compression=<type>`` option to the command
 ``radosgw-admin zone placement modify``.
 
-The compression ``type`` refers to the name of the compression plugin to use
-when writing new object data. Each compressed object remembers which plugin
-was used, so changing this setting does not hinder the ability to decompress
-existing objects, nor does it force existing objects to be recompressed.
+The compression ``type`` refers to the name of the compression plugin that will
+be used when writing new object data. Each compressed object remembers which
+plugin was used, so any change to this setting will neither affect Ceph's
+ability to decompress existing objects nor require existing objects to be
+recompressed.
 
-This compression setting applies to all new objects uploaded to buckets using
-this placement target. Compression can be disabled by setting the ``type`` to
-an empty string or ``none``.
+Compression settings apply to all new objects uploaded to buckets using this
+placement target. Compression can be disabled by setting the ``type`` to an
+empty string or ``none``.
 
 For example::
 
@@ -62,11 +69,15 @@ For example::
 Statistics
 ==========
 
-While all existing commands and APIs continue to report object and bucket
-sizes based their uncompressed data, compression statistics for a given bucket
-are included in its ``bucket stats``::
+Run the ``radosgw-admin bucket stats`` command to see compression statistics
+for a given bucket:
 
-  $ radosgw-admin bucket stats --bucket=<name>
+.. prompt:: bash
+
+   radosgw-admin bucket stats --bucket=<name>
+
+::
+
   {
   ...
       "usage": {
@@ -82,6 +93,9 @@ are included in its ``bucket stats``::
       },
   ...
   }
+
+Other commands and APIs will report object and bucket sizes based on their
+uncompressed data. 
 
 The ``size_utilized`` and ``size_kb_utilized`` fields represent the total
 size of compressed data, in bytes and kilobytes respectively.

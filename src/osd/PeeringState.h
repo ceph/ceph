@@ -389,6 +389,7 @@ public:
     virtual void on_role_change() = 0;
     virtual void on_change(ObjectStore::Transaction &t) = 0;
     virtual void on_activate(interval_set<snapid_t> to_trim) = 0;
+    virtual void on_replica_activate() {}
     virtual void on_activate_complete() = 0;
     virtual void on_new_interval() = 0;
     virtual Context *on_clean() = 0;
@@ -2333,13 +2334,15 @@ public:
     if (peer == pg_whoami) {
       return pg_log.get_missing();
     } else {
-      assert(peer_missing.count(peer));
-      return peer_missing.find(peer)->second;
+      auto it = peer_missing.find(peer);
+      assert(it != peer_missing.end());
+      return it->second;
     }
   }
   const pg_info_t&get_peer_info(pg_shard_t peer) const {
-    assert(peer_info.count(peer));
-    return peer_info.find(peer)->second;
+    auto it = peer_info.find(peer);
+    assert(it != peer_info.end());
+    return it->second;
   }
   bool has_peer_info(pg_shard_t peer) const {
     return peer_info.count(peer);

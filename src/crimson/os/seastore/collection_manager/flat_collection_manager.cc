@@ -30,7 +30,7 @@ FlatCollectionManager::mkfs(Transaction &t)
 {
 
   logger().debug("FlatCollectionManager: {}", __func__);
-  return tm.alloc_extent<CollectionNode>(
+  return tm.alloc_non_data_extent<CollectionNode>(
     t, L_ADDR_MIN, MIN_FLAT_BLOCK_SIZE
   ).si_then([](auto&& root_extent) {
     coll_root_t coll_root = coll_root_t(
@@ -74,7 +74,7 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
 	// TODO return error probably, but such a nonsensically large number of
 	// collections would create a ton of other problems as well
 	assert(new_size < MAX_FLAT_BLOCK_SIZE);
-        return tm.alloc_extent<CollectionNode>(
+        return tm.alloc_non_data_extent<CollectionNode>(
 	  t, L_ADDR_MIN, new_size
 	).si_then([=, this, &coll_root, &t] (auto &&root_extent) {
           coll_root.update(root_extent->get_laddr(), root_extent->get_length());
@@ -84,11 +84,14 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
 	    get_coll_context(t), cid, info.split_bits
 	  ).si_then([=, this, &t](auto result) {
 	    assert(result == CollectionNode::create_result_t::SUCCESS);
-	    return tm.dec_ref(t, extent->get_laddr());
+	    return tm.remove(t, extent->get_laddr());
 	  }).si_then([] (auto) {
             return create_iertr::make_ready_future<>();
           });
-        });
+        }).handle_error_interruptible(
+	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	  create_iertr::pass_further{}
+	);
       }
       case CollectionNode::create_result_t::SUCCESS: {
         return create_iertr::make_ready_future<>();

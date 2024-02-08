@@ -77,24 +77,6 @@ void PGScrubResched::run(OSD* osd,
   pg->unlock();
 }
 
-void PGScrubResourcesOK::run(OSD* osd,
-			     OSDShard* sdata,
-			     PGRef& pg,
-			     ThreadPool::TPHandle& handle)
-{
-  pg->scrub_send_resources_granted(epoch_queued, handle);
-  pg->unlock();
-}
-
-void PGScrubDenied::run(OSD* osd,
-			OSDShard* sdata,
-			PGRef& pg,
-			ThreadPool::TPHandle& handle)
-{
-  pg->scrub_send_resources_denied(epoch_queued, handle);
-  pg->unlock();
-}
-
 void PGScrubPushesUpdate::run(OSD* osd,
 			      OSDShard* sdata,
 			      PGRef& pg,
@@ -128,15 +110,6 @@ void PGScrubDigestUpdate::run(OSD* osd,
 			      ThreadPool::TPHandle& handle)
 {
   pg->scrub_send_digest_update(epoch_queued, handle);
-  pg->unlock();
-}
-
-void PGScrubGotLocalMap::run(OSD* osd,
-			     OSDShard* sdata,
-			     PGRef& pg,
-			     ThreadPool::TPHandle& handle)
-{
-  pg->scrub_send_local_map_ready(epoch_queued, handle);
   pg->unlock();
 }
 

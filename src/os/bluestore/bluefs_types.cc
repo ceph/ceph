@@ -64,6 +64,15 @@ void bluefs_layout_t::dump(Formatter *f) const
   f->dump_stream("dedicated_wal") << dedicated_wal;
 }
 
+void bluefs_layout_t::generate_test_instances(list<bluefs_layout_t*>& ls)
+{
+  ls.push_back(new bluefs_layout_t);
+  ls.push_back(new bluefs_layout_t);
+  ls.back()->shared_bdev = 1;
+  ls.back()->dedicated_db = true;
+  ls.back()->dedicated_wal = true;
+}
+
 // bluefs_super_t
 
 void bluefs_super_t::encode(bufferlist& bl) const

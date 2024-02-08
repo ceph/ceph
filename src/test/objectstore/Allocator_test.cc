@@ -26,8 +26,7 @@ public:
   void init_alloc(int64_t size, uint64_t min_alloc_size) {
     std::cout << "Creating alloc type " << string(GetParam()) << " \n";
     alloc.reset(Allocator::create(g_ceph_context, GetParam(), size,
-				  min_alloc_size,
-				  256*1048576, 100*256*1048576ull));
+				  min_alloc_size));
   }
 
   void init_close() {
@@ -587,8 +586,7 @@ TEST_P(AllocTest, test_alloc_47883)
   PExtentVector extents;
   auto need = 0x3f980000;
   auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
-  EXPECT_GT(got, 0);
-  EXPECT_EQ(got, 0x630000);
+  EXPECT_GE(got, 0x630000);
 }
 
 TEST_P(AllocTest, test_alloc_50656_best_fit)
@@ -632,7 +630,29 @@ TEST_P(AllocTest, test_alloc_50656_first_fit)
   EXPECT_EQ(got, 0x400000);
 }
 
+TEST_P(AllocTest, test_init_rm_free_unbound)
+{
+  int64_t block_size = 1024;
+  int64_t capacity = 4 * 1024 * block_size;
+
+  {
+    init_alloc(capacity, block_size);
+
+    alloc->init_add_free(0, block_size * 2);
+    alloc->init_add_free(block_size * 3, block_size * 3);
+    alloc->init_add_free(block_size * 7, block_size * 2);
+
+    alloc->init_rm_free(block_size * 4, block_size);
+    ASSERT_EQ(alloc->get_free(), block_size * 6);
+
+    auto cb = [&](size_t off, size_t len) {
+      cout << std::hex << "0x" << off << "~" << len << std::dec << std::endl;
+    };
+    alloc->foreach(cb);
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap", "avl", "hybrid"));
+  ::testing::Values("stupid", "bitmap", "avl", "hybrid", "btree"));

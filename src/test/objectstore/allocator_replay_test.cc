@@ -24,6 +24,7 @@ void usage(const string &name) {
        << " raw_duplicates|"
           "duplicates|"
           "free_dump|"
+          "assess_free <alloc_unit>|"
           "try_alloc <count> <want> <alloc_unit>|"
           "replay_alloc <alloc_list_file|"
           "export_binary <out_file>|"
@@ -390,7 +391,7 @@ int replay_free_dump_and_apply(char* fname,
                        std::string_view alloc_name) {
     alloc.reset(
       Allocator::create(
-        g_ceph_context, alloc_type, capacity, alloc_unit, 0, 0, alloc_name));
+        g_ceph_context, alloc_type, capacity, alloc_unit, alloc_name));
   };
   auto add_fn = [&](uint64_t offset,
                    uint64_t len) {
@@ -535,7 +536,7 @@ int check_duplicates(char* fname)
 
 int main(int argc, char **argv)
 {
-  vector<const char*> args;
+  auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
@@ -564,6 +565,42 @@ int main(int argc, char **argv)
         }
         return 0;
       });
+  } else if (strcmp(argv[2], "assess_free") == 0) {
+    if (argc < 4) {
+      std::cerr << "Error: insufficient arguments for \"assess_free_extents\" operation."
+                << std::endl;
+      usage(argv[0]);
+      return 1;
+    }
+    auto alloc_unit = strtoul(argv[3], nullptr, 10);
+    return replay_free_dump_and_apply(argv[1],
+      [&](Allocator* a, const string& aname) {
+        ceph_assert(a);
+        std::cout << "Fragmentation:" << a->get_fragmentation()
+                  << std::endl;
+        std::cout << "Fragmentation score:" << a->get_fragmentation_score()
+                  << std::endl;
+        std::cout << "Free:" << std::hex << a->get_free() << std::dec
+                  << std::endl;
+        {
+          uint64_t available = 0;
+          uint64_t available2 = 0;
+          a->foreach([&](uint64_t offs, uint64_t len) {
+            auto a = p2align(len, alloc_unit);
+            available += a;
+            auto a0 = p2roundup(offs, alloc_unit);
+            a = p2align(offs + len, alloc_unit);
+            if (a > a0) {
+              available2 += a - a0;
+            }
+          });
+          std::cout << "Available: 0x" << std::hex << available
+                    << " Available(strict align): 0x" << available2
+                    << " alloc_unit: 0x" << alloc_unit << std::dec
+                    << std::endl;
+        }
+        return 0;
+      });
   } else if (strcmp(argv[2], "try_alloc") == 0) {
     if (argc < 6) {
       std::cerr << "Error: insufficient arguments for \"try_alloc\" operation."
@@ -587,13 +624,20 @@ int main(int argc, char **argv)
         {
           PExtentVector extents;
           for(size_t i = 0; i < count; i++) {
-              extents.clear();
-              auto r = a->allocate(want, alloc_unit, 0, &extents);
-              if (r < 0) {
-                  std::cerr << "Error: allocation failure at step:" << i + 1
-                            << ", ret = " << r << std::endl;
+            extents.clear();
+            auto r = a->allocate(want, alloc_unit, 0, &extents);
+            if (r < 0) {
+              std::cerr << "Error: allocation failure at step:" << i + 1
+                        << ", ret = " << r << std::endl;
               return -1;
             }
+            std::cout << ">allocated: " << r << std::endl;
+
+            std::cout << "Extents:" << std::hex;
+            for (auto& e : extents) {
+              std::cout << e.offset << "~" << e.length << " ";
+            }
+            std::cout << std::dec << std::endl;
 	  }
         }
         std::cout << "Successfully allocated: " << count << " * " << want
@@ -676,7 +720,8 @@ int main(int argc, char **argv)
               std::cout << "Duration (ns): " << (ceph::mono_clock::now() - t0).count()
                         << " want/unit/max/hint (hex): " << std::hex
                         << want << "/" << unit << "/" << max << "/" << hint
-                        << std::dec << std::endl;
+                        << std::dec << " res fragments " << extents.size()
+                        << std::endl;
 
               /* Do not release. */
               //alloc->release(extents);

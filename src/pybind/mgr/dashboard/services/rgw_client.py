@@ -702,6 +702,19 @@ class RgwClient(RestClient):
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
 
+    @RestClient.api_put('/{bucket_name}?tagging')
+    def set_tags(self, bucket_name, tags, request=None):
+        # pylint: disable=unused-argument
+        try:
+            ET.fromstring(tags)
+        except ET.ParseError:
+            return "Data must be properly formatted"
+        try:
+            result = request(data=tags)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
     @RestClient.api_get('/{bucket_name}?object-lock')
     def get_bucket_locking(self, bucket_name, request=None):
         # type: (str, Optional[object]) -> dict
@@ -851,6 +864,74 @@ class RgwClient(RestClient):
                    'Looks like the document has a wrong format.'
                    f' For more information about the format look at {link}')
             raise DashboardException(msg=msg, component='rgw')
+
+    def get_role(self, role_name: str):
+        rgw_get_role_command = ['role', 'get', '--role-name', role_name]
+        code, role, _err = mgr.send_rgwadmin_command(rgw_get_role_command)
+        if code != 0:
+            raise DashboardException(msg=f'Error getting role with code {code}: {_err}',
+                                     component='rgw')
+        return role
+
+    def update_role(self, role_name: str, max_session_duration: str):
+        rgw_update_role_command = ['role', 'update', '--role-name',
+                                   role_name, '--max_session_duration', max_session_duration]
+        code, _, _err = mgr.send_rgwadmin_command(rgw_update_role_command,
+                                                  stdout_as_json=False)
+        if code != 0:
+            raise DashboardException(msg=f'Error updating role with code {code}: {_err}',
+                                     component='rgw')
+
+    def delete_role(self, role_name: str) -> None:
+        rgw_delete_role_command = ['role', 'delete', '--role-name', role_name]
+        code, _, _err = mgr.send_rgwadmin_command(rgw_delete_role_command,
+                                                  stdout_as_json=False)
+        if code != 0:
+            raise DashboardException(msg=f'Error deleting role with code {code}: {_err}',
+                                     component='rgw')
+
+    @RestClient.api_get('/{bucket_name}?policy')
+    def get_bucket_policy(self, bucket_name: str, request=None):
+        """
+        Gets the bucket policy for a bucket.
+        :param bucket_name: The name of the bucket.
+        :type bucket_name: str
+        :rtype: None
+        """
+        # pylint: disable=unused-argument
+
+        try:
+            request = request()
+            return request
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get(
+                        'Code') == 'NoSuchBucketPolicy':
+                    return None
+            raise e
+
+    @RestClient.api_put('/{bucket_name}?policy')
+    def set_bucket_policy(self, bucket_name: str, policy: str, request=None):
+        """
+        Sets the bucket policy for a bucket.
+        :param bucket_name: The name of the bucket.
+        :type bucket_name: str
+        :param policy: The bucket policy.
+        :type policy: JSON Structured Document
+        :return: The bucket policy.
+        :rtype: Dict
+        """
+        # pylint: disable=unused-argument
+        try:
+            request = request(data=policy)
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get("Code") == "InvalidArgument":
+                    msg = "Invalid JSON document"
+                    raise DashboardException(msg=msg, component='rgw')
+            raise DashboardException(e)
 
     def perform_validations(self, retention_period_days, retention_period_years, mode):
         try:

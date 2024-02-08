@@ -194,6 +194,11 @@ options:
     load on busy clusters.
   default: false
   with_legacy: true
+- name: osd_debug_trim_objects
+  type: bool
+  level: advanced
+  desc: Asserts that no clone-objects were added to a snap after we start trimming it
+  default: false
 - name: osd_repair_during_recovery
   type: bool
   level: advanced
@@ -511,9 +516,9 @@ options:
   type: millisecs
   level: advanced
   desc: Maximum wait (milliseconds) for scrub reservations before issuing a cluster-log warning
-  long_desc: Waiting too long for a replica to respond to scrub resource reservation request
-   (after at least half of the replicas have responded). Disable by setting to a very large value.
-  default: 2200
+  long_desc: Waiting too long for a replica to respond to scrub resource reservation request.
+    Disable by setting to a very large value.
+  default: 30000
   min: 500
   see_also:
   - osd_scrub_reservation_timeout
@@ -525,10 +530,20 @@ options:
   long_desc: Maximum wait (milliseconds) for all replicas to respond to
     scrub reservation requests, before the scrub session is aborted. Disable by setting
     to a very large value.
-  default: 5000
+  default: 300000
   min: 2000
   see_also:
   - osd_scrub_slow_reservation_response
+  with_legacy: false
+- name: osd_scrub_disable_reservation_queuing
+  type: bool
+  level: advanced
+  desc: Disable queuing of scrub reservations
+  long_desc: When set - scrub replica reservations are responded to immediately, with
+    either success or failure (the pre-Squid version behaviour). This configuration
+    option is introduced to support mixed-version clusters and debugging, and will
+    be removed in the next release.
+  default: false
   with_legacy: false
 # where rados plugins are stored
 - name: osd_class_dir
@@ -892,13 +907,13 @@ options:
   desc: Do not store full-object checksums if the backend (bluestore) does its own
     checksums.  Only usable with all BlueStore OSDs.
   default: false
-# PrioritzedQueue (prio), Weighted Priority Queue (wpq ; default),
-# mclock_opclass, mclock_client, or debug_random. "mclock_opclass"
-# and "mclock_client" are based on the mClock/dmClock algorithm
-# (Gulati, et al. 2010). "mclock_opclass" prioritizes based on the
-# class the operation belongs to. "mclock_client" does the same but
-# also works to ienforce fairness between clients. "debug_random"
-# chooses among all four with equal probability.
+# Weighted Priority Queue (wpq), mClock Scheduler (mclock_scheduler: default)
+# or debug_random. "mclock_scheduler" is based on the mClock/dmClock
+# algorithm (Gulati, et al. 2010). "mclock_scheduler" prioritizes based on
+# the class the operation belongs to. "wpq" dequeues ops based on their
+# priorities. "debug_random" chooses among the two with equal probability.
+# Note: PrioritzedQueue (prio) implementation is not used for scheduling ops
+# within OSDs and is therefore not listed.
 - name: osd_op_queue
   type: str
   level: advanced

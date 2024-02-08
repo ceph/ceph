@@ -1,15 +1,46 @@
+.. _rados_config_pool_pg_crush_ref:
+
 ======================================
  Pool, PG and CRUSH Config Reference
 ======================================
 
 .. index:: pools; configuration
 
-Ceph uses default values to determine how many placement groups (PGs) will be
-assigned to each pool. We recommend overriding some of the defaults.
-Specifically, we recommend setting a pool's replica size and overriding the
-default number of placement groups. You can set these values when running
-`pool`_ commands. You can also override the defaults by adding new ones in the
-``[global]`` section of your Ceph configuration file.
+The number of placement groups that the CRUSH algorithm assigns to each pool is
+determined by the values of variables in the centralized configuration database
+in the monitor cluster. 
+
+Both containerized deployments of Ceph (deployments made using ``cephadm`` or
+Rook) and non-containerized deployments of Ceph rely on the values in the
+central configuration database in the monitor cluster to assign placement
+groups to pools. 
+
+Example Commands
+----------------
+
+To see the value of the variable that governs the number of placement groups in a given pool, run a command of the following form:
+
+.. prompt:: bash
+
+   ceph config get osd osd_pool_default_pg_num
+
+To set the value of the variable that governs the number of placement groups in a given pool, run a command of the following form:
+
+.. prompt:: bash
+
+   ceph config set osd osd_pool_default_pg_num
+
+Manual Tuning
+-------------
+In some cases, it might be advisable to override some of the defaults. For
+example, you might determine that it is wise to set a pool's replica size and
+to override the default number of placement groups in the pool. You can set
+these values when running `pool`_ commands. 
+
+See Also
+--------
+
+See :ref:`pg-autoscaler`.
 
 
 .. literalinclude:: pool-pg.conf

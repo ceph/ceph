@@ -15,10 +15,12 @@
                 introduced in the Ceph Kraken release. The Luminous release of
                 Ceph promoted BlueStore to the default OSD back end,
                 supplanting FileStore. As of the Reef release, FileStore is no
-                longer available as a storage backend.
+                longer available as a storage back end.
                 
-                BlueStore stores objects directly on Ceph block devices without
-                a mounted file system.  
+                BlueStore stores objects directly on raw block devices or
+                partitions, and does not interact with mounted file systems.
+                BlueStore uses RocksDB's key/value database to map object names
+                to block locations on disk.
 
         Bucket
                 In the context of :term:`RGW`, a bucket is a group of objects.
@@ -58,7 +60,7 @@
                 as QEMU or Xen, and (3) a hypervisor abstraction layer such as
                 ``libvirt``.
 
-	Ceph Client
+	:ref:`Ceph Client <architecture_ceph_clients>`
                 Any of the Ceph components that can access a Ceph Storage
                 Cluster. This includes the Ceph Object Gateway, the Ceph Block
                 Device, the Ceph File System, and their corresponding
@@ -269,8 +271,13 @@
                 The Ceph manager software, which collects all the state from
                 the whole cluster in one place.
 
-	MON
+	:ref:`MON<arch_monitor>`
 		The Ceph monitor software.
+
+        Monitor Store
+                The persistent storage that is used by the Monitor. This
+                includes the Monitor's RocksDB and all related files in
+                ``/var/lib/ceph``.
 
 	Node
                 See :term:`Ceph Node`.
@@ -327,6 +334,19 @@
 
 	Pools
                 See :term:`pool`.
+
+	:ref:`Primary Affinity <rados_ops_primary_affinity>`
+                The characteristic of an OSD that governs the likelihood that
+                a given OSD will be selected as the primary OSD (or "lead
+                OSD") in an acting set. Primary affinity was introduced in
+                Firefly (v. 0.80). See :ref:`Primary Affinity
+                <rados_ops_primary_affinity>`.
+
+        Quorum	
+                Quorum is the state that exists when a majority of the
+                :ref:`Monitors<arch_monitor>` in the cluster are ``up``. A
+                minimum of three :ref:`Monitors<arch_monitor>` must exist in
+                the cluster in order for Quorum to be possible.
 
 	RADOS
                 **R**\eliable **A**\utonomic **D**\istributed **O**\bject

@@ -358,7 +358,7 @@ OSD and run the following command:
 
        ceph-bluestore-tool \
         --path <data path> \
-        --sharding="m(3) p(3,0-12) o(3,0-13)=block_cache={type=binned_lru} l p" \
+        --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
         reshard
 
 .. confval:: bluestore_rocksdb_cf

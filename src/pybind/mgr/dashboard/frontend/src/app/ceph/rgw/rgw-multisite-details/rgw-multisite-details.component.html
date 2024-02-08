@@ -4,10 +4,20 @@
       <cd-alert-panel   *ngIf="!rgwModuleStatus"
                         type="info"
                         spacingClass="mb-3"
-                        i18n>You need to enable the rgw module to access the import/export feature.
+                        class="d-flex align-items-center"
+                        i18n>In order to access the import/export feature, the rgw module must be enabled
+
+        <button class="btn btn-light mx-2"
+                type="button"
+                (click)="enableRgwModule()">Enable</button>
+      </cd-alert-panel>
+      <cd-alert-panel   *ngIf="restartGatewayMessage"
+                        type="warning"
+                        spacingClass="mb-3"
+                        i18n>Please restart all Ceph Object Gateway instances in all zones to ensure consistent multisite configuration updates.
         <a class="text-decoration-underline"
-           (click)="enableRgwModule()">
-           Enable RGW Module</a>
+           routerLink="/services">
+           Cluster->Services</a>
       </cd-alert-panel>
       <cd-table-actions class="btn-group mb-4 me-2"
                         [permission]="permission"

@@ -166,12 +166,22 @@ public:
     return ret;
   }
 
+  /// @return min hobject_t ret s.t. ret.get_head() == get_head()
   hobject_t get_object_boundary() const {
     if (is_max())
       return *this;
     hobject_t ret = *this;
     ret.snap = 0;
     return ret;
+  }
+
+  /// @return max hobject_t ret s.t. ret.get_head() == get_head()
+  hobject_t get_max_object_boundary() const {
+    if (is_max())
+      return *this;
+    // CEPH_SNAPDIR happens to sort above HEAD and MAX_SNAP and is no longer used
+    // for actual objects
+    return get_snapdir();
   }
 
   /// @return head version of this hobject_t

@@ -217,7 +217,6 @@ public:
   std::map<int, failure_info_t> failure_info;
   std::map<int,utime_t>    down_pending_out;  // osd down -> out
   bool priority_convert = false;
-  std::map<int64_t,std::set<snapid_t>> pending_pseudo_purged_snaps;
   std::shared_ptr<PriorityCache::PriCache> rocksdb_binned_kv_cache = nullptr;
   std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
   ceph::mutex balancer_lock = ceph::make_mutex("OSDMonitor::balancer_lock");
@@ -699,8 +698,8 @@ public:
   void do_osd_create(const int32_t id, const uuid_d& uuid,
 		     const std::string& device_class,
 		     int32_t* new_id);
-  int prepare_command_osd_purge(int32_t id, std::stringstream& ss);
-  int prepare_command_osd_destroy(int32_t id, std::stringstream& ss);
+  int prepare_command_osd_purge(MonOpRequestRef op, int32_t id, std::stringstream& ss);
+  int prepare_command_osd_destroy(MonOpRequestRef op, int32_t id, std::stringstream& ss);
   int _prepare_command_osd_crush_remove(
       CrushWrapper &newcrush,
       int32_t id,

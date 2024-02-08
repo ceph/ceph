@@ -133,13 +133,15 @@ export class RbdFormComponent extends CdForm implements OnInit {
         desc: $localize`Deep flatten`,
         requires: null,
         allowEnable: false,
-        allowDisable: true
+        allowDisable: true,
+        helperHtml: $localize`Feature can be disabled but can't be re-enabled later`
       },
       layering: {
         desc: $localize`Layering`,
         requires: null,
         allowEnable: false,
-        allowDisable: false
+        allowDisable: false,
+        helperHtml: $localize`Feature flag can't be manipulated after the image is created. Disabling this option will also disable the Protect and Clone actions on Snapshot`
       },
       'exclusive-lock': {
         desc: $localize`Exclusive lock`,
@@ -224,6 +226,11 @@ export class RbdFormComponent extends CdForm implements OnInit {
         this.rbdForm.get('deep-flatten').disable();
         this.rbdForm.get('layering').disable();
         this.rbdForm.get('exclusive-lock').disable();
+      } else {
+        if (!this.rbdForm.get('deep-flatten').value) {
+          this.rbdForm.get('deep-flatten').disable();
+        }
+        this.rbdForm.get('layering').disable();
       }
     });
   }

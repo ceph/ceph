@@ -125,7 +125,7 @@ namespace rgw {
   public:
     CephContext* cct;
 
-    /* unambiguiously return req_state */
+    /* unambiguously return req_state */
     inline req_state* get_state() { return this->RGWRequest::s; }
 
     RGWLibRequest(CephContext* _cct, std::unique_ptr<rgw::sal::User> _user)

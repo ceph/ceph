@@ -23,19 +23,13 @@ class ShardServices;
 class PG;
 class BackfillRecovery;
 
-  class PGPeeringPipeline {
+  struct PGPeeringPipeline {
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "PeeringEvent::PGPipeline::await_map";
     } await_map;
     struct Process : OrderedExclusivePhaseT<Process> {
       static constexpr auto type_name = "PeeringEvent::PGPipeline::process";
     } process;
-    template <class T>
-    friend class PeeringEvent;
-    friend class LocalPeeringEvent;
-    friend class RemotePeeringEvent;
-    friend class PGAdvanceMap;
-    friend class BackfillRecovery;
   };
 
 template <class T>
@@ -107,7 +101,9 @@ public:
 
 class RemotePeeringEvent : public PeeringEvent<RemotePeeringEvent> {
 protected:
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionRef l_conn;
+  crimson::net::ConnectionXcoreRef r_conn;
+
   // must be after conn due to ConnectionPipeline's life-time
   PipelineHandle handle;
 
@@ -120,18 +116,10 @@ protected:
   ) override;
 
 public:
-  class OSDPipeline {
-    struct AwaitActive : OrderedExclusivePhaseT<AwaitActive> {
-      static constexpr auto type_name =
-	"PeeringRequest::OSDPipeline::await_active";
-    } await_active;
-    friend class RemotePeeringEvent;
-  };
-
   template <typename... Args>
   RemotePeeringEvent(crimson::net::ConnectionRef conn, Args&&... args) :
     PeeringEvent(std::forward<Args>(args)...),
-    conn(conn)
+    l_conn(conn)
   {}
 
   std::tuple<
@@ -139,12 +127,12 @@ public:
     ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
-    ConnectionPipeline::GetPG::BlockingEvent,
+    ConnectionPipeline::GetPGMapping::BlockingEvent,
+    PerShardPipeline::CreateOrWaitPG::BlockingEvent,
     PGMap::PGCreationBlockingEvent,
     PGPeeringPipeline::AwaitMap::BlockingEvent,
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGPeeringPipeline::Process::BlockingEvent,
-    OSDPipeline::AwaitActive::BlockingEvent,
     CompletionEvent
   > tracking_events;
 
@@ -157,17 +145,34 @@ public:
   epoch_t get_epoch() const { return evt.get_epoch_sent(); }
 
   ConnectionPipeline &get_connection_pipeline();
-  seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
-    assert(conn);
-    return conn.get_foreign(
-    ).then([this](auto f_conn) {
-      conn.reset();
-      return f_conn;
-    });
+
+  PerShardPipeline &get_pershard_pipeline(ShardServices &);
+
+  crimson::net::Connection &get_local_connection() {
+    assert(l_conn);
+    assert(!r_conn);
+    return *l_conn;
+  };
+
+  crimson::net::Connection &get_foreign_connection() {
+    assert(r_conn);
+    assert(!l_conn);
+    return *r_conn;
+  };
+
+  crimson::net::ConnectionFFRef prepare_remote_submission() {
+    assert(l_conn);
+    assert(!r_conn);
+    auto ret = seastar::make_foreign(std::move(l_conn));
+    l_conn.reset();
+    return ret;
   }
-  void finish_remote_submission(crimson::net::ConnectionFRef _conn) {
-    assert(!conn);
-    conn = make_local_shared_foreign(std::move(_conn));
+
+  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
+    assert(conn);
+    assert(!l_conn);
+    assert(!r_conn);
+    r_conn = make_local_shared_foreign(std::move(conn));
   }
 };
 

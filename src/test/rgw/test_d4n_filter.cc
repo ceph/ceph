@@ -11,6 +11,10 @@
 #include "rgw_sal.h"
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
+#include "driver/rados/rgw_zone.h"
+#include "rgw_sal_config.h"
+
+#include <boost/asio/io_context.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -25,6 +29,7 @@ string redisHost = "";
 vector<const char*> args;
 class Environment* env;
 const DoutPrefixProvider* dpp;
+const req_context rctx{dpp, null_yield, nullptr};
 
 class StoreObject : public rgw::sal::StoreObject {
   friend class D4NFilterFixture;
@@ -32,6 +37,7 @@ class StoreObject : public rgw::sal::StoreObject {
 };
 
 class Environment : public ::testing::Environment {
+  boost::asio::io_context ioc;
   public:
     Environment() {}
     
@@ -51,15 +57,24 @@ class Environment : public ::testing::Environment {
       cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT, 
 		        CODE_ENVIRONMENT_UTILITY, 
 			CINIT_FLAG_NO_MON_CONFIG);
-      
+
       dpp = new DoutPrefix(cct->get(), dout_subsys, "d4n test: ");
       DriverManager::Config cfg;
 
       cfg.store_name = "dbstore";
       cfg.filter_name = "d4n";
-      
+      auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+      std::unique_ptr<rgw::sal::ConfigStore> cfgstore
+        = DriverManager::create_config_store(dpp, config_store_type);
+      ASSERT_TRUE(cfgstore);
+      rgw::SiteConfig site;
+      auto r = site.load(dpp, null_yield, cfgstore.get());
+      ASSERT_GT(r, 0);
+
       driver = DriverManager::get_storage(dpp, dpp->get_cct(),
               cfg,
+              ioc,
+              site,
               false,
               false,
               false,
@@ -113,43 +128,17 @@ class D4NFilterFixture : public ::testing::Test {
     }
 
     int createBucket() {
-      rgw_bucket b;
-      string zonegroup_id = "test_id";
-      rgw_placement_rule placement_rule;
-      string swift_ver_location = "test_location";
-      const RGWAccessControlPolicy policy;
-      rgw::sal::Attrs attrs;
       RGWBucketInfo info;
-      obj_version ep_objv;
-      bool bucket_exists;
-      int ret;
-      
-      CephContext* cct = get_pointer(env->cct);
-      RGWProcessEnv penv;
-      RGWEnv rgw_env;
-      req_state s(cct->get(), penv, &rgw_env, 0);
-      req_info _req_info = s.info;
+      info.bucket.name = "test_bucket";
 
-      b.name = "test_bucket";
-      placement_rule.storage_class = "test_sc";
+      testBucket = driver->get_bucket(info);
 
-      ret = testUser->create_bucket(dpp, b,
-	    zonegroup_id,
-	    placement_rule,
-	    swift_ver_location,
-	    nullptr,
-	    policy,
-	    attrs,
-	    info,
-	    ep_objv,
-	    false,
-	    false,
-	    &bucket_exists,
-	    _req_info,
-	    &testBucket,
-	    null_yield);
-	
-      return ret;
+      rgw::sal::Bucket::CreateParams params;
+      params.zonegroup_id = "test_id";
+      params.placement_rule.storage_class = "test_sc";
+      params.swift_ver_location = "test_location";
+
+      return testBucket->create(dpp, params, null_yield);
     }
 
     int putObject(string name) {
@@ -194,7 +183,7 @@ class D4NFilterFixture : public ::testing::Test {
                        &if_match, &if_nomatch,
                        &user_data,
                        &zones_trace, &canceled,
-                       null_yield);
+                       rctx, rgw::sal::FLAG_LOG_OP);
 
       return ret;
     }
@@ -454,7 +443,7 @@ TEST_F(D4NFilterFixture, CopyObjectReplace) {
 		   &if_match, &if_nomatch,
 		   &user_data,
 		   &zones_trace, &canceled,
-		   null_yield), 0);
+		   rctx, rgw::sal::FLAG_LOG_OP), 0);
 
   unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
 
@@ -579,7 +568,7 @@ TEST_F(D4NFilterFixture, CopyObjectMerge) {
 		   &if_match, &if_nomatch,
 		   &user_data,
 		   &zones_trace, &canceled,
-		   null_yield), 0);
+		   rctx, rgw::sal::FLAG_LOG_OP), 0);
 
   unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
 
@@ -664,7 +653,7 @@ TEST_F(D4NFilterFixture, DelObject) {
   unique_ptr<rgw::sal::Object::DeleteOp> testDOp = testObject_DelObject->get_delete_op();
 
   EXPECT_NE(testDOp, nullptr);
-  EXPECT_EQ(testDOp->delete_obj(dpp, null_yield), 0);
+  EXPECT_EQ(testDOp->delete_obj(dpp, null_yield, true), 0);
 
   /* Check the object does not exist after delete op */
   client.exists(keys, [](cpp_redis::reply& reply) {
@@ -1724,9 +1713,6 @@ TEST_F(D4NFilterFixture, StoreGetMetadata) {
   value.push_back(make_pair("source_zone_short_id", "300"));
   value.push_back(make_pair("bucket_count", "10"));
   value.push_back(make_pair("bucket_size", "20"));
-  value.push_back(make_pair("user_quota.max_size", "0"));
-  value.push_back(make_pair("user_quota.max_objects", "0"));
-  value.push_back(make_pair("max_buckets", "2000"));
 
   client.hmset("rgw-object:test_object_StoreGetMetadata:cache", value, [](cpp_redis::reply& reply) {
     if (!reply.is_null()) {
@@ -1755,7 +1741,6 @@ TEST_F(D4NFilterFixture, StoreGetMetadata) {
   ASSERT_EQ(testROp->prepare(null_yield, dpp), 0);
 
   /* Check updated metadata values */ 
-  RGWUserInfo info = testObject_StoreGetMetadata->get_bucket()->get_owner()->get_info();
   static StoreObject* storeObject = static_cast<StoreObject*>(dynamic_cast<rgw::sal::FilterObject*>(testObject_StoreGetMetadata.get())->get_next());
 
   EXPECT_EQ(to_iso_8601(storeObject->state.mtime), "2021-11-08T21:13:38.334696731Z");
@@ -1763,11 +1748,6 @@ TEST_F(D4NFilterFixture, StoreGetMetadata) {
   EXPECT_EQ(storeObject->state.accounted_size, (uint64_t)200);
   EXPECT_EQ(storeObject->state.epoch, (uint64_t)3);
   EXPECT_EQ(storeObject->state.zone_short_id, (uint32_t)300);
-  EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_count(), (uint64_t)10);
-  EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_size(), (uint64_t)20);
-  EXPECT_EQ(info.quota.user_quota.max_size, (int64_t)0);
-  EXPECT_EQ(info.quota.user_quota.max_objects, (int64_t)0);
-  EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_owner()->get_max_buckets(), (int32_t)2000);
 }
 
 TEST_F(D4NFilterFixture, StoreModifyAttr) {
@@ -1906,7 +1886,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 
   ASSERT_EQ(testWriter->prepare(null_yield), 0);
   
-  ASSERT_EQ(testWriter->process(move(data), 0), 0);
+  ASSERT_EQ(testWriter->process(std::move(data), 0), 0);
 
   ASSERT_EQ(testWriter->complete(accounted_size, etag,
 		 &mtime, set_mtime,
@@ -1915,7 +1895,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 		 &if_match, &if_nomatch,
 		 &user_data,
 		 &zones_trace, &canceled,
-		 null_yield), 0);
+		 rctx, rgw::sal::FLAG_LOG_OP), 0);
  
   client.hget("rgw-object:test_object_DataCheck:cache", "data", [&data](cpp_redis::reply& reply) {
     if (reply.is_string()) {
@@ -1931,7 +1911,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 
   ASSERT_EQ(testWriter->prepare(null_yield), 0);
   
-  ASSERT_EQ(testWriter->process(move(dataNew), 0), 0);
+  ASSERT_EQ(testWriter->process(std::move(dataNew), 0), 0);
 
   ASSERT_EQ(testWriter->complete(accounted_size, etag,
 		 &mtime, set_mtime,
@@ -1940,7 +1920,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 		 &if_match, &if_nomatch,
 		 &user_data,
 		 &zones_trace, &canceled,
-		 null_yield), 0);
+		 rctx, rgw::sal::FLAG_LOG_OP), 0);
 
   client.hget("rgw-object:test_object_DataCheck:cache", "data", [&dataNew](cpp_redis::reply& reply) {
     if (reply.is_string()) {

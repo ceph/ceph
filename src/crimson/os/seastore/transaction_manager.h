@@ -183,7 +183,7 @@ public:
         auto lextent = extent->template cast<LogicalCachedExtent>();
         auto pin_laddr = pin->get_key();
         if (pin->is_indirect()) {
-          pin_laddr = pin->get_intermediate_key();
+          pin_laddr = pin->get_intermediate_base();
         }
         assert(lextent->get_laddr() == pin_laddr);
 #endif
@@ -235,6 +235,7 @@ public:
   using ref_iertr = LBAManager::ref_iertr;
   using ref_ret = ref_iertr::future<unsigned>;
 
+#ifdef UNIT_TESTS_BUILT
   /// Add refcount for ref
   ref_ret inc_ref(
     Transaction &t,
@@ -244,14 +245,28 @@ public:
   ref_ret inc_ref(
     Transaction &t,
     laddr_t offset);
+#endif
 
-  /// Remove refcount for ref
-  ref_ret dec_ref(
+  /** 
+   * remove
+   *
+   * Remove the extent and the corresponding lba mapping,
+   * users must make sure that lba mapping's refcount is 1
+   */
+  ref_ret remove(
     Transaction &t,
     LogicalCachedExtentRef &ref);
 
-  /// Remove refcount for offset
-  ref_ret dec_ref(
+  /**
+   * remove
+   *
+   * 1. Remove the indirect mapping(s), and if refcount drops to 0,
+   *    also remove the direct mapping and retire the extent.
+   * 
+   * 2. Remove the direct mapping(s) and retire the extent if
+   * 	refcount drops to 0.
+   */
+  ref_ret remove(
     Transaction &t,
     laddr_t offset) {
     return _dec_ref(t, offset, true);
@@ -259,34 +274,38 @@ public:
 
   /// remove refcount for list of offset
   using refs_ret = ref_iertr::future<std::vector<unsigned>>;
-  refs_ret dec_ref(
+  refs_ret remove(
     Transaction &t,
     std::vector<laddr_t> offsets);
 
   /**
-   * alloc_extent
+   * alloc_non_data_extent
    *
    * Allocates a new block of type T with the minimum lba range of size len
    * greater than laddr_hint.
    */
-  using alloc_extent_iertr = LBAManager::alloc_extent_iertr;
+  using alloc_extent_iertr = LBAManager::alloc_extent_iertr::extend<
+    crimson::ct_error::enospc>;
   template <typename T>
   using alloc_extent_ret = alloc_extent_iertr::future<TCachedExtentRef<T>>;
   template <typename T>
-  alloc_extent_ret<T> alloc_extent(
+  alloc_extent_ret<T> alloc_non_data_extent(
     Transaction &t,
     laddr_t laddr_hint,
     extent_len_t len,
     placement_hint_t placement_hint = placement_hint_t::HOT) {
-    LOG_PREFIX(TransactionManager::alloc_extent);
+    LOG_PREFIX(TransactionManager::alloc_non_data_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
     ceph_assert(is_aligned(laddr_hint, epm->get_block_size()));
-    auto ext = cache->alloc_new_extent<T>(
+    auto ext = cache->alloc_new_non_data_extent<T>(
       t,
       len,
       placement_hint,
       INIT_GENERATION);
+    if (!ext) {
+      return crimson::ct_error::enospc::make();
+    }
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
@@ -294,9 +313,78 @@ public:
       ext->get_paddr(),
       *ext
     ).si_then([ext=std::move(ext), laddr_hint, &t](auto &&) mutable {
-      LOG_PREFIX(TransactionManager::alloc_extent);
+      LOG_PREFIX(TransactionManager::alloc_non_data_extent);
       SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
+	std::move(ext));
+    });
+  }
+
+  /**
+   * alloc_data_extents
+   *
+   * Allocates a new block of type T with the minimum lba range of size len
+   * greater than laddr_hint.
+   */
+  using alloc_extents_iertr = alloc_extent_iertr;
+  template <typename T>
+  using alloc_extents_ret = alloc_extents_iertr::future<
+    std::vector<TCachedExtentRef<T>>>;
+  template <typename T>
+  alloc_extents_ret<T> alloc_data_extents(
+    Transaction &t,
+    laddr_t laddr_hint,
+    extent_len_t len,
+    placement_hint_t placement_hint = placement_hint_t::HOT) {
+    LOG_PREFIX(TransactionManager::alloc_data_extents);
+    SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
+              t, T::TYPE, len, placement_hint, laddr_hint);
+    ceph_assert(is_aligned(laddr_hint, epm->get_block_size()));
+    auto exts = cache->alloc_new_data_extents<T>(
+      t,
+      len,
+      placement_hint,
+      INIT_GENERATION);
+    if (exts.empty()) {
+      return crimson::ct_error::enospc::make();
+    }
+    return seastar::do_with(
+      std::move(exts),
+      laddr_hint,
+      [this, &t](auto &exts, auto &laddr_hint) {
+      return trans_intr::do_for_each(
+        exts,
+        [this, &t, &laddr_hint](auto &ext) {
+        return lba_manager->alloc_extent(
+          t,
+          laddr_hint,
+          ext->get_length(),
+          ext->get_paddr(),
+          *ext
+        ).si_then([&ext, &laddr_hint, &t](auto &&) mutable {
+          LOG_PREFIX(TransactionManager::alloc_extents);
+          SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
+          laddr_hint += ext->get_length();
+          return alloc_extent_iertr::now();
+        });
+      }).si_then([&exts] {
+        return alloc_extent_iertr::make_ready_future<
+          std::vector<TCachedExtentRef<T>>>(std::move(exts));
+      });
+    });
+  }
+
+  template <typename T>
+  read_extent_ret<T> get_mutable_extent_by_laddr(Transaction &t, laddr_t laddr, extent_len_t len) {
+    return get_pin(t, laddr
+    ).si_then([this, &t, len](auto pin) {
+      ceph_assert(pin->is_stable() && !pin->is_zero_reserved());
+      ceph_assert(!pin->is_clone());
+      ceph_assert(pin->get_length() == len);
+      return this->read_pin<T>(t, std::move(pin));
+    }).si_then([this, &t](auto extent) {
+      auto ext = get_mutable_extent(t, extent)->template cast<T>();
+      return read_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
   }
@@ -358,7 +446,7 @@ public:
 				  ? pin->get_intermediate_key()
 				  : L_ADDR_NULL,
               original_paddr = pin->get_val(),
-              original_len = pin->get_length()](auto ext) {
+              original_len = pin->get_length()](auto ext) mutable {
       std::optional<ceph::bufferptr> original_bptr;
       LOG_PREFIX(TransactionManager::remap_pin);
       SUBDEBUGT(seastore_tm,
@@ -401,6 +489,9 @@ public:
             auto remap_len = remap.len;
             auto remap_laddr = original_laddr + remap_offset;
             auto remap_paddr = original_paddr.add_offset(remap_offset);
+	    if (intermediate_key != L_ADDR_NULL) {
+	      remap_paddr = original_paddr;
+	    }
             ceph_assert(remap_len < original_len);
             ceph_assert(remap_offset + remap_len <= original_len);
             ceph_assert(remap_len != 0);
@@ -409,6 +500,11 @@ public:
             SUBDEBUGT(seastore_tm,
               "remap laddr: {}, remap paddr: {}, remap length: {}", t,
               remap_laddr, remap_paddr, remap_len);
+	    auto remapped_intermediate_key = intermediate_key;
+	    if (remapped_intermediate_key != L_ADDR_NULL) {
+	      assert(intermediate_base != L_ADDR_NULL);
+	      remapped_intermediate_key += remap_offset;
+	    }
             return alloc_remapped_extent<T>(
               t,
               remap_laddr,
@@ -416,7 +512,7 @@ public:
               remap_len,
               original_laddr,
 	      intermediate_base,
-	      intermediate_key,
+	      remapped_intermediate_key,
               std::move(original_bptr)
             ).si_then([&ret, &count, remap_laddr](auto &&npin) {
               ceph_assert(npin->get_key() == remap_laddr);
@@ -462,12 +558,12 @@ public:
   }
 
   /*
-   * clone_pin
+   * clone_mapping
    *
    * create an indirect lba mapping pointing to the physical
-   * lba mapping whose key is clone_offset. Resort to btree_lba_manager.h
-   * for the definition of "indirect lba mapping" and "physical lba mapping"
-   *
+   * lba mapping whose key is intermediate_key. Resort to btree_lba_manager.h
+   * for the definition of "indirect lba mapping" and "physical lba mapping".
+   * Note that the cloned extent must be stable
    */
   using clone_extent_iertr = alloc_extent_iertr;
   using clone_extent_ret = clone_extent_iertr::future<LBAMappingRef>;
@@ -475,38 +571,33 @@ public:
     Transaction &t,
     laddr_t hint,
     const LBAMapping &mapping) {
-    auto clone_offset =
+    auto intermediate_key =
       mapping.is_indirect()
 	? mapping.get_intermediate_key()
 	: mapping.get_key();
+    auto intermediate_base =
+      mapping.is_indirect()
+        ? mapping.get_intermediate_base()
+        : mapping.get_key();
 
     LOG_PREFIX(TransactionManager::clone_pin);
     SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}, clone_offset {}",
-      t, mapping.get_length(), hint, clone_offset);
+      t, mapping.get_length(), hint, intermediate_key);
     ceph_assert(is_aligned(hint, epm->get_block_size()));
-    return lba_manager->clone_extent(
+    return lba_manager->clone_mapping(
       t,
       hint,
       mapping.get_length(),
-      clone_offset,
+      intermediate_key,
       mapping.get_val(),
-      clone_offset
-    ).si_then([this, &t, clone_offset](auto pin) {
-      return inc_ref(t, clone_offset
-      ).si_then([pin=std::move(pin)](auto) mutable {
-	return std::move(pin);
-      }).handle_error_interruptible(
-	crimson::ct_error::input_output_error::pass_further(),
-	crimson::ct_error::assert_all("not possible")
-      );
-    });
+      intermediate_base
+    );
   }
 
   /* alloc_extents
    *
    * allocates more than one new blocks of type T.
    */
-   using alloc_extents_iertr = alloc_extent_iertr;
    template<class T>
    alloc_extents_iertr::future<std::vector<TCachedExtentRef<T>>>
    alloc_extents(
@@ -523,7 +614,7 @@ public:
                        boost::make_counting_iterator(0),
                        boost::make_counting_iterator(num),
          [this, &t, len, hint, &extents] (auto i) {
-         return alloc_extent<T>(t, hint, len).si_then(
+         return alloc_non_data_extent<T>(t, hint, len).si_then(
            [&extents](auto &&node) {
            extents.push_back(node);
          });
@@ -872,7 +963,7 @@ private:
       fut = lba_manager->alloc_extent(
 	t, remap_laddr, remap_length, remap_paddr, *ext);
     } else {
-      fut = lba_manager->clone_extent(
+      fut = lba_manager->clone_mapping(
 	t,
 	remap_laddr,
 	remap_length,

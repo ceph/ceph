@@ -216,7 +216,6 @@ public:
       std::string *err);
 
   int init();
-  void shutdown();
 
   void start_one(PyModuleRef py_module);
 

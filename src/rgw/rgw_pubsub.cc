@@ -337,6 +337,7 @@ void rgw_pubsub_topic::dump(Formatter *f) const
   encode_json("dest", dest, f);
   encode_json("arn", arn, f);
   encode_json("opaqueData", opaque_data, f);
+  encode_json("policy", policy_text, f);
 }
 
 void rgw_pubsub_topic::dump_xml(Formatter *f) const
@@ -346,6 +347,7 @@ void rgw_pubsub_topic::dump_xml(Formatter *f) const
   encode_xml("EndPoint", dest, f);
   encode_xml("TopicArn", arn, f);
   encode_xml("OpaqueData", opaque_data, f);
+  encode_xml("Policy", policy_text, f);
 }
 
 void encode_xml_key_value_entry(const std::string& key, const std::string& value, Formatter *f) {
@@ -365,6 +367,7 @@ void rgw_pubsub_topic::dump_xml_as_attributes(Formatter *f) const
   encode_xml_key_value_entry("EndPoint", dest.to_json_str(), f);
   encode_xml_key_value_entry("TopicArn", arn, f);
   encode_xml_key_value_entry("OpaqueData", opaque_data, f);
+  encode_xml_key_value_entry("Policy", policy_text, f);
   f->close_section(); // Attributes
 }
 
@@ -672,7 +675,7 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
     return ret ;
   }
 
-  // remove all auto-genrated topics
+  // remove all auto-generated topics
   for (const auto& topic : bucket_topics.topics) {
     const auto& topic_name = topic.first;
     ret = ps.remove_topic(dpp, topic_name, y);
@@ -695,7 +698,9 @@ int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
                             const std::string& name,
                             const rgw_pubsub_dest& dest, const std::string& arn,
                             const std::string& opaque_data,
-                            const rgw_user& user, optional_yield y) const {
+                            const rgw_user& user,
+                            const std::string& policy_text,
+                            optional_yield y) const {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
 
@@ -712,6 +717,7 @@ int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
   new_topic.dest = dest;
   new_topic.arn = arn;
   new_topic.opaque_data = opaque_data;
+  new_topic.policy_text = policy_text;
 
   ret = write_topics(dpp, topics, &objv_tracker, y);
   if (ret < 0) {

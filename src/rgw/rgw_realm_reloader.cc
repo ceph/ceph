@@ -22,7 +22,7 @@
 #define dout_prefix (*_dout << "rgw realm reloader: ")
 
 
-// safe callbacks from SafeTimer are unneccessary. reload() can take a long
+// safe callbacks from SafeTimer are unnecessary. reload() can take a long
 // time, so we don't want to hold the mutex and block handle_notify() for the
 // duration
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
@@ -31,11 +31,13 @@ static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 RGWRealmReloader::RGWRealmReloader(RGWProcessEnv& env,
                                    const rgw::auth::ImplicitTenants& implicit_tenants,
                                    std::map<std::string, std::string>& service_map_meta,
-                                   Pauser* frontends)
+                                   Pauser* frontends,
+				   boost::asio::io_context& io_context)
   : env(env),
     implicit_tenants(implicit_tenants),
     service_map_meta(service_map_meta),
     frontends(frontends),
+    io_context(io_context),
     timer(env.driver->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
     mutex(ceph::make_mutex("RGWRealmReloader")),
     reload_scheduled(nullptr)
@@ -118,7 +120,8 @@ void RGWRealmReloader::reload()
       DriverManager::Config cfg;
       cfg.store_name = "rados";
       cfg.filter_name = "none";
-      env.driver = DriverManager::get_storage(&dp, cct, cfg,
+      env.driver = DriverManager::get_storage(&dp, cct, cfg, io_context,
+	  *env.site,
           cct->_conf->rgw_enable_gc_threads,
           cct->_conf->rgw_enable_lc_threads,
           cct->_conf->rgw_enable_quota_threads,
@@ -183,7 +186,10 @@ void RGWRealmReloader::reload()
    * the dynamic reconfiguration. */
   env.auth_registry = rgw::auth::StrategyRegistry::create(
       cct, implicit_tenants, env.driver);
-  env.lua.manager = env.driver->get_lua_manager();
+  env.lua.manager = env.driver->get_lua_manager(env.lua.manager->luarocks_path());
+  if (env.lua.background) {
+    env.lua.background->set_manager(env.lua.manager.get());
+  }
 
   ldpp_dout(&dp, 1) << "Resuming frontends with new realm configuration." << dendl;
 
