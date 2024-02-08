@@ -53,6 +53,7 @@
 #include "os/ObjectStore.h"
 
 #include "bluestore_types.h"
+#include "bluestore_common.h"
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 
