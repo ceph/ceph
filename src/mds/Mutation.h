@@ -86,30 +86,33 @@ public:
       reserve(32);
     }
 
-    void add_rdlock(SimpleLock *lock) {
-      emplace_back(lock, LockOp::RDLOCK);
+    void add_rdlock(SimpleLock *lock, int idx=-1) {
+      add_lock(LockOp(lock, LockOp::RDLOCK), idx);
     }
     void erase_rdlock(SimpleLock *lock);
     void add_xlock(SimpleLock *lock, int idx=-1) {
-      if (idx >= 0)
-	emplace(cbegin() + idx, lock, LockOp::XLOCK);
-      else
-	emplace_back(lock, LockOp::XLOCK);
+      add_lock(LockOp(lock, LockOp::XLOCK), idx);
     }
     void add_wrlock(SimpleLock *lock, int idx=-1) {
-      if (idx >= 0)
-	emplace(cbegin() + idx, lock, LockOp::WRLOCK);
-      else
-	emplace_back(lock, LockOp::WRLOCK);
+      add_lock(LockOp(lock, LockOp::WRLOCK), idx);
     }
     void add_remote_wrlock(SimpleLock *lock, mds_rank_t rank) {
       ceph_assert(rank != MDS_RANK_NONE);
-      emplace_back(lock, LockOp::REMOTE_WRLOCK, rank);
+      add_lock(LockOp(lock, LockOp::REMOTE_WRLOCK, rank), -1);
     }
     void lock_scatter_gather(SimpleLock *lock) {
-      emplace_back(lock, LockOp::WRLOCK | LockOp::STATE_PIN);
+      add_lock(LockOp(lock, LockOp::WRLOCK | LockOp::STATE_PIN), -1);
     }
     void sort_and_merge();
+
+  protected:
+    void add_lock(LockOp op, int idx) {
+      if (idx >= 0) {
+	emplace(cbegin() + idx, std::move(op));
+      } else {
+	emplace_back(std::move(op));
+      }
+    }
   };
 
   using lock_set = std::set<LockOp>;
