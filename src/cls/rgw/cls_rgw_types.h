@@ -469,10 +469,11 @@ struct rgw_bucket_dir_entry {
 WRITE_CLASS_ENCODER(rgw_bucket_dir_entry)
 
 enum class BIIndexType : uint8_t {
-  Invalid    = 0,
-  Plain      = 1,
-  Instance   = 2,
-  OLH        = 3,
+  Invalid        = 0,
+  Plain          = 1,
+  Instance       = 2,
+  OLH            = 3,
+  ReshardDeleted = 4,
 };
 
 struct rgw_bucket_category_stats;
@@ -591,6 +592,25 @@ struct rgw_bucket_olh_entry {
   static void generate_test_instances(std::list<rgw_bucket_olh_entry*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_bucket_olh_entry)
+
+struct rgw_bucket_deleted_entry {
+  cls_rgw_obj_key key;
+  rgw_bucket_deleted_entry() {}
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(key, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(key, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<rgw_bucket_deleted_entry*>& o);
+};
+WRITE_CLASS_ENCODER(rgw_bucket_deleted_entry)
 
 struct rgw_bi_log_entry {
   std::string id;

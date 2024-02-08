@@ -54,13 +54,15 @@ CLS_NAME(rgw)
 #define BI_BUCKET_LOG_INDEX           1
 #define BI_BUCKET_OBJ_INSTANCE_INDEX  2
 #define BI_BUCKET_OLH_DATA_INDEX      3
+#define BI_BUCKET_RESHARD_LOG_INDEX   4
 
-#define BI_BUCKET_LAST_INDEX          4
+#define BI_BUCKET_LAST_INDEX          5
 
 static std::string bucket_index_prefixes[] = { "", /* special handling for the objs list index */
 					       "0_",     /* bucket log index */
 					       "1000_",  /* obj instance index */
 					       "1001_",  /* olh data index */
+					       "2001_",   /* reshard log index */
 
 					       /* this must be the last index */
 					       "9999_",};
@@ -131,6 +133,40 @@ static void get_index_ver_key(cls_method_context_t hctx, uint64_t index_ver, str
            (unsigned long long)cls_current_version(hctx),
            cls_current_subop_num(hctx));
   *key = buf;
+}
+
+static void bi_reshard_log_prefix(string& key)
+{
+  key = BI_PREFIX_CHAR;
+  key.append(bucket_index_prefixes[BI_BUCKET_RESHARD_LOG_INDEX]);
+}
+
+// 0x802001_idx
+static void bi_reshard_log_key(cls_method_context_t hctx, string& key, string& idx)
+{
+  bi_reshard_log_prefix(key);
+  key.append(idx);
+}
+
+static int reshard_log_index_operation(cls_method_context_t hctx, string& idx,
+                                       cls_rgw_obj_key& key, bufferlist* log_bl)
+{
+  string reshard_log_idx;
+  bi_reshard_log_key(hctx, reshard_log_idx, idx);
+
+  rgw_cls_bi_entry reshard_log_entry;
+  if (log_bl && log_bl->length() == 0) {
+    reshard_log_entry.type = BIIndexType::ReshardDeleted;
+    rgw_bucket_deleted_entry delete_entry;
+    delete_entry.key = key;
+    encode(delete_entry, reshard_log_entry.data);
+  } else {
+    reshard_log_entry.data = *log_bl;
+  }
+  reshard_log_entry.idx = idx;
+  bufferlist bl;
+  encode(reshard_log_entry, bl);
+  return cls_cxx_map_set_val(hctx, reshard_log_idx, &bl);
 }
 
 static void bi_log_prefix(string& key)
