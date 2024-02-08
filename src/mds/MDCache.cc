@@ -11295,7 +11295,7 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestR
        it != replicas.end();
        ++it) {
     // don't tell (rmdir) witnesses; they already know
-    if (mdr.get() && mdr->more()->witnessed.count(*it))
+    if (mdr.get() && mdr->more()->witnessed.count(*it) && !dn->get_linkage()->is_referent())
       continue;
 
     if (mds->mdsmap->get_state(*it) < MDSMap::STATE_REJOIN ||
