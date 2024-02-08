@@ -186,6 +186,7 @@ private:
   std::string output_row_delimiter;
   std::string m_start_scan;
   std::string m_end_scan;
+  std::string m_output_json_format;
   bool m_scan_range_ind;
   int64_t m_start_scan_sz;
   int64_t m_end_scan_sz;
