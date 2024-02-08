@@ -14,6 +14,7 @@
 #include "common/RefCountedObj.h"
 #include "common/ceph_time.h"
 #include "common/Timer.h"
+#include "common/async/context_pool.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
@@ -389,6 +390,8 @@ class RGWRados
 
   ceph::mutex meta_sync_thread_lock{ceph::make_mutex("meta_sync_thread_lock")};
   ceph::mutex data_sync_thread_lock{ceph::make_mutex("data_sync_thread_lock")};
+
+  ceph::async::io_context_pool v1_topic_migration;
 
   librados::IoCtx root_pool_ctx;      // .rgw
 
