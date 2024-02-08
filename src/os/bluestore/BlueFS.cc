@@ -490,7 +490,7 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
       break;
     case BDEV_DB:
     case BDEV_NEWDB:
-      reserved = DB_SUPER_RESERVED;
+      reserved = SUPER_RESERVED;
       break;
     case BDEV_SLOW:
       reserved = 0;
