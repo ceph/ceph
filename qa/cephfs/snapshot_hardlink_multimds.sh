@@ -4,6 +4,8 @@ RADOS=bin/rados
 FS=a
 DIR1_MDS_OBJ=""
 DIR2_MDS_OBJ=""
+DIR1_FILE1_DATA_OBJ=""
+DIR2_HL_FILE1_DATA_OBJ=""
 
 function flush_mds_journal () {
   echo "flush mds.a journal"
@@ -61,6 +63,52 @@ function validate_data_inode_and_bt () {
   fi
 }
 
+function get_data_object () {
+  $RADOS -p cephfs.a.meta getomapval $1 $2 /tmp/a
+  pinode=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.ino')
+  hex_pinode=$(printf "%x" $pinode)
+  dataobject=$(echo $hex_pinode.00000000)
+  echo "$dataobject"
+}
+
+function validate_mpool_omap_deletion () {
+  $RADOS -p cephfs.a.meta getomapval $1 $2_head /tmp/a
+  if [ $? -ne 0 ];then
+    echo "/$3/$2's omap key deleted"
+  else
+    echo "FAIL - /$3/$2's omap key/val still present"
+    exit -1
+  fi
+}
+
+function validate_dpool_object_deletion () {
+  $RADOS -p cephfs.a.data getxattr $1 parent > /tmp/a
+  if [ $? -ne 0 ];then
+    echo "$2's data object deleted after unlink"
+  else
+    echo "FAIL - $2's data object still present after unlink"
+    exit -1
+  fi
+}
+
+function unlink_and_validate () {
+  echo "--------------------------------------------------------------------------------------------------"
+  echo "MULTIMDS - UNLINK"
+  echo "unlink /dir2/hl_file1 (secondary link first to avoid stray reintegration)"
+  rm -f $MNT/dir2/hl_file1
+  echo "unlink /dir1/file1 (primary link)"
+  rm -f $MNT/dir1/file1
+  flush_mds_journal
+  echo "Sleep for 5 seconds for unlink to clean up the objects"
+  sleep 5
+  validate_mpool_omap_deletion $DIR1_MDS_OBJ "file1" "dir1"
+  validate_mpool_omap_deletion $DIR2_MDS_OBJ "hl_file1" "dir2"
+
+  validate_dpool_object_deletion $DIR1_FILE1_DATA_OBJ "/dir1/file1"
+  validate_dpool_object_deletion $DIR2_HL_FILE1_DATA_OBJ "/dir2/hl_file1"
+  echo "multi-mds unlink success"
+}
+
 function create_link_and_validate () {
   echo "--------------------------------------------------------------------------------------------------"
   echo "MULTIMDS - LINK"
@@ -71,6 +119,7 @@ function create_link_and_validate () {
   flush_mds_journal
   validate_inode_size $DIR2_MDS_OBJ "hl_file1_head" "dir2"
   validate_data_inode_and_bt $DIR2_MDS_OBJ "hl_file1_head" "dir2" "hl_file1"
+  echo "multi-mds link success"
 }
 
 function create_dirs_and_pin () {
@@ -143,5 +192,10 @@ create_sample_files
 echo "Wait for subtree migration"
 sleep 10
 create_link_and_validate
+DIR1_FILE1_DATA_OBJ=$(get_data_object $DIR1_MDS_OBJ "file1_head")
+DIR2_HL_FILE1_DATA_OBJ=$(get_data_object $DIR2_MDS_OBJ "hl_file1_head")
+echo "DIR1_FILE1_DATA_OBJ: $DIR1_FILE1_DATA_OBJ"
+echo "DIR2_HL_FILE1_DATA_OBJ: $DIR2_HL_FILE1_DATA_OBJ"
+unlink_and_validate
 echo "--------------------------------------------------------------------------------------------------"
 echo ""
