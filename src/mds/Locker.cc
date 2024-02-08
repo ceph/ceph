@@ -4503,7 +4503,7 @@ void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr
       ceph_assert(dnl->get_inode() == in);
       mask = CEPH_LEASE_PRIMARY_LINK;
     } else {
-      if (dnl->is_remote())
+      if (dnl->is_remote() || dnl->is_referent())
         ceph_assert(dnl->get_remote_ino() == in->ino());
       else
         ceph_assert(!in);

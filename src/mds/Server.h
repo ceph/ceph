@@ -257,7 +257,7 @@ public:
   // link
   void handle_client_link(const MDRequestRef& mdr);
   void _link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, SnapRealm *target_realm);
-  void _link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti,
+  void _link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, CInode *referenti,
 			  version_t, version_t, bool);
 
   void _link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);

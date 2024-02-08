@@ -578,7 +578,7 @@ void StrayManager::eval_remote(CDentry *remote_dn)
   dout(10) << __func__ << " " << *remote_dn << dendl;
 
   CDentry::linkage_t *dnl = remote_dn->get_projected_linkage();
-  ceph_assert(dnl->is_remote());
+  ceph_assert(dnl->is_remote() || dnl->is_referent());
   CInode *in = dnl->get_inode();
 
   if (!in) {

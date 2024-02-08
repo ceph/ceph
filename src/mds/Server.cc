@@ -7482,17 +7482,18 @@ void Server::handle_client_link(const MDRequestRef& mdr)
 class C_MDS_link_local_finish : public ServerLogContext {
   CDentry *dn;
   CInode *targeti;
+  CInode *referenti;
   version_t dnpv;
   version_t tipv;
   bool adjust_realm;
 public:
-  C_MDS_link_local_finish(Server *s, const MDRequestRef& r, CDentry *d, CInode *ti,
+  C_MDS_link_local_finish(Server *s, const MDRequestRef& r, CDentry *d, CInode *ti, CInode *ri,
 			  version_t dnpv_, version_t tipv_, bool ar) :
-    ServerLogContext(s, r), dn(d), targeti(ti),
+    ServerLogContext(s, r), dn(d), targeti(ti), referenti(ri),
     dnpv(dnpv_), tipv(tipv_), adjust_realm(ar) { }
   void finish(int r) override {
     ceph_assert(r == 0);
-    server->_link_local_finish(mdr, dn, targeti, dnpv, tipv, adjust_realm);
+    server->_link_local_finish(mdr, dn, targeti, referenti, dnpv, tipv, adjust_realm);
   }
 };
 
@@ -7516,6 +7517,17 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   pi.inode->change_attr++;
   pi.inode->version = tipv;
 
+  // create inode.
+  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), 0, pi.inode->mode);
+  ceph_assert(newi);
+
+  auto _inode = newi->_get_inode();
+  _inode->version = dnpv;
+  _inode->update_backtrace();
+
+  //TODO layout, rstat accounting for referent inode ?
+
+  // TODO - snapshot related inode updates - snaprealm on referent inode
   bool adjust_realm = false;
   if (!target_realm->get_subvolume_ino() && !targeti->is_projected_snaprealm_global()) {
     sr_t *newsnap = targeti->project_snaprealm();
@@ -7532,14 +7544,19 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type());  // new remote
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, targeti);
 
+  // journal allocated referent inode.
+  journal_allocated_inos(mdr, &le->metablob);
   // do this after predirty_*, to avoid funky extra dnl arg
-  dn->push_projected_linkage(targeti->ino(), targeti->d_type());
+  //dn->push_projected_linkage(targeti->ino(), targeti->d_type());
+
+  // referent inode
+  dn->push_projected_linkage(newi, targeti->ino());
 
   journal_and_reply(mdr, targeti, dn, le,
-		    new C_MDS_link_local_finish(this, mdr, dn, targeti, dnpv, tipv, adjust_realm));
+		    new C_MDS_link_local_finish(this, mdr, dn, targeti, newi, dnpv, tipv, adjust_realm));
 }
 
-void Server::_link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti,
+void Server::_link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, CInode *referenti,
 				version_t dnpv, version_t tipv, bool adjust_realm)
 {
   dout(10) << "_link_local_finish " << *dn << " to " << *targeti << dendl;
@@ -7549,6 +7566,10 @@ void Server::_link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *ta
   if (!dnl->get_inode())
     dn->link_remote(dnl, targeti);
   dn->mark_dirty(dnpv, mdr->ls);
+
+  // dirty secondary inode
+  referenti->mark_dirty(mdr->ls);
+  referenti->mark_dirty_parent(mdr->ls, true);
 
   // target inode
   mdr->apply();

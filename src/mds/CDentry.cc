@@ -267,7 +267,7 @@ void CDentry::make_path(filepath& fp, bool projected) const
  */
 void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
 {
-  ceph_assert(dnl->is_remote());
+  ceph_assert(dnl->is_remote() || dnl->is_referent());
   ceph_assert(in->ino() == dnl->get_remote_ino());
   dnl->inode = in;
 

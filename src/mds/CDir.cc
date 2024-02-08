@@ -590,8 +590,6 @@ void CDir::link_referent_inode(CDentry *dn, CInode *ref_in, inodeno_t rino, unsi
   dn->get_linkage()->set_remote(rino, d_type);
   dn->get_linkage()->ref_inode = ref_in;
 
-  link_inode_work(dn, ref_in);
-
   if (dn->state_test(CDentry::STATE_BOTTOMLRU)) {
     mdcache->bottom_lru.lru_remove(dn);
     mdcache->lru.lru_insert_mid(dn);
