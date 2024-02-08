@@ -19,6 +19,7 @@
 
 #include "include/types.h"
 #include "include/interval_set.h"
+#include "common/config_obs.h"
 #include "common/Thread.h"
 #include "include/utime.h"
 
@@ -28,7 +29,8 @@
 
 #define RW_IO_MAX (INT_MAX & CEPH_PAGE_MASK)
 
-class KernelDevice : public BlockDevice {
+class KernelDevice : public BlockDevice,
+                     public md_config_obs_t {
 protected:
   std::string path;
 private:
@@ -50,14 +52,11 @@ private:
   aio_callback_t discard_callback;
   void *discard_callback_priv;
   bool aio_stop;
-  bool discard_started;
-  bool discard_stop;
 
   ceph::mutex discard_lock = ceph::make_mutex("KernelDevice::discard_lock");
   ceph::condition_variable discard_cond;
   bool discard_running = false;
   interval_set<uint64_t> discard_queued;
-  interval_set<uint64_t> discard_finishing;
 
   struct AioCompletionThread : public Thread {
     KernelDevice *bdev;
@@ -70,12 +69,16 @@ private:
 
   struct DiscardThread : public Thread {
     KernelDevice *bdev;
-    explicit DiscardThread(KernelDevice *b) : bdev(b) {}
+    const uint64_t id;
+    bool stop = false;
+    explicit DiscardThread(KernelDevice *b, uint64_t id) : bdev(b), id(id) {}
     void *entry() override {
-      bdev->_discard_thread();
+      bdev->_discard_thread(id);
       return NULL;
     }
-  } discard_thread;
+  };
+  std::vector<std::shared_ptr<DiscardThread>> discard_threads;
+  uint64_t target_discard_threads = 0;
 
   std::atomic_int injecting_crash;
 
@@ -83,7 +86,7 @@ private:
   virtual void  _pre_close() { }  // hook for child implementations
 
   void _aio_thread();
-  void _discard_thread();
+  void _discard_thread(uint64_t tid);
   int _queue_discard(interval_set<uint64_t> &to_release);
   bool try_discard(interval_set<uint64_t> &to_release, bool async = true) override;
 
@@ -92,6 +95,7 @@ private:
 
   void _discard_start();
   void _discard_stop();
+  bool _discard_started();
 
   void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
   void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
@@ -116,6 +120,7 @@ private:
 
 public:
   KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
+  ~KernelDevice();
 
   void aio_submit(IOContext *ioc) override;
   void discard_drain() override;
@@ -151,6 +156,11 @@ public:
   int invalidate_cache(uint64_t off, uint64_t len) override;
   int open(const std::string& path) override;
   void close() override;
+
+  // config observer bits
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set <std::string> &changed) override;
 };
 
 #endif
