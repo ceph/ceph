@@ -6006,6 +6006,10 @@ int BlueStore::_set_cache_sizes()
 
 int BlueStore::write_meta(const std::string& key, const std::string& value)
 {
+    if (bdev && !bdev->supported_bdev_label()) {
+    // skip bdev label section if not supported
+    return ObjectStore::write_meta(key, value);
+  }
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
     _read_main_bdev_label(cct, p, &bdev_label,
@@ -6025,6 +6029,10 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
 
 int BlueStore::read_meta(const std::string& key, std::string *value)
 {
+  if (bdev && !bdev->supported_bdev_label()) {
+    // skip bdev label section if not supported
+    return ObjectStore::read_meta(key, value);
+  }
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
     _read_main_bdev_label(cct, p, &bdev_label,
@@ -6799,7 +6807,7 @@ int BlueStore::_check_or_set_main_bdev_label(
       bdev_label_multi = true;
       bdev_label_epoch = 1;
       for (uint64_t position : bdev_label_positions) {
-        if (int64_t(position + BDEV_LABEL_BLOCK_SIZE) <= size) {
+        if (position + BDEV_LABEL_BLOCK_SIZE <= size) {
           bdev_label_valid_locations.push_back(position);
         }
       }
@@ -10254,18 +10262,8 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
       depth == FSCK_SHALLOW ? " (shallow)" : " (regular)")
     << dendl;
 
-  {
-    string p = path + "/block";
-    int r = _read_main_bdev_label(cct, p, &bdev_label,
-      &bdev_label_valid_locations, &bdev_label_multi);
-    if (r < 0) {
-      derr << __func__ << " fsck error: no valid block device label found" << dendl;
-      return r;
-    }
-    // hack - sanitize check for bdev label
-    bluestore_bdev_label_require_all = false;
-  }
-
+  // hack - sanitize check for bdev label
+  bluestore_bdev_label_require_all = false;
   auto restore_option = make_scope_guard([&] {
     bluestore_bdev_label_require_all = cct->_conf.get_val<bool>("bluestore_bdev_label_require_all");
   });
@@ -10359,8 +10357,13 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   auto alloc_size = fm->get_alloc_size();
 
+  if (bdev->supported_bdev_label() && bdev_label_multi
+    && bdev_label_valid_locations.empty()) {
+    derr << __func__ << " fsck error: no valid block device label found" << dendl;
+    return -EIO;
+  }
   // Delayed action, we could not do it in _fsck().
-  if (repair && !bdev_label_multi &&
+  if (bdev->supported_bdev_label() && repair && !bdev_label_multi &&
     cct->_conf.get_val<bool>("bluestore_bdev_label_multi_upgrade")) {
     // upgrade to multi
     bdev_label.meta["multi"] = "yes";
@@ -10369,7 +10372,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     bdev_labels_broken.push_back(BDEV_LABEL_POSITION);
     errors++;
   }
-  if (bdev_label_multi) {
+  if (bdev->supported_bdev_label() && bdev_label_multi) {
     for (size_t i = 0; i < bdev_label_positions.size(); i++) {
       uint64_t location = bdev_label_positions[i];
       if (location + BDEV_LABEL_BLOCK_SIZE > bdev->get_size()) {
@@ -10411,7 +10414,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   bluefs_used_blocks = used_blocks;
 
-  if (bdev_label_multi) {
+  if (bdev->supported_bdev_label() && bdev_label_multi) {
     // Forcibly mark regions of bdev label clones as used.
     // If an object happens to be using it we will get an error and a repair applied.
     // We can move away data only if it was allocated for object in BlueStore,
@@ -11013,6 +11016,10 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     // skip freelist vs allocated compare when we have Null fm
     if (!fm->is_null_manager()) {
       dout(1) << __func__ << " checking freelist vs allocated" << dendl;
+      if (!bdev->supported_bdev_label()) {
+        // it should be 0 labels if labels are not supported
+        ceph_assert(bdev_label_valid_locations.empty());
+      }
       //unmark extra bdev copies, will collide with the check
       for (uint64_t location : bdev_label_valid_locations) {
         uint64_t length = std::max<uint64_t>(BDEV_LABEL_BLOCK_SIZE, alloc_size);
@@ -11108,6 +11115,8 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     dout(5) << __func__ << " repair applied" << dendl;
   }
   if (repair && bdev_labels_in_repair.size() > 0) {
+    // should not happen when labels are disabled
+    ceph_assert(bdev->supported_bdev_label());
     // Now fix bdev_labels that were detected to be broken & repairable.
     string p = path + "/block";
     _write_bdev_label(cct, p, bdev_label, bdev_labels_in_repair);
