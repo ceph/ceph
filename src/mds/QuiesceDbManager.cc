@@ -202,7 +202,9 @@ bool QuiesceDbManager::membership_upkeep()
   bool was_leader = membership.epoch > 0 && membership.leader == membership.me;
   bool is_leader = cluster_membership && cluster_membership->leader == cluster_membership->me;
   if (cluster_membership) {
-    dout(10) << "epoch: " << cluster_membership->epoch << " is_leader: " << is_leader << " was_leader: " << was_leader << dendl;
+    dout(10) << "epoch:" << cluster_membership->epoch << " leader:" 
+      << std::boolalpha << was_leader << "->" << is_leader << std::noboolalpha
+      << " members:" << cluster_membership->members << dendl;
   } else {
     dout(10) << "shutdown! was_leader: " << was_leader << dendl;
   }
