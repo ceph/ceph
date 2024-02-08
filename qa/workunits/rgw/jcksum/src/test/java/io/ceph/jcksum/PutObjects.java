@@ -100,7 +100,6 @@ class PutObjects {
 			}
 		} catch (IOException e) {
             System.err.println(e.getMessage());
-            System.exit(1);
 		}
 	} /* generateFile */
 
@@ -146,12 +145,18 @@ class PutObjects {
 	            .buildWithDefaults(AttributeMap.builder().put(SdkHttpConfigurationOption.TRUST_ALL_CERTIFICATES, true).build());
 		
 		/* https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/S3Client.html */
-        client = S3Client.builder()
-          .endpointOverride(http_uri)
-          .credentialsProvider(StaticCredentialsProvider.create(creds))
-          .region(jcksum.region)
-          .forcePathStyle(true)
-          .build();
+
+    try {
+      client = S3Client.builder()
+        .endpointOverride(http_uri)
+        .credentialsProvider(StaticCredentialsProvider.create(creds))
+        .region(jcksum.region)
+        .forcePathStyle(true) /* XXX change in future */
+        .build();
+		} catch (Exception e) {
+      System.err.println(e.getMessage());
+      System.exit(1);
+		}
 
     generateBigFiles();
 
