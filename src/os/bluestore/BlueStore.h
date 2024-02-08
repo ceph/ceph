@@ -3412,6 +3412,18 @@ public:
     _wctx_finish(&txc, c, o, &wctx, nullptr);
   }
 
+  static int debug_read_bdev_label(
+    CephContext* cct, const std::string &path,
+    bluestore_bdev_label_t *label, uint64_t disk_position) {
+      return _read_bdev_label(cct, path, label, disk_position);
+    }
+  static int debug_write_bdev_label(
+    CephContext* cct, const std::string &path,
+    const bluestore_bdev_label_t& label, uint64_t disk_position) {
+      return _write_bdev_label(cct, path, label,
+        std::vector<uint64_t>({disk_position}));
+    }
+
   inline void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,

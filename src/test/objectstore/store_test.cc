@@ -188,10 +188,10 @@ class MultiLabelTest : public StoreTestDeferredSetup {
     return data_dir;
   }
   bool mounted = false;
-  void mount() {
-    ASSERT_FALSE(mounted);
-    store->mount();
-    mounted = true;
+  int mount() {
+    int r = store->mount();
+    if (r == 0) mounted = true;
+    return r;
   }
   void umount() {
     ASSERT_TRUE(mounted);
@@ -10411,7 +10411,6 @@ TEST_P(MultiLabelTest, DetectCorruptedFirst) {
   bool corrupt = corrupt_disk_at(0);
   ASSERT_EQ(corrupt, true);
   ASSERT_EQ(store->fsck(false), 1);
-  //store->mount();
 }
 
 TEST_P(MultiLabelTest, FixCorruptedFirst) {
@@ -10494,6 +10493,75 @@ TEST_P(MultiLabelTest, CantFixCorruptedAll) {
   ASSERT_EQ(corrupt, true);
   ASSERT_NE(store->fsck(false), 0);
   ASSERT_NE(store->repair(false), 0);
+}
+
+TEST_P(MultiLabelTest, SkipInvalidUUID) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  SetVal(g_conf(), "bluestore_block_size",
+    stringify(101L * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  int r;
+  bluestore_bdev_label_t label;
+  r = BlueStore::debug_read_bdev_label(g_ceph_context,
+    get_data_dir()+"/block", &label, 0);
+  ASSERT_EQ(r, 0);
+  label.meta["epoch"] = "1";
+  uuid_d new_id;
+  new_id.generate_random();
+  label.osd_uuid = new_id;
+  r = BlueStore::debug_write_bdev_label(g_ceph_context,
+    get_data_dir()+"/block", label, 0);
+  ASSERT_EQ(r, 0);
+
+  ASSERT_EQ(store->fsck(false), 1);
+  ASSERT_EQ(store->repair(false), 0);
+  mount();
+}
+
+TEST_P(MultiLabelTest, FailAllInvalidUUID) {
+  static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+  SetVal(g_conf(), "bluestore_block_size",
+    stringify(101 * _1G).c_str());
+  SetVal(g_conf(), "bluestore_bdev_label_multi", "true");
+  SetVal(g_conf(), "bluestore_bdev_label_require_all", "false");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+  if (!bdev_supports_label()) {
+    GTEST_SKIP();
+  }
+  umount();
+  int r;
+  bluestore_bdev_label_t label;
+  r = BlueStore::debug_read_bdev_label(g_ceph_context,
+    get_data_dir()+"/block", &label, 0);
+  ASSERT_EQ(r, 0);
+  label.meta["epoch"] = "1";
+  uuid_d new_id;
+  new_id.generate_random();
+  label.osd_uuid = new_id;
+  r = BlueStore::debug_write_bdev_label(g_ceph_context,
+    get_data_dir()+"/block", label, 0);
+  ASSERT_EQ(r, 0);
+  r = BlueStore::debug_write_bdev_label(g_ceph_context,
+    get_data_dir()+"/block", label, _1G);
+  ASSERT_EQ(r, 0);
+  r = BlueStore::debug_write_bdev_label(g_ceph_context,
+    get_data_dir()+"/block", label, 10 * _1G);
+  ASSERT_EQ(r, 0);
+  r = BlueStore::debug_write_bdev_label(g_ceph_context,
+    get_data_dir()+"/block", label, 100 * _1G);
+  ASSERT_EQ(r, 0);
+
+  ASSERT_EQ(store->fsck(false), -2); // this is complete failure
+  ASSERT_EQ(store->repair(false), -2);
+  r = mount();
+  ASSERT_NE(r, 0);
 }
 
 TEST_P(MultiLabelTest, SelectNewestLabel) {
