@@ -11013,6 +11013,17 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     // skip freelist vs allocated compare when we have Null fm
     if (!fm->is_null_manager()) {
       dout(1) << __func__ << " checking freelist vs allocated" << dendl;
+      //unmark extra bdev copies, will collide with the check
+      for (uint64_t location : bdev_label_valid_locations) {
+        uint64_t length = std::max<uint64_t>(BDEV_LABEL_BLOCK_SIZE, alloc_size);
+        if (location != BDEV_LABEL_POSITION) {
+          apply_for_bitset_range(location, length, alloc_size, used_blocks,
+            [&](uint64_t pos, mempool_dynamic_bitset& bs) {
+              bs.reset(pos);
+            }
+          );
+        }
+      }
       fm->enumerate_reset();
       uint64_t offset, length;
       while (fm->enumerate_next(db, &offset, &length)) {
