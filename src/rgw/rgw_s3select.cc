@@ -427,6 +427,9 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
     csv.use_header_info=true;
   }
 
+  if(m_outputFormat == OutputFormat::JSON) {
+    csv.output_json_format = true;
+  }
   m_s3_csv_object.set_csv_query(&s3select_syntax, csv);
 
   m_s3_csv_object.set_external_system_functions(fp_s3select_continue,
@@ -479,6 +482,9 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_parquet(const char* query)
     //parsing the SQL statement.
     s3select_syntax.parse_query(m_sql_query.c_str());
     parquet_object::csv_definitions parquet;
+    if(m_outputFormat == OutputFormat::JSON) {
+    parquet.output_json_format = true;
+    }
 
   m_s3_parquet_object.set_external_system_functions(fp_s3select_continue,
 						fp_s3select_result_format,
@@ -539,6 +545,10 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
     ldpp_dout(this, 10) << s3select_json_error_msg << dendl;
     return -EINVAL;
   } 
+
+  if(m_outputFormat == OutputFormat::JSON) {
+    json.output_json_format = true;
+  }
 
   //parsing the SQL statement
   s3select_syntax.parse_query(m_sql_query.c_str());
@@ -619,6 +629,10 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   } else if (m_s3select_query.find(input_tag+"><Parquet") != std::string::npos) {
     m_parquet_type=true;
     ldpp_dout(this, 10) << "s3select: engine is set to process Parquet objects" << dendl;
+  }
+
+  if (m_s3select_query.find(output_tag+"><JSON") != std::string::npos) {
+    m_outputFormat = OutputFormat::JSON;
   }
 
   extract_by_tag(m_s3select_query, "Expression", sql_query);
