@@ -4,6 +4,7 @@ RADOS=bin/rados
 FS=a
 DIR1_MDS_OBJ=""
 DIR2_MDS_OBJ=""
+DIR3_MDS_OBJ=""
 DIR1_FILE1_DATA_OBJ=""
 DIR2_HL_FILE1_DATA_OBJ=""
 
@@ -12,6 +13,8 @@ function flush_mds_journal () {
   $CEPH tell mds.a flush journal > /dev/null 2>&1
   echo "flush mds.b journal"
   $CEPH tell mds.b flush journal > /dev/null 2>&1
+  echo "flush mds.c journal"
+  $CEPH tell mds.c flush journal > /dev/null 2>&1
 }
 
 function validate_inode_size () {
@@ -109,6 +112,41 @@ function unlink_and_validate () {
   echo "multi-mds unlink success"
 }
 
+function validate_rename () {
+  echo "--------------------------------------------------------------------------------------------------"
+  echo "MULTIMDS - RENAME"
+  #create source files for rename
+  echo "create /dir1/file1"
+  echo "data ..." > $MNT/dir1/file1
+  echo "ln /dir1/file1 /dir2/hl_file1"
+  ln $MNT/dir1/file1 $MNT/dir2/hl_file1
+  echo "ln /dir1/file1 /dir2/hl_file2"
+  ln $MNT/dir1/file1 $MNT/dir2/hl_file2
+  echo "ln /dir1/file1 /dir2/hl_file3"
+  ln $MNT/dir1/file1 $MNT/dir2/hl_file3
+  flush_mds_journal
+
+  #rename
+  echo "rename /dir2/hl_file1 /dir1/dir1_hl_file1"
+  mv $MNT/dir2/hl_file1 $MNT/dir1/dir1_hl_file1
+  echo "rename /dir2/hl_file2 /dir2/dir2_hl_file2"
+  mv $MNT/dir2/hl_file2 $MNT/dir2/dir2_hl_file2
+  echo "rename /dir2/hl_file3 /dir3/dir3_hl_file3"
+  mv $MNT/dir2/hl_file3 $MNT/dir3/dir3_hl_file3
+  flush_mds_journal
+
+  validate_inode_size $DIR1_MDS_OBJ "dir1_hl_file1_head" "dir1"
+  validate_data_inode_and_bt $DIR1_MDS_OBJ "dir1_hl_file1_head" "dir1" "dir1_hl_file1"
+
+  validate_inode_size $DIR2_MDS_OBJ "dir2_hl_file2_head" "dir2"
+  validate_data_inode_and_bt $DIR2_MDS_OBJ "dir2_hl_file2_head" "dir2" "dir2_hl_file2"
+
+  validate_inode_size $DIR3_MDS_OBJ "dir3_hl_file3_head" "dir3"
+  validate_data_inode_and_bt $DIR3_MDS_OBJ "dir3_hl_file3_head" "dir3" "dir3_hl_file3"
+
+  echo "multi-mds rename success"
+}
+
 function create_link_and_validate () {
   echo "--------------------------------------------------------------------------------------------------"
   echo "MULTIMDS - LINK"
@@ -117,6 +155,12 @@ function create_link_and_validate () {
   echo "ln /dir1/file1 /dir2/hl_file1"
   ln $MNT/dir1/file1 $MNT/dir2/hl_file1
   flush_mds_journal
+
+  DIR1_FILE1_DATA_OBJ=$(get_data_object $DIR1_MDS_OBJ "file1_head")
+  DIR2_HL_FILE1_DATA_OBJ=$(get_data_object $DIR2_MDS_OBJ "hl_file1_head")
+  echo "DIR1_FILE1_DATA_OBJ: $DIR1_FILE1_DATA_OBJ"
+  echo "DIR2_HL_FILE1_DATA_OBJ: $DIR2_HL_FILE1_DATA_OBJ"
+
   validate_inode_size $DIR2_MDS_OBJ "hl_file1_head" "dir2"
   validate_data_inode_and_bt $DIR2_MDS_OBJ "hl_file1_head" "dir2" "hl_file1"
   echo "multi-mds link success"
@@ -124,23 +168,35 @@ function create_link_and_validate () {
 
 function create_dirs_and_pin () {
   echo "--------------------------------------------------------------------------------------------------"
-  echo "create /dir1, /dir2 and pin /dir1 to rank 0 and /dir2 to rank 1"
+  echo "create /dir1, /dir2 , /dir3 and pin /dir1 to rank 0, /dir2 to rank 1, /dir3 to rank2"
   echo "mkdir /dir1"
   mkdir $MNT/dir1
   flush_mds_journal
   declare -g DIR1_MDS_OBJ=$($RADOS -p cephfs.a.meta ls | egrep "([0-9]|[a-f]){11}.")
   echo "DIR1_MDS_OBJ: $DIR1_MDS_OBJ"
+
   echo "mkdir /dir2"
   mkdir $MNT/dir2
   flush_mds_journal
   declare -g DIR2_MDS_OBJ=$($RADOS -p cephfs.a.meta ls | egrep "([0-9]|[a-f]){11}." | grep -v "${DIR1_MDS_OBJ}")
   echo "DIR2_MDS_OBJ: $DIR2_MDS_OBJ"
+
+  echo "mkdir /dir3"
+  mkdir $MNT/dir3
+  flush_mds_journal
+  declare -g DIR3_MDS_OBJ=$($RADOS -p cephfs.a.meta ls | egrep "([0-9]|[a-f]){11}." | grep -v "${DIR1_MDS_OBJ}" | grep -v "${DIR2_MDS_OBJ}")
+  echo "DIR3_MDS_OBJ: $DIR3_MDS_OBJ"
+
+
   rank0=$($CEPH fs get $FS 2>/dev/null | grep "mds\." | grep "{0" | awk '{print $1}')
   echo "static pin /dir1 to rank 0 - $rank0"
   setfattr -n ceph.dir.pin -v 0 $MNT/dir1
   rank1=$($CEPH fs get $FS 2>/dev/null | grep "mds\." | grep "{1" | awk '{print $1}')
   echo "static pin /dir2 to rank 1 - $rank1"
   setfattr -n ceph.dir.pin -v 1 $MNT/dir2
+  rank2=$($CEPH fs get $FS 2>/dev/null | grep "mds\." | grep "{2" | awk '{print $1}')
+  echo "static pin /dir3 to rank 2 - $rank2"
+  setfattr -n ceph.dir.pin -v 2 $MNT/dir3
 }
 
 function fuse_mount () {
@@ -171,8 +227,8 @@ function set_max_mds () {
   echo "set max_mds to $1"
   $CEPH fs set $FS max_mds $1
   flush_mds_journal
-  echo "Wait 5 secs for other mds to become active"
-  sleep 5
+  echo "Wait 10 secs for other mds to become active"
+  sleep 10
 }
 
 function create_sample_files () {
@@ -184,7 +240,7 @@ function create_sample_files () {
   flush_mds_journal
 }
 
-set_max_mds 2
+set_max_mds 3
 fuse_mount
 clean_data
 create_dirs_and_pin
@@ -192,10 +248,7 @@ create_sample_files
 echo "Wait for subtree migration"
 sleep 10
 create_link_and_validate
-DIR1_FILE1_DATA_OBJ=$(get_data_object $DIR1_MDS_OBJ "file1_head")
-DIR2_HL_FILE1_DATA_OBJ=$(get_data_object $DIR2_MDS_OBJ "hl_file1_head")
-echo "DIR1_FILE1_DATA_OBJ: $DIR1_FILE1_DATA_OBJ"
-echo "DIR2_HL_FILE1_DATA_OBJ: $DIR2_HL_FILE1_DATA_OBJ"
 unlink_and_validate
+validate_rename
 echo "--------------------------------------------------------------------------------------------------"
 echo ""
