@@ -2778,13 +2778,9 @@ public:
 private:
   int _check_or_set_bdev_label(const std::string& path, uint64_t size, std::string desc,
 			       bool create);
-  int _check_or_set_main_bdev_label(
-    const std::string& path,
-    uint64_t size,
-    bool create);
-  static int _read_main_bdev_label(
-    CephContext* cct,
-    const std::string &path,
+  int _set_main_bdev_label();
+  int _check_main_bdev_label();
+  int _read_main_bdev_label(
     bluestore_bdev_label_t *out_label,
     std::vector<uint64_t>* out_valid_positions = nullptr,
     bool* out_is_cloned = nullptr,
