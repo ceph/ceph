@@ -1745,6 +1745,8 @@ paths:
               properties:
                 fs:
                   type: string
+                group:
+                  type: string
                 path:
                   type: string
                 retention_policy:
@@ -1752,6 +1754,8 @@ paths:
                 snap_schedule:
                   type: string
                 start:
+                  type: string
+                subvol:
                   type: string
               required:
               - fs
@@ -1838,9 +1842,13 @@ paths:
           application/json:
             schema:
               properties:
+                group:
+                  type: string
                 retention_to_add:
                   type: string
                 retention_to_remove:
+                  type: string
+                subvol:
                   type: string
               type: object
       responses:
@@ -1885,9 +1893,13 @@ paths:
           application/json:
             schema:
               properties:
+                group:
+                  type: string
                 schedule:
                   type: string
                 start:
+                  type: string
+                subvol:
                   type: string
               required:
               - schedule
@@ -1935,9 +1947,13 @@ paths:
           application/json:
             schema:
               properties:
+                group:
+                  type: string
                 schedule:
                   type: string
                 start:
+                  type: string
+                subvol:
                   type: string
               required:
               - schedule
@@ -1988,6 +2004,16 @@ paths:
       - in: query
         name: start
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: subvol
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: group
         schema:
           type: string
       responses:

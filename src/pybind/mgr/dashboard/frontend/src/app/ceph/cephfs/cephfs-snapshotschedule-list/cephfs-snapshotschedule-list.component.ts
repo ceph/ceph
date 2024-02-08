@@ -46,6 +46,12 @@ export class CephfsSnapshotscheduleListComponent
   @ViewChild('pathTpl', { static: true })
   pathTpl: any;
 
+  @ViewChild('retentionTpl', { static: true })
+  retentionTpl: any;
+
+  @ViewChild('subvolTpl', { static: true })
+  subvolTpl: any;
+
   @BlockUI()
   blockUI: NgBlockUI;
 
@@ -122,7 +128,9 @@ export class CephfsSnapshotscheduleListComponent
             if (!status) {
               return of([]);
             }
-            return this.snapshotScheduleService.getSnapshotScheduleList('/', this.fsName);
+            return this.snapshotScheduleService
+              .getSnapshotScheduleList('/', this.fsName)
+              .pipe(map((list) => list.map((l) => ({ ...l, path: `${l.path}@${l.schedule}` }))));
           }),
           shareReplay(1)
         )
@@ -131,9 +139,11 @@ export class CephfsSnapshotscheduleListComponent
 
     this.columns = [
       { prop: 'path', name: $localize`Path`, flexGrow: 3, cellTemplate: this.pathTpl },
-      { prop: 'subvol', name: $localize`Subvolume` },
-      { prop: 'schedule', name: $localize`Repeat interval` },
-      { prop: 'retention', name: $localize`Retention policy` },
+      { prop: 'subvol', name: $localize`Subvolume`, cellTemplate: this.subvolTpl },
+      { prop: 'scheduleCopy', name: $localize`Repeat interval` },
+      { prop: 'schedule', isHidden: true },
+      { prop: 'retentionCopy', name: $localize`Retention policy`, cellTemplate: this.retentionTpl },
+      { prop: 'retention', isHidden: true },
       { prop: 'created_count', name: $localize`Created Count` },
       { prop: 'pruned_count', name: $localize`Deleted Count` },
       { prop: 'start', name: $localize`Start time`, cellTransformation: CellTemplate.timeAgo },
@@ -230,7 +240,7 @@ export class CephfsSnapshotscheduleListComponent
   }
 
   deactivateSnapshotSchedule() {
-    const { path, start, fs, schedule } = this.selection.first();
+    const { path, start, fs, schedule, subvol, group } = this.selection.first();
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
@@ -244,14 +254,16 @@ export class CephfsSnapshotscheduleListComponent
             path,
             schedule,
             start,
-            fs
+            fs,
+            subvol,
+            group
           })
         })
     });
   }
 
   activateSnapshotSchedule() {
-    const { path, start, fs, schedule } = this.selection.first();
+    const { path, start, fs, schedule, subvol, group } = this.selection.first();
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
@@ -265,14 +277,16 @@ export class CephfsSnapshotscheduleListComponent
             path,
             schedule,
             start,
-            fs
+            fs,
+            subvol,
+            group
           })
         })
     });
   }
 
   deleteSnapshotSchedule() {
-    const { path, start, fs, schedule } = this.selection.first();
+    const { path, start, fs, schedule, subvol, group } = this.selection.first();
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
@@ -285,7 +299,9 @@ export class CephfsSnapshotscheduleListComponent
             path,
             schedule,
             start,
-            fs
+            fs,
+            subvol,
+            group
           })
         })
     });
