@@ -65,7 +65,13 @@ enum crush_opcodes {
 	CRUSH_RULE_SET_CHOOSE_LOCAL_TRIES = 10,
 	CRUSH_RULE_SET_CHOOSE_LOCAL_FALLBACK_TRIES = 11,
 	CRUSH_RULE_SET_CHOOSELEAF_VARY_R = 12,
-	CRUSH_RULE_SET_CHOOSELEAF_STABLE = 13
+	CRUSH_RULE_SET_CHOOSELEAF_STABLE = 13,
+
+	CRUSH_RULE_SET_MSR_DESCENTS = 14,
+	CRUSH_RULE_SET_MSR_COLLISION_TRIES = 15,
+
+	/* choose variant without FIRSTN|INDEP */
+	CRUSH_RULE_CHOOSE_MSR = 16
 };
 
 /*
@@ -87,7 +93,12 @@ struct crush_rule {
 #define crush_rule_size(len) (sizeof(struct crush_rule) + \
 			      (len)*sizeof(struct crush_rule_step))
 
-
+enum crush_rule_type {
+	CRUSH_RULE_TYPE_REPLICATED = 1,
+	CRUSH_RULE_TYPE_ERASURE = 3,
+	CRUSH_RULE_TYPE_MSR_FIRSTN = 4,
+	CRUSH_RULE_TYPE_MSR_INDEP = 5
+};
 
 /*
  * A bucket is a named container of other items (either devices or
@@ -409,6 +420,12 @@ struct crush_map {
          *  It should always be set to 1 except for backward compatibility.
          */
 	__u8 chooseleaf_stable;
+
+	/*! Sets total descents for MSR rules */
+	__u32 msr_descents;
+
+	/*! Sets local collision retries for MSR rules */
+	__u32 msr_collision_tries;
 
         /*! @cond INTERNAL */
 	/* This value is calculated after decode or construction by
