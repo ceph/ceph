@@ -245,7 +245,7 @@ once a limited cache is filled declines considerably.  Consider also durability:
 a drive rated for 0.3 Drive Writes Per Day (DWPD or equivalent) may be fine for
 OSDs dedicated to certain types of sequentially-written read-mostly data, but
 are not a good choice for Ceph Monitor duty.  Enterprise-class SSDs are best
-for Ceph:  they almost always feature power less protection (PLP) and do
+for Ceph:  they almost always feature power loss protection (PLP) and do
 not suffer the dramatic cliffing that client (desktop) models may experience.
 
 When using a single (or mirrored pair) SSD for both operating system boot
