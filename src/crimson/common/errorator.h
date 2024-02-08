@@ -522,9 +522,9 @@ private:
     }
 
   protected:
-    using base_t::get_exception;
     friend class ::transaction_manager_test_t;
   public:
+    using base_t::get_exception;
     using errorator_type = ::crimson::errorator<AllowedErrors...>;
     using promise_type = seastar::promise<ValueT>;
 
