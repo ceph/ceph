@@ -376,6 +376,20 @@ class SpecStore():
                     iscsi_spec.ssl_key,
                     service_name=iscsi_spec.service_name(),
                     user_made=True)
+        elif spec.service_type == 'ingress':
+            ingress_spec = cast(IngressSpec, spec)
+            if ingress_spec.ssl_cert:
+                self.mgr.cert_key_store.save_cert(
+                    'ingress_ssl_cert',
+                    ingress_spec.ssl_cert,
+                    service_name=ingress_spec.service_name(),
+                    user_made=True)
+            if ingress_spec.ssl_key:
+                self.mgr.cert_key_store.save_key(
+                    'ingress_ssl_key',
+                    ingress_spec.ssl_key,
+                    service_name=ingress_spec.service_name(),
+                    user_made=True)
 
     def rm(self, service_name: str) -> bool:
         if service_name not in self._specs:
@@ -411,6 +425,9 @@ class SpecStore():
         if spec.service_type == 'iscsi':
             self.mgr.cert_key_store.rm_cert('iscsi_ssl_cert', service_name=spec.service_name())
             self.mgr.cert_key_store.rm_key('iscsi_ssl_key', service_name=spec.service_name())
+        if spec.service_type == 'ingress':
+            self.mgr.cert_key_store.rm_cert('ingress_ssl_cert', service_name=spec.service_name())
+            self.mgr.cert_key_store.rm_key('ingress_ssl_key', service_name=spec.service_name())
 
     def get_created(self, spec: ServiceSpec) -> Optional[datetime.datetime]:
         return self.spec_created.get(spec.service_name())
