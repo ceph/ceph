@@ -131,6 +131,8 @@
 #include "messages/MClientMetrics.h"
 
 #include "messages/MMDSPeerRequest.h"
+#include "messages/MMDSQuiesceDbListing.h"
+#include "messages/MMDSQuiesceDbAck.h"
 
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
@@ -848,6 +850,14 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MDS_TABLE_REQUEST:
     m = make_message<MMDSTableRequest>();
+    break;
+
+  case MSG_MDS_QUIESCE_DB_LISTING:
+    m = make_message<MMDSQuiesceDbListing>();
+    break;
+
+  case MSG_MDS_QUIESCE_DB_ACK:
+    m = make_message<MMDSQuiesceDbAck>();
     break;
 
 	/*  case MSG_MDS_INODEUPDATE:
