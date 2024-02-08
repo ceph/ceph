@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-lines
 import errno
 import json
 import logging
 import os
 from collections import defaultdict
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import cephfs
 import cherrypy
@@ -952,7 +953,7 @@ class CephFSSnapshotSchedule(RESTController):
             return []
 
         snapshot_schedule_list = out.split('\n')
-        output: list[Any] = []
+        output: List[Any] = []
 
         for snap in snapshot_schedule_list:
             current_path = snap.strip().split(' ')[0]
@@ -997,3 +998,30 @@ class CephFSSnapshotSchedule(RESTController):
             )
 
         return f'Snapshot schedule for path {path} created successfully'
+
+    def set(self, fs: str, path: str, retention_to_add=None, retention_to_remove=None):
+        def editRetentionPolicies(method, retention_policy):
+            if not retention_policy:
+                return
+
+            retention_policies = retention_policy.split('|')
+            for retention in retention_policies:
+                retention_count = retention.split('-')[0]
+                retention_spec_or_period = retention.split('-')[1]
+                error_code_retention, _, err_retention = mgr.remote('snap_schedule',
+                                                                    method,
+                                                                    path,
+                                                                    retention_spec_or_period,
+                                                                    retention_count,
+                                                                    fs,
+                                                                    None,
+                                                                    None)
+                if error_code_retention != 0:
+                    raise DashboardException(
+                        f'Failed to add/remove retention policy for path {path}: {err_retention}'
+                    )
+
+        editRetentionPolicies('snap_schedule_retention_rm', retention_to_remove)
+        editRetentionPolicies('snap_schedule_retention_add', retention_to_add)
+
+        return f'Retention policies for snapshot schedule on path {path} updated successfully'

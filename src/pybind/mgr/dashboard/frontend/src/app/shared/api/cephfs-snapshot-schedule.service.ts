@@ -19,6 +19,14 @@ export class CephfsSnapshotScheduleService {
     return this.http.post(`${this.baseURL}/snapshot/schedule`, data, { observe: 'response' });
   }
 
+  update(data: Record<string, any>): Observable<any> {
+    return this.http.put(
+      `${this.baseURL}/snapshot/schedule/${data.fs}/${encodeURIComponent(data.path)}`,
+      data,
+      { observe: 'response' }
+    );
+  }
+
   checkScheduleExists(
     path: string,
     fs: string,
@@ -41,15 +49,21 @@ export class CephfsSnapshotScheduleService {
   checkRetentionPolicyExists(
     path: string,
     fs: string,
-    retentionFrequencies: string[]
+    retentionFrequencies: string[],
+    retentionFrequenciesRemoved: string[] = []
   ): Observable<{ exists: boolean; errorIndex: number }> {
-    return this.getList(path, fs, false).pipe(
+    return this.getSnapshotSchedule(path, fs, false).pipe(
       map((response) => {
         let errorIndex = -1;
         let exists = false;
         const index = response.findIndex((x) => x.path === path);
         const result = retentionFrequencies?.length
-          ? intersection(Object.keys(response?.[index]?.retention), retentionFrequencies)
+          ? intersection(
+              Object.keys(response?.[index]?.retention).filter(
+                (v) => !retentionFrequenciesRemoved.includes(v)
+              ),
+              retentionFrequencies
+            )
           : [];
         exists = !!result?.length;
         result?.forEach((r) => (errorIndex = retentionFrequencies.indexOf(r)));
@@ -62,10 +76,10 @@ export class CephfsSnapshotScheduleService {
     );
   }
 
-  private getList(path: string, fs: string, recursive = true): Observable<SnapshotSchedule[]> {
+  getSnapshotSchedule(path: string, fs: string, recursive = true): Observable<SnapshotSchedule[]> {
     return this.http
       .get<SnapshotSchedule[]>(
-        `${this.baseURL}/snapshot/schedule?path=${path}&fs=${fs}&recursive=${recursive}`
+        `${this.baseURL}/snapshot/schedule/${fs}?path=${path}&recursive=${recursive}`
       )
       .pipe(
         catchError(() => {
@@ -79,7 +93,7 @@ export class CephfsSnapshotScheduleService {
     fs: string,
     recursive = true
   ): Observable<SnapshotSchedule[]> {
-    return this.getList(path, fs, recursive).pipe(
+    return this.getSnapshotSchedule(path, fs, recursive).pipe(
       map((snapList: SnapshotSchedule[]) =>
         uniqWith(
           snapList.map((snapItem: SnapshotSchedule) => ({

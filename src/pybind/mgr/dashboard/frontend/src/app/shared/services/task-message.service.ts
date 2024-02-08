@@ -390,6 +390,9 @@ export class TaskMessageService {
     ),
     'cephfs/snapshot/schedule/create': this.newTaskMessage(this.commonOperations.add, (metadata) =>
       this.snapshotSchedule(metadata)
+    ),
+    'cephfs/snapshot/schedule/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.snapshotSchedule(metadata)
     )
   };
 
