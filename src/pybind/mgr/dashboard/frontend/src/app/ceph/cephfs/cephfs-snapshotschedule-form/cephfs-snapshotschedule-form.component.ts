@@ -5,6 +5,7 @@ import { uniq } from 'lodash';
 import { Observable, OperatorFunction, of, timer } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, map, switchMap } from 'rxjs/operators';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
+import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { DirectoryStoreService } from '~/app/shared/api/directory-store.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -23,6 +24,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 const VALIDATON_TIMER = 300;
 const DEBOUNCE_TIMER = 300;
+const DEFAULT_SUBVOLUME_GROUP = '_nogroup';
 
 @Component({
   selector: 'cd-cephfs-snapshotschedule-form',
@@ -36,12 +38,18 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
   retention!: string;
   start!: string;
   status!: string;
+  subvol!: string;
+  group!: string;
   id!: number;
   isEdit = false;
   icons = Icons;
   repeatFrequencies = Object.entries(RepeatFrequency);
   retentionFrequencies = Object.entries(RetentionFrequency);
   retentionPoliciesToRemove: RetentionPolicy[] = [];
+  isDefaultSubvolumeGroup = false;
+  subvolumeGroup!: string;
+  subvolume!: string;
+  isSubvolume = false;
 
   currentTime!: NgbTimeStruct;
   minDate!: NgbDateStruct;
@@ -59,7 +67,8 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
     private snapScheduleService: CephfsSnapshotScheduleService,
     private taskWrapper: TaskWrapperService,
     private cd: ChangeDetectorRef,
-    public directoryStore: DirectoryStoreService
+    public directoryStore: DirectoryStoreService,
+    private subvolumeService: CephfsSubvolumeService
   ) {
     super();
     this.resource = $localize`Snapshot schedule`;
@@ -82,6 +91,25 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
     this.directoryStore.loadDirectories(this.id, '/', 3);
     this.createForm();
     this.isEdit ? this.populateForm() : this.loadingReady();
+    this.snapScheduleForm.get('directory').valueChanges.subscribe({
+      next: (value: string) => {
+        this.subvolumeGroup = value?.split?.('/')?.[2];
+        this.subvolume = value?.split?.('/')?.[3];
+        this.subvolumeService
+          .exists(
+            this.subvolume,
+            this.fsName,
+            this.subvolumeGroup === DEFAULT_SUBVOLUME_GROUP ? '' : this.subvolumeGroup
+          )
+          .subscribe({
+            next: (exists: boolean) => {
+              this.isSubvolume = exists;
+              this.isDefaultSubvolumeGroup =
+                exists && this.subvolumeGroup === DEFAULT_SUBVOLUME_GROUP;
+            }
+          });
+      }
+    });
   }
 
   get retentionPolicies() {
@@ -149,6 +177,7 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
     this.snapScheduleForm = new CdFormGroup(
       {
         directory: new FormControl(undefined, {
+          updateOn: 'blur',
           validators: [Validators.required]
         }),
         startDate: new FormControl(this.minDate, {
@@ -234,6 +263,8 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
       const updateObj = {
         fs: this.fsName,
         path: this.path,
+        subvol: this.subvol,
+        group: this.group,
         retention_to_add: this.parseRetentionPolicies(retentionPoliciesToAdd) || null,
         retention_to_remove: this.parseRetentionPolicies(this.retentionPoliciesToRemove) || null
       };
@@ -262,9 +293,15 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
       };
 
       const retentionPoliciesValues = this.parseRetentionPolicies(values?.retentionPolicies);
-      if (retentionPoliciesValues) {
-        snapScheduleObj['retention_policy'] = retentionPoliciesValues;
+
+      if (retentionPoliciesValues) snapScheduleObj['retention_policy'] = retentionPoliciesValues;
+
+      if (this.isSubvolume) snapScheduleObj['subvol'] = this.subvolume;
+
+      if (this.isSubvolume && !this.isDefaultSubvolumeGroup) {
+        snapScheduleObj['group'] = this.subvolumeGroup;
       }
+
       this.taskWrapper
         .wrapTaskAroundCall({
           task: new FinishedTask('cephfs/snapshot/schedule/' + URLVerbs.CREATE, {
