@@ -78,7 +78,7 @@ namespace rgw::sal {
 // default number of entries to list with each bucket listing call
 // (use marker to bridge between calls)
 static constexpr size_t listing_max_entries = 1000;
-static std::string pubsub_oid_prefix = "pubsub.";
+const std::string pubsub_oid_prefix = "pubsub.";
 
 static int drain_aio(std::list<librados::AioCompletion*>& handles)
 {

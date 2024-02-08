@@ -14,6 +14,7 @@
  */
 
 #include "topic_migration.h"
+#include "services/svc_zone.h"
 #include "rgw_sal_rados.h"
 
 namespace rgwrados::topic_migration {
@@ -101,13 +102,50 @@ int migrate(const DoutPrefixProvider* dpp,
 
   ldpp_dout(dpp, 1) << "starting v1 topic migration.." << dendl;
 
-  // TODO: loop over all objects with pubsub_oid_prefix = "pubsub."
-  rgw_raw_obj obj;
-  if (obj.oid.find(".bucket.") != obj.oid.npos) {
-    (void) migrate_notification(dpp, y, driver, obj);
-  } else {
-    (void) migrate_topics(dpp, y, driver, obj);
+  librados::Rados* rados = driver->getRados()->get_rados_handle();
+  const rgw_pool& pool = driver->svc()->zone->get_zone_params().log_pool;
+  librados::IoCtx ioctx;
+  int r = rgw_init_ioctx(dpp, rados, pool, ioctx);
+  if (r < 0) {
+    ldpp_dout(dpp, 1) << "failed to initialize log pool for listing with: "
+        << cpp_strerror(r) << dendl;
+    return r;
   }
+
+  // loop over all objects with oid prefix "pubsub."
+  auto filter = rgw::AccessListFilterPrefix(rgw::sal::pubsub_oid_prefix);
+  constexpr uint32_t max = 100;
+  std::string marker;
+  bool truncated = false;
+
+  std::vector<std::string> oids;
+  do {
+    oids.clear();
+    int r = rgw_list_pool(dpp, ioctx, max, filter, marker, &oids, &truncated);
+    if (r == -ENOENT) {
+      r = 0;
+      break;
+    }
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "failed to list v1 topic metadata with: "
+          << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    for (const std::string& oid : oids) {
+      const auto obj = rgw_raw_obj{pool, oid};
+      if (oid.find(".bucket.") != oid.npos) {
+        ldpp_dout(dpp, 4) << "migrating v1 topics " << oid << dendl;
+        (void) migrate_notification(dpp, y, driver, obj);
+      } else {
+        ldpp_dout(dpp, 4) << "migrating v1 bucket notification " << oid << dendl;
+        (void) migrate_topics(dpp, y, driver, obj);
+      }
+    }
+    if (!oids.empty()) {
+      marker = oids.back(); // update marker for next listing
+    }
+  } while (truncated);
 
   ldpp_dout(dpp, 1) << "finished v1 topic migration" << dendl;
   return 0;
