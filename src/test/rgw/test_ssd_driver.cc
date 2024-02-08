@@ -11,6 +11,46 @@
 
 namespace net = boost::asio;
 
+rgw::AioResultList completed;
+uint64_t offset = 0;
+
+int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results) {
+  int r = rgw::check_for_errors(results);
+
+  if (r < 0) {
+    return r;
+  }
+
+  auto cmp = [](const auto& lhs, const auto& rhs) { return lhs.id < rhs.id; };
+  results.sort(cmp); // merge() requires results to be sorted first
+  completed.merge(results, cmp); // merge results in sorted order
+
+  while (!completed.empty() && completed.front().id == offset) {
+    auto ret = std::move(completed.front().result);
+
+    EXPECT_EQ(0, ret);
+    completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
+  }
+  return 0;
+}
+
+void cancel(rgw::Aio* aio) {
+  aio->drain();
+}
+
+int drain(const DoutPrefixProvider* dpp, rgw::Aio* aio) {
+  auto c = aio->wait();
+  while (!c.empty()) {
+    int r = flush(dpp, std::move(c));
+    if (r < 0) {
+      cancel(aio);
+      return r;
+    }
+    c = aio->wait();
+  }
+  return flush(dpp, std::move(c));
+}
+
 class Environment* env;
 
 class Environment : public ::testing::Environment {
@@ -211,6 +251,19 @@ TEST_F(SSDDriverFixture, DeleteData)
         EXPECT_EQ(get_attrs.size(), 0);
         ASSERT_EQ(0, cacheDriver->delete_data(env->dpp, "testDeleteData", optional_yield{io, yield}));
         ASSERT_EQ(-ENOENT, cacheDriver->get(env->dpp, "testDeleteData", 0, bl.length(), ret, get_attrs, optional_yield{io, yield}));
+    });
+
+    io.run();
+}
+
+TEST_F(SSDDriverFixture, PutAsync)
+{
+    spawn::spawn(io, [this] (spawn::yield_context yield) {
+        rgw::sal::Attrs attrs = {};
+        const uint64_t window_size = env->cct->_conf->rgw_put_obj_min_window_size;
+        std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(window_size, optional_yield{io, yield});
+        auto results = cacheDriver->put_async(env->dpp, optional_yield{io, yield}, aio.get(), "testPutAsync", bl, bl.length(), attrs, bl.length(), 0);
+        drain(env->dpp, aio.get());
     });
 
     io.run();
