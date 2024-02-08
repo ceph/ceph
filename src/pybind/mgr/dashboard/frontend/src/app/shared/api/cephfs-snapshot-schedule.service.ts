@@ -5,7 +5,12 @@ import { catchError, map } from 'rxjs/operators';
 import { intersection, isEqual, uniqWith } from 'lodash';
 import { SnapshotSchedule } from '../models/snapshot-schedule';
 import { of } from 'rxjs';
-import { RepeatFrequency } from '../enum/repeat-frequency.enum';
+import {
+  RepeaFrequencyPlural,
+  RepeaFrequencySingular,
+  RepeatFrequency
+} from '../enum/repeat-frequency.enum';
+import { RetentionFrequencyCopy } from '../enum/retention-frequency.enum';
 
 @Injectable({
   providedIn: 'root'
@@ -43,12 +48,14 @@ export class CephfsSnapshotScheduleService {
     );
   }
 
-  delete({ fs, path, schedule, start }: Record<string, any>): Observable<any> {
-    return this.http.delete(
-      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(
-        path
-      )}/delete_snapshot?schedule=${schedule}&start=${encodeURIComponent(start)}`
-    );
+  delete({ fs, path, schedule, start, subvol, group }: Record<string, any>): Observable<any> {
+    let deleteUrl = `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(
+      path
+    )}/delete_snapshot?schedule=${schedule}&start=${encodeURIComponent(start)}`;
+    if (subvol && group) {
+      deleteUrl += `&subvol=${encodeURIComponent(subvol)}&group=${encodeURIComponent(group)}`;
+    }
+    return this.http.delete(deleteUrl);
   }
 
   checkScheduleExists(
@@ -122,8 +129,10 @@ export class CephfsSnapshotScheduleService {
         uniqWith(
           snapList.map((snapItem: SnapshotSchedule) => ({
             ...snapItem,
+            scheduleCopy: this.parseScheduleCopy(snapItem.schedule),
             status: snapItem.active ? 'Active' : 'Inactive',
-            subvol: snapItem?.subvol || ' - ',
+            subvol: snapItem?.subvol,
+            retentionCopy: this.parseRetentionCopy(snapItem?.retention),
             retention: Object.values(snapItem?.retention || [])?.length
               ? Object.entries(snapItem.retention)
                   ?.map?.(([frequency, interval]) => `${interval}${frequency.toLocaleUpperCase()}`)
@@ -133,6 +142,22 @@ export class CephfsSnapshotScheduleService {
           isEqual
         )
       )
+    );
+  }
+
+  parseScheduleCopy(schedule: string): string {
+    const scheduleArr = schedule.split('');
+    const interval = Number(scheduleArr.filter((x) => !isNaN(Number(x))).join(''));
+    const frequencyUnit = scheduleArr[scheduleArr.length - 1];
+    const frequency =
+      interval > 1 ? RepeaFrequencyPlural[frequencyUnit] : RepeaFrequencySingular[frequencyUnit];
+    return $localize`Every ${interval > 1 ? interval + ' ' : ''}${frequency}`;
+  }
+
+  parseRetentionCopy(retention: string | Record<string, number>): string[] {
+    if (!retention) return ['-'];
+    return Object.entries(retention).map(([frequency, interval]) =>
+      $localize`${interval} ${RetentionFrequencyCopy[frequency]}`.toLocaleLowerCase()
     );
   }
 }

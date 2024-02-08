@@ -6,3 +6,12 @@ export enum RetentionFrequency {
   Yearly = 'y',
   'lastest snapshots' = 'n'
 }
+
+export enum RetentionFrequencyCopy {
+  h = 'Hourly',
+  d = 'Daily',
+  w = 'Weekly',
+  m = 'Monthly',
+  y = 'Yearly',
+  n = 'lastest snapshots'
+}
