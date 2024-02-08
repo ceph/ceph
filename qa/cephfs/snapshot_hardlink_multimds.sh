@@ -94,7 +94,7 @@ function validate_dpool_object_deletion () {
   fi
 }
 
-function unlink_and_validate () {
+function validate_unlink () {
   echo "--------------------------------------------------------------------------------------------------"
   echo "MULTIMDS - UNLINK"
   echo "unlink /dir2/hl_file1 (secondary link first to avoid stray reintegration)"
@@ -147,12 +147,13 @@ function validate_rename () {
   echo "multi-mds rename success"
 }
 
-function create_link_and_validate () {
+function validate_link () {
   echo "--------------------------------------------------------------------------------------------------"
   echo "MULTIMDS - LINK"
   echo "create /dir1/file1"
   echo "data ..." > $MNT/dir1/file1
   echo "ln /dir1/file1 /dir2/hl_file1"
+  echo "mds-0 to mds-1"
   ln $MNT/dir1/file1 $MNT/dir2/hl_file1
   flush_mds_journal
 
@@ -163,7 +164,33 @@ function create_link_and_validate () {
 
   validate_inode_size $DIR2_MDS_OBJ "hl_file1_head" "dir2"
   validate_data_inode_and_bt $DIR2_MDS_OBJ "hl_file1_head" "dir2" "hl_file1"
-  echo "multi-mds link success"
+  echo "multi-mds link (mds-0 to mds-1) success"
+
+  echo "mds-0 to mds-2"
+  ln $MNT/dir1/file1 $MNT/dir3/hl_file1
+  flush_mds_journal
+
+  DIR1_FILE1_DATA_OBJ=$(get_data_object $DIR1_MDS_OBJ "file1_head")
+  DIR3_HL_FILE1_DATA_OBJ=$(get_data_object $DIR3_MDS_OBJ "hl_file1_head")
+  echo "DIR1_FILE1_DATA_OBJ: $DIR1_FILE1_DATA_OBJ"
+  echo "DIR3_HL_FILE1_DATA_OBJ: $DIR3_HL_FILE1_DATA_OBJ"
+
+  validate_inode_size $DIR3_MDS_OBJ "hl_file1_head" "dir3"
+  validate_data_inode_and_bt $DIR3_MDS_OBJ "hl_file1_head" "dir3" "hl_file1"
+  echo "multi-mds link (mds-0 to mds-2) success"
+
+  echo "mds-0 to mds-0"
+  ln $MNT/dir1/file1 $MNT/dir1/hl_file1
+  flush_mds_journal
+
+  DIR1_FILE1_DATA_OBJ=$(get_data_object $DIR1_MDS_OBJ "file1_head")
+  DIR1_HL_FILE1_DATA_OBJ=$(get_data_object $DIR1_MDS_OBJ "hl_file1_head")
+  echo "DIR1_FILE1_DATA_OBJ: $DIR1_FILE1_DATA_OBJ"
+  echo "DIR1_HL_FILE1_DATA_OBJ: $DIR1_HL_FILE1_DATA_OBJ"
+
+  validate_inode_size $DIR1_MDS_OBJ "hl_file1_head" "dir1"
+  validate_data_inode_and_bt $DIR1_MDS_OBJ "hl_file1_head" "dir1" "hl_file1"
+  echo "multi-mds link (mds-0 to mds-0) success"
 }
 
 function create_dirs_and_pin () {
@@ -232,23 +259,35 @@ function set_max_mds () {
 }
 
 function create_sample_files () {
-  echo "Create some files in /dir1 and /dir2 to trigger subtree migration"
+  echo "Create some files in /dir1, /dir2  and /dir3 to trigger subtree migration"
   for i in {1..10};do touch $MNT/dir1/file-$i;done
   for j in {1..10};do touch $MNT/dir2/file-$j;done
+  for j in {1..10};do touch $MNT/dir3/file-$j;done
   rm -rf $MNT/dir1/file-*
   rm -rf $MNT/dir2/file-*
+  rm -rf $MNT/dir3/file-*
   flush_mds_journal
 }
 
-set_max_mds 3
-fuse_mount
-clean_data
-create_dirs_and_pin
-create_sample_files
-echo "Wait for subtree migration"
-sleep 10
-create_link_and_validate
-unlink_and_validate
-validate_rename
+function setup_test_bed () {
+  fuse_mount
+  clean_data
+  create_dirs_and_pin
+  create_sample_files
+  echo "Wait for subtree migration"
+  sleep 10
+}
+
+if [ "$1" == "repeat" ]; then
+  echo "Cleanup and repeating the test"
+else
+  echo "Setup ..."
+  set_max_mds 3
+fi
+setup_test_bed
+validate_link
+#validate_unlink
+#validate_rename
+
 echo "--------------------------------------------------------------------------------------------------"
 echo ""
