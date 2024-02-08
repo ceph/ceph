@@ -505,10 +505,6 @@ if(NOT WITH_SYSTEM_BOOST)
   list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
 endif()
 
-if(HAVE_QATZIP)
-  list(APPEND ceph_common_deps ${qatzip_LIBRARIES})
-endif()
-
 if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
 endif()

@@ -16,9 +16,11 @@
 #include <vector>
 #include <functional>
 #include <span>
-#include "boost/circular_buffer.hpp"
-#include "boost/asio/thread_pool.hpp"
+#include <boost/circular_buffer.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
 extern "C" {
+#ifdef HAVE_QATDRV
 #include "cpa.h"
 #include "cpa_cy_sym_dp.h"
 #include "cpa_cy_im.h"
@@ -28,6 +30,15 @@ extern "C" {
 #include "icp_sal_user.h"
 #include "icp_sal_poll.h"
 #include "qae_mem_utils.h"
+#else
+#include <qat/cpa.h>
+#include <qat/cpa_cy_im.h>
+#include <qat/cpa_cy_sym_dp.h>
+#include <qat/cpa_cy_sym.h>
+#include <qat/qae_mem.h>
+#include <qat/icp_sal_user.h>
+#include <qat/icp_sal_poll.h>
+#endif
 }
 
 class QccCrypto {
