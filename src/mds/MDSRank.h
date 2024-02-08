@@ -566,6 +566,7 @@ class MDSRank {
 
     void quiesce_cluster_update();
     void quiesce_agent_setup();
+    bool quiesce_dispatch(const cref_t<Message> &m);
 
     /* Update MDSMap export_targets for this rank. Called on ::tick(). */
     void update_targets();

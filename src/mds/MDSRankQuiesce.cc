@@ -3,10 +3,15 @@
 
 #include "QuiesceDbManager.h"
 #include "QuiesceAgent.h"
+
+#include "messages/MMDSQuiesceDbListing.h"
+#include "messages/MMDSQuiesceDbAck.h"
+
 #include <boost/url.hpp>
 #include <chrono>
 #include <ranges>
 #include <algorithm>
+#include <queue>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds_quiesce
@@ -203,46 +208,203 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
     }
   });
 
-  dout(20) << "Submitting a quiesce db request " << (set_id ? "for" : "without a") << " setid " << set_id.value_or("") << ", operation: " << ctx->request.op_string() << dendl;
+  dout(20) << "Submitting " << ctx->request << dendl;
   int rc = quiesce_db_manager->submit_request(ctx);
   if (rc != 0) {
     bufferlist bl;
+    // on_finish was moved there, so should only call via the ctx.
+    ctx->on_finish(rc, "Error submitting the command to the local db manager", bl);
     delete ctx;
-    on_finish(rc, "Error submitting the command to the local db manager", bl);
   }
 }
 
-void MDSRank::quiesce_cluster_update() {
-  QuiesceClusterMembership membership;
-
-  mds_rank_t leader = 0; // MAYBE LATER: initialize this from the map
-
-  membership.epoch = mdsmap->get_epoch();
-  membership.leader = leader;
-  membership.me = whoami;
-  membership.fs_id = mdsmap->get_info(whoami).join_fscid;
-  membership.fs_name = mdsmap->get_fs_name();
-  mdsmap->get_mds_set(membership.members);
-
-  dout(5) << "epoch:" << membership.epoch << " leader:" << membership.leader << " members:" << membership.members << dendl;
-
-  membership.send_ack = [=,this](QuiesceMap&& ack) {
-    if (whoami == leader) {
-      // loopback
-      quiesce_db_manager->submit_ack_from(whoami, std::move(ack));
-      return 0;
+static void rebind_agent_callback(std::shared_ptr<QuiesceAgent> agt, std::shared_ptr<QuiesceDbManager> mgr) {
+  if (!agt || !mgr) {
+    return;
+  }
+  std::weak_ptr<QuiesceAgent> weak_agent = agt;
+  mgr->reset_agent_callback([weak_agent](QuiesceMap& update) {
+    if (auto agent = weak_agent.lock()) {
+      return agent->db_update(update);
     } else {
-      // TODO: implement messaging
-      return -ENOTSUP;
+      return false;
+    }
+  });
+}
+
+void MDSRank::quiesce_cluster_update() {
+  // the quiesce leader is the lowest rank with the highest state up to ACTIVE
+  auto less_leader = [](MDSMap::mds_info_t const* l, MDSMap::mds_info_t const* r) {
+    ceph_assert(l->rank != MDS_RANK_NONE);
+    ceph_assert(r->rank != MDS_RANK_NONE);
+    ceph_assert(l->state <= MDSMap::STATE_ACTIVE);
+    ceph_assert(r->state <= MDSMap::STATE_ACTIVE);
+    if (l->rank == r->rank) {
+      return l->state < r->state;
+    } else {
+      return l->rank > r->rank;
     }
   };
 
-  membership.send_listing_to = [=](mds_rank_t to, QuiesceDbListing&& db) {
-    // TODO: implement messaging
-    return -ENOTSUP;
-  };
+  std::priority_queue<MDSMap::mds_info_t const*, std::vector<MDSMap::mds_info_t const*>, decltype(less_leader)> member_info(less_leader);
+  QuiesceClusterMembership membership;
 
-  quiesce_db_manager->update_membership(membership);
+  QuiesceInterface::PeerId me = mds_gid_t(monc->get_global_id());
+
+  for (auto&& [gid, info] : mdsmap->get_mds_info()) {
+    // if it has a rank and state <= ACTIVE, it's good enough
+    if (info.rank != MDS_RANK_NONE && info.state <= MDSMap::STATE_ACTIVE) {
+      member_info.push(&info);
+      membership.members.insert(info.global_id);
+    }
+  }
+
+  QuiesceInterface::PeerId leader = 
+    member_info.empty() 
+    ? QuiesceClusterMembership::INVALID_MEMBER 
+    : member_info.top()->global_id;
+
+  membership.epoch = mdsmap->get_epoch();
+  membership.leader = leader;
+  membership.me = me;
+  membership.fs_name = mdsmap->get_fs_name();
+
+  dout(5) << "epoch:" << membership.epoch << " me:" << me << " leader:" << leader << " members:" << membership.members 
+    << (mdsmap->is_degraded() ? " (degraded)" : "") << dendl;
+
+  if (leader != QuiesceClusterMembership::INVALID_MEMBER) {
+    membership.send_ack = [=, this](QuiesceMap&& ack) {
+      if (me == leader) {
+        // loopback
+        quiesce_db_manager->submit_ack_from(me, std::move(ack));
+        return 0;
+      } else {
+        std::lock_guard guard(mds_lock);
+
+        if (mdsmap->get_state_gid(leader) == MDSMap::STATE_NULL) {
+          dout(5) << "couldn't find the leader " << leader << " in the map" << dendl;
+          return -ENOENT;
+        }
+        auto addrs = mdsmap->get_info_gid(leader).addrs;
+
+        auto ack_msg = make_message<MMDSQuiesceDbAck>(me);
+        dout(10) << "sending ack " << ack << " to the leader " << leader << dendl;
+        ack_msg->diff_map = std::move(ack);
+        return send_message_mds(ack_msg, addrs);
+      }
+    };
+
+    membership.send_listing_to = [=, this](QuiesceInterface::PeerId to, QuiesceDbListing&& db) {
+      std::lock_guard guard(mds_lock);
+      if (mdsmap->get_state_gid(to) == MDSMap::STATE_NULL) {
+        dout(5) << "couldn't find the peer " << to << " in the map" << dendl;
+        return -ENOENT;
+      }
+      auto addrs = mdsmap->get_info_gid(to).addrs;
+      auto listing_msg = make_message<MMDSQuiesceDbListing>(me);
+      dout(10) << "sending listing " << db << " to the peer " << to << dendl;
+      listing_msg->db_listing = std::move(db);
+      return send_message_mds(listing_msg, addrs);
+    };
+  }
+
+  QuiesceDbManager::RequestContext* inject_request = nullptr;
+
+  bool degraded = mdsmap->is_degraded();
+
+  if (degraded && membership.is_leader()) {
+    dout(5) << "WARNING: injecting a cancel all request"
+      << " members: " << membership.members
+      << " in: " << mdsmap->get_num_in_mds() 
+      << " up: " << mdsmap->get_num_up_mds() 
+      << " sr: " << mdsmap->get_num_standby_replay_mds()
+      << dendl;
+    
+    struct CancelAll: public QuiesceDbManager::RequestContext {
+      mds_rank_t whoami;
+      CancelAll(mds_rank_t whoami) : whoami(whoami) {
+        request.cancel_roots();
+      }
+      void finish(int rc) override {
+        dout(rc == 0 ? 15 : 3) << "injected cancel all completed with rc: " << rc << dendl;
+      }
+    };
+
+    inject_request = new CancelAll(whoami);
+  }
+
+  if (!is_active()) {
+    quiesce_db_manager->reset_agent_callback([whoami = whoami, degraded, is_sr = is_standby_replay()](QuiesceMap& quiesce_map) {
+      for (auto it = quiesce_map.roots.begin(); it != quiesce_map.roots.end();) {
+        switch (it->second.state) {
+        case QS_QUIESCING:
+          if (degraded) {
+            it->second.state = QS_FAILED;
+            dout(3) << "DEGRADED RESPONDER: reporting '" << it->first << "' as " << it->second.state << dendl;
+            ++it;
+          } else if (is_sr) {
+            it->second.state = QS_QUIESCED;
+            dout(15) << "STANDBY REPLAY RESPONDER: reporting '" << it->first << "' as " << it->second.state << dendl;
+            ++it;
+          } else {
+            // just ack.
+            dout(20) << "INTACTIVE RESPONDER: reporting '" << it->first << "' as " << it->second.state << dendl;
+            it = quiesce_map.roots.erase(it);
+          }
+          break;
+        default:
+          it = quiesce_map.roots.erase(it);
+          break;
+        }
+      }
+      return true;
+    });
+
+    if (quiesce_agent) {
+      // reset the agent if it's present
+      // because it won't receive any more callbacks
+      quiesce_agent->reset_async();
+    }
+  } else {
+    rebind_agent_callback(quiesce_agent, quiesce_db_manager);
+  }
+
+  quiesce_db_manager->update_membership(membership, inject_request);
+}
+
+bool MDSRank::quiesce_dispatch(const cref_t<Message> &m) {
+  switch(m->get_type()) {
+    case MSG_MDS_QUIESCE_DB_LISTING:
+    {
+      const auto& req = ref_cast<MMDSQuiesceDbListing>(m);
+      if (quiesce_db_manager) {
+        dout(10) << "got " << req->db_listing << " from peer " << req->gid << dendl;
+        int result = quiesce_db_manager->submit_listing_from(req->gid, std::move(req->db_listing));
+        if (result != 0) {
+          dout(3) << "error (" << result << ") submitting " << req->db_listing << " from peer " << req->gid << dendl;
+        }
+      } else {
+        dout(5) << "no db manager to process " << req->db_listing << dendl;
+      }
+      return true;
+    }
+    case MSG_MDS_QUIESCE_DB_ACK:
+    {
+      const auto& req = ref_cast<MMDSQuiesceDbAck>(m);
+      if (quiesce_db_manager) {
+        dout(10) << "got ack " << req->diff_map << " from peer " << req->gid << dendl;
+        int result = quiesce_db_manager->submit_ack_from(req->gid, std::move(req->diff_map));
+        if (result != 0) {
+          dout(3) << "error (" << result << ") submitting an ack from peer " << req->gid << dendl;
+        }
+      } else {
+        dout(5) << "no db manager to process an ack: " << req->diff_map << dendl;
+      }
+      return true;
+    }
+    default:
+      return false;
+  }
 }
 
 void MDSRank::quiesce_agent_setup() {
@@ -278,15 +440,43 @@ void MDSRank::quiesce_agent_setup() {
         return std::nullopt;
       }
     }
-    std::optional<double> dummy_quiesce_after;
+    std::optional<double> debug_quiesce_after;
     if (auto pit = uri->params().find("q"); pit != uri->params().end()) {
       try {
-        dummy_quiesce_after = (*pit).has_value ? std::stod((*pit).value) : 1 /*second*/;
+        debug_quiesce_after = (*pit).has_value ? std::stod((*pit).value) : 1 /*second*/;
       } catch (...) {
         dout(5) << "error parsing the time for debug quiesce for query: " << uri->query() << dendl;
         c->complete(-EINVAL);
         return std::nullopt;
       }
+    }
+    std::optional<double> debug_fail_after;
+    if (auto pit = uri->params().find("f"); pit != uri->params().end()) {
+      try {
+        debug_fail_after = (*pit).has_value ? std::stod((*pit).value) : 1 /*second*/;
+      } catch (...) {
+        dout(5) << "error parsing the time for debug fail for query: " << uri->query() << dendl;
+        c->complete(-EINVAL);
+        return std::nullopt;
+      }
+    }
+    std::optional<mds_rank_t> debug_rank;
+    if (auto pit = uri->params().find("r"); pit != uri->params().end()) {
+      try {
+        if ((*pit).has_value) {
+          debug_rank = (mds_rank_t)std::stoul((*pit).value);
+        }
+      } catch (...) {
+        dout(5) << "error parsing the rank for debug pin for query: " << uri->query() << dendl;
+        c->complete(-EINVAL);
+        return std::nullopt;
+      }
+    }
+
+    if (debug_rank && (debug_rank >= mdsmap->get_max_mds())) {
+        dout(5) << "invalid rank: " << uri->query() << dendl;
+        c->complete(-EINVAL);
+        return std::nullopt;
     }
 
     auto path = uri->path();
@@ -294,13 +484,18 @@ void MDSRank::quiesce_agent_setup() {
 
     std::lock_guard l(mds_lock);
 
-    if (!dummy_quiesce_after) {
+    if (!debug_quiesce_after && !debug_fail_after && !debug_rank) {
       // the real deal!
+      if (mdsmap->is_degraded()) {
+        dout(3) << "DEGRADED: refusing to quiesce" << dendl;
+        c->complete(EPERM);
+        return std::nullopt;
+      }
       auto qc = new MDCache::C_MDS_QuiescePath(mdcache, c);
       auto mdr = mdcache->quiesce_path(filepath(path), qc, nullptr, quiesce_delay_ms);
       return mdr ? mdr->reqid : std::optional<RequestHandle>();
     } else {
-      /* dummy quiesce */
+      /* dummy quiesce/fail */
       // always create a new request id
       auto req_id = metareqid_t(entity_name_t::MDS(whoami), issue_tid());
       auto [it, inserted] = quiesce_requests->try_emplace(path, req_id, c);
@@ -317,25 +512,44 @@ void MDSRank::quiesce_agent_setup() {
           // since we weren't inserted, we must have successfully quiesced
           c->complete(0);
         }
+      } else if (debug_rank && (debug_rank != whoami)) {
+        // the root was pinned to a different rank
+        // we should acknowledge the quiesce regardless of the other flags
+        it->second.second->complete(0);
+        it->second.second = nullptr;
       } else {
-        // do quiesce if needed
+        // do quiesce or fail
 
-        auto quiesce_task = new LambdaContext([quiesce_requests, req_id, this](int) {
+        bool do_fail = false;
+        double delay;
+        if (debug_quiesce_after.has_value() && debug_fail_after.has_value()) {
+          do_fail = debug_fail_after < debug_quiesce_after;
+        } else {
+          do_fail = debug_fail_after.has_value();
+        }
+
+        if (do_fail) {
+          delay = debug_fail_after.value();
+        } else {
+          delay = debug_quiesce_after.value();
+        }
+
+        auto quiesce_task = new LambdaContext([quiesce_requests, req_id, do_fail, this](int) {
           // the mds lock should be held by the timer
           dout(20) << "quiesce_task: callback by the timer" << dendl;
           auto it = std::ranges::find(*quiesce_requests, req_id, [](auto x) { return x.second.first; });
           if (it != quiesce_requests->end() && it->second.second != nullptr) {
-            dout(20) << "quiesce_task: completing the root '" << it->first << "'" << dendl;
-            it->second.second->complete(0);
+            dout(20) << "quiesce_task: completing the root '" << it->first << "' as failed: " << do_fail << dendl;
+            it->second.second->complete(do_fail ? -EBADF : 0);
             it->second.second = nullptr;
           }
           dout(20) << "quiesce_task: done" << dendl;
         });
 
         dout(20) << "scheduling a quiesce_task (" << quiesce_task
-                 << ") to fire after " << *dummy_quiesce_after
+                 << ") to fire after " << delay
                  << " seconds on timer " << &timer << dendl;
-        timer.add_event_after(*dummy_quiesce_after, quiesce_task);
+        timer.add_event_after(delay, quiesce_task);
       }
       return it->second.first;
     }
@@ -373,13 +587,5 @@ void MDSRank::quiesce_agent_setup() {
   };
 
   quiesce_agent.reset(new QuiesceAgent(ci));
-
-  std::weak_ptr<QuiesceAgent> weak_agent = quiesce_agent;
-  quiesce_db_manager->reset_agent_callback([weak_agent](QuiesceMap& update) {
-    if (auto agent = weak_agent.lock()) {
-      return agent->db_update(update);
-    } else {
-      return false;
-    }
-  });
+  rebind_agent_callback(quiesce_agent, quiesce_db_manager);
 };
