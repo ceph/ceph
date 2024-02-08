@@ -6648,7 +6648,7 @@ int BlueStore::_read_main_bdev_label(
   for (uint64_t position : bdev_label_positions) {
     bluestore_bdev_label_t label;
     int r = _read_bdev_label(cct, path + "/block", &label, position);
-    if (r == 0) {
+    if (r == 0 && (fsid.is_zero() || label.osd_uuid == fsid)) {
       auto i = label.meta.find("multi");
       bool is_multi = i != label.meta.end() && i->second == "yes";
       if (position == BDEV_LABEL_POSITION && !is_multi) {
@@ -6689,6 +6689,9 @@ int BlueStore::_read_main_bdev_label(
           out_valid_positions->push_back(position);
         }
       }
+    } else if (r == 0) {
+      derr << __func__ << " label at 0x" << std::hex << position << std::dec
+        << " correct, but osd_uuid=" << label.osd_uuid << " need=" << fsid << dendl;
     } else if (r == 1) {
       // tried to read but no disk
     } else {
