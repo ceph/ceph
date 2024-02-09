@@ -140,6 +140,9 @@ as follows:
 :command:`object stat`
   Stat an object for its metadata.
 
+:command:`object manifest`
+  Display the manifest of RADOS objects containing the data.
+
 :command:`object unlink`
   Unlink object from bucket index.
 
