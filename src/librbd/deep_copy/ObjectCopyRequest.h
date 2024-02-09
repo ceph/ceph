@@ -71,6 +71,10 @@ private:
    *    v          |
    * READ ---------/
    *    |
+   *    |
+   *    v
+   * COPY_UP (for cloned image)
+   *    |
    *    |     /-----------\
    *    |     |           | (repeat for each snapshot)
    *    v     v           |
@@ -134,6 +138,9 @@ private:
 
   void send_update_object_map();
   void handle_update_object_map(int r);
+
+  void trigger_copyup();
+  void handle_trigger_copyup(int r);
 
   void process_copyup();
   void send_write_object();

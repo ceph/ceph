@@ -137,7 +137,7 @@ void ObjectCopyRequest<I>::send_read() {
     merge_write_ops();
     compute_zero_ops();
 
-    send_update_object_map();
+    trigger_copyup();
     return;
   }
 
@@ -833,6 +833,51 @@ void ObjectCopyRequest<I>::compute_dst_object_may_exist() {
 
   ldout(m_cct, 20) << "dst_object_may_exist=" << m_dst_object_may_exist
                    << dendl;
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::trigger_copyup() {
+  // When performing a deep copy with incremental snapshots, it is possible
+  // that not all data will be synced correctly. A write to a non-existent
+  // object in a cloned image triggers a copyup which updates the older synced
+  // snaps with the parent data. As this snapshot was already processed, the changes
+  // are not copied again and the parent data will not be synced, causing data
+  // corruption.
+  // For cloned images, we now trigger a copyup on the object and write the parent
+  // data to the object before writing the new clone image data.
+  if ((m_dst_image_ctx->parent != nullptr) &&
+      (m_src_snap_id_start != 0 && m_src_image_ctx->parent != nullptr)) {
+    ldout(m_cct, 20) << dendl;
+    auto io_context = m_dst_image_ctx->get_data_io_context();
+    auto ctx = create_context_callback<
+	    ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_trigger_copyup>(this);
+    bool r = io::util::trigger_copyup(m_dst_image_ctx, m_dst_object_number,
+				      io_context, ctx);
+    if (r == false) {
+      // No parent found
+      delete ctx;
+      send_update_object_map();
+      return;
+    }
+  } else {
+    send_update_object_map();
+    return;
+  }
+}
+
+
+template <typename I>
+void ObjectCopyRequest<I>::handle_trigger_copyup(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to trigger copyup for destination object: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
+    return;
+  }
+
+  send_update_object_map();
 }
 
 } // namespace deep_copy
