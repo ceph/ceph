@@ -554,9 +554,6 @@ TransactionManager::rewrite_logical_extent(
           fut = lba_manager->alloc_extent(
             t,
             lextent->get_laddr() + off,
-            nlextent->get_length(),
-            nlextent->get_paddr(),
-            nlextent->get_last_committed_crc(),
             *nlextent
           ).si_then([lextent, nlextent, off](auto mapping) {
             ceph_assert(mapping->get_key() == lextent->get_laddr() + off);

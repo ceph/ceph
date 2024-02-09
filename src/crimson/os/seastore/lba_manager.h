@@ -85,9 +85,6 @@ public:
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len,
-    paddr_t addr,
-    uint32_t checksum,
     LogicalCachedExtent &nextent) = 0;
 
   virtual alloc_extent_ret clone_mapping(
@@ -95,7 +92,6 @@ public:
     laddr_t hint,
     extent_len_t len,
     laddr_t intermediate_key,
-    paddr_t actual_addr,
     laddr_t intermediate_base) = 0;
 
   virtual alloc_extent_ret reserve_region(

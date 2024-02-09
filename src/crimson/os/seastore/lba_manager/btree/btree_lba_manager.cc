@@ -306,7 +306,6 @@ BtreeLBAManager::_alloc_extent(
   laddr_t hint,
   extent_len_t len,
   pladdr_t addr,
-  paddr_t actual_addr,
   uint32_t checksum,
   LogicalCachedExtent* nextent)
 {
@@ -322,7 +321,6 @@ BtreeLBAManager::_alloc_extent(
   LOG_PREFIX(BtreeLBAManager::_alloc_extent);
   TRACET("{}~{}, hint={}", t, addr, len, hint);
 
-  ceph_assert(actual_addr != P_ADDR_NULL ? addr.is_laddr() : addr.is_paddr());
   auto c = get_context(t);
   ++stats.num_alloc_extents;
   auto lookup_attempts = stats.num_alloc_extents_iter_nexts;

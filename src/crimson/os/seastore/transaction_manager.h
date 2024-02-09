@@ -309,9 +309,6 @@ public:
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
-      len,
-      ext->get_paddr(),
-      0, // checksum will be updated upon transaction commit
       *ext
     ).si_then([ext=std::move(ext), laddr_hint, &t](auto &&) mutable {
       LOG_PREFIX(TransactionManager::alloc_non_data_extent);
@@ -359,9 +356,6 @@ public:
         return lba_manager->alloc_extent(
           t,
           laddr_hint,
-          ext->get_length(),
-          ext->get_paddr(),
-	  0, // checksum will be updated upon trans commit
           *ext
         ).si_then([&ext, &laddr_hint, &t](auto &&) mutable {
           LOG_PREFIX(TransactionManager::alloc_extents);
@@ -591,7 +585,6 @@ public:
       hint,
       mapping.get_length(),
       intermediate_key,
-      mapping.get_val(),
       intermediate_base
     );
   }
@@ -971,18 +964,16 @@ private:
 	remap_length,
 	original_laddr,
 	std::move(original_bptr));
-      fut = lba_manager->alloc_extent(
-	t, remap_laddr, remap_length, remap_paddr,
-	//TODO: oringal_bptr must be present if crc is enabled
-	(original_bptr.has_value() ? ext->calc_crc32c() : 0),
-	*ext);
+      if (original_bptr.has_value()) {
+	ext->set_last_committed_crc(ext->get_crc32c());
+      }
+      fut = lba_manager->alloc_extent(t, remap_laddr, *ext);
     } else {
       fut = lba_manager->clone_mapping(
 	t,
 	remap_laddr,
 	remap_length,
 	intermediate_key,
-	remap_paddr,
 	intermediate_base);
     }
     return fut.si_then([remap_laddr, remap_length, remap_paddr](auto &&ref) {

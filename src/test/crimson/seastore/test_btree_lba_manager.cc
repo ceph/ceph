@@ -481,7 +481,7 @@ struct btree_lba_manager_test : btree_test_base {
 	assert(extents.size() == 1);
 	auto extent = extents.front();
 	return lba_manager->alloc_extent(
-	  t, hint, len, extent->get_paddr(), 0, *extent);
+	  t, hint, *extent);
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());

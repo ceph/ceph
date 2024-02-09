@@ -224,7 +224,6 @@ public:
       hint,
       len,
       P_ADDR_ZERO,
-      P_ADDR_NULL,
       0,
       nullptr);
   }
@@ -234,7 +233,6 @@ public:
     laddr_t hint,
     extent_len_t len,
     laddr_t intermediate_key,
-    paddr_t actual_addr,
     laddr_t intermediate_base)
   {
     assert(intermediate_key != L_ADDR_NULL);
@@ -244,7 +242,6 @@ public:
       hint,
       len,
       intermediate_key,
-      actual_addr,
       0,
       nullptr
     ).si_then([&t, this, intermediate_base](auto indirect_mapping) {
@@ -269,18 +266,14 @@ public:
   alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len,
-    paddr_t addr,
-    uint32_t checksum,
     LogicalCachedExtent &ext) final
   {
     return _alloc_extent(
       t,
       hint,
-      len,
-      addr,
-      P_ADDR_NULL,
-      checksum,
+      ext.get_length(),
+      ext.get_paddr(),
+      ext.get_last_committed_crc(),
       &ext);
   }
 
@@ -407,7 +400,6 @@ private:
     laddr_t hint,
     extent_len_t len,
     pladdr_t addr,
-    paddr_t actual_addr,
     uint32_t checksum,
     LogicalCachedExtent*);
 
