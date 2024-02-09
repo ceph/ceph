@@ -144,8 +144,25 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{}.{}: pg active, entering process[_pg]_op",
 	   *pgref, *this, this_instance_id);
 
-  co_await (is_pg_op() ? process_pg_op(pgref) :
-	    process_op(ihref, pgref, this_instance_id));
+  {
+    /* The following works around two different gcc bugs:
+     *  1. https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101244
+     *     This example isn't preciesly as described in the bug, but it seems
+     *     similar.  It causes the generated code to incorrectly execute
+     *     process_pg_op unconditionally before the predicate.  It seems to be
+     *     fixed in gcc 12.2.1.
+     *  2. https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102217
+     *     This one appears to cause the generated code to double-free
+     *     awaiter holding the future.  This one seems to be fixed
+     *     in gcc 13.2.1.
+     *
+     * Assigning the intermediate result and moving it into the co_await
+     * expression bypasses both bugs.
+     */
+    auto fut = (is_pg_op() ? process_pg_op(pgref) :
+		process_op(ihref, pgref, this_instance_id));
+    co_await std::move(fut);
+  }
 
   DEBUGDPP("{}.{}: process[_pg]_op complete, completing handle",
 	   *pgref, *this, this_instance_id);
