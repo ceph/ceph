@@ -3065,6 +3065,36 @@ void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
   o.push_back(p);
 }
 
+void RGWGroupInfo::dump(Formatter * const f) const
+{
+  encode_json("id", id, f);
+  encode_json("tenant", tenant, f);
+  encode_json("name", name, f);
+  encode_json("path", path, f);
+  encode_json("account_id", account_id, f);
+}
+
+void RGWGroupInfo::decode_json(JSONObj* obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("tenant", tenant, obj);
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("path", path, obj);
+  JSONDecoder::decode_json("account_id", account_id, obj);
+}
+
+void RGWGroupInfo::generate_test_instances(std::list<RGWGroupInfo*>& o)
+{
+  o.push_back(new RGWGroupInfo);
+  auto p = new RGWGroupInfo;
+  p->id = "id";
+  p->tenant = "tenant";
+  p->name = "name";
+  p->path = "/path/";
+  p->account_id = "account";
+  o.push_back(p);
+}
+
 void RGWStorageStats::dump(Formatter *f) const
 {
   encode_json("size", size, f);
