@@ -148,6 +148,39 @@ bootstrap`` command, so you'll need to know the IP address of that host.
 .. note:: If there are multiple networks and interfaces, be sure to choose one
    that will be accessible by any host accessing the Ceph cluster.
 
+.. important:: When installing the Quincy release of Ceph, you might see the
+   following error message:
+
+   .. code-block:: console 
+   
+      Deploying ceph-exporter service with default
+      placement...  Non-zero exit code 22
+
+   If you see this error message, add the ``--skip-monitoring-stack`` flag to
+   your ``cephadm bootstrap`` command. To do this, run a command of the
+   following form:
+
+   .. prompt:: bash $
+
+      cephadm bootstrap --mon-ip {monitor IP address} --skip-monitoring-stack
+
+   This command should result in a successfully-deployed cluster. Expand the
+   successfully deployed cluster by deploying the monitoring stack without
+   ``ceph-exporter`` by running the following commands:
+
+   .. prompt:: bash $
+
+      ceph orch apply prometheus
+      ceph orch apply grafana
+      ceph orch apply node-exporter
+      ceph orch apply alertmanager
+
+   This error occurs because some Quincy releases contain a faulty
+   ``ceph-exporter``. After this fault was discovered, ``ceph-exporter`` was
+   removed from Quincy. If your binary of ``cephadm`` is from the release with
+   the fault, you will hit this error.
+
+
 Running the bootstrap command
 -----------------------------
 
