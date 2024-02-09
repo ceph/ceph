@@ -7,6 +7,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
@@ -14,6 +15,7 @@
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/CloneRequest.h"
+#include "librbd/api/Snapshot.h"
 #include "tools/rbd_mirror/PoolMetaCache.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/Threads.h"
@@ -224,30 +226,20 @@ void CreateImageRequest<I>::handle_open_remote_parent_image(int r) {
     return;
   }
 
-  clone_image();
-}
-
-template <typename I>
-void CreateImageRequest<I>::clone_image() {
-  dout(10) << dendl;
-
   LocalPoolMeta local_parent_pool_meta;
-  int r = m_pool_meta_cache->get_local_pool_meta(
+  int err = m_pool_meta_cache->get_local_pool_meta(
     m_local_parent_io_ctx.get_id(), &local_parent_pool_meta);
-  if (r < 0) {
+  if (err < 0) {
     derr << "failed to retrieve local parent mirror uuid for pool "
          << m_local_parent_io_ctx.get_id() << dendl;
-    m_ret_val = r;
+    m_ret_val = err;
     close_remote_parent_image();
     return;
   }
-
   // ensure no image sync snapshots for the local cluster exist in the
   // remote image
   bool found_parent_snap = false;
   bool found_image_sync_snap = false;
-  std::string snap_name;
-  cls::rbd::SnapshotNamespace snap_namespace;
   {
     auto snap_prefix = image_sync::util::get_snapshot_name_prefix(
       local_parent_pool_meta.mirror_uuid);
@@ -256,14 +248,13 @@ void CreateImageRequest<I>::clone_image() {
     for (auto snap_info : m_remote_parent_image_ctx->snap_info) {
       if (snap_info.first == m_remote_parent_spec.snap_id) {
         found_parent_snap = true;
-        snap_name = snap_info.second.name;
-        snap_namespace = snap_info.second.snap_namespace;
+        m_snap_name = snap_info.second.name;
+        m_snap_namespace = snap_info.second.snap_namespace;
       } else if (boost::starts_with(snap_info.second.name, snap_prefix)) {
         found_image_sync_snap = true;
       }
     }
   }
-
   if (!found_parent_snap) {
     dout(15) << "remote parent image snapshot not found" << dendl;
     m_ret_val = -ENOENT;
@@ -276,6 +267,81 @@ void CreateImageRequest<I>::clone_image() {
     return;
   }
 
+  open_local_parent_image();
+}
+
+template <typename I>
+void CreateImageRequest<I>::open_local_parent_image() {
+  if (m_mirror_image_mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    clone_image();
+    return;
+  }
+  dout(10) << dendl;
+
+  Context *ctx = create_context_callback<
+    CreateImageRequest<I>,
+    &CreateImageRequest<I>::handle_open_local_parent_image>(this);
+  OpenImageRequest<I> *request = OpenImageRequest<I>::create(
+    m_local_parent_io_ctx, &m_local_parent_image_ctx,
+    m_local_parent_spec.image_id, true, ctx);
+  request->send();
+}
+
+template <typename I>
+void CreateImageRequest<I>::handle_open_local_parent_image(int r) {
+  dout(10) << "r=" << r << dendl;
+  if (r < 0) {
+    derr << "failed to open local parent image " << m_parent_pool_name << "/"
+         << m_local_parent_spec.image_id << dendl;
+    close_remote_parent_image();
+    return;
+  }
+
+  bool synced = false;
+  uint64_t local_snap_id = 0;
+  librbd::snap_mirror_namespace_t mirror_snap;
+
+  std::shared_lock local_image_locker(m_local_parent_image_ctx->image_lock);
+
+  for (auto snap_info : m_local_parent_image_ctx->snap_info) {
+    if(m_snap_name.compare(snap_info.second.name) == 0){
+      local_snap_id = snap_info.first;
+      break;
+    }
+  }
+
+  if (local_snap_id == 0) {
+    dout(15) << "local parent image snapshot not found" << dendl;
+    m_ret_val = -ENOENT;
+    close_local_parent_image();
+    return;
+  }
+  auto local_snap_infos=  m_local_parent_image_ctx->snap_info;
+  for (auto snap_it = local_snap_infos.lower_bound(local_snap_id);
+    snap_it != local_snap_infos.end(); ++snap_it) {
+    auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+		  &snap_it->second.snap_namespace);
+    if (mirror_ns == nullptr || !mirror_ns->is_non_primary()) {
+      continue;
+    }
+    if (mirror_ns->complete ){
+      synced = true;
+      break;
+    }
+  }
+  if (!synced) {
+    dout(15) << "remote parent image snapshot not synced" << dendl;
+    m_ret_val = -ENOENT;
+    close_local_parent_image();
+    return;
+  }
+  clone_image();
+}
+
+template <typename I>
+void CreateImageRequest<I>::clone_image() {
+  dout(10) << dendl;
+
   librbd::ImageOptions opts;
   populate_image_options(&opts);
 
@@ -287,8 +353,8 @@ void CreateImageRequest<I>::clone_image() {
     klass, &klass::handle_clone_image>(this);
 
   librbd::image::CloneRequest<I> *req = librbd::image::CloneRequest<I>::create(
-    config, m_local_parent_io_ctx, m_local_parent_spec.image_id, snap_name,
-    snap_namespace, CEPH_NOSNAP, m_local_io_ctx, m_local_image_name,
+    config, m_local_parent_io_ctx, m_local_parent_spec.image_id, m_snap_name,
+    m_snap_namespace, CEPH_NOSNAP, m_local_io_ctx, m_local_image_name,
     m_local_image_id, opts, m_mirror_image_mode, m_global_image_id,
     m_remote_mirror_uuid, m_remote_image_ctx->op_work_queue, ctx);
   req->send();
@@ -307,8 +373,34 @@ void CreateImageRequest<I>::handle_clone_image(int r) {
     m_ret_val = r;
   }
 
+  close_local_parent_image();
+}
+
+template <typename I>
+void CreateImageRequest<I>::close_local_parent_image() {
+  if (m_mirror_image_mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    close_remote_parent_image();
+    return;
+  }
+  dout(10) << dendl;
+  Context *ctx = create_context_callback<
+    CreateImageRequest<I>,
+    &CreateImageRequest<I>::handle_close_local_parent_image>(this);
+  CloseImageRequest<I> *request = CloseImageRequest<I>::create(
+    &m_local_parent_image_ctx, ctx);
+  request->send();
+}
+
+template <typename I>
+void CreateImageRequest<I>::handle_close_local_parent_image(int r) {
+  dout(10) << "r=" << r << dendl;
+  if (r < 0) {
+    derr << "error encountered closing local parent image: "
+         << cpp_strerror(r) << dendl;
+  }
   close_remote_parent_image();
 }
+
 
 template <typename I>
 void CreateImageRequest<I>::close_remote_parent_image() {

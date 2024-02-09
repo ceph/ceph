@@ -76,7 +76,13 @@ private:
    *                    OPEN_REMOTE_PARENT  * * * * * * * | * * *   *
    *                        |                             |       * *
    *                        v                             |         *
+   *                    OPEN_LOCAL_PARENT   * * * * * * * | * * *   *
+   *                        |                             |       * *
+   *                        v                             |         *
    *                    CLONE_IMAGE                       |         *
+   *                        |                             |         *
+   *                        v                             |         *
+   *                    CLOSE_LOCAL_PARENT                |         *
    *                        |                             |         *
    *                        v                             |         *
    *                    CLOSE_REMOTE_PARENT               |         *
@@ -101,11 +107,14 @@ private:
   cls::rbd::ParentImageSpec m_remote_parent_spec;
 
   librados::IoCtx m_local_parent_io_ctx;
+  ImageCtxT *m_local_parent_image_ctx = nullptr;
   cls::rbd::ParentImageSpec m_local_parent_spec;
 
   bufferlist m_out_bl;
   std::string m_parent_global_image_id;
   std::string m_parent_pool_name;
+  std::string m_snap_name;
+  cls::rbd::SnapshotNamespace m_snap_namespace;
   int m_ret_val = 0;
 
   void create_image();
@@ -120,11 +129,17 @@ private:
   void open_remote_parent_image();
   void handle_open_remote_parent_image(int r);
 
+  void open_local_parent_image();
+  void handle_open_local_parent_image(int r);
+
   void clone_image();
   void handle_clone_image(int r);
 
   void close_remote_parent_image();
   void handle_close_remote_parent_image(int r);
+
+  void close_local_parent_image();
+  void handle_close_local_parent_image(int r);
 
   void error(int r);
   void finish(int r);
