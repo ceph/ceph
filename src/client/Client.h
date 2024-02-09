@@ -485,7 +485,6 @@ public:
   int preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset=-1);
   int write(int fd, const char *buf, loff_t size, loff_t offset=-1);
   int pwritev(int fd, const struct iovec *iov, int iovcnt, loff_t offset=-1);
-  int fake_write_size(int fd, loff_t size);
   int ftruncate(int fd, loff_t size, const UserPerm& perms);
   int fsync(int fd, bool syncdataonly);
   int fstat(int fd, struct stat *stbuf, const UserPerm& perms,
