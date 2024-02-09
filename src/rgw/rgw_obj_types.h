@@ -432,7 +432,7 @@ struct rgw_raw_obj {
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(6, 6, bl);
+    ENCODE_START(6, 6, bl);
     encode(pool, bl);
     encode(oid, bl);
     encode(loc, bl);

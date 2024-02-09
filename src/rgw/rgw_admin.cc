@@ -682,6 +682,7 @@ enum class OPT {
   OBJECT_RM,
   OBJECT_UNLINK,
   OBJECT_STAT,
+  OBJECT_MANIFEST,
   OBJECT_REWRITE,
   OBJECT_REINDEX,
   OBJECTS_EXPIRE,
@@ -903,6 +904,7 @@ static SimpleCmd::Commands all_cmds = {
   { "object rm", OPT::OBJECT_RM },
   { "object unlink", OPT::OBJECT_UNLINK },
   { "object stat", OPT::OBJECT_STAT },
+  { "object manifest", OPT::OBJECT_MANIFEST },
   { "object rewrite", OPT::OBJECT_REWRITE },
   { "object reindex", OPT::OBJECT_REINDEX },
   { "objects expire", OPT::OBJECTS_EXPIRE },
@@ -4180,6 +4182,7 @@ int main(int argc, const char **argv)
 			 OPT::LOG_SHOW,
 			 OPT::USAGE_SHOW,
 			 OPT::OBJECT_STAT,
+			 OPT::OBJECT_MANIFEST,
 			 OPT::BI_GET,
 			 OPT::BI_LIST,
 			 OPT::OLH_GET,
@@ -8327,7 +8330,7 @@ next:
       bufferlist& bl = iter->second;
       bool handled = false;
       if (iter->first == RGW_ATTR_MANIFEST) {
-        handled = decode_dump<RGWObjManifest>("manifest", bl, formatter.get());
+	handled = decode_dump<RGWObjManifest>("manifest", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_ACL) {
         handled = decode_dump<RGWAccessControlPolicy>("policy", bl, formatter.get());
       } else if (iter->first == RGW_ATTR_ID_TAG) {
@@ -8360,7 +8363,76 @@ next:
     formatter->close_section();
     formatter->close_section();
     formatter->flush(cout);
-  }
+  } // OPT::OBJECT_STAT
+
+  if (opt_cmd == OPT::OBJECT_MANIFEST) {
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<
+	std::endl;
+      return -ret;
+    }
+
+    std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(object);
+    obj->set_instance(object_version);
+
+    ret = obj->get_obj_attrs(null_yield, dpp());
+    if (ret < 0) {
+      cerr << "ERROR: failed to retrieve object metadata, returned error: " <<
+	cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    formatter->open_object_section("outer");  // name not displayed since top level
+    formatter->dump_unsigned("size", obj->get_obj_size());
+
+    auto attr_iter = obj->get_attrs().find(RGW_ATTR_MANIFEST);
+    if (attr_iter == obj->get_attrs().end()) {
+      cerr << "ERROR: unable to find object manifest" << std::endl;
+      return ENOENT;
+    }
+
+    RGWObjManifest m;
+    try {
+      auto part_iter = attr_iter->second.cbegin();
+      decode(m, part_iter);
+    } catch (buffer::error& err) {
+      cerr << "ERROR: unable to decode manifest" << std::endl;
+      return EIO;
+    }
+
+    rgw::sal::RadosStore* store =
+      dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr << "ERROR: this command (currently) only works with "
+	"RADOS back-ends" << std::endl;
+      return EINVAL;
+    }
+
+    RGWRados* rados = store->getRados();
+
+    formatter->open_array_section("objects");
+    unsigned index = 0;
+    for (auto p = m.obj_begin(dpp()); p != m.obj_end(dpp()); ++p, ++index) {
+      formatter->open_object_section("object"); // name not displayed since in array
+
+      formatter->dump_unsigned("index", index);
+      formatter->dump_unsigned("part_id", p.get_cur_part_id());
+      formatter->dump_unsigned("stripe_id", p.get_cur_stripe());
+      formatter->dump_unsigned("offset", p.get_ofs());
+      formatter->dump_unsigned("size", p.get_stripe_size());
+
+      formatter->open_object_section("raw_obj");
+      p.get_location().get_raw_obj(rados).dump(formatter.get());
+      formatter->close_section(); // raw_obj
+
+      formatter->close_section(); // object
+    }
+    formatter->close_section(); // objects array
+
+    formatter->close_section(); // outer
+    formatter->flush(cout);
+  } // OPT::OBJECT_MANIFEST
 
   if (opt_cmd == OPT::BUCKET_CHECK) {
     if (check_head_obj_locator) {
