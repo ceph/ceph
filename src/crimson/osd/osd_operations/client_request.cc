@@ -288,7 +288,7 @@ ClientRequest::process_op(
 
   DEBUGDPP("{}.{}: past scrub blocker, getting obc",
 	   *pg, *this, this_instance_id);
-  co_await pg->with_locked_obc(
+  auto process = pg->with_locked_obc(
     m->get_hobj(), op_info,
     [FNAME, this, pg, this_instance_id, &ihref] (
       auto head, auto obc
@@ -322,6 +322,19 @@ ClientRequest::process_op(
 	  return reply_op_error(pg, -code.value());
 	})
     );
+
+  /* The following works around gcc bug
+   * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98401.
+   * The specific symptom I observed is the pg param being
+   * destructed multiple times resulting in the refcount going
+   * rapidly to 0 destoying the PG prematurely.
+   *
+   * This bug seems to be resolved in gcc 13.2.1.
+   *
+   * Assigning the intermediate result and moving it into the co_await
+   * expression bypasses both bugs.
+   */
+  co_await std::move(process);
 }
 
 ClientRequest::do_process_iertr::future<>
