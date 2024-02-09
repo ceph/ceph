@@ -117,11 +117,12 @@ def test_nfsganesha_container_mounts():
             "fred",
             good_nfs_json(),
         )
-        cmounts = nfsg._get_container_mounts("/var/tmp")
-        assert len(cmounts) == 3
+        cmounts = nfsg._get_container_mounts("/var/tmp", "/var/tmp_log")
+        assert len(cmounts) == 4
         assert cmounts["/var/tmp/config"] == "/etc/ceph/ceph.conf:z"
         assert cmounts["/var/tmp/keyring"] == "/etc/ceph/keyring:z"
         assert cmounts["/var/tmp/etc/ganesha"] == "/etc/ganesha:z"
+        assert cmounts["/var/tmp_log"] == "/var/log:z"
 
     with with_cephadm_ctx([]) as ctx:
         nfsg = _cephadm.NFSGanesha(
@@ -130,11 +131,12 @@ def test_nfsganesha_container_mounts():
             "fred",
             nfs_json(pool=True, files=True, rgw=True),
         )
-        cmounts = nfsg._get_container_mounts("/var/tmp")
-        assert len(cmounts) == 4
+        cmounts = nfsg._get_container_mounts("/var/tmp", "/var/tmp_log")
+        assert len(cmounts) == 5
         assert cmounts["/var/tmp/config"] == "/etc/ceph/ceph.conf:z"
         assert cmounts["/var/tmp/keyring"] == "/etc/ceph/keyring:z"
         assert cmounts["/var/tmp/etc/ganesha"] == "/etc/ganesha:z"
+        assert cmounts["/var/tmp_log"] == "/var/log:z"
         assert (
             cmounts["/var/tmp/keyring.rgw"]
             == "/var/lib/ceph/radosgw/ceph-jsmith/keyring:z"
@@ -208,7 +210,7 @@ def test_nfsganesha_get_daemon_args():
             good_nfs_json(),
         )
         args = nfsg.get_daemon_args()
-        assert args == ["-F", "-L", "STDERR"]
+        assert args == ["-F", "-L", "/var/log/ganesha.log"]
 
 
 @mock.patch("cephadm.logger")
@@ -223,6 +225,7 @@ def test_nfsganesha_create_daemon_dirs(_logger, cephadm_fs):
         with pytest.raises(OSError):
             nfsg.create_daemon_dirs("/var/tmp", 45, 54)
         cephadm_fs.create_dir("/var/tmp")
+        cephadm_fs.create_dir("/var/tmp_log")
         nfsg.create_daemon_dirs("/var/tmp", 45, 54)
         # TODO: make assertions about the dirs created
 
@@ -237,5 +240,6 @@ def test_nfsganesha_create_daemon_dirs_rgw(_logger, cephadm_fs):
             nfs_json(pool=True, files=True, rgw=True),
         )
         cephadm_fs.create_dir("/var/tmp")
+        cephadm_fs.create_dir("/var/tmp_log")
         nfsg.create_daemon_dirs("/var/tmp", 45, 54)
         # TODO: make assertions about the dirs created

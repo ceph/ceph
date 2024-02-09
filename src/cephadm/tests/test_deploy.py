@@ -58,7 +58,7 @@ def test_deploy_nfs_container(cephadm_fs, funkypatch):
     with open(f'/var/lib/ceph/{fsid}/nfs.fun/unit.run') as f:
         runfile_lines = f.read().splitlines()
     assert 'podman' in runfile_lines[-1]
-    assert runfile_lines[-1].endswith('quay.io/ceph/ceph:latest -F -L STDERR')
+    assert runfile_lines[-1].endswith('quay.io/ceph/ceph:latest -F -L /var/log/ganesha.log')
     assert '-e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES' not in runfile_lines[-1]
     assert '--pids-limit' in runfile_lines[-1]
     assert '-e CEPH_CONF=' in runfile_lines[-1]

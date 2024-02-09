@@ -29,7 +29,7 @@ class NFSGanesha(ContainerDaemonForm):
 
     daemon_type = 'nfs'
     entrypoint = '/usr/bin/ganesha.nfsd'
-    daemon_args = ['-F', '-L', 'STDERR']
+    daemon_args = ['-F', '-L', '/var/log/ganesha.log']
 
     required_files = ['ganesha.conf']
 
@@ -76,12 +76,13 @@ class NFSGanesha(ContainerDaemonForm):
     def identity(self) -> DaemonIdentity:
         return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
-    def _get_container_mounts(self, data_dir):
-        # type: (str) -> Dict[str, str]
+    def _get_container_mounts(self, data_dir, log_dir):
+        # type: (str, str) -> Dict[str, str]
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
         mounts[os.path.join(data_dir, 'etc/ganesha')] = '/etc/ganesha:z'
+        mounts[log_dir] = '/var/log:z'
         if self.rgw:
             cluster = self.rgw.get('cluster', 'ceph')
             rgw_user = self.rgw.get('user', 'admin')
@@ -94,7 +95,8 @@ class NFSGanesha(ContainerDaemonForm):
         self, ctx: CephadmContext, mounts: Dict[str, str]
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
-        mounts.update(self._get_container_mounts(data_dir))
+        log_dir = os.path.join(ctx.log_dir, self.identity.fsid)
+        mounts.update(self._get_container_mounts(data_dir, log_dir))
 
     @staticmethod
     def get_container_envs():
