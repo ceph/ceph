@@ -316,9 +316,9 @@ Here's an example prometheus job definition that uses the cephadm service discov
 
   .. code-block:: bash
 
-     - job_name: 'ceph-exporter'  
+     - job_name: 'haproxy'  
        http_sd_configs:  
-       - url: http://<mgr-ip>:8765/sd/prometheus/sd-config?service=ceph-exporter
+       - url: http://<mgr-ip>:8765/sd/prometheus/sd-config?service=haproxy
 
 
 * To enable the dashboard's prometheus-based alerting, see :ref:`dashboard-alerting`.
