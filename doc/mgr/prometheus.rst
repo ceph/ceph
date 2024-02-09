@@ -206,16 +206,6 @@ Example to turn up the sync interval to 10 minutes:
 
    ceph config set mgr mgr/prometheus/rbd_stats_pools_refresh_interval 600
 
-Ceph daemon performance counters metrics
------------------------------------------
-
-With the introduction of ``ceph-exporter`` daemon, the prometheus module will no longer export Ceph daemon
-perf counters as prometheus metrics by default. However, one may re-enable exporting these metrics by setting
-the module option ``exclude_perf_counters`` to ``false``:
-
-.. prompt:: bash $
-
-   ceph config set mgr mgr/prometheus/exclude_perf_counters false
 
 Statistic names and labels
 ==========================
