@@ -1994,7 +1994,6 @@ private:
   void maybe_override_sleep_options_for_qos();
   bool maybe_override_options_for_qos(
     const std::set<std::string> *changed = nullptr);
-  void maybe_override_cost_for_qos();
   int run_osd_bench_test(int64_t count,
                          int64_t bsize,
                          int64_t osize,
