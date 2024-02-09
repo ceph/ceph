@@ -833,6 +833,40 @@ struct RGWAccountInfo {
 };
 WRITE_CLASS_ENCODER(RGWAccountInfo)
 
+// user group metadata
+struct RGWGroupInfo {
+  std::string id;
+  std::string tenant;
+  std::string name;
+  std::string path;
+  rgw_account_id account_id;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(id, bl);
+    encode(tenant, bl);
+    encode(name, bl);
+    encode(path, bl);
+    encode(account_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(id, bl);
+    decode(tenant, bl);
+    decode(name, bl);
+    decode(path, bl);
+    decode(account_id, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter* f) const;
+  void decode_json(JSONObj* obj);
+  static void generate_test_instances(std::list<RGWGroupInfo*>& o);
+};
+WRITE_CLASS_ENCODER(RGWGroupInfo)
+
 /// `RGWObjVersionTracker`
 /// ======================
 ///
