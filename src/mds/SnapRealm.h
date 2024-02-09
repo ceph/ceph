@@ -46,7 +46,8 @@ public:
 
   const ceph::buffer::list& get_snap_trace() const;
   const ceph::buffer::list& get_snap_trace_new() const;
-  void build_snap_trace() const;
+  const ceph::buffer::list& get_snap_trace_new(std::vector<SnapRealm*>& related_realms) const;
+  void build_snap_trace(std::vector<SnapRealm*>& related_realms) const;
 
   std::string_view get_snapname(snapid_t snapid, inodeno_t atino);
   snapid_t resolve_snapname(std::string_view name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
@@ -133,6 +134,7 @@ public:
 
 protected:
   void check_cache() const;
+  void check_cache(std::vector<SnapRealm*>& related_realms) const;
 
 private:
   bool global;

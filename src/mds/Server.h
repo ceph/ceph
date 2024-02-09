@@ -251,12 +251,12 @@ public:
   // link
   void handle_client_link(const MDRequestRef& mdr);
   void _link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, SnapRealm *target_realm);
-  void _link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti,
+  void _link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, CInode *referenti,
 			  version_t, version_t, bool);
 
-  void _link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);
-  void _link_remote_finish(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
-			   version_t);
+  void _link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti, CDentry *straydn);
+  void _link_remote_finish(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti, CInode *referenti,
+                           CDentry *sd, version_t);
 
   void handle_peer_link_prep(const MDRequestRef& mdr);
   void _logged_peer_link(const MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
@@ -337,6 +337,7 @@ public:
     laggy_clients.clear();
   }
 
+  const bufferlist& get_snap_trace(Session *session, SnapRealm *realm, std::vector<SnapRealm*>& related_realms) const;
   const bufferlist& get_snap_trace(Session *session, SnapRealm *realm) const;
   const bufferlist& get_snap_trace(client_t client, SnapRealm *realm) const;
 
