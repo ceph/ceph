@@ -4,9 +4,10 @@ import { CssHelper } from '~/app/shared/classes/css-helper';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { DimlessBinaryPerSecondPipe } from '~/app/shared/pipes/dimless-binary-per-second.pipe';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { BaseChartDirective, PluginServiceGlobalRegistrationAndOptions } from 'ng2-charts';
+import { BaseChartDirective } from 'ng2-charts';
 import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 import { NumberFormatterService } from '~/app/shared/services/number-formatter.service';
+import 'chartjs-adapter-moment';
 
 @Component({
   selector: 'cd-dashboard-area-chart',
@@ -41,25 +42,25 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
   maxConvertedValueUnits?: string;
 
   chartDataUnits: string;
-  chartData: any = {};
-  options: any = {};
+  chartData: any;
+  options: any;
 
-  public chartAreaBorderPlugin: PluginServiceGlobalRegistrationAndOptions[] = [
+  public chartAreaBorderPlugin: any[] = [
     {
-      beforeDraw(chart: Chart) {
+      beforeDraw(chart: any) {
         if (!chart.options.plugins.borderArea) {
           return;
         }
         const {
           ctx,
-          chartArea: { left, top, right, bottom }
+          chartArea: { left, top, width, height }
         } = chart;
         ctx.save();
         ctx.strokeStyle = chart.options.plugins.chartAreaBorder.borderColor;
         ctx.lineWidth = chart.options.plugins.chartAreaBorder.borderWidth;
         ctx.setLineDash(chart.options.plugins.chartAreaBorder.borderDash || []);
         ctx.lineDashOffset = chart.options.plugins.chartAreaBorder.borderDashOffset;
-        ctx.strokeRect(left, top, right - left - 1, bottom);
+        ctx.strokeRect(left, top, width, height);
         ctx.restore();
       }
     }
@@ -82,7 +83,10 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
           pointBackgroundColor: this.cssHelper.propertyValue('chart-color-strong-blue'),
           backgroundColor: this.cssHelper.propertyValue('chart-color-translucent-blue'),
           borderColor: this.cssHelper.propertyValue('chart-color-strong-blue'),
-          borderWidth: 1
+          borderWidth: 1,
+          fill: {
+            target: 'origin'
+          }
         },
         {
           label: '',
@@ -91,12 +95,50 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
           pointBackgroundColor: this.cssHelper.propertyValue('chart-color-orange'),
           backgroundColor: this.cssHelper.propertyValue('chart-color-translucent-yellow'),
           borderColor: this.cssHelper.propertyValue('chart-color-orange'),
-          borderWidth: 1
+          borderWidth: 1,
+          fill: {
+            target: 'origin'
+          }
         }
       ]
     };
 
     this.options = {
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          mode: 'index',
+          external: function (tooltipModel: any) {
+            tooltipModel.tooltip.x = 10;
+            tooltipModel.tooltip.y = 0;
+          }.bind(this),
+          intersect: false,
+          displayColors: true,
+          backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
+          callbacks: {
+            title: function (tooltipItem: any): any {
+              return tooltipItem[0].xLabel;
+            },
+            label: (context: any) => {
+              return (
+                ' ' +
+                context.dataset.label +
+                ' - ' +
+                context.formattedValue +
+                ' ' +
+                this.chartDataUnits
+              );
+            }
+          }
+        },
+        borderArea: true,
+        chartAreaBorder: {
+          borderColor: this.cssHelper.propertyValue('chart-color-slight-dark-gray'),
+          borderWidth: 1
+        }
+      },
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
@@ -105,74 +147,29 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
           radius: 0
         }
       },
-      legend: {
-        display: false
-      },
-      tooltips: {
-        mode: 'index',
-        custom: function (tooltipModel: { x: number; y: number }) {
-          tooltipModel.x = 10;
-          tooltipModel.y = 0;
-        }.bind(this),
-        intersect: false,
-        displayColors: true,
-        backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
-        callbacks: {
-          title: function (tooltipItem: any): any {
-            return tooltipItem[0].xLabel;
-          },
-          label: (tooltipItems: any, data: any) => {
-            return (
-              ' ' +
-              data.datasets[tooltipItems.datasetIndex].label +
-              ' - ' +
-              tooltipItems.value +
-              ' ' +
-              this.chartDataUnits
-            );
-          }
-        }
-      },
       hover: {
         intersect: false
       },
       scales: {
-        xAxes: [
-          {
-            display: false,
-            type: 'time',
-            gridLines: {
-              display: false
-            },
-            time: {
-              tooltipFormat: 'DD/MM/YYYY - HH:mm:ss'
-            }
+        x: {
+          display: false,
+          type: 'time',
+          grid: {
+            display: false
+          },
+          time: {
+            tooltipFormat: 'DD/MM/YYYY - HH:mm:ss'
           }
-        ],
-        yAxes: [
-          {
-            afterFit: (scaleInstance: any) => (scaleInstance.width = 100),
-            gridLines: {
-              display: false
-            },
-            ticks: {
-              beginAtZero: true,
-              maxTicksLimit: 4,
-              callback: (value: any) => {
-                if (value === 0) {
-                  return null;
-                }
-                return this.convertUnits(value);
-              }
-            }
+        },
+        y: {
+          afterFit: (scaleInstance: any) => (scaleInstance.width = 100),
+          grid: {
+            display: false
+          },
+          beginAtZero: true,
+          ticks: {
+            maxTicksLimit: 4
           }
-        ]
-      },
-      plugins: {
-        borderArea: true,
-        chartAreaBorder: {
-          borderColor: this.cssHelper.propertyValue('chart-color-slight-dark-gray'),
-          borderWidth: 1
         }
       }
     };
@@ -271,12 +268,12 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
 
   private setChartTicks() {
     if (!this.chart) {
+      this.chartDataUnits = '';
       return;
     }
 
     let maxValue = 0;
     let maxValueDataUnits = '';
-    let extraRoom = 1.2;
 
     if (this.data) {
       let maxValueData = Math.max(...this.data.map((values: any) => values[1]));
@@ -289,10 +286,8 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
       [maxValue, maxValueDataUnits] = this.convertUnits(maxValue).split(' ');
     }
 
-    const yAxesTicks = this.chart.chart.options.scales.yAxes[0].ticks;
-    yAxesTicks.suggestedMax = maxValue * extraRoom;
-    yAxesTicks.suggestedMin = 0;
-    yAxesTicks.callback = (value: any) => {
+    const yAxesTicks = this.chart.chart.options.scales.y;
+    yAxesTicks.ticks.callback = (value: any) => {
       if (value === 0) {
         return null;
       }
