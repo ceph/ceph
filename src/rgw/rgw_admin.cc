@@ -8411,9 +8411,30 @@ next:
 
     RGWRados* rados = store->getRados();
 
+    rgw_obj head_obj = obj->get_obj();
+    rgw_raw_obj raw_head_obj;
+    store->get_raw_obj(m.get_head_placement_rule(), head_obj, &raw_head_obj);
+    
     formatter->open_array_section("objects");
     unsigned index = 0;
     for (auto p = m.obj_begin(dpp()); p != m.obj_end(dpp()); ++p, ++index) {
+      rgw_raw_obj raw_obj =  p.get_location().get_raw_obj(rados);
+
+      if (index == 0 && raw_obj != raw_head_obj) {
+	// we have a head object without data, so let's include it
+	formatter->open_object_section("object"); // name not displayed since in array
+
+	formatter->dump_int("index", -1);
+	formatter->dump_unsigned("offset", 0);
+	formatter->dump_unsigned("size", 0);
+	
+	formatter->open_object_section("raw_obj");
+	raw_head_obj.dump(formatter.get());
+	formatter->close_section(); // raw_obj
+
+	formatter->close_section(); // object
+      }
+
       formatter->open_object_section("object"); // name not displayed since in array
 
       formatter->dump_unsigned("index", index);
@@ -8423,7 +8444,7 @@ next:
       formatter->dump_unsigned("size", p.get_stripe_size());
 
       formatter->open_object_section("raw_obj");
-      p.get_location().get_raw_obj(rados).dump(formatter.get());
+      raw_obj.dump(formatter.get());
       formatter->close_section(); // raw_obj
 
       formatter->close_section(); // object
