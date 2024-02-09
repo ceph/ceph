@@ -1,3 +1,10 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(MON_DOWN\)
+      - mons down
+      - \(MGR_DOWN\)
+      - out of quorum
 roles:
 - - host.a
   - osd.0

@@ -2,8 +2,8 @@ overrides:
   ceph:
     log-ignorelist:
       - overall HEALTH_
-      - \(OSD_DOWN\)
-      - \(OSD_
+      - OSD_DOWN
+      - OSD_
       - but it is still running
 # MDS daemon 'b' is not responding, replacing it as rank 0 with standby 'a'
       - is not responding

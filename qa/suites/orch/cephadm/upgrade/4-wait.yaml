@@ -1,3 +1,14 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(MON_DOWN\)
+      - \(PG_
+      - mons down
+      - pg inactive
+      - out of quorum
+      - \(OSD_
+      - osds down
+      - osd down
 tasks:
 - cephadm.shell:
     env: [sha1]

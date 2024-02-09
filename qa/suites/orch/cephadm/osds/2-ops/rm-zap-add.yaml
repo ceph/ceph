@@ -1,3 +1,10 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(MON_DOWN\)
+      - \(OSD_DOWN\)
+      - \(PG_
+      - but it is still running
 tasks:
 - cephadm.shell:
     host.a:

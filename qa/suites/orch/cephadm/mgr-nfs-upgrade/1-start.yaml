@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - slow requests
 tasks:
 - cephadm.shell:
     host.a:
