@@ -224,7 +224,6 @@ public:
       hint,
       len,
       P_ADDR_ZERO,
-      P_ADDR_NULL,
       0,
       nullptr,
       EXTENT_DEFAULT_REF_COUNT);
@@ -235,7 +234,6 @@ public:
     laddr_t hint,
     extent_len_t len,
     laddr_t intermediate_key,
-    paddr_t actual_addr,
     laddr_t intermediate_base)
   {
     assert(intermediate_key != L_ADDR_NULL);
@@ -245,7 +243,6 @@ public:
       hint,
       len,
       intermediate_key,
-      actual_addr,
       0,	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
       nullptr,
@@ -272,19 +269,17 @@ public:
   alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len,
-    paddr_t addr,
-    uint32_t checksum,
     LogicalCachedExtent &ext,
     extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) final
   {
+    // The real checksum will be updated upon transaction commit
+    assert(ext.get_last_committed_crc() == 0);
     return _alloc_extent(
       t,
       hint,
-      len,
-      addr,
-      P_ADDR_NULL,
-      checksum,
+      ext.get_length(),
+      ext.get_paddr(),
+      ext.get_last_committed_crc(),
       &ext,
       refcount);
   }
@@ -419,7 +414,6 @@ private:
     laddr_t hint,
     extent_len_t len,
     pladdr_t addr,
-    paddr_t actual_addr,
     uint32_t checksum,
     LogicalCachedExtent*,
     extent_ref_count_t refcount);
