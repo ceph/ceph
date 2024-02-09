@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import errno
 import json
 import logging
 import os
@@ -640,11 +641,17 @@ class CephFSSubvolume(RESTController):
                 params['sub_name'] = subvolume['name']
                 error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None,
                                                   params)
-                if error_code != 0:
+                # just ignore this error for now so the subvolumes page will load.
+                # the ideal solution is to implement a status page where clone status
+                # can be displayed
+                if error_code == -errno.EAGAIN:
+                    pass
+                elif error_code != 0:
                     raise DashboardException(
                         f'Failed to get info for subvolume {subvolume["name"]}: {err}'
                     )
-                subvolume['info'] = json.loads(out)
+                if out:
+                    subvolume['info'] = json.loads(out)
         return subvolumes
 
     @RESTController.Resource('GET')
@@ -804,11 +811,17 @@ class CephFSSubvolumeSnapshots(RESTController):
                 params['snap_name'] = snapshot['name']
                 error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_snapshot_info',
                                                   None, params)
-                if error_code != 0:
+                # just ignore this error for now so the subvolumes page will load.
+                # the ideal solution is to implement a status page where clone status
+                # can be displayed
+                if error_code == -errno.EAGAIN:
+                    pass
+                elif error_code != 0:
                     raise DashboardException(
                         f'Failed to get info for subvolume snapshot {snapshot["name"]}: {err}'
                     )
-                snapshot['info'] = json.loads(out)
+                if out:
+                    snapshot['info'] = json.loads(out)
         return snapshots
 
     @RESTController.Resource('GET')
@@ -850,3 +863,26 @@ class CephFSSubvolumeSnapshots(RESTController):
                 f'Failed to delete subvolume snapshot {snap_name}: {err}'
             )
         return f'Subvolume snapshot {snap_name} removed successfully'
+
+
+@APIRouter('/cephfs/subvolume/snapshot/clone', Scope.CEPHFS)
+@APIDoc("Cephfs Snapshot Clone Management API", "CephfsSnapshotClone")
+class CephFsSnapshotClone(RESTController):
+    @EndpointDoc("Create a clone of a subvolume snapshot")
+    def create(self, vol_name: str, subvol_name: str, snap_name: str, clone_name: str,
+               group_name='', target_group_name=''):
+        params = {'vol_name': vol_name, 'sub_name': subvol_name, 'snap_name': snap_name,
+                  'target_sub_name': clone_name}
+        if group_name:
+            params['group_name'] = group_name
+
+        if target_group_name:
+            params['target_group_name'] = target_group_name
+
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_snapshot_clone', None,
+                                        params)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to create clone {clone_name}: {err}'
+            )
+        return f'Clone {clone_name} created successfully'
