@@ -19,6 +19,7 @@ for details on individual services:
     monitoring
     snmp-gateway
     tracing
+    smb
 
 Service Status
 ==============
