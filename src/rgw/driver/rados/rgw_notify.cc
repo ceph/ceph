@@ -988,7 +988,8 @@ static inline bool notification_match(reservation_t& res,
 		      const RGWObjTags* req_tags)
 {
   rgw_pubsub_bucket_topics bucket_topics;
-  if (all_zonegroups_support(site, zone_features::notification_v2)) {
+  if (all_zonegroups_support(site, zone_features::notification_v2) &&
+      res.store->stat_topics_v1(res.user_tenant, res.yield, res.dpp) == -ENOENT) {
     auto ret = 0;
     if (!res.s) {
       //  for non S3-request caller (e.g., lifecycle, ObjectSync), bucket attrs
@@ -1064,7 +1065,7 @@ static inline bool notification_match(reservation_t& res,
       ldpp_dout(res.dpp, 1)
           << "INFO: failed to load topic: " << topic_cfg.name
           << ". error: " << ret
-          << " while storing the persistent notification event" << dendl;
+          << " while resrving persistent notification event" << dendl;
       if (ret == -ENOENT) {
         // either the topic is deleted but the corresponding notification still
         // exist or in v2 mode the notification could have synced first but

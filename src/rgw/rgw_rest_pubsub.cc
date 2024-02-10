@@ -1152,6 +1152,13 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
     }
   }
 
+  if (const auto ret = driver->stat_topics_v1(s->bucket_tenant, y, this); ret != -ENOENT) {
+    ldpp_dout(this, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+      << ". please try again later" << dendl; 
+    op_ret = -ERR_SERVICE_UNAVAILABLE;
+    return;
+  }
+
   std::unique_ptr<rgw::sal::Bucket> bucket;
   op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
                                &bucket, y);
@@ -1381,6 +1388,13 @@ void RGWPSDeleteNotifOp::execute_v2(optional_yield y) {
     }
   }
 
+  if (const auto ret = driver->stat_topics_v1(s->bucket_tenant, y, this); ret != -ENOENT) {
+    ldpp_dout(this, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+      << ". please try again later" << dendl; 
+    op_ret = -ERR_SERVICE_UNAVAILABLE;
+    return;
+  }
+
   std::unique_ptr<rgw::sal::Bucket> bucket;
   op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
                                &bucket, y);
@@ -1459,7 +1473,8 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
 
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
-  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2) &&
+      driver->stat_topics_v1(s->bucket_tenant, y, this) == -ENOENT) {
     op_ret = get_bucket_notifications(this, bucket.get(), bucket_topics);
   } else {
     const RGWPubSub ps(driver, s->owner.id.tenant);
