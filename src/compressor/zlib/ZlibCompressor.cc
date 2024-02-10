@@ -17,6 +17,9 @@
 #include "ZlibCompressor.h"
 #include "osd/osd_types.h"
 #include "isa-l/include/igzip_lib.h"
+#ifdef HAVE_QATZIP
+  #include "compressor/QatAccel.h"
+#endif
 // -----------------------------------------------------------------------------
 
 #include <zlib.h>
@@ -51,6 +54,21 @@ _prefix(std::ostream* _dout)
 // significantly (helps only on >=16K blocks) and sometimes degrades
 // compression ratio.
 #define ZLIB_MEMORY_LEVEL 8
+
+#ifdef HAVE_QATZIP
+QatAccel ZlibCompressor::qat_accel;
+#endif
+
+ZlibCompressor::ZlibCompressor(CephContext *cct, bool isal)
+  : Compressor(COMP_ALG_ZLIB, "zlib"), isal_enabled(isal), cct(cct)
+{
+#ifdef HAVE_QATZIP
+  if (cct->_conf->qat_compressor_enabled && qat_accel.init("zlib"))
+    qat_enabled = true;
+  else
+    qat_enabled = false;
+#endif
+}
 
 int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out, std::optional<int32_t> &compressor_message)
 {

@@ -64,6 +64,8 @@ public:
     detailed(detailed) {}
   std::optional<interval_set<rbm_abs_addr>> alloc_extent(
     size_t size) final;
+  std::optional<interval_set<rbm_abs_addr>> alloc_extents(
+    size_t size) final;
 
   void free_extent(rbm_abs_addr addr, size_t size) final;
   void mark_extent_used(rbm_abs_addr addr, size_t size) final;
@@ -141,6 +143,7 @@ private:
 
   void _remove_from_tree(rbm_abs_addr start, rbm_abs_addr size);
   rbm_abs_addr find_block(size_t size);
+  extent_len_t find_block(size_t size, rbm_abs_addr &start);
 
   using extent_tree_t = 
     boost::intrusive::avl_set<

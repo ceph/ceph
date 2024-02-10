@@ -20,6 +20,7 @@ set_target_properties(ceph-dencoder PROPERTIES
 
 set(denc_plugin_dir ${CEPH_INSTALL_FULL_PKGLIBDIR}/denc)
 add_custom_target(ceph-dencoder-modules)
+add_dependencies(ceph-dencoder ceph-dencoder-modules)
 
 function(add_denc_mod name)
   add_library(${name} SHARED

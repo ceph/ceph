@@ -51,6 +51,9 @@ paddr_t BlockRBManager::alloc_extent(size_t size)
   LOG_PREFIX(BlockRBManager::alloc_extent);
   assert(allocator);
   auto alloc = allocator->alloc_extent(size);
+  if (!alloc) {
+    return P_ADDR_NULL;
+  }
   ceph_assert((*alloc).num_intervals() == 1);
   auto extent = (*alloc).begin();
   ceph_assert(size == extent.get_len());
@@ -60,6 +63,34 @@ paddr_t BlockRBManager::alloc_extent(size_t size)
   DEBUG("allocated addr: {}, size: {}, requested size: {}",
 	paddr, extent.get_len(), size);
   return paddr;
+}
+
+BlockRBManager::allocate_ret_bare
+BlockRBManager::alloc_extents(size_t size)
+{
+  LOG_PREFIX(BlockRBManager::alloc_extents);
+  assert(allocator);
+  auto alloc = allocator->alloc_extents(size);
+  if (!alloc) {
+    return {};
+  }
+  allocate_ret_bare ret;
+  size_t len = 0;
+  for (auto extent = (*alloc).begin();
+       extent != (*alloc).end();
+       extent++) {
+    len += extent.get_len();
+    paddr_t paddr = convert_abs_addr_to_paddr(
+      extent.get_start(),
+      device->get_device_id());
+    DEBUG("allocated addr: {}, size: {}, requested size: {}",
+         paddr, extent.get_len(), size);
+    ret.push_back(
+      {std::move(paddr),
+      static_cast<extent_len_t>(extent.get_len())});
+  }
+  ceph_assert(size == len);
+  return ret;
 }
 
 void BlockRBManager::complete_allocation(
@@ -150,6 +181,25 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
     addr,
     std::move(bptr));
 }
+
+#ifdef UNIT_TESTS_BUILT
+void BlockRBManager::prefill_fragmented_device()
+{
+  LOG_PREFIX(BlockRBManager::prefill_fragmented_device);
+  // the first 2 blocks must be allocated to lba root
+  // and backref root during mkfs
+  for (size_t block = get_block_size() * 2;
+      block <= get_size() - get_block_size() * 2;
+      block += get_block_size() * 2) {
+    DEBUG("marking {}~{} used",
+      get_start_rbm_addr() + block,
+      get_block_size());
+    allocator->mark_extent_used(
+      get_start_rbm_addr() + block,
+      get_block_size());
+  }
+}
+#endif
 
 std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
 {

@@ -2,9 +2,8 @@ import concurrent.futures
 import json
 from ceph_node_proxy.basesystem import BaseSystem
 from ceph_node_proxy.redfish_client import RedFishClient
-from threading import Thread, Lock
 from time import sleep
-from ceph_node_proxy.util import Logger, retry
+from ceph_node_proxy.util import get_logger
 from typing import Dict, Any, List, Callable, Union
 from urllib.error import HTTPError, URLError
 
@@ -15,20 +14,16 @@ class BaseRedfishSystem(BaseSystem):
         self.common_endpoints: List[str] = kw.get('common_endpoints', ['/Systems/System.Embedded.1',
                                                                        '/UpdateService'])
         self.chassis_endpoint: str = kw.get('chassis_endpoint', '/Chassis/System.Embedded.1')
-        self.log = Logger(__name__)
+        self.log = get_logger(__name__)
         self.host: str = kw['host']
         self.port: str = kw['port']
         self.username: str = kw['username']
         self.password: str = kw['password']
         # move the following line (class attribute?)
         self.client: RedFishClient = RedFishClient(host=self.host, port=self.port, username=self.username, password=self.password)
-        self.log.logger.info(f'redfish system initialization, host: {self.host}, user: {self.username}')
-
-        self.run: bool = False
-        self.thread: Thread
+        self.log.info(f'redfish system initialization, host: {self.host}, user: {self.username}')
         self.data_ready: bool = False
         self.previous_data: Dict = {}
-        self.lock: Lock = Lock()
         self.data: Dict[str, Dict[str, Any]] = {}
         self._system: Dict[str, Dict[str, Any]] = {}
         self._sys: Dict[str, Any] = {}
@@ -44,71 +39,63 @@ class BaseRedfishSystem(BaseSystem):
                                                                    'firmwares'])
         self.update_funcs: List[Callable] = []
         for component in self.component_list:
-            self.log.logger.debug(f'adding: {component} to hw component gathered list.')
+            self.log.debug(f'adding: {component} to hw component gathered list.')
             func = f'_update_{component}'
             if hasattr(self, func):
                 f = getattr(self, func)
                 self.update_funcs.append(f)
 
-        self.start_client()
-
-    def start_client(self) -> None:
+    def main(self) -> None:
+        self.stop = False
         self.client.login()
-        self.start_update_loop()
+        while not self.stop:
+            self.log.debug('waiting for a lock in the update loop.')
+            with self.lock:
+                if not self.pending_shutdown:
+                    self.log.debug('lock acquired in the update loop.')
+                    try:
+                        self._update_system()
+                        self._update_sn()
 
-    def start_update_loop(self) -> None:
-        self.run = True
-        self.thread = Thread(target=self.update)
-        self.thread.start()
+                        with concurrent.futures.ThreadPoolExecutor() as executor:
+                            executor.map(lambda f: f(), self.update_funcs)
 
-    def stop_update_loop(self) -> None:
-        self.run = False
-        self.thread.join()
-
-    def update(self) -> None:
-        #  this loop can have:
-        #  - caching logic
-        while self.run:
-            self.log.logger.debug('waiting for a lock in the update loop.')
-            self.lock.acquire()
-            self.log.logger.debug('lock acquired in the update loop.')
-            try:
-                self._update_system()
-                self._update_sn()
-
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    executor.map(lambda f: f(), self.update_funcs)
-
-                self.data_ready = True
-            except RuntimeError as e:
-                self.run = False
-                self.log.logger.error(f'Error detected, trying to gracefully log out from redfish api.\n{e}')
-                self.client.logout()
-            finally:
-                self.lock.release()
-                sleep(5)
-                self.log.logger.debug('lock released in the update loop.')
+                        self.data_ready = True
+                    except RuntimeError as e:
+                        self.stop = True
+                        self.log.error(f'Error detected, trying to gracefully log out from redfish api.\n{e}')
+                        self.client.logout()
+                        raise
+                    sleep(5)
+            self.log.debug('lock released in the update loop.')
+        self.log.debug('exiting update loop.')
+        raise SystemExit(0)
 
     def flush(self) -> None:
-        self.log.logger.debug('Acquiring lock to flush data.')
+        self.log.debug('Acquiring lock to flush data.')
         self.lock.acquire()
-        self.log.logger.debug('Lock acquired, flushing data.')
+        self.log.debug('Lock acquired, flushing data.')
         self._system = {}
         self.previous_data = {}
-        self.log.logger.info('Data flushed.')
+        self.log.info('Data flushed.')
         self.data_ready = False
-        self.log.logger.debug('Data marked as not ready.')
+        self.log.debug('Data marked as not ready.')
         self.lock.release()
-        self.log.logger.debug('Released the lock after flushing data.')
+        self.log.debug('Released the lock after flushing data.')
 
-    @retry(retries=10, delay=2)
+    # @retry(retries=10, delay=2)
     def _get_path(self, path: str) -> Dict:
+        result: Dict[str, Any] = {}
         try:
-            result = self.client.get_path(path)
+            if not self.pending_shutdown:
+                self.log.debug(f'Getting path: {path}')
+                result = self.client.get_path(path)
+            else:
+                self.log.debug(f'Pending shutdown, aborting query to {path}')
         except RuntimeError:
             raise
         if result is None:
-            self.log.logger.error(f'The client reported an error when getting path: {path}')
+            self.log.error(f'The client reported an error when getting path: {path}')
             raise RuntimeError(f'Could not get path: {path}')
         return result
 
@@ -197,7 +184,7 @@ class BaseRedfishSystem(BaseSystem):
                                        endpoint=endpoint,
                                        timeout=10)
         except HTTPError as e:
-            self.log.logger.error(f"Couldn't get the ident device LED status for device '{device}': {e}")
+            self.log.error(f"Couldn't get the ident device LED status for device '{device}': {e}")
             raise
         response_json = json.loads(result[1])
         _result: Dict[str, Any] = {'http_code': result[2]}
@@ -215,7 +202,7 @@ class BaseRedfishSystem(BaseSystem):
                 endpoint=self._sys['storage'][device]['redfish_endpoint']
             )
         except (HTTPError, KeyError) as e:
-            self.log.logger.error(f"Couldn't set the ident device LED for device '{device}': {e}")
+            self.log.error(f"Couldn't set the ident device LED for device '{device}': {e}")
             raise
         return status
 
@@ -226,7 +213,7 @@ class BaseRedfishSystem(BaseSystem):
                                        endpoint=endpoint,
                                        timeout=10)
         except HTTPError as e:
-            self.log.logger.error(f"Couldn't get the ident chassis LED status: {e}")
+            self.log.error(f"Couldn't get the ident chassis LED status: {e}")
             raise
         response_json = json.loads(result[1])
         _result: Dict[str, Any] = {'http_code': result[2]}
@@ -246,18 +233,18 @@ class BaseRedfishSystem(BaseSystem):
                 endpoint=f'/redfish/v1{self.chassis_endpoint}'
             )
         except HTTPError as e:
-            self.log.logger.error(f"Couldn't set the ident chassis LED: {e}")
+            self.log.error(f"Couldn't set the ident chassis LED: {e}")
             raise
         return status
 
-    def shutdown(self, force: bool = False) -> int:
+    def shutdown_host(self, force: bool = False) -> int:
         reboot_type: str = 'GracefulRebootWithForcedShutdown' if force else 'GracefulRebootWithoutForcedShutdown'
 
         try:
             job_id: str = self.create_reboot_job(reboot_type)
             status = self.schedule_reboot_job(job_id)
         except (HTTPError, KeyError) as e:
-            self.log.logger.error(f"Couldn't create the reboot job: {e}")
+            self.log.error(f"Couldn't create the reboot job: {e}")
             raise
         return status
 
@@ -266,7 +253,7 @@ class BaseRedfishSystem(BaseSystem):
             job_id: str = self.create_reboot_job('PowerCycle')
             status = self.schedule_reboot_job(job_id)
         except (HTTPError, URLError) as e:
-            self.log.logger.error(f"Couldn't perform power cycle: {e}")
+            self.log.error(f"Couldn't perform power cycle: {e}")
             raise
         return status
 
@@ -279,7 +266,7 @@ class BaseRedfishSystem(BaseSystem):
             )
             job_id: str = headers['Location'].split('/')[-1]
         except (HTTPError, URLError) as e:
-            self.log.logger.error(f"Couldn't create the reboot job: {e}")
+            self.log.error(f"Couldn't create the reboot job: {e}")
             raise
         return job_id
 
@@ -291,6 +278,6 @@ class BaseRedfishSystem(BaseSystem):
                 endpoint=self.setup_job_queue_endpoint
             )
         except (HTTPError, KeyError) as e:
-            self.log.logger.error(f"Couldn't schedule the reboot job: {e}")
+            self.log.error(f"Couldn't schedule the reboot job: {e}")
             raise
         return status

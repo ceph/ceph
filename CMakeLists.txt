@@ -233,13 +233,6 @@ endif()
 
 include(CMakeDependentOption)
 
-CMAKE_DEPENDENT_OPTION(WITH_ZBD "Enable libzbd bluestore backend" OFF
-  "WITH_BLUESTORE" OFF)
-if(WITH_ZBD)
-  find_package(zbd REQUIRED)
-  set(HAVE_LIBZBD ${ZBD_FOUND})
-endif()
-
 CMAKE_DEPENDENT_OPTION(WITH_LIBURING "Enable io_uring bluestore backend" ON
   "WITH_BLUESTORE;HAVE_LIBAIO" OFF)
 set(HAVE_LIBURING ${WITH_LIBURING})
@@ -314,16 +307,45 @@ endif()
 
 option(WITH_BLUEFS "libbluefs library" OFF)
 
-option(WITH_QAT "Enable Qat driver" OFF)
-if(WITH_QAT)
+CMAKE_DEPENDENT_OPTION(WITH_QATLIB "Enable QAT with qatlib" ON
+  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
+option(WITH_SYSTEM_QATLIB "Use system packages for qatlib" OFF)
+option(WITH_QATDRV "Enable QAT with out-of-tree driver" OFF)
+CMAKE_DEPENDENT_OPTION(WITH_QATZIP "Enable QATzip" ON
+  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
+option(WITH_SYSTEM_QATZIP "Use system packages for QATzip" OFF)
+
+if(WITH_QATDRV)
   find_package(QatDrv REQUIRED COMPONENTS qat_s usdm_drv_s)
-  set(HAVE_QATDRV $(QatDrv_FOUND))
+  set(HAVE_QAT TRUE)
+elseif(WITH_QATLIB)
+  if(NOT WITH_SYSTEM_QAT)
+    include(BuildQAT)
+    build_qat()
+  endif()
+  find_package(QAT REQUIRED)
+  if(NOT WITH_SYSTEM_QAT)
+    add_dependencies(QAT::qat qatlib_ext)
+    add_dependencies(QAT::usdm qatlib_ext)
+  endif()
+  set(HAVE_QAT TRUE)
 endif()
 
-option(WITH_QATZIP "Enable QATZIP" OFF)
 if(WITH_QATZIP)
-  find_package(qatzip REQUIRED)
-  set(HAVE_QATZIP ${qatzip_FOUND})
+  if(NOT HAVE_QAT)
+    message(FATAL_ERROR "WITH_QATZIP requires WITH_QATLIB or WITH_QATDRV")
+  endif()
+  if(NOT WITH_SYSTEM_QATZIP)
+    include(BuildQATzip)
+    build_qatzip()
+    # qatzip build depends on qatlib
+    add_dependencies(qatzip_ext QAT::qat)
+  endif()
+  find_package(QATzip REQUIRED)
+  if(NOT WITH_SYSTEM_QATZIP)
+    add_dependencies(QAT::zip qatzip_ext)
+  endif()
+  set(HAVE_QATZIP TRUE)
 endif(WITH_QATZIP)
 
 # needs mds and? XXX

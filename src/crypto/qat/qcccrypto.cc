@@ -39,7 +39,6 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
   }
 }
 
-static std::mutex qcc_alloc_mutex;
 static std::mutex qcc_eng_mutex;
 static std::atomic<bool> init_called = { false };
 static std::mutex poll_inst_mutex;
@@ -66,7 +65,7 @@ auto QccCrypto::async_get_instance(CompletionToken&& token) {
       // keep a few objects to wait QAT instance to make sure qat full utilization as much as possible,
       // that is, QAT don't need to wait for new objects to ensure
       // that QAT will not be in a free state as much as possible
-      instance_completions.push_back([this, ex, handler2 = std::move(handler1)](int inst)mutable{
+      instance_completions.push_back([ex, handler2 = std::move(handler1)](int inst)mutable{
         boost::asio::post(ex, std::bind(handler2, inst));
       });
     } else {
@@ -89,7 +88,9 @@ void QccCrypto::QccFreeInstance(int entry) {
 
 void QccCrypto::cleanup() {
   icp_sal_userStop();
+#ifdef HAVE_QATDRV
   qaeMemDestroy();
+#endif
   is_init = false;
   init_called = false;
   derr << "Failure during QAT init sequence. Quitting" << dendl;
@@ -140,6 +141,7 @@ bool QccCrypto::init(const size_t chunk_size, const size_t max_requests) {
   dout(15) << "First init for QAT" << dendl;
   init_called = true;
 
+#ifdef HAVE_QATDRV
   // Find if the usermode memory driver is available. We need to this to
   // create contiguous memory needed by QAT.
   stat = qaeMemInit();
@@ -148,7 +150,7 @@ bool QccCrypto::init(const size_t chunk_size, const size_t max_requests) {
     this->cleanup();
     return false;
   }
-
+#endif
   stat = icp_sal_userStart("CEPH");
   if (stat != CPA_STATUS_SUCCESS) {
     derr << "Unable to start qat device" << dendl;
@@ -301,7 +303,9 @@ bool QccCrypto::destroy() {
 
   //Un-init memory driver and QAT HW
   icp_sal_userStop();
+#ifdef HAVE_QATDRV
   qaeMemDestroy();
+#endif
   init_called = false;
   is_init = false;
   return true;
@@ -330,7 +334,7 @@ bool QccCrypto::perform_op_batch(unsigned char* out, const unsigned char* in, si
   int avail_inst = NON_INSTANCE;
 
   if (y) {
-    yield_context yield = y.get_yield_context();
+    spawn::yield_context yield = y.get_yield_context();
     avail_inst = async_get_instance(yield);
   } else {
     auto result = async_get_instance(boost::asio::use_future);
@@ -479,7 +483,7 @@ auto QatCrypto::async_perform_op(int avail_inst, std::span<CpaCySymDpOpData*> pO
   using Signature = void(CpaStatus);
   async_completion<CompletionToken, Signature> init(token);
   auto ex = boost::asio::get_associated_executor(init.completion_handler);
-  completion_handler = [this, ex, handler = init.completion_handler](CpaStatus stat) {
+  completion_handler = [ex, handler = init.completion_handler](CpaStatus stat) {
     boost::asio::post(ex, std::bind(handler, stat));
   };
 
@@ -540,7 +544,7 @@ bool QccCrypto::symPerformOp(int avail_inst,
     do {
       poll_retry_num = RETRY_MAX_NUM;
       if (y) {
-        yield_context yield = y.get_yield_context();
+        spawn::yield_context yield = y.get_yield_context();
         status = helper.async_perform_op(avail_inst, std::span<CpaCySymDpOpData*>(pOpDataVec), yield);
       } else {
         auto result = helper.async_perform_op(avail_inst, std::span<CpaCySymDpOpData*>(pOpDataVec), boost::asio::use_future);

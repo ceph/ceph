@@ -17,6 +17,7 @@
 
 #include "acconfig.h"
 
+#include <tuple>
 #include <unistd.h>
 
 #include <atomic>
@@ -32,6 +33,7 @@
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
 #include <boost/circular_buffer.hpp>
+#include <utility>
 
 #include "include/cpp-btree/btree_set.h"
 
@@ -311,6 +313,20 @@ public:
       : space(space), state(s), flags(f), seq(q), offset(o),
 	length(b.length()), data(b) {}
 
+    Buffer(Buffer &&other) {
+      std::swap(space, other.space);
+      std::swap(state, other.state);
+      std::swap(cache_private, other.cache_private);
+      std::swap(flags, other.flags);
+      std::swap(seq, other.seq);
+      std::swap(offset, other.offset);
+      std::swap(length, other.length);
+      std::swap(data, other.data);
+      std::swap(cache_age_bin, other.cache_age_bin);
+      lru_item.swap_nodes(other.lru_item);
+      state_item.swap_nodes(other.state_item);
+    }
+
     bool is_empty() const {
       return state == STATE_EMPTY;
     }
@@ -366,7 +382,7 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Buffer::state_item> > state_list_t;
 
-    mempool::bluestore_cache_meta::map<uint32_t, std::unique_ptr<Buffer>>
+    mempool::bluestore_cache_meta::map<uint32_t, Buffer>
       buffer_map;
 
     // we use a bare intrusive list here instead of std::map because
@@ -379,56 +395,63 @@ public:
       ceph_assert(writing.empty());
     }
 
-    void _add_buffer(BufferCacheShard* cache, Buffer* b, int level, Buffer* near) {
+    void _add_buffer(BufferCacheShard *cache, BufferSpace *space, Buffer&& buffer,
+                     uint16_t cache_private, int level, Buffer *near) {
+      auto it = buffer_map.emplace(buffer.offset, std::move(buffer));
+      Buffer *cached_buffer = &it.first->second;
+      cached_buffer->cache_private = cache_private;
+      _add_buffer(cache, space, cached_buffer, level, near);
+    }
+
+    void _add_buffer(BufferCacheShard *cache, BufferSpace *space,
+                     Buffer *buffer, int level, Buffer *near) {
       cache->_audit("_add_buffer start");
-      buffer_map[b->offset].reset(b);
-      if (b->is_writing()) {
+      if (buffer->is_writing()) {
         // we might get already cached data for which resetting mempool is inppropriate
         // hence calling try_assign_to_mempool
-        b->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
-        if (writing.empty() || writing.rbegin()->seq <= b->seq) {
-          writing.push_back(*b);
+        buffer->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
+        if (writing.empty() || writing.rbegin()->seq <= buffer->seq) {
+          writing.push_back(*buffer);
         } else {
           auto it = writing.begin();
-          while (it->seq < b->seq) {
+          while (it->seq < buffer->seq) {
             ++it;
           }
 
-          ceph_assert(it->seq >= b->seq);
+          ceph_assert(it->seq >= buffer->seq);
           // note that this will insert b before it
           // hence the order is maintained
-          writing.insert(it, *b);
+          writing.insert(it, *buffer);
         }
       } else {
-        b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
-        cache->_add(b, level, near);
+        buffer->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+        cache->_add(buffer, level, near);
       }
       cache->_audit("_add_buffer end");
     }
     void _rm_buffer(BufferCacheShard* cache, Buffer *b) {
       _rm_buffer(cache, buffer_map.find(b->offset));
     }
-    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator
+    std::map<uint32_t, Buffer>::iterator
     _rm_buffer(BufferCacheShard* cache,
-		    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
+		    std::map<uint32_t, Buffer>::iterator p) {
       ceph_assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
-      if (p->second->is_writing()) {
-        writing.erase(writing.iterator_to(*p->second));
+      if (p->second.is_writing()) {
+        writing.erase(writing.iterator_to(p->second));
       } else {
-	cache->_rm(p->second.get());
+	cache->_rm(&p->second);
       }
       p = buffer_map.erase(p);
       cache->_audit("_rm_buffer end");
       return p;
     }
 
-    std::map<uint32_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
-      uint32_t offset) {
+    std::map<uint32_t, Buffer>::iterator _data_lower_bound(uint32_t offset) {
       auto i = buffer_map.lower_bound(offset);
       if (i != buffer_map.begin()) {
 	--i;
-	if (i->first + i->second->length <= offset)
+	if (i->first + i->second.length <= offset)
 	  ++i;
       }
       return i;
@@ -449,18 +472,22 @@ public:
     void write(BufferCacheShard* cache, uint64_t seq, uint32_t offset, ceph::buffer::list& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
-      Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
-			     flags);
-      b->cache_private = _discard(cache, offset, bl.length());
-      _add_buffer(cache, b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
+      uint16_t cache_private = _discard(cache, offset, bl.length());
+      _add_buffer(cache, this,
+                  Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
+                                   flags),
+                  cache_private, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1,
+                  nullptr);
       cache->_trim();
     }
     void _finish_write(BufferCacheShard* cache, uint64_t seq);
     void did_read(BufferCacheShard* cache, uint32_t offset, ceph::buffer::list& bl) {
       std::lock_guard l(cache->lock);
-      Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
-      b->cache_private = _discard(cache, offset, bl.length());
-      _add_buffer(cache, b, 1, nullptr);
+      uint16_t cache_private = _discard(cache, offset, bl.length());
+      _add_buffer(
+          cache, this,
+          Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl, 0),
+          cache_private, 1, nullptr);
       cache->_trim();
     }
 
@@ -481,8 +508,8 @@ public:
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
-	ceph_assert(i.first == i.second->offset);
-	i.second->dump(f);
+	ceph_assert(i.first == i.second.offset);
+	i.second.dump(f);
 	f->close_section();
       }
       f->close_section();
@@ -1377,17 +1404,6 @@ public:
     void rewrite_omap_key(const std::string& old, std::string *out);
     void decode_omap_key(const std::string& key, std::string *user_key);
 
-#ifdef HAVE_LIBZBD
-    // Return the offset of an object on disk.  This function is intended *only*
-    // for use with zoned storage devices because in these devices, the objects
-    // are laid out contiguously on disk, which is not the case in general.
-    // Also, it should always be called after calling extent_map.fault_range(),
-    // so that the extent map is loaded.
-    int64_t zoned_get_ondisk_starting_offset() const {
-      return extent_map.extent_map.begin()->blob->
-	  get_blob().calc_offset(0, nullptr);
-    }
-#endif
 private:
     void _decode(const ceph::buffer::list& v);
   };
@@ -1848,16 +1864,6 @@ private:
     std::set<OnodeRef> onodes;     ///< these need to be updated/written
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
 
-#ifdef HAVE_LIBZBD
-    // zone refs to add/remove.  each zone ref is a (zone, offset) tuple.  The offset
-    // is the first offset in the zone that the onode touched; subsequent writes
-    // to that zone do not generate additional refs.  This is a bit imprecise but
-    // is sufficient to generate reasonably sequential reads when doing zone
-    // cleaning with less metadata than a ref for every extent.
-    std::map<std::pair<OnodeRef, uint32_t>, uint64_t> new_zone_offset_refs;
-    std::map<std::pair<OnodeRef, uint32_t>, uint64_t> old_zone_offset_refs;
-#endif
-    
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
     std::set<BlobRef> blobs_written; ///< update these on io completion
     KeyValueDB::Transaction t; ///< then we will commit this
@@ -1928,17 +1934,6 @@ private:
       modified_objects.insert(o);
       onodes.erase(o);
     }
-
-#ifdef HAVE_LIBZBD
-    void note_write_zone_offset(OnodeRef& o, uint32_t zone, uint64_t offset) {
-      o->onode.zone_offset_refs[zone] = offset;
-      new_zone_offset_refs[std::make_pair(o, zone)] = offset;
-    }
-    void note_release_zone_offset(OnodeRef& o, uint32_t zone, uint64_t offset) {
-      old_zone_offset_refs[std::make_pair(o, zone)] = offset;
-      o->onode.zone_offset_refs.erase(zone);
-    }
-#endif
 
     void aio_finish(BlueStore *store) override {
       store->txc_aio_finish(this);
@@ -2249,17 +2244,6 @@ private:
     }
   };
 
-#ifdef HAVE_LIBZBD
-  struct ZonedCleanerThread : public Thread {
-    BlueStore *store;
-    explicit ZonedCleanerThread(BlueStore *s) : store(s) {}
-    void *entry() override {
-      store->_zoned_cleaner_thread();
-      return nullptr;
-    }
-  };
-#endif
-  
   struct BigDeferredWriteContext {
     uint64_t off = 0;     // original logical offset
     uint32_t b_off = 0;   // blob relative offset
@@ -2356,15 +2340,6 @@ private:
   std::deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
   bool kv_finalize_in_progress = false;
 
-#ifdef HAVE_LIBZBD
-  ZonedCleanerThread zoned_cleaner_thread;
-  ceph::mutex zoned_cleaner_lock = ceph::make_mutex("BlueStore::zoned_cleaner_lock");
-  ceph::condition_variable zoned_cleaner_cond;
-  bool zoned_cleaner_started = false;
-  bool zoned_cleaner_stop = false;
-  std::deque<uint64_t> zoned_cleaner_queue;
-#endif
-
   PerfCounters *logger = nullptr;
 
   std::list<CollectionRef> removed_collections;
@@ -2388,10 +2363,6 @@ private:
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
   bool elastic_shared_blobs = false; ///< use smart ExtentMap::dup to reduce shared blob count
-
-  // smr-only
-  uint64_t zone_size = 0;              ///< number of SMR zones 
-  uint64_t first_sequential_zone = 0;  ///< first SMR zone that is sequential-only
 
   enum {
     // Please preserve the order since it's DB persistent
@@ -2826,16 +2797,6 @@ private:
   void _kv_stop();
   void _kv_sync_thread();
   void _kv_finalize_thread();
-
-#ifdef HAVE_LIBZBD
-  void _zoned_cleaner_start();
-  void _zoned_cleaner_stop();
-  void _zoned_cleaner_thread();
-  void _zoned_clean_zone(uint64_t zone_num,
-			 class ZonedAllocator *a,
-			 class ZonedFreelistManager *f);
-  void _clean_some(ghobject_t oid, uint32_t zone_num);
-#endif
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, uint64_t len);
   void _deferred_queue(TransContext *txc);

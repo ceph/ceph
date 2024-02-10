@@ -14,12 +14,14 @@
 
 namespace crimson::osd {
   class ShardServices;
+  class PG;
 }
 
 class ReplicatedBackend : public PGBackend
 {
 public:
   ReplicatedBackend(pg_t pgid, pg_shard_t whoami,
+		    crimson::osd::PG& pg,
 		    CollectionRef coll,
 		    crimson::osd::ShardServices& shard_services,
 		    DoutPrefixProvider &dpp);
@@ -55,6 +57,7 @@ private:
   };
   using pending_transactions_t = std::map<ceph_tid_t, pending_on_t>;
   pending_transactions_t pending_trans;
+  crimson::osd::PG& pg;
 
   seastar::future<> request_committed(
     const osd_reqid_t& reqid, const eversion_t& at_version) final;

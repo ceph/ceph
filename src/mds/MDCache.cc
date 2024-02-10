@@ -11139,12 +11139,16 @@ void MDCache::send_dentry_link(CDentry *dn, const MDRequestRef& mdr)
   CDir *subtree = get_subtree_root(dn->get_dir());
   for (const auto &p : dn->get_replicas()) {
     // don't tell (rename) witnesses; they already know
-    if (mdr.get() && mdr->more()->witnessed.count(p.first))
+    if (mdr.get() && mdr->more()->witnessed.count(p.first)) {
+      dout(20) << __func__ << " witnesses already know, skip notifying replica for the dentry " << *dn << dendl;
       continue;
+    }
     if (mds->mdsmap->get_state(p.first) < MDSMap::STATE_REJOIN ||
 	(mds->mdsmap->get_state(p.first) == MDSMap::STATE_REJOIN &&
-	 rejoin_gather.count(p.first)))
+	 rejoin_gather.count(p.first))) {
+      dout(20) << __func__ << " mds is not ready, skip notifying replica for the dentry " << *dn << dendl;
       continue;
+    }
     CDentry::linkage_t *dnl = dn->get_linkage();
     auto m = make_message<MDentryLink>(subtree->dirfrag(), dn->get_dir()->dirfrag(), dn->get_name(), dnl->is_primary());
     if (dnl->is_primary()) {
@@ -11218,13 +11222,17 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestR
        it != replicas.end();
        ++it) {
     // don't tell (rmdir) witnesses; they already know
-    if (mdr.get() && mdr->more()->witnessed.count(*it))
+    if (mdr.get() && mdr->more()->witnessed.count(*it)) {
+      dout(20) << __func__ << " witnesses already know, skip notifying replica for the dentry " << *dn << dendl;
       continue;
+    }
 
     if (mds->mdsmap->get_state(*it) < MDSMap::STATE_REJOIN ||
 	(mds->mdsmap->get_state(*it) == MDSMap::STATE_REJOIN &&
-	 rejoin_gather.count(*it)))
+	 rejoin_gather.count(*it))) {
+      dout(20) << __func__ << " mds is not ready, skip notifying replica for the dentry " << *dn << dendl;
       continue;
+    }
 
     auto unlink = make_message<MDentryUnlink>(dn->get_dir()->dirfrag(), dn->get_name());
     if (straydn) {

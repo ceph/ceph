@@ -10,6 +10,13 @@ overrides:
     conf:
       osd:
         osd shutdown pgref assert: true
+        crimson alien thread cpu cores: 6-7
+      osd.0:
+        crimson seastar cpu cores: 0-1
+      osd.1:
+        crimson seastar cpu cores: 2-3
+      osd.2:
+        crimson seastar cpu cores: 4-5
       global:
         ms cluster mode: crc
         ms service mode: crc

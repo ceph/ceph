@@ -172,10 +172,12 @@ rgw_store="rados"
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 # disable SPDK by default
 pmem_enabled=0
-zoned_enabled=0
 io_uring_enabled=0
 with_jaeger=0
 force_addr=0
+osds_per_host=0
+require_osd_and_client_version=""
+use_crush_tunables=""
 
 with_mgr_dashboard=true
 if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
@@ -253,7 +255,6 @@ options:
 	--bluestore-devs: comma-separated list of blockdevs to use for bluestore
 	--bluestore-db-devs: comma-separated list of db-devs to use for bluestore
 	--bluestore-wal-devs: comma-separated list of wal-devs to use for bluestore
-	--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)
 	--bluestore-io-uring: enable io_uring backend
 	--inc-osd: append some more osds into existing vcluster
 	--cephadm: enable cephadm orchestrator with ~/.ssh/id_rsa[.pub]
@@ -265,6 +266,9 @@ options:
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
 	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
 	--crimson-smp: number of cores to use for crimson
+	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
+	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
+	--use-crush-tunables: if supplied, set tunables to specified value
 \n
 EOF
 
@@ -588,9 +592,6 @@ case $1 in
         parse_bluestore_wal_devs --bluestore-wal-devs "$2"
         shift
         ;;
-    --bluestore-zoned)
-        zoned_enabled=1
-        ;;
     --bluestore-io-uring)
         io_uring_enabled=1
         shift
@@ -598,6 +599,21 @@ case $1 in
     --jaeger)
         with_jaeger=1
         echo "with_jaeger $with_jaeger"
+        ;;
+    --osds-per-host)
+        osds_per_host="$2"
+        shift
+        echo "osds_per_host $osds_per_host"
+        ;;
+    --require-osd-and-client-version)
+        require_osd_and_client_version="$2"
+        shift
+        echo "require_osd_and_client_version $require_osd_and_client_version"
+        ;;
+    --use-crush-tunables)
+        use_crush_tunables="$2"
+        shift
+        echo "use_crush_tunables $use_crush_tunables"
         ;;
     *)
         usage_exit
@@ -854,14 +870,6 @@ EOF
                 BLUESTORE_OPTS=""
             fi
         fi
-        if [ "$zoned_enabled" -eq 1 ]; then
-            BLUESTORE_OPTS+="
-        bluestore min alloc size = 65536
-        bluestore prefer deferred size = 0
-        bluestore prefer deferred size hdd = 0
-        bluestore prefer deferred size ssd = 0
-        bluestore allocator = zoned"
-        fi
         if [ "$io_uring_enabled" -eq 1 ]; then
             BLUESTORE_OPTS+="
         bdev ioring = true"
@@ -1095,6 +1103,15 @@ EOF
     if [ "$crimson" -eq 1 ]; then
         $CEPH_BIN/ceph osd set-allow-crimson --yes-i-really-mean-it
     fi
+
+    if [ -n "$require_osd_and_client_version" ]; then
+        $CEPH_BIN/ceph osd set-require-min-compat-client $require_osd_and_client_version
+        $CEPH_BIN/ceph osd require-osd-release $require_osd_and_client_version --yes-i-really-mean-it
+    fi
+
+    if [ -n "$use_crush_tunables" ]; then
+        $CEPH_BIN/ceph osd crush tunables $use_crush_tunables
+    fi
 }
 
 start_osd() {
@@ -1110,24 +1127,25 @@ start_osd() {
     local osds_wait
     for osd in `seq $start $end`
     do
-	local extra_seastar_args
 	if [ "$ceph_osd" == "crimson-osd" ]; then
         bottom_cpu=$(( osd * crimson_smp ))
         top_cpu=$(( bottom_cpu + crimson_smp - 1 ))
-	    # set a single CPU nodes for each osd
-	    extra_seastar_args="--cpuset $bottom_cpu-$top_cpu"
-	    if [ "$debug" -ne 0 ]; then
-		extra_seastar_args+=" --debug"
-	    fi
-            if [ "$trace" -ne 0 ]; then
-                extra_seastar_args+=" --trace"
-            fi
+	    # set exclusive CPU nodes for each osd
+	    echo "$CEPH_BIN/ceph -c $conf_fn config set osd.$osd crimson_seastar_cpu_cores $bottom_cpu-$top_cpu"
+	    $CEPH_BIN/ceph -c $conf_fn config set "osd.$osd" crimson_seastar_cpu_cores "$bottom_cpu-$top_cpu"
 	fi
 	if [ "$new" -eq 1 -o $inc_osd_num -gt 0 ]; then
             wconf <<EOF
 [osd.$osd]
         host = $HOSTNAME
 EOF
+
+            if [ "$osds_per_host" -gt 0 ]; then
+                wconf <<EOF
+        crush location = root=default host=$HOSTNAME-$(echo "$osd / $osds_per_host" | bc)
+EOF
+            fi
+
             if [ "$spdk_enabled" -eq 1 ]; then
                 wconf <<EOF
         bluestore_block_path = spdk:${bluestore_spdk_dev[$osd]}
@@ -1665,7 +1683,18 @@ EOF
 fi
 
 if [ "$ceph_osd" == "crimson-osd" ]; then
-    $CEPH_BIN/ceph -c $conf_fn config set osd crimson_seastar_smp $crimson_smp
+     if [ "$debug" -ne 0 ]; then
+        extra_seastar_args=" --debug"
+    fi
+    if [ "$trace" -ne 0 ]; then
+        extra_seastar_args=" --trace"
+    fi
+    if [ "$(expr $(nproc) - 1)" -gt "$(($CEPH_NUM_OSD * crimson_smp))" ]; then
+      echo "crimson_alien_thread_cpu_cores:" $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
+      $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_thread_cpu_cores $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
+    else
+      echo "No alien thread cpu core isolation"
+    fi
 fi
 
 if [ $CEPH_NUM_MGR -gt 0 ]; then

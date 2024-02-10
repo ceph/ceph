@@ -23,6 +23,7 @@
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/object_context_loader.h"
+#include "crimson/osd/pg.h"
 #include "replicated_backend.h"
 #include "replicated_recovery_backend.h"
 #include "ec_backend.h"
@@ -43,6 +44,7 @@ std::unique_ptr<PGBackend>
 PGBackend::create(pg_t pgid,
 		  const pg_shard_t pg_shard,
 		  const pg_pool_t& pool,
+		  crimson::osd::PG& pg,
 		  crimson::os::CollectionRef coll,
 		  crimson::osd::ShardServices& shard_services,
 		  const ec_profile_t& ec_profile,
@@ -50,7 +52,7 @@ PGBackend::create(pg_t pgid,
 {
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
-    return std::make_unique<ReplicatedBackend>(pgid, pg_shard,
+    return std::make_unique<ReplicatedBackend>(pgid, pg_shard, pg,
 					       coll, shard_services,
 					       dpp);
   case pg_pool_t::TYPE_ERASURE:
