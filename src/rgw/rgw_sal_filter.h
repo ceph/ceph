@@ -186,6 +186,9 @@ public:
       optional_yield y, const DoutPrefixProvider *dpp) override {
     return next->read_topics(tenant, topics, objv_tracker, y, dpp);
   }
+  int stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) override {
+    return next->stat_topics_v1(tenant, y, dpp);
+  }
   int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
       optional_yield y, const DoutPrefixProvider *dpp) override {
     return next->write_topics(tenant, topics, objv_tracker, y, dpp);

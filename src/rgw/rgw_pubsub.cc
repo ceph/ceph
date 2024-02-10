@@ -539,11 +539,12 @@ int RGWPubSub::get_topics(const DoutPrefixProvider* dpp,
                           rgw_pubsub_topics& result, std::string& next_marker,
                           optional_yield y) const
 {
-  if (!use_notification_v2) {
+  if (!use_notification_v2 || driver->stat_topics_v1(tenant, y, dpp) != -ENOENT) {
+    // in case of v1 or during migration we use v1 topics
     // v1 returns all topics, ignoring marker/max_items
     return read_topics_v1(dpp, result, nullptr, y);
   }
-
+ 
   // TODO: prefix filter on 'tenant:'
   void* handle = NULL;
   int ret = driver->meta_list_keys_init(dpp, "topic", start_marker, &handle);
@@ -623,6 +624,13 @@ int RGWPubSub::Bucket::write_topics(const DoutPrefixProvider *dpp, const rgw_pub
 					RGWObjVersionTracker *objv_tracker,
 					optional_yield y) const
 {
+  if (ps.use_notification_v2) { 
+    if (const auto ret = ps.driver->stat_topics_v1(bucket->get_tenant(), y, dpp); ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+        << ". please try again later" << dendl; 
+      return -ERR_SERVICE_UNAVAILABLE;
+    }
+  }
   const int ret = bucket->write_topics(topics, objv_tracker, y, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
@@ -637,7 +645,8 @@ int RGWPubSub::get_topic(const DoutPrefixProvider* dpp,
                          rgw_pubsub_topic& result,
                          optional_yield y,
                          std::set<std::string>* subscribed_buckets) const {
-  if (use_notification_v2) {
+  if (use_notification_v2 && driver->stat_topics_v1(tenant, y, dpp) == -ENOENT) {
+    // in case of v1 or during migration we use v1 topics
     int ret = driver->read_topic_v2(name, tenant, result, nullptr, y, dpp);
     if (ret < 0) {
       ldpp_dout(dpp, 1) << "failed to read topic info for name: " << name
@@ -962,6 +971,11 @@ int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
                             const std::string& policy_text,
                             optional_yield y) const {
   if (use_notification_v2) {
+    if (const auto ret = driver->stat_topics_v1(tenant, y, dpp); ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+        << ". please try again later" << dendl; 
+      return -ERR_SERVICE_UNAVAILABLE;
+    }
     rgw_pubsub_topic new_topic;
     new_topic.user = user;
     new_topic.name = name;
@@ -994,6 +1008,7 @@ int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
+  ldpp_dout(dpp, 1) << "INFO: successfully created v1 topic" << dendl;
 
   return 0;
 }
@@ -1025,6 +1040,11 @@ int RGWPubSub::remove_topic_v2(const DoutPrefixProvider* dpp,
 int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const
 {
   if (use_notification_v2) {
+    if (const auto ret = driver->stat_topics_v1(tenant, y, dpp); ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+        << ". please try again later" << dendl; 
+      return -ERR_SERVICE_UNAVAILABLE;
+    }
     return remove_topic_v2(dpp, name, y);
   }
   RGWObjVersionTracker objv_tracker;
