@@ -19,3 +19,9 @@ overrides:
       - slow request
       - timeout on replica
       - late reservation from
+      - MON_DOWN
+      - OSDMAP_FLAGS
+      - OSD_DOWN
+      - PG_DEGRADED
+      - PG_AVAILABILITY
+      - POOL_APP_NOT_ENABLED
