@@ -160,6 +160,7 @@ class RadosStore : public StoreDriver {
     std::string& _req_id, optional_yield y) override;
     int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) override;
+    int stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) override;
     int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
 	optional_yield y, const DoutPrefixProvider *dpp) override;
     int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,

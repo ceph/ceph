@@ -35,6 +35,7 @@
 #include "rgw_acl_s3.h"
 #include "rgw_aio.h"
 #include "rgw_aio_throttle.h"
+#include "rgw_tools.h"
 #include "rgw_tracer.h"
 
 #include "rgw_zone.h"
@@ -1115,6 +1116,10 @@ int RadosStore::read_topics(const std::string& tenant, rgw_pubsub_topics& topics
   }
 
   return 0;
+}
+
+int RadosStore::stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) {
+  return rgw_stat_system_obj(dpp, svc()->sysobj, svc()->zone->get_zone_params().log_pool, topics_oid(tenant), nullptr, nullptr, y, nullptr);
 }
 
 int RadosStore::write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,

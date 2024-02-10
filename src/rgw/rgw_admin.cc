@@ -10633,7 +10633,8 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
+    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
+        driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
       ret = get_bucket_notifications(dpp(), bucket.get(), result);
       if (ret < 0) {
         cerr << "ERROR: could not get topics: " << cpp_strerror(-ret)
@@ -10672,7 +10673,8 @@ next:
           continue;
         }
         std::set<std::string> subscribed_buckets;
-        if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
+        if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
+            driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
           ret = driver->get_bucket_topic_mapping(topic, subscribed_buckets,
                                                  null_yield, dpp());
           if (ret < 0) {
@@ -10714,7 +10716,8 @@ next:
       cerr << "ERROR: could not get topic: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
+    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
+        driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
       show_topics_info_v2(topic, subscribed_buckets, formatter.get());
     } else {
       encode_json("topic", topic, formatter.get());
@@ -10738,7 +10741,8 @@ next:
       return -ret;
     }
     rgw_pubsub_bucket_topics bucket_topics;
-    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
+    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
+        driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
       ret = get_bucket_notifications(dpp(), bucket.get(), bucket_topics);
       if (ret < 0) {
         cerr << "ERROR: could not get bucket notifications: "
@@ -10804,6 +10808,11 @@ next:
     }
 
     if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
+      if (ret = driver->stat_topics_v1(tenant, null_yield, dpp()); ret != -ENOENT) {
+        cerr << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+          << ". please try again later" << std::endl;
+        return -ret;
+      }
       ret = remove_notification_v2(dpp(), driver, bucket.get(), notification_id,
                                    null_yield);
     } else {

@@ -127,6 +127,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INTERNAL_ERROR, {500, "InternalError" }},
     { ERR_NOT_IMPLEMENTED, {501, "NotImplemented" }},
     { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
+    { EBUSY, {503, "ServiceUnavailable"}},
     { ERR_RATE_LIMITED, {503, "SlowDown"}},
     { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
     { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSet"}},
