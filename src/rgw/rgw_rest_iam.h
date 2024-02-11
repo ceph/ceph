@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <concepts>
+
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 #include "rgw_rest.h"
@@ -12,14 +14,17 @@
 class DoutPrefixProvider;
 namespace rgw { class SiteConfig; }
 struct RGWUserInfo;
+struct RGWGroupInfo;
 
 bool validate_iam_policy_name(const std::string& name, std::string& err);
 bool validate_iam_policy_arn(const std::string& arn, std::string& err);
 bool validate_iam_user_name(const std::string& name, std::string& err);
 bool validate_iam_role_name(const std::string& name, std::string& err);
+bool validate_iam_group_name(const std::string& name, std::string& err);
 bool validate_iam_path(const std::string& path, std::string& err);
 
 std::string iam_user_arn(const RGWUserInfo& info);
+std::string iam_group_arn(const RGWGroupInfo& info);
 
 int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
@@ -27,6 +32,26 @@ int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
                                   bufferlist& indata,
                                   RGWXMLDecoder::XMLParser& parser,
                                   req_info& req, optional_yield y);
+
+/// Perform an atomic read-modify-write operation on the given group metadata.
+/// Racing writes are detected here as ECANCELED errors, where we reload the
+/// updated group metadata and retry the operation.
+template <std::invocable<> F>
+int retry_raced_group_write(const DoutPrefixProvider* dpp, optional_yield y,
+                            rgw::sal::Driver* driver, RGWGroupInfo& info,
+                            rgw::sal::Attrs& attrs, RGWObjVersionTracker& objv,
+                            const F& f)
+{
+  int r = f();
+  for (int i = 0; i < 10 && r == -ECANCELED; ++i) {
+    objv.clear();
+    r = driver->load_group_by_id(dpp, y, info.id, info, attrs, objv);
+    if (r >= 0) {
+      r = f();
+    }
+  }
+  return r;
+}
 
 class RGWHandler_REST_IAM : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;

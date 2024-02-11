@@ -107,6 +107,12 @@ using rgw::IAM::iamListOIDCProviders;
 using rgw::IAM::iamListRoleTags;
 using rgw::IAM::iamListUsers;
 using rgw::IAM::iamListAccessKeys;
+using rgw::IAM::iamGetGroup;
+using rgw::IAM::iamListGroups;
+using rgw::IAM::iamListGroupsForUser;
+using rgw::IAM::iamGetGroupPolicy;
+using rgw::IAM::iamListGroupPolicies;
+using rgw::IAM::iamListAttachedGroupPolicies;
 using rgw::IAM::iamSimulateCustomPolicy;
 using rgw::IAM::iamSimulatePrincipalPolicy;
 using rgw::IAM::snsGetTopicAttributes;
@@ -809,6 +815,12 @@ TEST_F(ManagedPolicyTest, IAMReadOnlyAccess)
   act[iamListRoleTags] = 1;
   act[iamListUsers] = 1;
   act[iamListAccessKeys] = 1;
+  act[iamGetGroup] = 1;
+  act[iamListGroups] = 1;
+  act[iamListGroupsForUser] = 1;
+  act[iamGetGroupPolicy] = 1;
+  act[iamListGroupPolicies] = 1;
+  act[iamListAttachedGroupPolicies] = 1;
   act[iamSimulateCustomPolicy] = 1;
   act[iamSimulatePrincipalPolicy] = 1;
 
