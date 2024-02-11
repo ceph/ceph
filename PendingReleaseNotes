@@ -9,6 +9,8 @@
   and valid), diff-iterate is now guaranteed to execute locally if exclusive
   lock is available.  This brings a dramatic performance improvement for QEMU
   live disk synchronization and backup use cases.
+* RBD: The option ``--image-id`` has been added to `rbd children` CLI command,
+  so it can be run for images in the trash.
 
 >=17.2.7
 --------

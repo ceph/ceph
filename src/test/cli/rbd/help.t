@@ -194,9 +194,9 @@
   
   rbd help children
   usage: rbd children [--pool <pool>] [--namespace <namespace>] 
-                      [--image <image>] [--snap <snap>] [--snap-id <snap-id>] 
-                      [--all] [--descendants] [--format <format>] 
-                      [--pretty-format] 
+                      [--image <image>] [--snap <snap>] [--image-id <image-id>] 
+                      [--snap-id <snap-id>] [--all] [--descendants] 
+                      [--format <format>] [--pretty-format] 
                       <image-or-snap-spec> 
   
   Display children of an image or its snapshot.
@@ -211,6 +211,7 @@
     --namespace arg       namespace name
     --image arg           image name
     --snap arg            snapshot name
+    --image-id arg        image id
     --snap-id arg         snapshot id
     -a [ --all ]          list all children (include trash)
     --descendants         include all descendants
