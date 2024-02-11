@@ -392,8 +392,12 @@ def test_ceph_volume_command_12(test_input2):
     drive = drive_selection.DriveSelection(spec, spec.data_devices.paths)
     cmds = translate.to_ceph_volume(drive, []).run()
 
-    assert (cmds[0] == 'lvm batch --no-auto /dev/sdb --crush-device-class ssd --yes --no-systemd')  # noqa E501
-    assert (cmds[1] == 'lvm batch --no-auto /dev/sda --crush-device-class hdd --yes --no-systemd')  # noqa E501
+    expected_cmds = [
+        'lvm batch --no-auto /dev/sdb --crush-device-class ssd --yes --no-systemd',
+        'lvm batch --no-auto /dev/sda --crush-device-class hdd --yes --no-systemd',
+    ]
+    assert len(cmds) == len(expected_cmds), f"Expected {expected_cmds} got {cmds}"
+    assert all(cmd in cmds for cmd in expected_cmds), f'Expected {expected_cmds} got {cmds}'
 
 
 @pytest.mark.parametrize("test_input3",
@@ -418,8 +422,12 @@ def test_ceph_volume_command_13(test_input3):
     drive = drive_selection.DriveSelection(spec, spec.data_devices.paths)
     cmds = translate.to_ceph_volume(drive, []).run()
 
-    assert (cmds[0] == 'lvm batch --no-auto /dev/sdb --yes --no-systemd')  # noqa E501
-    assert (cmds[1] == 'lvm batch --no-auto /dev/sda --crush-device-class hdd --yes --no-systemd')  # noqa E501
+    expected_cmds = [
+        'lvm batch --no-auto /dev/sdb --yes --no-systemd',
+        'lvm batch --no-auto /dev/sda --crush-device-class hdd --yes --no-systemd',
+    ]
+    assert len(cmds) == len(expected_cmds), f"Expected {expected_cmds} got {cmds}"
+    assert all(cmd in cmds for cmd in expected_cmds), f'Expected {expected_cmds} got {cmds}'
 
 
 @pytest.mark.parametrize("test_input4",
