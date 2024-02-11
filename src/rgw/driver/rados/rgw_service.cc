@@ -30,6 +30,7 @@
 #include "common/errno.h"
 
 #include "account.h"
+#include "group.h"
 #include "rgw_bucket.h"
 #include "rgw_cr_rados.h"
 #include "rgw_datalog.h"
@@ -395,6 +396,8 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
   meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(driver, svc.role);
   meta.account = rgwrados::account::create_metadata_handler(
       *svc.sysobj, svc.zone->get_zone_params());
+  meta.group = rgwrados::group::create_metadata_handler(
+      *svc.sysobj, rados, svc.zone->get_zone_params());
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,
@@ -491,10 +494,17 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver,
     ldout(cct, 0) << "ERROR: failed to start init meta.account ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
+
   r = meta.topic->attach(meta.mgr);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start init topic ctl ("
                   << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = _ctl.meta.group->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init meta.group ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
   return 0;

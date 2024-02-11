@@ -21,6 +21,7 @@
 
 #include "driver/rados/account.h"
 #include "driver/rados/buckets.h"
+#include "driver/rados/group.h"
 #include "driver/rados/users.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -370,6 +371,25 @@ public:
           << " to account " << info.account_id << dendl;
     }
 
+    for (const auto& group_id : info.group_ids) {
+      if (old_info && old_info->group_ids.count(group_id)) {
+        continue;
+      }
+      // link the user to its group
+      const RGWZoneParams& zone = svc.zone->get_zone_params();
+      const auto& users = rgwrados::group::get_users_obj(zone, group_id);
+      ret = rgwrados::users::add(dpp, y, rados, users, info, false,
+                                 std::numeric_limits<uint32_t>::max());
+      if (ret < 0) {
+        ldpp_dout(dpp, 20) << "WARNING: failed to link user "
+            << info.user_id << " to group " << group_id
+            << ": " << cpp_strerror(ret) << dendl;
+        return ret;
+      }
+      ldpp_dout(dpp, 20) << "linked user " << info.user_id
+          << " to group " << group_id << dendl;
+    }
+
     return 0;
   }
 
@@ -426,6 +446,20 @@ public:
       ret = rgwrados::users::remove(dpp, y, rados, users, old_info.display_name);
       if (ret < 0 && ret != -ENOENT) {
         set_err_msg("ERROR: could not unlink from account " + old_info.account_id);
+        return ret;
+      }
+    }
+
+    for (const auto& group_id : old_info.group_ids) {
+      if (info.group_ids.count(group_id)) {
+        continue;
+      }
+      // remove from the old group
+      const RGWZoneParams& zone = svc.zone->get_zone_params();
+      const auto& users = rgwrados::group::get_users_obj(zone, group_id);
+      ret = rgwrados::users::remove(dpp, y, rados, users, old_info.display_name);
+      if (ret < 0 && ret != -ENOENT) {
+        set_err_msg("ERROR: could not unlink from group " + group_id);
         return ret;
       }
     }
@@ -567,6 +601,17 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *ctx,
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: could not unlink from account "
           << info.account_id << ": " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+  }
+
+  for (const auto& group_id : info.group_ids) {
+    const RGWZoneParams& zone = svc.zone->get_zone_params();
+    const auto& users = rgwrados::group::get_users_obj(zone, group_id);
+    ret = rgwrados::users::remove(dpp, y, *rados, users, info.display_name);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: could not unlink from group "
+          << group_id << ": " << cpp_strerror(ret) << dendl;
       return ret;
     }
   }

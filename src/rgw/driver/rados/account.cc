@@ -34,6 +34,7 @@ namespace rgwrados::account {
 
 static constexpr std::string_view buckets_oid_prefix = "buckets.";
 static constexpr std::string_view users_oid_prefix = "users.";
+static constexpr std::string_view groups_oid_prefix = "groups.";
 static constexpr std::string_view roles_oid_prefix = "roles.";
 static const std::string account_oid_prefix = "account.";
 static constexpr std::string_view name_oid_prefix = "name.";
@@ -53,6 +54,14 @@ static std::string get_users_key(std::string_view account_id) {
 rgw_raw_obj get_users_obj(const RGWZoneParams& zone,
                           std::string_view account_id) {
   return {zone.account_pool, get_users_key(account_id)};
+}
+
+static std::string get_groups_key(std::string_view account_id) {
+  return string_cat_reserve(groups_oid_prefix, account_id);
+}
+rgw_raw_obj get_groups_obj(const RGWZoneParams& zone,
+                           std::string_view account_id) {
+  return {zone.account_pool, get_groups_key(account_id)};
 }
 
 static std::string get_roles_key(std::string_view account_id) {

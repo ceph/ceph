@@ -198,6 +198,7 @@ struct RGWCtlDef {
     std::unique_ptr<RGWMetadataHandler> role;
     std::unique_ptr<RGWMetadataHandler> topic;
     std::unique_ptr<RGWMetadataHandler> account;
+    std::unique_ptr<RGWMetadataHandler> group;
 
     std::unique_ptr<RGWChainedCacheImpl<rgwrados::topic::cache_entry>> topic_cache;
 

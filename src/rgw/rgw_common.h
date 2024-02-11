@@ -22,6 +22,8 @@
 #include <unordered_map>
 
 #include <fmt/format.h>
+#include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
@@ -595,6 +597,7 @@ struct RGWUserInfo
   std::string path = "/";
   ceph::real_time create_date;
   std::multimap<std::string, std::string> tags;
+  boost::container::flat_set<std::string, std::less<>> group_ids;
 
   RGWUserInfo()
     : suspended(0),
@@ -666,6 +669,7 @@ struct RGWUserInfo
      encode(path, bl);
      encode(create_date, bl);
      encode(tags, bl);
+     encode(group_ids, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
@@ -761,6 +765,7 @@ struct RGWUserInfo
       decode(path, bl);
       decode(create_date, bl);
       decode(tags, bl);
+      decode(group_ids, bl);
     } else {
       path = "/";
     }

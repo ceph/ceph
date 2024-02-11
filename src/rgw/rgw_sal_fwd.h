@@ -48,6 +48,7 @@ namespace sal {
   struct RGWRoleInfo;
   class RGWRole;
   struct RoleList;
+  struct GroupList;
   class DataProcessor;
   class ObjectProcessor;
   class ReadStatsCB;

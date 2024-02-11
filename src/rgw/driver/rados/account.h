@@ -51,6 +51,11 @@ rgw_raw_obj get_buckets_obj(const RGWZoneParams& zone,
 rgw_raw_obj get_users_obj(const RGWZoneParams& zone,
                           std::string_view account_id);
 
+/// Return the rados object that tracks the given account's groups. This
+/// can be used with the cls_user interface in namespace rgwrados::groups.
+rgw_raw_obj get_groups_obj(const RGWZoneParams& zone,
+                           std::string_view account_id);
+
 /// Return the rados object that tracks the given account's roles. This
 /// can be used with the cls_user interface in namespace rgwrados::roles.
 rgw_raw_obj get_roles_obj(const RGWZoneParams& zone,
