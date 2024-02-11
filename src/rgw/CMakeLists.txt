@@ -155,6 +155,8 @@ set(librgw_common_srcs
   driver/rados/account.cc
   driver/rados/buckets.cc
   driver/rados/cls_fifo_legacy.cc
+  driver/rados/group.cc
+  driver/rados/groups.cc
   driver/rados/rgw_bucket.cc
   driver/rados/rgw_bucket_sync.cc
   driver/rados/rgw_cr_rados.cc

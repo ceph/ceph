@@ -135,6 +135,13 @@ namespace rgw::sal {
     return 0;
   }
 
+  int DBUser::list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                          std::string_view marker, uint32_t max_items,
+                          GroupList& listing)
+  {
+    return -ENOTSUP;
+  }
+
   int DBBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y)
   {
     int ret;
@@ -1685,6 +1692,70 @@ namespace rgw::sal {
                                   std::string_view marker,
                                   uint32_t max_items,
                                   UserList& listing)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_group_by_id(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                std::string_view id,
+                                RGWGroupInfo& info, Attrs& attrs,
+                                RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_group_by_name(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view account_id,
+                                  std::string_view name,
+                                  RGWGroupInfo& info, Attrs& attrs,
+                                  RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::store_group(const DoutPrefixProvider* dpp, optional_yield y,
+                           const RGWGroupInfo& info, const Attrs& attrs,
+                           RGWObjVersionTracker& objv, bool exclusive,
+                           const RGWGroupInfo* old_info)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::remove_group(const DoutPrefixProvider* dpp, optional_yield y,
+                            const RGWGroupInfo& info,
+                            RGWObjVersionTracker& objv)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::list_group_users(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                std::string_view tenant,
+                                std::string_view id,
+                                std::string_view marker,
+                                uint32_t max_items,
+                                UserList& listing)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::count_account_groups(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::list_account_groups(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   std::string_view path_prefix,
+                                   std::string_view marker,
+                                   uint32_t max_items,
+                                   GroupList& listing)
   {
     return -ENOTSUP;
   }
