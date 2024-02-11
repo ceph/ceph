@@ -243,6 +243,19 @@ RGWListUserPolicies::RGWListUserPolicies()
 {
 }
 
+int RGWListUserPolicies::get_params()
+{
+  marker = s->info.args.get("Marker");
+
+  int r = s->info.args.get_int("MaxItems", &max_items, max_items);
+  if (r < 0 || max_items > 1000) {
+    s->err.message = "Invalid value for MaxItems";
+    return -EINVAL;
+  }
+
+  return RGWRestUserPolicy::get_params();
+}
+
 void RGWListUserPolicies::execute(optional_yield y)
 {
   std::map<std::string, std::string> policies;
@@ -262,10 +275,16 @@ void RGWListUserPolicies::execute(optional_yield y)
   s->formatter->close_section();
   s->formatter->open_object_section("ListUserPoliciesResult");
   s->formatter->open_array_section("PolicyNames");
-  for (const auto& p : policies) {
-    s->formatter->dump_string("member", p.first);
+  auto policy = policies.lower_bound(marker);
+  for (; policy != policies.end() && max_items > 0; ++policy, --max_items) {
+    s->formatter->dump_string("member", policy->first);
   }
   s->formatter->close_section(); // PolicyNames
+  const bool is_truncated = (policy != policies.end());
+  encode_json("IsTruncated", is_truncated, s->formatter);
+  if (is_truncated) {
+    encode_json("Marker", policy->first, s->formatter);
+  }
   s->formatter->close_section(); // ListUserPoliciesResult
   s->formatter->close_section(); // ListUserPoliciesResponse
 }

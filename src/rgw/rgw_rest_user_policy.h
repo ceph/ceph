@@ -50,6 +50,9 @@ public:
 };
 
 class RGWListUserPolicies : public RGWRestUserPolicy {
+  std::string marker;
+  int max_items = 100;
+  int get_params() override;
 public:
   RGWListUserPolicies();
   void execute(optional_yield y) override;
