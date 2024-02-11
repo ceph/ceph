@@ -381,9 +381,11 @@ options:
 - name: osd_scrub_sleep
   type: float
   level: advanced
-  desc: Duration to inject a delay during scrubbing
-  fmt_desc: Time to sleep before scrubbing the next group of chunks (seconds). Increasing this value will slow
-    down the overall rate of scrubbing so that client operations will be less impacted.
+  desc: Duration (in seconds) of delay injected between chunks when scrubbing
+  fmt_desc: Sleep time in seconds before scrubbing the next group of objects (the next chunk).
+    Increasing this value will slow down the overall rate of scrubbing, reducing scrub
+    impact on client operations.
+    This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
@@ -392,7 +394,13 @@ options:
 - name: osd_scrub_extended_sleep
   type: float
   level: advanced
-  desc: Duration to inject a delay during scrubbing out of scrubbing hours (seconds)
+  desc: Duration (in seconds) of delay injected between chunks when scrubbing out
+    of scrubbing hours
+  fmt_desc: Sleep time in seconds before scrubbing the next group of objects (the next chunk).
+    This configuration value is used for scrubbing out of scrubbing hours.
+    Increasing this value will slow down the overall rate of scrubbing, reducing scrub
+    impact on client operations.
+    This setting is ignored when the mClock scheduler is used.
   default: 0
   see_also:
   - osd_scrub_begin_hour
