@@ -13801,6 +13801,7 @@ void BlueStore::_txc_finish(TransContext *txc)
 
   for (auto &[onode, seq] : txc->buffers_written) {
     if (txc->deferred_txn && txc->deferred_txn->txc_seq == seq) {
+      std::unique_lock l(onode->c->lock);
       auto it = onode->c->deferred_seq_dependencies.find(seq);
       if (it != onode->c->deferred_seq_dependencies.end()) {
         for (auto &dependent_onode : it->second) {
@@ -18167,6 +18168,7 @@ void BlueStore::_shutdown_cache()
   }
   for (auto& p : coll_map) {
     // Clear deferred write buffers before clearing up Onodes
+    std::unique_lock l(p.second->lock);
     for (auto &[seq, onodes] : p.second->deferred_seq_dependencies) {
       for (auto &onode : onodes) {
         onode->bc._finish_write(onode->c->cache, seq);
