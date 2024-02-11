@@ -2070,9 +2070,14 @@ extern int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Dr
 				     req_state *s, bool prefetch_data, optional_yield y);
 extern void rgw_build_iam_environment(rgw::sal::Driver* driver,
 				      req_state* s);
-extern std::vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
-                        const std::map<std::string, bufferlist>& attrs,
-                        const std::string& tenant);
+
+// load all user/group policies
+void load_iam_identity_policies(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                rgw::sal::Driver* driver,
+                                const RGWUserInfo& info,
+                                const rgw::sal::Attrs& attrs,
+                                std::vector<rgw::IAM::Policy>& policies);
 
 inline int get_system_versioning_params(req_state *s,
 					uint64_t *olh_epoch,
