@@ -10,6 +10,7 @@
 #include "rgw_rest_role.h"
 #include "rgw_rest_user_policy.h"
 #include "rgw_rest_oidc_provider.h"
+#include "rgw_rest_iam_group.h"
 #include "rgw_rest_iam_user.h"
 #include "rgw_rest_conn.h"
 #include "driver/rados/rgw_zone.h"
@@ -57,6 +58,21 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"UpdateAccessKey", make_iam_update_access_key_op},
   {"DeleteAccessKey", make_iam_delete_access_key_op},
   {"ListAccessKeys", make_iam_list_access_keys_op},
+  {"CreateGroup", make_iam_create_group_op},
+  {"GetGroup", make_iam_get_group_op},
+  {"UpdateGroup", make_iam_update_group_op},
+  {"DeleteGroup", make_iam_delete_group_op},
+  {"ListGroups", make_iam_list_groups_op},
+  {"AddUserToGroup", make_iam_add_user_to_group_op},
+  {"RemoveUserFromGroup", make_iam_remove_user_from_group_op},
+  {"ListGroupsForUser", make_iam_list_groups_for_user_op},
+  {"PutGroupPolicy", make_iam_put_group_policy_op},
+  {"GetGroupPolicy", make_iam_get_group_policy_op},
+  {"ListGroupPolicies", make_iam_list_group_policies_op},
+  {"DeleteGroupPolicy", make_iam_delete_group_policy_op},
+  {"AttachGroupPolicy", make_iam_attach_group_policy_op},
+  {"DetachGroupPolicy", make_iam_detach_group_policy_op},
+  {"ListAttachedGroupPolicies", make_iam_list_attached_group_policies_op},
 };
 
 bool RGWHandler_REST_IAM::action_exists(const req_state* s) 
@@ -189,6 +205,26 @@ bool validate_iam_role_name(const std::string& name, std::string& err)
   return true;
 }
 
+static constexpr size_t MAX_GROUP_NAME_LEN = 128;
+
+bool validate_iam_group_name(const std::string& name, std::string& err)
+{
+  if (name.empty()) {
+    err = "Missing required element GroupName";
+    return false;
+  }
+  if (name.size() > MAX_GROUP_NAME_LEN) {
+    err = "GroupName too long";
+    return false;
+  }
+  const std::regex pattern("[\\w+=,.@-]+");
+  if (!std::regex_match(name, pattern)) {
+    err = "GroupName contains invalid characters";
+    return false;
+  }
+  return true;
+}
+
 static constexpr size_t MAX_PATH_LEN = 512;
 
 bool validate_iam_path(const std::string& path, std::string& err)
@@ -218,6 +254,16 @@ std::string iam_user_arn(const RGWUserInfo& info)
   }
   return fmt::format("arn:aws:iam::{}:user{}{}",
                      acct, path, info.display_name);
+}
+
+std::string iam_group_arn(const RGWGroupInfo& info)
+{
+  std::string_view path = info.path;
+  if (path.empty()) {
+    path = "/";
+  }
+  return fmt::format("arn:aws:iam::{}:group{}{}",
+                     info.account_id, path, info.name);
 }
 
 int forward_iam_request_to_master(const DoutPrefixProvider* dpp,

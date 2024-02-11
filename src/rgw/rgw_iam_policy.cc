@@ -173,6 +173,21 @@ static const actpair actpairs[] =
  { "iam:UpdateAccessKey", iamUpdateAccessKey},
  { "iam:DeleteAccessKey", iamDeleteAccessKey},
  { "iam:ListAccessKeys", iamListAccessKeys},
+ { "iam:CreateGroup", iamCreateGroup},
+ { "iam:GetGroup", iamGetGroup},
+ { "iam:UpdateGroup", iamUpdateGroup},
+ { "iam:DeleteGroup", iamDeleteGroup},
+ { "iam:ListGroups", iamListGroups},
+ { "iam:AddUserToGroup", iamAddUserToGroup},
+ { "iam:RemoveUserFromGroup", iamRemoveUserFromGroup},
+ { "iam:ListGroupsForUser", iamListGroupsForUser},
+ { "iam:PutGroupPolicy", iamPutGroupPolicy },
+ { "iam:GetGroupPolicy", iamGetGroupPolicy },
+ { "iam:ListGroupPolicies", iamListGroupPolicies },
+ { "iam:DeleteGroupPolicy", iamDeleteGroupPolicy },
+ { "iam:AttachGroupPolicy", iamAttachGroupPolicy },
+ { "iam:DetachGroupPolicy", iamDetachGroupPolicy },
+ { "iam:ListAttachedGroupPolicies", iamListAttachedGroupPolicies },
  { "iam:GenerateCredentialReport", iamGenerateCredentialReport},
  { "iam:GenerateServiceLastAccessedDetails", iamGenerateServiceLastAccessedDetails},
  { "iam:SimulateCustomPolicy", iamSimulateCustomPolicy},
@@ -1567,6 +1582,51 @@ const char* action_bit_string(uint64_t action) {
 
   case iamListAccessKeys:
     return "iam:ListAccessKeys";
+
+  case iamCreateGroup:
+    return "iam:CreateGroup";
+
+  case iamGetGroup:
+    return "iam:GetGroup";
+
+  case iamUpdateGroup:
+    return "iam:UpdateGroup";
+
+  case iamDeleteGroup:
+    return "iam:DeleteGroup";
+
+  case iamListGroups:
+    return "iam:ListGroups";
+
+  case iamAddUserToGroup:
+    return "iam:AddUserToGroup";
+
+  case iamRemoveUserFromGroup:
+    return "iam:RemoveUserFromGroup";
+
+  case iamListGroupsForUser:
+    return "iam:ListGroupsForUser";
+
+  case iamPutGroupPolicy:
+    return "iam:PutGroupPolicy";
+
+  case iamGetGroupPolicy:
+    return "iam:GetGroupPolicy";
+
+  case iamListGroupPolicies:
+    return "iam:ListGroupPolicies";
+
+  case iamDeleteGroupPolicy:
+    return "iam:DeleteGroupPolicy";
+
+  case iamAttachGroupPolicy:
+    return "iam:AttachGroupPolicy";
+
+  case iamDetachGroupPolicy:
+    return "iam:DetachGroupPolicy";
+
+  case iamListAttachedGroupPolicies:
+    return "iam:ListAttachedGroupPolicies";
 
   case iamGenerateCredentialReport:
     return "iam:GenerateCredentialReport";
