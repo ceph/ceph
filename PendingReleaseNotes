@@ -133,6 +133,8 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   notifications to topics owned by other users. A new configuration parameter:
   ``rgw_topic_require_publish_policy`` can be enabled to deny ``sns:Publish``
   permissions unless explicitly granted by topic policy.
+* RBD: The option ``--image-id`` has been added to `rbd children` CLI command,
+  so it can be run for images in the trash.
 
 >=18.0.0
 
