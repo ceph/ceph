@@ -118,6 +118,11 @@ public:
   virtual int verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider* dpp, optional_yield y) override {
     return 0;
   }
+  int list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                  std::string_view marker, uint32_t max_items,
+                  rgw::sal::GroupList& listing) override {
+    return 0;
+  }
   virtual ~TestUser() = default;
 };
 

@@ -71,6 +71,8 @@
 
 #include "account.h"
 #include "buckets.h"
+#include "group.h"
+#include "groups.h"
 #include "roles.h"
 #include "users.h"
 #include "rgw_pubsub.h"
@@ -276,6 +278,39 @@ int RadosUser::verify_mfa(const std::string& mfa_str, bool* verified,
 
   *verified = true;
 
+  return 0;
+}
+
+int RadosUser::list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                           std::string_view marker, uint32_t max_items,
+                           GroupList& listing)
+{
+  RGWSI_SysObj& sysobj = *store->svc()->sysobj;
+  const RGWZoneParams& zone = store->svc()->zone->get_zone_params();
+
+  const auto& ids = info.group_ids;
+  for (auto id = ids.lower_bound(marker); id != ids.end(); ++id) {
+    if (listing.groups.size() >= max_items) {
+      listing.next_marker = *id;
+      return 0;
+    }
+
+    RGWGroupInfo info;
+    Attrs attrs_ignored;
+    ceph::real_time mtime_ignored;
+    RGWObjVersionTracker objv_ignored;
+    int r = rgwrados::group::read(dpp, y, sysobj, zone, *id, info,
+                                  attrs_ignored, mtime_ignored, objv_ignored);
+    if (r == -ENOENT) {
+      continue;
+    }
+    if (r < 0) {
+      return r;
+    }
+    listing.groups.push_back(std::move(info));
+  }
+
+  listing.next_marker.clear();
   return 0;
 }
 
@@ -1324,6 +1359,151 @@ int RadosStore::list_account_users(const DoutPrefixProvider* dpp,
       return r;
     }
     listing.users.push_back(std::move(info));
+  }
+
+  return 0;
+}
+
+int RadosStore::load_group_by_id(const DoutPrefixProvider* dpp,
+                                 optional_yield y,
+                                 std::string_view id,
+                                 RGWGroupInfo& info, Attrs& attrs,
+                                 RGWObjVersionTracker& objv)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  ceph::real_time mtime_ignored;
+  return rgwrados::group::read(dpp, y, *svc()->sysobj, zone, id,
+                               info, attrs, mtime_ignored, objv);
+}
+
+int RadosStore::load_group_by_name(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   std::string_view name,
+                                   RGWGroupInfo& info, Attrs& attrs,
+                                   RGWObjVersionTracker& objv)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::group::read_by_name(dpp, y, *svc()->sysobj, zone, account_id,
+                                       name, info, attrs, objv);
+}
+
+int RadosStore::store_group(const DoutPrefixProvider* dpp, optional_yield y,
+                            const RGWGroupInfo& info, const Attrs& attrs,
+                            RGWObjVersionTracker& objv, bool exclusive,
+                            const RGWGroupInfo* old_info)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  ceph::real_time mtime = ceph::real_clock::now();
+  int r = rgwrados::group::write(dpp, y, *svc()->sysobj, rados, zone, info,
+                                 old_info, attrs, mtime, exclusive, objv);
+  if (r < 0) {
+    return r;
+  }
+
+  return write_mdlog_entry(dpp, y, *svc()->mdlog, "group", info.id, objv);
+}
+
+int RadosStore::remove_group(const DoutPrefixProvider* dpp, optional_yield y,
+                             const RGWGroupInfo& info,
+                             RGWObjVersionTracker& objv)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  int r = rgwrados::group::remove(dpp, y, *svc()->sysobj, rados, zone, info, objv);
+  if (r < 0) {
+    return r;
+  }
+
+  return write_mdlog_entry(dpp, y, *svc()->mdlog, "group", info.id, objv);
+}
+
+int RadosStore::list_group_users(const DoutPrefixProvider* dpp,
+                                 optional_yield y,
+                                 std::string_view tenant,
+                                 std::string_view id,
+                                 std::string_view marker,
+                                 uint32_t max_items,
+                                 UserList& listing)
+{
+  // fetch the list of user ids from cls_user
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::group::get_users_obj(zone, id);
+  const std::string path_prefix; // empty
+  std::vector<std::string> ids;
+  int r = rgwrados::users::list(dpp, y, rados, obj, marker, path_prefix,
+                                max_items, ids, listing.next_marker);
+  if (r < 0) {
+    return r;
+  }
+
+  // load the user metadata for each
+  for (auto& id : ids) {
+    rgw_user uid;
+    uid.tenant = tenant;
+    uid.id = std::move(id);
+
+    RGWUserInfo info;
+    r = ctl()->user->get_info_by_uid(dpp, uid, &info, y);
+    if (r == -ENOENT) {
+      continue;
+    }
+    if (r < 0) {
+      return r;
+    }
+    listing.users.push_back(std::move(info));
+  }
+
+  return 0;
+}
+
+int RadosStore::count_account_groups(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view account_id,
+                                     uint32_t& count)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_groups_obj(zone, account_id);
+  return rgwrados::account::resource_count(dpp, y, rados, obj, count);
+}
+
+int RadosStore::list_account_groups(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    std::string_view path_prefix,
+                                    std::string_view marker,
+                                    uint32_t max_items,
+                                    GroupList& listing)
+{
+  // fetch the list of group ids from cls_user
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_groups_obj(zone, account_id);
+  std::vector<std::string> ids;
+  int r = rgwrados::groups::list(dpp, y, rados, obj, marker, path_prefix,
+                                 max_items, ids, listing.next_marker);
+  if (r < 0) {
+    return r;
+  }
+
+  // load the group metadata for each
+  for (auto& id : ids) {
+    RGWGroupInfo info;
+    Attrs attrs;
+    ceph::real_time mtime_ignored;
+    RGWObjVersionTracker objv;
+    r = rgwrados::group::read(dpp, y, *svc()->sysobj, zone, id,
+                              info, attrs, mtime_ignored, objv);
+    if (r == -ENOENT) {
+      continue;
+    }
+    if (r < 0) {
+      return r;
+    }
+    listing.groups.push_back(std::move(info));
   }
 
   return 0;
