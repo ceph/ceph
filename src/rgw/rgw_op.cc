@@ -353,27 +353,72 @@ get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
   return boost::none;
 }
 
-vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
-                        const map<string, bufferlist>& attrs,
-                        const string& tenant) {
-  vector<Policy> policies;
-  if (auto bl = attrs.find(RGW_ATTR_USER_POLICY); bl != attrs.end()) {
-    map<string, string> policy_map;
-    decode(policy_map, bl->second);
-    for (const auto& [name, policy] : policy_map) {
-      policies.emplace_back(cct, tenant, policy, false);
+static void load_inline_policy(CephContext* cct, const bufferlist& bl,
+                               const string& tenant,
+                               std::vector<rgw::IAM::Policy>& policies)
+{
+  map<string, string> policy_map;
+  decode(policy_map, bl);
+  for (const auto& [name, policy] : policy_map) {
+    policies.emplace_back(cct, tenant, policy, false);
+  }
+}
+
+static void load_managed_policy(CephContext* cct, const bufferlist& bl,
+                                const string& tenant,
+                                std::vector<rgw::IAM::Policy>& policies)
+{
+  rgw::IAM::ManagedPolicies policy_set;
+  decode(policy_set, bl);
+  for (const auto& arn : policy_set.arns) {
+    if (auto p = rgw::IAM::get_managed_policy(cct, arn); p) {
+      policies.push_back(std::move(*p));
     }
+  }
+}
+
+static void load_iam_group_policies(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    rgw::sal::Driver* driver,
+                                    const std::string& tenant,
+                                    std::string_view group_id,
+                                    std::vector<rgw::IAM::Policy>& policies)
+{
+  RGWGroupInfo info;
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  int r = driver->load_group_by_id(dpp, y, group_id, info, attrs, objv);
+  if (r >= 0) {
+    CephContext* cct = dpp->get_cct();
+    if (auto bl = attrs.find(RGW_ATTR_IAM_POLICY); bl != attrs.end()) {
+      load_inline_policy(cct, bl->second, tenant, policies);
+    }
+    if (auto bl = attrs.find(RGW_ATTR_MANAGED_POLICY); bl != attrs.end()) {
+      load_managed_policy(cct, bl->second, tenant, policies);
+    }
+  }
+}
+
+void load_iam_identity_policies(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                rgw::sal::Driver* driver,
+                                const RGWUserInfo& info,
+                                const rgw::sal::Attrs& attrs,
+                                std::vector<rgw::IAM::Policy>& policies)
+{
+  // load user policies from user attrs
+  CephContext* cct = dpp->get_cct();
+  if (auto bl = attrs.find(RGW_ATTR_USER_POLICY); bl != attrs.end()) {
+    load_inline_policy(cct, bl->second, info.user_id.tenant, policies);
   }
   if (auto bl = attrs.find(RGW_ATTR_MANAGED_POLICY); bl != attrs.end()) {
-    rgw::IAM::ManagedPolicies policy_set;
-    decode(policy_set, bl->second);
-    for (const auto& arn : policy_set.arns) {
-      if (auto p = rgw::IAM::get_managed_policy(cct, arn); p) {
-        policies.push_back(std::move(*p));
-      }
-    }
+    load_managed_policy(cct, bl->second, info.user_id.tenant, policies);
   }
-  return policies;
+
+  // load each group and its policies
+  for (const auto& id : info.group_ids) {
+    load_iam_group_policies(dpp, y, driver, info.user_id.tenant, id, policies);
+  }
 }
 
 static int read_bucket_policy(const DoutPrefixProvider *dpp, 
@@ -639,12 +684,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     try {
       ret = s->user->read_attrs(dpp, y);
       if (ret == 0) {
-	auto user_policies = get_iam_user_policy_from_attr(s->cct,
-							   s->user->get_attrs(),
-							   s->user->get_tenant());
-          s->iam_identity_policies.insert(s->iam_identity_policies.end(),
-                                          std::make_move_iterator(user_policies.begin()),
-                                          std::make_move_iterator(user_policies.end()));
+        // load all user and group policies
+        load_iam_identity_policies(dpp, y, driver,
+                                   s->user->get_info(),
+                                   s->user->get_attrs(),
+                                   s->iam_identity_policies);
       } else {
         if (ret == -ENOENT)
           ret = 0;

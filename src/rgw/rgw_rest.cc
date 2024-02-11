@@ -1878,11 +1878,11 @@ int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
     if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
       try {
         if (auto ret = s->user->read_attrs(s, y); ! ret) {
-          auto user_policies = get_iam_user_policy_from_attr(s->cct, s->user->get_attrs(), s->user->get_tenant());
-          s->iam_identity_policies.insert(s->iam_identity_policies.end(),
-                                          std::make_move_iterator(user_policies.begin()),
-                                          std::make_move_iterator(user_policies.end()));
-
+          // load all user and group policies
+          load_iam_identity_policies(op, y, driver,
+                                     s->user->get_info(),
+                                     s->user->get_attrs(),
+                                     s->iam_identity_policies);
         }
       } catch (const std::exception& e) {
         ldpp_dout(op, -1) << "Error reading IAM User Policy: " << e.what() << dendl;
