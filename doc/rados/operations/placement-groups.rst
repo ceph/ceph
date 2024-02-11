@@ -747,22 +747,48 @@ To see statistics for a particular PG, run a command of the following form:
 
    ceph pg {pg-id} query
 
-
 Scrub a PG
 ==========
 
-To scrub a PG, run a command of the following form:
+To force an immediate scrub of a PG, run a command of the following form:
 
 .. prompt:: bash #
 
-   ceph pg scrub {pg-id}
+   ceph tell {pg-id} scrub
 
-Ceph checks the primary and replica OSDs, generates a catalog of all objects in
-the PG, and compares the objects against each other in order to ensure that no
-objects are missing or mismatched and that their contents are consistent. If
-the replicas all match, then a final semantic sweep takes place to ensure that
-all snapshot-related object metadata is consistent.  Errors are reported in
-logs.
+or
+
+.. prompt:: bash #
+
+   ceph tell {pg-id} deep-scrub
+
+Ceph checks the primary and replica OSDs and generates a catalog of all objects in
+the PG. For each object, Ceph compares all instances of the object (in the primary
+and replica OSDs) to ensure that they are consistent. For shallow scrubs (initiated
+by the first command format), only object metadata is compared. Deep scrubs
+(initiated by the second command format) compare the contents of the objects as well.
+If the replicas all match, a final semantic sweep takes place to ensure that all
+snapshot-related object metadata is consistent.  Errors are reported in logs.
+
+Scrubs initiated using the command format above are deemed high priority, and
+are performed immediately. Such scrubs are not subject to any day-of-week or
+time-of-day restrictions that are in effect for regular, periodic, scrubs.
+They are not limited by 'osd_max_scrubs', and are not required to wait for
+their replicas' scrub resources.
+
+A second command format exists for initiating a scrub as-if it were a regular
+scrub. This command format is as follows:
+
+.. prompt:: bash #
+
+   ceph tell {pg-id} schedule-scrub
+
+or
+
+.. prompt:: bash #
+
+   ceph tell {pg-id} schedule-deep-scrub
+
 
 To scrub all PGs from a specific pool, run a command of the following form:
 
