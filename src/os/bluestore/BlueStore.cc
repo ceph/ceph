@@ -1873,11 +1873,11 @@ void BlueStore::BufferSpace::_dup_writing(TransContext* txc, Collection* collect
           uint64_t tail = b.end() - end;
           auto new_length = b.data.length() - tail;
           buffer_to_copy.substr_of(b.data, 0, new_length);
-          buffer_to_copy = b.offset;
+          offset_to_copy = b.offset;
         } else {
           // take whole buffer
           buffer_to_copy = b.data;
-          buffer_to_copy = b.offset;
+          offset_to_copy = b.offset;
         }
       } else {
         if (b.end() > end) {
@@ -1903,8 +1903,8 @@ void BlueStore::BufferSpace::_dup_writing(TransContext* txc, Collection* collect
       if (collection->is_deferred_seq(to_b.seq)) {
         collection->add_deferred_dependency(to_b.seq, onode);
       } else {
-      txc->buffers_written.insert({onode.get(), b.seq});
-    }
+        txc->buffers_written.insert({onode.get(), b.seq});
+      }
       to._discard(collection->cache, to_b.offset, to_b.length);
       to._add_buffer(collection->cache, &to, std::move(to_b), to_b.cache_private, 0, nullptr);
     }
