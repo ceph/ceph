@@ -30,15 +30,7 @@ To upload a script:
    
 ::
    
-   # radosgw-admin script put --infile={lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
-
-
-* When uploading a script with the ``background`` context, a tenant name should not be specified.
-* When uploading a script into a cluster deployed with cephadm, use the following command:
-
-::
-
-  # cephadm shell radosgw-admin script put --infile=/rootfs/{lua-file-path} --context={prerequest|postrequest|background|getdata|putdata} [--tenant={tenant-name}]
+   # radosgw-admin script put --infile={lua-file} --context={preRequest|postRequest} [--tenant={tenant-name}]
 
 
 To print the content of the script to standard output:
