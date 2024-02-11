@@ -250,6 +250,9 @@ TYPE(rgw_user)
 #include "rgw_oidc_provider.h"
 TYPE(RGWOIDCProviderInfo)
 
+#include "driver/rados/groups.h"
+TYPE(rgwrados::groups::resource_metadata)
+
 #include "driver/rados/roles.h"
 TYPE(rgwrados::roles::resource_metadata)
 

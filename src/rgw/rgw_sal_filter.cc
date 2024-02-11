@@ -300,6 +300,71 @@ int FilterDriver::list_account_users(const DoutPrefixProvider* dpp,
                                   marker, max_items, listing);
 }
 
+int FilterDriver::load_group_by_id(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view id,
+                                   RGWGroupInfo& info, Attrs& attrs,
+                                   RGWObjVersionTracker& objv)
+{
+  return next->load_group_by_id(dpp, y, id, info, attrs, objv);
+}
+
+int FilterDriver::load_group_by_name(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view account_id,
+                                     std::string_view name,
+                                     RGWGroupInfo& info, Attrs& attrs,
+                                     RGWObjVersionTracker& objv)
+{
+  return next->load_group_by_name(dpp, y, account_id, name, info, attrs, objv);
+}
+
+int FilterDriver::store_group(const DoutPrefixProvider* dpp, optional_yield y,
+                              const RGWGroupInfo& info, const Attrs& attrs,
+                              RGWObjVersionTracker& objv, bool exclusive,
+                              const RGWGroupInfo* old_info)
+{
+  return next->store_group(dpp, y, info, attrs, objv, exclusive, old_info);
+}
+
+int FilterDriver::remove_group(const DoutPrefixProvider* dpp, optional_yield y,
+                               const RGWGroupInfo& info,
+                               RGWObjVersionTracker& objv)
+{
+  return next->remove_group(dpp, y, info, objv);
+}
+
+int FilterDriver::list_group_users(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view tenant,
+                                   std::string_view id,
+                                   std::string_view marker,
+                                   uint32_t max_items,
+                                   UserList& listing)
+{
+  return next->list_group_users(dpp, y, tenant, id, marker, max_items, listing);
+}
+
+int FilterDriver::count_account_groups(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       std::string_view account_id,
+                                       uint32_t& count)
+{
+  return next->count_account_groups(dpp, y, account_id, count);
+}
+
+int FilterDriver::list_account_groups(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view account_id,
+                                      std::string_view path_prefix,
+                                      std::string_view marker,
+                                      uint32_t max_items,
+                                      GroupList& listing)
+{
+  return next->list_account_groups(dpp, y, account_id, path_prefix,
+                                   marker, max_items, listing);
+}
+
 std::unique_ptr<Object> FilterDriver::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
@@ -705,6 +770,13 @@ int FilterUser::verify_mfa(const std::string& mfa_str, bool* verified,
 			   const DoutPrefixProvider* dpp, optional_yield y)
 {
   return next->verify_mfa(mfa_str, verified, dpp, y);
+}
+
+int FilterUser::list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                            std::string_view marker, uint32_t max_items,
+                            GroupList& listing)
+{
+  return next->list_groups(dpp, y, marker, max_items, listing);
 }
 
 std::unique_ptr<Object> FilterBucket::get_object(const rgw_obj_key& k)

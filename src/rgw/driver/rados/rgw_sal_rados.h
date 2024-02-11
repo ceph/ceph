@@ -226,6 +226,43 @@ class RadosStore : public StoreDriver {
                            uint32_t max_items,
                            UserList& listing) override;
 
+    int load_group_by_id(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         std::string_view id,
+                         RGWGroupInfo& info, Attrs& attrs,
+                         RGWObjVersionTracker& objv) override;
+    int load_group_by_name(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           std::string_view account_id,
+                           std::string_view name,
+                           RGWGroupInfo& info, Attrs& attrs,
+                           RGWObjVersionTracker& objv) override;
+    int store_group(const DoutPrefixProvider* dpp, optional_yield y,
+                    const RGWGroupInfo& info, const Attrs& attrs,
+                    RGWObjVersionTracker& objv, bool exclusive,
+                    const RGWGroupInfo* old_info) override;
+    int remove_group(const DoutPrefixProvider* dpp, optional_yield y,
+                     const RGWGroupInfo& info,
+                     RGWObjVersionTracker& objv) override;
+    int list_group_users(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         std::string_view tenant,
+                         std::string_view id,
+                         std::string_view marker,
+                         uint32_t max_items,
+                         UserList& listing) override;
+    int count_account_groups(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             std::string_view account_id,
+                             uint32_t& count) override;
+    int list_account_groups(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            std::string_view path_prefix,
+                            std::string_view marker,
+                            uint32_t max_items,
+                            GroupList& listing) override;
+
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;
     int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
@@ -425,6 +462,9 @@ class RadosUser : public StoreUser {
     virtual int store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info = nullptr) override;
     virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider* dpp, optional_yield y) override;
+    int list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                    std::string_view marker, uint32_t max_items,
+                    GroupList& listing) override;
 
     friend class RadosBucket;
 };
