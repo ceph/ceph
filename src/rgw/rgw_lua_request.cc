@@ -743,7 +743,7 @@ struct RequestMetaTable : public EmptyMetaTable {
         create_metatable<PolicyMetaTable>(L, name, index, false, s->iam_policy.get_ptr());
       }
     } else if (strcasecmp(index, "UserPolicies") == 0) {
-        create_metatable<PoliciesMetaTable>(L, name, index, false, &(s->iam_user_policies));
+        create_metatable<PoliciesMetaTable>(L, name, index, false, &(s->iam_identity_policies));
     } else if (strcasecmp(index, "RGWId") == 0) {
       pushstring(L, s->host_id);
     } else if (strcasecmp(index, "HTTP") == 0) {

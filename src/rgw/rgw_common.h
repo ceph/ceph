@@ -1331,7 +1331,7 @@ struct req_state : DoutPrefixProvider {
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
   boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
-  std::vector<rgw::IAM::Policy> iam_user_policies;
+  std::vector<rgw::IAM::Policy> iam_identity_policies;
 
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */
