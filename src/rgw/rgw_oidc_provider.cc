@@ -81,7 +81,7 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
   struct tm result;
   gmtime_r(&tv.tv_sec, &result);
   strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
-  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
+  sprintf(buf + strlen(buf),".%03dZ",(int)tv.tv_usec/1000);
   creation_date.assign(buf, strlen(buf));
 
   ret = store_url(dpp, idp_url, exclusive, y);

@@ -3634,7 +3634,7 @@ int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, const std::
   struct tm result;
   gmtime_r(&tv.tv_sec, &result);
   strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
-  sprintf(buf + strlen(buf),".%dZ",(int)tv.tv_usec/1000);
+  sprintf(buf + strlen(buf),".%03dZ",(int)tv.tv_usec/1000);
   info.creation_date.assign(buf, strlen(buf));
 
   auto& pool = store->svc()->zone->get_zone_params().roles_pool;
