@@ -306,6 +306,7 @@ static inline const char* to_mime_type(const RGWFormat f)
 #define ERR_OBJECT_NOT_APPENDABLE                        2220
 #define ERR_INVALID_BUCKET_STATE                         2221
 #define ERR_INVALID_OBJECT_STATE			 2222
+#define ERR_PRESIGNED_URL_EXPIRED			 2223
 
 #define ERR_BUSY_RESHARDING      2300
 #define ERR_NO_SUCH_ENTITY       2301

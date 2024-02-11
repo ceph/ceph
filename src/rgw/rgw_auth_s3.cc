@@ -298,15 +298,15 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
      you can set is 1, and the maximum is 604800 (seven days) */
   time_t exp = atoll(expires.data());
   if ((exp < 1) || (exp > 7*24*60*60)) {
-    dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
+    dout(10) << "ERROR: exp out of range, exp = " << exp << dendl;
     return -EPERM;
   }
   /* handle expiration in epoch time */
   uint64_t req_sec = (uint64_t)internal_timegm(&date_t);
   uint64_t now = ceph_clock_now();
   if (now >= req_sec + exp) {
-    dout(10) << "NOTICE: now = " << now << ", req_sec = " << req_sec << ", exp = " << exp << dendl;
-    return -EPERM;
+    dout(10) << "ERROR: presigned URL has expired, now = " << now << ", req_sec = " << req_sec << ", exp = " << exp << dendl;
+    return -ERR_PRESIGNED_URL_EXPIRED;
   }
 
   signedheaders = info.args.get("x-amz-signedheaders");
