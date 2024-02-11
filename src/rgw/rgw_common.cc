@@ -1290,7 +1290,7 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
     // account users always require an Allow from identity-based policy
     mandatory_policy = true;
   }
-  return verify_user_permission(dpp, &ps, s->user_acl, s->iam_user_policies, s->session_policies, res, op, mandatory_policy);
+  return verify_user_permission(dpp, &ps, s->user_acl, s->iam_identity_policies, s->session_policies, res, op, mandatory_policy);
 }
 
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp, 
@@ -1447,7 +1447,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s
     return false;
   }
   return verify_bucket_permission(dpp, s, s->bucket->get_key(), s->user_acl, s->bucket_acl,
-                                  s->iam_policy, s->iam_user_policies, s->session_policies, op);
+                                  s->iam_policy, s->iam_identity_policies, s->session_policies, op);
 }
 
 // Authorize anyone permitted by the bucket policy, identity policies, session policies and the bucket owner
@@ -1460,7 +1460,7 @@ int verify_bucket_owner_or_policy(const DoutPrefixProvider* dpp,
   const auto arn = ARN(s->bucket->get_key());
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->auth.identity, account_root, op, arn,
-      s->iam_policy, s->iam_user_policies, s->session_policies);
+      s->iam_policy, s->iam_identity_policies, s->session_policies);
   if (effect == Effect::Deny) {
     return -EACCES;
   }
@@ -1629,7 +1629,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint6
                                   s->bucket_acl,
                                   s->object_acl,
                                   s->iam_policy,
-                                  s->iam_user_policies,
+                                  s->iam_identity_policies,
                                   s->session_policies,
                                   op);
 }

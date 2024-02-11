@@ -998,7 +998,7 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   for (const auto& policy : role.inline_policies) {
     try {
       const rgw::IAM::Policy p(s->cct, role.tenant, policy, false);
-      s->iam_user_policies.push_back(std::move(p));
+      s->iam_identity_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been
       //verified earlier
@@ -1008,7 +1008,7 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   for (const auto& arn : role.managed_policies) {
     try {
       if (auto p = rgw::IAM::get_managed_policy(s->cct, arn); p) {
-        s->iam_user_policies.push_back(std::move(*p));
+        s->iam_identity_policies.push_back(std::move(*p));
       }
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been

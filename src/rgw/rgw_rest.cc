@@ -1879,9 +1879,9 @@ int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
       try {
         if (auto ret = s->user->read_attrs(s, y); ! ret) {
           auto user_policies = get_iam_user_policy_from_attr(s->cct, s->user->get_attrs(), s->user->get_tenant());
-          s->iam_user_policies.insert(s->iam_user_policies.end(),
-                                      std::make_move_iterator(user_policies.begin()),
-                                      std::make_move_iterator(user_policies.end()));
+          s->iam_identity_policies.insert(s->iam_identity_policies.end(),
+                                          std::make_move_iterator(user_policies.begin()),
+                                          std::make_move_iterator(user_policies.end()));
 
         }
       } catch (const std::exception& e) {
