@@ -181,8 +181,9 @@ struct SparseExtent {
 std::ostream& operator<<(std::ostream& os, const SparseExtent& state);
 
 struct SparseExtentSplitMerge {
-  SparseExtent split(uint64_t offset, uint64_t length, SparseExtent &se) const {
-    return SparseExtent(se.state, se.length);
+  SparseExtent split(uint64_t offset, uint64_t length,
+                     const SparseExtent& se) const {
+    return SparseExtent(se.state, length);
   }
 
   bool can_merge(const SparseExtent& left, const SparseExtent& right) const {
@@ -233,10 +234,10 @@ struct SparseBufferlistExtent : public SparseExtent {
 
 struct SparseBufferlistExtentSplitMerge {
   SparseBufferlistExtent split(uint64_t offset, uint64_t length,
-                               SparseBufferlistExtent& sbe) const {
+                               const SparseBufferlistExtent& sbe) const {
     ceph::bufferlist bl;
     if (sbe.state == SPARSE_EXTENT_STATE_DATA) {
-      bl.substr_of(bl, offset, length);
+      bl.substr_of(sbe.bl, offset, length);
     }
     return SparseBufferlistExtent(sbe.state, length, std::move(bl));
   }

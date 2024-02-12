@@ -2063,6 +2063,97 @@ TEST_F(TestMockIoObjectRequest, ListSnapsNoSnapsInSnapSet) {
   EXPECT_EQ(expected_snapshot_delta, snapshot_delta);
 }
 
+TEST(SparseExtents, Split) {
+  SparseExtents extents;
+  extents.insert(50, 100, {SPARSE_EXTENT_STATE_DATA, 100});
+  extents.erase(80, 30);
+  extents.insert(45, 10, {SPARSE_EXTENT_STATE_ZEROED, 10});
+  extents.insert(140, 20, {SPARSE_EXTENT_STATE_DNE, 20});
+  extents.insert(125, 5, {SPARSE_EXTENT_STATE_ZEROED, 5});
+
+  SparseExtents expected_extents = {
+    {45, {10, {SPARSE_EXTENT_STATE_ZEROED, 10}}},
+    {55, {25, {SPARSE_EXTENT_STATE_DATA, 25}}},
+    {110, {15, {SPARSE_EXTENT_STATE_DATA, 15}}},
+    {125, {5, {SPARSE_EXTENT_STATE_ZEROED, 5}}},
+    {130, {10, {SPARSE_EXTENT_STATE_DATA, 10}}},
+    {140, {20, {SPARSE_EXTENT_STATE_DNE, 20}}}
+  };
+  EXPECT_EQ(expected_extents, extents);
+}
+
+TEST(SparseBufferlist, Split) {
+  bufferlist bl;
+  bl.append(std::string(5, '1'));
+  bl.append(std::string(25, '2'));
+  bl.append(std::string(30, '3'));
+  bl.append(std::string(15, '4'));
+  bl.append(std::string(5, '5'));
+  bl.append(std::string(10, '6'));
+  bl.append(std::string(10, '7'));
+  bufferlist expected_bl1;
+  expected_bl1.append(std::string(25, '2'));
+  bufferlist expected_bl2;
+  expected_bl2.append(std::string(15, '4'));
+  bufferlist expected_bl3;
+  expected_bl3.append(std::string(10, '6'));
+
+  SparseBufferlist extents;
+  extents.insert(50, 100, {SPARSE_EXTENT_STATE_DATA, 100, std::move(bl)});
+  extents.erase(80, 30);
+  extents.insert(45, 10, {SPARSE_EXTENT_STATE_ZEROED, 10});
+  extents.insert(140, 20, {SPARSE_EXTENT_STATE_DNE, 20});
+  extents.insert(125, 5, {SPARSE_EXTENT_STATE_ZEROED, 5});
+
+  SparseBufferlist expected_extents = {
+    {45, {10, {SPARSE_EXTENT_STATE_ZEROED, 10}}},
+    {55, {25, {SPARSE_EXTENT_STATE_DATA, 25, std::move(expected_bl1)}}},
+    {110, {15, {SPARSE_EXTENT_STATE_DATA, 15, std::move(expected_bl2)}}},
+    {125, {5, {SPARSE_EXTENT_STATE_ZEROED, 5}}},
+    {130, {10, {SPARSE_EXTENT_STATE_DATA, 10, std::move(expected_bl3)}}},
+    {140, {20, {SPARSE_EXTENT_STATE_DNE, 20}}}
+  };
+  EXPECT_EQ(expected_extents, extents);
+}
+
+TEST(SparseBufferlist, SplitData) {
+  bufferlist bl1;
+  bl1.append(std::string(100, '1'));
+  bufferlist bl2;
+  bl2.append(std::string(15, '2'));
+  bufferlist bl3;
+  bl3.append(std::string(40, '3'));
+  bufferlist bl4;
+  bl4.append(std::string(10, '4'));
+  bufferlist expected_bl1 = bl2;
+  bufferlist expected_bl2;
+  expected_bl2.append(std::string(35, '1'));
+  bufferlist expected_bl3 = bl4;
+  bufferlist expected_bl4;
+  expected_bl4.append(std::string(30, '1'));
+  bufferlist expected_bl5;
+  expected_bl5.append(std::string(5, '3'));
+  bufferlist expected_bl6;
+  expected_bl6.append(std::string(15, '3'));
+
+  SparseBufferlist extents;
+  extents.insert(50, 100, {SPARSE_EXTENT_STATE_DATA, 100, std::move(bl1)});
+  extents.insert(40, 15, {SPARSE_EXTENT_STATE_DATA, 15, std::move(bl2)});
+  extents.insert(130, 40, {SPARSE_EXTENT_STATE_DATA, 40, std::move(bl3)});
+  extents.erase(135, 20);
+  extents.insert(90, 10, {SPARSE_EXTENT_STATE_DATA, 10, std::move(bl4)});
+
+  SparseBufferlist expected_extents = {
+    {40, {15, {SPARSE_EXTENT_STATE_DATA, 15, std::move(expected_bl1)}}},
+    {55, {35, {SPARSE_EXTENT_STATE_DATA, 35, std::move(expected_bl2)}}},
+    {90, {10, {SPARSE_EXTENT_STATE_DATA, 10, std::move(expected_bl3)}}},
+    {100, {30, {SPARSE_EXTENT_STATE_DATA, 30, std::move(expected_bl4)}}},
+    {130, {5, {SPARSE_EXTENT_STATE_DATA, 5, std::move(expected_bl5)}}},
+    {155, {15, {SPARSE_EXTENT_STATE_DATA, 15, std::move(expected_bl6)}}}
+  };
+  EXPECT_EQ(expected_extents, extents);
+}
+
 } // namespace io
 } // namespace librbd
 
