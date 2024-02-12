@@ -247,14 +247,13 @@ struct SparseBufferlistExtentSplitMerge {
 
   SparseBufferlistExtent merge(SparseBufferlistExtent&& left,
                                SparseBufferlistExtent&& right) const {
+    ceph::bufferlist bl;
     if (left.state == SPARSE_EXTENT_STATE_DATA) {
-      ceph::bufferlist bl{std::move(left.bl)};
-      bl.claim_append(std::move(right.bl));
-      return SparseBufferlistExtent(SPARSE_EXTENT_STATE_DATA,
-                                    bl.length(), std::move(bl));
-    } else {
-      return SparseBufferlistExtent(left.state, left.length + right.length, {});
+      bl.claim_append(left.bl);
+      bl.claim_append(right.bl);
     }
+    return SparseBufferlistExtent(left.state, left.length + right.length,
+                                  std::move(bl));
   }
 
   uint64_t length(const SparseBufferlistExtent& sbe) const {
