@@ -80,23 +80,13 @@ int RGWRestRole::verify_permission(optional_yield y)
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
   }
-
+  
   string role_name = s->info.args.get("RoleName");
-  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
-							    s->user->get_tenant());
-  if (op_ret = role->get(s, y); op_ret < 0) {
-    if (op_ret == -ENOENT) {
-      op_ret = -ERR_NO_ROLE_FOUND;
-    }
-    return op_ret;
-  }
-
   if (int ret = check_caps(s->user->get_caps()); ret == 0) {
-    _role = std::move(role);
     return ret;
   }
 
-  string resource_name = role->get_path() + role_name;
+  string resource_name = _role->get_path() + role_name;
   uint64_t op = get_op();
   if (!verify_user_permission(this,
                               s,
@@ -107,8 +97,21 @@ int RGWRestRole::verify_permission(optional_yield y)
     return -EACCES;
   }
 
-  _role = std::move(role);
+  return 0;
+}
 
+int RGWRestRole::init_processing(optional_yield y)
+{
+  string role_name = s->info.args.get("RoleName");
+  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
+                                                             s->user->get_tenant());
+  if (int ret = role->get(s, y); ret < 0) {
+    if (ret == -ENOENT) {
+      return -ERR_NO_ROLE_FOUND;
+    }
+    return ret;
+  }
+  _role = std::move(role);
   return 0;
 }
 
@@ -200,6 +203,11 @@ int RGWCreateRole::verify_permission(optional_yield y)
     return -EACCES;
   }
   return 0;
+}
+
+int RGWCreateRole::init_processing(optional_yield y)
+{
+  return 0; // avoid calling RGWRestRole::init_processing()
 }
 
 int RGWCreateRole::get_params()
@@ -437,6 +445,11 @@ int RGWGetRole::_verify_permission(const rgw::sal::RGWRole* role)
   return 0;
 }
 
+int RGWGetRole::init_processing(optional_yield y)
+{
+  return 0; // avoid calling RGWRestRole::init_processing()
+}
+
 int RGWGetRole::get_params()
 {
   role_name = s->info.args.get("RoleName");
@@ -556,6 +569,11 @@ int RGWListRoles::verify_permission(optional_yield y)
   }
 
   return 0;
+}
+
+int RGWListRoles::init_processing(optional_yield y)
+{
+  return 0; // avoid calling RGWRestRole::init_processing()
 }
 
 int RGWListRoles::get_params()
