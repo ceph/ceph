@@ -591,17 +591,21 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
       // access RocksDB (an expensive operation!)
       int r = backend.get_next(pos, &next);
       dout(20) << __func__ << " get_next(" << pos << ") returns " << r
-	       << " " << next << dendl;
+	       << " " << next.first << dendl;
       if (r != 0) {
 	return out; // Done
       }
 
-      if (!next.first.starts_with(prefix)) {
+      ceph_assert(is_mapping(next.first));
+
+      if (auto next_prefix = next.first.substr(0, prefix.size());
+          next_prefix != prefix) {
 	// TBD: we access the DB twice for the first object of each iterator...
+	dout(20) << fmt::format("{}: breaking, prefix expected {} got {}",
+	                        __func__, prefix, next_prefix)
+	         << dendl;
 	break; // Done with this prefix
       }
-
-      ceph_assert(is_mapping(next.first));
 
       dout(20) << __func__ << " " << next.first << dendl;
       pair<snapid_t, hobject_t> next_decoded(from_raw(next));
@@ -613,6 +617,9 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
     }
 
     if (out.size() >= max) {
+      dout(20) << fmt::format("{}: reached max of: {} returning",
+                              __func__, out.size())
+               << dendl;
       return out;
     }
   }
