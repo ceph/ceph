@@ -6226,6 +6226,13 @@ rgw::auth::s3::LocalEngine::authenticate(
   }
   const RGWAccessKey& k = iter->second;
 
+  /* Ignore signature for HTTP OPTIONS */
+  if (s->op_type == RGW_OP_OPTIONS_CORS) {
+    auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
+                                             k.subuser, std::nullopt, access_key_id);
+    return result_t::grant(std::move(apl), completer_factory(k.key));
+  }
+
   const VersionAbstractor::server_signature_t server_signature = \
     signature_factory(cct, k.key, string_to_sign);
   auto compare = signature.compare(server_signature);
