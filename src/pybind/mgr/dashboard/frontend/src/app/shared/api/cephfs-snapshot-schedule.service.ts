@@ -19,11 +19,35 @@ export class CephfsSnapshotScheduleService {
     return this.http.post(`${this.baseURL}/snapshot/schedule`, data, { observe: 'response' });
   }
 
-  update(data: Record<string, any>): Observable<any> {
+  update({ fs, path, ...rest }: Record<string, any>): Observable<any> {
     return this.http.put(
-      `${this.baseURL}/snapshot/schedule/${data.fs}/${encodeURIComponent(data.path)}`,
-      data,
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(path)}`,
+      rest,
       { observe: 'response' }
+    );
+  }
+
+  activate({ fs, path, ...rest }: Record<string, any>): Observable<any> {
+    return this.http.post(
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(path)}/activate`,
+      rest,
+      { observe: 'response' }
+    );
+  }
+
+  deactivate({ fs, path, ...rest }: Record<string, any>): Observable<any> {
+    return this.http.post(
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(path)}/deactivate`,
+      rest,
+      { observe: 'response' }
+    );
+  }
+
+  delete({ fs, path, schedule, start }: Record<string, any>): Observable<any> {
+    return this.http.delete(
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(
+        path
+      )}/delete_snapshot?schedule=${schedule}&start=${encodeURIComponent(start)}`
     );
   }
 

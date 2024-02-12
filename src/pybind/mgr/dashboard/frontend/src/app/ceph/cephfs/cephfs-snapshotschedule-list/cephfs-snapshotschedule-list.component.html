@@ -73,7 +73,7 @@
       [permission]="permissions.cephfs"
       [selection]="selection"
       class="btn-group"
-      [tableActions]="tableActions"
+      [tableActions]="tableActions$ | async"
     >
     </cd-table-actions>
   </div>
