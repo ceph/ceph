@@ -18,6 +18,7 @@
 #include "common/dout.h"
 #include "rgw_url.h"
 #include "rgw_process_env.h"
+#include "rgw_rest_iam.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -257,10 +258,11 @@ class RGWPSCreateTopicOp : public RGWOp {
 
 void RGWPSCreateTopicOp::execute(optional_yield y) {
   // master request will replicate the topic creation.
-  bufferlist indata;
   if (!driver->is_meta_master()) {
-    op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+    bufferlist indata;
+    RGWXMLDecoder::XMLParser parser;
+    op_ret = forward_iam_request_to_master(
+        this, *s->penv.site, s->user->get_info(), indata, parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1)
           << "CreateTopic forward_request_to_master returned ret = " << op_ret
@@ -689,8 +691,9 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
 void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
   if (!driver->is_meta_master()) {
     bufferlist indata;
-    op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+    RGWXMLDecoder::XMLParser parser;
+    op_ret = forward_iam_request_to_master(
+        this, *s->penv.site, s->user->get_info(), indata, parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1)
           << "SetTopicAttributes forward_request_to_master returned ret = "
@@ -788,8 +791,9 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
   }
   if (!driver->is_meta_master()) {
     bufferlist indata;
-    op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+    RGWXMLDecoder::XMLParser parser;
+    op_ret = forward_iam_request_to_master(
+        this, *s->penv.site, s->user->get_info(), indata, parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1)
           << "DeleteTopic forward_request_to_master returned ret = " << op_ret
@@ -1004,8 +1008,10 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     return;
   }
   if (!driver->is_meta_master()) {
-    op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->user->get_id(), &data, nullptr, s->info, y);
+    bufferlist indata;
+    RGWXMLDecoder::XMLParser parser;
+    op_ret = forward_iam_request_to_master(
+        this, *s->penv.site, s->user->get_info(), indata, parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "CreateBucketNotification "
                             "forward_request_to_master returned ret = "
@@ -1136,8 +1142,10 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
     return;
   }
   if (!driver->is_meta_master()) {
-    op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->user->get_id(), &data, nullptr, s->info, y);
+    bufferlist indata;
+    RGWXMLDecoder::XMLParser parser;
+    op_ret = forward_iam_request_to_master(
+        this, *s->penv.site, s->user->get_info(), indata, parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "CreateBucketNotification "
                             "forward_request_to_master returned ret = "
@@ -1302,8 +1310,9 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
   }
   if (!driver->is_meta_master()) {
     bufferlist indata;
-    op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+    RGWXMLDecoder::XMLParser parser;
+    op_ret = forward_iam_request_to_master(
+        this, *s->penv.site, s->user->get_info(), indata, parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "DeleteBucketNotification "
                             "forward_request_to_master returned error ret= "
@@ -1365,8 +1374,9 @@ void RGWPSDeleteNotifOp::execute_v2(optional_yield y) {
   }
   if (!driver->is_meta_master()) {
     bufferlist indata;
-    op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+    RGWXMLDecoder::XMLParser parser;
+    op_ret = forward_iam_request_to_master(
+        this, *s->penv.site, s->user->get_info(), indata, parser, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "DeleteBucketNotification "
                             "forward_request_to_master returned error ret= "
