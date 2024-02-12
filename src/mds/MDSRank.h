@@ -253,6 +253,10 @@ class MDSRank {
       progress_thread.signal();
     }
 
+    uint64_t get_global_id() const {
+      return monc->get_global_id();
+    }
+
     // Daemon lifetime functions: these guys break the abstraction
     // and call up into the parent MDSDaemon instance.  It's kind
     // of unavoidable: if we want any depth into our calls 
