@@ -1025,3 +1025,54 @@ class CephFSSnapshotSchedule(RESTController):
         editRetentionPolicies('snap_schedule_retention_add', retention_to_add)
 
         return f'Retention policies for snapshot schedule on path {path} updated successfully'
+
+    @RESTController.Resource('DELETE')
+    def delete_snapshot(self, fs: str, path: str, schedule: str, start: str):
+        error_code, _, err = mgr.remote('snap_schedule',
+                                        'snap_schedule_rm',
+                                        path,
+                                        schedule,
+                                        start,
+                                        fs,
+                                        None,
+                                        None)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to delete snapshot schedule for path {path}: {err}'
+            )
+
+        return f'Snapshot schedule for path {path} deleted successfully'
+
+    @RESTController.Resource('POST')
+    def deactivate(self, fs: str, path: str, schedule: str, start: str):
+        error_code, _, err = mgr.remote('snap_schedule',
+                                        'snap_schedule_deactivate',
+                                        path,
+                                        schedule,
+                                        start,
+                                        fs,
+                                        None,
+                                        None)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to deactivate snapshot schedule for path {path}: {err}'
+            )
+
+        return f'Snapshot schedule for path {path} deactivated successfully'
+
+    @RESTController.Resource('POST')
+    def activate(self, fs: str, path: str, schedule: str, start: str):
+        error_code, _, err = mgr.remote('snap_schedule',
+                                        'snap_schedule_activate',
+                                        path,
+                                        schedule,
+                                        start,
+                                        fs,
+                                        None,
+                                        None)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to activate snapshot schedule for path {path}: {err}'
+            )
+
+        return f'Snapshot schedule for path {path} activated successfully'
