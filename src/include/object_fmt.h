@@ -5,6 +5,7 @@
 /**
  * \file fmtlib formatters for some object.h structs
  */
+#include <fmt/compile.h>
 #include <fmt/format.h>
 
 #include "object.h"
@@ -24,6 +25,6 @@ struct fmt::formatter<snapid_t> {
     if (snp == CEPH_SNAPDIR) {
       return fmt::format_to(ctx.out(), "snapdir");
     }
-    return fmt::format_to(ctx.out(), "{:x}", snp.val);
+    return fmt::format_to(ctx.out(), FMT_COMPILE("{:x}"), snp.val);
   }
 };
