@@ -126,7 +126,7 @@ static void dump_swift_keys_info(Formatter *f, RGWUserInfo &info)
 }
 
 static void dump_user_info(Formatter *f, RGWUserInfo &info,
-                           RGWStorageStats *stats = NULL)
+                           bool dump_keys, RGWStorageStats *stats = NULL)
 {
   f->open_object_section("user_info");
   encode_json("tenant", info.user_id.tenant, f);
@@ -137,8 +137,11 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("max_buckets", (int)info.max_buckets, f);
 
   dump_subusers_info(f, info);
-  dump_access_keys_info(f, info);
-  dump_swift_keys_info(f, info);
+
+  if (dump_keys) {
+    dump_access_keys_info(f, info);
+    dump_swift_keys_info(f, info);
+  }
 
   encode_json("caps", info.caps, f);
 
@@ -2098,6 +2101,7 @@ int RGWUserAdminOp_User::list(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
 			      rgw::sal::Driver* driver, RGWUserAdminOpState& op_state,
 			      RGWFormatterFlusher& flusher,
+                              bool dump_keys,
 			      optional_yield y)
 {
   RGWUserInfo info;
@@ -2140,7 +2144,7 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   if (formatter) {
     flusher.start(0);
 
-    dump_user_info(formatter, info, arg_stats);
+    dump_user_info(formatter, info, dump_keys, arg_stats);
     flusher.flush();
   }
 
@@ -2174,7 +2178,7 @@ int RGWUserAdminOp_User::create(const DoutPrefixProvider *dpp,
   if (formatter) {
     flusher.start(0);
 
-    dump_user_info(formatter, info);
+    dump_user_info(formatter, info, true);
     flusher.flush();
   }
 
@@ -2207,7 +2211,7 @@ int RGWUserAdminOp_User::modify(const DoutPrefixProvider *dpp,
   if (formatter) {
     flusher.start(0);
 
-    dump_user_info(formatter, info);
+    dump_user_info(formatter, info, true);
     flusher.flush();
   }
 
