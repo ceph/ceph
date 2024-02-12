@@ -1168,7 +1168,11 @@ class RGWSpec(ServiceSpec):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  rgw_realm_token: Optional[str] = None,
                  update_endpoints: Optional[bool] = False,
-                 zone_endpoints: Optional[str] = None  # commad separated endpoints list
+                 zone_endpoints: Optional[str] = None,  # comma separated endpoints list
+                 rgw_user_counters_cache: Optional[bool] = False,
+                 rgw_user_counters_cache_size: Optional[int] = None,
+                 rgw_bucket_counters_cache: Optional[bool] = False,
+                 rgw_bucket_counters_cache_size: Optional[int] = None
                  ):
         assert service_type == 'rgw', service_type
 
@@ -1208,6 +1212,15 @@ class RGWSpec(ServiceSpec):
         self.rgw_realm_token = rgw_realm_token
         self.update_endpoints = update_endpoints
         self.zone_endpoints = zone_endpoints
+
+        #: To track op metrics by user config value rgw_user_counters_cache must be set to true
+        self.rgw_user_counters_cache = rgw_user_counters_cache
+        #: Used to set number of entries in each cache of user counters
+        self.rgw_user_counters_cache_size = rgw_user_counters_cache_size
+        #: To track op metrics by bucket config value rgw_bucket_counters_cache must be set to true
+        self.rgw_bucket_counters_cache = rgw_bucket_counters_cache
+        #: Used to set number of entries in each cache of bucket counters
+        self.rgw_bucket_counters_cache_size = rgw_bucket_counters_cache_size
 
     def get_port_start(self) -> List[int]:
         return [self.get_port()]
