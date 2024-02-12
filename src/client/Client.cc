@@ -11901,7 +11901,7 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
   read_start_size = (need_read_start && need_read_end && start_block == end_block ?
                      FSCRYPT_BLOCK_SIZE : ofs_in_start_block);
   
-  bool need_read = need_read_start | need_read_start;
+  bool need_read = need_read_start | need_read_end;
 
 
   if (read_start_size > 0) {
