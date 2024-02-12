@@ -143,6 +143,7 @@ export class ActionLabelsI18n {
   START_UPGRADE: string;
   ACTIVATE: string;
   DEACTIVATE: string;
+  ATTACH: string;
 
   constructor() {
     /* Create a new item */
@@ -223,6 +224,8 @@ export class ActionLabelsI18n {
 
     this.ACTIVATE = $localize`Activate`;
     this.DEACTIVATE = $localize`Deactivate`;
+
+    this.ATTACH = $localize`Attach`;
   }
 }
 
