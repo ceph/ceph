@@ -21,14 +21,14 @@
     class="fw-bold"
     [ngbTooltip]="fullpathTpl"
     triggers="click:blur">
-    {{ row.path?.split?.("@")?.[0] | path }}
+    {{ row.pathForSelection?.split?.("@")?.[0] | path }}
   </span>
 
   <span
   *ngIf="row.active; else inactiveStatusTpl">
     <i
       [ngClass]="[icons.success, icons.large]"
-      ngbTooltip="{{ row.path?.split?.('@')?.[0] }} is active"
+      ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} is active"
       class="text-success"
     ></i>
   </span>
@@ -37,19 +37,19 @@
     <i
       [ngClass]="[icons.warning, icons.large]"
       class="text-warning"
-      ngbTooltip="{{ row.path?.split?.('@')?.[0] }} has been deactivated"
+      ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} has been deactivated"
     ></i>
   </ng-template>
 
-  <ng-template #fullpathTpl>
+  <ng-template #fullpathForSelectionTpl>
     <span
       data-toggle="tooltip"
-      [title]="row.path"
+      [title]="row.pathForSelection"
       class="font-monospace"
-      >{{ row.path?.split?.("@")?.[0] }}
+      >{{ row.pathForSelection?.split?.("@")?.[0] }}
       <cd-copy-2-clipboard-button
-        *ngIf="row.path"
-        [source]="row.path?.split?.('@')?.[0]"
+        *ngIf="row.pathForSelection"
+        [source]="row.pathForSelection?.split?.('@')?.[0]"
         [byId]="false"
         [showIconOnly]="true"
       >
