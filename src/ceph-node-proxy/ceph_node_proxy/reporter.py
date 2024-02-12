@@ -63,7 +63,7 @@ class Reporter(BaseThread):
                                 self.system.previous_data = self.system.get_system()
                         else:
                             self.log.debug('no diff, not sending data to the mgr.')
-                    time.sleep(5)
             self.log.debug('lock released in reporter loop.')
+            time.sleep(5)
         self.log.debug('exiting reporter loop.')
         raise SystemExit(0)
