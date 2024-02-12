@@ -176,7 +176,7 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                         const req_state* s,
 			optional_yield y) const override;
   auto get_secret_from_keystone(const DoutPrefixProvider* dpp,
-                                const std::string& user_id,
+                                const rgw::keystone::TokenEnvelope& token_env,
                                 const std::string_view& access_key_id,
                                 optional_yield y) const
       -> std::pair<boost::optional<std::string>, int>;
