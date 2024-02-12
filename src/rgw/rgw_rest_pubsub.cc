@@ -126,6 +126,7 @@ int verify_topic_owner_or_policy(req_state* const s,
 // Action=CreateTopic&Name=<topic-name>[&OpaqueData=data][&push-endpoint=<endpoint>[&persistent][&<arg1>=<value1>]]
 class RGWPSCreateTopicOp : public RGWOp {
   private:
+  bufferlist bl_post_body;
   std::string topic_name;
   rgw_pubsub_dest dest;
   std::string topic_arn;
@@ -190,8 +191,11 @@ class RGWPSCreateTopicOp : public RGWOp {
     return 0;
   }
 
-  public:
-   int verify_permission(optional_yield y) override {
+ public:
+  explicit RGWPSCreateTopicOp(bufferlist bl_post_body)
+    : bl_post_body(std::move(bl_post_body)) {}
+
+  int verify_permission(optional_yield y) override {
     auto ret = get_params();
     if (ret < 0) {
       return ret;
@@ -257,10 +261,9 @@ class RGWPSCreateTopicOp : public RGWOp {
 
 void RGWPSCreateTopicOp::execute(optional_yield y) {
   // master request will replicate the topic creation.
-  bufferlist indata;
   if (!driver->is_meta_master()) {
     op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+        this, *s->penv.site, s->user->get_id(), &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1)
           << "CreateTopic forward_request_to_master returned ret = " << op_ret
@@ -537,6 +540,7 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
 // Action=SetTopicAttributes&TopicArn=<topic-arn>&AttributeName=<attribute-name>&AttributeValue=<attribute-value>
 class RGWPSSetTopicAttributesOp : public RGWOp {
  private:
+  bufferlist bl_post_body;
   std::string topic_name;
   std::string topic_arn;
   std::string opaque_data;
@@ -632,6 +636,9 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
   }
 
  public:
+  explicit RGWPSSetTopicAttributesOp(bufferlist bl_post_body)
+    : bl_post_body(std::move(bl_post_body)) {}
+
   int verify_permission(optional_yield y) override {
     auto ret = get_params();
     if (ret < 0) {
@@ -688,9 +695,8 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
 
 void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
   if (!driver->is_meta_master()) {
-    bufferlist indata;
     op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+        this, *s->penv.site, s->user->get_id(), &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1)
           << "SetTopicAttributes forward_request_to_master returned ret = "
@@ -733,6 +739,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
 // Action=DeleteTopic&TopicArn=<topic-arn>
 class RGWPSDeleteTopicOp : public RGWOp {
   private:
+  bufferlist bl_post_body;
   std::string topic_name;
   
   int get_params() {
@@ -747,7 +754,10 @@ class RGWPSDeleteTopicOp : public RGWOp {
     return 0;
   }
 
-  public:
+ public:
+  explicit RGWPSDeleteTopicOp(bufferlist bl_post_body)
+    : bl_post_body(std::move(bl_post_body)) {}
+
   int verify_permission(optional_yield) override {
     return 0;
   }
@@ -787,9 +797,8 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
     return;
   }
   if (!driver->is_meta_master()) {
-    bufferlist indata;
     op_ret = rgw_forward_request_to_master(
-        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+        this, *s->penv.site, s->user->get_id(), &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1)
           << "DeleteTopic forward_request_to_master returned ret = " << op_ret
@@ -836,31 +845,28 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
   ldpp_dout(this, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
 }
 
-using op_generator = RGWOp*(*)();
+using op_generator = RGWOp*(*)(bufferlist);
 static const std::unordered_map<std::string, op_generator> op_generators = {
-    {"CreateTopic", []() -> RGWOp* { return new RGWPSCreateTopicOp; }},
-    {"DeleteTopic", []() -> RGWOp* { return new RGWPSDeleteTopicOp; }},
-    {"ListTopics", []() -> RGWOp* { return new RGWPSListTopicsOp; }},
-    {"GetTopic", []() -> RGWOp* { return new RGWPSGetTopicOp; }},
+    {"CreateTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSCreateTopicOp(std::move(bl)); }},
+    {"DeleteTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSDeleteTopicOp(std::move(bl)); }},
+    {"ListTopics", [](bufferlist bl) -> RGWOp* { return new RGWPSListTopicsOp; }},
+    {"GetTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSGetTopicOp; }},
     {"GetTopicAttributes",
-     []() -> RGWOp* { return new RGWPSGetTopicAttributesOp; }},
+     [](bufferlist bl) -> RGWOp* { return new RGWPSGetTopicAttributesOp; }},
     {"SetTopicAttributes",
-     []() -> RGWOp* { return new RGWPSSetTopicAttributesOp; }}};
+     [](bufferlist bl) -> RGWOp* { return new RGWPSSetTopicAttributesOp(std::move(bl)); }}};
 
-bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_state* s) 
+bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_info& info)
 {
-  if (s->info.args.exists("Action")) {
-    const std::string action_name = s->info.args.get("Action");
-    return op_generators.contains(action_name);
-  }
-  return false;
-}
-bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_info& info) {
   if (info.args.exists("Action")) {
     const std::string action_name = info.args.get("Action");
     return op_generators.contains(action_name);
   }
   return false;
+}
+bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_state* s)
+{
+  return action_exists(s->info);
 }
 
 RGWOp *RGWHandler_REST_PSTopic_AWS::op_post()
@@ -872,7 +878,7 @@ RGWOp *RGWHandler_REST_PSTopic_AWS::op_post()
     const std::string action_name = s->info.args.get("Action");
     const auto action_it = op_generators.find(action_name);
     if (action_it != op_generators.end()) {
-      return action_it->second();
+      return action_it->second(std::move(bl_post_body));
     }
     ldpp_dout(s, 10) << "unknown action '" << action_name << "' for Topic handler" << dendl;
   } else {

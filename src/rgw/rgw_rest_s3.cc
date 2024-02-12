@@ -5210,7 +5210,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
         return new RGWHandler_REST_IAM(auth_registry, data);
       }
       if (enable_pubsub && RGWHandler_REST_PSTopic_AWS::action_exists(s)) {
-        return new RGWHandler_REST_PSTopic_AWS(auth_registry); 
+        return new RGWHandler_REST_PSTopic_AWS(auth_registry, std::move(data));
       }
       return nullptr;
     }
