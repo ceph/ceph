@@ -1,6 +1,7 @@
 """
 rgw routines
 """
+from io import BytesIO
 import argparse
 import contextlib
 import logging
@@ -80,6 +81,21 @@ def start_rgw(ctx, config, clients):
             # add the ssl certificate path
             frontends += ' ssl_certificate={}'.format(endpoint.cert.certificate)
             frontends += ' ssl_port={}'.format(endpoint.port)
+            path = 'lib/security/cacerts'
+            ctx.cluster.only(client).run(
+                args=['sudo',
+                      'keytool',
+                      '-import', '-alias', '{alias}'.format(
+                          alias=endpoint.hostname),
+                      '-keystore',
+                      run.Raw(
+                          '$(readlink -e $(dirname $(readlink -e $(which keytool)))/../{path})'.format(path=path)),
+                      '-file', endpoint.cert.certificate,
+                      '-storepass', 'changeit',
+                      ],
+                stdout=BytesIO()
+            )
+
         else:
             frontends += ' port={}'.format(endpoint.port)
 
