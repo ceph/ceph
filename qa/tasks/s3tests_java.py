@@ -159,23 +159,6 @@ class S3tests_java(Task):
             stdout=BytesIO()
         )
 
-        endpoint = self.ctx.rgw.role_endpoints[client]
-        if endpoint.cert:
-            path = 'lib/security/cacerts'
-            self.ctx.cluster.only(client).run(
-                args=['sudo',
-                      'keytool',
-                      '-import', '-alias', '{alias}'.format(
-                          alias=endpoint.hostname),
-                      '-keystore',
-                      run.Raw(
-                          '$(readlink -e $(dirname $(readlink -e $(which keytool)))/../{path})'.format(path=path)),
-                      '-file', endpoint.cert.certificate,
-                      '-storepass', 'changeit',
-                      ],
-                stdout=BytesIO()
-            )
-
     def create_users(self):
         """
         Create a main and an alternative s3 user.
