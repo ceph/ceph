@@ -500,21 +500,6 @@ class RgwBucketUi(RgwBucket):
 @APIRouter('/rgw/user', Scope.RGW)
 @APIDoc("RGW User Management API", "RgwUser")
 class RgwUser(RgwRESTController):
-    def _append_uid(self, user):
-        """
-        Append the user identifier that looks like [<tenant>$]<user>.
-        See http://docs.ceph.com/docs/jewel/radosgw/multitenancy/ for
-        more information.
-        :param user: The user parameters.
-        :type user: dict
-        :return: The modified user parameters including the 'uid' parameter.
-        :rtype: dict
-        """
-        if isinstance(user, dict):
-            user['uid'] = '{}${}'.format(user['tenant'], user['user_id']) \
-                if user['tenant'] else user['user_id']
-        return user
-
     @staticmethod
     def _keys_allowed():
         permissions = AuthManager.get_user(JwtManager.get_username()).permissions_dict()
@@ -550,7 +535,8 @@ class RgwUser(RgwRESTController):
         if not self._keys_allowed():
             del result['keys']
             del result['swift_keys']
-        return self._append_uid(result)
+        result['uid'] = result['full_user_id']
+        return result
 
     @Endpoint()
     @ReadPermission
@@ -583,7 +569,8 @@ class RgwUser(RgwRESTController):
         if secret_key is not None:
             params['secret-key'] = secret_key
         result = self.proxy(daemon_name, 'PUT', 'user', params)
-        return self._append_uid(result)
+        result['uid'] = result['full_user_id']
+        return result
 
     @allow_empty_body
     def set(self, uid, display_name=None, email=None, max_buckets=None,
@@ -598,7 +585,8 @@ class RgwUser(RgwRESTController):
         if suspended is not None:
             params['suspended'] = suspended
         result = self.proxy(daemon_name, 'POST', 'user', params)
-        return self._append_uid(result)
+        result['uid'] = result['full_user_id']
+        return result
 
     def delete(self, uid, daemon_name=None):
         try:
