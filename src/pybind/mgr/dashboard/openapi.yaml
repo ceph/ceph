@@ -3086,6 +3086,60 @@ paths:
       - jwt: []
       tags:
       - Cephfs
+  /api/cephfs/{fs_id}/statfs:
+    get:
+      description: "\n        Get the statfs of the specified path.\n        :param\
+        \ fs_id: The filesystem identifier.\n        :param path: The path of the\
+        \ directory/file.\n        :return: Returns a dictionary containing 'bytes',\n\
+        \        'files' and 'subdirs'.\n        :rtype: dict\n        "
+      parameters:
+      - description: File System Identifier
+        in: path
+        name: fs_id
+        required: true
+        schema:
+          type: string
+      - description: File System Path
+        in: query
+        name: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties:
+                  bytes:
+                    description: ''
+                    type: integer
+                  files:
+                    description: ''
+                    type: integer
+                  subdirs:
+                    description: ''
+                    type: integer
+                required:
+                - bytes
+                - files
+                - subdirs
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get Cephfs statfs of the specified path
+      tags:
+      - Cephfs
   /api/cephfs/{fs_id}/tree:
     delete:
       description: "\n        Remove a directory.\n        :param fs_id: The filesystem\
@@ -3143,6 +3197,95 @@ paths:
                   type: string
               required:
               - path
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Cephfs
+  /api/cephfs/{fs_id}/unlink:
+    delete:
+      description: "\n        Removes a file, link, or symbolic link.\n        :param\
+        \ fs_id: The filesystem identifier.\n        :param path: The path of the\
+        \ file or link to unlink.\n        "
+      parameters:
+      - in: path
+        name: fs_id
+        required: true
+        schema:
+          type: string
+      - in: query
+        name: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Cephfs
+  /api/cephfs/{fs_id}/write_to_file:
+    post:
+      description: "\n        Write some data to the specified path.\n        :param\
+        \ fs_id: The filesystem identifier.\n        :param path: The path of the\
+        \ file to write.\n        :param buf: The str to write to the buf.\n     \
+        \   "
+      parameters:
+      - in: path
+        name: fs_id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                buf:
+                  type: string
+                path:
+                  type: string
+              required:
+              - path
+              - buf
               type: object
       responses:
         '201':
