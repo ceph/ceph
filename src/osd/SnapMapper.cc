@@ -119,7 +119,8 @@ int OSDriver::get_next(
     ch, hoid, key
   ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
     CRIMSON_DEBUG("OSDriver::get_next key {} got omap values", key);
-    if (auto nit = std::begin(vals); nit == std::end(vals)) {
+    if (auto nit = std::begin(vals);
+        nit == std::end(vals) || !SnapMapper::is_mapping(nit->first)) {
       CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
       return -ENOENT;
     } else {
