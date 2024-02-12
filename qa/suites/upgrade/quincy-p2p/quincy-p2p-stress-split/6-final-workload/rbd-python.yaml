@@ -3,7 +3,7 @@ meta:
    librbd python api tests
 tasks:
 - workunit:
-    tag: v17.2.5
+    branch: quincy
     clients:
       client.0:
         - rbd/test_librbd_python.sh
