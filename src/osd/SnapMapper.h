@@ -256,8 +256,6 @@ private:
   std::pair<std::string, ceph::buffer::list> to_raw(
     const std::pair<snapid_t, hobject_t> &to_map) const;
 
-  static bool is_mapping(const std::string &to_test);
-
   static std::pair<snapid_t, hobject_t> from_raw(
     const std::pair<std::string, ceph::buffer::list> &image);
 
@@ -316,6 +314,8 @@ private:
     ceph_assert(r < (int)sizeof(buf));
     return std::string(buf, r) + '_';
   }
+
+  static bool is_mapping(const std::string &to_test);
 
   uint32_t mask_bits;
   const uint32_t match;
