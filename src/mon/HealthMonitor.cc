@@ -400,7 +400,7 @@ void HealthMonitor::tick()
 
 bool HealthMonitor::check_mutes()
 {
-  bool changed = true;
+  bool changed = false;
   auto now = ceph_clock_now();
   health_check_map_t all;
   gather_all_health_checks(&all);
