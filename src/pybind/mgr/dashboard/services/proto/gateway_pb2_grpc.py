@@ -15,110 +15,120 @@ class GatewayStub(object):
             channel: A grpc.Channel.
         """
         self.namespace_add = channel.unary_unary(
-            '/Gateway/namespace_add',
-            request_serializer=gateway__pb2.namespace_add_req.SerializeToString,
-            response_deserializer=gateway__pb2.nsid_status.FromString,
-        )
+                '/Gateway/namespace_add',
+                request_serializer=gateway__pb2.namespace_add_req.SerializeToString,
+                response_deserializer=gateway__pb2.nsid_status.FromString,
+                )
         self.create_subsystem = channel.unary_unary(
-            '/Gateway/create_subsystem',
-            request_serializer=gateway__pb2.create_subsystem_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/create_subsystem',
+                request_serializer=gateway__pb2.create_subsystem_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.delete_subsystem = channel.unary_unary(
-            '/Gateway/delete_subsystem',
-            request_serializer=gateway__pb2.delete_subsystem_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/delete_subsystem',
+                request_serializer=gateway__pb2.delete_subsystem_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.list_namespaces = channel.unary_unary(
-            '/Gateway/list_namespaces',
-            request_serializer=gateway__pb2.list_namespaces_req.SerializeToString,
-            response_deserializer=gateway__pb2.namespaces_info.FromString,
-        )
+                '/Gateway/list_namespaces',
+                request_serializer=gateway__pb2.list_namespaces_req.SerializeToString,
+                response_deserializer=gateway__pb2.namespaces_info.FromString,
+                )
         self.namespace_resize = channel.unary_unary(
-            '/Gateway/namespace_resize',
-            request_serializer=gateway__pb2.namespace_resize_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/namespace_resize',
+                request_serializer=gateway__pb2.namespace_resize_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.namespace_get_io_stats = channel.unary_unary(
-            '/Gateway/namespace_get_io_stats',
-            request_serializer=gateway__pb2.namespace_get_io_stats_req.SerializeToString,
-            response_deserializer=gateway__pb2.namespace_io_stats_info.FromString,
-        )
+                '/Gateway/namespace_get_io_stats',
+                request_serializer=gateway__pb2.namespace_get_io_stats_req.SerializeToString,
+                response_deserializer=gateway__pb2.namespace_io_stats_info.FromString,
+                )
         self.namespace_set_qos_limits = channel.unary_unary(
-            '/Gateway/namespace_set_qos_limits',
-            request_serializer=gateway__pb2.namespace_set_qos_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/namespace_set_qos_limits',
+                request_serializer=gateway__pb2.namespace_set_qos_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.namespace_change_load_balancing_group = channel.unary_unary(
-            '/Gateway/namespace_change_load_balancing_group',
-            request_serializer=gateway__pb2.namespace_change_load_balancing_group_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/namespace_change_load_balancing_group',
+                request_serializer=gateway__pb2.namespace_change_load_balancing_group_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.namespace_delete = channel.unary_unary(
-            '/Gateway/namespace_delete',
-            request_serializer=gateway__pb2.namespace_delete_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/namespace_delete',
+                request_serializer=gateway__pb2.namespace_delete_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.add_host = channel.unary_unary(
-            '/Gateway/add_host',
-            request_serializer=gateway__pb2.add_host_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/add_host',
+                request_serializer=gateway__pb2.add_host_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.remove_host = channel.unary_unary(
-            '/Gateway/remove_host',
-            request_serializer=gateway__pb2.remove_host_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/remove_host',
+                request_serializer=gateway__pb2.remove_host_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.list_hosts = channel.unary_unary(
-            '/Gateway/list_hosts',
-            request_serializer=gateway__pb2.list_hosts_req.SerializeToString,
-            response_deserializer=gateway__pb2.hosts_info.FromString,
-        )
+                '/Gateway/list_hosts',
+                request_serializer=gateway__pb2.list_hosts_req.SerializeToString,
+                response_deserializer=gateway__pb2.hosts_info.FromString,
+                )
         self.list_connections = channel.unary_unary(
-            '/Gateway/list_connections',
-            request_serializer=gateway__pb2.list_connections_req.SerializeToString,
-            response_deserializer=gateway__pb2.connections_info.FromString,
-        )
+                '/Gateway/list_connections',
+                request_serializer=gateway__pb2.list_connections_req.SerializeToString,
+                response_deserializer=gateway__pb2.connections_info.FromString,
+                )
         self.create_listener = channel.unary_unary(
-            '/Gateway/create_listener',
-            request_serializer=gateway__pb2.create_listener_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/create_listener',
+                request_serializer=gateway__pb2.create_listener_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.delete_listener = channel.unary_unary(
-            '/Gateway/delete_listener',
-            request_serializer=gateway__pb2.delete_listener_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/delete_listener',
+                request_serializer=gateway__pb2.delete_listener_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.list_listeners = channel.unary_unary(
-            '/Gateway/list_listeners',
-            request_serializer=gateway__pb2.list_listeners_req.SerializeToString,
-            response_deserializer=gateway__pb2.listeners_info.FromString,
-        )
+                '/Gateway/list_listeners',
+                request_serializer=gateway__pb2.list_listeners_req.SerializeToString,
+                response_deserializer=gateway__pb2.listeners_info.FromString,
+                )
         self.list_subsystems = channel.unary_unary(
-            '/Gateway/list_subsystems',
-            request_serializer=gateway__pb2.list_subsystems_req.SerializeToString,
-            response_deserializer=gateway__pb2.subsystems_info.FromString,
-        )
+                '/Gateway/list_subsystems',
+                request_serializer=gateway__pb2.list_subsystems_req.SerializeToString,
+                response_deserializer=gateway__pb2.subsystems_info_cli.FromString,
+                )
+        self.get_subsystems = channel.unary_unary(
+                '/Gateway/get_subsystems',
+                request_serializer=gateway__pb2.get_subsystems_req.SerializeToString,
+                response_deserializer=gateway__pb2.subsystems_info.FromString,
+                )
+        self.set_ana_state = channel.unary_unary(
+                '/Gateway/set_ana_state',
+                request_serializer=gateway__pb2.ana_info.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.get_spdk_nvmf_log_flags_and_level = channel.unary_unary(
-            '/Gateway/get_spdk_nvmf_log_flags_and_level',
-            request_serializer=gateway__pb2.get_spdk_nvmf_log_flags_and_level_req.SerializeToString,
-            response_deserializer=gateway__pb2.spdk_nvmf_log_flags_and_level_info.FromString,
-        )
+                '/Gateway/get_spdk_nvmf_log_flags_and_level',
+                request_serializer=gateway__pb2.get_spdk_nvmf_log_flags_and_level_req.SerializeToString,
+                response_deserializer=gateway__pb2.spdk_nvmf_log_flags_and_level_info.FromString,
+                )
         self.disable_spdk_nvmf_logs = channel.unary_unary(
-            '/Gateway/disable_spdk_nvmf_logs',
-            request_serializer=gateway__pb2.disable_spdk_nvmf_logs_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/disable_spdk_nvmf_logs',
+                request_serializer=gateway__pb2.disable_spdk_nvmf_logs_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.set_spdk_nvmf_logs = channel.unary_unary(
-            '/Gateway/set_spdk_nvmf_logs',
-            request_serializer=gateway__pb2.set_spdk_nvmf_logs_req.SerializeToString,
-            response_deserializer=gateway__pb2.req_status.FromString,
-        )
+                '/Gateway/set_spdk_nvmf_logs',
+                request_serializer=gateway__pb2.set_spdk_nvmf_logs_req.SerializeToString,
+                response_deserializer=gateway__pb2.req_status.FromString,
+                )
         self.get_gateway_info = channel.unary_unary(
-            '/Gateway/get_gateway_info',
-            request_serializer=gateway__pb2.get_gateway_info_req.SerializeToString,
-            response_deserializer=gateway__pb2.gateway_info.FromString,
-        )
+                '/Gateway/get_gateway_info',
+                request_serializer=gateway__pb2.get_gateway_info_req.SerializeToString,
+                response_deserializer=gateway__pb2.gateway_info.FromString,
+                )
 
 
 class GatewayServicer(object):
@@ -243,6 +253,20 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def get_subsystems(self, request, context):
+        """Gets subsystems
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def set_ana_state(self, request, context):
+        """Set gateway ANA states
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def get_spdk_nvmf_log_flags_and_level(self, request, context):
         """Gets spdk nvmf log flags and level
         """
@@ -274,475 +298,518 @@ class GatewayServicer(object):
 
 def add_GatewayServicer_to_server(servicer, server):
     rpc_method_handlers = {
-        'namespace_add': grpc.unary_unary_rpc_method_handler(
-            servicer.namespace_add,
-            request_deserializer=gateway__pb2.namespace_add_req.FromString,
-            response_serializer=gateway__pb2.nsid_status.SerializeToString,
-        ),
-        'create_subsystem': grpc.unary_unary_rpc_method_handler(
-            servicer.create_subsystem,
-            request_deserializer=gateway__pb2.create_subsystem_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'delete_subsystem': grpc.unary_unary_rpc_method_handler(
-            servicer.delete_subsystem,
-            request_deserializer=gateway__pb2.delete_subsystem_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'list_namespaces': grpc.unary_unary_rpc_method_handler(
-            servicer.list_namespaces,
-            request_deserializer=gateway__pb2.list_namespaces_req.FromString,
-            response_serializer=gateway__pb2.namespaces_info.SerializeToString,
-        ),
-        'namespace_resize': grpc.unary_unary_rpc_method_handler(
-            servicer.namespace_resize,
-            request_deserializer=gateway__pb2.namespace_resize_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'namespace_get_io_stats': grpc.unary_unary_rpc_method_handler(
-            servicer.namespace_get_io_stats,
-            request_deserializer=gateway__pb2.namespace_get_io_stats_req.FromString,
-            response_serializer=gateway__pb2.namespace_io_stats_info.SerializeToString,
-        ),
-        'namespace_set_qos_limits': grpc.unary_unary_rpc_method_handler(
-            servicer.namespace_set_qos_limits,
-            request_deserializer=gateway__pb2.namespace_set_qos_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'namespace_change_load_balancing_group': grpc.unary_unary_rpc_method_handler(
-            servicer.namespace_change_load_balancing_group,
-            request_deserializer=gateway__pb2.namespace_change_load_balancing_group_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'namespace_delete': grpc.unary_unary_rpc_method_handler(
-            servicer.namespace_delete,
-            request_deserializer=gateway__pb2.namespace_delete_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'add_host': grpc.unary_unary_rpc_method_handler(
-            servicer.add_host,
-            request_deserializer=gateway__pb2.add_host_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'remove_host': grpc.unary_unary_rpc_method_handler(
-            servicer.remove_host,
-            request_deserializer=gateway__pb2.remove_host_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'list_hosts': grpc.unary_unary_rpc_method_handler(
-            servicer.list_hosts,
-            request_deserializer=gateway__pb2.list_hosts_req.FromString,
-            response_serializer=gateway__pb2.hosts_info.SerializeToString,
-        ),
-        'list_connections': grpc.unary_unary_rpc_method_handler(
-            servicer.list_connections,
-            request_deserializer=gateway__pb2.list_connections_req.FromString,
-            response_serializer=gateway__pb2.connections_info.SerializeToString,
-        ),
-        'create_listener': grpc.unary_unary_rpc_method_handler(
-            servicer.create_listener,
-            request_deserializer=gateway__pb2.create_listener_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'delete_listener': grpc.unary_unary_rpc_method_handler(
-            servicer.delete_listener,
-            request_deserializer=gateway__pb2.delete_listener_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'list_listeners': grpc.unary_unary_rpc_method_handler(
-            servicer.list_listeners,
-            request_deserializer=gateway__pb2.list_listeners_req.FromString,
-            response_serializer=gateway__pb2.listeners_info.SerializeToString,
-        ),
-        'list_subsystems': grpc.unary_unary_rpc_method_handler(
-            servicer.list_subsystems,
-            request_deserializer=gateway__pb2.list_subsystems_req.FromString,
-            response_serializer=gateway__pb2.subsystems_info.SerializeToString,
-        ),
-        'get_spdk_nvmf_log_flags_and_level': grpc.unary_unary_rpc_method_handler(
-            servicer.get_spdk_nvmf_log_flags_and_level,
-            request_deserializer=gateway__pb2.get_spdk_nvmf_log_flags_and_level_req.FromString,
-            response_serializer=gateway__pb2.spdk_nvmf_log_flags_and_level_info.SerializeToString,
-        ),
-        'disable_spdk_nvmf_logs': grpc.unary_unary_rpc_method_handler(
-            servicer.disable_spdk_nvmf_logs,
-            request_deserializer=gateway__pb2.disable_spdk_nvmf_logs_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'set_spdk_nvmf_logs': grpc.unary_unary_rpc_method_handler(
-            servicer.set_spdk_nvmf_logs,
-            request_deserializer=gateway__pb2.set_spdk_nvmf_logs_req.FromString,
-            response_serializer=gateway__pb2.req_status.SerializeToString,
-        ),
-        'get_gateway_info': grpc.unary_unary_rpc_method_handler(
-            servicer.get_gateway_info,
-            request_deserializer=gateway__pb2.get_gateway_info_req.FromString,
-            response_serializer=gateway__pb2.gateway_info.SerializeToString,
-        ),
+            'namespace_add': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_add,
+                    request_deserializer=gateway__pb2.namespace_add_req.FromString,
+                    response_serializer=gateway__pb2.nsid_status.SerializeToString,
+            ),
+            'create_subsystem': grpc.unary_unary_rpc_method_handler(
+                    servicer.create_subsystem,
+                    request_deserializer=gateway__pb2.create_subsystem_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'delete_subsystem': grpc.unary_unary_rpc_method_handler(
+                    servicer.delete_subsystem,
+                    request_deserializer=gateway__pb2.delete_subsystem_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'list_namespaces': grpc.unary_unary_rpc_method_handler(
+                    servicer.list_namespaces,
+                    request_deserializer=gateway__pb2.list_namespaces_req.FromString,
+                    response_serializer=gateway__pb2.namespaces_info.SerializeToString,
+            ),
+            'namespace_resize': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_resize,
+                    request_deserializer=gateway__pb2.namespace_resize_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'namespace_get_io_stats': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_get_io_stats,
+                    request_deserializer=gateway__pb2.namespace_get_io_stats_req.FromString,
+                    response_serializer=gateway__pb2.namespace_io_stats_info.SerializeToString,
+            ),
+            'namespace_set_qos_limits': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_set_qos_limits,
+                    request_deserializer=gateway__pb2.namespace_set_qos_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'namespace_change_load_balancing_group': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_change_load_balancing_group,
+                    request_deserializer=gateway__pb2.namespace_change_load_balancing_group_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'namespace_delete': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_delete,
+                    request_deserializer=gateway__pb2.namespace_delete_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'add_host': grpc.unary_unary_rpc_method_handler(
+                    servicer.add_host,
+                    request_deserializer=gateway__pb2.add_host_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'remove_host': grpc.unary_unary_rpc_method_handler(
+                    servicer.remove_host,
+                    request_deserializer=gateway__pb2.remove_host_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'list_hosts': grpc.unary_unary_rpc_method_handler(
+                    servicer.list_hosts,
+                    request_deserializer=gateway__pb2.list_hosts_req.FromString,
+                    response_serializer=gateway__pb2.hosts_info.SerializeToString,
+            ),
+            'list_connections': grpc.unary_unary_rpc_method_handler(
+                    servicer.list_connections,
+                    request_deserializer=gateway__pb2.list_connections_req.FromString,
+                    response_serializer=gateway__pb2.connections_info.SerializeToString,
+            ),
+            'create_listener': grpc.unary_unary_rpc_method_handler(
+                    servicer.create_listener,
+                    request_deserializer=gateway__pb2.create_listener_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'delete_listener': grpc.unary_unary_rpc_method_handler(
+                    servicer.delete_listener,
+                    request_deserializer=gateway__pb2.delete_listener_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'list_listeners': grpc.unary_unary_rpc_method_handler(
+                    servicer.list_listeners,
+                    request_deserializer=gateway__pb2.list_listeners_req.FromString,
+                    response_serializer=gateway__pb2.listeners_info.SerializeToString,
+            ),
+            'list_subsystems': grpc.unary_unary_rpc_method_handler(
+                    servicer.list_subsystems,
+                    request_deserializer=gateway__pb2.list_subsystems_req.FromString,
+                    response_serializer=gateway__pb2.subsystems_info_cli.SerializeToString,
+            ),
+            'get_subsystems': grpc.unary_unary_rpc_method_handler(
+                    servicer.get_subsystems,
+                    request_deserializer=gateway__pb2.get_subsystems_req.FromString,
+                    response_serializer=gateway__pb2.subsystems_info.SerializeToString,
+            ),
+            'set_ana_state': grpc.unary_unary_rpc_method_handler(
+                    servicer.set_ana_state,
+                    request_deserializer=gateway__pb2.ana_info.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'get_spdk_nvmf_log_flags_and_level': grpc.unary_unary_rpc_method_handler(
+                    servicer.get_spdk_nvmf_log_flags_and_level,
+                    request_deserializer=gateway__pb2.get_spdk_nvmf_log_flags_and_level_req.FromString,
+                    response_serializer=gateway__pb2.spdk_nvmf_log_flags_and_level_info.SerializeToString,
+            ),
+            'disable_spdk_nvmf_logs': grpc.unary_unary_rpc_method_handler(
+                    servicer.disable_spdk_nvmf_logs,
+                    request_deserializer=gateway__pb2.disable_spdk_nvmf_logs_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'set_spdk_nvmf_logs': grpc.unary_unary_rpc_method_handler(
+                    servicer.set_spdk_nvmf_logs,
+                    request_deserializer=gateway__pb2.set_spdk_nvmf_logs_req.FromString,
+                    response_serializer=gateway__pb2.req_status.SerializeToString,
+            ),
+            'get_gateway_info': grpc.unary_unary_rpc_method_handler(
+                    servicer.get_gateway_info,
+                    request_deserializer=gateway__pb2.get_gateway_info_req.FromString,
+                    response_serializer=gateway__pb2.gateway_info.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-        'Gateway', rpc_method_handlers)
+            'Gateway', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
 
+
  # This class is part of an EXPERIMENTAL API.
-
-
 class Gateway(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
     def namespace_add(request,
-                      target,
-                      options=(),
-                      channel_credentials=None,
-                      call_credentials=None,
-                      insecure=False,
-                      compression=None,
-                      wait_for_ready=None,
-                      timeout=None,
-                      metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_add',
-                                             gateway__pb2.namespace_add_req.SerializeToString,
-                                             gateway__pb2.nsid_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.namespace_add_req.SerializeToString,
+            gateway__pb2.nsid_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def create_subsystem(request,
-                         target,
-                         options=(),
-                         channel_credentials=None,
-                         call_credentials=None,
-                         insecure=False,
-                         compression=None,
-                         wait_for_ready=None,
-                         timeout=None,
-                         metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/create_subsystem',
-                                             gateway__pb2.create_subsystem_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.create_subsystem_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def delete_subsystem(request,
-                         target,
-                         options=(),
-                         channel_credentials=None,
-                         call_credentials=None,
-                         insecure=False,
-                         compression=None,
-                         wait_for_ready=None,
-                         timeout=None,
-                         metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/delete_subsystem',
-                                             gateway__pb2.delete_subsystem_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.delete_subsystem_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def list_namespaces(request,
-                        target,
-                        options=(),
-                        channel_credentials=None,
-                        call_credentials=None,
-                        insecure=False,
-                        compression=None,
-                        wait_for_ready=None,
-                        timeout=None,
-                        metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/list_namespaces',
-                                             gateway__pb2.list_namespaces_req.SerializeToString,
-                                             gateway__pb2.namespaces_info.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.list_namespaces_req.SerializeToString,
+            gateway__pb2.namespaces_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def namespace_resize(request,
-                         target,
-                         options=(),
-                         channel_credentials=None,
-                         call_credentials=None,
-                         insecure=False,
-                         compression=None,
-                         wait_for_ready=None,
-                         timeout=None,
-                         metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_resize',
-                                             gateway__pb2.namespace_resize_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.namespace_resize_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def namespace_get_io_stats(request,
-                               target,
-                               options=(),
-                               channel_credentials=None,
-                               call_credentials=None,
-                               insecure=False,
-                               compression=None,
-                               wait_for_ready=None,
-                               timeout=None,
-                               metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_get_io_stats',
-                                             gateway__pb2.namespace_get_io_stats_req.SerializeToString,
-                                             gateway__pb2.namespace_io_stats_info.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.namespace_get_io_stats_req.SerializeToString,
+            gateway__pb2.namespace_io_stats_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def namespace_set_qos_limits(request,
-                                 target,
-                                 options=(),
-                                 channel_credentials=None,
-                                 call_credentials=None,
-                                 insecure=False,
-                                 compression=None,
-                                 wait_for_ready=None,
-                                 timeout=None,
-                                 metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_set_qos_limits',
-                                             gateway__pb2.namespace_set_qos_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.namespace_set_qos_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def namespace_change_load_balancing_group(request,
-                                              target,
-                                              options=(),
-                                              channel_credentials=None,
-                                              call_credentials=None,
-                                              insecure=False,
-                                              compression=None,
-                                              wait_for_ready=None,
-                                              timeout=None,
-                                              metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_change_load_balancing_group',
-                                             gateway__pb2.namespace_change_load_balancing_group_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.namespace_change_load_balancing_group_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def namespace_delete(request,
-                         target,
-                         options=(),
-                         channel_credentials=None,
-                         call_credentials=None,
-                         insecure=False,
-                         compression=None,
-                         wait_for_ready=None,
-                         timeout=None,
-                         metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_delete',
-                                             gateway__pb2.namespace_delete_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.namespace_delete_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def add_host(request,
-                 target,
-                 options=(),
-                 channel_credentials=None,
-                 call_credentials=None,
-                 insecure=False,
-                 compression=None,
-                 wait_for_ready=None,
-                 timeout=None,
-                 metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/add_host',
-                                             gateway__pb2.add_host_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.add_host_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def remove_host(request,
-                    target,
-                    options=(),
-                    channel_credentials=None,
-                    call_credentials=None,
-                    insecure=False,
-                    compression=None,
-                    wait_for_ready=None,
-                    timeout=None,
-                    metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/remove_host',
-                                             gateway__pb2.remove_host_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.remove_host_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def list_hosts(request,
-                   target,
-                   options=(),
-                   channel_credentials=None,
-                   call_credentials=None,
-                   insecure=False,
-                   compression=None,
-                   wait_for_ready=None,
-                   timeout=None,
-                   metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/list_hosts',
-                                             gateway__pb2.list_hosts_req.SerializeToString,
-                                             gateway__pb2.hosts_info.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.list_hosts_req.SerializeToString,
+            gateway__pb2.hosts_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def list_connections(request,
-                         target,
-                         options=(),
-                         channel_credentials=None,
-                         call_credentials=None,
-                         insecure=False,
-                         compression=None,
-                         wait_for_ready=None,
-                         timeout=None,
-                         metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/list_connections',
-                                             gateway__pb2.list_connections_req.SerializeToString,
-                                             gateway__pb2.connections_info.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.list_connections_req.SerializeToString,
+            gateway__pb2.connections_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def create_listener(request,
-                        target,
-                        options=(),
-                        channel_credentials=None,
-                        call_credentials=None,
-                        insecure=False,
-                        compression=None,
-                        wait_for_ready=None,
-                        timeout=None,
-                        metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/create_listener',
-                                             gateway__pb2.create_listener_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.create_listener_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def delete_listener(request,
-                        target,
-                        options=(),
-                        channel_credentials=None,
-                        call_credentials=None,
-                        insecure=False,
-                        compression=None,
-                        wait_for_ready=None,
-                        timeout=None,
-                        metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/delete_listener',
-                                             gateway__pb2.delete_listener_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.delete_listener_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def list_listeners(request,
-                       target,
-                       options=(),
-                       channel_credentials=None,
-                       call_credentials=None,
-                       insecure=False,
-                       compression=None,
-                       wait_for_ready=None,
-                       timeout=None,
-                       metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/list_listeners',
-                                             gateway__pb2.list_listeners_req.SerializeToString,
-                                             gateway__pb2.listeners_info.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.list_listeners_req.SerializeToString,
+            gateway__pb2.listeners_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def list_subsystems(request,
-                        target,
-                        options=(),
-                        channel_credentials=None,
-                        call_credentials=None,
-                        insecure=False,
-                        compression=None,
-                        wait_for_ready=None,
-                        timeout=None,
-                        metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/list_subsystems',
-                                             gateway__pb2.list_subsystems_req.SerializeToString,
-                                             gateway__pb2.subsystems_info.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.list_subsystems_req.SerializeToString,
+            gateway__pb2.subsystems_info_cli.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def get_subsystems(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/get_subsystems',
+            gateway__pb2.get_subsystems_req.SerializeToString,
+            gateway__pb2.subsystems_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def set_ana_state(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/set_ana_state',
+            gateway__pb2.ana_info.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def get_spdk_nvmf_log_flags_and_level(request,
-                                          target,
-                                          options=(),
-                                          channel_credentials=None,
-                                          call_credentials=None,
-                                          insecure=False,
-                                          compression=None,
-                                          wait_for_ready=None,
-                                          timeout=None,
-                                          metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/get_spdk_nvmf_log_flags_and_level',
-                                             gateway__pb2.get_spdk_nvmf_log_flags_and_level_req.SerializeToString,
-                                             gateway__pb2.spdk_nvmf_log_flags_and_level_info.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.get_spdk_nvmf_log_flags_and_level_req.SerializeToString,
+            gateway__pb2.spdk_nvmf_log_flags_and_level_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def disable_spdk_nvmf_logs(request,
-                               target,
-                               options=(),
-                               channel_credentials=None,
-                               call_credentials=None,
-                               insecure=False,
-                               compression=None,
-                               wait_for_ready=None,
-                               timeout=None,
-                               metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/disable_spdk_nvmf_logs',
-                                             gateway__pb2.disable_spdk_nvmf_logs_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.disable_spdk_nvmf_logs_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def set_spdk_nvmf_logs(request,
-                           target,
-                           options=(),
-                           channel_credentials=None,
-                           call_credentials=None,
-                           insecure=False,
-                           compression=None,
-                           wait_for_ready=None,
-                           timeout=None,
-                           metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/set_spdk_nvmf_logs',
-                                             gateway__pb2.set_spdk_nvmf_logs_req.SerializeToString,
-                                             gateway__pb2.req_status.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.set_spdk_nvmf_logs_req.SerializeToString,
+            gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
     def get_gateway_info(request,
-                         target,
-                         options=(),
-                         channel_credentials=None,
-                         call_credentials=None,
-                         insecure=False,
-                         compression=None,
-                         wait_for_ready=None,
-                         timeout=None,
-                         metadata=None):
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/get_gateway_info',
-                                             gateway__pb2.get_gateway_info_req.SerializeToString,
-                                             gateway__pb2.gateway_info.FromString,
-                                             options, channel_credentials,
-                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            gateway__pb2.get_gateway_info_req.SerializeToString,
+            gateway__pb2.gateway_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
