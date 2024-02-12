@@ -40,7 +40,7 @@ export class FormatterService {
    */
   formatNumberFromTo(
     n: any,
-    units: any,
+    units: string = '',
     targetedUnits: string = '',
     conversionFactor: number,
     unitsArray: string[],
@@ -50,6 +50,9 @@ export class FormatterService {
       n = Number(n);
     }
     if (!_.isNumber(n)) {
+      return '-';
+    }
+    if (!unitsArray) {
       return '-';
     }
     const unitsArrayLowerCase = unitsArray.map((str) => str.toLowerCase());

@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, Input, OnChanges, ViewChild } from '@angular/core';
+import { Component, Input, OnChanges, SimpleChanges, ViewChild } from '@angular/core';
 
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
@@ -14,7 +14,7 @@ import 'chartjs-adapter-moment';
   templateUrl: './dashboard-area-chart.component.html',
   styleUrls: ['./dashboard-area-chart.component.scss']
 })
-export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
+export class DashboardAreaChartComponent implements OnChanges {
   @ViewChild(BaseChartDirective) chart: BaseChartDirective;
 
   @Input()
@@ -175,19 +175,16 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
     };
   }
 
-  ngOnChanges(): void {
-    this.updateChartData();
+  ngOnChanges(changes: SimpleChanges): void {
+    this.updateChartData(changes);
   }
 
-  ngAfterViewInit(): void {
-    this.updateChartData();
-  }
-
-  private updateChartData(): void {
+  private updateChartData(changes: SimpleChanges): void {
     this.chartData.dataset[0].label = this.label;
     this.chartData.dataset[1].label = this.label2;
     this.setChartTicks();
-    if (this.data) {
+    if (changes.data && changes.data.currentValue) {
+      this.data = changes.data.currentValue;
       this.chartData.dataset[0].data = this.formatData(this.data);
       [this.currentData, this.currentDataUnits] = this.convertUnits(
         this.data[this.data.length - 1][1]
@@ -196,7 +193,8 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
         this.maxValue
       ).split(' ');
     }
-    if (this.data2) {
+    if (changes.data2 && changes.data2.currentValue) {
+      this.data2 = changes.data2.currentValue;
       this.chartData.dataset[1].data = this.formatData(this.data2);
       [this.currentData2, this.currentDataUnits2] = this.convertUnits(
         this.data2[this.data2.length - 1][1]
