@@ -2082,6 +2082,25 @@ TEST(SparseExtents, Split) {
   EXPECT_EQ(expected_extents, extents);
 }
 
+TEST(SparseExtents, Merge) {
+  SparseExtents extents;
+  extents.insert(50, 100, {SPARSE_EXTENT_STATE_DATA, 100});
+  extents.insert(30, 15, {SPARSE_EXTENT_STATE_ZEROED, 15});
+  extents.insert(45, 10, {SPARSE_EXTENT_STATE_DATA, 10});
+  extents.insert(200, 40, {SPARSE_EXTENT_STATE_DNE, 40});
+  extents.insert(160, 25, {SPARSE_EXTENT_STATE_DNE, 25});
+  extents.insert(140, 20, {SPARSE_EXTENT_STATE_DATA, 20});
+  extents.insert(25, 5, {SPARSE_EXTENT_STATE_ZEROED, 5});
+  extents.insert(185, 15, {SPARSE_EXTENT_STATE_DNE, 15});
+
+  SparseExtents expected_extents = {
+    {25, {20, {SPARSE_EXTENT_STATE_ZEROED, 20}}},
+    {45, {115, {SPARSE_EXTENT_STATE_DATA, 115}}},
+    {160, {80, {SPARSE_EXTENT_STATE_DNE, 80}}}
+  };
+  EXPECT_EQ(expected_extents, extents);
+}
+
 TEST(SparseBufferlist, Split) {
   bufferlist bl;
   bl.append(std::string(5, '1'));
@@ -2150,6 +2169,36 @@ TEST(SparseBufferlist, SplitData) {
     {100, {30, {SPARSE_EXTENT_STATE_DATA, 30, std::move(expected_bl4)}}},
     {130, {5, {SPARSE_EXTENT_STATE_DATA, 5, std::move(expected_bl5)}}},
     {155, {15, {SPARSE_EXTENT_STATE_DATA, 15, std::move(expected_bl6)}}}
+  };
+  EXPECT_EQ(expected_extents, extents);
+}
+
+TEST(SparseBufferlist, Merge) {
+  bufferlist bl1;
+  bl1.append(std::string(100, '1'));
+  bufferlist bl2;
+  bl2.append(std::string(10, '2'));
+  bufferlist bl3;
+  bl3.append(std::string(20, '3'));
+  bufferlist expected_bl;
+  expected_bl.append(std::string(10, '2'));
+  expected_bl.append(std::string(85, '1'));
+  expected_bl.append(std::string(20, '3'));
+
+  SparseBufferlist extents;
+  extents.insert(50, 100, {SPARSE_EXTENT_STATE_DATA, 100, std::move(bl1)});
+  extents.insert(30, 15, {SPARSE_EXTENT_STATE_ZEROED, 15});
+  extents.insert(45, 10, {SPARSE_EXTENT_STATE_DATA, 10, std::move(bl2)});
+  extents.insert(200, 40, {SPARSE_EXTENT_STATE_DNE, 40});
+  extents.insert(160, 25, {SPARSE_EXTENT_STATE_DNE, 25});
+  extents.insert(140, 20, {SPARSE_EXTENT_STATE_DATA, 20, std::move(bl3)});
+  extents.insert(25, 5, {SPARSE_EXTENT_STATE_ZEROED, 5});
+  extents.insert(185, 15, {SPARSE_EXTENT_STATE_DNE, 15});
+
+  SparseBufferlist expected_extents = {
+    {25, {20, {SPARSE_EXTENT_STATE_ZEROED, 20}}},
+    {45, {115, {SPARSE_EXTENT_STATE_DATA, 115, std::move(expected_bl)}}},
+    {160, {80, {SPARSE_EXTENT_STATE_DNE, 80}}}
   };
   EXPECT_EQ(expected_extents, extents);
 }
