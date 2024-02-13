@@ -277,6 +277,7 @@ public:
   bool committing = false;
   bool aborted = false;
   bool killed = false;
+  bool dead = false;
 
   // for applying projected inode changes
   std::set<MDSCacheObject*> projected_nodes;
