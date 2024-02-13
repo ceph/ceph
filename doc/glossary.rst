@@ -216,7 +216,9 @@
 	CRUSH
                 **C**\ontrolled **R**\eplication **U**\nder **S**\calable
                 **H**\ashing. The algorithm that Ceph uses to compute object
-                storage locations.
+                storage locations. See `CRUSH: Controlled, Scalable,
+                Decentralized Placement of Replicated Data
+                <https://ceph.com/assets/pdfs/weil-crush-sc06.pdf>`_.
 
 	CRUSH rule
                 The CRUSH data placement rule that applies to a particular
