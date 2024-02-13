@@ -6,9 +6,8 @@ Conflicts=umount.target
 PartOf=ceph-fuse.target
 
 [Service]
-Environment=CLUSTER=ceph
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
-ExecStart=/usr/bin/ceph-fuse -f --cluster ${CLUSTER} %I
+ExecStart=/usr/bin/ceph-fuse -f %I
 LockPersonality=true
 MemoryDenyWriteExecute=true
 NoNewPrivileges=true
