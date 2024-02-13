@@ -2219,3 +2219,426 @@ tests:
         exp_annotations:
           summary: Fan error(s) detected
           description: "Fan error(s) detected. Check `ceph health detail`."
+
+# nvmeof Tests
+ # NVMeoFSubsystemNamespaceLimit
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_subsystem_namespace_limit{nqn="wah"}'
+      values: '5x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="wah", bdev_name="disk1"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="wah", bdev_name="disk2"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="wah", bdev_name="disk3"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="wah", bdev_name="disk4"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="wah", bdev_name="disk5"}'
+      values: '1x10'
+    - series: 'ceph_nvmeof_subsystem_namespace_metadata{nqn="wah", bdev_name="disk6"}'
+      values: '1x10'      
+   promql_expr_test:
+     - expr: (count by(nqn) (ceph_nvmeof_subsystem_namespace_metadata)) >= ceph_nvmeof_subsystem_namespace_limit
+       eval_time: 1m
+       exp_samples:
+         - labels: '{nqn="wah"}'
+           value: 6
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: NVMeoFSubsystemNamespaceLimit
+      exp_alerts:
+      - exp_labels:
+          nqn: wah
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "wah subsystem has reached its maximum number of namespaces "
+          description: "Subsystems have a max namespace limit defined at creation time. This alert means that no more namespaces can be added to wah"
+
+ # NVMeoFTooManyGateways
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_gateway_info{addr="1.1.1.1"}'
+      values: '1+0x20'
+    - series: 'ceph_nvmeof_gateway_info{addr="1.1.1.2"}'
+      values: '1+0x20'
+    - series: 'ceph_nvmeof_gateway_info{addr="1.1.1.3"}'
+      values: '1+0x20'      
+    - series: 'ceph_nvmeof_gateway_info{addr="1.1.1.4"}'
+      values: '1+0x20' 
+    - series: 'ceph_nvmeof_gateway_info{addr="1.1.1.5"}'
+      values: '1+0x20'             
+   promql_expr_test:
+     - expr: count(ceph_nvmeof_gateway_info) > 4.00
+       eval_time: 1m
+       exp_samples:
+         - labels: '{}'
+           value: 5
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: NVMeoFTooManyGateways
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "Max supported gateways exceeded "
+          description: "You may create many gateways, but 4 is the tested limit"
+
+ # NVMeoFMaxGatewayGroupSize
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_gateway_info{group="group-1",addr="1.1.1.1"}'
+      values: '1+0x20'
+    - series: 'ceph_nvmeof_gateway_info{group="group-1",addr="1.1.1.2"}'
+      values: '1+0x20'
+    - series: 'ceph_nvmeof_gateway_info{group="group-1",addr="1.1.1.3"}'
+      values: '1+0x20'      
+    - series: 'ceph_nvmeof_gateway_info{group="group-2",addr="1.1.1.4"}'
+      values: '1+0x20' 
+    - series: 'ceph_nvmeof_gateway_info{group="group-2",addr="1.1.1.5"}'
+      values: '1+0x20'             
+   promql_expr_test:
+     - expr: count by(group) (ceph_nvmeof_gateway_info) > 2.00
+       eval_time: 1m
+       exp_samples:
+         - labels: '{group="group-1"}'
+           value: 3
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: NVMeoFMaxGatewayGroupSize
+      exp_alerts:
+      - exp_labels:
+          group: group-1
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "Max gateways within a gateway group (group-1) exceeded "
+          description: "You may create many gateways in a gateway group, but 2 is the tested limit"
+
+ # NVMeoFSingleGatewayGroup
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_gateway_info{group="group-1",addr="1.1.1.2"}'
+      values: '1+0x20'
+    - series: 'ceph_nvmeof_gateway_info{group="group-2",addr="1.1.1.4"}'
+      values: '1+0x20' 
+    - series: 'ceph_nvmeof_gateway_info{group="group-2",addr="1.1.1.5"}'
+      values: '1+0x20'             
+   promql_expr_test:
+     - expr: count by(group) (ceph_nvmeof_gateway_info) == 1
+       eval_time: 1m
+       exp_samples:
+         - labels: '{group="group-1"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: NVMeoFSingleGatewayGroup
+      exp_alerts:
+      - exp_labels:
+          group: group-1
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "The gateway group group-1 consists of a single gateway - HA is not possible "
+          description: "Although a single member gateway group is valid, it should only be used for test purposes" 
+
+ # NVMeoFHighGatewayCPU
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_reactor_seconds_total{mode="busy",name="nvmf_tgt_poll_group_0",instance="node-1:10008"}'
+      values: '880+5080x20'
+   promql_expr_test:
+     - expr: label_replace(avg by(instance) (rate(ceph_nvmeof_reactor_seconds_total{mode="busy"}[1m])),"instance","$1","instance","(.*):.*") > 80
+       eval_time: 5m
+       exp_samples:
+         - labels: '{instance="node-1"}'
+           value: 8.466666666666667E+01
+   alert_rule_test:
+    - eval_time: 15m
+      alertname: NVMeoFHighGatewayCPU
+      exp_alerts:
+      - exp_labels:
+          instance: node-1
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "CPU used by node-1 NVMe-oF Gateway is high "
+          description: "Typically, high CPU may indicate degraded performance. Consider increasing the number of reactor cores" 
+ 
+ # NVMeoFGatewayOpenSecurity
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_subsystem_metadata{nqn="nqn.good", allow_any_host="no"}'
+      values: '1+0x10'
+    - series: 'ceph_nvmeof_subsystem_metadata{nqn="nqn.bad", allow_any_host="yes"}'
+      values: '1+0x10'
+   promql_expr_test:
+     - expr: ceph_nvmeof_subsystem_metadata{allow_any_host="yes"}
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_nvmeof_subsystem_metadata",nqn="nqn.bad",allow_any_host="yes"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: NVMeoFGatewayOpenSecurity
+      exp_alerts:
+      - exp_labels:
+          allow_any_host: yes
+          nqn: nqn.bad
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "Subsystem nqn.bad has been defined without host level security "
+          description: "It is good practice to ensure subsystems use host security to reduce the risk of unexpected data loss" 
+
+ # NVMeoFTooManySubsystems
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn1"}'
+      values: '1+0x10'
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn2"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn3"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn4"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn5"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn6"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn7"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn8"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn9"}'
+      values: '1+0x10'                                             
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn10"}'
+      values: '1+0x10'
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn11"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn12"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn13"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn14"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn15"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn16"}'
+      values: '1+0x10'  
+    - series: 'ceph_nvmeof_subsystem_metadata{instance="node-1:10008",nqn="nqn17"}'
+      values: '1+0x10'  
+   promql_expr_test:
+     - expr: count by(gateway_host) (label_replace(ceph_nvmeof_subsystem_metadata,"gateway_host","$1","instance","(.*):.*")) > 16
+       eval_time: 1m
+       exp_samples:
+         - labels: '{gateway_host="node-1"}'
+           value: 17
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: NVMeoFTooManySubsystems
+      exp_alerts:
+      - exp_labels:
+          gateway_host: node-1
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "The number of subsystems defined to the gateway exceeds supported values "
+          description: "Although you may continue to create subsystems in node-1, the configuration may not be supported" 
+
+ # NVMeoFVersionMismatch
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_gateway_info{version="0.0.7"}'
+      values: '1+0x80'
+    - series: 'ceph_nvmeof_gateway_info{version="1.0.0"}'
+      values: '1+0x80'
+   promql_expr_test:
+     - expr: count(count by(version) (ceph_nvmeof_gateway_info)) > 1
+       eval_time: 1m
+       exp_samples:
+         - labels: '{}'
+           value: 2
+   alert_rule_test:
+    - eval_time: 1h
+      alertname: NVMeoFVersionMismatch
+      exp_alerts:
+      - exp_labels:
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "The cluster has different NVMe-oF gateway releases active "
+          description: "This may indicate an issue with deployment. Check cephadm logs"  
+
+ # NVMeoFHighClientCount
+ - interval: 1m
+   input_series:
+    - series: 'ceph_nvmeof_subsystem_host_count{nqn="nqn1"}'
+      values: '2 2 2 4 4 8 8 8 10 10 20 20 32 34 34 38 38 40 44 44'
+    - series: 'ceph_nvmeof_subsystem_host_count{nqn="nqn2"}'
+      values: '2 2 2 8 8 8 16 16 16 16 16 16 16 16 16 16 16 16 16 16'
+   promql_expr_test:
+     - expr: ceph_nvmeof_subsystem_host_count > 32.00
+       eval_time: 15m
+       exp_samples:
+         - labels: '{__name__="ceph_nvmeof_subsystem_host_count",nqn="nqn1"}'
+           value: 38
+   alert_rule_test:
+    - eval_time: 20m
+      alertname: NVMeoFHighClientCount
+      exp_alerts:
+      - exp_labels:
+          nqn: nqn1
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "The number of clients connected to nqn1 is too high "
+          description: "The supported limit for clients connecting to a subsystem is 32" 
+ 
+ # NVMeoFHighHostCPU
+ - interval: 1m
+   input_series:
+    - series: 'node_cpu_seconds_total{mode="idle",instance="node-1:9100",cpu="0"}'
+      values: '0+18x10 180+9x20'
+    - series: 'node_cpu_seconds_total{mode="idle",instance="node-1:9100",cpu="1"}'
+      values: '0+18x10 180+9x20'
+    - series: 'ceph_nvmeof_gateway_info{instance="node-1:10008"}'
+      values: '1.00+0x20'
+   promql_expr_test:
+     - expr: 100-((100*(avg by(host) (label_replace(rate(node_cpu_seconds_total{mode="idle"}[5m]),"host","$1","instance","(.*):.*")) * on(host) group_right label_replace(ceph_nvmeof_gateway_info,"host","$1","instance","(.*):.*")))) >= 80
+       eval_time: 16m
+       exp_samples:
+         - labels: '{host="node-1",instance="node-1:10008"}'
+           value: 85
+   alert_rule_test:
+    # negative match at 15m
+    - eval_time: 15m
+      alertname: NVMeoFHighHostCPU
+    # positive match at 25m      
+    - eval_time: 25m
+      alertname: NVMeoFHighHostCPU
+      exp_alerts:
+      - exp_labels:
+          instance: node-1:10008
+          host: node-1
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "The CPU is high (85%) on NVMeoF Gateway host (node-1) "
+          description: "High CPU on a gateway host can lead to CPU contention and performance degradation"  
+
+ # NVMeoFInterfaceDown - triggered on eth0 only
+ - interval: 30s
+   input_series:
+    - series: 'ceph_nvmeof_subsystem_listener_iface_info{operstate="down", device="eth0"}'
+      values: '1+0x30'
+    - series: 'ceph_nvmeof_subsystem_listener_iface_info{operstate="up", device="eth1"}'
+      values: '1+0x30'      
+   promql_expr_test:
+     - expr: ceph_nvmeof_subsystem_listener_iface_info{operstate="down"}
+       eval_time: 1m
+       exp_samples:
+         - labels: '{__name__="ceph_nvmeof_subsystem_listener_iface_info", device="eth0", operstate="down"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: NVMeoFInterfaceDown
+      exp_alerts:
+      - exp_labels:
+          oid: 1.3.6.1.4.1.50495.1.2.1.14.1
+          operstate: down
+          device: eth0
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "Network interface eth0 is down "
+          description: "A NIC used by one or more subsystems is in a down state" 
+
+ # NVMeoFInterfaceDuplex - triggered on eth1 only
+ - interval: 30s
+   input_series:
+    - series: 'ceph_nvmeof_subsystem_listener_iface_info{duplex="full", device="eth0"}'
+      values: '1+0x30'   
+    - series: 'ceph_nvmeof_subsystem_listener_iface_info{duplex="half", device="eth1"}'
+      values: '1+0x30'
+   promql_expr_test:
+     - expr: ceph_nvmeof_subsystem_listener_iface_info{duplex!="full"}
+       eval_time: 30s
+       exp_samples:
+         - labels: '{__name__="ceph_nvmeof_subsystem_listener_iface_info", device="eth1", duplex="half"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 5m
+      alertname: NVMeoFInterfaceDuplex
+      exp_alerts:
+      - exp_labels:
+          duplex: half
+          device: eth1
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "Network interface eth1 is not running in full duplex mode "
+          description: "Until this is resolved, performance from the gateway will be degraded" 
+
+ # NVMeoFHighReadLatency 
+ - interval: 30s
+   input_series:
+    - series: 'ceph_nvmeof_bdev_read_seconds_total{instance="node-1:10008",bdev_name="disk1"}'
+      values: '0+1680x10 19800+3000x20'   
+    - series: 'ceph_nvmeof_bdev_reads_completed_total{instance="node-1:10008",bdev_name="disk1"}'
+      values: '0+286000x10 2980000+120000x20'
+   promql_expr_test:
+     - expr: label_replace((avg by(instance) ((rate(ceph_nvmeof_bdev_read_seconds_total[1m]) / rate(ceph_nvmeof_bdev_reads_completed_total[1m])))),"gateway","$1","instance","(.*):.*") > 0.02
+       eval_time: 10m
+       exp_samples:
+         - labels: '{gateway="node-1",instance="node-1:10008"}'
+           value: 0.025
+   alert_rule_test:
+    # negative test - latency is lower than 0.02s
+    - eval_time: 4m
+      alertname: NVMeoFHighReadLatency
+    # positive test - latency is higher than 0.02s
+    - eval_time: 15m
+      alertname: NVMeoFHighReadLatency
+      exp_alerts:
+      - exp_labels:
+          gateway: node-1
+          instance: node-1:10008
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "The average read latency over the last 5 mins has reached 10 ms or more on node-1"
+          description: "High latencies may indicate a constraint within the cluster e.g. CPU, network. Please investigate" 
+
+ # NVMeoFHighWriteLatency 
+ - interval: 30s
+   input_series:
+    - series: 'ceph_nvmeof_bdev_write_seconds_total{instance="node-1:10008",bdev_name="disk1"}'
+      values: '0+1680x10 19800+3000x20'   
+    - series: 'ceph_nvmeof_bdev_writes_completed_total{instance="node-1:10008",bdev_name="disk1"}'
+      values: '0+286000x10 2980000+120000x20'
+   promql_expr_test:
+     - expr: label_replace((avg by(instance) ((rate(ceph_nvmeof_bdev_write_seconds_total[1m]) / rate(ceph_nvmeof_bdev_writes_completed_total[1m])))),"gateway","$1","instance","(.*):.*") > 0.02
+       eval_time: 10m
+       exp_samples:
+         - labels: '{gateway="node-1",instance="node-1:10008"}'
+           value: 0.025
+   alert_rule_test:
+    # negative test - latency is lower than 0.02s
+    - eval_time: 4m
+      alertname: NVMeoFHighWriteLatency
+    # positive test - latency is higher than 0.02s
+    - eval_time: 15m
+      alertname: NVMeoFHighWriteLatency
+      exp_alerts:
+      - exp_labels:
+          gateway: node-1
+          instance: node-1:10008
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: "The average write latency over the last 5 mins has reached 20 ms or more on node-1"
+          description: "High latencies may indicate a constraint within the cluster e.g. CPU, network. Please investigate"
+ 
