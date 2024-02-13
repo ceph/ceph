@@ -247,7 +247,7 @@ class MdsCapTester:
         Run test for read perm and, for write perm, run positive test if it
         is present and run negative test if not.
         """
-        if mntpt:
+        if mntpt and mntpt != '/':
             # beacaue we want to value of mntpt from test_set.path along with
             # slash that precedes it.
             mntpt = '/' + mntpt if mntpt[0] != '/' else mntpt
