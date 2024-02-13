@@ -13,8 +13,10 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_ceph_exporter
 
-BlockTimer::BlockTimer(std::string file, std::string function)
-	: file(file), function(function), stopped(false) {
+BlockTimer::BlockTimer(std::string_view file, std::string_view function)
+	: file(file),
+    function(function),
+    stopped(false) {
 	t1 = clock_t::now();
 }
 BlockTimer::~BlockTimer() {
