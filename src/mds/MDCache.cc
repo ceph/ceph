@@ -9874,6 +9874,8 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
 {
   dout(15) << "request_cleanup " << *mdr << dendl;
 
+  mdr->dead = true;
+
   if (mdr->has_more()) {
     if (mdr->more()->is_ambiguous_auth)
       mdr->clear_ambiguous_auth();
@@ -9914,7 +9916,7 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
 
 void MDCache::request_kill(const MDRequestRef& mdr)
 {
-  if (mdr->killed) {
+  if (mdr->killed || mdr->dead) {
     /* ignore duplicate kills */
     return;
   }
