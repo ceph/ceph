@@ -35,14 +35,6 @@ void BlockTimer::stop() {
 	}
 }
 
-bool string_is_digit(std::string s) {
-	size_t i = 0;
-	while (std::isdigit(s[i]) && i < s.size()) {
-		i++;
-	}
-	return i >= s.size();
-}
-
 std::string read_file_to_string(std::string path) {
 	std::ifstream is(path);
 	std::stringstream buffer;
