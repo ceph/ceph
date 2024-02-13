@@ -7675,6 +7675,13 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
 	req->referent_ino = ref_in->ino();
       }
     }
+    // referent inode related
+    vector<CDentry*>& desttrace = mdr->dn[0];
+    req->destdnpath = filepath(desttrace.front()->get_dir()->ino());
+    for (auto dn : desttrace)
+      req->destdnpath.push_dentry(dn->get_name());
+    dout(20) << __func__ << " desttrace " << desttrace << " destdnpath " << req->destdnpath << dendl;
+
     if (auto& desti_srnode = mdr->more()->desti_srnode)
       encode(*desti_srnode, req->desti_snapbl);
     mds->send_message_mds(req, linkauth);
@@ -7862,6 +7869,7 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
 {
   dout(10) << "handle_peer_link_prep " << *mdr
 	   << " on " << mdr->peer_request->get_object_info()
+	   << " dest path " << mdr->peer_request->destdnpath
 	   << dendl;
 
   ceph_assert(g_conf()->mds_kill_link_at != 4);
@@ -7876,6 +7884,22 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
   mdr->set_op_stamp(mdr->peer_request->op_stamp);
 
   mdr->auth_pin(targeti);
+
+  // discover destdn
+  filepath destpath(mdr->peer_request->destdnpath);
+  dout(10) << __func__ << " dest " << destpath << dendl;
+  vector<CDentry*> trace;
+  CF_MDS_RetryRequestFactory cf(mdcache, mdr, false);
+  int r = mdcache->path_traverse(mdr, cf, destpath,
+				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_PATH_LOCKED | MDS_TRAVERSE_WANT_DENTRY,
+				 &trace);
+  if (r > 0) return;
+  if (r == -CEPHFS_ESTALE) {
+    mdcache->find_ino_peers(destpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
+			    mdr->peer_to_mds, true);
+    return;
+  }
+  ceph_assert(r == 0);  // we shouldn't get an error here!
 
   //ceph_abort();  // test hack: make sure leader can handle a peer that fails to prepare...
   ceph_assert(g_conf()->mds_kill_link_at != 5);
