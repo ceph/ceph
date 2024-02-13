@@ -6950,6 +6950,11 @@ paths:
                   type: string
                 prometheus_api_url:
                   type: string
+                ssl_certificate:
+                  type: string
+                ssl_verify:
+                  default: false
+                  type: boolean
                 token:
                   type: string
                 url:
@@ -7125,6 +7130,11 @@ paths:
               properties:
                 password:
                   type: string
+                ssl_certificate:
+                  type: string
+                ssl_verify:
+                  default: false
+                  type: boolean
                 token:
                   type: string
                 url:
@@ -7196,34 +7206,38 @@ paths:
       tags:
       - Multi-cluster
   /api/multi-cluster/verify_connection:
-    get:
-      parameters:
-      - allowEmptyValue: true
-        in: query
-        name: url
-        schema:
-          type: string
-      - allowEmptyValue: true
-        in: query
-        name: username
-        schema:
-          type: string
-      - allowEmptyValue: true
-        in: query
-        name: password
-        schema:
-          type: string
-      - allowEmptyValue: true
-        in: query
-        name: token
-        schema:
-          type: string
+    post:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                password:
+                  type: string
+                ssl_certificate:
+                  type: string
+                ssl_verify:
+                  default: false
+                  type: boolean
+                token:
+                  type: string
+                url:
+                  type: string
+                username:
+                  type: string
+              type: object
       responses:
-        '200':
+        '201':
           content:
             application/vnd.ceph.api.v1.0+json:
               type: object
-          description: OK
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
         '401':

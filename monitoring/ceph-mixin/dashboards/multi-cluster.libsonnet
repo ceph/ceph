@@ -5,7 +5,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     $.dashboardSchema(
       'Ceph - Multi-cluster',
       '',
-      'BnxelG7Sz',
+      'BnxelG7Sx',
       'now-1h',
       '30s',
       22,

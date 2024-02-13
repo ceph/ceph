@@ -19,9 +19,10 @@ from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
 @APIDoc('Multi-cluster Management API', 'Multi-cluster')
 class MultiCluster(RESTController):
     def _proxy(self, method, base_url, path, params=None, payload=None, verify=False,
-               token=None):
+               token=None, cert=None):
         if not base_url.endswith('/'):
             base_url = base_url + '/'
+
         try:
             if token:
                 headers = {
@@ -34,7 +35,7 @@ class MultiCluster(RESTController):
                     'Content-Type': 'application/json',
                 }
             response = requests.request(method, base_url + path, params=params,
-                                        json=payload, verify=verify, headers=headers)
+                                        json=payload, verify=verify, cert=cert, headers=headers)
         except Exception as e:
             raise DashboardException(
                 "Could not reach {}, {}".format(base_url+path, e),
@@ -54,7 +55,7 @@ class MultiCluster(RESTController):
     @EndpointDoc("Authenticate to a remote cluster")
     def auth(self, url: str, cluster_alias: str, username: str,
              password=None, token=None, hub_url=None, cluster_fsid=None,
-             prometheus_api_url=None):
+             prometheus_api_url=None, ssl_verify=False, ssl_certificate=None):
         if password:
             payload = {
                 'username': username,
@@ -70,7 +71,8 @@ class MultiCluster(RESTController):
             cluster_token = content['token']
 
             self._proxy('PUT', url, 'ui-api/multi-cluster/set_cors_endpoint',
-                        payload={'url': hub_url}, token=cluster_token)
+                        payload={'url': hub_url}, token=cluster_token, verify=ssl_verify,
+                        cert=ssl_certificate)
             fsid = self._proxy('GET', url, 'api/health/get_cluster_fsid', token=cluster_token)
 
             # add prometheus targets
@@ -79,16 +81,18 @@ class MultiCluster(RESTController):
             _set_prometheus_targets(prometheus_url['value'])
 
             self.set_multi_cluster_config(fsid, username, url, cluster_alias,
-                                          cluster_token, prometheus_url['value'])
+                                          cluster_token, prometheus_url['value'],
+                                          ssl_verify, ssl_certificate)
             return
 
         if token and cluster_fsid and prometheus_api_url:
             _set_prometheus_targets(prometheus_api_url)
             self.set_multi_cluster_config(cluster_fsid, username, url,
-                                          cluster_alias, token, prometheus_api_url)
+                                          cluster_alias, token, prometheus_api_url,
+                                          ssl_verify, ssl_certificate)
 
     def set_multi_cluster_config(self, fsid, username, url, cluster_alias, token,
-                                 prometheus_url=None):
+                                 prometheus_url=None, ssl_verify=False, ssl_certificate=None):
         multi_cluster_config = self.load_multi_cluster_config()
         if fsid in multi_cluster_config['config']:
             existing_entries = multi_cluster_config['config'][fsid]
@@ -99,7 +103,9 @@ class MultiCluster(RESTController):
                     "cluster_alias": cluster_alias,
                     "user": username,
                     "token": token,
-                    "prometheus_url": prometheus_url if prometheus_url else ''
+                    "prometheus_url": prometheus_url if prometheus_url else '',
+                    "ssl_verify": ssl_verify,
+                    "ssl_certificate": ssl_certificate if ssl_certificate else ''
                 })
         else:
             multi_cluster_config['current_user'] = username
@@ -109,7 +115,9 @@ class MultiCluster(RESTController):
                 "cluster_alias": cluster_alias,
                 "user": username,
                 "token": token,
-                "prometheus_url": prometheus_url if prometheus_url else ''
+                "prometheus_url": prometheus_url if prometheus_url else '',
+                "ssl_verify": ssl_verify,
+                "ssl_certificate": ssl_certificate if ssl_certificate else ''
             }]
         Settings.MULTICLUSTER_CONFIG = multi_cluster_config
 
@@ -135,16 +143,18 @@ class MultiCluster(RESTController):
         return Settings.MULTICLUSTER_CONFIG
 
     @Endpoint('PUT')
-    @CreatePermission
+    @UpdatePermission
     # pylint: disable=unused-variable
-    def reconnect_cluster(self, url: str, username=None, password=None, token=None):
+    def reconnect_cluster(self, url: str, username=None, password=None, token=None,
+                          ssl_verify=False, ssl_certificate=None):
         multicluster_config = self.load_multi_cluster_config()
         if username and password:
             payload = {
                 'username': username,
                 'password': password
             }
-            content = self._proxy('POST', url, 'api/auth', payload=payload)
+            content = self._proxy('POST', url, 'api/auth', payload=payload,
+                                  verify=ssl_verify, cert=ssl_certificate)
             if 'token' not in content:
                 raise DashboardException(
                     "Could not authenticate to remote cluster",
@@ -155,7 +165,7 @@ class MultiCluster(RESTController):
 
         if username and token:
             if "config" in multicluster_config:
-                for key, cluster_details in multicluster_config["config"].items():
+                for _, cluster_details in multicluster_config["config"].items():
                     for cluster in cluster_details:
                         if cluster["url"] == url and cluster["user"] == username:
                             cluster['token'] = token
@@ -200,16 +210,18 @@ class MultiCluster(RESTController):
         Settings.MULTICLUSTER_CONFIG = multicluster_config
         return Settings.MULTICLUSTER_CONFIG
 
-    @Endpoint()
-    @ReadPermission
+    @Endpoint('POST')
+    @CreatePermission
     # pylint: disable=R0911
-    def verify_connection(self, url=None, username=None, password=None, token=None):
+    def verify_connection(self, url=None, username=None, password=None, token=None,
+                          ssl_verify=False, ssl_certificate=None):
         if token:
             try:
                 payload = {
                     'token': token
                 }
-                content = self._proxy('POST', url, 'api/auth/check', payload=payload)
+                content = self._proxy('POST', url, 'api/auth/check', payload=payload,
+                                      verify=ssl_verify, cert=ssl_certificate)
                 if 'permissions' not in content:
                     return content['detail']
                 user_content = self._proxy('GET', url, f'api/user/{username}',
@@ -227,7 +239,8 @@ class MultiCluster(RESTController):
                     'username': username,
                     'password': password
                 }
-                content = self._proxy('POST', url, 'api/auth', payload=payload)
+                content = self._proxy('POST', url, 'api/auth', payload=payload,
+                                      verify=ssl_verify, cert=ssl_certificate)
                 if 'token' not in content:
                     return content['detail']
                 user_content = self._proxy('GET', url, f'api/user/{username}',
