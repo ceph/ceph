@@ -6012,7 +6012,7 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
   }
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
-    _read_main_bdev_label(&bdev_label, &bdev_label_valid_locations,
+    _read_main_bdev_label(cct, bdev, p, fsid, &bdev_label, &bdev_label_valid_locations,
       &bdev_label_multi, &bdev_label_epoch);
   }
   if (!bdev_label_valid_locations.empty()) {
@@ -6021,7 +6021,7 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
       bdev_label_epoch++;
       bdev_label.meta["epoch"] = std::to_string(bdev_label_epoch);
     }
-    int r = _write_bdev_label(cct, p, bdev_label, bdev_label_valid_locations);
+    int r = _write_bdev_label(cct, bdev, p, bdev_label, bdev_label_valid_locations);
     ceph_assert(r == 0);
   }
   return ObjectStore::write_meta(key, value);
@@ -6035,7 +6035,7 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
   }
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
-    _read_main_bdev_label(&bdev_label, &bdev_label_valid_locations,
+    _read_main_bdev_label(cct, bdev, p, fsid, &bdev_label, &bdev_label_valid_locations,
       &bdev_label_multi, &bdev_label_epoch);
   }
   if (!bdev_label_valid_locations.empty()) {
@@ -6466,11 +6466,17 @@ int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
 				     uuid_d *fsid)
 {
   bluestore_bdev_label_t label;
-  int r = _read_bdev_label(cct, path, &label);
-  if (r < 0)
-    return r;
-  *fsid = label.osd_uuid;
-  return 0;
+  string bdev_path = path + "/block";
+  unique_ptr<BlockDevice> bdev(BlockDevice::create(cct, bdev_path, nullptr, nullptr, nullptr, nullptr));
+  int r = bdev->open(bdev_path);
+  if (r == 0) {
+    r = _read_main_bdev_label(cct, bdev.get(), bdev_path, uuid_d(), &label);
+  }
+  if (r == 0) {
+    *fsid = label.osd_uuid;
+  }
+  bdev->close();
+  return r;
 }
 
 int BlueStore::_open_path()
@@ -6495,11 +6501,13 @@ void BlueStore::_close_path()
 
 int BlueStore::_write_bdev_label(
   CephContext *cct,
+  BlockDevice* bdev,
   const string &path,
   bluestore_bdev_label_t label,
   std::vector<uint64_t> locations)
 {
-  dout(10) << __func__ << " path " << path << " label " << label << dendl;
+  dout(10) << __func__ << " path " << path << " label " << label
+    << " locations " << locations << dendl;
   bufferlist bl;
   encode(label, bl);
   uint32_t crc = bl.crc32c(-1);
@@ -6509,29 +6517,15 @@ int BlueStore::_write_bdev_label(
   z.zero();
   bl.append(std::move(z));
 
-  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_WRONLY|O_CLOEXEC|O_DIRECT));
-  if (fd < 0) {
-    fd = -errno;
-    derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
-	 << dendl;
-    return fd;
-  }
   bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
   int r = 0;
   ceph_assert(locations.size() > 0);
-  struct stat st;
-  r = ::fstat(fd, &st);
-  if (r < 0) {
-    r = -errno;
-    derr << __func__ << " failed to fstat " << path << ": " << cpp_strerror(r) << dendl;
-    VOID_TEMP_FAILURE_RETRY(::close(fd));
-    return r;
-  }
+  uint64_t dev_size = bdev->get_size();
   int failed_r = 0;
   bool wrote_at_least_one = false;
   for (uint64_t position : locations) {
-    if (int64_t(position + BDEV_LABEL_BLOCK_SIZE) <= st.st_size) {
-      r = bl.write_fd(fd, position);
+    if (position + BDEV_LABEL_BLOCK_SIZE <= dev_size) {
+      r = bdev->write(position, bl, false);
       if (r == 0) {
         wrote_at_least_one = true;
       } else {
@@ -6543,17 +6537,16 @@ int BlueStore::_write_bdev_label(
     }
   }
   if (!wrote_at_least_one) {
-    derr << __func__ << " failed to write to any bdev of locations" << dendl;
+    derr << __func__ << " failed to write to any of bdev locations" << dendl;
     r = failed_r;
     goto out;
   }
-  r = ::fsync(fd);
+  r = bdev->flush();
   if (r < 0) {
     derr << __func__ << " failed to fsync " << path
       << ": " << cpp_strerror(r) << dendl;
   }
 out:
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
   return r;
 }
 /*
@@ -6566,44 +6559,28 @@ out:
 */
 int BlueStore::_read_bdev_label(
   CephContext* cct,
+  BlockDevice* bdev,
   const std::string &path,
   bluestore_bdev_label_t *label,
   uint64_t disk_position)
 {
   dout(10) << __func__ << " position=0x" << std::hex << disk_position << std::dec << dendl;
-  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_RDONLY|O_CLOEXEC));
-  if (fd < 0) {
-    fd = -errno;
-    derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
-	 << dendl;
-    return fd;
-  }
+  ceph_assert(bdev);
   bufferlist bl;
   unique_ptr<char> buf(new char[BDEV_LABEL_BLOCK_SIZE]);
-  struct stat st;
-  int r = ::fstat(fd, &st);
-  if (r < 0) {
-    r = -errno;
-    derr << __func__ << " failed to fstat " << path << ": " << cpp_strerror(r) << dendl;
-    VOID_TEMP_FAILURE_RETRY(::close(fd));
-    return r;
-  }
-  if (st.st_size <= int64_t(disk_position + BDEV_LABEL_BLOCK_SIZE)) {
+  uint64_t dev_size = bdev->get_size();
+  if (dev_size <= disk_position + BDEV_LABEL_BLOCK_SIZE) {
     dout(10) << __func__ << " position=0x" << std::hex << disk_position
-      << " dev size=0x" << st.st_size << std::dec << dendl;
+      << " dev size=0x" << dev_size << std::dec << dendl;
     return 1;
   }
-
-  r = safe_pread_exact(fd, buf.get(), BDEV_LABEL_BLOCK_SIZE, disk_position);
+  int r = bdev->read_random(disk_position, BDEV_LABEL_BLOCK_SIZE, buf.get(), false);
   if (r < 0) {
     derr << __func__ << " failed to read from " << path
          << " at 0x" << std::hex << disk_position << std::dec
          <<": " << cpp_strerror(r) << dendl;
   }
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
-  if (r < 0) {
-    return r;
-  }
+
   bl.append(buf.get(), BDEV_LABEL_BLOCK_SIZE);
   uint32_t crc, expected_crc;
   auto p = bl.cbegin();
@@ -6632,6 +6609,7 @@ int BlueStore::_read_bdev_label(
 
 /**
   Reads device label.
+  fsid            - Fsid to look for. If zero, accept any.
   *out_label      - Filled if reading of label is considered successful.
   *out_valid_positions - List of locations that contained valid labels.
   *out_is_multi  -  Whether the label is regular or multi label with epoch.
@@ -6641,15 +6619,19 @@ int BlueStore::_read_bdev_label(
   0    When all label are read
   1    When some, but not all labels are read
   -ENOENT Otherwise
-
 */
 int BlueStore::_read_main_bdev_label(
+  CephContext* cct,
+  BlockDevice* bdev,
+  const string& path,
+  uuid_d fsid,
   bluestore_bdev_label_t *out_label,
   std::vector<uint64_t>* out_valid_positions,
   bool* out_is_multi,
   int64_t* out_epoch)
 {
   dout(10) << __func__ << dendl;
+  ceph_assert(bdev);
   ceph_assert(out_label);
   // go and try read all possible bdev labels.
   // if only first bdev label is correct, it must not have "multi=yes" key.
@@ -6657,7 +6639,7 @@ int BlueStore::_read_main_bdev_label(
   bool all_labels_valid = true;
   for (uint64_t position : bdev_label_positions) {
     bluestore_bdev_label_t label;
-    int r = _read_bdev_label(cct, path + "/block", &label, position);
+    int r = _read_bdev_label(cct, bdev, path, &label, position);
     if (r == 0 && (fsid.is_zero() || label.osd_uuid == fsid)) {
       auto i = label.meta.find("multi");
       bool is_multi = i != label.meta.end() && i->second == "yes";
@@ -6677,6 +6659,7 @@ int BlueStore::_read_main_bdev_label(
         // for not base bdev position, it has to be cloned to be considered
         continue;
       }
+      fsid = label.osd_uuid; //from now on, only accept same fsid
       i = label.meta.find("epoch");
       if (i != label.meta.end()) {
         int64_t v = atoll(i->second.c_str());
@@ -6702,6 +6685,7 @@ int BlueStore::_read_main_bdev_label(
     } else if (r == 0) {
       derr << __func__ << " label at 0x" << std::hex << position << std::dec
         << " correct, but osd_uuid=" << label.osd_uuid << " need=" << fsid << dendl;
+      all_labels_valid = false;
     } else if (r == 1) {
       // tried to read but no disk
     } else {
@@ -6776,7 +6760,8 @@ void BlueStore::_main_bdev_label_remove(Allocator* an_alloc)
 }
 
 int BlueStore::_check_or_set_bdev_label(
-  const string& path, uint64_t size, const string& desc, bool create)
+  const string& path, BlockDevice* bdev,
+  uint64_t size, const string& desc, bool create)
 {
   bluestore_bdev_label_t label;
   if (create) {
@@ -6784,11 +6769,11 @@ int BlueStore::_check_or_set_bdev_label(
     label.size = size;
     label.btime = ceph_clock_now();
     label.description = desc;
-    int r = _write_bdev_label(cct, path, label);
+    int r = _write_bdev_label(cct, bdev, path, label);
     if (r < 0)
       return r;
   } else {
-    int r = _read_bdev_label(cct, path, &label);
+    int r = _read_bdev_label(cct, bdev, path, &label);
     if (r < 0)
       return r;
     if (cct->_conf->bluestore_debug_permit_any_bdev_label) {
@@ -6825,7 +6810,7 @@ int BlueStore::_set_main_bdev_label()
   } else {
     bdev_label_valid_locations.push_back(BDEV_FIRST_LABEL_POSITION);
   }
-  int r = _write_bdev_label(cct, path + "/block", label, bdev_label_valid_locations);
+  int r = _write_bdev_label(cct, bdev, path + "/block", label, bdev_label_valid_locations);
   if (r < 0)
     return r;
   return 0;
@@ -6834,8 +6819,8 @@ int BlueStore::_set_main_bdev_label()
 int BlueStore::_check_main_bdev_label()
 {
   string block_path = path + "/block";
-  int r = _read_main_bdev_label(&bdev_label, &bdev_label_valid_locations,
-    &bdev_label_multi, &bdev_label_epoch);
+  int r = _read_main_bdev_label(cct, bdev, block_path, fsid, &bdev_label,
+    &bdev_label_valid_locations, &bdev_label_multi, &bdev_label_epoch);
   if (r < 0)
     return r;
   if (cct->_conf->bluestore_debug_permit_any_bdev_label) {
@@ -7380,6 +7365,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
     if (bluefs->bdev_support_label(BlueFS::BDEV_DB)) {
       r = _check_or_set_bdev_label(
 	bfn,
+        bluefs->get_block_device(BlueFS::BDEV_DB),
 	bluefs->get_block_device_size(BlueFS::BDEV_DB),
         "bluefs db", create);
       if (r < 0) {
@@ -7427,6 +7413,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
     if (bluefs->bdev_support_label(BlueFS::BDEV_WAL)) {
       r = _check_or_set_bdev_label(
 	bfn,
+        bluefs->get_block_device(BlueFS::BDEV_WAL),
 	bluefs->get_block_device_size(BlueFS::BDEV_WAL),
         "bluefs wal", create);
       if (r < 0) {
@@ -8532,6 +8519,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
       r = _check_or_set_bdev_label(
 	p,
+        bluefs->get_block_device(BlueFS::BDEV_NEWWAL),
 	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
         "bluefs wal",
 	true);
@@ -8553,6 +8541,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
       r = _check_or_set_bdev_label(
 	p,
+        bluefs->get_block_device(BlueFS::BDEV_NEWDB),
 	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
         "bluefs db",
 	true);
@@ -8682,6 +8671,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
       r = _check_or_set_bdev_label(
 	dev_path,
+        bluefs->get_block_device(BlueFS::BDEV_NEWWAL),
 	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
         "bluefs wal",
 	true);
@@ -8700,6 +8690,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
       r = _check_or_set_bdev_label(
 	dev_path,
+        bluefs->get_block_device(BlueFS::BDEV_NEWDB),
 	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
         "bluefs db",
 	true);
@@ -8762,13 +8753,13 @@ string BlueStore::get_device_path(unsigned id)
 int BlueStore::_set_bdev_label_size(const string& path, uint64_t size)
 {
   bluestore_bdev_label_t label;
-  int r = _read_bdev_label(cct, path, &label);
+  int r = _read_bdev_label(cct, bdev, path, &label);
   if (r < 0) {
     derr << "unable to read label for " << path << ": "
           << cpp_strerror(r) << dendl;
   } else {
     label.size = size;
-    r = _write_bdev_label(cct, path, label);
+    r = _write_bdev_label(cct, bdev, path, label);
     if (r < 0) {
       derr << "unable to write label for " << path << ": "
             << cpp_strerror(r) << dendl;
@@ -11137,7 +11128,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     ceph_assert(bdev->supported_bdev_label());
     // Now fix bdev_labels that were detected to be broken & repairable.
     string p = path + "/block";
-    _write_bdev_label(cct, p, bdev_label, bdev_labels_in_repair);
+    _write_bdev_label(cct, bdev, p, bdev_label, bdev_labels_in_repair);
     repaired += bdev_labels_in_repair.size();
   }
 

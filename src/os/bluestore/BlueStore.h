@@ -2769,18 +2769,23 @@ public:
 
   static int _write_bdev_label(
     CephContext* cct,
+    BlockDevice* bdev,
     const std::string &path,
     bluestore_bdev_label_t label,
     std::vector<uint64_t> locations = std::vector<uint64_t>({BDEV_FIRST_LABEL_POSITION}));
   static int _read_bdev_label(
-    CephContext* cct, const std::string &path,
+    CephContext* cct, BlockDevice* bdev, const std::string &path,
     bluestore_bdev_label_t *label, uint64_t disk_position = BDEV_FIRST_LABEL_POSITION);
 private:
-  int _check_or_set_bdev_label(const std::string& path, uint64_t size, const std::string& desc,
-			       bool create);
+  int _check_or_set_bdev_label(const std::string& path, BlockDevice* bdev, uint64_t size,
+                               const std::string& desc, bool create);
   int _set_main_bdev_label();
   int _check_main_bdev_label();
-  int _read_main_bdev_label(
+  static int _read_main_bdev_label(
+    CephContext* cct,
+    BlockDevice* bdev,
+    const std::string& path,
+    uuid_d fsid,
     bluestore_bdev_label_t *out_label,
     std::vector<uint64_t>* out_valid_positions = nullptr,
     bool* out_is_cloned = nullptr,
@@ -3413,14 +3418,14 @@ public:
   }
 
   static int debug_read_bdev_label(
-    CephContext* cct, const std::string &path,
+    CephContext* cct, BlockDevice* bdev, const std::string &path,
     bluestore_bdev_label_t *label, uint64_t disk_position) {
-      return _read_bdev_label(cct, path, label, disk_position);
+      return _read_bdev_label(cct, bdev, path, label, disk_position);
     }
   static int debug_write_bdev_label(
-    CephContext* cct, const std::string &path,
+    CephContext* cct, BlockDevice* bdev, const std::string &path,
     const bluestore_bdev_label_t& label, uint64_t disk_position) {
-      return _write_bdev_label(cct, path, label,
+      return _write_bdev_label(cct, bdev, path, label,
         std::vector<uint64_t>({disk_position}));
     }
 
