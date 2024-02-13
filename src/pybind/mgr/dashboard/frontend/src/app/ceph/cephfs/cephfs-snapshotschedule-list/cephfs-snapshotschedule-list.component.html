@@ -21,14 +21,14 @@
     class="fw-bold"
     [ngbTooltip]="fullpathTpl"
     triggers="click:blur">
-    {{ row.path | path }}
+    {{ row.path?.split?.("@")?.[0] | path }}
   </span>
 
   <span
   *ngIf="row.active; else inactiveStatusTpl">
     <i
       [ngClass]="[icons.success, icons.large]"
-      ngbTooltip="{{ row.path }} is active"
+      ngbTooltip="{{ row.path?.split?.('@')?.[0] }} is active"
       class="text-success"
     ></i>
   </span>
@@ -37,7 +37,7 @@
     <i
       [ngClass]="[icons.warning, icons.large]"
       class="text-warning"
-      ngbTooltip="{{ row.path }} has been deactivated"
+      ngbTooltip="{{ row.path?.split?.('@')?.[0] }} has been deactivated"
     ></i>
   </ng-template>
 
@@ -46,10 +46,10 @@
       data-toggle="tooltip"
       [title]="row.path"
       class="font-monospace"
-      >{{ row.path }}
+      >{{ row.path?.split?.("@")?.[0] }}
       <cd-copy-2-clipboard-button
         *ngIf="row.path"
-        [source]="row.path"
+        [source]="row.path?.split?.('@')?.[0]"
         [byId]="false"
         [showIconOnly]="true"
       >
@@ -57,6 +57,26 @@
     </span>
   </ng-template>
 </ng-template>
+
+<ng-template
+  #retentionTpl
+  let-row="row">
+  <ul *ngIf="row.retentionCopy.length; else noDataTpl">
+    <li *ngFor="let ret of row.retentionCopy">{{ ret }}</li>
+  </ul>
+</ng-template>
+
+<ng-template
+  #subvolTpl
+  let-row="row">
+  <span *ngIf="row.subvol; else noDataTpl">
+    {{row.subvol}}
+  </span>
+</ng-template>
+
+
+
+<ng-template #noDataTpl>-</ng-template>
 
 <cd-table
   [data]="snapshotSchedules$ | async"

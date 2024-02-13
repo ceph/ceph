@@ -969,13 +969,16 @@ class CephFSSnapshotSchedule(RESTController):
             )
         return json.loads(output_json)
 
-    def create(self, fs: str, path: str, snap_schedule: str, start: str, retention_policy=None):
+    def create(self, fs: str, path: str, snap_schedule: str, start: str, retention_policy=None,
+               subvol=None, group=None):
         error_code, _, err = mgr.remote('snap_schedule',
                                         'snap_schedule_add',
                                         path,
                                         snap_schedule,
                                         start,
-                                        fs)
+                                        fs,
+                                        subvol,
+                                        group)
 
         if retention_policy:
             retention_policies = retention_policy.split('|')
@@ -999,7 +1002,8 @@ class CephFSSnapshotSchedule(RESTController):
 
         return f'Snapshot schedule for path {path} created successfully'
 
-    def set(self, fs: str, path: str, retention_to_add=None, retention_to_remove=None):
+    def set(self, fs: str, path: str, retention_to_add=None, retention_to_remove=None,
+            subvol=None, group=None):
         def editRetentionPolicies(method, retention_policy):
             if not retention_policy:
                 return
@@ -1014,8 +1018,8 @@ class CephFSSnapshotSchedule(RESTController):
                                                                     retention_spec_or_period,
                                                                     retention_count,
                                                                     fs,
-                                                                    None,
-                                                                    None)
+                                                                    subvol,
+                                                                    group)
                 if error_code_retention != 0:
                     raise DashboardException(
                         f'Failed to add/remove retention policy for path {path}: {err_retention}'
@@ -1027,15 +1031,16 @@ class CephFSSnapshotSchedule(RESTController):
         return f'Retention policies for snapshot schedule on path {path} updated successfully'
 
     @RESTController.Resource('DELETE')
-    def delete_snapshot(self, fs: str, path: str, schedule: str, start: str):
+    def delete_snapshot(self, fs: str, path: str, schedule: str, start: str,
+                        subvol=None, group=None):
         error_code, _, err = mgr.remote('snap_schedule',
                                         'snap_schedule_rm',
                                         path,
                                         schedule,
                                         start,
                                         fs,
-                                        None,
-                                        None)
+                                        subvol,
+                                        group)
         if error_code != 0:
             raise DashboardException(
                 f'Failed to delete snapshot schedule for path {path}: {err}'
@@ -1044,15 +1049,15 @@ class CephFSSnapshotSchedule(RESTController):
         return f'Snapshot schedule for path {path} deleted successfully'
 
     @RESTController.Resource('POST')
-    def deactivate(self, fs: str, path: str, schedule: str, start: str):
+    def deactivate(self, fs: str, path: str, schedule: str, start: str, subvol=None, group=None):
         error_code, _, err = mgr.remote('snap_schedule',
                                         'snap_schedule_deactivate',
                                         path,
                                         schedule,
                                         start,
                                         fs,
-                                        None,
-                                        None)
+                                        subvol,
+                                        group)
         if error_code != 0:
             raise DashboardException(
                 f'Failed to deactivate snapshot schedule for path {path}: {err}'
@@ -1061,15 +1066,15 @@ class CephFSSnapshotSchedule(RESTController):
         return f'Snapshot schedule for path {path} deactivated successfully'
 
     @RESTController.Resource('POST')
-    def activate(self, fs: str, path: str, schedule: str, start: str):
+    def activate(self, fs: str, path: str, schedule: str, start: str, subvol=None, group=None):
         error_code, _, err = mgr.remote('snap_schedule',
                                         'snap_schedule_activate',
                                         path,
                                         schedule,
                                         start,
                                         fs,
-                                        None,
-                                        None)
+                                        subvol,
+                                        group)
         if error_code != 0:
             raise DashboardException(
                 f'Failed to activate snapshot schedule for path {path}: {err}'
