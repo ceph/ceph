@@ -1065,7 +1065,7 @@ static inline bool notification_match(reservation_t& res,
       ldpp_dout(res.dpp, 1)
           << "INFO: failed to load topic: " << topic_cfg.name
           << ". error: " << ret
-          << " while resrving persistent notification event" << dendl;
+          << " while reserving persistent notification event" << dendl;
       if (ret == -ENOENT) {
         // either the topic is deleted but the corresponding notification still
         // exist or in v2 mode the notification could have synced first but

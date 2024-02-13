@@ -814,35 +814,35 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
     op_ret = verify_topic_owner_or_policy(
         s, result, driver->get_zone()->get_zonegroup().get_name(),
         rgw::IAM::snsDeleteTopic);
-    if (op_ret != 0) {
+    if (op_ret < 0) {
       ldpp_dout(this, 1) << "no permission to remove topic '" << topic_name
                          << "'" << dendl;
       return;
     }
-  } else {
+    op_ret = ps.remove_topic(this, topic_name, y);
+    if (op_ret < 0 && op_ret != -ENOENT) {
+      ldpp_dout(this, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
+      return;
+    }
+    ldpp_dout(this, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
+  } else if (op_ret != -ENOENT) {
     ldpp_dout(this, 1) << "failed to fetch topic '" << topic_name
                        << "' with error: " << op_ret << dendl;
-    if (op_ret == -ENOENT) {
-      // its not an error if no topics exist, just a no-op
-      op_ret = 0;
-    }
     return;
+  }
+  if (op_ret == -ENOENT) {
+    // its not an error if no topics exist, just a no-op
+    op_ret = 0;
   }
   // upon deletion it is not known if topic is persistent or not
   // will try to delete the persistent topic anyway
-  op_ret = rgw::notify::remove_persistent_topic(topic_name, s->yield);
-  if (op_ret != -ENOENT && op_ret < 0) {
+  // doing this regardless of the topic being previously deleted
+  // to allow for cleanup if only the queue deletion failed
+  if (const auto ret = rgw::notify::remove_persistent_topic(topic_name, s->yield); ret < 0 && ret != -ENOENT) {
     ldpp_dout(this, 1) << "DeleteTopic Action failed to remove queue for "
                           "persistent topics. error:"
-                       << op_ret << dendl;
-    return;
+                       << ret << dendl;
   }
-  op_ret = ps.remove_topic(this, topic_name, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
-    return;
-  }
-  ldpp_dout(this, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
 }
 
 using op_generator = RGWOp*(*)(bufferlist);
