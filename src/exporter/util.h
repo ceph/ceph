@@ -9,7 +9,6 @@ class BlockTimer {
 	void stop();
 	double get_ms() const;
  private:
-	std::chrono::duration<double, std::milli> ms;
 	std::string file, function;
 	bool stopped;
 	using clock_t = std::chrono::steady_clock;
