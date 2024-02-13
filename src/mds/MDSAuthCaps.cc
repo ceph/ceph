@@ -392,18 +392,36 @@ bool MDSAuthCaps::merge_one_cap_grant(MDSCapGrant ng)
   // check if "ng" is already present in this cap object.
   for (auto& g : grants) {
     if (g.match.fs_name == ng.match.fs_name && g.match.path == ng.match.path) {
-      if (g.spec.get_caps() == ng.spec.get_caps()) {
-	// no update required. maintaining idempotency.
+      if (g.spec.get_caps() == ng.spec.get_caps() &&
+	  g.match.root_squash == ng.match.root_squash) {
+	// Since all components of MDS caps (fsname, path, perm/spec and
+	// root_squash) matched, it means cap same as "ng" is present in MDS
+	// cap grant list. No need to look further in MDS cap grant list.
+	// No update is required. Maintain idempotency.
 	return false;
-       } else {
-	// "ng" is present but perm/spec is different. update it.
+       }
+
+      // fsname and path match but perm/spec is different. update the cap
+      // with new perm/spec.
+      if (g.spec.get_caps() != ng.spec.get_caps()) {
 	g.spec.set_caps(ng.spec.get_caps());
-	return true;
       }
+
+      // fsname and path match but value of root_squash is different. update
+      // its value.
+      if (g.match.root_squash != ng.match.root_squash) {
+	g.match.root_squash = ng.match.root_squash;
+      }
+
+      // Since fsname and path matched and either perm/spec or root_squash
+      // or both has been updated, cap from "ng" has been incorporated
+      // into this cap grant list. Time to return.
+      return true;
     }
   }
 
-  // since "ng" is absent in this cap object, add it.
+  // Since a cap grant like "ng" is absent in this cap object's grant list,
+  // add "ng" to the cap grant list.
   grants.push_back(MDSCapGrant(
     MDSCapSpec(ng.spec.get_caps()),
     MDSCapMatch(ng.match.fs_name, ng.match.path, ng.match.root_squash),
