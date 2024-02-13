@@ -9,7 +9,7 @@ class BlockTimer {
 	BlockTimer(std::string file, std::string function);
 	~BlockTimer();
 	void stop();
-	double get_ms();
+	double get_ms() const;
  private:
 	std::chrono::duration<double, std::milli> ms;
 	std::string file, function;

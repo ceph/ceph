@@ -22,7 +22,7 @@ BlockTimer::~BlockTimer() {
 }
 
 // useful with stop
-double BlockTimer::get_ms() {
+double BlockTimer::get_ms() const {
 	return ms.count();
 }
 
