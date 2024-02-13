@@ -3445,16 +3445,25 @@ void CDir::adjust_freeze_after_rename(CDir *dir)
   mdcache->mds->queue_waiters(unfreeze_waiters);
 }
 
-bool CDir::can_auth_pin(int *err_ret) const
+bool CDir::can_auth_pin(int *err_ret, bool bypassfreezing) const
 {
   int err;
   if (!is_auth()) {
     err = ERR_NOT_AUTH;
-  } else if (is_freezing_dir() || is_frozen_dir()) {
+  } else if (is_freezing_dir()) {
+    if (bypassfreezing) {
+      dout(20) << "allowing authpin with freezing" << dendl;
+      err = 0;
+    } else {
+      err = ERR_FRAGMENTING_DIR;
+    }
+  } else if (is_frozen_dir()) {
     err = ERR_FRAGMENTING_DIR;
   } else {
     auto p = is_freezing_or_frozen_tree();
-    if (p.first || p.second) {
+    if (p.first && !bypassfreezing) {
+      err = ERR_EXPORTING_TREE;
+    } else if (p.second) {
       err = ERR_EXPORTING_TREE;
     } else {
       err = 0;

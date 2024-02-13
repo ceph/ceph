@@ -3149,8 +3149,12 @@ void Server::handle_peer_auth_pin(const MDRequestRef& mdr)
   list<MDSCacheObject*> objects;
   CInode *auth_pin_freeze = NULL;
   bool nonblocking = mdr->peer_request->is_nonblocking();
+  bool bypassfreezing = mdr->peer_request->is_bypassfreezing();
   bool fail = false, wouldblock = false, readonly = false;
   ref_t<MMDSPeerRequest> reply;
+
+  dout(15) << " nonblocking=" << nonblocking
+           << " bypassfreezing=" << bypassfreezing << dendl;
 
   if (mdcache->is_readonly()) {
     dout(10) << " read-only FS" << dendl;
@@ -3183,7 +3187,7 @@ void Server::handle_peer_auth_pin(const MDRequestRef& mdr)
       }
       if (mdr->is_auth_pinned(obj))
 	continue;
-      if (!mdr->can_auth_pin(obj)) {
+      if (!mdr->can_auth_pin(obj, bypassfreezing)) {
 	if (nonblocking) {
 	  dout(10) << " can't auth_pin (freezing?) " << *obj << " nonblocking" << dendl;
 	  fail = true;
