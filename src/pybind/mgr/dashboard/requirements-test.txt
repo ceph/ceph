@@ -1,4 +1,4 @@
 pytest-cov
 pytest-instafail
 pyfakefs==4.5.0
-jsonschema
+jsonschema~=4.0
