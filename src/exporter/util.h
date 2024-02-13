@@ -2,8 +2,6 @@
 #include <chrono>
 #include <string>
 
-#define TIMED_FUNCTION() BlockTimer timer(__FILE__, __FUNCTION__) 
-
 class BlockTimer {
  public:
 	BlockTimer(std::string file, std::string function);
