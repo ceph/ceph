@@ -6012,7 +6012,7 @@ int BlueStore::_set_cache_sizes()
 
 int BlueStore::write_meta(const std::string& key, const std::string& value)
 {
-    if (bdev && !bdev->supported_bdev_label()) {
+  if (!bdev || !bdev->supported_bdev_label()) {
     // skip bdev label section if not supported
     return ObjectStore::write_meta(key, value);
   }
@@ -6035,7 +6035,7 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
 
 int BlueStore::read_meta(const std::string& key, std::string *value)
 {
-  if (bdev && !bdev->supported_bdev_label()) {
+  if (!bdev || !bdev->supported_bdev_label()) {
     // skip bdev label section if not supported
     return ObjectStore::read_meta(key, value);
   }
