@@ -3999,3 +3999,11 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_localize_read
+  type: bool
+  level: advanced
+  desc: Enable localization of read operations
+  default: false
+  services:
+  - rgw
+  with_legacy: true

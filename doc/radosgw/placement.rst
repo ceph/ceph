@@ -259,5 +259,9 @@ will drop the request and raise an exception.
 S3 Object Lifecycle Management can then be used to move object data between
 storage classes using ``Transition`` actions.
 
+Using Localise Read
+===================
+The ``rgw_localise_read`` configuration option can be used to enable or disable the localisation of read operations. When enabled, read operations are localised to the OSD where the object resides.
+
 .. _`Pools`: ../pools
 .. _`Multisite Configuration`: ../multisite
