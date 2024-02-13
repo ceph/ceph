@@ -2083,10 +2083,11 @@ void Server::respond_to_request(const MDRequestRef& mdr, int r)
     }
   } else if (mdr->internal_op > -1) {
     dout(10) << __func__ << ": completing with result " << cpp_strerror(r) << " on internal " << *mdr << dendl;
-    if (!mdr->internal_op_finish)
+    auto c = mdr->internal_op_finish;
+    if (!c)
       ceph_abort_msg("trying to respond to internal op without finisher");
-    mdr->internal_op_finish->complete(r);
     mdcache->request_finish(mdr);
+    c->complete(r);
   }
 }
 
