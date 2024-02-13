@@ -1873,12 +1873,6 @@ class TestFsAuthorize(CephFSTestCase):
             self.captesters[i].run_cap_tests(self.fs, self.client_id, PERM,
                                              PATH)
 
-    def tearDown(self):
-        self.mount_a.umount_wait()
-        self.run_ceph_cmd(f'auth rm {self.client_name}')
-
-        super(type(self), self).tearDown()
-
     def _remount(self, keyring, path='/'):
         keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
         self.mount_a.remount(client_id=self.client_id,
@@ -1896,6 +1890,12 @@ class TestFsAuthorize(CephFSTestCase):
                       cephfs_name=fsname, client_keyring_path=keyring_path)
 
         captester.run_cap_tests(self.fs, self.client_id, PERM, PATH)
+
+    def tearDown(self):
+        self.mount_a.umount_wait()
+        self.run_ceph_cmd(f'auth rm {self.client_name}')
+
+        super(type(self), self).tearDown()
 
 
 class TestFsAuthorizeUpdate(CephFSTestCase):
