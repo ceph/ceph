@@ -15,8 +15,7 @@
 
 BlockTimer::BlockTimer(std::string_view file, std::string_view function)
 	: file(file),
-    function(function),
-    stopped(false) {
+    function(function) {
 	t1 = clock_t::now();
 }
 BlockTimer::~BlockTimer() {
