@@ -764,6 +764,10 @@ int SnapMapper::_lookup_purged_snap(
   decode(gotpool, p);
   decode(*begin, p);
   decode(*end, p);
+  if (gotpool != pool) {
+    dout(20) << __func__ << " got wrong pool " << gotpool << dendl;
+    return -ENOENT;
+  }
   if (snap < *begin || snap >= *end) {
     dout(20) << __func__ << " pool " << pool << " snap " << snap
 	     << " found [" << *begin << "," << *end << "), no overlap" << dendl;
