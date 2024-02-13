@@ -17,8 +17,6 @@ class BlockTimer {
 	std::chrono::time_point<std::chrono::high_resolution_clock> t1, t2;
 };
 
-bool string_is_digit(std::string s);
 std::string read_file_to_string(std::string path);
-std::string get_hostname(std::string path);
 
 void promethize(std::string &name);
