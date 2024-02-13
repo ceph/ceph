@@ -527,7 +527,8 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
   }
     
   //initializing json processor
-  m_s3_json_object.set_json_query(&s3select_syntax);
+  json_object::csv_definitions output_definition;
+  m_s3_json_object.set_json_query(&s3select_syntax,output_definition);
 
   if (input == nullptr) {
     input = "";
