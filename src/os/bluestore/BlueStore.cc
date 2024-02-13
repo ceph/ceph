@@ -5193,12 +5193,14 @@ void BlueStore::Collection::split_cache(
 }
 
 bool BlueStore::Collection::is_deferred_seq(uint64_t seq) {
+  std::unique_lock l(deferred_seq_dependencies_lock);
   auto it = deferred_seq_dependencies.find(seq);
   return it != deferred_seq_dependencies.end();
 
 }
 
 void BlueStore::Collection::add_deferred_dependency(uint64_t seq, OnodeRef onode) {
+  std::unique_lock l(deferred_seq_dependencies_lock);
   BufferCacheShard* cache = onode->c->cache;
   ldout(cache->cct, 20) << __func__ << " seq=" << seq << " onode=" << onode << dendl;
   auto it = deferred_seq_dependencies.find(seq);
@@ -13801,13 +13803,18 @@ void BlueStore::_txc_finish(TransContext *txc)
 
   for (auto &[onode, seq] : txc->buffers_written) {
     if (txc->deferred_txn && txc->deferred_txn->txc_seq == seq) {
-      std::unique_lock l(onode->c->lock);
-      auto it = onode->c->deferred_seq_dependencies.find(seq);
-      if (it != onode->c->deferred_seq_dependencies.end()) {
-        for (auto &dependent_onode : it->second) {
-          dependent_onode->bc._finish_write(dependent_onode->c->cache, seq);
+      std::set<OnodeRef> dependent_onodes;
+      {
+        std::unique_lock l(onode->c->deferred_seq_dependencies_lock);
+        auto it = onode->c->deferred_seq_dependencies.find(seq);
+        if (it != onode->c->deferred_seq_dependencies.end()) {
+          dependent_onodes.swap(it->second);
+          onode->c->deferred_seq_dependencies.erase(it);
         }
-        onode->c->deferred_seq_dependencies.erase(it);
+
+      }
+      for (auto &dependent_onode : dependent_onodes) {
+        dependent_onode->bc._finish_write(dependent_onode->c->cache, seq);
       }
     }
     onode->bc._finish_write(onode->c->cache, seq);

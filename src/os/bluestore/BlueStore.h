@@ -1654,6 +1654,7 @@ private:
 
     // Deferred write dependencies. Buffers of deferred writes than get cloned must be marked as clean
     // on all cloned Onodes after the main deferred txc is completed.
+    std::mutex deferred_seq_dependencies_lock;
     std::map<uint64_t, std::set<OnodeRef>> deferred_seq_dependencies;
 
     OnodeCacheShard* get_onode_cache() const {
