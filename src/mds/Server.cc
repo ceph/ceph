@@ -7537,8 +7537,12 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   pi.inode->change_attr++;
   pi.inode->version = tipv;
 
-  // create inode.
-  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), 0, pi.inode->mode);
+  // create referent inode. Don't re-create on retry
+  CInode *newi = nullptr;
+  if (!mdr->alloc_ino && !mdr->used_prealloc_ino)
+    newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(0), pi.inode->mode);
+  else
+    newi = mdcache->get_inode(mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino);
   ceph_assert(newi);
 
   auto _inode = newi->_get_inode();
@@ -7641,9 +7645,12 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
   CInode *newi = nullptr;
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
 
-  // create referent inode.
+  // create referent inode. Don't re-create on retry
   if (inc) {
-    newi = prepare_new_inode(mdr, dn->get_dir(), 0, targeti->inode->mode);
+    if (!mdr->alloc_ino && !mdr->used_prealloc_ino)
+      newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(0), targeti->inode->mode);
+    else
+      newi = mdcache->get_inode(mdr->alloc_ino ? mdr->alloc_ino : mdr->used_prealloc_ino);
     ceph_assert(newi);
   }
 
