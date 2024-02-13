@@ -1,15 +1,16 @@
 #include "common/hostname.h"
 #include <chrono>
-#include <string>
+#include <string_view>
 
 class BlockTimer {
  public:
-	BlockTimer(std::string file, std::string function);
+	BlockTimer(std::string_view file, std::string_view function);
 	~BlockTimer();
 	void stop();
 	double get_ms() const;
  private:
-	std::string file, function;
+	const std::string_view file;
+	const std::string_view function;
 	bool stopped;
 	using clock_t = std::chrono::steady_clock;
 	clock_t::time_point t1;
