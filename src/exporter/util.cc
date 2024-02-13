@@ -15,7 +15,7 @@
 
 BlockTimer::BlockTimer(std::string file, std::string function)
 	: file(file), function(function), stopped(false) {
-	t1 = std::chrono::high_resolution_clock::now();
+	t1 = clock_t::now();
 }
 BlockTimer::~BlockTimer() {
   dout(20) << file << ":" << function << ": " << ms.count() << "ms" << dendl;
@@ -30,7 +30,7 @@ double BlockTimer::get_ms() const {
 void BlockTimer::stop() {
 	if (!stopped) {
 		stopped = true;
-		t2 = std::chrono::high_resolution_clock::now();
+		t2 = clock_t::now();
 		ms = t2 - t1;
 	}
 }
