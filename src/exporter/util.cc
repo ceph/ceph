@@ -18,12 +18,13 @@ BlockTimer::BlockTimer(std::string file, std::string function)
 	t1 = clock_t::now();
 }
 BlockTimer::~BlockTimer() {
-  dout(20) << file << ":" << function << ": " << ms.count() << "ms" << dendl;
+  dout(20) << file << ":" << function << ": " << get_ms() << "ms" << dendl;
 }
 
 // useful with stop
 double BlockTimer::get_ms() const {
-	return ms.count();
+	using milliseconds_t = std::chrono::duration<double, std::milli>;
+	return std::chrono::duration_cast<milliseconds_t>(t2 - t1).count();
 }
 
 // Manually stop the timer as you might want to get the time
@@ -31,7 +32,6 @@ void BlockTimer::stop() {
 	if (!stopped) {
 		stopped = true;
 		t2 = clock_t::now();
-		ms = t2 - t1;
 	}
 }
 
