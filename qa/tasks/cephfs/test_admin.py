@@ -1486,6 +1486,7 @@ class TestFsAuthorize(CephFSTestCase):
         the entity's caps when multiple caps are passed to it in one go.
 
         Tests: https://tracker.ceph.com/issues/64127
+        Tests: https://tracker.ceph.com/issues/64417
         '''
         DIR = 'dir1'
         self.mount_a.run_shell(f'mkdir {DIR}')
@@ -1497,6 +1498,12 @@ class TestFsAuthorize(CephFSTestCase):
         # The fact that following line passes means
         # https://tracker.ceph.com/issues/64127 has been fixed
         keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
+
+        # The fact that following lines passes means
+        # https://tracker.ceph.com/issues/64417 has been fixed.
+        mdscaps = (f'allow rw fsname={self.fs.name} root_squash, '
+                   f'allow rw fsname={self.fs.name} path={DIR}')
+        self.assertIn(mdscaps, keyring)
 
         self._remount_and_run_tests(FS_AUTH_CAPS, keyring)
 
