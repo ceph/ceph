@@ -145,6 +145,7 @@ private:
     uint64_t nr_failures = 0; // number of consecutive failures
     boost::optional<time> last_failed; // lat failed timestamp
     bool failed = false; // hit upper cap for consecutive failures
+    std::string type;
     boost::optional<std::pair<uint64_t, std::string>> last_synced_snap;
     boost::optional<std::pair<uint64_t, std::string>> current_syncing_snap;
     uint64_t synced_snap_count = 0;
@@ -220,6 +221,12 @@ private:
     sync_stat.last_synced = clock::now();
     sync_stat.last_sync_duration = duration;
     ++sync_stat.synced_snap_count;
+  }
+
+  void set_sync_type(const std::string &dir_root, const std::string &type) {
+    std::scoped_lock locker(m_lock);
+    auto &sync_stat = m_snap_sync_stats.at(dir_root);
+    sync_stat.type = type;
   }
 
   bool should_backoff(const std::string &dir_root, int *retval) {
