@@ -2766,7 +2766,7 @@ public:
     std::lock_guard l(deferred_lock);
     return deferred_last_submitted;
   }
-
+private:
   static int _write_bdev_label(
     CephContext* cct,
     BlockDevice* bdev,
@@ -2776,7 +2776,6 @@ public:
   static int _read_bdev_label(
     CephContext* cct, BlockDevice* bdev, const std::string &path,
     bluestore_bdev_label_t *label, uint64_t disk_position = BDEV_FIRST_LABEL_POSITION);
-private:
   int _check_or_set_bdev_label(const std::string& path, BlockDevice* bdev, uint64_t size,
                                const std::string& desc, bool create);
   int _set_main_bdev_label();
@@ -3428,6 +3427,12 @@ public:
       return _write_bdev_label(cct, bdev, path, label,
         std::vector<uint64_t>({disk_position}));
     }
+  static int read_bdev_label(
+    CephContext* cct, const std::string &path,
+    bluestore_bdev_label_t *label, uint64_t disk_position = 0);
+  static int write_bdev_label(
+    CephContext* cct, const std::string &path,
+    const bluestore_bdev_label_t& label, uint64_t disk_position = 0);
 
   inline void log_latency(const char* name,
     int idx,

@@ -79,7 +79,7 @@ const char* find_device_path(
 {
   for (auto& i : devs) {
     bluestore_bdev_label_t label;
-    int r = BlueStore::_read_bdev_label(cct, i, &label);
+    int r = BlueStore::read_bdev_label(cct, i, &label);
     if (r < 0) {
       cerr << "unable to read label for " << i << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -111,7 +111,7 @@ void parse_devices(
   }
   for (auto& d : devs) {
     bluestore_bdev_label_t label;
-    int r = BlueStore::_read_bdev_label(cct, d, &label);
+    int r = BlueStore::read_bdev_label(cct, d, &label);
     if (r < 0) {
       cerr << "unable to read label for " << d << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -625,7 +625,7 @@ int main(int argc, char **argv)
   }
   else if (action == "prime-osd-dir") {
     bluestore_bdev_label_t label;
-    int r = BlueStore::_read_bdev_label(cct.get(), devs.front(), &label);
+    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label);
     if (r < 0) {
       cerr << "failed to read label for " << devs.front() << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -679,7 +679,7 @@ int main(int argc, char **argv)
     jf.open_object_section("devices");
     for (auto& i : devs) {
       bluestore_bdev_label_t label;
-      int r = BlueStore::_read_bdev_label(cct.get(), i, &label);
+      int r = BlueStore::read_bdev_label(cct.get(), i, &label);
       if (r < 0) {
 	cerr << "unable to read label for " << i << ": "
 	     << cpp_strerror(r) << std::endl;
@@ -694,7 +694,7 @@ int main(int argc, char **argv)
   }
   else if (action == "set-label-key") {
     bluestore_bdev_label_t label;
-    int r = BlueStore::_read_bdev_label(cct.get(), devs.front(), &label);
+    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label);
     if (r < 0) {
       cerr << "unable to read label for " << devs.front() << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -716,7 +716,7 @@ int main(int argc, char **argv)
     } else {
       label.meta[key] = value;
     }
-    r = BlueStore::_write_bdev_label(cct.get(), devs.front(), label);
+    r = BlueStore::write_bdev_label(cct.get(), devs.front(), label);
     if (r < 0) {
       cerr << "unable to write label for " << devs.front() << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -725,7 +725,7 @@ int main(int argc, char **argv)
   }
   else if (action == "rm-label-key") {
     bluestore_bdev_label_t label;
-    int r = BlueStore::_read_bdev_label(cct.get(), devs.front(), &label);
+    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label);
     if (r < 0) {
       cerr << "unable to read label for " << devs.front() << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -736,7 +736,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     label.meta.erase(key);
-    r = BlueStore::_write_bdev_label(cct.get(), devs.front(), label);
+    r = BlueStore::write_bdev_label(cct.get(), devs.front(), label);
     if (r < 0) {
       cerr << "unable to write label for " << devs.front() << ": "
 	   << cpp_strerror(r) << std::endl;

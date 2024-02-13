@@ -6838,6 +6838,36 @@ int BlueStore::_check_main_bdev_label()
   return 0;
 }
 
+int BlueStore::read_bdev_label(
+  CephContext* cct, const std::string &path,
+  bluestore_bdev_label_t *label, uint64_t disk_position)
+{
+  unique_ptr<BlockDevice> bdev(BlockDevice::create(
+    cct, path, nullptr, nullptr, nullptr, nullptr));
+  int r = bdev->open(path);
+  if (r < 0)
+    return r;
+  r = BlueStore::_read_bdev_label(
+    cct, bdev.get(), path, label, disk_position);
+  bdev->close();
+  return r;
+}
+int BlueStore::write_bdev_label(
+  CephContext* cct, const std::string &path,
+  const bluestore_bdev_label_t& label, uint64_t disk_position)
+{
+  unique_ptr<BlockDevice> bdev(BlockDevice::create(
+    cct, path, nullptr, nullptr, nullptr, nullptr));
+  int r = bdev->open(path);
+  if (r < 0)
+    return r;
+  r = BlueStore::_write_bdev_label(
+    cct, bdev.get(), path, label, {disk_position});
+  bdev->close();
+  return r;
+}
+
+
 void BlueStore::_set_alloc_sizes(void)
 {
   max_alloc_size = cct->_conf->bluestore_max_alloc_size;
