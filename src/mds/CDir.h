@@ -526,7 +526,7 @@ public:
   void abort_import();
 
   // -- auth pins --
-  bool can_auth_pin(int *err_ret=nullptr) const override;
+  bool can_auth_pin(int *err_ret=nullptr, bool bypassfreezing=false) const override;
   int get_auth_pins() const { return auth_pins; }
   int get_dir_auth_pins() const { return dir_auth_pins; }
   void auth_pin(void *who) override;
