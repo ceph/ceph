@@ -399,7 +399,7 @@ struct MDRequestImpl : public MutationImpl {
   bool freeze_auth_pin(CInode *inode);
   void unfreeze_auth_pin(bool clear_inode=false);
   void set_remote_frozen_auth_pin(CInode *inode);
-  bool can_auth_pin(MDSCacheObject *object);
+  bool can_auth_pin(MDSCacheObject *object, bool bypassfreezing=false);
   void drop_local_auth_pins();
   void set_ambiguous_auth(CInode *inode);
   void clear_ambiguous_auth();
