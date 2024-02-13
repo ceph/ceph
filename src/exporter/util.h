@@ -11,7 +11,7 @@ class BlockTimer {
  private:
 	const std::string_view file;
 	const std::string_view function;
-	bool stopped;
+	bool stopped = false;
 	using clock_t = std::chrono::steady_clock;
 	clock_t::time_point t1;
 	clock_t::time_point t2;
