@@ -546,6 +546,13 @@ uint64_t BlueFS::get_block_device_size(unsigned id) const
   return 0;
 }
 
+BlockDevice* BlueFS::get_block_device(unsigned id) const
+{
+  if (id < bdev.size() && bdev[id])
+    return bdev[id];
+  return nullptr;
+}
+
 void BlueFS::handle_discard(unsigned id, interval_set<uint64_t>& to_release)
 {
   dout(10) << __func__ << " bdev " << id << dendl;
