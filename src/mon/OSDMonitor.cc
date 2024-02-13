@@ -68,6 +68,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 
+#include "erasure-code/ErasureCode.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "compressor/Compressor.h"
 #include "common/Checksummer.h"
@@ -11312,6 +11313,26 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     << existing_profile_map
 	     << " is different from the proposed profile "
 	     << profile_map;
+	  goto reply_no_propose;
+	}
+      }
+
+      bool allow_experimental = false;
+      cmd_getval(cmdmap, "allow_experimental_ec_profile", allow_experimental);
+
+      bool supported_profile = ErasureCode::is_supported_profile(profile_map);
+      bool experimental_enabled =
+	g_ceph_context->check_experimental_feature_enabled("experimental_ec_profiles");
+      if (!supported_profile) {
+	if (!allow_experimental || !experimental_enabled) {
+	  ss << "This ec plugin or technique is considered experimental, and as such is not "
+	     << "recommended (see https://tracker.ceph.com/issues/63876 for a related "
+	     << "data corruption issue concerning the blaum_roth technique). Current supported "
+	     << "profiles include 'jerasure' and 'isa', and current supported techniques include "
+	     << "'reed_sol_van'. If you are sure you want to use this profile, add "
+	     << "'experimental_ec_profiles' to the experimental features config and add "
+	     << "--allow-experimental-ec-profile to the mon command.";
+	  err = -EPERM;
 	  goto reply_no_propose;
 	}
       }

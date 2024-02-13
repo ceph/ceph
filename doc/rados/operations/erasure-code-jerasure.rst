@@ -29,6 +29,7 @@ To create a new *jerasure* erasure code profile:
      [crush-device-class={device-class}] \
      [directory={directory}] \
      [--force]
+     [--allow-experimental-ec-profile]
 
 Where:
 

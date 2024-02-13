@@ -115,6 +115,27 @@ namespace ceph {
     int decode_concat(const std::map<int, bufferlist> &chunks,
 			      bufferlist *decoded) override;
 
+   /**
+   * is_supported_profile
+   *
+   * We only test a limited subset of implemented plugin/technique combinations. Combinations for
+   * which this function returns false will be rejected unless the "experimental_ec_profiles" experimental
+   * feature is enabled.  See the "osd erasure-code-profile set" handler in
+   * OSDMonitor::prepare_command_impl. As new plugin/techique combinations are declared stable,
+   * this function should be updated.
+   */
+    static bool is_supported_profile(const std::map<std::string, std::string> &profile_map) {
+
+      auto plugin = profile_map.find("plugin");
+      auto technique = profile_map.find("technique");
+      if ((plugin == profile_map.end()) || (technique == profile_map.end())) {
+	return false;
+      }
+
+      return ((plugin->second == "jerasure") && (technique->second == "reed_sol_van")) ||
+	     ((plugin->second == "isa") && (technique->second == "reed_sol_van"));
+    }
+
   protected:
     int parse(const ErasureCodeProfile &profile,
 	      std::ostream *ss);
