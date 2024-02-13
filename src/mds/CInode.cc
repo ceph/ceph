@@ -2930,11 +2930,18 @@ void CInode::clear_ambiguous_auth()
 }
 
 // auth_pins
-bool CInode::can_auth_pin(int *err_ret) const {
+bool CInode::can_auth_pin(int *err_ret, bool bypassfreezing) const {
   int err;
   if (!is_auth()) {
     err = ERR_NOT_AUTH;
-  } else if (is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin()) {
+  } else if (is_freezing_inode()) {
+    if (bypassfreezing) {
+      dout(20) << "allowing authpin with freezing" << dendl;
+      err = 0;
+    } else {
+      err = ERR_EXPORTING_INODE;
+    }
+  } else if (is_frozen_inode() || is_frozen_auth_pin()) {
     err = ERR_EXPORTING_INODE;
   } else {
     if (parent)
