@@ -59,7 +59,7 @@ export class DashboardPieComponent implements OnChanges, OnInit {
   constructor(private cssHelper: CssHelper, private dimlessBinary: DimlessBinaryPipe) {
     this.chartConfig = {
       chartType: 'doughnut',
-      labels: ['', '', ''],
+      labels: [],
       dataset: [
         {
           label: null,
@@ -97,19 +97,20 @@ export class DashboardPieComponent implements OnChanges, OnInit {
                   fillStyle: chart.data.datasets[1].backgroundColor[0],
                   strokeStyle: chart.data.datasets[1].backgroundColor[0]
                 };
-                labels[1] = {
-                  text: $localize`Warning: ${chart.data.datasets[0].data[0]}%`,
-                  fillStyle: chart.data.datasets[0].backgroundColor[1],
-                  strokeStyle: chart.data.datasets[0].backgroundColor[1]
-                };
-                labels[2] = {
-                  text: $localize`Danger: ${
-                    chart.data.datasets[0].data[0] + chart.data.datasets[0].data[1]
-                  }%`,
-                  fillStyle: chart.data.datasets[0].backgroundColor[2],
-                  strokeStyle: chart.data.datasets[0].backgroundColor[2]
-                };
-
+                if (chart.data.datasets[0].data?.length) {
+                  labels[1] = {
+                    text: $localize`Warning: ${chart.data.datasets[0].data[0]}%`,
+                    fillStyle: chart.data.datasets[0].backgroundColor[1],
+                    strokeStyle: chart.data.datasets[0].backgroundColor[1]
+                  };
+                  labels[2] = {
+                    text: $localize`Danger: ${
+                      chart.data.datasets[0].data[0] + chart.data.datasets[0].data[1]
+                    }%`,
+                    fillStyle: chart.data.datasets[0].backgroundColor[2],
+                    strokeStyle: chart.data.datasets[0].backgroundColor[2]
+                  };
+                }
                 return labels;
               }
             }
@@ -158,19 +159,24 @@ export class DashboardPieComponent implements OnChanges, OnInit {
     const fullRatioPercent = this.highThreshold * 100;
     const percentAvailable = this.calcPercentage(data.max - data.current, data.max);
     const percentUsed = this.calcPercentage(data.current, data.max);
-    if (percentUsed >= fullRatioPercent) {
+
+    if (fullRatioPercent >= 0 && percentUsed >= fullRatioPercent) {
       this.color = 'chart-color-red';
-    } else if (percentUsed >= nearFullRatioPercent) {
+    } else if (nearFullRatioPercent >= 0 && percentUsed >= nearFullRatioPercent) {
       this.color = 'chart-color-yellow';
     } else {
       this.color = 'chart-color-blue';
     }
 
-    chart.dataset[0].data = [
-      Math.round(nearFullRatioPercent),
-      Math.round(Math.abs(nearFullRatioPercent - fullRatioPercent)),
-      Math.round(100 - fullRatioPercent)
-    ];
+    if (fullRatioPercent >= 0 && nearFullRatioPercent >= 0) {
+      chart.dataset[0].data = [
+        Math.round(nearFullRatioPercent),
+        Math.round(Math.abs(nearFullRatioPercent - fullRatioPercent)),
+        Math.round(100 - fullRatioPercent)
+      ];
+    } else {
+      chart.dataset[1].backgroundColor[1] = this.cssHelper.propertyValue('chart-color-light-gray');
+    }
 
     chart.dataset[1].data = [
       percentUsed,
@@ -178,7 +184,6 @@ export class DashboardPieComponent implements OnChanges, OnInit {
       this.dimlessBinary.transform(data.current)
     ];
     chart.dataset[1].backgroundColor[0] = this.cssHelper.propertyValue(this.color);
-
     chart.dataset[0].label = [`${percentUsed}%\nof ${this.dimlessBinary.transform(data.max)}`];
   }
 
