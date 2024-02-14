@@ -1,0 +1,75 @@
+commit 59ddece17e36fef69ecf40e239aeffad33c9db35
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Tue Jul 23 13:52:19 2013 -0700
+
+    v0.61.6
+
+commit 38c3271d3fc415919f0856398bd94eb87a0776b5
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 23 13:32:12 2013 -0700
+
+    mon/OSDMonitor: fix base case for 7fb3804fb workaround
+    
+    After cluster creation, we have no full map stored and first_committed ==
+    1.  In that case, there is no need for a full map, since we can get there
+    from OSDMap() and the incrementals.
+    
+    Backport: cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao@inktank.com>
+    (cherry picked from commit e807770784175b05130bba938113fdbf874f152e)
+
+commit f94956cb1a56ff62e01b7ae218a93c4004470ae5
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Jul 23 17:25:13 2013 +0100
+
+    mon: OSDMonitor: work around a full version bug introduced in 7fb3804fb
+    
+    In 7fb3804fb860dcd0340dd3f7c39eec4315f8e4b6 we moved the full version
+    stashing logic to the encode_trim_extra() function.  However, we forgot
+    to update the osdmap's 'latest_full' key that should always point to
+    the latest osdmap full version.  This eventually degenerated in a missing
+    full version after a trim.  This patch works around this bug by looking
+    for the latest available full osdmap version in the store and updating
+    'latest_full' to its proper value.
+    
+    Related-to: #5704
+    Backport: cuttlefish
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 97462a3213e5e15812c79afc0f54d697b6c498b1)
+
+commit 10e1de45dc8ace793ecf921f884f90c9daa99c48
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Jul 23 16:36:52 2013 +0100
+
+    mon: OSDMonitor: update the osdmap's latest_full with the new full version
+    
+    We used to do this on encode_full(), but since [1] we no longer rely on
+    PaxosService to manage the full maps for us.  And we forgot to write down
+    the latest_full version to the store, leaving it in a truly outdated state.
+    
+    [1] - 7fb3804fb860dcd0340dd3f7c39eec4315f8e4b6
+    
+    Fixes: #5704
+    Backport: cuttlefish
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a815547ed3e5ffdbbb96c8c0c1b8d6dd8c62bfba)
+
+commit a0cb40b45c4f2f921a63c2d7bb5a28572381d793
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 18 14:35:19 2013 -0700
+
+    mon: decline to scrub when paxos is not active
+    
+    In f1ce8d7c955a2443111bf7d9e16b4c563d445712 we close a race between scrub
+    and paxos commit completion on the leader.  The fix is nontrivial to
+    backport and probably not worthwhile; just avoid scrubbing at that time
+    for now.
+    
+    Note that the actual fix for this is in commit
+    f1ce8d7c955a2443111bf7d9e16b4c563d445712.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
