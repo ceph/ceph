@@ -4288,8 +4288,11 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     }
     reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
     // append to pg log for dup detection - don't save buffers for now
-    record_write_error(op, soid, reply, result,
-		       ctx->op->allows_returnvec() ? ctx : nullptr);
+    // store op's returnvec unconditionally-on-errors to ensure coherency
+    // with the original request handling (see `ignore_out_data` above).
+    record_write_error(
+      op, soid, reply, result,
+      (ctx->op->allows_returnvec() || result < 0) ? ctx : nullptr);
     close_op_ctx(ctx);
     return;
   }
