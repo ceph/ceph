@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, SimpleChanges, ViewChild } from '@angular/core';
+import { Component, Input, ViewChild, OnChanges, SimpleChanges } from '@angular/core';
 
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
@@ -24,26 +24,48 @@ export class DashboardAreaChartComponent implements OnChanges {
   @Input()
   dataUnits: string;
   @Input()
-  data: Array<[number, string]>;
+  dataArray?: Array<Array<[number, string]>>; // Array of query results
   @Input()
-  data2?: Array<[number, string]>;
-  @Input()
-  label: string;
-  @Input()
-  label2?: string;
+  labelsArray?: string[] = []; // Array of chart labels
   @Input()
   decimals?: number = 1;
 
   currentDataUnits: string;
   currentData: number;
-  currentDataUnits2?: string;
-  currentData2?: number;
   maxConvertedValue?: number;
   maxConvertedValueUnits?: string;
 
   chartDataUnits: string;
-  chartData: any;
-  options: any;
+  chartData: any = { dataset: [] };
+  options: any = {};
+  currentChartData: any = {};
+
+  chartColors: any[] = [
+    [
+      this.cssHelper.propertyValue('chart-color-strong-blue'),
+      this.cssHelper.propertyValue('chart-color-translucent-blue')
+    ],
+    [
+      this.cssHelper.propertyValue('chart-color-orange'),
+      this.cssHelper.propertyValue('chart-color-translucent-orange')
+    ],
+    [
+      this.cssHelper.propertyValue('chart-color-green'),
+      this.cssHelper.propertyValue('chart-color-translucent-green')
+    ],
+    [
+      this.cssHelper.propertyValue('chart-color-cyan'),
+      this.cssHelper.propertyValue('chart-color-translucent-cyan')
+    ],
+    [
+      this.cssHelper.propertyValue('chart-color-purple'),
+      this.cssHelper.propertyValue('chart-color-translucent-purple')
+    ],
+    [
+      this.cssHelper.propertyValue('chart-color-red'),
+      this.cssHelper.propertyValue('chart-color-translucent-red')
+    ]
+  ];
 
   public chartAreaBorderPlugin: any[] = [
     {
@@ -74,35 +96,6 @@ export class DashboardAreaChartComponent implements OnChanges {
     private formatter: FormatterService,
     private numberFormatter: NumberFormatterService
   ) {
-    this.chartData = {
-      dataset: [
-        {
-          label: '',
-          data: [{ x: 0, y: 0 }],
-          tension: 0.2,
-          pointBackgroundColor: this.cssHelper.propertyValue('chart-color-strong-blue'),
-          backgroundColor: this.cssHelper.propertyValue('chart-color-translucent-blue'),
-          borderColor: this.cssHelper.propertyValue('chart-color-strong-blue'),
-          borderWidth: 1,
-          fill: {
-            target: 'origin'
-          }
-        },
-        {
-          label: '',
-          data: [],
-          tension: 0.2,
-          pointBackgroundColor: this.cssHelper.propertyValue('chart-color-orange'),
-          backgroundColor: this.cssHelper.propertyValue('chart-color-translucent-yellow'),
-          borderColor: this.cssHelper.propertyValue('chart-color-orange'),
-          borderWidth: 1,
-          fill: {
-            target: 'origin'
-          }
-        }
-      ]
-    };
-
     this.options = {
       plugins: {
         legend: {
@@ -179,27 +172,50 @@ export class DashboardAreaChartComponent implements OnChanges {
     this.updateChartData(changes);
   }
 
+  ngAfterViewInit() {
+    this.updateChartData(null);
+  }
+
   private updateChartData(changes: SimpleChanges): void {
-    this.chartData.dataset[0].label = this.label;
-    this.chartData.dataset[1].label = this.label2;
+    for (let index = 0; index < this.labelsArray.length; index++) {
+      const colorIndex = index % this.chartColors.length;
+      this.chartData.dataset[index] = {
+        label: '',
+        data: [],
+        tension: 0.2,
+        pointBackgroundColor: this.chartColors[colorIndex][0],
+        backgroundColor: this.chartColors[colorIndex][1],
+        borderColor: this.chartColors[colorIndex][0],
+        borderWidth: 1,
+        fill: {
+          target: 'origin'
+        }
+      };
+      this.chartData.dataset[index].label = this.labelsArray[index];
+    }
+
     this.setChartTicks();
-    if (changes.data && changes.data.currentValue) {
-      this.data = changes.data.currentValue;
-      this.chartData.dataset[0].data = this.formatData(this.data);
-      [this.currentData, this.currentDataUnits] = this.convertUnits(
-        this.data[this.data.length - 1][1]
-      ).split(' ');
-      [this.maxConvertedValue, this.maxConvertedValueUnits] = this.convertUnits(
-        this.maxValue
-      ).split(' ');
+
+    if (this.dataArray && this.dataArray.length && this.dataArray[0] && this.dataArray[0].length) {
+      this.dataArray = changes?.dataArray?.currentValue || this.dataArray;
+      this.currentChartData = this.chartData;
+      for (let index = 0; index < this.dataArray.length; index++) {
+        this.chartData.dataset[index].data = this.formatData(this.dataArray[index]);
+        let currentDataValue = this.dataArray[index][this.dataArray[index].length - 1]
+          ? this.dataArray[index][this.dataArray[index].length - 1][1]
+          : 0;
+        if (currentDataValue) {
+          [
+            this.currentChartData.dataset[index]['currentData'],
+            this.currentChartData.dataset[index]['currentDataUnits']
+          ] = this.convertUnits(currentDataValue).split(' ');
+          [this.maxConvertedValue, this.maxConvertedValueUnits] = this.convertUnits(
+            this.maxValue
+          ).split(' ');
+        }
+      }
     }
-    if (changes.data2 && changes.data2.currentValue) {
-      this.data2 = changes.data2.currentValue;
-      this.chartData.dataset[1].data = this.formatData(this.data2);
-      [this.currentData2, this.currentDataUnits2] = this.convertUnits(
-        this.data2[this.data2.length - 1][1]
-      ).split(' ');
-    }
+
     if (this.chart) {
       this.chart.chart.update();
     }
@@ -207,7 +223,7 @@ export class DashboardAreaChartComponent implements OnChanges {
 
   private formatData(array: Array<any>): any {
     let formattedData = {};
-    formattedData = array.map((data: any) => ({
+    formattedData = array?.map((data: any) => ({
       x: data[0] * 1000,
       y: Number(this.convertToChartDataUnits(data[1]).replace(/[^\d,.]+/g, ''))
     }));
@@ -273,16 +289,12 @@ export class DashboardAreaChartComponent implements OnChanges {
     let maxValue = 0;
     let maxValueDataUnits = '';
 
-    if (this.data) {
-      let maxValueData = Math.max(...this.data.map((values: any) => values[1]));
-      if (this.data2) {
-        let maxValueData2 = Math.max(...this.data2.map((values: any) => values[1]));
-        maxValue = Math.max(maxValueData, maxValueData2);
-      } else {
-        maxValue = maxValueData;
-      }
-      [maxValue, maxValueDataUnits] = this.convertUnits(maxValue).split(' ');
-    }
+    const allDataValues = this.dataArray.reduce((array: string[], data) => {
+      return array.concat(data?.map((values: [number, string]) => values[1]));
+    }, []);
+
+    maxValue = Math.max(...allDataValues.map(Number));
+    [maxValue, maxValueDataUnits] = this.convertUnits(maxValue).split(' ');
 
     const yAxesTicks = this.chart.chart.options.scales.y;
     yAxesTicks.ticks.callback = (value: any) => {

@@ -3,29 +3,22 @@
     <br>
     <b class="chartTitle pb-2"
        i18n>{{ chartTitle }}</b>
-    <div
+    <div *ngFor="let data of currentChartData.dataset"
          i18n>
-      <div class="d-inline-flex align-items-center gap-1">
-        <div *ngIf="!maxValue"
-             class="blue-box">
-      </div>
-        <div *ngIf="label2">{{ label }}:
+      <div *ngIf="data.data.length !== 0"
+           class="d-inline-flex align-items-center gap-1">
+        <div class="box"
+             [style.background-color]="data.pointBackgroundColor">
         </div>
-        {{ currentData || 'N/A' }} {{ currentDataUnits }}
-        <div *ngIf="maxValue && currentData"> used of
-          {{ maxConvertedValue }} {{ maxConvertedValueUnits }}
+        <div *ngIf="!chartTitle.includes(data.label)">{{ data.label }}:</div>
+          {{ data?.currentData || 'N/A' }} {{ data?.currentDataUnits }}
+        <div *ngIf="maxValue && data.currentData">
+          used of {{ maxConvertedValue }} {{ maxConvertedValueUnits }}
         </div>
-      </div>
-    </div>
-    <div *ngIf="label2"
-         i18n>
-      <div class="d-inline-flex align-items-center gap-1">
-        <div class="yellow-box"></div>
-        <div *ngIf="label2 !== chartTitle" >{{ label2 }}: </div>
-        <div>{{ currentData2 || 'N/A' }} {{ currentDataUnits2 }}</div>
       </div>
     </div>
   </div>
+
   <div class="col-9 d-flex flex-column">
     <div class="chart mt-3">
       <canvas baseChart

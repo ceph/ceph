@@ -4,7 +4,7 @@
   <div class="row d-flex flex-row ps-3">
 
     <!-- First Grid to hold Details and Inventory Card-->
-    <div class="col-sm-3 d-flex flex-column ps-2 pe-4">
+    <div class="col-sm-3 d-flex flex-column ps-2">
 
       <!-- Details Card-->
       <cd-card cardTitle="Details"
@@ -216,54 +216,48 @@
         </div>
 
       <!-- This column will hold Cluster Utlization card -->
-        <div class="col-sm-12 d-flex flex-column pt-4">
-          <cd-card cardTitle="Cluster Utilization"
-                   i18n-title
-                   aria-label="Cluster utilization card">
-            <div class="ms-4 me-4 mt-0">
-              <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
-              </cd-dashboard-time-selector>
-              <ng-container *ngIf="capacity">
-                <cd-dashboard-area-chart chartTitle="Used Capacity (RAW)"
-                                         [maxValue]="capacity.total_bytes"
-                                         dataUnits="B"
-                                         label="Used Capacity"
-                                         [data]="queriesResults.USEDCAPACITY">
-                </cd-dashboard-area-chart>
-              </ng-container>
-              <cd-dashboard-area-chart chartTitle="IOPS"
-                                       dataUnits=""
-                                       decimals="0"
-                                       label="Reads"
-                                       label2="Writes"
-                                       [data]="queriesResults.READIOPS"
-                                       [data2]="queriesResults.WRITEIOPS">
+      <div class="col-sm-12 d-flex flex-column pt-4">
+        <cd-card cardTitle="Cluster Utilization"
+                 i18n-title
+                 aria-label="Cluster utilization card">
+          <div class="ms-4 me-4 mt-0">
+            <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
+            </cd-dashboard-time-selector>
+            <ng-container *ngIf="capacity">
+              <cd-dashboard-area-chart chartTitle="Used Capacity (RAW)"
+                                       [maxValue]="capacity.total_bytes"
+                                       dataUnits="B"
+                                       [labelsArray]="['Used Capacity']"
+                                       [dataArray]="[queriesResults.USEDCAPACITY]">
               </cd-dashboard-area-chart>
-              <cd-dashboard-area-chart chartTitle="OSD Latencies"
-                                       dataUnits="ms"
-                                       decimals="2"
-                                       label="Apply"
-                                       label2="Commit"
-                                       [data]="queriesResults.READLATENCY"
-                                       [data2]="queriesResults.WRITELATENCY">
-              </cd-dashboard-area-chart>
-              <cd-dashboard-area-chart chartTitle="Client Throughput"
-                                       dataUnits="B/s"
-                                       decimals="2"
-                                       label="Reads"
-                                       label2="Writes"
-                                       [data]="queriesResults.READCLIENTTHROUGHPUT"
-                                       [data2]="queriesResults.WRITECLIENTTHROUGHPUT">
-              </cd-dashboard-area-chart>
-              <cd-dashboard-area-chart chartTitle="Recovery Throughput"
-                                       dataUnits="B/s"
-                                       decimals="2"
-                                       label="Recovery Throughput"
-                                       [data]="queriesResults.RECOVERYBYTES">
-              </cd-dashboard-area-chart>
-            </div>
-          </cd-card>
-        </div>
+            </ng-container>
+            <cd-dashboard-area-chart chartTitle="IOPS"
+                                     dataUnits=""
+                                     decimals="0"
+                                     [labelsArray]="['Reads', 'Writes']"
+                                     [dataArray]="[queriesResults.READIOPS, queriesResults.WRITEIOPS]">
+            </cd-dashboard-area-chart>
+            <cd-dashboard-area-chart chartTitle="OSD Latencies"
+                                     dataUnits="ms"
+                                     decimals="2"
+                                     [labelsArray]="['Apply', 'Commit']"
+                                     [dataArray]="[queriesResults.READLATENCY, queriesResults.WRITELATENCY]">
+            </cd-dashboard-area-chart>
+            <cd-dashboard-area-chart chartTitle="Client Throughput"
+                                     dataUnits="B/s"
+                                     decimals="2"
+                                     [labelsArray]="['Reads', 'Writes']"
+                                     [dataArray]="[queriesResults.READCLIENTTHROUGHPUT, queriesResults.WRITECLIENTTHROUGHPUT]">
+            </cd-dashboard-area-chart>
+            <cd-dashboard-area-chart chartTitle="Recovery Throughput"
+                                     dataUnits="B/s"
+                                     decimals="2"
+                                     [labelsArray]="['Recovery Throughput']"
+                                     [dataArray]="[queriesResults.RECOVERYBYTES]">
+            </cd-dashboard-area-chart>
+          </div>
+        </cd-card>
+      </div>
       </div>
     </div>
   </div>
