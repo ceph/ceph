@@ -403,6 +403,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def node_proxy_fullreport(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy full report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def node_proxy_firmwares(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
         """
         Return node-proxy firmwares report
