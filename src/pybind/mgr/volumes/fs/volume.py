@@ -146,7 +146,9 @@ class VolumeClient(CephfsClient["Module"]):
         return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
     def list_fs_volumes(self):
-        volumes = list_volumes(self.mgr)
+        volnames = list_volumes(self.mgr)
+        # since we report in json format, make a dict of volnames.
+        volumes = [{'name': vn} for vn in volnames]
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
 
     def rename_fs_volume(self, volname, newvolname, sure):
