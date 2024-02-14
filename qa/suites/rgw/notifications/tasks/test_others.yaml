@@ -1,0 +1,4 @@
+tasks:
+- notification-tests:
+    client.0:
+      rgw_server: client.0
