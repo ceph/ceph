@@ -16,7 +16,7 @@ from .fs_util import listdir, has_subdir
 from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
 from .operations.volume import create_volume, delete_volume, rename_volume, \
-    list_volumes, open_volume, get_pool_names, get_pool_ids, \
+    get_all_volnames, open_volume, get_pool_names, get_pool_ids, \
     get_pending_subvol_deletions_count, get_all_pending_clones_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
@@ -144,7 +144,9 @@ class VolumeClient(CephfsClient["Module"]):
         return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
     def list_fs_volumes(self):
-        volumes = list_volumes(self.mgr)
+        volnames = get_all_volnames(self.mgr)
+        # since we report in json format, make a dict of volnames.
+        volumes = [{'name': vn} for vn in volnames]
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
 
     def rename_fs_volume(self, volname, newvolname, sure):
