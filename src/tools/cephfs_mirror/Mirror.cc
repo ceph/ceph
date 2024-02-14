@@ -510,7 +510,7 @@ void Mirror::update_fs_mirrors() {
       if (!mirror_action.action_in_progress && !_is_restarting(filesystem)) {
 	if (failed_restart || blocklisted_restart) {
 	  dout(5) << ": filesystem=" << filesystem << " failed mirroring (failed: "
-		  << failed_restart << ", blocklisted: " << blocklisted_restart << dendl;
+		  << failed_restart << ", blocklisted: " << blocklisted_restart << ")" << dendl;
 	  _set_restarting(filesystem);
 	  auto peers = mirror_action.fs_mirror->get_peers();
 	  auto ctx =  new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
