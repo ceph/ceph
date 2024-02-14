@@ -1,0 +1,38 @@
+<cd-modal (hide)="cancel()">
+  <ng-container class="modal-title">
+    <span i18n>Attach commands</span>
+  </ng-container>
+  <ng-container class="modal-content">
+    <div class="modal-body">
+      <h5 class="fw-bold"
+          i18n>
+        Using Mount command
+      </h5>
+      <cd-code-block textWrap="true"
+                     [codes]="[mount]"></cd-code-block>
+
+      <h5 class="fw-bold"
+          i18n>
+        Using FUSE command
+      </h5>
+      <cd-code-block textWrap="true"
+                     [codes]="[fuse]"></cd-code-block>
+
+      <h5 class="fw-bold"
+          i18n>
+          Using NFS Command
+      </h5>
+      <cd-code-block textWrap="true"
+                     [codes]="[nfs]"></cd-code-block>
+    </div>
+    <div class="modal-footer">
+      <cd-submit-button (submitAction)="cancel()"
+                        i18n>
+        Close
+      </cd-submit-button>
+    </div>
+  </ng-container>
+</cd-modal>
+
+
+

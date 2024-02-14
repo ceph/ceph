@@ -8,4 +8,10 @@ import { Component, Input } from '@angular/core';
 export class CodeBlockComponent {
   @Input()
   codes: string[];
+
+  @Input()
+  textWrap: boolean = false;
+
+  @Input()
+  grayBg: boolean = false;
 }

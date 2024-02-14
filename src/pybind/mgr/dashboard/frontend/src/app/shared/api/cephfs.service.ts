@@ -50,6 +50,10 @@ export class CephfsService {
     return this.http.get(`${this.baseURL}/${id}/mds_counters`);
   }
 
+  getFsRootDirectory(id: string) {
+    return this.http.get(`${this.baseURL}/${id}/get_root_directory`);
+  }
+
   mkSnapshot(id: number, path: string, name?: string) {
     let params = new HttpParams();
     params = params.append('path', path);
