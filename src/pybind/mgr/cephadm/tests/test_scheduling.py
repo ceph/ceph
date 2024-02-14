@@ -631,6 +631,17 @@ class NodeAssignmentTest(NamedTuple):
              'rgw:host2(*:81)', 'rgw:host3(*:81)'],
             ['rgw.c']
         ),
+        # label + host pattern
+        # Note all hosts will get the "foo" label, we are checking
+        # that it also filters on the host pattern when label is provided
+        NodeAssignmentTest(
+            'mgr',
+            PlacementSpec(label='foo', host_pattern='mgr*'),
+            'mgr1 mgr2 osd1'.split(),
+            [],
+            None, None,
+            ['mgr:mgr1', 'mgr:mgr2'], ['mgr:mgr1', 'mgr:mgr2'], []
+        ),
         # cephadm.py teuth case
         NodeAssignmentTest(
             'mgr',
