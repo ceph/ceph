@@ -61,7 +61,8 @@ export class RgwBucketService extends ApiClient {
     encryption_type: string,
     key_id: string,
     tags: string,
-    bucketPolicy: string
+    bucketPolicy: string,
+    cannedAcl: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       return this.http.post(this.url, null, {
@@ -79,6 +80,7 @@ export class RgwBucketService extends ApiClient {
             key_id,
             tags: tags,
             bucket_policy: bucketPolicy,
+            canned_acl: cannedAcl,
             daemon_name: params.get('daemon_name')
           }
         })
@@ -100,7 +102,8 @@ export class RgwBucketService extends ApiClient {
     lockMode: 'GOVERNANCE' | 'COMPLIANCE',
     lockRetentionPeriodDays: string,
     tags: string,
-    bucketPolicy: string
+    bucketPolicy: string,
+    cannedAcl: string
   ) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.appendAll({
@@ -116,7 +119,8 @@ export class RgwBucketService extends ApiClient {
         lock_mode: lockMode,
         lock_retention_period_days: lockRetentionPeriodDays,
         tags: tags,
-        bucket_policy: bucketPolicy
+        bucket_policy: bucketPolicy,
+        canned_acl: cannedAcl
       });
       return this.http.put(`${this.url}/${bucket}`, null, { params: params });
     });

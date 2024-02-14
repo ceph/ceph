@@ -417,6 +417,8 @@
         <div class="row">
           <div class="col-12">
             <div class="form-group row">
+
+              <!-- Bucket policy -->
               <label i18n
                      class="cd-col-form-label"
                      for="id">Bucket policy</label>
@@ -457,6 +459,55 @@
                     <i [ngClass]="[icons.externalUrl]"></i>
                     Policy generator
                   </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group row">
+
+              <!-- ACL -->
+              <label class="cd-col-form-label"
+                     i18n>ACL
+                <cd-helper>Any changes to the ACL will overwrite previous one.
+                  You can choose any of the available options to modify the spcified user group.</cd-helper>
+              </label>
+              <div class="cd-col-form-input">
+                <div class="input-group">
+                  <span class="input-group-text"
+                        for="grantee"
+                        i18n>Grantee
+                    <cd-helper>Select a grantee (user group) to modify it's permisions</cd-helper>
+                  </span>
+                  <select id="grantee"
+                          name="grantee"
+                          class="form-input form-select"
+                          formControlName="grantee"
+                          (change)="onSelectionFilter()">
+                    <option *ngFor="let item of grantees"
+                            [value]="item"
+                            i18n>{{ item }}</option>
+                  </select>
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('grantee', frm, 'required')"
+                        i18n>This field is required.</span>
+                  <span class="input-group-text"
+                        for="aclPermission"
+                        i18n>Permissions
+                    <cd-helper>Select the permision to give to the selected grantee.
+                        Regardless, the owner of the bucket will always have
+                          FULL CONTROL access</cd-helper>
+                    </span>
+                  <select id="aclPermission"
+                          name="aclPermission"
+                          class="form-input form-select"
+                          formControlName="aclPermission">
+                    <option *ngFor="let permission of aclPermissions"
+                            [value]="permission"
+                            i18n>{{ permission }}</option>
+                  </select>
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('aclPermission', frm, 'required')"
+                        i18n>This field is required.</span>
                 </div>
               </div>
             </div>
