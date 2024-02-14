@@ -557,7 +557,7 @@ struct FP_BUFFER {
     unsigned n = snprintf(name_buf, sizeof(name_buf),
 			  HASH_FORMAT, d_thread_id, d_part_number);
     std::string oid(name_buf, n);
-    if (d_verbose >= VERBOSE_MAX) {
+    if (d_verbose >= VERBOSE_MID) {
       std::unique_lock<std::mutex> lock(print_mtx);
       cout << __func__ << "::" << d_obj_destage << "::oid=" << oid
 	   << "::cursor=" << cursor << "::bytes_read=" << d_bytes_read << std::endl;
@@ -712,31 +712,22 @@ static int calculate_fp_cdc(FP_BUFFER *fp_buffer,
 static void move_itr_by_cursor(NObjectIterator &start_itr,
 			       const std::string *cursor,
 			       uint32_t *offset_in_obj,
+			       uint16_t thread_id,
 			       int verbose)
 {
   ObjectCursor delimiter;
   if (delimiter.from_str(*cursor)) {
-    unsigned count = 0;
-    for ( ; start_itr.get_cursor() < delimiter; start_itr++) {
-      count++;
-      if(verbose) {
-	string oid = start_itr->get_oid();
-	std::unique_lock<std::mutex> lock(print_mtx);
-	std::cout << "|||" << start_itr.get_cursor() << " || " << oid << std::endl;
-      }
-    }
-    if(verbose) {
-      std::cout << "skipped " << count << " objects before cursor: " << delimiter << std::endl;
-    }
+    start_itr.seek(delimiter);
   }
   else {
     std::cerr << __func__ << "::bad cursor " << *cursor << std::endl;
     ceph_abort("bad cursor");
   }
+
   if (start_itr.get_cursor() == delimiter) {
     if (*offset_in_obj == FULL_OBJ_READ) {
       if (verbose) {
-	std::cout << "skipping oid: " << start_itr->get_oid()
+	std::cout << thread_id << "]skipping oid: " << start_itr->get_oid()
 		  << ", cursor: " << start_itr.get_cursor() << std::endl;
       }
       start_itr++;
@@ -744,13 +735,15 @@ static void move_itr_by_cursor(NObjectIterator &start_itr,
     }
     else {
       if (verbose) {
-	std::cout << "start oid: " << start_itr->get_oid()
+	std::cout << thread_id << "]start oid: " << start_itr->get_oid()
 		  << ", offset_in_obj: " << *offset_in_obj << std::endl;
       }
     }
   }
+
   if (verbose) {
-    std::cout << "cursor=" << start_itr.get_cursor() << " || " << *cursor << std::endl;
+    std::cout << thread_id << "]cursor=" << start_itr.get_cursor()
+	      << " || " << *cursor << std::endl;
   }
 }
 
@@ -793,10 +786,10 @@ static int thread_collect(unsigned thread_id,
   auto start_itr = itr_ioctx.nobjects_begin(split_start);
   //start_itr.set_cursor(itr.get_cursor());
   uint64_t fp_count = 0, fp_count_total = 0;;
-  utime_t total_time, max_time, min_time = utime_t::max();
+  //utime_t total_time, max_time, min_time = utime_t::max();
 
   if (cursor) {
-    move_itr_by_cursor(start_itr, cursor, &offset_in_obj, verbose);
+    move_itr_by_cursor(start_itr, cursor, &offset_in_obj, thread_id, verbose);
   }
 
   unsigned skip_count = 0;
@@ -812,24 +805,25 @@ static int thread_collect(unsigned thread_id,
     }
     if(verbose >= VERBOSE_MAX) {
       std::unique_lock<std::mutex> lock(print_mtx);
-      std::cout << itr.get_cursor() << " || " << oid << std::endl;
+      std::cout << oid << std::endl;
     }
     oid_vec.push_back(oid);
     obj_ioctx.set_namespace(itr->get_nspace());
     obj_ioctx.locator_set_key(itr->get_locator());
     bufferlist bl;
-    utime_t start_time = ceph_clock_now();
+    //utime_t start_time = ceph_clock_now();
     // 0 @len means read until the end
     int ret = obj_ioctx.read(oid, bl, 0, offset_in_obj);
-    utime_t duration = ceph_clock_now() - start_time;
+    //utime_t duration = ceph_clock_now() - start_time;
     if (unlikely(ret <= 0)) {
       cerr << "failed to read file: " << cpp_strerror(ret) << std::endl;
       return ret;
     }
+#if 0
     total_time += duration;
     min_time = std::min(min_time, duration);
     max_time = std::max(max_time, duration);
-
+#endif
     if (params.chunk_algo == CHUNK_ALGO_FBC) {
       fp_count = calculate_fp_fbc(fp_buffer.get(), bl, itr.get_cursor(), offset_in_obj, params);
     }
@@ -852,21 +846,22 @@ static int thread_collect(unsigned thread_id,
   }
 
   fp_buffer->flush(split_finish, FULL_OBJ_READ);
-  if (objs_read > 0) {
+  if (objs_read > 0 || verbose) {
     std::unique_lock<std::mutex> lock(print_mtx);
     if (verbose) {
-      cout << thread_id << " Num Objects read=" << objs_read
+      cout << thread_id << "] Num Objects read=" << objs_read
 	   << ", Num Bytes read=" << std::setw(4)
 	   << *p_bytes_read/(1024*1024) << " MiB"
 	   << ", chunks-written=" << fp_count_total
 	   << std::endl;
+#if 0
       cout << thread_id
 	   << "] Total-Time=" << total_time
 	   << ", Max-Time=" << max_time
 	   << ", Min-Time=" << min_time
 	   << ", Avg-Time=" << total_time/objs_read
 	   << std::endl;
-#if 0
+
       for (auto const & oid : oid_vec) {
 	std::cout << oid << std::endl;
       }
@@ -1353,7 +1348,7 @@ static int read_thread_last_fp_header(FP_BUFFER::FP_BUFFER_HEADER *p_fp_header,
 			thread_id, last_part_num);
   std::string oid(name_buf, n);
   if (verbose) {
-    std::cout << "recovering cursor from oid: " << oid << std::endl;
+    std::cout << __func__ << "[" << thread_id << "]::oid: " << oid << std::endl;
   }
 
   bufferlist bl;
@@ -1399,6 +1394,11 @@ static int resume_thread_collect(uint16_t thread_id,
   if (ret == 0) {
     std::string cursor(fp_header.cursor, fp_header.cursor_len);
     *p_bytes_read = fp_header.bytes_read;
+    if (params.verbose) {
+      std::cout << thread_id << "] read_bytes=" << *p_bytes_read << "::"
+		<< "last_part=" << last_part_num << "::" << cursor << std::endl;
+    }
+
     return thread_collect(thread_id, p_bytes_read, &cursor, last_part_num+1,
 			  fp_header.offset_in_obj, params);
   }
@@ -1465,7 +1465,7 @@ static void find_last_part_number_per_id(IoCtx *p_itr_ioctx,
 static int recover_reduce_fingerprints_step(IoCtx *p_itr_ioctx,
 					    IoCtx *p_obj_ioctx,
 					    uint64_t *p_reduced_bytes,
-					    const dedup_params_t &params)
+					    dedup_params_t &params)
 {
   uint32_t last_part_num_table[UINT16_MAX];
   uint16_t highest_shard_id = 0, num_shards = params.num_shards;
@@ -1483,7 +1483,9 @@ static int recover_reduce_fingerprints_step(IoCtx *p_itr_ioctx,
 						p_obj_ioctx, params);
     if (ret == 0) {
       shards_to_process[shard_id] = false;
+      // TBD: should verify that all shards agree on num_shards
       num_shards = header.num_shards;
+      params.num_shards = header.num_shards;
       *p_reduced_bytes += header.reduced_bytes;
     }
     else {
@@ -1523,33 +1525,49 @@ uint16_t find_num_threads(IoCtx *p_obj_ioctx,
 			  uint16_t highest_thread_id,
 			  const dedup_params_t &params)
 {
-  for (unsigned thread_id = 0; thread_id <= highest_thread_id; thread_id++) {
-    FP_BUFFER::FP_BUFFER_HEADER fp_header;
-    uint32_t last_part_num = last_part_num_table[thread_id];
-    int ret = read_thread_last_fp_header(&fp_header, thread_id, last_part_num,
-					 p_obj_ioctx, params.verbose);
-    if (ret == 0) {
-      uint16_t num_threads = fp_header.num_threads;
-      if (params.verbose && params.verbose < VERBOSE_MID) {
-	cout << "num_threads=" << num_threads << std::endl;
+  bool has_more  = true;
+  unsigned count = 3;
+  while (has_more && count > 0) {
+    for (unsigned thread_id = 0; thread_id <= highest_thread_id; thread_id++) {
+      FP_BUFFER::FP_BUFFER_HEADER fp_header;
+      uint32_t last_part_num = last_part_num_table[thread_id];
+      int ret = read_thread_last_fp_header(&fp_header, thread_id, last_part_num,
+					   p_obj_ioctx, params.verbose);
+      if (ret == 0) {
+	uint16_t num_threads = fp_header.num_threads;
+	if (params.verbose && params.verbose < VERBOSE_MID) {
+	  cout << "num_threads=" << num_threads << std::endl;
+	}
+	ceph_assert(num_threads <= THREAD_LIMIT_STRICT);
+	ceph_assert(num_threads > 0);
+	ceph_assert(highest_thread_id <= num_threads);
+	return num_threads;
       }
-      ceph_assert(num_threads <= THREAD_LIMIT_STRICT);
-      ceph_assert(num_threads > 0);
-      ceph_assert(highest_thread_id < num_threads);
-      return num_threads;
     }
+
+    cerr << __func__ << "::" << count
+	 << "::corrupted object headers" << std::endl;
+    // if arrived here all last obejcts are corrupted
+    // try the one before and so on ...
+    has_more = false;
+    for (unsigned thread_id = 0; thread_id <= highest_thread_id; thread_id++) {
+      if (last_part_num_table[thread_id] > 0) {
+	last_part_num_table[thread_id] --;
+	has_more = true;
+      }
+    }
+    count --;
   }
 
-  // if arrived here all last obejcts are corrupted
-  // TBD: try the one before and so on ...
-  return params.num_threads;
+  // fail the call and restart work from the beginning
+  return 0;
 }
 
 //---------------------------------------------------------------------------
 static int recover_collect_fingerprints_step(IoCtx *p_itr_ioctx,
 					     IoCtx *p_obj_ioctx,
 					     uint64_t *p_total_bytes_read,
-					     const dedup_params_t &params)
+					     dedup_params_t &params)
 {
   uint32_t last_part_num_table[THREAD_LIMIT_STRICT];
   uint16_t highest_thread_id = 0;
@@ -1561,7 +1579,11 @@ static int recover_collect_fingerprints_step(IoCtx *p_itr_ioctx,
   find_last_part_number_per_id(p_itr_ioctx, HASH_FORMAT, last_part_num_table,
 			       THREAD_LIMIT_STRICT, &highest_thread_id, params.verbose);
   ceph_assert(highest_thread_id < THREAD_LIMIT_STRICT);
-
+  if (params.verbose) {
+    for (unsigned thread_id = 0; thread_id <= highest_thread_id; thread_id++) {
+      cout << thread_id << "] last_part=" << last_part_num_table[thread_id] << std::endl;
+    }
+  }
   std::thread* thread_arr[THREAD_LIMIT_STRICT];
   memset(thread_arr, 0, sizeof(thread_arr));
 
@@ -1570,7 +1592,13 @@ static int recover_collect_fingerprints_step(IoCtx *p_itr_ioctx,
 
   uint16_t num_threads = find_num_threads(p_obj_ioctx, last_part_num_table,
 					  highest_thread_id, params);
-
+  if (num_threads == 0) {
+    // we failed to recover from last session -> run_full_scan
+    return -1;
+  }
+  cout << __func__ << "::Resume collect, num_threads=" << num_threads << std::endl;
+  // change num_threads inside params!!!
+  params.num_threads = num_threads;
   for (unsigned thread_id = 0; thread_id < num_threads; thread_id++) {
     uint32_t last_part_num = last_part_num_table[thread_id];
     thread_arr[thread_id] = new std::thread(resume_thread_collect, thread_id, last_part_num,
@@ -1609,36 +1637,46 @@ static bool namespace_exists(IoCtx *p_itr_ioctx, const string &nspace, int verbo
 }
 
 //---------------------------------------------------------------------------
-static int resume_operation(const dedup_params_t &params)
+static int resume_operation(const dedup_params_t &old_params)
 {
   Rados rados;
   IoCtx itr_ioctx, obj_ioctx;
-  if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, params.pool_name.c_str()) != 0) {
+  const int   verbose   = old_params.verbose;
+  const char* pool_name = old_params.pool_name.c_str();
+  if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, pool_name) != 0) {
     return -1;
   }
-  int verbose = params.verbose;
+
   // clear all debug setting
-  dedup_params_t params_dup = params;
-  params_dup.dbg_max_objs    = 0;
-  params_dup.dbg_max_shards  = 0;
+  dedup_params_t params  = old_params;
+  params.dbg_max_objs    = 0;
+  params.dbg_max_shards  = 0;
   // check if we have any work done from before
   if (namespace_exists(&itr_ioctx, RAW_FP_NSPACE, verbose) == false) {
     // nothing was done, start from the beginning
-    run_full_scan(params_dup);
+    cerr << __func__ << "::nothing to resume -> run_full_scan" << std::endl;
+    run_full_scan(params);
     return 0;
   }
 
   uint64_t total_bytes_before = 0;
   uint64_t reduced_bytes = 0;
+  int ret = recover_collect_fingerprints_step(&itr_ioctx, &obj_ioctx,
+					      &total_bytes_before, params);
+  if (ret != 0) {
+    // we failed to recover from last session -> run_full_scan
+    cerr << __func__ << "::Failed resume -> run_full_scan" << std::endl;
+    run_full_scan(params);
+    return 0;
+  }
 
-  recover_collect_fingerprints_step(&itr_ioctx, &obj_ioctx, &total_bytes_before, params_dup);
   if (namespace_exists(&itr_ioctx, REDUCED_FP_NSPACE, verbose) == false) {
-    params_dup.verbose = VERBOSE_NONE;
-    reduce_fingerprints(&reduced_bytes, params_dup);
+    params.verbose = VERBOSE_NONE;
+    reduce_fingerprints(&reduced_bytes, params);
   }
   else {
-    recover_reduce_fingerprints_step(&itr_ioctx, &obj_ioctx, &reduced_bytes, params_dup);
-    params_dup.verbose = VERBOSE_NONE;
+    recover_reduce_fingerprints_step(&itr_ioctx, &obj_ioctx, &reduced_bytes, params);
+    params.verbose = VERBOSE_NONE;
   }
 
   uint64_t bytes_after_dedup = total_bytes_before-reduced_bytes;
@@ -1648,7 +1686,7 @@ static int resume_operation(const dedup_params_t &params)
 
   if (params.chunk_algo == CHUNK_ALGO_FBC) {
     std::cout << "Unique Count = " << bytes_after_dedup/params.chunk_size
-	      << ", Dup Count = " << reduced_bytes/params.chunk_size << std::endl;
+	      << ", Dup Count = "  << reduced_bytes/params.chunk_size << std::endl;
   }
   uint64_t bytes_after_reduce = (total_bytes_before-reduced_bytes);
   if (bytes_after_reduce) {
@@ -1656,59 +1694,10 @@ static int resume_operation(const dedup_params_t &params)
   }
 
   uint64_t reduced_bytes_wrt = 0;
-  merge_reduced_fingerprints(&reduced_bytes_wrt, params_dup);
+  merge_reduced_fingerprints(&reduced_bytes_wrt, params);
   return 0;
 }
 
-#if 0
-//---------------------------------------------------------------------------
-static int resume_operation(const dedup_params_t &params)
-{
-  Rados rados;
-  IoCtx itr_ioctx, obj_ioctx;
-  if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, params.pool_name.c_str()) != 0) {
-    return -1;
-  }
-  int verbose = params.verbose;
-  // clear all debug setting
-  dedup_params_t params_dup = params;
-  params_dup.dbg_max_objs    = 0;
-  params_dup.dbg_max_shards  = 0;
-  // check if we have any work done from before
-  if (namespace_exists(&itr_ioctx, RAW_FP_NSPACE, verbose) == false) {
-    // nothing was done, start from the beginning
-    run_full_scan(params_dup);
-    return 0;
-  }
-
-  uint64_t total_bytes_before = 0;
-  uint64_t reduced_bytes = 0;
-
-  // check if the collect-fingerprints step was completed
-  if (namespace_exists(&itr_ioctx, REDUCED_FP_NSPACE, verbose) == false) {
-    recover_collect_fingerprints_step(&itr_ioctx, &obj_ioctx, &total_bytes_before, params_dup);
-    reduce_fingerprints(&reduced_bytes, params_dup);
-
-    uint64_t bytes_after_dedup = total_bytes_before-reduced_bytes;
-    if (params.chunk_algo == CHUNK_ALGO_FBC) {
-      std::cout << "Unique Count = " << bytes_after_dedup/params.chunk_size
-		<< ", Dup Count = " << reduced_bytes/params.chunk_size << std::endl;
-    }
-    uint64_t bytes_after_reduce = (total_bytes_before-reduced_bytes);
-    if (bytes_after_reduce) {
-      cout << "dedup ratio = " << ((double)total_bytes_before/bytes_after_reduce) << std::endl;
-    }
-  }
-  else {
-    recover_reduce_fingerprints_step(&itr_ioctx, &obj_ioctx, params_dup);
-  }
-
-  params_dup.verbose = VERBOSE_NONE;
-  uint64_t reduced_bytes_wrt = 0;
-  merge_reduced_fingerprints(&reduced_bytes_wrt, params_dup);
-  return 0;
-}
-#endif
 //===========================================================================
 enum scan_namespace_op_t {
   SCAN_NAMESPACE_OP_LIST,
