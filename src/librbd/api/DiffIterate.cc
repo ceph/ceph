@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/api/DiffIterate.h"
+#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/ObjectMap.h"
@@ -29,6 +30,8 @@ namespace librbd {
 namespace api {
 
 namespace {
+
+constexpr uint32_t LOCK_INTERVAL_SECONDS = 5;
 
 struct DiffContext {
   DiffIterate<>::Callback callback;
@@ -149,6 +152,35 @@ private:
   }
 };
 
+template <typename I>
+bool should_try_acquire_lock(I* image_ctx) {
+  if (image_ctx->exclusive_lock == nullptr ||
+      image_ctx->exclusive_lock->is_lock_owner()) {
+    return false;
+  }
+  if ((image_ctx->features & RBD_FEATURE_FAST_DIFF) == 0) {
+    return false;
+  }
+
+  utime_t now = ceph_clock_now();
+  utime_t cutoff = now - utime_t(LOCK_INTERVAL_SECONDS, 0);
+
+  {
+    std::shared_lock timestamp_locker{image_ctx->timestamp_lock};
+    if (image_ctx->diff_iterate_lock_timestamp > cutoff) {
+      return false;
+    }
+  }
+
+  std::unique_lock timestamp_locker{image_ctx->timestamp_lock};
+  if (image_ctx->diff_iterate_lock_timestamp > cutoff) {
+    return false;
+  }
+
+  image_ctx->diff_iterate_lock_timestamp = now;
+  return true;
+}
+
 int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg) {
   // This reads the existing extents in a parent from the beginning
   // of time.  Since images are thin-provisioned, the extents will
@@ -168,10 +200,14 @@ int DiffIterate<I>::diff_iterate(I *ictx,
                                  uint64_t off, uint64_t len,
                                  bool include_parent, bool whole_object,
                                  int (*cb)(uint64_t, size_t, int, void *),
-                                 void *arg)
-{
-  ldout(ictx->cct, 20) << "diff_iterate " << ictx << " off = " << off
-      		 << " len = " << len << dendl;
+                                 void *arg) {
+  ldout(ictx->cct, 10) << "from_snap_namespace=" << from_snap_namespace
+                       << ", fromsnapname=" << (fromsnapname ?: "")
+                       << ", off=" << off
+                       << ", len=" << len
+                       << ", include_parent=" << include_parent
+                       << ", whole_object=" << whole_object
+                       << dendl;
 
   if (!ictx->data_ctx.is_valid()) {
     return -ENODEV;
@@ -198,17 +234,57 @@ int DiffIterate<I>::diff_iterate(I *ictx,
     return r;
   }
 
-  ictx->image_lock.lock_shared();
-  r = clip_io(ictx, off, &len, io::ImageArea::DATA);
-  ictx->image_lock.unlock_shared();
-  if (r < 0) {
-    return r;
+  {
+    std::shared_lock owner_locker{ictx->owner_lock};
+    std::shared_lock image_locker{ictx->image_lock};
+
+    r = clip_io(ictx, off, &len, io::ImageArea::DATA);
+    if (r < 0) {
+      return r;
+    }
+
+    // optimization: hang onto the only object map needed to run fast
+    // diff against the beginning of time -- it's loaded when exclusive
+    // lock is acquired
+    // acquire exclusive lock only if not busy (i.e. don't request),
+    // throttle acquisition attempts and ignore errors
+    if (fromsnapname == nullptr && whole_object &&
+        should_try_acquire_lock(ictx)) {
+      C_SaferCond lock_ctx;
+      ictx->exclusive_lock->try_acquire_lock(&lock_ctx);
+      image_locker.unlock();
+      owner_locker.unlock();
+      lock_ctx.wait();
+    }
   }
 
   DiffIterate command(*ictx, from_snap_namespace, fromsnapname, off, len,
 		      include_parent, whole_object, cb, arg);
   r = command.execute();
   return r;
+}
+
+template <typename I>
+std::pair<uint64_t, uint64_t> DiffIterate<I>::calc_object_diff_range() {
+  uint64_t period = m_image_ctx.get_stripe_period();
+  uint64_t first_period_off = round_down_to(m_offset, period);
+  uint64_t last_period_off = round_down_to(m_offset + m_length - 1, period);
+
+  striper::LightweightObjectExtents object_extents;
+  if (first_period_off != last_period_off) {
+    // map only the tail of the first period and the front of the last
+    // period instead of the entire range for efficiency
+    Striper::file_to_extents(m_image_ctx.cct, &m_image_ctx.layout,
+                             m_offset, first_period_off + period - m_offset,
+                             0, 0, &object_extents);
+    Striper::file_to_extents(m_image_ctx.cct, &m_image_ctx.layout,
+                        last_period_off, m_offset + m_length - last_period_off,
+                        0, 0, &object_extents);
+  } else {
+    Striper::file_to_extents(m_image_ctx.cct, &m_image_ctx.layout, m_offset,
+                             m_length, 0, 0, &object_extents);
+  }
+  return {object_extents.front().object_no, object_extents.back().object_no + 1};
 }
 
 template <typename I>
@@ -245,20 +321,24 @@ int DiffIterate<I>::execute() {
 
   int r;
   bool fast_diff_enabled = false;
+  uint64_t start_object_no, end_object_no;
   BitVector<2> object_diff_state;
   interval_set<uint64_t> parent_diff;
   if (m_whole_object) {
+    std::tie(start_object_no, end_object_no) = calc_object_diff_range();
+
     C_SaferCond ctx;
     auto req = object_map::DiffRequest<I>::create(&m_image_ctx, from_snap_id,
-                                                  end_snap_id, true,
+                                                  end_snap_id, start_object_no,
+                                                  end_object_no,
                                                   &object_diff_state, &ctx);
     req->send();
-
     r = ctx.wait();
     if (r < 0) {
       ldout(cct, 5) << "fast diff disabled" << dendl;
     } else {
       ldout(cct, 5) << "fast diff enabled" << dendl;
+      ceph_assert(object_diff_state.size() == end_object_no - start_object_no);
       fast_diff_enabled = true;
 
       // check parent overlap only if we are comparing to the beginning of time
@@ -266,12 +346,14 @@ int DiffIterate<I>::execute() {
         std::shared_lock image_locker{m_image_ctx.image_lock};
         uint64_t raw_overlap = 0;
         m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &raw_overlap);
-        auto overlap = m_image_ctx.reduce_parent_overlap(raw_overlap, false);
-        if (overlap.first > 0 && overlap.second == io::ImageArea::DATA) {
+        io::Extents parent_extents = {{m_offset, m_length}};
+        if (m_image_ctx.prune_parent_extents(parent_extents, io::ImageArea::DATA,
+                                             raw_overlap, false) > 0) {
           ldout(cct, 10) << " first getting parent diff" << dendl;
-          DiffIterate diff_parent(*m_image_ctx.parent, {}, nullptr, 0,
-                                  overlap.first, true, true, &simple_diff_cb,
-                                  &parent_diff);
+          DiffIterate diff_parent(*m_image_ctx.parent, {}, nullptr,
+                                  parent_extents[0].first,
+                                  parent_extents[0].second, true, true,
+                                  &simple_diff_cb, &parent_diff);
           r = diff_parent.execute();
           if (r < 0) {
             return r;
@@ -293,7 +375,7 @@ int DiffIterate<I>::execute() {
   uint64_t left = m_length;
 
   while (left > 0) {
-    uint64_t period_off = off - (off % period);
+    uint64_t period_off = round_down_to(off, period);
     uint64_t read_len = std::min(period_off + period - off, left);
 
     if (fast_diff_enabled) {
@@ -308,7 +390,8 @@ int DiffIterate<I>::execute() {
       io::SparseExtents aggregate_sparse_extents;
       for (auto& [object, extents] : object_extents) {
         const uint64_t object_no = extents.front().objectno;
-        uint8_t diff_state = object_diff_state[object_no];
+        ceph_assert(object_no >= start_object_no && object_no < end_object_no);
+        uint8_t diff_state = object_diff_state[object_no - start_object_no];
         ldout(cct, 20) << "object " << object << ": diff_state="
                        << (int)diff_state << dendl;
 

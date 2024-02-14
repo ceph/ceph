@@ -1,3 +1,12 @@
+>=18.2.2
+--------
+
+* RBD: When diffing against the beginning of time (`fromsnapname == NULL`) in
+  fast-diff mode (`whole_object == true` with `fast-diff` image feature enabled
+  and valid), diff-iterate is now guaranteed to execute locally if exclusive
+  lock is available.  This brings a dramatic performance improvement for QEMU
+  live disk synchronization and backup use cases.
+
 >=19.0.0
 
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
