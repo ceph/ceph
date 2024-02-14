@@ -171,7 +171,9 @@ increase or decrease the frequency and depth of scrubbing operations.
 .. confval:: osd_scrub_min_interval
 .. confval:: osd_scrub_max_interval
 .. confval:: osd_scrub_chunk_min
+.. confval:: osd_shallow_scrub_chunk_min
 .. confval:: osd_scrub_chunk_max
+.. confval:: osd_shallow_scrub_chunk_max
 .. confval:: osd_scrub_sleep
 .. confval:: osd_deep_scrub_interval
 .. confval:: osd_scrub_interval_randomize_ratio

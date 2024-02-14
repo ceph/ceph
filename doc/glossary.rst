@@ -424,7 +424,7 @@
                 "inconsistent" (that is, the PG is marked "inconsistent"). 
 
                 There are two kinds of scrubbing: light scrubbing and deep
-                scrubbing (also called "normal scrubbing" and "deep scrubbing",
+                scrubbing (also called "shallow scrubbing" and "deep scrubbing",
                 respectively). Light scrubbing is performed daily and does
                 nothing more than confirm that a given object exists and that
                 its metadata is correct. Deep scrubbing is performed weekly and
