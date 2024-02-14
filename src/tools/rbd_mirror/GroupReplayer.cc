@@ -973,8 +973,13 @@ void GroupReplayer<I>::handle_get_remote_group_snapshot(
         &iter, &remote_group_snap);
   }
 
+  bool complete = (remote_group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE);
   if (r < 0) {
     derr << "failed to get remote group snapshot: " << cpp_strerror(r) << dendl;
+  } else if (!complete) {
+    derr << "incomplete remote group snapshot: " << remote_group_snap_id
+         << dendl;
+    r = -EAGAIN;
   } else {
     m_local_group_snaps[remote_group_snap_id].name = remote_group_snap.name;
   }
