@@ -4,6 +4,11 @@
  Placement Groups
 ==================
 
+See Sage Weil's blog post `New in Nautilus: PG merging and autotuning
+<https://ceph.io/en/news/blog/2019/new-in-nautilus-pg-merging-and-autotuning/>`_
+for information about the relationship of placement groups to pools and to
+objects.
+
 .. _pg-autoscaler:
 
 Autoscaling placement groups
