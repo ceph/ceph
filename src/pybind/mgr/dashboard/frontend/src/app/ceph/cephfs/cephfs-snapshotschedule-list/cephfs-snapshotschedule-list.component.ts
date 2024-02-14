@@ -130,7 +130,11 @@ export class CephfsSnapshotscheduleListComponent
             }
             return this.snapshotScheduleService
               .getSnapshotScheduleList('/', this.fsName)
-              .pipe(map((list) => list.map((l) => ({ ...l, path: `${l.path}@${l.schedule}` }))));
+              .pipe(
+                map((list) =>
+                  list.map((l) => ({ ...l, pathForSelection: `${l.path}@${l.schedule}` }))
+                )
+              );
           }),
           shareReplay(1)
         )
@@ -138,7 +142,8 @@ export class CephfsSnapshotscheduleListComponent
     );
 
     this.columns = [
-      { prop: 'path', name: $localize`Path`, flexGrow: 3, cellTemplate: this.pathTpl },
+      { prop: 'pathForSelection', name: $localize`Path`, flexGrow: 3, cellTemplate: this.pathTpl },
+      { prop: 'path', isHidden: true },
       { prop: 'subvol', name: $localize`Subvolume`, cellTemplate: this.subvolTpl },
       { prop: 'scheduleCopy', name: $localize`Repeat interval` },
       { prop: 'schedule', isHidden: true },

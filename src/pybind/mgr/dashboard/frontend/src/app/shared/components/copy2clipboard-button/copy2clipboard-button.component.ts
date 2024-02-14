@@ -26,7 +26,7 @@ export class Copy2ClipboardButtonComponent {
 
   private getText(): string {
     const element = document.getElementById(this.source) as HTMLInputElement;
-    return element.value;
+    return element?.value || element?.textContent;
   }
 
   @HostListener('click')
