@@ -497,6 +497,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         """
         table_heading_mapping = {
             'summary': ['HOST', 'STORAGE', 'CPU', 'NET', 'MEMORY', 'POWER', 'FANS'],
+            'fullreport': [],
             'firmwares': ['HOST', 'COMPONENT', 'NAME', 'DATE', 'VERSION', 'STATUS'],
             'criticals': ['HOST', 'COMPONENT', 'NAME', 'STATUS', 'STATE'],
             'memory': ['HOST', 'NAME', 'STATUS', 'STATE'],
@@ -525,6 +526,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     row.extend([v['status'][key] for key in ['storage', 'processors', 'network', 'memory', 'power', 'fans']])
                     table.add_row(row)
                 output = table.get_string()
+        elif category == 'fullreport':
+            if hostname is None:
+                output = "Missing host name"
+            elif format != Format.json:
+                output = "fullreport only supports json output"
+            else:
+                completion = self.node_proxy_fullreport(hostname=hostname)
+                fullreport: Dict[str, Any] = raise_if_exception(completion)
+                output = json.dumps(fullreport)
         elif category == 'firmwares':
             output = "Missing host name" if hostname is None else self._firmwares_table(hostname, table, format)
         elif category == 'criticals':
