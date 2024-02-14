@@ -192,7 +192,7 @@ void UnlinkPeerRequest<I>::unlink_group_snapshot(
     const cls::rbd::SnapshotNamespace& snap_namespace,
     const std::string& snap_name) {
   CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 15) << dendl;
+  ldout(cct, 15) << "snap_name: " << snap_name << dendl;
 
   auto info = std::get_if<cls::rbd::MirrorSnapshotNamespace>(&snap_namespace);
   if (!info->group_spec.is_valid()) {
