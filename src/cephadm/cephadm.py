@@ -8218,6 +8218,13 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
             for fname in glob(f'{ctx.log_dir}/cephadm.log*'):
                 os.remove(fname)
 
+        try:
+            Path('/etc/ceph/podman-auth.json').unlink()
+        except FileNotFoundError:
+            pass
+        except Exception as e:
+            logger.debug(f'Could not remove podman-auth.json: {e}')
+
     # rm sysctl settings
     sysctl_dirs: List[Path] = [Path(ctx.sysctl_dir), Path('/usr/lib/sysctl.d')]
 
