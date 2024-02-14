@@ -1759,7 +1759,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         state_ord = self.MDS_STATE_ORD.get(info['state'])
                         leader_state_ord = self.MDS_STATE_ORD.get(leader_info['state'])
 
-                        if state_ord <= self.MDS_STATE_ACTIVE_ORD and state_ord > leader_state_ord:
+                        if state_ord == self.MDS_STATE_ACTIVE_ORD and state_ord > leader_state_ord:
                             leader_info = info
             break
 
