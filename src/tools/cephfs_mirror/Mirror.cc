@@ -9,6 +9,8 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
+#include "common/perf_counters.h"
+#include "common/perf_counters_key.h"
 #include "include/types.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
@@ -19,6 +21,14 @@
 #define dout_subsys ceph_subsys_cephfs_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "cephfs::mirror::Mirror " << __func__
+
+// Performance Counters
+enum {
+  l_cephfs_mirror_first = 4000,
+  l_cephfs_mirror_file_systems_mirrorred,
+  l_cephfs_mirror_file_systems_mirror_enable_failures,
+  l_cephfs_mirror_last,
+};
 
 namespace cephfs {
 namespace mirror {
@@ -277,6 +287,17 @@ int Mirror::init(std::string &reason) {
     return r;
   }
 
+  std::string labels = ceph::perf_counters::key_create("cephfs_mirror");
+  PerfCountersBuilder plb(m_cct, labels, l_cephfs_mirror_first, l_cephfs_mirror_last);
+
+  auto prio = m_cct->_conf.get_val<int64_t>("cephfs_mirror_perf_stats_prio");
+  plb.add_u64(l_cephfs_mirror_file_systems_mirrorred,
+	      "mirrored_filesystems", "Filesystems mirrored", "mir", prio);
+  plb.add_u64_counter(l_cephfs_mirror_file_systems_mirror_enable_failures,
+		      "mirror_enable_failures", "Mirroring enable failures", "mirf", prio);
+  m_perf_counters = plb.create_perf_counters();
+  m_cct->get_perfcounters_collection()->add(m_perf_counters);
+
   return 0;
 }
 
@@ -285,6 +306,13 @@ void Mirror::shutdown() {
   m_stopping = true;
   m_cluster_watcher->shutdown();
   m_cond.notify_all();
+
+  PerfCounters *perf_counters = nullptr;
+  std::swap(perf_counters, m_perf_counters);
+  if (perf_counters != nullptr) {
+    m_cct->get_perfcounters_collection()->remove(perf_counters);
+    delete perf_counters;
+  }
 }
 
 void Mirror::reopen_logs() {
@@ -328,6 +356,9 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem,
     m_service_daemon->add_or_update_fs_attribute(filesystem.fscid,
                                                  SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY,
                                                  true);
+    if (m_perf_counters) {
+      m_perf_counters->inc(l_cephfs_mirror_file_systems_mirror_enable_failures);
+    }
     return;
   }
 
@@ -341,6 +372,9 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem,
   }
 
   dout(10) << ": Initialized FSMirror for filesystem=" << filesystem << dendl;
+  if (m_perf_counters) {
+    m_perf_counters->inc(l_cephfs_mirror_file_systems_mirrorred);
+  }
 }
 
 void Mirror::handle_enable_mirroring(const Filesystem &filesystem, int r) {
@@ -358,6 +392,9 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem, int r) {
     m_service_daemon->add_or_update_fs_attribute(filesystem.fscid,
                                                  SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY,
                                                  true);
+    if (m_perf_counters) {
+      m_perf_counters->inc(l_cephfs_mirror_file_systems_mirror_enable_failures);
+    }
     return;
   }
 
@@ -367,6 +404,9 @@ void Mirror::handle_enable_mirroring(const Filesystem &filesystem, int r) {
   m_cond.notify_all();
 
   dout(10) << ": Initialized FSMirror for filesystem=" << filesystem << dendl;
+  if (m_perf_counters) {
+    m_perf_counters->inc(l_cephfs_mirror_file_systems_mirrorred);
+  }
 }
 
 void Mirror::enable_mirroring(const Filesystem &filesystem, uint64_t local_pool_id,
@@ -421,6 +461,10 @@ void Mirror::handle_disable_mirroring(const Filesystem &filesystem, int r) {
       dout(10) << ": no pending actions for filesystem=" << filesystem << dendl;
       m_mirror_actions.erase(filesystem);
     }
+  }
+
+  if (m_perf_counters) {
+    m_perf_counters->dec(l_cephfs_mirror_file_systems_mirrorred);
   }
 }
 
