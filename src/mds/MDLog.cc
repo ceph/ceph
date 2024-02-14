@@ -1403,11 +1403,10 @@ void MDLog::_replay_thread()
       break;
     }
 
-    if (!journaler->is_readable() &&
-	journaler->get_read_pos() == journaler->get_write_pos())
+    if (journaler->get_read_pos() == journaler->get_write_pos()) {
+      dout(10) << "_replay: read_pos == write_pos" << dendl;
       break;
-    
-    ceph_assert(journaler->is_readable() || mds->is_daemon_stopping());
+    }
     
     // read it
     uint64_t pos = journaler->get_read_pos();
