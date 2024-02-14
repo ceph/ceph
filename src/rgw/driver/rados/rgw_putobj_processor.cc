@@ -124,6 +124,11 @@ void RadosWriter::add_write_hint(librados::ObjectWriteOperation& op) {
   op.set_alloc_hint2(0, 0, alloc_hint_flags);
 }
 
+void RadosWriter::set_head_obj(const rgw_obj& head)
+{
+  head_obj = head;
+}
+
 int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
 {
   return rgw_get_rados_ref(dpp, store->get_rados_handle(), raw_obj,
@@ -457,6 +462,9 @@ int MultipartObjectProcessor::prepare_head()
   rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
   RGWSI_Tier_RADOS::raw_obj_to_obj(head_obj.bucket, stripe_obj, &head_obj);
   head_obj.index_hash_source = target_obj.key.name;
+
+  // point part uploads at the part head instead of the final multipart head
+  writer.set_head_obj(head_obj);
 
   r = writer.set_stripe_obj(stripe_obj);
   if (r < 0) {
