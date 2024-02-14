@@ -104,6 +104,9 @@ class RadosWriter : public DataProcessor {
 
   ~RadosWriter();
 
+  // change the head object
+  void set_head_obj(std::unique_ptr<rgw::sal::RGWObject> head);
+
   // change the current stripe object
   int set_stripe_obj(const rgw_raw_obj& obj);
 
