@@ -1701,6 +1701,10 @@ Then run the following:
         return f'Powercycle scheduled on {hostname}'
 
     @handle_orch_error
+    def node_proxy_fullreport(self, hostname: Optional[str] = None) -> Dict[str, Any]:
+        return self.node_proxy_cache.fullreport(hostname=hostname)
+
+    @handle_orch_error
     def node_proxy_summary(self, hostname: Optional[str] = None) -> Dict[str, Any]:
         return self.node_proxy_cache.summary(hostname=hostname)
 
