@@ -1,7 +1,8 @@
 from contextlib import contextmanager
 
+from .volume import open_volume, open_volume_lockless
+from .group import open_group
 from .template import SubvolumeOpType
-
 from .versions import loaded_subvolumes
 
 def create_subvol(mgr, fs, vol_spec, group, subvolname, size, isolate_nspace, pool, mode, uid, gid):
@@ -72,3 +73,61 @@ def open_subvol(mgr, fs, vol_spec, group, subvolname, op_type):
     subvolume = loaded_subvolumes.get_subvolume_object(mgr, fs, vol_spec, group, subvolname)
     subvolume.open(op_type)
     yield subvolume
+
+
+@contextmanager
+def open_sv_in_vol(vc, vol_spec, vol_name, grp_name, sv_name, op_type,
+                   lockless=True):
+    open_vol = open_volume_lockless if lockless else open_volume
+
+    with open_vol(vc, vol_name) as fsh:
+        with open_group(fsh, vol_spec, grp_name) as grp:
+            with open_subvol(vc.mgr, fsh, vol_spec, grp, sv_name, op_type) as sv:
+                yield fsh, grp, sv
+
+
+# TODO: 99% chance that lockless=True mode will suffice for all cases of usage
+# this method, check that, and if so, remove parameter lockless.
+@contextmanager
+def open_sv_in_grp(mgr, fsh, vol_spec, grp_name, sv_name, op_type,
+                   lockless=True):
+    with open_group(fsh, vol_spec, grp_name) as grp:
+        with open_subvol(mgr, fsh, vol_spec, grp, sv_name, op_type) as sv:
+            yield sv
+
+
+# TODO: 99% chance that lockless=True mode will suffice for all cases of usage
+# this method, check that, and if so, remove lockless parameter.
+@contextmanager
+def open_clone_sv_pair_in_vol(vc, vol_spec, vol_name, grp_name, sv_name,
+                              lockless=True):
+    with open_sv_in_vol(
+            vc, vol_spec, vol_name, grp_name, sv_name,
+            SubvolumeOpType.CLONE_INTERNAL, lockless) as (fsh, _, dst_sv):
+        src_volname, src_grp_name, src_sv_name, src_snap_name = \
+            dst_sv.get_clone_source()
+
+        if grp_name == src_grp_name and sv_name == src_sv_name:
+            # use the same subvolume to avoid metadata overwrites
+            yield (dst_sv, dst_sv, src_snap_name)
+        else:
+            with open_sv_in_grp(vc.mgr, fsh, vol_spec, src_grp_name, src_sv_name,
+                                SubvolumeOpType.CLONE_SOURCE) as src_sv:
+                yield (dst_sv, src_sv, src_snap_name)
+
+
+@contextmanager
+def open_clone_sv_pair_in_grp(mgr, fsh, vol_spec, volname, grp_name, sv_name,
+                              lockless=True):
+    with open_sv_in_grp(mgr, fsh, vol_spec, grp_name, sv_name,
+                        SubvolumeOpType.CLONE_INTERNAL, lockless) as dst_sv:
+        src_volname, src_grp_name, src_sv_name, src_snap_name = \
+            dst_sv.get_clone_source()
+
+        if grp_name == src_grp_name and sv_name == src_sv_name:
+            # use the same subvolume to avoid metadata overwrites
+            yield (dst_sv, dst_sv, src_snap_name)
+        else:
+            with open_sv_in_grp(mgr, fsh, vol_spec, src_grp_name, src_sv_name,
+                                SubvolumeOpType.CLONE_SOURCE) as src_sv:
+                yield (dst_sv, src_sv, src_snap_name)
