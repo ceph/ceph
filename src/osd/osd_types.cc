@@ -7150,8 +7150,16 @@ void ScrubMap::object::generate_test_instances(list<object*>& o)
   o.back()->negative = true;
   o.push_back(new object);
   o.back()->size = 123;
-  o.back()->attrs["foo"] = ceph::buffer::copy("foo", 3);
-  o.back()->attrs["bar"] = ceph::buffer::copy("barval", 6);
+  {
+    bufferlist foobl;
+    foobl.push_back(ceph::buffer::copy("foo", 3));
+    o.back()->attrs["foo"] = std::move(foobl);
+  }
+  {
+    bufferlist barbl;
+    barbl.push_back(ceph::buffer::copy("barval", 6));
+    o.back()->attrs["bar"] = std::move(barbl);
+  }
 }
 
 // -- OSDOp --

@@ -6234,7 +6234,7 @@ std::ostream& operator<<(std::ostream& out, const PushOp &op);
  */
 struct ScrubMap {
   struct object {
-    std::map<std::string, ceph::buffer::ptr, std::less<>> attrs;
+    std::map<std::string, ceph::buffer::list, std::less<>> attrs;
     uint64_t size;
     __u32 omap_digest;         ///< omap crc32c
     __u32 digest;              ///< data crc32c

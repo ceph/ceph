@@ -451,4 +451,22 @@ private:
 		      std::vector<pg_log_entry_t>&& log_entries) = 0;
   friend class ReplicatedRecoveryBackend;
   friend class ::crimson::osd::PG;
+
+protected:
+  boost::container::flat_set<hobject_t> temp_contents;
+
+  template <class... Args>
+  void add_temp_obj(Args&&... args) {
+    temp_contents.insert(std::forward<Args>(args)...);
+  }
+  void clear_temp_obj(const hobject_t &oid) {
+    temp_contents.erase(oid);
+  }
+  template <class T>
+  void clear_temp_objs(const T &cont) {
+    for (const auto& oid : cont) {
+      clear_temp_obj(oid);
+    }
+  }
+  friend class RecoveryBackend;
 };

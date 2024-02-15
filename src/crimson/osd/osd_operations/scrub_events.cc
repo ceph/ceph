@@ -221,7 +221,7 @@ ScrubScan::ifut<> ScrubScan::scan_object(
       if (i.second.length() == 0) {
 	entry.attrs[i.first];
       } else {
-	entry.attrs.emplace(i.first, i.second.front());
+	entry.attrs.emplace(i.first, i.second);
       }
     }
   }).handle_error_interruptible(

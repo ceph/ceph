@@ -24,22 +24,21 @@ constexpr static size_t TEST_OMAP_BYTES_LIMIT = 1<<30;
 
 void so_set_attr_len(ScrubMap::object &obj, const std::string &name, size_t len)
 {
-  obj.attrs[name] = buffer::ptr(len);
+  obj.attrs[name] = bufferlist();
+  obj.attrs[name].push_back(buffer::ptr(len));
 }
 
 void so_set_attr(ScrubMap::object &obj, const std::string &name, bufferlist bl)
 {
   bl.rebuild();
-  obj.attrs[name] = bl.front();
+  obj.attrs[name] = bl;
 }
 
 std::optional<bufferlist> so_get_attr(
   ScrubMap::object &obj, const std::string &name)
 {
   if (obj.attrs.count(name)) {
-    bufferlist bl;
-    bl.push_back(obj.attrs[name]);
-    return bl;
+    return obj.attrs[name];
   } else {
     return std::nullopt;
   }

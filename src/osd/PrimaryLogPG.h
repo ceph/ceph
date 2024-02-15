@@ -29,6 +29,7 @@
 #include "common/sharedptr_registry.hpp"
 #include "common/shared_cache.hpp"
 #include "ReplicatedBackend.h"
+#include "ECBackend.h"
 #include "PGTransaction.h"
 #include "cls/cas/cls_cas_ops.h"
 
@@ -55,7 +56,9 @@ void put_with_id(PrimaryLogPG *pg, uint64_t id);
 
 struct inconsistent_snapset_wrapper;
 
-class PrimaryLogPG : public PG, public PGBackend::Listener {
+class PrimaryLogPG : public PG,
+		     public PGBackend::Listener,
+		     public ECListener {
   friend class OSD;
   friend class Watch;
   friend class PrimaryLogScrub;
@@ -301,6 +304,8 @@ public:
   }
 
   /// Listener methods
+  void add_temp_obj(const hobject_t &oid) override { get_pgbackend()->add_temp_obj(oid); }
+  void clear_temp_obj(const hobject_t &oid) override { get_pgbackend()->clear_temp_obj(oid); }
   DoutPrefixProvider *get_dpp() override {
     return this;
   }
@@ -391,11 +396,24 @@ public:
   const std::map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
     return recovery_state.get_peer_missing();
   }
-  using PGBackend::Listener::get_shard_missing;
+  const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const override {
+    auto m = maybe_get_shard_missing(peer);
+    ceph_assert(m);
+    return *m;
+  }
   const std::map<pg_shard_t, pg_info_t> &get_shard_info() const override {
     return recovery_state.get_peer_info();
   }
-  using PGBackend::Listener::get_shard_info;
+  const pg_info_t &get_shard_info(pg_shard_t peer) const override {
+    if (peer == primary_shard()) {
+      return get_info();
+    } else {
+      std::map<pg_shard_t, pg_info_t>::const_iterator i =
+        get_shard_info().find(peer);
+      ceph_assert(i != get_shard_info().end());
+      return i->second;
+    }
+  }
   const pg_missing_tracker_t &get_local_missing() const override {
     return recovery_state.get_pg_log().get_missing();
   }
@@ -1892,6 +1910,21 @@ public:
   void on_shutdown() override;
   bool check_failsafe_full() override;
   bool maybe_preempt_replica_scrub(const hobject_t& oid) override;
+  struct ECListener *get_eclistener() override;
+  const pg_missing_const_i * maybe_get_shard_missing(
+    pg_shard_t peer) const {
+    if (peer == primary_shard()) {
+      return &get_local_missing();
+    } else {
+      std::map<pg_shard_t, pg_missing_t>::const_iterator i =
+        get_shard_missing().find(peer);
+      if (i == get_shard_missing().end()) {
+        return nullptr;
+      } else {
+        return &(i->second);
+      }
+    }
+  }
   int rep_repair_primary_object(const hobject_t& soid, OpContext *ctx);
 
   // attr cache handling

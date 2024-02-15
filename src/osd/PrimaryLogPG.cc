@@ -15798,6 +15798,11 @@ bool PrimaryLogPG::maybe_preempt_replica_scrub(const hobject_t& oid)
   return m_scrubber->write_blocked_by_scrub(oid);
 }
 
+struct ECListener *PrimaryLogPG::get_eclistener()
+{
+  return this;
+}
+
 void intrusive_ptr_add_ref(PrimaryLogPG *pg) { pg->get("intptr"); }
 void intrusive_ptr_release(PrimaryLogPG *pg) { pg->put("intptr"); }
 

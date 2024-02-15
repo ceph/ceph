@@ -275,15 +275,13 @@ struct fmt::formatter<ScrubMap::object> {
 
     // note the special handling of (1) OI_ATTR and (2) non-printables
     for (auto [k, v] : so.attrs) {
-      std::string bkstr{v.raw_c_str(), v.raw_length()};
+      std::string bkstr = v.to_str();
       if (k == std::string{OI_ATTR}) {
 	/// \todo consider parsing the OI args here. Maybe add a specific format
 	/// specifier
 	fmt::format_to(ctx.out(), "{{{}:<<OI_ATTR>>({})}} ", k, bkstr.length());
       } else if (k == std::string{SS_ATTR}) {
-	bufferlist bl;
-	bl.push_back(v);
-	SnapSet sns{bl};
+	SnapSet sns{v};
 	fmt::format_to(ctx.out(), "{{{}:{:D}}} ", k, sns);
       } else {
 	fmt::format_to(ctx.out(), "{{{}:{}({})}} ", k, bkstr, bkstr.length());
