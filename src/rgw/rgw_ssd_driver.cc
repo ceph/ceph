@@ -98,9 +98,8 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const 
     boost::system::error_code ec;
     if (y) {
         using namespace boost::asio;
-        spawn::yield_context yield = y.get_yield_context();
-        async_completion<spawn::yield_context, void()> init(yield);
-        auto ex = get_associated_executor(init.completion_handler);
+        yield_context yield = y.get_yield_context();
+        auto ex = yield.get_executor();
         this->put_async(dpp, ex, key, bl, len, attrs, yield[ec]);
     } else {
       auto ex = boost::asio::system_executor{};
@@ -285,9 +284,8 @@ rgw::Aio::OpFunc SSDDriver::ssd_cache_read_op(const DoutPrefixProvider *dpp, opt
     ldpp_dout(dpp, 20) << "SSDCache: cache_read_op(): Read From Cache, oid=" << r.obj.oid << dendl;
 
     using namespace boost::asio;
-    spawn::yield_context yield = y.get_yield_context();
-    async_completion<spawn::yield_context, void()> init(yield);
-    auto ex = get_associated_executor(init.completion_handler);
+    yield_context yield = y.get_yield_context();
+    auto ex = yield.get_executor();
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
     this->get_async(dpp, ex, key, read_ofs, read_len, bind_executor(ex, SSDDriver::libaio_read_handler{aio, r}));
@@ -301,9 +299,8 @@ rgw::Aio::OpFunc SSDDriver::ssd_cache_write_op(const DoutPrefixProvider *dpp, op
     ldpp_dout(dpp, 20) << "SSDCache: cache_write_op(): Write to Cache, oid=" << r.obj.oid << dendl;
 
     using namespace boost::asio;
-    spawn::yield_context yield = y.get_yield_context();
-    async_completion<spawn::yield_context, void()> init(yield);
-    auto ex = get_associated_executor(init.completion_handler);
+    yield_context yield = y.get_yield_context();
+    auto ex = yield.get_executor();
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
     this->put_async(dpp, ex, key, bl, len, attrs, bind_executor(ex, SSDDriver::libaio_write_handler{aio, r}));

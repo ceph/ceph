@@ -17,7 +17,7 @@ struct initiate_exec {
   {
     auto h = boost::asio::consign(std::move(handler), conn);
     return boost::asio::dispatch(get_executor(),
-        [c = conn, &req, &resp, h = std::move(h)] {
+        [c = conn, &req, &resp, h = std::move(h)] () mutable {
             return c->async_exec(req, resp, std::move(h));
     });
   }
