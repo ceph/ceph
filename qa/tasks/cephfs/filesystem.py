@@ -759,17 +759,30 @@ class Filesystem(MDSCluster):
                 assert(isinstance(subvols['create'], int))
                 assert(subvols['create'] > 0)
 
+                self.run_ceph_cmd('fs', 'subvolumegroup', 'create', self.name, 'qa')
+                subvol_options = self.fs_config.get('subvol_options', '')
+
                 for sv in range(0, subvols['create']):
                     sv_name = f'sv_{sv}'
-                    self.mon_manager.raw_cluster_cmd(
-                        'fs', 'subvolume', 'create', self.name, sv_name,
-                        self.fs_config.get('subvol_options', ''))
+                    cmd = [
+                      'fs',
+                      'subvolume',
+                      'create',
+                      self.name,
+                      sv_name,
+                      '--group_name', 'qa',
+                    ]
+                    if subvol_options:
+                        cmd.append(subvol_options)
+                    self.mon_manager.raw_cluster_cmd(*cmd)
 
                     if self.name not in self._ctx.created_subvols:
                         self._ctx.created_subvols[self.name] = []
                     
                     subvol_path = self.mon_manager.raw_cluster_cmd(
-                        'fs', 'subvolume', 'getpath', self.name, sv_name)
+                        'fs', 'subvolume', 'getpath', self.name,
+                        '--group_name', 'qa',
+                        sv_name)
                     subvol_path = subvol_path.strip()
                     self._ctx.created_subvols[self.name].append(subvol_path)
             else:

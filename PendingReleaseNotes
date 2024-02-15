@@ -94,6 +94,10 @@
   mirroring policies between RGW and AWS, you may wish to set
   "rgw policy reject invalid principals" to "false". This affects only newly set
   policies, not policies that are already in place.
+* The CephFS automatic metadata load (sometimes called "default") balancer is
+  now disabled by default. The new file system flag `balance_automate`
+  can be used to toggle it on or off. It can be enabled or disabled via
+  `ceph fs set <fs_name> balance_automate <bool>`.
 * RGW's default backend for `rgw_enable_ops_log` changed from RADOS to file.
   The default value of `rgw_ops_log_rados` is now false, and `rgw_ops_log_file_path`
   defaults to "/var/log/ceph/ops-log-$cluster-$name.log".
