@@ -1,0 +1,57 @@
+#
+# Ceph - scalable distributed file system
+#
+# Copyright (C) 2011 Wido den Hollander <wido@widodh.nl>
+#
+# This is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License version 2.1, as published by the Free Software
+# Foundation.  See file COPYING.
+#
+
+_radosgw_admin()
+{
+        local cur prev
+
+        COMPREPLY=()
+        cur="${COMP_WORDS[COMP_CWORD]}"
+        prev="${COMP_WORDS[COMP_CWORD-1]}"
+
+        if [[ ${cur} == -* ]] ; then
+            COMPREPLY=( $(compgen -W "--uid --subuser --access-key --os-user --email --auth_uid --secret --os-secret --gen-access-key --gen-secret \
+                                      --access --display-name --bucket --object --date --conf --name --id --version -s -w" -- ${cur}) )
+            return 0
+        fi
+
+        case "${prev}" in
+            --conf | -c)
+                COMPREPLY=( $(compgen -f ${cur}) )
+                return 0
+                ;;
+            -m)
+                COMPREPLY=( $(compgen -A hostname ${cur}) )
+                return 0
+                ;;
+            user)
+                COMPREPLY=( $(compgen -W "create modify info rm" -- ${cur}) )
+                return 0
+                ;;
+            subuser)
+                COMPREPLY=( $(compgen -W "create modify rm" -- ${cur}) )
+                return 0
+                ;;
+            key)
+                COMPREPLY=( $(compgen -W "create rm" -- ${cur}) )
+                return 0
+                ;;
+            buckets)
+                COMPREPLY=( $(compgen -W "list unlink" -- ${cur}) )
+                return 0
+                ;;
+            *)
+                COMPREPLY=( $(compgen -W "user subuser key buckets policy log" -- ${cur}) )
+                return 0
+            ;;
+        esac
+}
+complete -F _radosgw_admin radosgw-admin
