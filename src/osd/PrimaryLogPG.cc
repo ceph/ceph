@@ -11531,7 +11531,7 @@ void PrimaryLogPG::submit_log_entries(
   }
 
   pgbackend->call_write_ordered(
-    [this, entries, repop, on_complete]() {
+    [this, entries, repop, on_complete]() mutable {
       ObjectStore::Transaction t;
       eversion_t old_last_update = info.last_update;
       recovery_state.merge_new_log_entries(
@@ -12109,7 +12109,6 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
   dout(20) << __func__ << " " << soid
 	   << " snapset " << obc->ssc->snapset
 	   << dendl;
-  snapid_t first, last;
   auto p = obc->ssc->snapset.clone_snaps.find(soid.snap);
   ceph_assert(p != obc->ssc->snapset.clone_snaps.end());
   if (p->second.empty()) {

@@ -337,11 +337,6 @@ TEST_P(IndepTest, out_progressive) {
       if (i > 0) cout << "marked out " << i - 1 << " ";
       cout << x << " -> " << out << std::endl;
 
-      int num_none = 0;
-      for (unsigned k=0; k<out.size(); ++k) {
-	if (out[k] == CRUSH_ITEM_NONE)
-	  num_none++;
-      }
       ASSERT_EQ(0, get_num_dups(out));
 
       // make sure nothing moved
