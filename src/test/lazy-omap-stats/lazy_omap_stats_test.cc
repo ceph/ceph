@@ -300,9 +300,7 @@ void LazyOmapStatsTest::check_one()
   string full_output = get_output();
   cout << full_output << endl;
   regex reg(
-      "\n"
-      R"((PG_STAT[\s\S]*)"
-      "\n)OSD_STAT"); // Strip OSD_STAT table so we don't find matches there
+      "\n((PG_STAT[\\s\\S]*)\n)OSD_STAT"); // Strip OSD_STAT table so we don't find matches there
   smatch match;
   regex_search(full_output, match, reg);
   auto truncated_output = match[1].str();
@@ -563,10 +561,7 @@ void LazyOmapStatsTest::wait_for_active_clean()
   cout << "Waiting for active+clean" << endl;
 
   int index = -1;
-  regex reg(
-      "\n"
-      R"((PG_STAT[\s\S]*))"
-      "\n +\n[0-9]");
+  regex reg(R"(PG_STAT[^\n]*\n)");
   string command = R"({"prefix": "pg dump"})";
   int num_not_clean;
   do {
