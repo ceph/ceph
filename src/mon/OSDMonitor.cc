@@ -8032,10 +8032,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     /* crimson-osd requires that the pool be replicated and that pg_num/pgp_num
      * be static.  User must also have specified set-allow-crimson */
     const auto *suffix = " (--crimson specified or osd_pool_default_crimson set)";
-    if (pool_type != pg_pool_t::TYPE_REPLICATED) {
-      *ss << "crimson-osd only supports replicated pools" << suffix;
-      return -EINVAL;
-    } else if (pg_autoscale_mode != "off") {
+    if (pg_autoscale_mode != "off") {
       *ss << "crimson-osd does not support changing pg_num or pgp_num, "
 	  << "pg_autoscale_mode must be set to 'off'" << suffix;
       return -EINVAL;

@@ -1331,11 +1331,9 @@ void PgScrubber::repair_oinfo_oid(ScrubMap& smap)
     if (o.attrs.find(OI_ATTR) == o.attrs.end()) {
       continue;
     }
-    bufferlist bl;
-    bl.push_back(o.attrs[OI_ATTR]);
     object_info_t oi;
     try {
-      oi.decode(bl);
+      oi.decode(o.attrs[OI_ATTR]);
     } catch (...) {
       continue;
     }
@@ -1350,13 +1348,12 @@ void PgScrubber::repair_oinfo_oid(ScrubMap& smap)
         << "...repaired";
       // Fix object info
       oi.soid = hoid;
-      bl.clear();
+      bufferlist bl;
       encode(oi,
              bl,
              m_pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 
-      bufferptr bp(bl.c_str(), bl.length());
-      o.attrs[OI_ATTR] = bp;
+      o.attrs[OI_ATTR] = std::move(bl);
 
       t.setattr(m_pg->coll, ghobject_t(hoid), OI_ATTR, bl);
       int r = m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t));
