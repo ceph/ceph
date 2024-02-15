@@ -598,12 +598,6 @@ public:
       ec_backend.handle_sub_write(from, std::move(msg), op, trace);
     }
 
-    ECUtil::HashInfoRef get_hash_info(
-      const hobject_t &hoid,
-      bool create
-    ) {
-      return ec_backend.get_hash_info(hoid, create);
-    }
     // end of iface
 
     ceph::ErasureCodeInterfaceRef ec_impl;
@@ -689,8 +683,12 @@ public:
   const ECUtil::stripe_info_t sinfo;
   /// If modified, ensure that the ref is held until the update is applied
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
-  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool create = false,
-				    const std::map<std::string, ceph::buffer::ptr, std::less<>> *attr = NULL);
+  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid,
+				    bool create,
+				    const std::map<std::string, ceph::buffer::list, std::less<>>& attr,
+				    uint64_t size);
+
+  int object_stat(const hobject_t &hoid, struct stat* st);
 
 public:
   ECBackend(
