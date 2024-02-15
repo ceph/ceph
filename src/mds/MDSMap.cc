@@ -807,8 +807,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     encode(min_compat_client, bl);
   }
   encode(required_client_features, bl);
-  encode(max_xattr_size, bl);
   encode(bal_rank_mask, bl);
+  encode(max_xattr_size, bl);
   encode(qdb_cluster_leader, bl);
   encode(qdb_cluster_members, bl);
   ENCODE_FINISH(bl);
@@ -958,11 +958,11 @@ void MDSMap::decode(bufferlist::const_iterator& p)
   }
 
   if (ev >= 17) {
-    decode(max_xattr_size, p);
+    decode(bal_rank_mask, p);
   }
 
   if (ev >= 18) {
-    decode(bal_rank_mask, p);
+    decode(max_xattr_size, p);
   }
 
   if (ev >= 19) {
