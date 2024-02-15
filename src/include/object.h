@@ -23,6 +23,9 @@
 #include <string>
 #include <string_view>
 
+#include <fmt/compile.h>
+#include <fmt/format.h>
+
 #include "include/rados.h"
 #include "include/unordered_map.h"
 #include "common/Formatter.h"
@@ -112,10 +115,10 @@ struct file_object_t {
 struct snapid_t {
   uint64_t val;
   // cppcheck-suppress noExplicitConstructor
-  snapid_t(uint64_t v=0) : val(v) {}
+  constexpr snapid_t(uint64_t v=0) : val(v) {}
   snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
   snapid_t operator++() { ++val; return *this; }
-  operator uint64_t() const { return val; }
+  constexpr operator uint64_t() const { return val; }
 };
 
 inline void encode(snapid_t i, ceph::buffer::list &bl) {
@@ -153,6 +156,25 @@ inline std::ostream& operator<<(std::ostream& out, const snapid_t& s) {
     return out << std::hex << s.val << std::dec;
 }
 
+namespace fmt {
+template <>
+struct formatter<snapid_t> {
+
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const snapid_t& snp, FormatContext& ctx) const
+  {
+    if (snp == CEPH_NOSNAP) {
+      return fmt::format_to(ctx.out(), "head");
+    }
+    if (snp == CEPH_SNAPDIR) {
+      return fmt::format_to(ctx.out(), "snapdir");
+    }
+    return fmt::format_to(ctx.out(), FMT_COMPILE("{:x}"), snp.val);
+  }
+};
+} // namespace fmt
 
 struct sobject_t {
   object_t oid;

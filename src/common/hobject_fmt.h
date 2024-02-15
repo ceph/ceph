@@ -9,7 +9,6 @@
 #include <fmt/ranges.h>
 
 #include "common/hobject.h"
-#include "include/object_fmt.h"
 #include "msg/msg_fmt.h"
 
 // \todo reimplement
