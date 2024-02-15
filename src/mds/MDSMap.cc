@@ -861,7 +861,8 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     decode(cas_pool, p);
   }
 
-  // kclient ignores everything from here
+  // kclient skips most of what's below
+  // see fs/ceph/mdsmap.c for current decoding
   __u16 ev = 1;
   if (struct_v >= 2)
     decode(ev, p);
