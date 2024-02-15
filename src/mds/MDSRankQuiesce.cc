@@ -253,7 +253,8 @@ void MDSRank::quiesce_cluster_update() {
 
   for (auto&& [gid, info] : mdsmap->get_mds_info()) {
     // if it has a rank and state <= ACTIVE, it's good enough
-    if (info.rank != MDS_RANK_NONE && info.state <= MDSMap::STATE_ACTIVE) {
+    // if (info.rank != MDS_RANK_NONE && info.state <= MDSMap::STATE_ACTIVE) {
+    if (info.rank != MDS_RANK_NONE && info.state == MDSMap::STATE_ACTIVE) {
       member_info.push(&info);
       membership.members.insert(info.global_id);
     }
