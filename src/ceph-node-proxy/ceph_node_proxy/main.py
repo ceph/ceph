@@ -2,6 +2,7 @@ from ceph_node_proxy.redfishdellsystem import RedfishDellSystem
 from ceph_node_proxy.api import NodeProxyApi
 from ceph_node_proxy.reporter import Reporter
 from ceph_node_proxy.util import Config, get_logger, http_req, write_tmp_file, CONFIG
+from urllib.error import HTTPError
 from typing import Dict, Any, Optional
 
 import argparse
@@ -33,6 +34,8 @@ class NodeProxyManager:
         self.cephx = {'cephx': {'name': self.cephx_name,
                                 'secret': self.cephx_secret}}
         self.config = Config('/etc/ceph/node-proxy.yml', config=CONFIG)
+        self.username: str = ''
+        self.password: str = ''
 
     def run(self) -> None:
         self.init()
@@ -44,15 +47,16 @@ class NodeProxyManager:
         self.init_api()
 
     def fetch_oob_details(self) -> Dict[str, str]:
-        headers, result, status = http_req(hostname=self.mgr_host,
-                                           port=self.mgr_agent_port,
-                                           data=json.dumps(self.cephx),
-                                           endpoint='/node-proxy/oob',
-                                           ssl_ctx=self.ssl_ctx)
-        if status != 200:
-            msg = f'No out of band tool details could be loaded: {status}, {result}'
+        try:
+            headers, result, status = http_req(hostname=self.mgr_host,
+                                               port=self.mgr_agent_port,
+                                               data=json.dumps(self.cephx),
+                                               endpoint='/node-proxy/oob',
+                                               ssl_ctx=self.ssl_ctx)
+        except HTTPError as e:
+            msg = f'No out of band tool details could be loaded: {e.code}, {e.reason}'
             self.log.debug(msg)
-            raise RuntimeError(msg)
+            raise
 
         result_json = json.loads(result)
         oob_details: Dict[str, str] = {
@@ -64,9 +68,13 @@ class NodeProxyManager:
         return oob_details
 
     def init_system(self) -> None:
-        oob_details = self.fetch_oob_details()
-        self.username: str = oob_details['username']
-        self.password: str = oob_details['password']
+        try:
+            oob_details = self.fetch_oob_details()
+            self.username = oob_details['username']
+            self.password = oob_details['password']
+        except HTTPError:
+            self.log.warning('No oob details could be loaded, exiting...')
+            raise SystemExit(1)
         try:
             self.system = RedfishDellSystem(host=oob_details['host'],
                                             port=oob_details['port'],
