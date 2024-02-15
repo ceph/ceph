@@ -308,13 +308,14 @@ void RGWCreateRole::execute(optional_yield y)
     try {
       if (role_obj) {
         RGWXMLDecoder::decode_xml("RoleId", role_id, role_obj, true);
+        RGWXMLDecoder::decode_xml("CreateDate", role->get_info().creation_date, role_obj);
       }
     } catch (RGWXMLDecoder::err& err) {
       ldpp_dout(this, 5) << "ERROR: unexpected xml: RoleId" << dendl;
       op_ret = -EINVAL;
       return;
     }
-    ldpp_dout(this, 0) << "role_id decoded from master zonegroup response is" << role_id << dendl;
+    ldpp_dout(this, 0) << "role_id decoded from master zonegroup response is " << role_id << dendl;
   }
 
   op_ret = role->create(s, true, role_id, y);
