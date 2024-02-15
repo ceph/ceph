@@ -98,8 +98,8 @@ Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op,
       async_completion<spawn::yield_context, void()> init(yield);
       auto ex = get_associated_executor(init.completion_handler);
 
-      librados::async_operate(context, ctx, r.obj.oid, &op, 0,
-                              bind_executor(ex, Handler{aio, ctx, r}), trace_ctx);
+      librados::async_operate(context, ctx, r.obj.oid, &op, 0, trace_ctx,
+                              bind_executor(ex, Handler{aio, ctx, r}));
     };
 }
 
