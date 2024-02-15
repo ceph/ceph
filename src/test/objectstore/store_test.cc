@@ -7030,6 +7030,15 @@ TEST_P(DeferredWriteTest, NewData) {
   SetVal(g_conf(), "bluestore_min_alloc_size", stringify(t.min_alloc_size).c_str());
   SetVal(g_conf(), "bluestore_max_blob_size", stringify(t.max_blob_size).c_str());
   SetVal(g_conf(), "bluestore_prefer_deferred_size", stringify(t.prefer_deferred_size).c_str());
+  // bluestore_prefer_deferred_size set to 0 is a special case
+  // when hdd-/ssd-specific settings applied.
+  // Need to adjust them as well if we want to have no deferred ops at all
+  // Fixes: https://tracker.ceph.com/issues/64443
+  //
+  if (0 == t.prefer_deferred_size) {
+    SetVal(g_conf(), "bluestore_prefer_deferred_size_hdd", "0");
+    SetVal(g_conf(), "bluestore_prefer_deferred_size_ssd", "0");
+  }
   g_conf().apply_changes(nullptr);
   DeferredSetup();
 
