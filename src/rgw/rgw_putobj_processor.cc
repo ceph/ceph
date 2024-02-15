@@ -74,6 +74,11 @@ static int process_completed(const AioResultList& completed, RawObjSet *written)
   return error.value_or(0);
 }
 
+void RadosWriter::set_head_obj(std::unique_ptr<rgw::sal::RGWObject> head)
+{
+  head_obj = std::move(head);
+}
+
 int RadosWriter::set_stripe_obj(const rgw_raw_obj& raw_obj)
 {
   stripe_obj = store->svc()->rados->obj(raw_obj);
@@ -388,6 +393,9 @@ int MultipartObjectProcessor::prepare_head()
   rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
   head_obj->raw_obj_to_obj(stripe_obj);
   head_obj->set_hash_source(target_obj->get_name());
+
+  // point part uploads at the part head instead of the final multipart head
+  writer.set_head_obj(head_obj->clone());
 
   r = writer.set_stripe_obj(stripe_obj);
   if (r < 0) {
