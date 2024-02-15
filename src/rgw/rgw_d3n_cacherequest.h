@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <aio.h>
 
+#include <boost/asio/spawn.hpp>
+
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "common/async/completion.h"
@@ -135,13 +137,10 @@ struct D3nL1CacheRequest {
     }
   };
 
-  void file_aio_read_abstract(const DoutPrefixProvider *dpp, spawn::yield_context yield,
+  void file_aio_read_abstract(const DoutPrefixProvider *dpp, boost::asio::yield_context yield,
                               std::string& cache_location, off_t read_ofs, off_t read_len,
                               rgw::Aio* aio, rgw::AioResult& r) {
-    using namespace boost::asio;
-    async_completion<spawn::yield_context, void()> init(yield);
-    auto ex = get_associated_executor(init.completion_handler);
-
+    auto ex = yield.get_executor();
     ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): oid=" << r.obj.oid << dendl;
     async_read(dpp, ex, cache_location+"/"+url_encode(r.obj.oid, true), read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
   }
