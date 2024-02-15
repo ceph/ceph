@@ -9062,12 +9062,25 @@ next:
       }
     }
 
+    int ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      cerr << "User has not been initialized or user does not exist" << std::endl;
+      return -ret;
+    }
+
+    const RGWUserInfo& info = user->get_info();
+    rgw_owner owner = info.user_id;
+    if (!info.account_id.empty()) {
+      cerr << "Reading stats for user account " << info.account_id << std::endl;
+      owner = info.account_id;
+    }
+
     constexpr bool omit_utilized_stats = false;
     RGWStorageStats stats(omit_utilized_stats);
     ceph::real_time last_stats_sync;
     ceph::real_time last_stats_update;
-    int ret = driver->load_stats(dpp(), null_yield, user->get_id(),
-                                 stats, last_stats_sync, last_stats_update);
+    ret = driver->load_stats(dpp(), null_yield, owner, stats,
+                             last_stats_sync, last_stats_update);
     if (ret < 0) {
       if (ret == -ENOENT) { /* in case of ENOENT */
         cerr << "User has not been initialized or user does not exist" << std::endl;

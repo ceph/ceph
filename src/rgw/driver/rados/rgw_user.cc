@@ -2323,8 +2323,15 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
 
   ruser = driver->get_user(info.user_id);
 
+  rgw_owner owner = info.user_id;
+  if (!info.account_id.empty()) {
+    ldpp_dout(dpp, 4) << "Reading stats for user account "
+        << info.account_id << dendl;
+    owner = info.account_id;
+  }
+
   if (op_state.sync_stats) {
-    ret = rgw_sync_all_stats(dpp, y, driver, ruser->get_id(), ruser->get_tenant());
+    ret = rgw_sync_all_stats(dpp, y, driver, owner, ruser->get_tenant());
     if (ret < 0) {
       return ret;
     }
@@ -2335,7 +2342,7 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   if (op_state.fetch_stats) {
     ceph::real_time last_synced; // ignored
     ceph::real_time last_updated; // ignored
-    int ret = driver->load_stats(dpp, y, ruser->get_id(), stats,
+    int ret = driver->load_stats(dpp, y, owner, stats,
                                  last_synced, last_updated);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
