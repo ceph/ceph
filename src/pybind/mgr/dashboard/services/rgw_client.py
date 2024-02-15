@@ -480,7 +480,7 @@ class RgwClient(RestClient):
     def _is_system_user(self, admin_path, userid, request=None) -> bool:
         # pylint: disable=unused-argument
         response = request()
-        return strtobool(response['data']['system'])
+        return strtobool(response['data']['system']) # type: ignore
 
     def is_system_user(self) -> bool:
         return self._is_system_user(self.admin_path, self.userid)
