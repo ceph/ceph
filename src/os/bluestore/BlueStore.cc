@@ -2865,7 +2865,7 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
     auto buf = src->bc.buffer_map.extract(src->bc.buffer_map.cbegin());
     buf.mapped().space = &dst->bc;
     if (dst->bc.buffer_map.count(buf.key()) == 0) {
-      dst->bc.buffer_map.insert({buf.key(), std::move(buf.mapped())});
+      dst->bc.buffer_map.emplace(buf.key(), std::move(buf.mapped()));
     }
   }
   // move BufferSpace writing
