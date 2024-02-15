@@ -207,7 +207,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
     auto bl = librados::async_operate(
-      context, ioctx, oid, op, flags, yield[ec]);
+      context, ioctx, oid, op, flags, trace_info, yield[ec]);
     if (pbl) {
       *pbl = std::move(bl);
     }
@@ -231,7 +231,7 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
     boost::system::error_code ec;
-    librados::async_operate(context, ioctx, oid, op, flags, yield[ec], trace_info);
+    librados::async_operate(context, ioctx, oid, op, flags, trace_info, yield[ec]);
     return -ec.value();
   }
   if (is_asio_thread) {
