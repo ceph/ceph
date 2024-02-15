@@ -1537,8 +1537,21 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
     }
   } else if (op_state.is_user_op()) {
     const rgw_user& uid = op_state.get_user_id();
-    ret = list_owner_bucket_info(dpp, y, driver, uid, uid.tenant,
-                                 op_state.marker, show_stats, flusher);
+    auto user = driver->get_user(uid);
+    ret = user->load_user(dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
+    const RGWUserInfo& info = user->get_info();
+    if (!info.account_id.empty()) {
+      ldpp_dout(dpp, 1) << "Listing buckets in user account "
+          << info.account_id << dendl;
+      ret = list_owner_bucket_info(dpp, y, driver, info.account_id, uid.tenant,
+                                   op_state.marker, show_stats, flusher);
+    } else {
+      ret = list_owner_bucket_info(dpp, y, driver, uid, uid.tenant,
+                                   op_state.marker, show_stats, flusher);
+    }
     if (ret < 0) {
       return ret;
     }
