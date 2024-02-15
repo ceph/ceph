@@ -3624,18 +3624,20 @@ int RadosRole::create(const DoutPrefixProvider *dpp, bool exclusive, const std::
   //arn
   info.arn = role_arn_prefix + info.tenant + ":role" + info.path + info.name;
 
-  // Creation time
-  real_clock::time_point t = real_clock::now();
+  if (info.creation_date.empty()) {
+    // Creation time
+    real_clock::time_point t = real_clock::now();
 
-  struct timeval tv;
-  real_clock::to_timeval(t, tv);
+    struct timeval tv;
+    real_clock::to_timeval(t, tv);
 
-  char buf[30];
-  struct tm result;
-  gmtime_r(&tv.tv_sec, &result);
-  strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
-  sprintf(buf + strlen(buf),".%03dZ",(int)tv.tv_usec/1000);
-  info.creation_date.assign(buf, strlen(buf));
+    char buf[30];
+    struct tm result;
+    gmtime_r(&tv.tv_sec, &result);
+    strftime(buf,30,"%Y-%m-%dT%H:%M:%S", &result);
+    sprintf(buf + strlen(buf),".%03dZ",(int)tv.tv_usec/1000);
+    info.creation_date.assign(buf, strlen(buf));
+  }
 
   auto& pool = store->svc()->zone->get_zone_params().roles_pool;
   ret = store_info(dpp, exclusive, y);

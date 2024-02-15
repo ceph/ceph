@@ -327,6 +327,7 @@ void RGWCreateRole::execute(optional_yield y)
     try {
       if (role_obj) {
         RGWXMLDecoder::decode_xml("RoleId", role_id, role_obj, true);
+        RGWXMLDecoder::decode_xml("CreateDate", role->get_info().creation_date, role_obj);
       }
     } catch (RGWXMLDecoder::err& err) {
       ldpp_dout(this, 5) << "ERROR: unexpected xml: RoleId" << dendl;
