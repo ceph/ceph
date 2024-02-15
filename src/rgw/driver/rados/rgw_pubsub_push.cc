@@ -19,7 +19,7 @@
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
 #endif
-#include <boost/asio/yield.hpp>
+//#include <boost/asio/yield.hpp>
 #include <boost/algorithm/string.hpp>
 #include <functional>
 #include "rgw_perf_counters.h"
@@ -153,7 +153,7 @@ public:
       boost::system::error_code ec;
       auto yield = y.get_yield_context();
       auto&& token = yield[ec];
-      boost::asio::async_initiate<spawn::yield_context, Signature>(
+      boost::asio::async_initiate<boost::asio::yield_context, Signature>(
           [this] (auto handler, auto ex) {
             completion = Completion::create(ex, std::move(handler));
           }, token, yield.get_executor());

@@ -1363,10 +1363,15 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
     using namespace rgw;
     if (svc.site->is_meta_master() &&
         all_zonegroups_support(*svc.site, zone_features::notification_v2)) {
-      spawn::spawn(v1_topic_migration, [this] (spawn::yield_context yield) {
+      boost::asio::spawn(v1_topic_migration, [this] (boost::asio::yield_context yield) {
             DoutPrefix dpp{cct, dout_subsys, "v1 topic migration: "};
             rgwrados::topic_migration::migrate(&dpp, driver, v1_topic_migration, yield);
+          }, [] (std::exception_ptr eptr) {
+            if (eptr) std::rethrow_exception(eptr);
           });
+      // TODO: we run this on a separate thread so shutdown can cancel it with
+      // v1_topic_migration.stop(), but we could run it on the global thread
+      // pool and cancel spawn() with a cancellation_signal instead
       v1_topic_migration.start(1);
     }
   }
