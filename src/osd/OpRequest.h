@@ -35,6 +35,7 @@ public:
   bool op_info_needs_init() const { return op_info.get_flags() == 0; }
   bool check_rmw(int flag) const { return op_info.check_rmw(flag); }
   bool may_read() const { return op_info.may_read(); }
+  bool may_read_data() const { return op_info.may_read_data(); }
   bool may_write() const { return op_info.may_write(); }
   bool may_cache() const { return op_info.may_cache(); }
   bool rwordered_forced() const { return op_info.rwordered_forced(); }
