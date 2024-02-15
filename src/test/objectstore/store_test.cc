@@ -7101,6 +7101,201 @@ INSTANTIATE_TEST_SUITE_P(
   ));
 #endif
 
+class DeferredReplayTest : public DeferredWriteTest {
+};
+
+TEST_P(DeferredReplayTest, DeferredReplay) {
+  const bool print = false;
+  deferred_test_t t = GetParam();
+  SetVal(g_conf(), "bdev_block_size", stringify(t.bdev_block_size).c_str());
+  SetVal(g_conf(), "bluestore_min_alloc_size", stringify(t.min_alloc_size).c_str());
+  SetVal(g_conf(), "bluestore_max_blob_size", stringify(t.max_blob_size).c_str());
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", stringify(t.prefer_deferred_size).c_str());
+  // forbid periodic deferred ops submission to keep them pending
+  // until umount.
+  SetVal(g_conf(), "bluestore_max_defer_interval", "0");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+
+  int r;
+  coll_t cid;
+  const PerfCounters* logger = store->get_perf_counters();
+  ObjectStore::CollectionHandle ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    auto offset = offsets[0];
+    auto length = lengths[0];
+    std::string hname = fmt::format("test-{}-{}", offset, length);
+    ghobject_t hoid(hobject_t(hname, "", CEPH_NOSNAP, 0, -1, ""));
+    {
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    if (print)
+      std::cout << hname << std::endl;
+
+    auto w_new =             logger->get(l_bluestore_write_new);
+    auto i_deferred_w =      logger->get(l_bluestore_issued_deferred_writes);
+    {
+      C_SaferCond c;
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append(std::string(length, 'x'));
+      t.write(cid, hoid, offset, bl.length(), bl,
+              CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+      t.register_on_commit(&c);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+      c.wait();
+    }
+    uint32_t first_db = offset / t.bdev_block_size;
+    uint32_t last_db = (offset + length - 1) / t.bdev_block_size;
+
+    uint32_t write_size = (last_db - first_db + 1) * t.bdev_block_size;
+    if (write_size < t.prefer_deferred_size) {
+      // expect no direct writes
+      ASSERT_EQ(w_new,                 logger->get(l_bluestore_write_new));
+      ASSERT_EQ(i_deferred_w + 1,      logger->get(l_bluestore_issued_deferred_writes));
+      ASSERT_EQ(0, logger->get(l_bluestore_submitted_deferred_writes));
+    }
+  }
+  auto cct = store->cct;
+  // disable DB txc commits during umount,
+  // hence deferred op(s) aren't fully committed and
+  // are left pending in DB.
+  //
+  SetVal(g_conf(), "bluestore_debug_omit_kv_commit", "true");
+  g_conf().apply_changes(nullptr);
+  store->umount();
+  SetVal(g_conf(), "bluestore_debug_omit_kv_commit", "false");
+  g_conf().apply_changes(nullptr);
+  store = ObjectStore::create(cct,
+                              get_type(),
+                              get_data_dir(),
+                              "store_test_temp_journal");
+  store->mount();
+  logger = store->get_perf_counters();
+  // mount performs deferred ops replay and submits pending ones,
+  // hence we get a submitted deferred write.
+  ASSERT_EQ(1, logger->get(l_bluestore_submitted_deferred_writes));
+}
+
+
+TEST_P(DeferredReplayTest, DeferredReplayInReadOnly) {
+  const bool print = false;
+  deferred_test_t t = GetParam();
+  SetVal(g_conf(), "bdev_block_size", stringify(t.bdev_block_size).c_str());
+  SetVal(g_conf(), "bluestore_min_alloc_size", stringify(t.min_alloc_size).c_str());
+  SetVal(g_conf(), "bluestore_max_blob_size", stringify(t.max_blob_size).c_str());
+  SetVal(g_conf(), "bluestore_prefer_deferred_size", stringify(t.prefer_deferred_size).c_str());
+  // forbid periodic deferred ops submission to keep them pending
+  // until umount.
+  SetVal(g_conf(), "bluestore_max_defer_interval", "0");
+  g_conf().apply_changes(nullptr);
+  DeferredSetup();
+
+  int r;
+  coll_t cid;
+  const PerfCounters* logger = store->get_perf_counters();
+  ObjectStore::CollectionHandle ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    auto offset = offsets[0];
+    auto length = lengths[0];
+    std::string hname = fmt::format("test-{}-{}", offset, length);
+    ghobject_t hoid(hobject_t(hname, "", CEPH_NOSNAP, 0, -1, ""));
+    {
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    if (print)
+      std::cout << hname << std::endl;
+
+    auto w_new =             logger->get(l_bluestore_write_new);
+    auto i_deferred_w =      logger->get(l_bluestore_issued_deferred_writes);
+    {
+      C_SaferCond c;
+      ObjectStore::Transaction t;
+      bufferlist bl;
+      bl.append(std::string(length, 'x'));
+      t.write(cid, hoid, offset, bl.length(), bl,
+              CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+      t.register_on_commit(&c);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+      c.wait();
+    }
+    uint32_t first_db = offset / t.bdev_block_size;
+    uint32_t last_db = (offset + length - 1) / t.bdev_block_size;
+
+    uint32_t write_size = (last_db - first_db + 1) * t.bdev_block_size;
+    if (write_size < t.prefer_deferred_size) {
+      // expect no direct writes
+      ASSERT_EQ(w_new,                 logger->get(l_bluestore_write_new));
+      ASSERT_EQ(i_deferred_w + 1,      logger->get(l_bluestore_issued_deferred_writes));
+      ASSERT_EQ(0, logger->get(l_bluestore_submitted_deferred_writes));
+    }
+  }
+  auto cct = store->cct;
+  // disable DB txc commits during umount,
+  // hence deferred op(s) aren't fully committed and
+  // kept in DB.
+  //
+  SetVal(g_conf(), "bluestore_debug_omit_kv_commit", "true");
+  g_conf().apply_changes(nullptr);
+  store->umount();
+  SetVal(g_conf(), "bluestore_debug_omit_kv_commit", "false");
+  g_conf().apply_changes(nullptr);
+  store = ObjectStore::create(cct,
+                              get_type(),
+                              get_data_dir(),
+                              "store_test_temp_journal");
+  store->mount_readonly();
+  logger = store->get_perf_counters();
+  // make sure we don't inherit old perf counters from the previous mount
+  ASSERT_EQ(0, logger->get(l_bluestore_issued_deferred_writes));
+  // mount_readonly performs deferred ops replay and submits pending ones,
+  // hence we get a submitted deferred write.
+  // Deferred op isn't removed though - will see that on the next mount.
+  ASSERT_EQ(1, logger->get(l_bluestore_submitted_deferred_writes));
+
+  store->umount_readonly();
+  store = ObjectStore::create(cct,
+                              get_type(),
+                              get_data_dir(),
+                              "store_test_temp_journal");
+  store->mount();
+  logger = store->get_perf_counters();
+  // mount performs deferred ops replay and submits pending ones,
+  // preceding mount_readonly left deferred op pending, although applied it.
+  // Hence we get a submitted deferred write once again.
+  ASSERT_EQ(1, logger->get(l_bluestore_submitted_deferred_writes));
+}
+
+#if defined(WITH_BLUESTORE)
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  DeferredReplayTest,
+  ::testing::Values(
+    //              bdev      alloc      blob       deferred
+    deferred_test_t{4 * 1024, 4 * 1024,  16 * 1024, 32 * 1024}
+  ));
+#endif
+
 void doMany4KWritesTest(ObjectStore* store,
                         unsigned max_objects,
                         unsigned max_ops,
