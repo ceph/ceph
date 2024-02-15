@@ -1752,8 +1752,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     }
     MDS_STATE_ACTIVE_ORD = MDS_STATE_ORD["up:active"]
 
-    def get_quiesce_leader_info(self, fscid: str) -> dict:
-        leader_info = None
+    def get_quiesce_leader_info(self, fscid: str) -> Optional[dict]:
+        leader_info: Optional[dict] = None
 
         for fs in self.get("fs_map")['filesystems']:
             if fscid != fs["id"]:
@@ -1772,16 +1772,16 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         leader_info = info
                     elif info['rank'] == leader_info['rank']:
                         state_ord = self.MDS_STATE_ORD.get(info['state'])
-                        leader_state_ord = self.MDS_STATE_ORD.get(leader_info['state'])
-
-                        if state_ord == self.MDS_STATE_ACTIVE_ORD and state_ord > leader_state_ord:
+                        # if there are more than one daemons with the same rank
+                        # only one of them can be active
+                        if state_ord == self.MDS_STATE_ACTIVE_ORD:
                             leader_info = info
             break
 
         return leader_info
 
-    def tell_quiesce_leader(self, fscid: str, cmd_dict: dict, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
-        qleader: dict = self.get_quiesce_leader_info(fscid)
+    def tell_quiesce_leader(self, fscid: str, cmd_dict: dict) -> Tuple[int, str, str]:
+        qleader = self.get_quiesce_leader_info(fscid)
         if qleader is None:
             self.log.warn("Couldn't resolve the quiesce leader for fscid %s" % fscid)
             return (-errno.ENOENT, "", "Couldn't resolve the quiesce leader for fscid %s" % fscid)
