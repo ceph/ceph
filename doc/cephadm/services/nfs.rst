@@ -15,7 +15,7 @@ Deploying NFS ganesha
 =====================
 
 Cephadm deploys NFS Ganesha daemon (or set of daemons).  The configuration for
-NFS is stored in the ``nfs-ganesha`` pool and exports are managed via the
+NFS is stored in the ``.nfs`` pool and exports are managed via the
 ``ceph nfs export ...`` commands and via the dashboard.
 
 To deploy a NFS Ganesha gateway, run the following command:
