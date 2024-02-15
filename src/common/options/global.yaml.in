@@ -4008,31 +4008,18 @@ options:
   flags:
   - runtime
   see_also:
-  - bdev_async_discard
-  - bdev_async_discard_threads
-- name: bdev_async_discard
-  desc: send discards to the block device in one or more threads
-  type: uint
-  level: advanced
-  default: false
-  with_legacy: false
-  flags:
-  - runtime
-  see_also:
-  - bdev_enable_discard
   - bdev_async_discard_threads
 - name: bdev_async_discard_threads
   desc: number of discard threads used to issue discards to the device
   type: uint
   level: advanced
-  default: 1
-  min: 1
+  default: 0
+  min: 0
   with_legacy: false
   flags:
   - runtime
   see_also:
   - bdev_enable_discard
-  - bdev_async_discard
 - name: bdev_flock_retry_interval
   type: float
   level: advanced
