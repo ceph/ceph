@@ -39,7 +39,7 @@ postfix = "-" + time.strftime(TIME_FORMAT, time.localtime())
 
 current_branch = check_output('git rev-parse --abbrev-ref HEAD',
                               shell=True).strip().decode()
-if current_branch in 'mimic nautilus octopus pacific quincy reef'.split():
+if current_branch in 'mimic nautilus octopus pacific quincy reef squid'.split():
     postfix += '-' + current_branch
     print(f"Adding current branch name '-{current_branch}' as a postfix")
 
