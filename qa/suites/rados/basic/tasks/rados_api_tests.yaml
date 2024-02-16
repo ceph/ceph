@@ -11,6 +11,14 @@ overrides:
     - \(POOL_APP_NOT_ENABLED\)
     - \(PG_AVAILABILITY\)
     - \(PG_DEGRADED\)
+    - \(MON_DOWN\)
+    - missing hit_sets
+    - do not have an application enabled
+    - application not enabled on pool
+    - pool application
+    - mons down
+    - out of quorum
+    - needs hit_set_type to be set but it is not
     conf:
       client:
         debug ms: 1

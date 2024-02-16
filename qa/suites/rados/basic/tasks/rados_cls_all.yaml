@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-ignorelist:
     - \(PG_AVAILABILITY\)
+    - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         osd_class_load_list: "*"

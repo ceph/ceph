@@ -1,3 +1,11 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(MON_DOWN\)
+      - \(PG_AVAILABILITY\)
+      - mon down
+      - mons down
+      - out of quorum
 tasks:
 - cephadm:
     conf:

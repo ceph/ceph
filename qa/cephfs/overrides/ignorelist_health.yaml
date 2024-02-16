@@ -10,3 +10,9 @@ overrides:
       - \(MDS_ALL_DOWN\)
       - \(MDS_UP_LESS_THAN_MAX\)
       - \(FS_INLINE_DATA_DEPRECATED\)
+      - \(PG_DEGRADED\)
+      - Degraded data redundancy
+      - \(PG_
+      - MDS_INSUFFICIENT_STANDBY
+      - deprecated feature inline_data
+      - compat changed unexpectedly

@@ -16,3 +16,11 @@ overrides:
       - \(REQUEST_SLOW\)
       - \(TOO_FEW_PGS\)
       - slow request
+      - \(MON_DOWN\)
+      - osds down
+      - mons down
+      - flag\(s\) set
+      - out of quorum
+      - PG_
+      - Reduced data availability
+      - stuck undersized

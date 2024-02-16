@@ -1,3 +1,9 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - \(HOST_IN_MAINTENANCE\)
+      - \(OSD_DOWN\)
+      - \(MON_DOWN\)
 roles:
 # 3 osd roles on host.a is required for cephadm task. It checks if the cluster is healthy.
 # More daemons will be deployed on both hosts in e2e tests.

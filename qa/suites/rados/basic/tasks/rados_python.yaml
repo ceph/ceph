@@ -8,6 +8,13 @@ overrides:
     - \(OSD_
     - \(OBJECT_
     - \(POOL_APP_NOT_ENABLED\)
+    - \(MON_DOWN\)
+    - mons down
+    - application not enabled on pool
+    - do not have an application enabled
+    - pool application
+    - out of quorum
+    - needs hit_set_type to be set but it is not
 tasks:
 - workunit:
     clients:
