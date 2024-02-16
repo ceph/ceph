@@ -611,3 +611,104 @@ TEST_F(TestClient, LlreadvLlwritevInvalidFileHandle) {
   ASSERT_EQ(bytes_read, -CEPHFS_EBADF);
   ASSERT_EQ(bl.length(), 0);
 }
+
+TEST_F(TestClient, LlreadvContiguousLlwritevNonContiguous) {
+  /* Test writing at non-contiguous memory locations, and make sure
+  contiguous read returns bytes requested. */
+
+  int mypid = getpid();
+  char filename[256];
+
+  client->unmount();
+  TearDown();
+  SetUp();
+
+  sprintf(filename, "test_llreadvcontiguousllwritevnoncontiguousfile%u", mypid);
+
+  Inode *root, *file;
+  root = client->get_root();
+  ASSERT_NE(root, (Inode *)NULL);
+
+  Fh *fh;
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, client->ll_createx(root, filename, 0666,
+				  O_RDWR | O_CREAT | O_TRUNC,
+				  &file, &fh, &stx, 0, 0, myperm));
+
+  const int NUM_BUF = 5;
+  char out_buf_0[] = "hello ";
+  char out_buf_1[] = "world\n";
+  char out_buf_2[] = "Ceph - ";
+  char out_buf_3[] = "a scalable distributed ";
+  char out_buf_4[] = "storage system\n";
+
+  struct iovec iov_out_non_contiguous[NUM_BUF] = {
+    {out_buf_0, sizeof(out_buf_0)},
+    {out_buf_1, sizeof(out_buf_1)},
+    {out_buf_2, sizeof(out_buf_2)},
+    {out_buf_3, sizeof(out_buf_3)},
+    {out_buf_4, sizeof(out_buf_4)}
+  };
+
+  char in_buf_0[sizeof(out_buf_0)];
+  char in_buf_1[sizeof(out_buf_1)];
+  char in_buf_2[sizeof(out_buf_2)];
+  char in_buf_3[sizeof(out_buf_3)];
+  char in_buf_4[sizeof(out_buf_4)];
+
+  struct iovec iov_in_contiguous[NUM_BUF] = {
+    {in_buf_0, sizeof(in_buf_0)},
+    {in_buf_1, sizeof(in_buf_1)},
+    {in_buf_2, sizeof(in_buf_2)},
+    {in_buf_3, sizeof(in_buf_3)},
+    {in_buf_4, sizeof(in_buf_4)}
+  };
+
+  ssize_t bytes_to_write = 0, total_bytes_written = 0, total_bytes_read = 0;
+  for(int i = 0; i < NUM_BUF; ++i) {
+    bytes_to_write += iov_out_non_contiguous[i].iov_len;
+  }
+
+  std::unique_ptr<C_SaferCond> writefinish = nullptr;
+  std::unique_ptr<C_SaferCond> readfinish = nullptr;
+
+  int64_t rc;
+  bufferlist bl;
+
+  struct iovec *current_iov = iov_out_non_contiguous;
+
+  for(int i = 0; i < NUM_BUF; ++i) {
+    writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-non-contiguous"));
+    rc = client->ll_preadv_pwritev(fh, current_iov++, 1, i * NUM_BUF * 100,
+                                   true, writefinish.get(), nullptr);
+    ASSERT_EQ(rc, 0);
+    total_bytes_written += writefinish->wait();
+  }
+  ASSERT_EQ(total_bytes_written, bytes_to_write);
+
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-contiguous"));
+  rc = client->ll_preadv_pwritev(fh, iov_in_contiguous, NUM_BUF, 0, false,
+                                 readfinish.get(), &bl);
+  ASSERT_EQ(rc, 0);
+  total_bytes_read = readfinish->wait();
+  ASSERT_EQ(total_bytes_read, bytes_to_write);
+  ASSERT_EQ(bl.length(), bytes_to_write);
+
+  copy_bufferlist_to_iovec(iov_in_contiguous, NUM_BUF, &bl,
+                           total_bytes_read);
+  /* since the iovec structures are written at gaps of 100, only the first
+  iovec structure content should match when reading contiguously while rest
+  of the read buffers should just be 0s(holes filled with zeros) */
+  ASSERT_EQ(0, strncmp((const char*)iov_in_contiguous[0].iov_base,
+                       (const char*)iov_out_non_contiguous[0].iov_base,
+                       iov_out_non_contiguous[0].iov_len));
+  for(int i = 1; i < NUM_BUF; ++i) {
+    ASSERT_NE(0, strncmp((const char*)iov_in_contiguous[i].iov_base,
+                         (const char*)iov_out_non_contiguous[i].iov_base,
+                         iov_out_non_contiguous[i].iov_len));
+  }
+
+  client->ll_release(fh);
+  ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));        
+}
