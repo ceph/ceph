@@ -191,17 +191,16 @@ class ZoneConn(object):
             self.conn = get_gateway_connection(self.zone.gateways[0], self.credentials)
             self.secure_conn = get_gateway_secure_connection(self.zone.gateways[0], self.credentials)
 
-            self.iam_conn = get_gateway_iam_connection(self.zone.gateways[0], self.credentials)
             region = "" if self.zone.zonegroup is None else self.zone.zonegroup.name
+            self.iam_conn = get_gateway_iam_connection(self.zone.gateways[0], self.credentials, region)
             self.s3_client = get_gateway_s3_client(self.zone.gateways[0], self.credentials, region)
-            self.sns_client = get_gateway_sns_client(self.zone.gateways[0], self.credentials,region)
+            self.sns_client = get_gateway_sns_client(self.zone.gateways[0], self.credentials, region)
 
             # create connections for the rest of the gateways (if exist)
             for gw in list(self.zone.gateways):
                 get_gateway_connection(gw, self.credentials)
                 get_gateway_secure_connection(gw, self.credentials)
-
-                get_gateway_iam_connection(gw, self.credentials)
+                get_gateway_iam_connection(gw, self.credentials, region)
 
 
     def get_connection(self):
@@ -369,10 +368,11 @@ class Credentials:
         return ['--access-key', self.access_key, '--secret', self.secret]
 
 class User(SystemObject):
-    def __init__(self, uid, data = None, name = None, credentials = None, tenant = None):
+    def __init__(self, uid, data = None, name = None, credentials = None, tenant = None, account = None):
         self.name = name
         self.credentials = credentials or []
         self.tenant = tenant
+        self.account = account
         super(User, self).__init__(data, uid)
 
     def user_arg(self):
@@ -380,6 +380,8 @@ class User(SystemObject):
         args = ['--uid', self.id]
         if self.tenant:
             args += ['--tenant', self.tenant]
+        if self.account:
+            args += ['--account-id', self.account, '--account-root']
         return args
 
     def build_command(self, command):
