@@ -3517,7 +3517,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
       if (!osdmap.get_allow_crimson()) {
 	mon.clog->info()
 	  << "Disallowing boot of crimson-osd without allow_crimson "
-	  << "OSDMap flag.  Run ceph osd set_allow_crimson to set "
+	  << "OSDMap flag.  Run ceph osd set-allow-crimson to set "
 	  << "allow_crimson flag.  Note that crimson-osd is "
 	  << "considered unstable and may result in crashes or "
 	  << "data loss.  Its usage should be restricted to "
