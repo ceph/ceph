@@ -34,6 +34,7 @@ namespace rgw::putobj {
       _state(State::DIGEST)
   {
     cksum::Digest* digest = cksum::get_digest(dv);
+    /* XXXX remove this */
     std::cout << "ctor had digest " << _digest
 	      << " and got digest: " << digest
 	      << std::endl;
@@ -75,10 +76,4 @@ namespace rgw::putobj {
     return 0;
   }
 
-  RGWPutObj_Cksum::~RGWPutObj_Cksum()
-  {
-    if ((_state > State::START) &&
-	(_state < State::FINAL))
-      (void) finalize();
-  }
 } // namespace rgw::putobj

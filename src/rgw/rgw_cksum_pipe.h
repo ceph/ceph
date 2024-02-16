@@ -52,7 +52,7 @@ namespace rgw::putobj {
     RGWPutObj_Cksum(rgw::sal::DataProcessor* next, rgw::cksum::Type _type,
 		    cksum_hdr_t&& _hdr);
     RGWPutObj_Cksum(RGWPutObj_Cksum& rhs) = delete;
-    ~RGWPutObj_Cksum();
+    ~RGWPutObj_Cksum() {}
 
     cksum::Type type() { return _type; }
     cksum::Digest* digest() const { return _digest; }
