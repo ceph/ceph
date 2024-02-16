@@ -8,6 +8,7 @@
 #include <string_view>
 #include <boost/container/flat_set.hpp>
 #include "common/sstring.hh"
+#include "common/strtol.h"
 #include "common/ceph_json.h"
 #include "include/ceph_assert.h" /* needed because of common/ceph_json.h */
 #include "rgw_op.h"
@@ -782,6 +783,23 @@ inline void dump_header_if_nonempty(req_state* s,
   }
 }
 
+static inline int64_t parse_content_length(const char *content_length)
+{
+  int64_t len = -1;
+
+  if (*content_length == '\0') {
+    len = 0;
+  } else {
+    std::string err;
+    len = strict_strtoll(content_length, 10, &err);
+    if (!err.empty()) {
+      len = -1;
+    }
+  }
+
+  return len;
+} /* parse_content_length */
+
 inline std::string compute_domain_uri(const req_state *s) {
   std::string uri = (!s->info.domain.empty()) ? s->info.domain :
     [&s]() -> std::string {
@@ -799,7 +817,6 @@ inline std::string compute_domain_uri(const req_state *s) {
 }
 
 extern void dump_content_length(req_state *s, uint64_t len);
-extern int64_t parse_content_length(const char *content_length);
 extern void dump_etag(req_state *s,
                       const std::string_view& etag,
                       bool quoted = false);

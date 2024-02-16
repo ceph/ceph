@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <cstdint>
 #include <errno.h>
 #include <array>
 #include <string.h>
@@ -5628,9 +5629,9 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
    *   because the URL is used to upload an arbitrary payload. Instead, you
    *   use a constant string UNSIGNED-PAYLOAD.
    *
-   * This means we have absolutely no business in spawning completer. Both
-   * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
-   * by default. We don't need to change that. */
+   * This means that, in the absence of a trailer, we don't need to spawn
+   * a completer. Both aws4_auth_needs_complete and aws4_auth_streaming_mode
+   * are set to false by default. We don't need to change that. */
   return {
     access_key_id,
     date,
@@ -5768,19 +5769,22 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
     throw -ERR_AMZ_CONTENT_SHA256_MISMATCH;
   }
 
-  /* Requests authenticated with the Query Parameters are treated as unsigned.
-   * From "Authenticating Requests: Using Query Parameters (AWS Signature
-   * Version 4)":
-   *
-   *   You don't include a payload hash in the Canonical Request, because
-   *   when you create a presigned URL, you don't know the payload content
-   *   because the URL is used to upload an arbitrary payload. Instead, you
-   *   use a constant string UNSIGNED-PAYLOAD.
-   *
-   * This means we have absolutely no business in spawning completer. Both
-   * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
-   * by default. We don't need to change that. */
-  if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s) || is_non_s3_op) {
+  /* Traditional UNSIGNED-PAYLOAD requests do not require a completer, but since
+   * 2022, even unsigned payload requests can be sent as aws-chunked and may
+   * have a checksum trailer */
+
+  auto traditional_v4_unsigned =
+    is_traditional_v4_unsigned_payload(exp_payload_hash);
+  auto v4_unsigned = is_v4_payload_unsigned(exp_payload_hash);
+  auto v4_unsigned_chunked = is_v4_payload_unsigned_chunked(exp_payload_hash);
+  auto checksum_trailer = have_checksum_trailer(exp_payload_hash);
+  auto trailer_signature = expect_trailer_signature(exp_payload_hash);
+
+  if (traditional_v4_unsigned ||
+      (v4_unsigned && !checksum_trailer) ||
+      is_v4_payload_empty(s) ||
+      is_non_s3_op) {
+    ldpp_dout(s, 10) << __func__ << ": UNSIGNED-PAYLOAD or other v4 no-completer case" << dendl;
     return {
       access_key_id,
       client_signature,
@@ -5855,9 +5859,6 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         cmpl_factory
       };
     } else {
-      /* IMHO "streamed" doesn't fit too good here. I would prefer to call
-       * it "chunked" but let's be coherent with Amazon's terminology. */
-
       ldpp_dout(s, 10) << "body content detected in multiple chunks" << dendl;
 
       /* payload in multiple chunks */
@@ -5883,11 +5884,31 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       /* In the case of query string-based authentication there should be no
        * x-amz-content-sha256 header and the value "UNSIGNED-PAYLOAD" is used
        * for CanonReq. */
+
+      uint32_t flags{AWSv4ComplMulti::FLAG_NONE};
+
+      if (v4_unsigned) {
+	flags |= AWSv4ComplMulti::FLAG_UNSIGNED_PAYLOAD;
+      }
+
+      if (checksum_trailer) {
+	flags |= AWSv4ComplMulti::FLAG_TRAILING_CHECKSUM;
+      }
+
+      if (v4_unsigned_chunked) {
+	flags |= AWSv4ComplMulti::FLAG_UNSIGNED_CHUNKED;
+      }
+
+      if (trailer_signature) {
+	flags |= AWSv4ComplMulti::FLAG_TRAILER_SIGNATURE;
+      }
+
       const auto cmpl_factory = std::bind(AWSv4ComplMulti::create,
                                           s,
                                           date,
                                           credential_scope,
                                           client_signature,
+					  flags,
                                           std::placeholders::_1);
       return {
         access_key_id,
