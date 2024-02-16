@@ -17,7 +17,11 @@ FreelistManager *FreelistManager::create(
   if (type == "bitmap") {
     return new BitmapFreelistManager(cct, "B", "b");
   }
-  if (type == "null") {
+  // Originally "null" was used but we've switched to "nil" as Config engine
+  // has specific handling for "null" keyword hence it can't be used
+  // for bluestore_freelist_type parameter.
+  // Leaving "null" handling for backward compatibility.
+  if (type == "null" || type == "nil") {
     // use BitmapFreelistManager with the null option to stop allocations from going to RocksDB
     auto *fm = new BitmapFreelistManager(cct, "B", "b");
     fm->set_null_manager();
