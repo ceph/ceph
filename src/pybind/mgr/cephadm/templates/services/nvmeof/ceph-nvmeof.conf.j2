@@ -1,0 +1,37 @@
+# {{ cephadm_managed }}
+[gateway]
+name = {{ name }}
+group = {{ spec.group if spec.group is not none else '' }}
+addr = {{ addr }}
+port = {{ port }}
+enable_auth = {{ spec.enable_auth }}
+state_update_notify = True
+state_update_interval_sec = 5
+min_controller_id = {{ spec.min_controller_id }}
+max_controller_id = {{ spec.max_controller_id }}
+enable_spdk_discovery_controller = {{ spec.enable_spdk_discovery_controller }}
+
+[ceph]
+pool = {{ spec.pool }}
+config_file = /etc/ceph/ceph.conf
+id = {{ rados_id }}
+
+[mtls]
+server_key = {{ spec.server_key }}
+client_key = {{ spec.client_key }}
+server_cert = {{ spec.server_cert }}
+client_cert = {{ spec.client_cert }}
+
+[spdk]
+tgt_path = {{ spec.tgt_path }}
+rpc_socket = {{ rpc_socket }}
+timeout = {{ spec.timeout }}
+log_level = {{ log_level }}
+conn_retries = {{ spec.conn_retries }}
+transports = {{ spec.transports }}
+{% if transport_tcp_options %}
+transport_tcp_options = {{ transport_tcp_options }}
+{% endif %}
+{% if spec.tgt_cmd_extra_args %}
+tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
+{% endif %}

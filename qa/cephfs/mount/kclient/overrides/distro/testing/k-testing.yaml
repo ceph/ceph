@@ -1,0 +1,4 @@
+kernel:
+  client:
+    branch: testing
+ktype: upstream
