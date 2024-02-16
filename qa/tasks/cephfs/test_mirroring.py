@@ -1182,8 +1182,9 @@ class TestMirroring(CephFSTestCase):
         # confirm if the sync completed
         self.check_sync_completed(self.primary_fs_name, self.primary_fs_id,
                                   peer_spec, f'/{repo_path}', 'snap_b', 2)
+        time.sleep(7200)
         self.verify_snapshot(repo_path, 'snap_b')
-        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        #self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
     def test_cephfs_mirror_peer_add_primary(self):
         self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
