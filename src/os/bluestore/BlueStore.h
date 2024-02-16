@@ -526,13 +526,13 @@ public:
     std::atomic_int nref = {0}; ///< reference count
     bool loaded = false;
 
-    CollectionRef coll;
+    CollectionRef collection;
     union {
       uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
       bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
     };
 
-    SharedBlob(Collection *_coll) : coll(_coll), sbid_unloaded(0) {
+    SharedBlob(Collection *_coll) : collection(_coll), sbid_unloaded(0) {
     }
     SharedBlob(uint64_t i, Collection *_coll);
     ~SharedBlob();
@@ -562,10 +562,10 @@ public:
       return l.get_sbid() == r.get_sbid();
     }
     inline BufferCacheShard* get_cache() {
-      return coll ? coll->cache : nullptr;
+      return collection ? collection->cache : nullptr;
     }
     inline SharedBlobSet* get_parent() {
-      return coll ? &(coll->shared_blob_set) : nullptr;
+      return collection ? &(collection->shared_blob_set) : nullptr;
     }
     inline bool is_loaded() const {
       return loaded;
@@ -596,7 +596,7 @@ public:
     void add(Collection* coll, SharedBlob *sb) {
       std::lock_guard l(lock);
       sb_map[sb->get_sbid()] = sb;
-      sb->coll = coll;
+      sb->collection = coll;
     }
 
     bool remove(SharedBlob *sb, bool verify_nref_is_zero=false) {
@@ -632,17 +632,19 @@ public:
     std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
-    SharedBlobRef shared_blob;      ///< shared blob state (if any)
+    CollectionRef collection;
 
     void set_shared_blob(SharedBlobRef sb) {
       ceph_assert((bool)sb);
       ceph_assert(!shared_blob);
+      ceph_assert(sb->collection = collection);
       shared_blob = sb;
-      ceph_assert(shared_blob->get_cache());
-      shared_blob->get_cache()->add_blob();
+      ceph_assert(get_cache());
     }
+    Blob(CollectionRef collection) : collection(collection) {}
     BufferSpace bc;
   private:
+    SharedBlobRef shared_blob;      ///< shared blob state (if any)
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
 #ifdef CACHE_BLOB_BL
     mutable ceph::buffer::list blob_bl;     ///< cached encoded blob, blob is dirty if empty
@@ -664,6 +666,15 @@ public:
     bluestore_blob_use_tracker_t& dirty_blob_use_tracker() {
       return used_in_blob;
     }
+
+    const SharedBlobRef& get_shared_blob() const {
+      return shared_blob;
+    }
+
+    SharedBlobRef& get_dirty_shared_blob() {
+      return shared_blob;
+    }
+
     bool is_referenced() const {
       return used_in_blob.is_not_empty();
     }
@@ -675,8 +686,8 @@ public:
       return id >= 0;
     }
 
-    bool can_split() const {
-      std::lock_guard l(shared_blob->get_cache()->lock);
+    bool can_split() {
+      std::lock_guard l(get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
       return get_bc().writing.empty() &&
              used_in_blob.can_split() &&
@@ -749,6 +760,19 @@ public:
       if (--nref == 0)
 	delete this;
     }
+    bool is_shared_loaded() const {
+      return shared_blob && shared_blob->is_loaded();
+    }
+    inline BufferCacheShard* get_cache() {
+      return collection ? collection->cache : nullptr;
+    }
+    uint64_t get_sbid() const {
+      return shared_blob ? shared_blob->get_sbid() : 0;
+    }
+    CollectionRef get_collection() const {
+      return collection;
+    }
+
     ~Blob();
 
 #ifdef CACHE_BLOB_BL
@@ -851,7 +875,7 @@ public:
     }
     ~Extent() {
       if (blob) {
-	blob->shared_blob->get_cache()->rm_extent();
+	blob->get_cache()->rm_extent();
       }
     }
 
@@ -860,7 +884,7 @@ public:
     void assign_blob(const BlobRef& b) {
       ceph_assert(!blob);
       blob = b;
-      blob->shared_blob->get_cache()->add_extent();
+      blob->get_cache()->add_extent();
     }
 
     // comparators for intrusive_set
@@ -1636,8 +1660,8 @@ private:
     uint64_t make_blob_unshared(SharedBlob *sb);
 
     BlobRef new_blob() {
-      BlobRef b = new Blob();
-      b->set_shared_blob(new SharedBlob(this));
+      BlobRef b = new Blob(this);
+      b->get_cache()->add_blob();
       return b;
     }
 
@@ -1918,7 +1942,7 @@ private:
     void write_onode(OnodeRef& o) {
       onodes.insert(o);
     }
-    void write_shared_blob(SharedBlobRef &sb) {
+    void write_shared_blob(const SharedBlobRef &sb) {
       shared_blobs.insert(sb);
     }
     void unshare_blob(SharedBlob *sb) {
@@ -2859,7 +2883,7 @@ private:
     uint64_t offset,
     ceph::buffer::list& bl,
     unsigned flags) {
-    b->dirty_bc().write(b->shared_blob->get_cache(), txc->seq, offset, bl,
+    b->dirty_bc().write(b->get_cache(), txc->seq, offset, bl,
 			     flags);
     txc->blobs_written.insert(b);
   }
