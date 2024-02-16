@@ -334,6 +334,9 @@ class Monitoring(ContainerDaemonForm):
                 os.path.join(data_dir, 'etc/grafana/provisioning/datasources')
             ] = '/etc/grafana/provisioning/datasources:Z'
             mounts[
+                os.path.join(data_dir, 'etc/grafana/provisioning/dashboards')
+            ] = '/etc/grafana/provisioning/dashboards:Z'
+            mounts[
                 os.path.join(data_dir, 'etc/grafana/certs')
             ] = '/etc/grafana/certs:Z'
             mounts[
