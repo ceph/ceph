@@ -260,7 +260,7 @@ namespace rgw {
     static constexpr uint32_t FLAG_ROOT =    0x0002;
     static constexpr uint32_t FLAG_CREATE =  0x0004;
     static constexpr uint32_t FLAG_CREATING =  0x0008;
-    static constexpr uint32_t FLAG_SYMBOLIC_LINK = 0x0009;
+    static constexpr uint32_t FLAG_SYMBOLIC_LINK = 0x0009; // XXXX bug?
     static constexpr uint32_t FLAG_DIRECTORY = 0x0010;
     static constexpr uint32_t FLAG_BUCKET = 0x0020;
     static constexpr uint32_t FLAG_LOCK =   0x0040;
