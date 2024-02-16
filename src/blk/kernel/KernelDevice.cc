@@ -778,30 +778,28 @@ void KernelDevice::_discard_thread(uint64_t tid)
   dout(10) << __func__ << " thread " << tid << " finish" << dendl;
 }
 
-int KernelDevice::_queue_discard(interval_set<uint64_t> &to_release)
+// this is private and is expected that the caller checks that discard
+// threads are running via _discard_started()
+void KernelDevice::_queue_discard(interval_set<uint64_t> &to_release)
 {
-  // if bdev_async_discard enabled on the fly, discard_thread is not started here, fallback to sync discard
-  if (!_discard_started())
-    return -1;
-
   if (to_release.empty())
-    return 0;
+    return;
 
   std::lock_guard l(discard_lock);
   discard_queued.insert(to_release);
   discard_cond.notify_one();
-  return 0;
 }
 
-// return true only if _queue_discard succeeded, so caller won't have to do alloc->release
-// otherwise false
+// return true only if discard was queued, so caller won't have to do
+// alloc->release, otherwise return false
 bool KernelDevice::try_discard(interval_set<uint64_t> &to_release, bool async)
 {
   if (!support_discard || !cct->_conf->bdev_enable_discard)
     return false;
 
-  if (async) {
-    return 0 == _queue_discard(to_release);
+  if (async && _discard_started()) {
+    _queue_discard(to_release);
+    return true;
   } else {
     for (auto p = to_release.begin(); p != to_release.end(); ++p) {
       _discard(p.get_start(), p.get_len());
@@ -1528,13 +1526,19 @@ void KernelDevice::handle_conf_change(const ConfigProxy& conf,
       // Decrease? Signal threads after telling them to stop
       dout(10) << __func__ << " stopping " << (oldval - newval) << " existing discard threads" << dendl;
 
-      // Signal the last threads to quit, and stop tracking them
-      for(uint64_t i = oldval - 1; i >= newval; i--)
-      {
-        // Also detach the thread so we no longer need to join
-        discard_threads[i]->stop = true;
-        discard_threads[i]->detach();
-        discard_threads.erase(discard_threads.begin() + i);
+      // Decreasing to zero is exactly the same as disabling async discard.
+      // Signal all threads to stop
+      if(newval == 0) {
+        _discard_stop();
+      } else {
+        // Signal the last threads to quit, and stop tracking them
+        for(uint64_t i = oldval - 1; i >= newval; i--)
+        {
+          // Also detach the thread so we no longer need to join
+          discard_threads[i]->stop = true;
+          discard_threads[i]->detach();
+          discard_threads.erase(discard_threads.begin() + i);
+        }
       }
 
       discard_cond.notify_all();
