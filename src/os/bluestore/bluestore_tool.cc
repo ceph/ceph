@@ -322,11 +322,11 @@ int main(int argc, char **argv)
   po_positional.add_options()
     ("command", po::value<string>(&action),
         "fsck, "
-        "qfsck, "
-        "allocmap, "
-        "restore_cfb, "
         "repair, "
         "quick-fix, "
+        "allocmap-to-bitmap, "
+        "allocmap-to-nil, "
+        "allocmap-invalidate, "
         "bluefs-export, "
         "bluefs-import, "
         "bluefs-bdev-sizes, "
@@ -345,6 +345,7 @@ int main(int argc, char **argv)
         "bluefs-stats, "
         "reshard, "
         "show-sharding, "
+        "show-superblock, "
 	"trim")
     ;
   po::options_description po_all("All options");
@@ -458,7 +459,9 @@ int main(int argc, char **argv)
     }
   }
 
-  if (action == "fsck" || action == "repair" || action == "quick-fix" || action == "allocmap" || action == "qfsck" || action == "restore_cfb") {
+  if (action == "fsck" || action == "repair" || action == "quick-fix" ||
+      action == "allocmap-to-bitmap" || action == "allocmap-to-nil" ||
+      action == "allocmap-invalidate") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -601,56 +604,41 @@ int main(int argc, char **argv)
       bdev_type = vector<string>{"bdev-block", "bdev-db", "bdev-wal"};
   }
 
-  if (action == "restore_cfb") {
-#ifndef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
-    cerr << action << " bluestore.restore_cfb is not supported!!! " << std::endl;
-    exit(EXIT_FAILURE);
-#else
-    cout << action << " bluestore.restore_cfb" << std::endl;
+  if (action == "allocmap-to-bitmap") {
+    cout << action << std::endl;
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.push_allocation_to_rocksdb();
+    int r = bluestore.push_allocmap_to_bitmap();
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     } else {
       cout << action << " success" << std::endl;
     }
-#endif
   }
-  else if (action == "allocmap") {
-#ifdef CEPH_BLUESTORE_TOOL_DISABLE_ALLOCMAP
-    cerr << action << " bluestore.allocmap is not supported!!! " << std::endl;
-    exit(EXIT_FAILURE);
-#else
-    cout << action << " bluestore.allocmap" << std::endl;
+  else if (action == "allocmap-to-nil") {
+    cout << action << std::endl;
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.read_allocation_from_drive_for_bluestore_tool();
+    int r = bluestore.push_allocmap_to_nil(true);
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     } else {
       cout << action << " success" << std::endl;
     }
-#endif
   }
-  else if( action == "qfsck" ) {
-#ifndef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
-    cerr << action << " bluestore.qfsck is not supported!!! " << std::endl;
-    exit(EXIT_FAILURE);
-#else
-    cout << action << " bluestore.quick-fsck" << std::endl;
+  else if (action == "allocmap-invalidate") {
+    cout << action << std::endl;
     validate_path(cct.get(), path, false);
     BlueStore bluestore(cct.get(), path);
-    int r = bluestore.read_allocation_from_drive_for_bluestore_tool();
+    int r = bluestore.push_allocmap_to_nil(false);
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     } else {
       cout << action << " success" << std::endl;
     }
-#endif
   }
   else if (action == "fsck" ||
       action == "repair" ||
@@ -1165,6 +1153,29 @@ int main(int argc, char **argv)
       in, err, &out);
     if (r != 0) {
       cerr << "failure querying bluefs stats: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    cout << std::string(out.c_str(), out.length()) << std::endl;
+     bluestore.cold_close();
+  } else  if (action == "show-superblock") {
+    AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
+    ceph_assert(admin_socket);
+    validate_path(cct.get(), path, false);
+
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.cold_open();
+    if (r < 0) {
+      cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    ceph::bufferlist in, out;
+    ostringstream err;
+    r = admin_socket->execute_command(
+      { "{\"prefix\": \"bluestore show-superblock\"}" },
+      in, err, &out);
+    if (r != 0) {
+      cerr << "failure querying bluestore superblock: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
     cout << std::string(out.c_str(), out.length()) << std::endl;

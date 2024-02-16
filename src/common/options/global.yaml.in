@@ -5196,12 +5196,30 @@ options:
   desc: Run fsck at umount
   default: false
   with_legacy: true
-- name: bluestore_allocation_from_file
-  type: bool
+- name: bluestore_freelist_type
+  type: str
   level: dev
-  desc: Remove allocation info from RocksDB and store the info in a new allocation file
-  default: true
-  with_legacy: true
+  enum_values:
+  - auto
+  - bitmap
+  - nil
+  default: auto
+  flags:
+  - create
+  desc: Allocation map type
+  long_desc: This determines where (and how) BlueStore keeps allocation map.
+    'bitmap' specifies the original mode where allocation map is kept in RocksDB
+    as bitmap and it's updated on any performed allocation. Which has some
+    performance impact on user write operations. 'nil' specifies an alternative
+    mode where allocation map is tracked in memory by allocator and flushed to a
+    file on OSD shutdown. This reduces write operation overhead but object store
+    has to perform cumbersome allocation map rebuild procedure after unexpected
+    OSD process termination. Such a rebuild might take dozens of minutes for
+    large metadata and/or slow DB volumes. 'auto' mode is a default value which
+    specifies using 'bitmap' mode if DB volume is a slow spinning drive and
+    'nil' one for flash drives.
+    This way it balances startup and operational latencies depending on disk
+    type where BlueStore keeps metadata.
 - name: bluestore_debug_inject_allocation_from_file_failure
   type: float
   level: dev

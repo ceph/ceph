@@ -512,14 +512,13 @@ public:
     bstore = dynamic_cast<BlueStore*>(_store);
     ceph_assert(bstore);
   }
-  int __store_allocator(Allocator* a, const char* filename, uint32_t ver,
-    bool exclude_bluefs) {
-    return bstore->__store_allocator(a, filename, ver, exclude_bluefs);
+  int __store_allocator(Allocator* a, const char* filename, uint32_t ver) {
+    return bstore->__store_allocator(a, filename, ver);
   }
   int __restore_allocator(Allocator* a, const char* filename, uint64_t total_size) {
     return bstore->__restore_allocator(a, filename, total_size);
   }
-  int compare_allocators(Allocator* alloc1, Allocator* alloc2) {
+  bool compare_allocators(Allocator* alloc1, Allocator* alloc2) {
     return bstore->compare_allocators(alloc1, alloc2);
   }
   Allocator* create_bitmap_allocator(size_t size) {
@@ -7152,6 +7151,228 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     ASSERT_EQ(r, 0);
   }
 }
+
+void doSomeWrites(ObjectStore* store, const coll_t& cid,
+                  ObjectStore::Transaction* t_fin) {
+  const size_t num_stages = 3;
+  const uint64_t offsets[num_stages] = {0, 16384, 65536};
+  const uint64_t lengths[num_stages] = {65536, 4096, 32768};
+  int r;
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  for(size_t i = 0; i < num_stages; i++) {
+    for(char c = 'a'; c <= 'z'; c++) {
+      bufferlist bl;
+      bl.append(std::string(lengths[i], c));
+      ObjectStore::Transaction t;
+      std::string name = "obj_";
+      name += c;
+      ghobject_t hoid(hobject_t(name, "", CEPH_NOSNAP, 0, cid.pool(), ""));
+      t.write(cid, hoid, offsets[i], bl.length(), bl);
+      int r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(0, r);
+      if (i == 0) {
+        t_fin->remove(cid, hoid);
+      }
+    }
+  }
+  t_fin->remove_collection(cid);
+}
+
+int substr_in_bluestore_superblock(const char* substr)
+{
+  if (!substr)
+    return -1;
+  AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
+  ceph_assert(admin_socket);
+
+  ceph::bufferlist in, out;
+  ostringstream err;
+
+  int r = admin_socket->execute_command(
+    { "{\"prefix\": \"bluestore show-superblock\"}" },
+    in, err, &out);
+  if (r != 0) {
+    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
+  } else {
+    r = ::strstr(out.c_str(), substr) == nullptr ? -1 : 0;
+    if (r != 0) {
+      cerr << "superblock = " << out.c_str() << std::endl;
+    }
+  }
+  return r;
+}
+
+TEST_P(StoreTestSpecificAUSize, BluestoreAllocmapSwitchTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_freelist_type", "nil");
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  StartDeferred(65536);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  const PerfCounters* logger = store->get_perf_counters();
+
+  int r;
+  int poolid = 4373;
+  coll_t cid = coll_t(spg_t(pg_t(0, poolid), shard_id_t::NO_SHARD));
+
+  ObjectStore::Transaction t_fin;
+  doSomeWrites(bstore, cid, &t_fin);
+  ASSERT_EQ(0, substr_in_bluestore_superblock("\"freelist_type\": \"nil\""));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 0);
+  bstore->umount();
+
+  cerr << "Push allocmap to nil(created), no-op..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_nil(true)); // no-op
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 0);
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 0);
+
+  cerr << "Push allocmap to nil(invalidated)..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_nil(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 0);
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 1);
+
+  cerr << "Mounting..." << std::endl;
+  bstore->mount();
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2);
+  bstore->umount();
+
+  cerr << "One more mounting..." << std::endl;
+  bstore->mount();
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+  bstore->umount();
+
+  cerr << "Push allocmap to bitmap, no rebuild..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_bitmap());
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2);  // no change
+
+  cerr << "Mounting(in bitmap)..." << std::endl;
+  bstore->mount();
+  ASSERT_EQ(0, substr_in_bluestore_superblock("\"freelist_type\": \"bitmap\""));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+  bstore->umount();
+
+  cerr << "Push allocmap to nil(created)..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_nil(true));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+
+  cerr << "Push allocmap to nil(invalidated)..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_nil(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 3);
+
+  cerr << "Push allocmap to bitmap, rebuild..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_bitmap());
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 4);
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 4);  // no change
+
+  cerr << "Push allocmap to nil(invalidated)..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_nil(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 4); // no change
+
+  cerr << "Push allocmap to bitmap, rebuild again..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_bitmap());
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 5);
+
+  bstore->mount();
+  ASSERT_EQ(0, substr_in_bluestore_superblock("\"freelist_type\": \"bitmap\""));
+  {
+    auto ch = store->open_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t_fin));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTestSpecificAUSize, BluestoreAllocmapSwitch2Test) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_freelist_type", "bitmap");
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+  StartDeferred(65536);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  const PerfCounters* logger = store->get_perf_counters();
+
+  int r;
+  int poolid = 4373;
+  coll_t cid = coll_t(spg_t(pg_t(0, poolid), shard_id_t::NO_SHARD));
+
+  ObjectStore::Transaction t_fin;
+  doSomeWrites(bstore, cid, &t_fin);
+  ASSERT_EQ(0, substr_in_bluestore_superblock("\"freelist_type\": \"bitmap\""));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 0);
+  bstore->umount();
+
+  cerr << "Push allocmap to nil(created), no-op..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_bitmap()); // no-op
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 0);
+  ASSERT_EQ(0, store->fsck(false));
+
+  cerr << "Push allocmap to nil(invalidated)..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_nil(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 0);
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 1);
+
+  cerr << "Mounting..." << std::endl;
+  bstore->mount();
+  ASSERT_EQ(0, substr_in_bluestore_superblock("\"freelist_type\": \"nil\""));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2);
+  bstore->umount();
+
+  cerr << "One more mounting..." << std::endl;
+  bstore->mount();
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+  bstore->umount();
+
+  cerr << "Push allocmap to bitmap, no rebuild..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_bitmap());
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2);  // no change
+
+  cerr << "Mounting(in bitmap)..." << std::endl;
+  bstore->mount();
+  ASSERT_EQ(0, substr_in_bluestore_superblock("\"freelist_type\": \"bitmap\""));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+  bstore->umount();
+
+  cerr << "Push allocmap to nil(created)..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_nil(true));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2); // no change
+
+  cerr << "Push allocmap to bitmap, no rebuild..." << std::endl;
+  ASSERT_EQ(0, bstore->push_allocmap_to_bitmap());
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2);
+
+  bstore->mount();
+  ASSERT_EQ(0, substr_in_bluestore_superblock("\"freelist_type\": \"bitmap\""));
+  {
+    auto ch = store->open_collection(cid);
+    cerr << "Cleaning..." << std::endl;
+    r = queue_transaction(store, ch, std::move(t_fin));
+    ASSERT_EQ(r, 0);
+  }
+}
 #endif
 
 INSTANTIATE_TEST_SUITE_P(
@@ -11946,7 +12167,7 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
   }
 }
 
-void doStoreAllocatorTest(ObjectStore* store, uint32_t ver, size_t alloc_size,
+void doStoreAllocmapTest(ObjectStore* store, uint32_t ver, size_t alloc_size,
   uint64_t total_size, uint64_t num_extents)
 {
   BlueStoreTester t(store);
@@ -11957,7 +12178,7 @@ void doStoreAllocatorTest(ObjectStore* store, uint32_t ver, size_t alloc_size,
     o += 2 * alloc_size;
   }
   auto t0 = ceph_clock_now();
-  t.__store_allocator(a.get(), "test", ver, false);
+  t.__store_allocator(a.get(), "test", ver);
   utime_t dur = ceph_clock_now() - t0;
   std::cout << " Saving completed in " << dur << " seconds" << std::endl;
 
@@ -11968,12 +12189,10 @@ void doStoreAllocatorTest(ObjectStore* store, uint32_t ver, size_t alloc_size,
   dur = ceph_clock_now() - t0;
   std::cout << " Restore completed in " << dur << " seconds" << std::endl;
 
-  ASSERT_TRUE(
-    t.compare_allocators(
-      a.get(), a2.get()) == 0);
+  ASSERT_TRUE(t.compare_allocators(a.get(), a2.get()));
 }
 
-TEST_P(StoreTestSpecificAUSize, StoreAllocatorV1Test) {
+TEST_P(StoreTestSpecificAUSize, StoreAllocmapV1Test) {
   if (string(GetParam()) != "bluestore")
     return;
   SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
@@ -11984,7 +12203,7 @@ TEST_P(StoreTestSpecificAUSize, StoreAllocatorV1Test) {
   StartDeferred(alloc_size);
   size_t total_size = 1ull << 42; // 4 TiB
   size_t num_extents = 32ull * (1ull << 20); // 32 M
-  doStoreAllocatorTest(store.get(), 1, alloc_size, total_size, num_extents);
+  doStoreAllocmapTest(store.get(), 1, alloc_size, total_size, num_extents);
 }
 
 TEST_P(StoreTestSpecificAUSize, StoreSmallAllocmapV1Test) {
@@ -12012,7 +12231,7 @@ TEST_P(StoreTestSpecificAUSize, StoreAllocmapV2Test) {
   StartDeferred(alloc_size);
   size_t total_size = 1ull << 42; // 4 TiB
   size_t num_extents = 32ull * (1ull << 20); // 32 M
-  doStoreAllocatorTest(store.get(), 2, alloc_size, total_size, num_extents);
+  doStoreAllocmapTest(store.get(), 2, alloc_size, total_size, num_extents);
 }
 
 TEST_P(StoreTestSpecificAUSize, StoreSmallAllocmapV2Test) {
