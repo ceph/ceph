@@ -31,7 +31,7 @@
 #include "rgw_user_types.h"
 #include "rgw_bucket_types.h"
 #include "rgw_obj_types.h"
-#include "rgw_cksum.h"
+#include "rgw_cksum_types.h"
 
 #include "driver/rados/rgw_obj_manifest.h" // FIXME: subclass dependency
 

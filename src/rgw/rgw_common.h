@@ -929,8 +929,6 @@ struct RGWBucketInfo {
 
   std::map<std::string, uint32_t> mdsearch_config;
 
-  rgw::cksum::Type cksum_type = rgw::cksum::Type::none;
-
   // resharding
   cls_rgw_reshard_status reshard_status{cls_rgw_reshard_status::NOT_RESHARDING};
   std::string new_bucket_instance_id;

@@ -13,6 +13,8 @@
 
 #pragma once
 
+#include "rgw_cksum_types.h"
+
 #include <boost/algorithm/string/predicate.hpp>
 #include <cstdint>
 #include <stdint.h>
@@ -36,149 +38,6 @@
 #include "include/encoding.h"
 
 namespace rgw { namespace cksum {
-
-  enum class Type : uint16_t
-  {
-      none = 0,
-      crc32,  /* !cryptographic, but AWS supports */
-      crc32c, /* !cryptographic, but AWS supports */
-      xxh3,   /* !cryptographic, but strong and very fast */
-      sha1,   /* unsafe, but AWS supports */
-      sha256,
-      sha512,
-      blake3,
-  };
-
-  static constexpr uint16_t FLAG_NONE =      0x0000;
-  static constexpr uint16_t FLAG_AWS_CKSUM = 0x0001;
-
-  class Desc
-  {
-  public:
-    const Type type;
-    const char* name;
-    const uint16_t digest_size;
-    const uint16_t armored_size;
-    const uint16_t flags;
-
-    constexpr uint16_t to_armored_size(uint16_t sz) {
-      return sz / 3 * 4 + 4;
-    }
-
-    constexpr Desc(Type _type, const char* _name, uint16_t _size,
-		   uint16_t _flags)
-      : type(_type), name(_name),
-	digest_size(_size),
-	armored_size(to_armored_size(digest_size)),
-	flags(_flags)
-      {}
-
-    constexpr bool aws() const {
-      return (flags & FLAG_AWS_CKSUM);
-    }
-  }; /* Desc */
-
-  namespace  ba = boost::algorithm;
-
-  class Cksum {
-  public:
-    static constexpr std::array<Desc, 8> checksums =
-    {
-      Desc(Type::none, "none", 0, FLAG_NONE),
-      Desc(Type::crc32, "crc32", 4, FLAG_AWS_CKSUM),
-      Desc(Type::crc32c, "crc32c", 4, FLAG_AWS_CKSUM),
-      Desc(Type::xxh3, "xxh3", 8, FLAG_NONE),
-      Desc(Type::sha1, "sha1", 20, FLAG_AWS_CKSUM),
-      Desc(Type::sha256, "sha256", 32, FLAG_AWS_CKSUM),
-      Desc(Type::sha512, "sha512", 64, FLAG_NONE),
-      Desc(Type::blake3, "blake3", 32, FLAG_NONE),
-    };
-
-    static constexpr uint16_t max_digest_size = 64;
-    using value_type = std::array<unsigned char, max_digest_size>;
-
-    Type type;
-    value_type digest;
-
-    Cksum(Type _type = Type::none) : type(_type) {}
-
-    static const char* type_string(const Type type) {
-      return (Cksum::checksums[uint16_t(type)]).name;
-    }
-
-    std::string aws_name() {
-      return fmt::format("x-amz-checksum-{}", type_string(type));
-    }
-
-    std::string rgw_name() {
-      return fmt::format("x-rgw-checksum-{}", type_string(type));
-    }
-
-    std::string header_name() {
-      return ((Cksum::checksums[uint16_t(type)]).aws()) ?
-	aws_name() :
-	rgw_name();
-    }
-
-    std::string to_armor() const {
-      std::string hs;
-      const auto& ckd = checksums[uint16_t(type)];
-      hs.resize(ckd.armored_size);
-      memset(hs.data(), 0, hs.length());
-      ceph_armor((char*) hs.data(), (char*) hs.data() + ckd.armored_size,
-		 (char*) digest.begin(), (char*) digest.begin() +
-		 ckd.digest_size);
-      return hs;
-    }
-
-    std::string hex() const {
-      std::string hs;
-      const auto& ckd = checksums[uint16_t(type)];
-      hs.reserve(ckd.digest_size * 2 + 1);
-      ba::hex_lower(digest.begin(), digest.begin() + ckd.digest_size,
-		    std::back_inserter(hs));
-      return hs;
-    }
-
-    std::string to_base64() const {
-      return rgw::to_base64(hex());
-    }
-
-    std::string to_string() const  {
-      std::string hs;
-      const auto& ckd = checksums[uint16_t(type)];
-      return fmt::format("{{{}}}{}", ckd.name, to_base64());
-    }
-
-    void encode(buffer::list& bl) const {
-      const auto& ckd = checksums[uint16_t(type)];
-      ENCODE_START(1, 1, bl);
-      encode(uint16_t(type), bl);
-      encode(ckd.digest_size, bl);
-      bl.append((char*)digest.data(), ckd.digest_size);
-      ENCODE_FINISH(bl);
-    }
-
-    void decode(bufferlist::const_iterator& p) {
-      DECODE_START(1, p);
-      uint16_t tt;
-      decode(tt, p);
-      type = cksum::Type(tt);
-      decode(tt, p); /* <= max_digest_size */
-      p.copy(tt, (char*)digest.data());
-      DECODE_FINISH(p);
-    }
-  }; /* Cksum */
-  WRITE_CLASS_ENCODER(Cksum);
-
-  static inline Type parse_cksum_type(const char* name)
-  {
-    for (const auto& ck : Cksum::checksums) {
-      if (boost::iequals(ck.name, name))
-	return ck.type;
-    }
-    return Type::none;
-  }
 
   class Digest {
   public:
