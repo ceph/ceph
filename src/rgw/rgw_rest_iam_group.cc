@@ -903,14 +903,18 @@ void RGWAddUserToGroup_IAM::execute(optional_yield y)
     }
   }
 
-  RGWUserInfo& info = user->get_info();
-  RGWUserInfo old_info = info;
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y] {
+        RGWUserInfo& info = user->get_info();
+        RGWUserInfo old_info = info;
 
-  const bool inserted = info.group_ids.insert(group.id).second;
-  if (inserted) {
-    constexpr bool exclusive = false;
-    op_ret = user->store_user(this, y, exclusive, &old_info);
-  }
+        if (!info.group_ids.insert(group.id).second) {
+          return 0; // nothing to do, return success
+        }
+
+        constexpr bool exclusive = false;
+        return user->store_user(this, y, exclusive, &old_info);
+      });
 }
 
 void RGWAddUserToGroup_IAM::send_response()
@@ -1036,16 +1040,20 @@ void RGWRemoveUserFromGroup_IAM::execute(optional_yield y)
     }
   }
 
-  RGWUserInfo& info = user->get_info();
-  RGWUserInfo old_info = info;
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y] {
+        RGWUserInfo& info = user->get_info();
+        RGWUserInfo old_info = info;
 
-  if (auto id = info.group_ids.find(group.id);
-      id != info.group_ids.end()) {
-    info.group_ids.erase(id);
+        auto id = info.group_ids.find(group.id);
+        if (id == info.group_ids.end()) {
+          return 0; // nothing to do, return success
+        }
+        info.group_ids.erase(id);
 
-    constexpr bool exclusive = false;
-    op_ret = user->store_user(this, y, exclusive, &old_info);
-  }
+        constexpr bool exclusive = false;
+        return user->store_user(this, y, exclusive, &old_info);
+      });
 }
 
 void RGWRemoveUserFromGroup_IAM::send_response()
