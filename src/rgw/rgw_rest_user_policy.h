@@ -32,9 +32,11 @@ public:
 };
 
 class RGWPutUserPolicy : public RGWRestUserPolicy {
+  bufferlist post_body;
   int get_params() override;
+  int forward_to_master(optional_yield y, const rgw::SiteConfig& site);
 public:
-  RGWPutUserPolicy();
+  RGWPutUserPolicy(const ceph::bufferlist& post_body);
   void execute(optional_yield y) override;
   const char* name() const override { return "put_user_policy"; }
   RGWOpType get_type() override { return RGW_OP_PUT_USER_POLICY; }
@@ -61,9 +63,11 @@ public:
 };
 
 class RGWDeleteUserPolicy : public RGWRestUserPolicy {
+  bufferlist post_body;
   int get_params() override;
+  int forward_to_master(optional_yield y, const rgw::SiteConfig& site);
 public:
-  RGWDeleteUserPolicy();
+  RGWDeleteUserPolicy(const ceph::bufferlist& post_body);
   void execute(optional_yield y) override;
   const char* name() const override { return "delete_user_policy"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_USER_POLICY; }
