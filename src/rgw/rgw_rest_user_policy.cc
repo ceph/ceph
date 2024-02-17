@@ -111,8 +111,9 @@ int RGWRestUserPolicy::verify_permission(optional_yield y)
 }
 
 
-RGWPutUserPolicy::RGWPutUserPolicy()
-  : RGWRestUserPolicy(rgw::IAM::iamPutUserPolicy, RGW_CAP_WRITE)
+RGWPutUserPolicy::RGWPutUserPolicy(const ceph::bufferlist& post_body)
+  : RGWRestUserPolicy(rgw::IAM::iamPutUserPolicy, RGW_CAP_WRITE),
+    post_body(post_body)
 {
 }
 
@@ -132,6 +133,29 @@ int RGWPutUserPolicy::get_params()
   return RGWRestUserPolicy::get_params();
 }
 
+int RGWPutUserPolicy::forward_to_master(optional_yield y, const rgw::SiteConfig& site)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+
+  s->info.args.remove("UserName");
+  s->info.args.remove("PolicyName");
+  s->info.args.remove("PolicyDocument");
+  s->info.args.remove("Action");
+  s->info.args.remove("Version");
+
+  int r = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                        post_body, parser, s->info, y);
+  if (r < 0) {
+    ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
 void RGWPutUserPolicy::execute(optional_yield y)
 {
   // validate the policy document
@@ -146,11 +170,12 @@ void RGWPutUserPolicy::execute(optional_yield y)
     return;
   }
 
-  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
-    return;
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_to_master(y, site);
+    if (op_ret) {
+      return;
+    }
   }
 
   op_ret = retry_raced_user_write(this, y, user.get(),
@@ -296,8 +321,9 @@ void RGWListUserPolicies::execute(optional_yield y)
 }
 
 
-RGWDeleteUserPolicy::RGWDeleteUserPolicy()
-  : RGWRestUserPolicy(rgw::IAM::iamDeleteUserPolicy, RGW_CAP_WRITE)
+RGWDeleteUserPolicy::RGWDeleteUserPolicy(const ceph::bufferlist& post_body)
+  : RGWRestUserPolicy(rgw::IAM::iamDeleteUserPolicy, RGW_CAP_WRITE),
+    post_body(post_body)
 {
 }
 
@@ -311,22 +337,40 @@ int RGWDeleteUserPolicy::get_params()
   return RGWRestUserPolicy::get_params();
 }
 
+int RGWDeleteUserPolicy::forward_to_master(optional_yield y, const rgw::SiteConfig& site)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+
+  s->info.args.remove("UserName");
+  s->info.args.remove("PolicyName");
+  s->info.args.remove("Action");
+  s->info.args.remove("Version");
+
+  int r = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                        post_body, parser, s->info, y);
+  if (r < 0) {
+    ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
 void RGWDeleteUserPolicy::execute(optional_yield y)
 {
-  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                         nullptr, nullptr, s->info, y);
-  if (op_ret < 0) {
-    // a policy might've been uploaded to this site when there was no sync
-    // req. in earlier releases, proceed deletion
-    if (op_ret != -ENOENT) {
-      ldpp_dout(this, 5) << "forward_request_to_master returned ret=" << op_ret << dendl;
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_to_master(y, site);
+    if (op_ret) {
       return;
     }
-    ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
   }
 
   op_ret = retry_raced_user_write(this, y, user.get(),
-      [this, y] {
+      [this, y, &site] {
         rgw::sal::Attrs& attrs = user->get_attrs();
         std::map<std::string, std::string> policies;
         if (auto it = attrs.find(RGW_ATTR_USER_POLICY); it != attrs.end()) try {
@@ -338,6 +382,9 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
 
         auto policy = policies.find(policy_name);
         if (policy == policies.end()) {
+          if (!site.is_meta_master()) {
+            return 0; // delete succeeded on the master
+          }
           s->err.message = "No such PolicyName on the user";
           return -ERR_NO_SUCH_ENTITY;
         }
@@ -541,7 +588,7 @@ void RGWDetachUserPolicy_IAM::execute(optional_yield y)
   }
 
   op_ret = retry_raced_user_write(this, y, user.get(),
-      [this, y] {
+      [this, y, &site] {
         rgw::sal::Attrs& attrs = user->get_attrs();
         rgw::IAM::ManagedPolicies policies;
         if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) try {
@@ -553,6 +600,9 @@ void RGWDetachUserPolicy_IAM::execute(optional_yield y)
 
         auto i = policies.arns.find(policy_arn);
         if (i == policies.arns.end()) {
+          if (!site.is_meta_master()) {
+            return 0; // delete succeeded on the master
+          }
           s->err.message = "No such PolicyArn on the user";
           return ERR_NO_SUCH_ENTITY;
         }
