@@ -134,6 +134,18 @@ int RGWPutUserPolicy::get_params()
 
 void RGWPutUserPolicy::execute(optional_yield y)
 {
+  // validate the policy document
+  try {
+    const rgw::IAM::Policy p(
+      s->cct, s->user->get_tenant(), policy,
+      s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
+  } catch (const rgw::IAM::PolicyParseException& e) {
+    ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
+    s->err.message = e.what();
+    op_ret = -ERR_MALFORMED_DOC;
+    return;
+  }
+
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
                                          nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
@@ -141,44 +153,38 @@ void RGWPutUserPolicy::execute(optional_yield y)
     return;
   }
 
-  try {
-    const rgw::IAM::Policy p(
-      s->cct, s->user->get_tenant(), policy,
-      s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
-    std::map<std::string, std::string> policies;
-    if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
-      decode(policies, it->second);
-    }
-    bufferlist in_bl;
-    policies[policy_name] = policy;
-    constexpr unsigned int USER_POLICIES_MAX_NUM = 100;
-    const unsigned int max_num = s->cct->_conf->rgw_user_policies_max_num < 0 ?
-      USER_POLICIES_MAX_NUM : s->cct->_conf->rgw_user_policies_max_num;
-    if (policies.size() > max_num) {
-      ldpp_dout(this, 4) << "IAM user policies has reached the num config: "
-                         << max_num << ", cant add another" << dendl;
-      op_ret = -ERR_LIMIT_EXCEEDED;
-      s->err.message =
-          "The number of IAM user policies should not exceed allowed limit "
-          "of " +
-          std::to_string(max_num) + " policies.";
-      return;
-    }
-    encode(policies, in_bl);
-    user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y] {
+        rgw::sal::Attrs& attrs = user->get_attrs();
+        std::map<std::string, std::string> policies;
+        if (auto it = attrs.find(RGW_ATTR_USER_POLICY); it != attrs.end()) try {
+          decode(policies, it->second);
+        } catch (const buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+          return -EIO;
+        }
 
-    op_ret = user->store_user(s, s->yield, false);
-    if (op_ret < 0) {
-      op_ret = -ERR_INTERNAL_ERROR;
-    }
-  } catch (buffer::error& err) {
-    ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
-    op_ret = -EIO;
-  } catch (rgw::IAM::PolicyParseException& e) {
-    ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
-    s->err.message = e.what();
-    op_ret = -ERR_MALFORMED_DOC;
-  }
+        policies[policy_name] = policy;
+
+        constexpr unsigned int USER_POLICIES_MAX_NUM = 100;
+        const unsigned int max_num = s->cct->_conf->rgw_user_policies_max_num < 0 ?
+          USER_POLICIES_MAX_NUM : s->cct->_conf->rgw_user_policies_max_num;
+        if (policies.size() > max_num) {
+          ldpp_dout(this, 4) << "IAM user policies has reached the num config: "
+                             << max_num << ", cant add another" << dendl;
+          s->err.message =
+              "The number of IAM user policies should not exceed allowed limit "
+              "of " +
+              std::to_string(max_num) + " policies.";
+          return -ERR_LIMIT_EXCEEDED;
+        }
+
+        bufferlist bl;
+        encode(policies, bl);
+        attrs[RGW_ATTR_USER_POLICY] = std::move(bl);
+
+        return user->store_user(s, y, false);
+      });
 
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("PutUserPolicyResponse", RGW_REST_IAM_XMLNS);
@@ -319,33 +325,32 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
     ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
   }
 
-  std::map<std::string, std::string> policies;
-  if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
-    bufferlist out_bl = it->second;
-    try {
-      decode(policies, out_bl);
-    } catch (buffer::error& err) {
-      ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
-      op_ret = -EIO;
-      return;
-    }
-  }
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y] {
+        rgw::sal::Attrs& attrs = user->get_attrs();
+        std::map<std::string, std::string> policies;
+        if (auto it = attrs.find(RGW_ATTR_USER_POLICY); it != attrs.end()) try {
+          decode(policies, it->second);
+        } catch (const buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+          return -EIO;
+        }
 
-  auto policy = policies.find(policy_name);
-  if (policy == policies.end()) {
-    s->err.message = "No such PolicyName on the user";
-    op_ret = -ERR_NO_SUCH_ENTITY;
-    return;
-  }
+        auto policy = policies.find(policy_name);
+        if (policy == policies.end()) {
+          s->err.message = "No such PolicyName on the user";
+          return -ERR_NO_SUCH_ENTITY;
+        }
+        policies.erase(policy);
 
-  bufferlist in_bl;
-  policies.erase(policy);
-  encode(policies, in_bl);
-  user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
+        bufferlist bl;
+        encode(policies, bl);
+        attrs[RGW_ATTR_USER_POLICY] = std::move(bl);
 
-  op_ret = user->store_user(s, s->yield, false);
+        return user->store_user(s, y, false);
+      });
+
   if (op_ret < 0) {
-    op_ret = -ERR_INTERNAL_ERROR;
     return;
   }
 
@@ -407,6 +412,21 @@ int RGWAttachUserPolicy_IAM::forward_to_master(optional_yield y, const rgw::Site
 
 void RGWAttachUserPolicy_IAM::execute(optional_yield y)
 {
+  // validate the policy arn
+  try {
+    const auto p = rgw::IAM::get_managed_policy(s->cct, policy_arn);
+    if (!p) {
+      op_ret = ERR_NO_SUCH_ENTITY;
+      s->err.message = "The requested PolicyArn is not recognized";
+      return;
+    }
+  } catch (const rgw::IAM::PolicyParseException& e) {
+    ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
+    s->err.message = e.what();
+    op_ret = -ERR_MALFORMED_DOC;
+    return;
+  }
+
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
     op_ret = forward_to_master(y, site);
@@ -415,37 +435,24 @@ void RGWAttachUserPolicy_IAM::execute(optional_yield y)
     }
   }
 
-  try {
-    const auto p = rgw::IAM::get_managed_policy(s->cct, policy_arn);
-    if (!p) {
-      op_ret = ERR_NO_SUCH_ENTITY;
-      s->err.message = "The requested PolicyArn is not recognized";
-      return;
-    }
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y] {
+        rgw::sal::Attrs& attrs = user->get_attrs();
+        rgw::IAM::ManagedPolicies policies;
+        if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) try {
+          decode(policies, it->second);
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+          return -EIO;
+        }
+        policies.arns.insert(policy_arn);
 
-    rgw::IAM::ManagedPolicies policies;
-    auto& attrs = user->get_attrs();
-    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
-      decode(policies, it->second);
-    }
-    policies.arns.insert(policy_arn);
+        bufferlist bl;
+        encode(policies, bl);
+        attrs[RGW_ATTR_MANAGED_POLICY] = std::move(bl);
 
-    bufferlist in_bl;
-    encode(policies, in_bl);
-    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
-
-    op_ret = user->store_user(this, s->yield, false);
-    if (op_ret < 0) {
-      op_ret = -ERR_INTERNAL_ERROR;
-    }
-  } catch (buffer::error& err) {
-    ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
-    op_ret = -EIO;
-  } catch (rgw::IAM::PolicyParseException& e) {
-    ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
-    s->err.message = e.what();
-    op_ret = -ERR_MALFORMED_DOC;
-  }
+        return user->store_user(this, y, false);
+      });
 
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("AttachUserPolicyResponse", RGW_REST_IAM_XMLNS);
@@ -533,32 +540,30 @@ void RGWDetachUserPolicy_IAM::execute(optional_yield y)
     }
   }
 
-  try {
-    rgw::IAM::ManagedPolicies policies;
-    auto& attrs = user->get_attrs();
-    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
-      decode(policies, it->second);
-    }
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y] {
+        rgw::sal::Attrs& attrs = user->get_attrs();
+        rgw::IAM::ManagedPolicies policies;
+        if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) try {
+          decode(policies, it->second);
+        } catch (const buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+          return -EIO;
+        }
 
-    auto i = policies.arns.find(policy_arn);
-    if (i == policies.arns.end()) {
-      op_ret = ERR_NO_SUCH_ENTITY;
-      return;
-    }
-    policies.arns.erase(i);
+        auto i = policies.arns.find(policy_arn);
+        if (i == policies.arns.end()) {
+          s->err.message = "No such PolicyArn on the user";
+          return ERR_NO_SUCH_ENTITY;
+        }
+        policies.arns.erase(i);
 
-    bufferlist in_bl;
-    encode(policies, in_bl);
-    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
+        bufferlist bl;
+        encode(policies, bl);
+        attrs[RGW_ATTR_MANAGED_POLICY] = std::move(bl);
 
-    op_ret = user->store_user(this, s->yield, false);
-    if (op_ret < 0) {
-      op_ret = -ERR_INTERNAL_ERROR;
-    }
-  } catch (buffer::error& err) {
-    ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
-    op_ret = -EIO;
-  }
+        return user->store_user(this, y, false);
+      });
 
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("DetachUserPolicyResponse", RGW_REST_IAM_XMLNS);

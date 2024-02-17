@@ -426,18 +426,26 @@ void RGWUpdateUser_IAM::execute(optional_yield y)
     }
   }
 
-  RGWUserInfo& info = user->get_info();
-  RGWUserInfo old_info = info;
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y] {
+        RGWUserInfo& info = user->get_info();
+        RGWUserInfo old_info = info;
 
-  if (!new_path.empty()) {
-    info.path = new_path;
-  }
-  if (!new_username.empty()) {
-    info.display_name = new_username;
-  }
+        if (!new_path.empty()) {
+          info.path = new_path;
+        }
+        if (!new_username.empty()) {
+          info.display_name = new_username;
+        }
 
-  constexpr bool exclusive = false;
-  op_ret = user->store_user(this, y, exclusive, &old_info);
+        if (info.path == old_info.path &&
+            info.display_name == old_info.display_name) {
+          return 0; // no changes to write
+        }
+
+        constexpr bool exclusive = false;
+        return user->store_user(this, y, exclusive, &old_info);
+      });
 }
 
 void RGWUpdateUser_IAM::send_response()
@@ -901,20 +909,17 @@ int RGWCreateAccessKey_IAM::forward_to_master(optional_yield y,
 
 void RGWCreateAccessKey_IAM::execute(optional_yield y)
 {
-  RGWUserInfo& info = user->get_info();
-  RGWUserInfo old_info = info;
-
   std::optional<int> max_keys;
   {
     // read account's access key limit
     RGWAccountInfo account;
     rgw::sal::Attrs attrs; // unused
     RGWObjVersionTracker objv; // unused
-    op_ret = driver->load_account_by_id(this, y, info.account_id,
+    op_ret = driver->load_account_by_id(this, y, user->get_info().account_id,
                                         account, attrs, objv);
     if (op_ret < 0) {
       ldpp_dout(this, 4) << "failed to load iam account "
-          << info.account_id << ": " << cpp_strerror(op_ret) << dendl;
+          << user->get_info().account_id << ": " << cpp_strerror(op_ret) << dendl;
       return;
     }
     if (account.max_access_keys >= 0) { // max < 0 means unlimited
@@ -939,17 +944,22 @@ void RGWCreateAccessKey_IAM::execute(optional_yield y)
     }
   }
 
-  info.access_keys[key.id] = key;
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y, &max_keys] {
+        RGWUserInfo& info = user->get_info();
+        RGWUserInfo old_info = info;
 
-  // check the current count against account limit
-  if (max_keys && std::cmp_greater(info.access_keys.size(), *max_keys)) {
-    s->err.message = fmt::format("Access key limit {} exceeded", *max_keys);
-    op_ret = -ERR_LIMIT_EXCEEDED;
-    return;
-  }
+        info.access_keys[key.id] = key;
 
-  constexpr bool exclusive = false;
-  op_ret = user->store_user(this, y, exclusive, &old_info);
+        // check the current count against account limit
+        if (max_keys && std::cmp_greater(info.access_keys.size(), *max_keys)) {
+          s->err.message = fmt::format("Access key limit {} exceeded", *max_keys);
+          return -ERR_LIMIT_EXCEEDED;
+        }
+
+        constexpr bool exclusive = false;
+        return user->store_user(this, y, exclusive, &old_info);
+      });
 }
 
 void RGWCreateAccessKey_IAM::send_response()
@@ -1093,20 +1103,6 @@ int RGWUpdateAccessKey_IAM::forward_to_master(optional_yield y,
 
 void RGWUpdateAccessKey_IAM::execute(optional_yield y)
 {
-  RGWUserInfo& info = user->get_info();
-  RGWUserInfo old_info = info;
-
-  auto key = info.access_keys.find(access_key_id);
-  if (key == info.access_keys.end()) {
-    s->err.message = "No such AccessKeyId in the user";
-    op_ret = -ERR_NO_SUCH_ENTITY;
-    return;
-  }
-
-  if (key->second.active == new_status) {
-    return; // nothing to do, return success
-  }
-
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
     op_ret = forward_to_master(y, site);
@@ -1115,10 +1111,26 @@ void RGWUpdateAccessKey_IAM::execute(optional_yield y)
     }
   }
 
-  key->second.active = new_status;
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y] {
+        RGWUserInfo& info = user->get_info();
+        RGWUserInfo old_info = info;
 
-  constexpr bool exclusive = false;
-  op_ret = user->store_user(this, y, exclusive, &old_info);
+        auto key = info.access_keys.find(access_key_id);
+        if (key == info.access_keys.end()) {
+          s->err.message = "No such AccessKeyId in the user";
+          return -ERR_NO_SUCH_ENTITY;
+        }
+
+        if (key->second.active == new_status) {
+          return 0; // nothing to do, return success
+        }
+
+        key->second.active = new_status;
+
+        constexpr bool exclusive = false;
+        return user->store_user(this, y, exclusive, &old_info);
+      });
 }
 
 void RGWUpdateAccessKey_IAM::send_response()
@@ -1244,23 +1256,25 @@ void RGWDeleteAccessKey_IAM::execute(optional_yield y)
     }
   }
 
-  RGWUserInfo& info = user->get_info();
-  RGWUserInfo old_info = info;
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y, &site] {
+        RGWUserInfo& info = user->get_info();
+        RGWUserInfo old_info = info;
 
-  auto key = info.access_keys.find(access_key_id);
-  if (key == info.access_keys.end()) {
-    if (!site.is_meta_master()) {
-      return; // delete succeeded on the master
-    }
-    s->err.message = "No such AccessKeyId in the user";
-    op_ret = -ERR_NO_SUCH_ENTITY;
-    return;
-  }
+        auto key = info.access_keys.find(access_key_id);
+        if (key == info.access_keys.end()) {
+          if (!site.is_meta_master()) {
+            return 0; // delete succeeded on the master
+          }
+          s->err.message = "No such AccessKeyId in the user";
+          return -ERR_NO_SUCH_ENTITY;
+        }
 
-  info.access_keys.erase(key);
+        info.access_keys.erase(key);
 
-  constexpr bool exclusive = false;
-  op_ret = user->store_user(this, y, exclusive, &old_info);
+        constexpr bool exclusive = false;
+        return user->store_user(this, y, exclusive, &old_info);
+      });
 }
 
 void RGWDeleteAccessKey_IAM::send_response()
