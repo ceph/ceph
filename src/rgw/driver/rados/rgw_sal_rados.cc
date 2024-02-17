@@ -4430,11 +4430,6 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
     return ret;
   }
 
-  if (!info.perm_policy_map.empty() ||
-      !info.managed_policies.arns.empty()) {
-    return -ERR_DELETE_CONFLICT;
-  }
-
   // Delete id & insert MD Log
   RGWSI_MBSObj_RemoveParams params;
   std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
