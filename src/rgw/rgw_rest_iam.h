@@ -8,6 +8,7 @@
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 #include "rgw_rest.h"
+#include "rgw_sal.h"
 #include "rgw_xml.h"
 
 
@@ -32,6 +33,24 @@ int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
                                   bufferlist& indata,
                                   RGWXMLDecoder::XMLParser& parser,
                                   req_info& req, optional_yield y);
+
+/// Perform an atomic read-modify-write operation on the given user metadata.
+/// Racing writes are detected here as ECANCELED errors, where we reload the
+/// updated user metadata and retry the operation.
+template <std::invocable<> F>
+int retry_raced_user_write(const DoutPrefixProvider* dpp, optional_yield y,
+                           rgw::sal::User* u, const F& f)
+{
+  int r = f();
+  for (int i = 0; i < 10 && r == -ECANCELED; ++i) {
+    u->get_version_tracker().clear();
+    r = u->load_user(dpp, y);
+    if (r >= 0) {
+      r = f();
+    }
+  }
+  return r;
+}
 
 /// Perform an atomic read-modify-write operation on the given group metadata.
 /// Racing writes are detected here as ECANCELED errors, where we reload the
