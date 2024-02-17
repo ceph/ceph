@@ -2664,6 +2664,8 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "ops") {
     vector<string> flags;
     cmd_getval(cmdmap, "flags", flags);
+    string path;
+    cmd_getval(cmdmap, "path", path);
     std::unique_lock l(mds_lock, std::defer_lock);
     auto lambda = OpTracker::default_dumper;
     if (flags.size()) {
@@ -2678,8 +2680,18 @@ void MDSRankDispatcher::handle_asok_command(
       };
       l.lock();
     }
-    if (!op_tracker.dump_ops_in_flight(f, false, {""}, false, lambda)) {
-      *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+    if (!path.empty()) {
+      auto ff = JSONFormatterFile(path, false);
+      if (!op_tracker.dump_ops_in_flight(&ff, false, {""}, false, lambda)) {
+        *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+      }
+      f->open_object_section("result");
+      f->dump_string("path", path);
+      f->close_section();
+    } else {
+      if (!op_tracker.dump_ops_in_flight(f, false, {""}, false, lambda)) {
+        *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+      }
     }
   } else if (command == "dump_blocked_ops") {
     if (!op_tracker.dump_ops_in_flight(f, true)) {
@@ -3206,23 +3218,39 @@ int MDSRank::_command_export_dir(
 
 void MDSRank::command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f) 
 {
+  std::string path;
+  cmd_getval(cmdmap, "path", path);
   std::string root;
-  int64_t depth;
   cmd_getval(cmdmap, "root", root);
+  int64_t depth;
+  if (!cmd_getval(cmdmap, "depth", depth)) {
+    depth = -1;
+  }
   if (root.empty()) {
     root = "/";
   }
-  if (!cmd_getval(cmdmap, "depth", depth))
-    depth = -1;
-  std::lock_guard l(mds_lock);
-  CInode *in = mdcache->cache_traverse(filepath(root.c_str()));
-  if (!in) {
-    ss << "inode for path '" << filepath(root.c_str()) << "' is not in cache";
-    return;
+
+  auto dump = [&](Formatter *f) {
+    std::lock_guard l(mds_lock);
+    CInode *in = mdcache->cache_traverse(filepath(root.c_str()));
+    if (!in) {
+      ss << "inode for path '" << filepath(root.c_str()) << "' is not in cache";
+      return;
+    }
+    f->open_array_section("inodes");
+    mdcache->dump_tree(in, 0, depth, f);
+    f->close_section();
+  };
+
+  if (!path.empty()) {
+    auto ff = JSONFormatterFile(path, false);
+    dump(&ff);
+    f->open_object_section("result");
+    f->dump_string("path", path);
+    f->close_section();
+  } else {
+    dump(f);
   }
-  f->open_array_section("inodes");
-  mdcache->dump_tree(in, 0, depth, f);
-  f->close_section();
 }
 
 CDir *MDSRank::_command_dirfrag_get(
