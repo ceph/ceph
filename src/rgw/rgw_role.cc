@@ -431,7 +431,8 @@ public:
     auto* driver = mdo->get_driver();
     info.mtime = mtime;
     std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(info);
-    int ret = role->create(dpp, true, info.id, y);
+    constexpr bool exclusive = false;
+    int ret = role->create(dpp, exclusive, info.id, y);
     if (ret == -EEXIST) {
       ret = role->update(dpp, y);
     }
