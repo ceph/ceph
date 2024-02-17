@@ -4,9 +4,19 @@
  Placement Groups
 ==================
 
+Placement groups (PGs) are subsets of each logical Ceph pool. Placement groups
+perform the function of placing objects (as a group) into OSDs. Ceph manages
+data internally at placement-group granularity: this scales better than would
+managing individual RADOS objects. A cluster that has a larger number of
+placement groups (for example, 150 per OSD) is better balanced than an
+otherwise identical cluster with a smaller number of placement groups.
+
+Ceph’s internal RADOS objects are each mapped to a specific placement group,
+and each placement group belongs to exactly one Ceph pool.
+
 See Sage Weil's blog post `New in Nautilus: PG merging and autotuning
 <https://ceph.io/en/news/blog/2019/new-in-nautilus-pg-merging-and-autotuning/>`_
-for information about the relationship of placement groups to pools and to
+for more information about the relationship of placement groups to pools and to
 objects.
 
 .. _pg-autoscaler:
