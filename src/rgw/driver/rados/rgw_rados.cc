@@ -3263,7 +3263,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   state = NULL;
 
   if (versioned_op && meta.olh_epoch) {
-    r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, log_op);
+    bool add_log = log_op && store->svc.zone->need_to_log_data();
+    r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, add_log);
     if (r < 0) {
       return r;
     }
