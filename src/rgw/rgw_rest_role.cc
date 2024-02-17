@@ -352,11 +352,8 @@ int RGWDeleteRole::init_processing(optional_yield y)
 
 void RGWDeleteRole::execute(optional_yield y)
 {
-  bool is_master = true;
-
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
-    is_master = false;
     RGWXMLDecoder::XMLParser parser;
     if (!parser.init()) {
       ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
@@ -376,16 +373,28 @@ void RGWDeleteRole::execute(optional_yield y)
     }
   }
 
-  op_ret = role->delete_obj(s, y);
+  op_ret = retry_raced_role_write(this, y, role.get(),
+      [this, y, &site] {
+        if (site.is_meta_master()) {
+          // only check on the master zone. if a forwarded DeleteRole request
+          // succeeds on the master zone, it needs to succeed here too
+          const auto& info = role->get_info();
+          if (!info.perm_policy_map.empty() ||
+              !info.managed_policies.arns.empty()) {
+            s->err.message = "The role cannot be deleted until all role policies are removed";
+            return -ERR_DELETE_CONFLICT;
+          }
+        }
+        return role->delete_obj(s, y);
+      });
 
   if (op_ret == -ENOENT) {
     //Role has been deleted since metadata from master has synced up
-    if (!is_master) {
+    if (!site.is_meta_master()) {
       op_ret = 0;
     } else {
       op_ret = -ERR_NO_ROLE_FOUND;
     }
-    return;
   }
   if (!op_ret) {
     s->formatter->open_object_section("DeleteRoleResponse");
@@ -725,12 +734,16 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
   }
 
   op_ret = retry_raced_role_write(this, y, role.get(),
-      [this, y] {
+      [this, y, &site] {
         int r = role->delete_policy(this, policy_name);
         if (r == -ENOENT) {
+          if (!site.is_meta_master()) {
+            return 0; // delete succeeded on the master
+          }
           s->err.message = "The requested PolicyName was not found";
           return -ERR_NO_SUCH_ENTITY;
-        } else if (r == 0) {
+        }
+        if (r == 0) {
           r = role->update(this, y);
         }
         return r;
@@ -1157,10 +1170,13 @@ void RGWDetachRolePolicy_IAM::execute(optional_yield y)
   }
 
   op_ret = retry_raced_role_write(this, y, role.get(),
-      [this, y] {
+      [this, y, &site] {
         auto &policies = role->get_info().managed_policies;
         auto p = policies.arns.find(policy_arn);
         if (p == policies.arns.end()) {
+          if (!site.is_meta_master()) {
+            return 0; // delete succeeded on the master
+          }
           s->err.message = "The requested PolicyArn is not attached to the role";
           return -ERR_NO_SUCH_ENTITY;
         }
