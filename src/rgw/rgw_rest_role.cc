@@ -471,8 +471,11 @@ void RGWModifyRoleTrustPolicy::execute(optional_yield y)
     }
   }
 
-  role->update_trust_policy(trust_policy);
-  op_ret = role->update(this, y);
+  op_ret = retry_raced_role_write(this, y, role.get(),
+      [this, y] {
+        role->update_trust_policy(trust_policy);
+        return role->update(this, y);
+      });
 
   s->formatter->open_object_section("UpdateAssumeRolePolicyResponse");
   s->formatter->open_object_section("ResponseMetadata");
@@ -594,8 +597,11 @@ void RGWPutRolePolicy::execute(optional_yield y)
     }
   }
 
-  role->set_perm_policy(policy_name, perm_policy);
-  op_ret = role->update(this, y);
+  op_ret = retry_raced_role_write(this, y, role.get(),
+      [this, y] {
+        role->set_perm_policy(policy_name, perm_policy);
+        return role->update(this, y);
+      });
 
   if (op_ret == 0) {
     s->formatter->open_object_section("PutRolePolicyResponse");
@@ -718,15 +724,17 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
     }
   }
 
-  op_ret = role->delete_policy(this, policy_name);
-  if (op_ret == -ENOENT) {
-    op_ret = -ERR_NO_ROLE_FOUND;
-    return;
-  }
-
-  if (op_ret == 0) {
-    op_ret = role->update(this, y);
-  }
+  op_ret = retry_raced_role_write(this, y, role.get(),
+      [this, y] {
+        int r = role->delete_policy(this, policy_name);
+        if (r == -ENOENT) {
+          s->err.message = "The requested PolicyName was not found";
+          return -ERR_NO_SUCH_ENTITY;
+        } else if (r == 0) {
+          r = role->update(this, y);
+        }
+        return r;
+      });
 
   s->formatter->open_object_section("DeleteRolePoliciesResponse");
   s->formatter->open_object_section("ResponseMetadata");
@@ -782,10 +790,14 @@ void RGWTagRole::execute(optional_yield y)
     }
   }
 
-  op_ret = role->set_tags(this, tags);
-  if (op_ret == 0) {
-    op_ret = role->update(this, y);
-  }
+  op_ret = retry_raced_role_write(this, y, role.get(),
+      [this, y] {
+        int r = role->set_tags(this, tags);
+        if (r == 0) {
+          r = role->update(this, y);
+        }
+        return r;
+      });
 
   if (op_ret == 0) {
     s->formatter->open_object_section("TagRoleResponse");
@@ -882,8 +894,11 @@ void RGWUntagRole::execute(optional_yield y)
     }
   }
 
-  role->erase_tags(untag);
-  op_ret = role->update(this, y);
+  op_ret = retry_raced_role_write(this, y, role.get(),
+      [this, y] {
+        role->erase_tags(untag);
+        return role->update(this, y);
+      });
 
   if (op_ret == 0) {
     s->formatter->open_object_section("UntagRoleResponse");
@@ -939,16 +954,18 @@ void RGWUpdateRole::execute(optional_yield y)
     }
   }
 
-  if (description) {
-    role->get_info().description = std::move(*description);
-  }
-  role->update_max_session_duration(max_session_duration);
-  if (!role->validate_max_session_duration(this)) {
-    op_ret = -EINVAL;
-    return;
-  }
+  op_ret = retry_raced_role_write(this, y, role.get(),
+      [this, y] {
+        if (description) {
+          role->get_info().description = std::move(*description);
+        }
+        role->update_max_session_duration(max_session_duration);
+        if (!role->validate_max_session_duration(this)) {
+          return -EINVAL;
+        }
 
-  op_ret = role->update(this, y);
+        return role->update(this, y);
+      });
 
   s->formatter->open_object_section("UpdateRoleResponse");
   s->formatter->open_object_section("UpdateRoleResult");
@@ -1056,12 +1073,15 @@ void RGWAttachRolePolicy_IAM::execute(optional_yield y)
     return;
   }
 
-  // insert the policy arn. if it's already there, just return success
-  auto &policies = role->get_info().managed_policies;
-  const bool inserted = policies.arns.insert(policy_arn).second;
-  if (inserted) {
-    op_ret = role->update(this, y);
-  }
+  op_ret = retry_raced_role_write(this, y, role.get(),
+      [this, y] {
+        // insert the policy arn. if it's already there, just return success
+        auto &policies = role->get_info().managed_policies;
+        if (!policies.arns.insert(policy_arn).second) {
+          return 0;
+        }
+        return role->update(this, y);
+      });
 
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("AttachRolePolicyResponse", RGW_REST_IAM_XMLNS);
@@ -1136,15 +1156,17 @@ void RGWDetachRolePolicy_IAM::execute(optional_yield y)
     }
   }
 
-  auto &policies = role->get_info().managed_policies;
-  auto p = policies.arns.find(policy_arn);
-  if (p == policies.arns.end()) {
-    op_ret = -ERR_NO_SUCH_ENTITY;
-    s->err.message = "The requested PolicyArn is not attached to the role";
-    return;
-  }
-  policies.arns.erase(p);
-  op_ret = role->update(this, y);
+  op_ret = retry_raced_role_write(this, y, role.get(),
+      [this, y] {
+        auto &policies = role->get_info().managed_policies;
+        auto p = policies.arns.find(policy_arn);
+        if (p == policies.arns.end()) {
+          s->err.message = "The requested PolicyArn is not attached to the role";
+          return -ERR_NO_SUCH_ENTITY;
+        }
+        policies.arns.erase(p);
+        return role->update(this, y);
+      });
 
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("DetachRolePolicyResponse", RGW_REST_IAM_XMLNS);

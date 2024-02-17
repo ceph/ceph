@@ -135,6 +135,7 @@ public:
   const std::string& get_create_date() const { return info.creation_date; }
   const std::string& get_assume_role_policy() const { return info.trust_policy;}
   const uint64_t& get_max_session_duration() const { return info.max_session_duration; }
+  RGWObjVersionTracker& get_objv_tracker() { return info.objv_tracker; }
   const RGWObjVersionTracker& get_objv_tracker() const { return info.objv_tracker; }
   const real_time& get_mtime() const { return info.mtime; }
   std::map<std::string, bufferlist>& get_attrs() { return info.attrs; }
