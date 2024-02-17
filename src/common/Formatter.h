@@ -13,6 +13,7 @@
 #include <stdarg.h>
 #include <sstream>
 #include <map>
+#include <vector>
 
 namespace ceph {
 
@@ -204,7 +205,7 @@ namespace ceph {
     copyable_sstream m_ss;
     copyable_sstream m_pending_string;
     std::string m_pending_name;
-    std::list<json_formatter_stack_entry_d> m_stack;
+    std::vector<json_formatter_stack_entry_d> m_stack;
     bool m_is_pending_string;
     bool m_line_break_enabled = false;
   };
