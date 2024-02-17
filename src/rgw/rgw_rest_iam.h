@@ -8,6 +8,7 @@
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 #include "rgw_rest.h"
+#include "rgw_role.h"
 #include "rgw_sal.h"
 #include "rgw_xml.h"
 
@@ -65,6 +66,24 @@ int retry_raced_group_write(const DoutPrefixProvider* dpp, optional_yield y,
   for (int i = 0; i < 10 && r == -ECANCELED; ++i) {
     objv.clear();
     r = driver->load_group_by_id(dpp, y, info.id, info, attrs, objv);
+    if (r >= 0) {
+      r = f();
+    }
+  }
+  return r;
+}
+
+/// Perform an atomic read-modify-write operation on the given role metadata.
+/// Racing writes are detected here as ECANCELED errors, where we reload the
+/// updated group metadata and retry the operation.
+template <std::invocable<> F>
+int retry_raced_role_write(const DoutPrefixProvider* dpp, optional_yield y,
+                           rgw::sal::RGWRole* role, const F& f)
+{
+  int r = f();
+  for (int i = 0; i < 10 && r == -ECANCELED; ++i) {
+    role->get_objv_tracker().clear();
+    r = role->get_by_id(dpp, y);
     if (r >= 0) {
       r = f();
     }
