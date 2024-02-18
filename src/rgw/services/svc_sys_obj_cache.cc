@@ -90,6 +90,11 @@ int RGWSI_SysObj_Cache::remove(const DoutPrefixProvider *dpp,
                                optional_yield y)
 
 {
+  int r = RGWSI_SysObj_Core::remove(dpp, objv_tracker, obj, y);
+  if (r < 0) {
+    return r;
+  }
+
   rgw_pool pool;
   string oid;
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
@@ -98,12 +103,12 @@ int RGWSI_SysObj_Cache::remove(const DoutPrefixProvider *dpp,
   cache.invalidate_remove(dpp, name);
 
   ObjectCacheInfo info;
-  int r = distribute_cache(dpp, name, obj, info, INVALIDATE_OBJ, y);
+  r = distribute_cache(dpp, name, obj, info, INVALIDATE_OBJ, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): failed to distribute cache: r=" << r << dendl;
-  }
+  } // not fatal
 
-  return RGWSI_SysObj_Core::remove(dpp, objv_tracker, obj, y);
+  return 0;
 }
 
 int RGWSI_SysObj_Cache::read(const DoutPrefixProvider *dpp,
