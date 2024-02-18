@@ -5,9 +5,10 @@
  * \file fmtlib formatters for some types.h classes
  */
 
-#include "common/hobject_fmt.h"
+#include "common/hobject.h"
 #include "osd/osd_types.h"
 #include <fmt/chrono.h>
+#include <fmt/ranges.h>
 #if FMT_VERSION >= 90000
 #include <fmt/ostream.h>
 #endif
