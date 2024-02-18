@@ -14,7 +14,7 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
-#include "common/hobject_fmt.h"
+#include "common/hobject.h"
 
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
