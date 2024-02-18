@@ -408,7 +408,6 @@ void RGWDeleteRole::execute(optional_yield y)
     } else {
       op_ret = -ERR_NO_ROLE_FOUND;
     }
-    return;
   }
   if (!op_ret) {
     s->formatter->open_object_section("DeleteRoleResponse");
