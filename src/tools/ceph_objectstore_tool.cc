@@ -1057,6 +1057,84 @@ int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
   return 0;
 }
 
+int expand_log(
+  CephContext *cct,
+  ObjectStore *fs,
+  spg_t pgid,
+  pg_info_t &info,
+  eversion_t target_version)
+{
+  try {
+    bufferlist bl;
+    OSDMap osdmap;
+    int ret = get_osdmap(fs, info.last_update.epoch, osdmap, bl);
+    if (ret < 0) {
+      std::cerr << "Can't find latest local OSDMap " << info.last_update.epoch << std::endl;
+      return ret;
+    }
+    ceph_assert(osdmap.have_pg_pool(info.pgid.pool()));
+    auto pool_info = osdmap.get_pg_pool(info.pgid.pool());
+    if (!pool_info->is_erasure()) {
+      std::cerr << "extend-log-with-fake-entries can only apply to pgs of ec pools" << std::endl;
+      return -EINVAL;
+    }
+
+    PGLog log(cct);
+    pg_missing_t missing;
+    auto ch = fs->open_collection(coll_t(pgid));
+    if (!ch) {
+      return -ENOENT;
+    }
+    ostringstream oss;
+    log.read_log_and_missing(
+      fs, ch,
+      pgid.make_pgmeta_oid(),
+      info,
+      oss,
+      cct->_conf->osd_ignore_stale_divergent_priors,
+      cct->_conf->osd_debug_verify_missing_on_start);
+    if (debug && oss.str().size())
+      cerr << oss.str() << std::endl;
+
+    auto e = target_version;
+    e.version = log.get_head().version + 1;
+    auto entry = *log.get_log().log.rbegin();
+    for (; e <= target_version; e.version++) {
+      entry.version = e;
+      std::cout << "adding " << e << std::endl;
+      log.add(entry, true);
+    }
+    info.last_complete = target_version;
+    info.last_update = target_version;
+    info.last_user_version = target_version.version + 1;
+
+    std::map<string, bufferlist> km;
+    ObjectStore::Transaction t;
+
+    pg_fast_info_t fast;
+    fast.populate_from(info);
+    encode(fast, km[string(fastinfo_key)]);
+    encode(info, km[string(info_key)]);
+    log.write_log_and_missing(
+      t,
+      &km,
+      coll_t(pgid),
+      pgid.make_pgmeta_oid(),
+      pool_info->require_rollback());
+
+    for (auto &ent : km) {
+      std::cout << "km key: " << ent.first << std::endl;
+    }
+
+    t.omap_setkeys(coll_t(pgid), pgid.make_pgmeta_oid(), km);
+    fs->queue_transaction(ch, std::move(t));
+    return 0;
+  } catch (const buffer::error &e) {
+    cerr << "read_log_and_missing threw exception error " << e.what() << std::endl;
+    return -EFAULT;
+  }
+}
+
 int get_pg_num_history(ObjectStore *store, pool_pg_num_history_t *h)
 {
   ObjectStore::CollectionHandle ch = store->open_collection(coll_t::meta());
@@ -3350,7 +3428,7 @@ bool ends_with(const string& check, const string& ending)
 int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, mountpoint, mon_store_path, object;
-  string target_data_path, fsid;
+  string target_data_path, fsid, target_version_str;
   string objcmd, arg1, arg2, type, format, argnspace, pool, rmtypestr, dump_data_dir;
   boost::optional<std::string> nspace;
   spg_t pgid;
@@ -3368,6 +3446,8 @@ int main(int argc, char **argv)
      "Arg is one of [bluestore (default), memstore]")
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
+    ("target-version", po::value<string>(&target_version_str),
+     "the target version that log is expected to be expanded to")
     ("journal-path", po::value<string>(&jpath),
      "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
@@ -3625,6 +3705,18 @@ int main(int argc, char **argv)
   if (pgidstr.length() && pgidstr != "meta" && !pgid.parse(pgidstr.c_str())) {
     cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
     return 1;
+  }
+
+  eversion_t target_version;
+  if (op == "extend-log-with-fake-entries") {
+    if (target_version_str.empty()) {
+      std::cerr << "target-version needed" << std::endl;
+      return 1;
+    }
+    std::string epoch_str = target_version_str.substr(0, target_version_str.find("."));
+    std::string version_str = target_version_str.substr(target_version_str.find(".") + 1);
+    target_version.epoch = std::stoi(epoch_str);
+    target_version.version = std::stoll(version_str);
   }
 
   std::unique_ptr<ObjectStore> fs = ObjectStore::create(g_ceph_context, type, dpath, jpath, flags);
@@ -4147,7 +4239,7 @@ int main(int argc, char **argv)
 
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
-  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log" && op != "trim-pg-log-dups" && op != "pg-log-inject-dups") {
+  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log" && op != "trim-pg-log-dups" && op != "pg-log-inject-dups" && op != "extend-log-with-fake-entries") {
     cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-super, meta-list, "
       "get-osdmap, set-osdmap, get-superblock, set-superblock, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log, "
       "trim-pg-log-dups statfs)"
@@ -4464,6 +4556,10 @@ int main(int argc, char **argv)
           goto out;
 
       dump_log(formatter, cout, log, missing);
+    } else if (op == "extend-log-with-fake-entries") {
+      ret = expand_log(cct.get(), fs.get(), pgid, info, target_version);
+      if (ret < 0)
+	goto out;
     } else if (op == "mark-complete") {
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
