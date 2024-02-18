@@ -802,7 +802,7 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
     op_ret = _role->update(this, y);
   }
 
-  s->formatter->open_object_section("DeleteRolePoliciesResponse");
+  s->formatter->open_object_section("DeleteRolePolicyResponse");
   s->formatter->open_object_section("ResponseMetadata");
   s->formatter->dump_string("RequestId", s->trans_id);
   s->formatter->close_section();
