@@ -854,7 +854,7 @@ TEST_P(TestSingleError, SingleError) {
   bool found_selected_oi = false;
   for (const auto &shard : shards) {
     auto siter = obj_error.shards.find(
-      librados::osd_shard_t(shard.osd, shard.shard)
+      librados::osd_shard_t{shard.osd, shard.shard}
     );
     if (siter == obj_error.shards.end()) {
       EXPECT_NE(siter, obj_error.shards.end());
@@ -1125,7 +1125,7 @@ TEST_P(TestSnapSetCloneError, CloneError) {
       auto to_insert = make_clone(name, should_exist[i]);
       if (GetParam().should_inject_size(i)) {
 	expected_error.set_size_mismatch();
-	to_insert.second = so_builder_t(to_insert.second).set_size(
+	to_insert.second = so_builder_t{to_insert.second}.set_size(
 	  so_get_oi(to_insert.second)->size + 1).get();
       }
       map.objects.insert(to_insert);
