@@ -749,11 +749,13 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
         return r;
       });
 
-  s->formatter->open_object_section("DeleteRolePoliciesResponse");
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section();
-  s->formatter->close_section();
+  if (op_ret == 0) {
+    s->formatter->open_object_section("DeleteRolePolicyResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
 }
 
 int RGWTagRole::init_processing(optional_yield y)
