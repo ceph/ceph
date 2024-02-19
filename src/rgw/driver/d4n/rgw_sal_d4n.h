@@ -114,7 +114,6 @@ class D4NFilterObject : public FilterObject {
 	    uint64_t ofs = 0, len = 0;
 	    bufferlist bl_rem;
 	    bool last_part{false};
-	    std::mutex d4n_get_data_lock;
 	    bool write_to_cache{true};
 	    const DoutPrefixProvider* dpp;
 	    optional_yield* y;

@@ -36,6 +36,7 @@ private:
   Partition partition_info;
   uint64_t free_space;
   CephContext* cct;
+  inline static std::atomic<uint64_t> index{0};
 
   struct libaio_read_handler {
     rgw::Aio* throttle = nullptr;
@@ -101,6 +102,7 @@ private:
   struct AsyncWriteRequest {
     const DoutPrefixProvider* dpp;
 	  std::string key;
+    std::string temp_key;
 	  void *data;
 	  int fd;
 	  unique_aio_cb_ptr cb;
