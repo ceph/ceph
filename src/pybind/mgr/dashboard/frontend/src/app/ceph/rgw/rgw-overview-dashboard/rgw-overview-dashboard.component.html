@@ -1,0 +1,181 @@
+<div class="container-fluid">
+  <div class="row">
+    <cd-card cardTitle="Inventory"
+             i18n-title
+             class="col-sm-3 px-3 d-flex"
+             aria-label="Inventory card">
+
+      <cd-card-row [data]="rgwDaemonCount"
+                   link="/rgw/daemon"
+                   title="Gateway"
+                   summaryType="simplified"
+                   *ngIf="rgwDaemonCount != null"></cd-card-row>
+
+      <cd-card-row [data]="rgwRealmCount"
+                   link="/rgw/multisite"
+                   title="Realm"
+                   summaryType="simplified"
+                   *ngIf="rgwRealmCount != null"></cd-card-row>
+
+      <cd-card-row [data]="rgwZonegroupCount"
+                   link="/rgw/multisite"
+                   title="Zone Group"
+                   summaryType="simplified"
+                   *ngIf="rgwZonegroupCount != null"></cd-card-row>
+
+      <cd-card-row [data]="rgwZoneCount"
+                   link="/rgw/multisite"
+                   title="Zone"
+                   summaryType="simplified"
+                   *ngIf="rgwZoneCount != null"></cd-card-row>
+
+      <cd-card-row [data]="rgwBucketCount"
+                   link="/rgw/bucket"
+                   title="Bucket"
+                   summaryType="simplified"
+                   *ngIf="rgwBucketCount != null"></cd-card-row>
+
+      <cd-card-row [data]="UserCount"
+                   link="/rgw/user"
+                   title="User"
+                   summaryType="simplified"
+                   *ngIf="UserCount != null"></cd-card-row>
+
+      <cd-card-row [data]="objectCount"
+                   title="Object"
+                   summaryType="simplified"
+                   *ngIf="objectCount != null"></cd-card-row>
+    </cd-card>
+    <cd-card cardTitle="Performance Statistics"
+             i18n-title
+             class="col-sm-6 d-flex"
+             ria-label="Performance Statistics card">
+      <div class="ms-4 me-4 mt-0">
+        <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
+        </cd-dashboard-time-selector>
+        <cd-dashboard-area-chart chartTitle="Requests/sec"
+                                 dataUnits=""
+                                 [labelsArray]="['Requests/sec']"
+                                 [dataArray]="[queriesResults.RGW_REQUEST_PER_SECOND]">
+        </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="Latency"
+                                 dataUnits="ms"
+                                 [labelsArray]="['GET', 'PUT']"
+                                 [dataArray]="[queriesResults.AVG_GET_LATENCY, queriesResults.AVG_PUT_LATENCY]">
+        </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="Bandwidth"
+                                 dataUnits="B"
+                                 [labelsArray]="['GET', 'PUT']"
+                                 [dataArray]="[queriesResults.GET_BANDWIDTH, queriesResults.PUT_BANDWIDTH]">
+        </cd-dashboard-area-chart>
+      </div>
+    </cd-card>
+    <div class="col-lg-3">
+      <cd-card cardTitle="Used Capacity"
+               i18n-title
+               class="col-sm-2 d-flex w-100 h-50 pb-3"
+               aria-label="Used Capacity"
+               [alignItemsCenter]="true"
+               [justifyContentCenter]="true">
+        <span  class="ms-4 me-4 text-center">
+          <h1>{{ totalPoolUsedBytes | dimlessBinary}}</h1>
+        </span>
+      </cd-card>
+      <cd-card cardTitle="Average Object Size"
+               i18n-title
+               class="col-sm-2 d-flex w-100 h-50 pt-3"
+               aria-label="Avg Object Size"
+               [alignItemsCenter]="true"
+               [justifyContentCenter]="true">
+        <span class="ms-4 me-4 text-center">
+          <h1>{{ averageObjectSize | dimlessBinary}}</h1>
+        </span>
+      </cd-card>
+    </div>
+  </div>
+
+  <div class="row pt-4 pb-4">
+    <cd-card cardTitle="Multi-Site Sync Status"
+             i18n-title>
+      <ng-template #notConfigured>
+        <span class="pe-5 ps-5">
+          <cd-alert-panel type="info"
+                          i18n>
+            Multi-site needs to be configured in order to see the multi-site sync status.
+            Please consult the <cd-doc section="multisite"></cd-doc> on how to configure and enable the multi-site functionality.
+          </cd-alert-panel>
+        </span>
+      </ng-template>
+      <span *ngIf="loading"
+            class="d-flex justify-content-center">
+        <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
+      </span>
+      <div class="row"
+           *ngIf="multisiteSyncStatus$ | async">
+        <div class="row pt-2"
+             *ngIf="showMultisiteCard; else notConfigured">
+          <cd-card cardTitle="Primary Source Zone"
+                   class="col-lg-3 d-flex justify-content-center align-primary-zone"
+                   [alignItemsCenter]="true"
+                   [justifyContentCenter]="true">
+            <span *ngIf="loading"
+                  class="d-flex justify-content-center">
+              <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
+            </span>
+            <span *ngIf="!loading"
+                  class="d-flex justify-content-center">
+              <cd-rgw-sync-primary-zone [realm]="realm"
+                                        [zonegroup]="zonegroup"
+                                        [zone]="zone">
+              </cd-rgw-sync-primary-zone>
+            </span>
+          </cd-card>
+          <div class="col-lg-9">
+            <cd-card cardTitle="Source Zones"
+                     class="d-flex h-100">
+              <span *ngIf="loading"
+                    class="d-flex justify-content-center">
+                <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
+              </span>
+              <div class="row"
+                   *ngIf="!loading">
+                <cd-card *ngFor="let zone of replicaZonesInfo; trackBy: trackByFn"
+                         cardTitle="{{zone.name}}"
+                         cardType="zone"
+                         shadowClass="true"
+                         i18n-title
+                         class="col-sm-9 col-lg-6 align-replica-zones d-flex pt-4"
+                         aria-label="Source Zones Card">
+                  <div class="row pb-4 ps-3 pe-3">
+                    <cd-card *ngFor="let title of chartTitles"
+                             [cardTitle]="title"
+                             i18n-title
+                             cardType="syncCards"
+                             removeBorder="true"
+                             class="col-sm-9 col-lg-6"
+                             [ngClass]="{ 'border-left': title === 'Data Sync' }"
+                             aria-label="Charts Card"
+                             [alignItemsCenter]="true"
+                             [justifyContentCenter]="true">
+                      <span class="me-2 text-center"
+                            *ngIf="title === 'Metadata Sync'">
+                        <cd-rgw-sync-metadata-info [metadataSyncInfo]="metadataSyncInfo">
+                        </cd-rgw-sync-metadata-info>
+                      </span>
+                      <span class="me-2"
+                            *ngIf="title === 'Data Sync'">
+                        <cd-rgw-sync-data-info [zone]="zone">
+                        </cd-rgw-sync-data-info>
+                      </span>
+                    </cd-card>
+                  </div>
+                </cd-card>
+              </div>
+            </cd-card>
+          </div>
+        </div>
+      </div>
+    </cd-card>
+  </div>
+</div>
+
