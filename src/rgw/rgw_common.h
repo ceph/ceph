@@ -1115,6 +1115,7 @@ struct req_state : DoutPrefixProvider {
   uint64_t obj_size{0};
   bool enable_ops_log;
   bool enable_usage_log;
+  rgw_s3select_usage_data s3select_usage;
   uint8_t defer_to_bucket_acls;
   uint32_t perm_mask{0};
 

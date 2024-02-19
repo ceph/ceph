@@ -238,9 +238,12 @@ static void log_usage(req_state *s, const string& op_name)
   ldpp_dout(s, 30) << "log_usage: bucket_name=" << bucket_name
 	<< " tenant=" << s->bucket_tenant
 	<< ", bytes_sent=" << bytes_sent << ", bytes_received="
-	<< bytes_received << ", success=" << data.successful_ops << dendl;
+	<< bytes_received << ", success=" << data.successful_ops
+	<< ", bytes_processed=" << s->s3select_usage.bytes_processed
+	<< ", bytes_returned=" << s->s3select_usage.bytes_returned << dendl;
 
-  entry.add(op_name, data);
+  entry.add_usage(op_name, data);
+  entry.s3select_usage = s->s3select_usage;
 
   utime_t ts = ceph_clock_now();
 
