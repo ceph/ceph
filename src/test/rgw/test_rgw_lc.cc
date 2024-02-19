@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>
+#include <chrono>
 #include <stdexcept>
 
 static const char* xmldoc_1 =
@@ -105,6 +106,17 @@ TEST(TestLCFilterInvalidAnd, XMLDoc3)
   */
   /* check our flags */
   ASSERT_EQ(filter.get_flags(), uint32_t(LCFlagType::none));
+}
+
+TEST(ExpHdr, ReplaceStrftime)
+{
+  using namespace std::chrono;
+
+  constexpr auto dec21 = year(2012)/12/21;
+  auto exp = sys_days(dec21) + 9h + 13min + 7s ;
+  auto exp_str = fmt::format("{:%a, %d %b %Y %T %Z}", fmt::gmtime(exp));
+  std::cout << "exp_str: " << exp_str << std::endl;
+  ASSERT_EQ(exp_str, "Fri, 21 Dec 2012 09:13:07 GMT");
 }
 
 struct LCWorkTimeTests : ::testing::Test
