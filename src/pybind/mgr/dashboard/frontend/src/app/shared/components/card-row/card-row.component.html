@@ -1,0 +1,171 @@
+<hr>
+<li class="list-group-item">
+  <div class="d-flex pl-1 pb-2 pt-2">
+    <div class="ms-4 me-auto">
+      <a [routerLink]="link"
+         *ngIf="link && total > 0; else noLinkTitle"
+         [ngPlural]="total"
+        i18n>
+          {{ total }}
+        <ng-template ngPluralCase="=0">{{ title }}</ng-template>
+        <ng-template ngPluralCase="=1">{{ title }}</ng-template>
+        <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+      </a>
+    </div>
+    <span class="me-3">
+      <ng-container [ngSwitch]="summaryType">
+        <ng-container *ngSwitchCase="'iscsi'">
+          <ng-container *ngTemplateOutlet="iscsiSummary"></ng-container>
+        </ng-container>
+        <ng-container *ngSwitchCase="'osd'">
+          <ng-container *ngTemplateOutlet="osdSummary"></ng-container>
+        </ng-container>
+        <ng-container *ngSwitchCase="'simplified'">
+          <ng-container *ngTemplateOutlet="simplifiedSummary"></ng-container>
+        </ng-container>
+        <ng-container *ngSwitchDefault>
+          <ng-container *ngTemplateOutlet="defaultSummary"></ng-container>
+        </ng-container>
+      </ng-container>
+    </span>
+  </div>
+</li>
+
+<ng-template #defaultSummary>
+  <span *ngIf="data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)">
+    <span *ngIf="data.success || (data.success === 0 && data.total === 0)">
+      {{ data.success }}
+    </span>
+    <span *ngIf="data.categoryPgAmount?.clean">
+      {{ data.categoryPgAmount?.clean }}
+    </span>
+    <i class="text-success"
+       [ngClass]="[icons.success]">
+    </i>
+  </span>
+  <span *ngIf="data.info"
+        class="ms-2">
+    <span *ngIf="data.info">
+      {{ data.info }}
+    </span>
+    <i class="text-info"
+       [ngClass]="[icons.danger]">
+    </i>
+  </span>
+  <span *ngIf="data.warn || data.categoryPgAmount?.warning"
+        class="ms-2">
+    <span *ngIf="data.warn">
+      {{ data.warn }}
+    </span>
+    <span *ngIf="data.categoryPgAmount?.warning">
+      {{ data.categoryPgAmount?.warning }}
+    </span>
+    <i class="text-warning"
+       [ngClass]="[icons.warning]">
+    </i>
+  </span>
+  <span *ngIf="data.error || data.categoryPgAmount?.unknown"
+        class="ms-2">
+    <span *ngIf="data.error">
+      {{ data.error }}
+    </span>
+    <span *ngIf="data.categoryPgAmount?.unknown">
+      {{ data.categoryPgAmount?.unknown }}
+    </span>
+    <i class="text-danger"
+       [ngClass]="[icons.danger]">
+    </i>
+  </span>
+  <span *ngIf="data.categoryPgAmount?.working"
+        class="ms-2">
+    <span *ngIf="data.categoryPgAmount?.working">
+      {{ data.categoryPgAmount?.working }}
+    </span>
+    <i class="text-warning"
+       [ngClass]="[icons.spinner, icons.spin]">
+    </i>
+  </span>
+</ng-template>
+
+<ng-template #osdSummary>
+  <span *ngIf="data.up === data.in">
+    {{ data.up }}
+    <i class="text-success"
+       [ngClass]="[icons.success]">
+    </i>
+  </span>
+  <span *ngIf="data.up !== data.in">
+    {{ data.up }}
+    <span class="fw-bold text-success">
+        up
+    </span>
+  </span>
+  <span *ngIf="data.in !== data.up"
+        class="ms-2">
+    {{ data.in }}
+    <span class="fw-bold text-success">
+        in
+    </span>
+  </span>
+  <span *ngIf="data.down"
+        class="ms-2">
+    {{ data.down }}
+    <span class="fw-bold text-danger me-2">
+        down
+    </span>
+  </span>
+  <span *ngIf="data.out"
+        class="ms-2">
+    {{ data.out }}
+    <span class="fw-bold text-danger me-2">
+        out
+    </span>
+  </span>
+  <span *ngIf="data.nearfull"
+        class="ms-2">
+        {{ data.nearfull }}
+    <span class="fw-bold text-warning me-2">
+      nearfull</span></span>
+  <span *ngIf="data.full"
+        class="ms-2">
+        {{ data.full }}
+    <span class="fw-bold text-danger">
+      full
+    </span>
+  </span>
+</ng-template>
+
+<ng-template #iscsiSummary>
+  <span>
+    {{ data.up }}
+    <i class="text-success"
+       *ngIf="data.up || data.up === 0"
+       [ngClass]="[icons.success]">
+    </i>
+  </span>
+  <span *ngIf="data.down"
+        class="ms-2">
+        {{ data.down }}
+    <i class="text-danger"
+       [ngClass]="[icons.danger]">
+    </i>
+  </span>
+</ng-template>
+
+<ng-template #simplifiedSummary>
+  <span>
+    {{ data }}
+    <i class="text-success"
+       [ngClass]="[icons.success]"></i>
+  </span>
+</ng-template>
+
+<ng-template #noLinkTitle>
+  <span *ngIf="total || total === 0"
+        [ngPlural]="total">
+    {{ total }}
+    <ng-template ngPluralCase="=0">{{ title }}</ng-template>
+    <ng-template ngPluralCase="=1">{{ title }}</ng-template>
+    <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+  </span>
+</ng-template>
