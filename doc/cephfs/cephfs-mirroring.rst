@@ -398,6 +398,69 @@ created, the mirror daemon will clear the failed state upon successful synchroni
 When mirroring is disabled, the respective `fs mirror status` command for the file system
 will not show up in command help.
 
+Metrics
+-------
+
+CephFS exports mirroring metrics as :ref:`Labeled Perf Counters` which will be consumed by the OCP/ODF Dashboard to provide monitoring of the Geo Replication. These metrics can be used to measure the progress of cephfs_mirror syncing and thus provide the monitoring capability. CephFS exports the following mirroring metrics, which are displayed using the ``counter dump`` command.
+
+.. list-table:: Mirror Status Metrics
+   :widths: 25 25 75
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * - mirroring_peers
+     - Gauge
+     - The number of peers involved in mirroring
+   * - directory_count
+     - Gauge
+     - The total number of directories being synchronized
+   * - mirrored_filesystems
+     - Gauge
+     - The total number of filesystems which are mirrored
+   * - mirror_enable_failures
+     - Counter
+     - Enable mirroring failures
+
+.. list-table:: Replication Metrics
+   :widths: 25 25 75
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * - snaps_synced
+     - Counter
+     - The total number of snapshots successfully synchronized
+   * - sync_bytes
+     - Counter
+     - The total bytes being synchronized
+   * - sync_failures
+     - Counter
+     - The total number of failed snapshot synchronizations
+   * - snaps_deleted
+     - Counter
+     - The total number of snapshots deleted
+   * - snaps_renamed
+     - Counter
+     - The total number of snapshots renamed
+   * - avg_sync_time
+     - Gauge
+     - The average time (ms) taken by all snapshot synchronizations
+   * - last_synced_start
+     - Gauge
+     - The sync start time (ms) of the last synced snapshot
+   * - last_synced_end
+     - Gauge
+     - The sync end time (ms) of the last synced snapshot
+   * - last_synced_duration
+     - Gauge
+     - The time duration (ms) of the last synchronization
+   * - last_synced_bytes
+     - counter
+     - The total bytes being synchronized for the last synced snapshot
+
 Configuration Options
 ---------------------
 
@@ -410,6 +473,7 @@ Configuration Options
 .. confval:: cephfs_mirror_retry_failed_directories_interval
 .. confval:: cephfs_mirror_restart_mirror_on_failure_interval
 .. confval:: cephfs_mirror_mount_timeout
+.. confval:: cephfs_mirror_perf_stats_prio
 
 Re-adding Peers
 ---------------
