@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <fmt/chrono.h>
 #include <string.h>
 #include <iostream>
 #include <map>
@@ -2816,18 +2817,11 @@ std::string s3_expiration_header(
 
   // cond format header
   if (expiration_date && rule_id) {
-    // Fri, 23 Dec 2012 00:00:00 GMT
-    char exp_buf[100];
-    time_t exp = ceph::real_clock::to_time_t(*expiration_date);
-    if (std::strftime(exp_buf, sizeof(exp_buf),
-		      "%a, %d %b %Y %T %Z", std::gmtime(&exp))) {
-      hdr = fmt::format("expiry-date=\"{0}\", rule-id=\"{1}\"", exp_buf,
-			*rule_id);
-    } else {
-      ldpp_dout(dpp, 0) << __func__ <<
-	"() strftime of life cycle expiration header failed"
-			<< dendl;
-    }
+    auto exp = ceph::real_clock::to_time_t(*expiration_date);
+    // Fri, 21 Dec 2012 00:00:00 GMT
+    auto exp_str = fmt::format("{:%a, %d %b %Y %T %Z}", fmt::gmtime(exp));
+    hdr = fmt::format("expiry-date=\"{0}\", rule-id=\"{1}\"", exp_str,
+		      *rule_id);
   }
 
   return hdr;
