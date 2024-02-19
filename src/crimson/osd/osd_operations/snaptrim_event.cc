@@ -88,28 +88,19 @@ SnapTrimEvent::start()
         client_pp().process);
     }).then_interruptible([&shard_services, this] {
       return interruptor::async([this] {
-        std::vector<hobject_t> to_trim;
         using crimson::common::local_conf;
         const auto max =
           local_conf().get_val<uint64_t>("osd_pg_max_concurrent_snap_trims");
         // we need to look for at least 1 snaptrim, otherwise we'll misinterpret
-        // the ENOENT below and erase snapid.
-        int r = snap_mapper.get_next_objects_to_trim(
+        // the nullopt below and erase snapid.
+        auto to_trim = snap_mapper.get_next_objects_to_trim(
           snapid,
-          max,
-          &to_trim);
-        if (r == -ENOENT) {
-          to_trim.clear(); // paranoia
-          return to_trim;
-        } else if (r != 0) {
-          logger().error("{}: get_next_objects_to_trim returned {}",
-                         *this, cpp_strerror(r));
-          ceph_abort_msg("get_next_objects_to_trim returned an invalid code");
-        } else {
-          assert(!to_trim.empty());
+          max);
+        if (!to_trim.has_value()) {
+          return std::vector<hobject_t>{};
         }
         logger().debug("{}: async almost done line {}", *this, __LINE__);
-        return to_trim;
+        return std::move(*to_trim);
       }).then_interruptible([&shard_services, this] (const auto& to_trim) {
         if (to_trim.empty()) {
           // the legit ENOENT -> done
