@@ -15707,23 +15707,16 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 
   ldout(pg->cct, 10) << "AwaitAsyncWork: trimming snap " << snap_to_trim << dendl;
 
-  vector<hobject_t> to_trim;
   unsigned max = pg->cct->_conf->osd_pg_max_concurrent_snap_trims;
   // we need to look for at least 1 snaptrim, otherwise we'll misinterpret
   // the ENOENT below and erase snap_to_trim.
   ceph_assert(max > 0);
-  to_trim.reserve(max);
-  int r = pg->snap_mapper.get_next_objects_to_trim(
-    snap_to_trim,
-    max,
-    &to_trim);
-  if (r != 0 && r != -ENOENT) {
-    lderr(pg->cct) << "get_next_objects_to_trim returned "
-		   << cpp_strerror(r) << dendl;
-    ceph_abort_msg("get_next_objects_to_trim returned an invalid code");
-  } else if (r == -ENOENT) {
+
+  auto to_trim =
+      pg->snap_mapper.get_next_objects_to_trim(snap_to_trim, max);
+  if (!to_trim.has_value()) {
     // Done!
-    ldout(pg->cct, 10) << "got ENOENT" << dendl;
+    ldout(pg->cct, 10) << "no more entries to trim" << dendl;
 
     pg->snap_trimq.erase(snap_to_trim);
 
@@ -15754,9 +15747,8 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     pg->set_snaptrim_duration();
     return transit< NotTrimming >();
   }
-  ceph_assert(!to_trim.empty());
 
-  for (auto &&object: to_trim) {
+  for (auto &&object: *to_trim) {
     // Get next
     ldout(pg->cct, 10) << "AwaitAsyncWork react trimming " << object << dendl;
     OpContextUPtr ctx;
