@@ -2059,7 +2059,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     @profile_method()
     def get_unlabeled_perf_counters(self, prio_limit: int = PRIO_USEFUL,
                               services: Sequence[str] = ("mds", "mon", "osd",
-                                                         "rbd-mirror", "rgw",
+                                                         "rbd-mirror", "cephfs-mirror", "rgw",
                                                          "tcmu-runner")) -> Dict[str, dict]:
         """
         Return the perf counters currently known to this ceph-mgr
