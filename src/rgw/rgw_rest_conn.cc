@@ -147,13 +147,13 @@ void RGWRESTConn::set_url_unconnectable(const std::string& endpoint)
   ldout(cct, 10) << "set endpoint unconnectable. url=" << endpoint << dendl;
 }
 
-void RGWRESTConn::populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup)
+void RGWRESTConn::populate_params(param_vec_t& params, const rgw_owner* uid, const string& zonegroup)
 {
   populate_uid(params, uid);
   populate_zonegroup(params, zonegroup);
 }
 
-int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_user& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_owner& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
 {
   int ret = 0;
 
@@ -225,9 +225,8 @@ int RGWRESTConn::put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair
   if (ret < 0)
     return ret;
 
-  rgw_user uid;
   param_vec_t params;
-  populate_params(params, &uid, self_zone_group);
+  populate_params(params, nullptr, self_zone_group);
 
   if (extra_params) {
     append_param_list(params, extra_params);
@@ -240,7 +239,7 @@ int RGWRESTConn::put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair
   return 0;
 }
 
-int RGWRESTConn::put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_user& uid, const rgw_obj& obj,
+int RGWRESTConn::put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_owner& uid, const rgw_obj& obj,
                                     map<string, bufferlist>& attrs,
                                     RGWRESTStreamS3PutObj **req)
 {
@@ -296,7 +295,7 @@ static void set_header(T val, map<string, string>& headers, const string& header
 }
 
 
-int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
+int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_owner& uid, req_info *info /* optional */, const rgw_obj& obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, bool get_op, bool rgwx_stat,
