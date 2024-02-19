@@ -590,11 +590,7 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
     entry.obj_size = s->obj_size;
   } /* !bucket empty */
 
-  if (s->cct->_conf->rgw_remote_addr_param.length())
-    set_param_str(s, s->cct->_conf->rgw_remote_addr_param.c_str(),
-		  entry.remote_addr);
-  else
-    set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
+  entry.remote_addr = extract_remote_addr(s);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
   // legacy apps are still using misspelling referer, such as curl -e option
   if (s->info.env->exists("HTTP_REFERRER"))

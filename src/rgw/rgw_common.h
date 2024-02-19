@@ -2055,6 +2055,68 @@ static inline std::string ys_header_mangle(std::string_view name)
   return out;
 } /* ys_header_mangle */
 
+static inline std::string extract_remote_addr(req_state * const s)
+{
+  std::string remote_param = s->cct->_conf->rgw_remote_addr_param;
+  const auto trusted_proxy_count = s->cct->_conf->rgw_trusted_proxy_count;
+
+  if (trusted_proxy_count) {
+    // force remote_param to be HTTP_X_FORWARDED_FOR when trusted_proxy_count is set
+    remote_param = "HTTP_X_FORWARDED_FOR";
+  } else if (remote_param.empty()) {
+    remote_param = "REMOTE_ADDR";
+  }
+
+  const char *p = s->info.env->get(remote_param.c_str());
+  if (unlikely(p == nullptr)) {
+    ldpp_dout(s, 0) << "ERROR: couldn't find remote address in env" << dendl;
+
+    return "";
+  }
+
+  std::string remote_addr = p;
+
+  if (!trusted_proxy_count) {
+    if (remote_param == "HTTP_X_FORWARDED_FOR") {
+      // for backward compatibility the first IP is returned when trusted_proxy_count is 0 (default)
+      size_t comma_pos = remote_addr.find(",");
+      if (comma_pos != std::string::npos) {
+        remote_addr = remote_addr.substr(0, comma_pos);
+      }
+    }
+
+    return remote_addr;
+  }
+
+  size_t pos = remote_addr.length();
+  size_t comma_count = 0;
+  std::string ip = "";
+
+  // reverse search for the trusted_proxy_count-th comma
+  do {
+    size_t next_pos = remote_addr.rfind(",", pos - 1);
+    comma_count++;
+
+    if (comma_count == trusted_proxy_count) {
+      ip = remote_addr.substr(next_pos + 1, pos - next_pos - 1);
+
+      break;
+    }
+
+    pos = next_pos;
+  } while(pos != std::string::npos && comma_count < trusted_proxy_count);
+
+  // trim whitespaces from the extracted IP address
+  ip.erase(ip.find_last_not_of(" \t\n\r\f\v") + 1);
+  ip.erase(0, ip.find_first_not_of(" \t\n\r\f\v"));
+
+  if (unlikely(ip.empty())) {
+    ldpp_dout(s, 0) << "ERROR: out of range rgw_trust_proxy_count for: " << remote_addr << dendl;
+  }
+
+  return ip;
+}
+
 extern int rgw_bucket_parse_bucket_instance(const std::string& bucket_instance, std::string *bucket_name, std::string *bucket_id, int *shard_id);
 
 boost::intrusive_ptr<CephContext>

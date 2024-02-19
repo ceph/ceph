@@ -1184,20 +1184,41 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.2");
 
+  // check backwards compatibility when rgw_trusted_proxy_count is default(zero)
+  // and rgw_remote_addr_param is HTTP_X_FORWARDED_FOR
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_trusted_proxy_count", "0"), 0);
+  EXPECT_EQ(cct.get()->_conf->rgw_trusted_proxy_count, 0);
   ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
-  rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3");
+  rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3, 192.168.2.3");
   rgw_req_state.env.clear();
   rgw_build_iam_environment(&rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.3");
 
-  rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.4, 4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348");
+  // check when rgw_trusted_proxy_count is set
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_trusted_proxy_count", "1"), 0);
+  EXPECT_EQ(cct.get()->_conf->rgw_trusted_proxy_count, 1);
+  rgw_env.set("HTTP_X_FORWARDED_FOR", "4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348, 192.168.1.4");
   rgw_req_state.env.clear();
   rgw_build_iam_environment(&rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.4");
+
+  // check when rgw_trusted_proxy_count is set and rgw_remote_addr_param is not HTTP_X_FORWARDED_FOR
+  // so that rgw_remote_addr_param is ignored
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_trusted_proxy_count", "2"), 0);
+  EXPECT_EQ(cct.get()->_conf->rgw_trusted_proxy_count, 2);
+  ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
+  EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
+  rgw_env.set("SOME_VAR", "1.2.3.4");
+  rgw_env.set("HTTP_X_FORWARDED_FOR", "4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348, 192.168.1.4");
+  rgw_req_state.env.clear();
+  rgw_build_iam_environment(&store, &rgw_req_state);
+  ip = rgw_req_state.env.find("aws:SourceIp");
+  ASSERT_NE(ip, rgw_req_state.env.end());
+  EXPECT_EQ(ip->second, "2001:db8:85a3:8d3:1319:8a2e:370:7348");
 }
 
 TEST_F(IPPolicyTest, ParseIPAddress) {
