@@ -1,0 +1,118 @@
+<cd-modal [pageURL]="pageURL"
+          [modalRef]="activeModal">
+  <span class="modal-title"
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
+  <ng-container class="modal-content">
+    <form name="nsForm"
+          #formDir="ngForm"
+          [formGroup]="nsForm"
+          novalidate>
+      <div class="modal-body">
+        <!-- Block Pool -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="pool">
+            <span [ngClass]="{'required': !edit}"
+                  i18n>Pool</span>
+          </label>
+          <div class="cd-col-form-input">
+            <input *ngIf="edit"
+                   name="pool"
+                   class="form-control"
+                   type="text"
+                   formControlName="pool">
+            <select *ngIf="!edit"
+                    id="pool"
+                    name="pool"
+                    class="form-select"
+                    formControlName="pool">
+              <option *ngIf="rbdPools === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="rbdPools && rbdPools.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No block pools available --</option>
+              <option *ngIf="rbdPools && rbdPools.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select a pool --</option>
+              <option *ngFor="let pool of rbdPools"
+                      [value]="pool.pool_name">{{ pool.pool_name }}</option>
+            </select>
+            <cd-help-text i18n>
+              An RBD application-enabled pool where the image will be created.
+            </cd-help-text>
+            <span class="invalid-feedback"
+                  *ngIf="nsForm.showError('pool', formDir, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+        <!-- Image Name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="image">
+            <span [ngClass]="{'required': !edit}"
+                  i18n>Image Name</span>
+          </label>
+          <div class="cd-col-form-input">
+            <input name="image"
+                   class="form-control"
+                   type="text"
+                   formControlName="image">
+            <span class="invalid-feedback"
+                  *ngIf="nsForm.showError('image', formDir, 'required')">
+              <ng-container i18n>This field is required.</ng-container>
+            </span>
+            <span class="invalid-feedback"
+                  *ngIf="nsForm.showError('image', formDir, 'pattern')">
+              <ng-container i18n>'/' and '@' are not allowed.</ng-container>
+            </span>
+          </div>
+        </div>
+        <!-- Image Size -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="image_size">
+            <span [ngClass]="{'required': edit}"
+                  i18n>Image Size</span>
+          </label>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input id="size"
+                     class="form-control"
+                     type="text"
+                     name="image_size"
+                     formControlName="image_size">
+              <select id="unit"
+                      name="unit"
+                      class="form-input form-select"
+                      formControlName="unit">
+                <option *ngFor="let u of units"
+                        [value]="u"
+                        i18n>{{ u }}</option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="nsForm.showError('image_size', formDir, 'pattern')">
+                <ng-container i18n>Enter a positive integer.</ng-container>
+              </span>
+              <span class="invalid-feedback"
+                    *ngIf="edit && nsForm.showError('image_size', formDir, 'required')">
+                <ng-container i18n>This field is required</ng-container>
+              </span>
+              <span class="invalid-feedback"
+                    *ngIf="edit && invalidSizeError">
+                <ng-container i18n>Enter a value above than previous. A block device image can be expanded but not reduced.</ng-container>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="text-right">
+          <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                                [form]="nsForm"
+                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
