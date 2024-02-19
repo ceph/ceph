@@ -104,6 +104,8 @@ private:
   RadosRef m_local;
   std::unique_ptr<ServiceDaemon> m_service_daemon;
 
+  PerfCounters *m_perf_counters;
+
   int init_mon_client();
 
   // called via listener

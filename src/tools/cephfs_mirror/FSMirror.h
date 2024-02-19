@@ -154,6 +154,8 @@ private:
 
   MountRef m_mount;
 
+  PerfCounters *m_perf_counters;
+
   int init_replayer(PeerReplayer *peer_replayer);
   void shutdown_replayer(PeerReplayer *peer_replayer);
   void cleanup();
