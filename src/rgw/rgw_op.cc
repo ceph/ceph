@@ -8997,7 +8997,10 @@ void RGWGetBucketPublicAccessBlock::execute(optional_yield y)
       aiter == attrs.end()) {
     ldpp_dout(this, 0) << "can't find bucket IAM POLICY attr bucket_name = "
 		       << s->bucket_name << dendl;
-    // return the default;
+
+    op_ret = -ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION;
+    s->err.message = "The public access block configuration was not found";
+
     return;
   } else {
     bufferlist::const_iterator iter{&aiter->second};
