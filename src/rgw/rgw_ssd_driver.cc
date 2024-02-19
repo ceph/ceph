@@ -202,16 +202,18 @@ void SSDDriver::put_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, 
 
     int r = 0;
     bufferlist src = bl;
-    r = op.prepare_libaio_write_op(dpp, src, len, key, partition_info.location);
+    std::string temp_key = key + "_" + std::to_string(index++);
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): temp key=" << temp_key << dendl;
+    r = op.prepare_libaio_write_op(dpp, src, len, temp_key, partition_info.location);
     op.cb->aio_sigevent.sigev_notify = SIGEV_THREAD;
     op.cb->aio_sigevent.sigev_notify_function = SSDDriver::AsyncWriteRequest::libaio_write_cb;
     op.cb->aio_sigevent.sigev_notify_attributes = nullptr;
     op.cb->aio_sigevent.sigev_value.sival_ptr = (void*)p.get();
     op.key = key;
+    op.temp_key = temp_key;
     op.dpp = dpp;
     op.priv_data = this;
     op.attrs = std::move(attrs);
-
     if (r >= 0) {
         r = ::aio_write(op.cb.get());
     } else {
@@ -322,13 +324,23 @@ void SSDDriver::AsyncWriteRequest::libaio_write_cb(sigval sigval) {
     auto p = std::unique_ptr<Completion>{static_cast<Completion*>(sigval.sival_ptr)};
     auto op = std::move(p->user_data);
     ldpp_dout(op.dpp, 20) << "INFO: AsyncWriteRequest::libaio_write_cb: key: " << op.key << dendl;
+    int ret = -aio_error(op.cb.get());
+    boost::system::error_code ec;
+    if (ret < 0) {
+        ec.assign(-ret, boost::system::system_category());
+        ceph::async::dispatch(std::move(p), ec);
+        return;
+    }
     int attr_ret = 0;
     if (op.attrs.size() > 0) {
         //TODO - fix yield_context
         optional_yield y{null_yield};
-        attr_ret = op.priv_data->set_attrs(op.dpp, op.key, op.attrs, y);
+        attr_ret = op.priv_data->set_attrs(op.dpp, op.temp_key, op.attrs, y);
         if (attr_ret < 0) {
-            ldpp_dout(op.dpp, 0) << "ERROR: put::set_attrs: failed to set attrs, ret = " << attr_ret << dendl;
+            ldpp_dout(op.dpp, 0) << "ERROR: AsyncWriteRequest::libaio_write_yield_cb::set_attrs: failed to set attrs, ret = " << attr_ret << dendl;
+            ec.assign(-ret, boost::system::system_category());
+            ceph::async::dispatch(std::move(p), ec);
+            return;
         }
     }
 
@@ -336,12 +348,16 @@ void SSDDriver::AsyncWriteRequest::libaio_write_cb(sigval sigval) {
     efs::space_info space = efs::space(partition_info.location);
     op.priv_data->set_free_space(op.dpp, space.available);
 
-    const int ret = -aio_error(op.cb.get());
-    boost::system::error_code ec;
+    std::string new_path = partition_info.location + op.key;
+    std::string old_path = partition_info.location + op.temp_key;
+
+    ldpp_dout(op.dpp, 20) << "INFO: AsyncWriteRequest::libaio_write_yield_cb: temp_key: " << op.temp_key << dendl;
+
+    ret = rename(old_path.c_str(), new_path.c_str());
     if (ret < 0) {
+        ret = errno;
+        ldpp_dout(op.dpp, 0) << "ERROR: put::rename: failed to rename file: " << ret << dendl;
         ec.assign(-ret, boost::system::system_category());
-    } else if (attr_ret < 0) {
-        ec.assign(-attr_ret, boost::system::system_category());
     }
     ceph::async::dispatch(std::move(p), ec);
 }
