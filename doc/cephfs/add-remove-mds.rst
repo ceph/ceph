@@ -1,11 +1,13 @@
 .. _cephfs_add_remote_mds:
 
-.. note::
-   It is highly recommended to use :doc:`/cephadm/index` or another Ceph
-   orchestrator for setting up the ceph cluster. Use this approach only if you
-   are setting up the ceph cluster manually. If one still intends to use the
-   manual way for deploying MDS daemons, :doc:`/cephadm/services/mds/` can
-   also be used.
+.. warning:: The material on this page is to be used only for manually setting
+   up a Ceph cluster. If you intend to use an automated tool such as
+   :doc:`/cephadm/index` to set up a Ceph cluster, do not use the
+   instructions on this page.
+
+.. note:: If you are certain that you know what you are doing and you intend to
+   manually deploy MDS daemons, see :doc:`/cephadm/services/mds/` before
+   proceeding.
 
 ============================
  Deploying Metadata Servers
