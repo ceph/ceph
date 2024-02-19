@@ -131,7 +131,11 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
                            bool dump_keys, RGWStorageStats *stats = NULL)
 {
   f->open_object_section("user_info");
+  encode_json("full_user_id", info.user_id, f);
   encode_json("tenant", info.user_id.tenant, f);
+  if (!info.user_id.ns.empty()) {
+    encode_json("namespace", info.user_id.ns, f);
+  }
   encode_json("user_id", info.user_id.id, f);
   encode_json("display_name", info.display_name, f);
   encode_json("email", info.user_email, f);

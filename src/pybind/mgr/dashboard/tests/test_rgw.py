@@ -282,6 +282,7 @@ class RgwUserControllerTestCase(ControllerTestCase):
         mock_proxy.return_value = {
             'tenant': '',
             'user_id': 'my_user_id',
+            'full_user_id': 'my_user_id',
             'keys': [],
             'swift_keys': []
         }
@@ -297,6 +298,7 @@ class RgwUserControllerTestCase(ControllerTestCase):
         mock_proxy.return_value = {
             'tenant': '',
             'user_id': 'my_user_id',
+            'full_user_id': 'my_user_id',
             'keys': [],
             'swift_keys': []
         }
