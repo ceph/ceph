@@ -149,7 +149,7 @@ static void bi_reshard_log_key(cls_method_context_t hctx, string& key, string& i
 }
 
 static int reshard_log_index_operation(cls_method_context_t hctx, string& idx,
-                                       cls_rgw_obj_key& key, bufferlist* log_bl)
+                                       const cls_rgw_obj_key& key, bufferlist* log_bl)
 {
   string reshard_log_idx;
   bi_reshard_log_key(hctx, reshard_log_idx, idx);
@@ -819,6 +819,20 @@ static std::string modify_op_str(uint8_t op) {
   return modify_op_str((RGWModifyOp) op);
 }
 
+static int record_duplicate_entry(cls_method_context_t hctx, string& idx,
+                                  const cls_rgw_obj_key& key, bufferlist* log_bl,
+                                  bool resharding) {
+  if (resharding) {
+    int rc = reshard_log_index_operation(hctx, idx, key, log_bl);
+    if (rc < 0) {
+      CLS_LOG(0, "record_duplicate_entry(): failed to update entry, name=%s, rc=%d",
+              escape_str(idx).c_str(), rc);
+      return rc;
+    }
+  }
+  return 0;
+}
+
 int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   const ConfigProxy& conf = cls_get_config(hctx);
@@ -851,11 +865,18 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 	       "INFO: %s: request: op=%s name=%s tag=%s", __func__,
 	       modify_op_str(op.op).c_str(), op.key.to_string().c_str(), op.tag.c_str());
 
+  struct rgw_bucket_dir_header header;
+  int rc = read_bucket_header(hctx, &header);
+  if (rc < 0) {
+    CLS_LOG_BITX(bitx_inst, 1, "ERROR: %s: failed to read header", __func__);
+    return rc;
+  }
+
   // get on-disk state
   std::string idx;
 
   rgw_bucket_dir_entry entry;
-  int rc = read_key_entry(hctx, op.key, &idx, &entry);
+  rc = read_key_entry(hctx, op.key, &idx, &entry);
   if (rc < 0 && rc != -ENOENT) {
     CLS_LOG_BITX(bitx_inst, 1,
 		 "ERROR: %s could not read key entry, key=%s, rc=%d",
@@ -897,6 +918,10 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
 		 "ERROR: %s could not set value for key, key=%s, rc=%d",
 		 __func__, escape_str(idx).c_str(), rc);
     return rc;
+  }
+  if (header.resharding_in_logrecord()) {
+    // write the duplicated index entry copy
+    return reshard_log_index_operation(hctx, idx, entry.key, &info_bl);
   }
 
   CLS_LOG_BITX(bitx_inst, 10, "EXITING %s, returning 0", __func__);
@@ -1014,6 +1039,11 @@ static int complete_remove_obj(cls_method_context_t hctx,
           int(entry.meta.category));
   unaccount_entry(header, entry);
 
+  bufferlist empty;
+  ret = record_duplicate_entry(hctx, idx, key, &empty, header.resharding_in_logrecord());
+  if (ret < 0)
+    return ret;
+
   ret = cls_cxx_map_remove_key(hctx, idx);
   if (ret < 0) {
     CLS_LOG(1, "%s: cls_cxx_map_remove_key failed with %d", __func__, ret);
@@ -1126,6 +1156,11 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
                        __func__, escape_str(idx).c_str(), rc);
           return rc;
         }
+
+        bufferlist empty;
+        rc = record_duplicate_entry(hctx, idx, entry.key, &empty, header.resharding_in_logrecord());
+        if (rc < 0)
+          return rc;
       } else {
         // we removed this tag from pending_map so need to write the changes
         CLS_LOG_BITX(bitx_inst, 20,
@@ -1140,6 +1175,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
                        __func__, escape_str(idx).c_str(), rc);
           return rc;
         }
+        rc = record_duplicate_entry(hctx, idx, entry.key, &new_key_bl, header.resharding_in_logrecord());
+        if (rc < 0)
+          return rc;
       }
     }
   } // CLS_RGW_OP_CANCEL
@@ -1168,6 +1206,10 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		       __func__, escape_str(idx).c_str(), rc);
         return rc;
       }
+      bufferlist empty;
+      rc = record_duplicate_entry(hctx, idx, entry.key, &empty, header.resharding_in_logrecord());
+      if (rc < 0)
+        return rc;
     } else {
       entry.exists = false;
       bufferlist new_key_bl;
@@ -1182,6 +1224,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		     __func__, escape_str(idx).c_str(), rc);
         return rc;
       }
+      rc = record_duplicate_entry(hctx, idx, entry.key, &new_key_bl, header.resharding_in_logrecord());
+      if (rc < 0)
+        return rc;
     }
   } // CLS_RGW_OP_DEL
   else if (op.op == CLS_RGW_OP_ADD) {
@@ -1214,6 +1259,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		   __func__, escape_str(idx).c_str(), rc);
       return rc;
     }
+    rc = record_duplicate_entry(hctx, idx, entry.key, &new_key_bl, header.resharding_in_logrecord());
+    if (rc < 0)
+      return rc;
   } // CLS_RGW_OP_ADD
 
   if (log_op) {
