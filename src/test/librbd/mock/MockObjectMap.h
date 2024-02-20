@@ -30,10 +30,10 @@ struct MockObjectMap {
   bool aio_update(uint64_t snap_id, uint64_t start_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
                   const ZTracer::Trace &parent_trace, bool ignore_enoent,
-                  T *callback_object) {
+                  bool force, T *callback_object) {
     return aio_update<T, MF>(snap_id, start_object_no, start_object_no + 1,
                              new_state, current_state, parent_trace,
-                             ignore_enoent, callback_object);
+                             ignore_enoent, force, callback_object);
   }
 
   template <typename T, void(T::*MF)(int) = &T::complete>
@@ -41,21 +41,22 @@ struct MockObjectMap {
                   uint64_t end_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
                   const ZTracer::Trace &parent_trace, bool ignore_enoent,
-                  T *callback_object) {
+                  bool force, T *callback_object) {
     auto ctx = util::create_context_callback<T, MF>(callback_object);
     bool updated = aio_update(snap_id, start_object_no, end_object_no,
                               new_state, current_state, parent_trace,
-                              ignore_enoent, ctx);
+                              ignore_enoent, force, ctx);
     if (!updated) {
       delete ctx;
     }
     return updated;
   }
-  MOCK_METHOD8(aio_update, bool(uint64_t snap_id, uint64_t start_object_no,
+  MOCK_METHOD9(aio_update, bool(uint64_t snap_id, uint64_t start_object_no,
                                 uint64_t end_object_no, uint8_t new_state,
                                 const boost::optional<uint8_t> &current_state,
                                 const ZTracer::Trace &parent_trace,
-                                bool ignore_enoent, Context *on_finish));
+                                bool ignore_enoent, bool force,
+				Context *on_finish));
 
   MOCK_METHOD2(snapshot_add, void(uint64_t snap_id, Context *on_finish));
   MOCK_METHOD2(snapshot_remove, void(uint64_t snap_id, Context *on_finish));

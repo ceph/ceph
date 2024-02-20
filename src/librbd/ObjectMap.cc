@@ -301,7 +301,8 @@ void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
       handle_detained_aio_update(cell, r, on_finish);
     });
   aio_update(CEPH_NOSNAP, op.start_object_no, op.end_object_no, op.new_state,
-             op.current_state, op.parent_trace, op.ignore_enoent, ctx);
+             op.current_state, op.parent_trace, op.ignore_enoent,
+             op.force, ctx);
 }
 
 template <typename I>
@@ -330,7 +331,8 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
                               uint64_t end_object_no, uint8_t new_state,
                               const boost::optional<uint8_t> &current_state,
                               const ZTracer::Trace &parent_trace,
-                              bool ignore_enoent, Context *on_finish) {
+                              bool ignore_enoent, bool force,
+			      Context *on_finish) {
   ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
   ceph_assert((m_image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0);
   ceph_assert(m_image_ctx.image_watcher != nullptr);
@@ -353,17 +355,19 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
       return;
     }
 
-    auto it = m_object_map.begin() + start_object_no;
-    auto end_it = m_object_map.begin() + end_object_no;
-    for (; it != end_it; ++it) {
-      if (update_required(it, new_state)) {
-        break;
+    if (!force) {
+      auto it = m_object_map.begin() + start_object_no;
+      auto end_it = m_object_map.begin() + end_object_no;
+      for (; it != end_it; ++it) {
+	if (update_required(it, new_state)) {
+	  break;
+	}
       }
-    }
-    if (it == end_it) {
-      ldout(cct, 20) << "object map update not required" << dendl;
-      m_image_ctx.op_work_queue->queue(on_finish, 0);
-      return;
+      if (it == end_it) {
+	ldout(cct, 20) << "object map update not required" << dendl;
+	m_image_ctx.op_work_queue->queue(on_finish, 0);
+        return;
+      }
     }
   }
 
