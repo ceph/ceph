@@ -38,6 +38,7 @@ struct MutationImpl;
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
 struct LockType {
+  static const uint16_t WAIT_ID_OFFSET      = 16;
   explicit LockType(int t) : type(t) {
     switch (type) {
     case CEPH_LOCK_DN:
@@ -63,23 +64,33 @@ struct LockType {
     default:
       sm = 0;
     }
+
+    uint16_t lock_ord = LockType::WAIT_ID_OFFSET;
+    int lock_id = type;
+    while (!(lock_id & 1)) ++lock_ord, lock_id >>=1;
+    wait_id = WaitTag(lock_ord);
+  }
+
+  uint16_t ord() const {
+    return wait_id.id;
   }
 
   int type;
   const sm_t *sm;
+  WaitTag wait_id;
 };
 
 
 class SimpleLock {
 public:
   // waiting
-  static const uint64_t WAIT_RD          = (1<<0);  // to read
-  static const uint64_t WAIT_WR          = (1<<1);  // to write
-  static const uint64_t WAIT_XLOCK       = (1<<2);  // to xlock   (** dup)
-  static const uint64_t WAIT_STABLE      = (1<<2);  // for a stable state
-  static const uint64_t WAIT_REMOTEXLOCK = (1<<3);  // for a remote xlock
-  static const int WAIT_BITS        = 4;
-  static const uint64_t WAIT_ALL         = ((1<<WAIT_BITS)-1);
+  static constexpr WaitTag WAIT_RD          = WaitTag(WaitTag::ANY_ID).bit_mask(0);  // to read
+  static constexpr WaitTag WAIT_WR          = WaitTag(WaitTag::ANY_ID).bit_mask(1);  // to write
+  static constexpr WaitTag WAIT_XLOCK       = WaitTag(WaitTag::ANY_ID).bit_mask(2);  // to xlock   (** dup)
+  static constexpr WaitTag WAIT_STABLE      = WaitTag(WaitTag::ANY_ID).bit_mask(2);  // for a stable state
+  static constexpr WaitTag WAIT_REMOTEXLOCK = WaitTag(WaitTag::ANY_ID).bit_mask(3);  // for a remote xlock
+  static const int WAIT_BITS                = 4;
+  static constexpr WaitTag WAIT_ALL         = WaitTag(WaitTag::ANY_ID,(1<<WAIT_BITS)-1);
 
   static std::string_view get_state_name(int n) {
     switch (n) {
@@ -176,7 +187,8 @@ public:
   SimpleLock(MDSCacheObject *o, LockType *lt) :
     type(lt),
     parent(o)
-  {}
+  {
+  }
   virtual ~SimpleLock() {}
 
   client_t get_excl_client() const {
@@ -200,7 +212,6 @@ public:
   int get_type() const { return type->type; }
   const sm_t* get_sm() const { return type->sm; }
 
-  int get_wait_shift() const;
   int get_cap_shift() const;
   int get_cap_mask() const;
 
@@ -210,17 +221,18 @@ public:
   void encode_locked_state(ceph::buffer::list& bl) {
     parent->encode_lock_state(type->type, bl);
   }
-  void finish_waiters(uint64_t mask, int r=0) {
-    parent->finish_waiting(mask << get_wait_shift(), r);
+
+  void finish_waiters(WaitTag mask, int r=0) {
+    parent->finish_waiting(type->wait_id | mask, r);
   }
-  void take_waiting(uint64_t mask, MDSContext::vec& ls) {
-    parent->take_waiting(mask << get_wait_shift(), ls);
+  void take_waiting(WaitTag mask, MDSContext::vec& ls) {
+    parent->take_waiting(type->wait_id | mask, ls);
   }
-  void add_waiter(uint64_t mask, MDSContext *c) {
-    parent->add_waiter((mask << get_wait_shift()) | MDSCacheObject::WAIT_ORDERED, c);
+  void add_waiter(WaitTag mask, MDSContext *c) {
+    parent->add_waiter(type->wait_id | mask, c, true);
   }
-  bool is_waiter_for(uint64_t mask) const {
-    return parent->is_waiter_for(mask << get_wait_shift());
+  bool is_waiter_for(WaitTag mask) const {
+    return parent->has_waiter_for(type->wait_id | mask);
   }
 
   bool is_cached() const {
@@ -249,7 +261,7 @@ public:
     state = s;
 
     if (is_stable())
-      take_waiting(SimpleLock::WAIT_ALL, waiters);
+      take_waiting(type->wait_id | SimpleLock::WAIT_ALL, waiters);
   }
 
   bool is_stable() const {
@@ -603,7 +615,7 @@ public:
 
 protected:
   // parent (what i lock)
-  MDSCacheObject *parent;
+  MDSCacheObject * const parent;
 
   // lock state
   __s16 state = LOCK_SYNC;

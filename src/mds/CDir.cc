@@ -1315,7 +1315,7 @@ void CDir::take_dentry_waiting(std::string_view dname, snapid_t first, snapid_t 
     put(PIN_DNWAITER);
 }
 
-void CDir::add_waiter(uint64_t tag, MDSContext *c) 
+void CDir::add_waiter(WaitTag tag, MDSContext *c, bool ordered) 
 {
   // hierarchical?
   
@@ -1324,7 +1324,7 @@ void CDir::add_waiter(uint64_t tag, MDSContext *c)
     if (!is_subtree_root()) {
       // try parent
       dout(10) << "add_waiter " << std::hex << tag << std::dec << " " << c << " should be ATSUBTREEROOT, " << *this << " is not root, trying parent" << dendl;
-      inode->parent->dir->add_waiter(tag, c);
+      inode->parent->dir->add_waiter(tag, c, ordered);
       return;
     }
   }
@@ -1337,9 +1337,9 @@ void CDir::add_waiter(uint64_t tag, MDSContext *c)
 
 
 /* NOTE: this checks dentry waiters too */
-void CDir::take_waiting(uint64_t mask, MDSContext::vec& ls)
+void CDir::take_waiting(WaitTag tag, MDSContext::vec& ls)
 {
-  if ((mask & WAIT_DENTRY) && !waiting_on_dentry.empty()) {
+  if ((tag & WAIT_DENTRY) && !waiting_on_dentry.empty()) {
     // take all dentry waiters
     for (const auto &p : waiting_on_dentry) {
       dout(10) << "take_waiting dentry " << p.first.name
@@ -1351,16 +1351,16 @@ void CDir::take_waiting(uint64_t mask, MDSContext::vec& ls)
   }
   
   // waiting
-  MDSCacheObject::take_waiting(mask, ls);
+  MDSCacheObject::take_waiting(tag, ls);
 }
 
 
-void CDir::finish_waiting(uint64_t mask, int result) 
+void CDir::finish_waiting(WaitTag tag, int result) 
 {
-  dout(11) << __func__ << " mask " << hex << mask << dec << " result " << result << " on " << *this << dendl;
+  dout(11) << __func__ << tag << " result " << result << " on " << *this << dendl;
 
   MDSContext::vec finished;
-  take_waiting(mask, finished);
+  take_waiting(tag, finished);
   if (result < 0)
     finish_contexts(g_ceph_context, finished, result);
   else

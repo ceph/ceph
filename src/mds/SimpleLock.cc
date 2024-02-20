@@ -43,25 +43,6 @@ void SimpleLock::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
-int SimpleLock::get_wait_shift() const {
-  switch (get_type()) {
-    case CEPH_LOCK_DN:       return 8;
-    case CEPH_LOCK_DVERSION: return 8 + 1*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IAUTH:    return 8 + 2*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_ILINK:    return 8 + 3*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IDFT:     return 8 + 4*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IFILE:    return 8 + 5*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IVERSION: return 8 + 6*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IXATTR:   return 8 + 7*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_ISNAP:    return 8 + 8*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_INEST:    return 8 + 9*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IFLOCK:   return 8 +10*SimpleLock::WAIT_BITS;
-    case CEPH_LOCK_IPOLICY:  return 8 +11*SimpleLock::WAIT_BITS;
-    default:
-      ceph_abort();
-  }
-}
-
 int SimpleLock::get_cap_shift() const {
   switch (get_type()) {
     case CEPH_LOCK_IAUTH: return CEPH_CAP_SAUTH;

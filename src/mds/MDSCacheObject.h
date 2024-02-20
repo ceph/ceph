@@ -16,6 +16,8 @@
 #include "MDSContext.h"
 #include "include/elist.h"
 
+#include "MDSWaitable.h"
+
 #define MDS_REF_SET      // define me for improved debug output, sanity checking
 //#define MDS_AUTHPIN_SET  // define me for debugging auth pin leaks
 //#define MDS_VERIFY_FRAGSTAT    // do (slow) sanity checking on frags
@@ -54,7 +56,7 @@ struct mdsco_db_line_prefix {
   MDSCacheObject *object;
 };
 
-class MDSCacheObject {
+class MDSCacheObject: public MDSWaitable<MDSContext> {
  public:
   typedef mempool::mds_co::compact_map<mds_rank_t,unsigned> replica_map_type;
 
@@ -85,10 +87,10 @@ class MDSCacheObject {
   const static int STATE_REJOINING = (1<<27);  // replica has not joined w/ primary copy
   const static int STATE_REJOINUNDEF = (1<<26);  // contents undefined.
 
+  constexpr static WaitTag const  WAIT_ID_GLOBAL = WaitTag(WaitTag::ANY_ID); // lowest priority
   // -- wait --
-  const static uint64_t WAIT_ORDERED	 = (1ull<<61);
-  const static uint64_t WAIT_SINGLEAUTH  = (1ull<<60);
-  const static uint64_t WAIT_UNFREEZE    = (1ull<<59); // pka AUTHPINNABLE
+  constexpr static WaitTag const  WAIT_SINGLEAUTH = WAIT_ID_GLOBAL.bit_mask(WaitTag::MASK_BITS-1);
+  constexpr static WaitTag const  WAIT_UNFREEZE = WAIT_ID_GLOBAL.bit_mask(WaitTag::MASK_BITS-2); // pka AUTHPINNABLE
 
   elist<MDSCacheObject*>::item item_scrub;   // for scrub inode or dir
 
@@ -261,51 +263,59 @@ class MDSCacheObject {
   unsigned get_replica_nonce() const { return replica_nonce; }
   void set_replica_nonce(unsigned n) { replica_nonce = n; }
 
-  bool is_waiter_for(uint64_t mask, uint64_t min=0);
-  virtual void add_waiter(uint64_t mask, MDSContext *c) {
-    if (waiting.empty())
-      get(PIN_WAITER);
-
-    uint64_t seq = 0;
-    if (mask & WAIT_ORDERED) {
-      seq = ++last_wait_seq;
-      mask &= ~WAIT_ORDERED;
-    }
-    waiting.insert(std::pair<uint64_t, std::pair<uint64_t, MDSContext*> >(
-			    mask,
-			    std::pair<uint64_t, MDSContext*>(seq, c)));
-//    pdout(10,g_conf()->debug_mds) << (mdsco_db_line_prefix(this)) 
-//			       << "add_waiter " << hex << mask << dec << " " << c
-//			       << " on " << *this
-//			       << dendl;
-    
+  void add_waiter(WaitTag tag, MDSContext* c, bool ordered = false) override
+  {
+      if (waiting_empty()) {
+        get(PIN_WAITER);
+      }
+      MDSWaitable::add_waiter(tag, c, ordered);
   }
-  virtual void take_waiting(uint64_t mask, MDSContext::vec& ls);
-  void finish_waiting(uint64_t mask, int result = 0);
 
+  virtual void take_waiting(WaitTag tag, MDSContext::vec& ls)
+  {
+    MDSWaitable::take_waiting(tag, std::back_inserter(ls));
+    if (waiting_empty()) {
+      put(PIN_WAITER);
+    }
+  }
+
+  void finish_waiting(WaitTag tag, int result = 0)
+  {
+    MDSContext::vec finished;
+    take_waiting(tag, finished);
+    finish_contexts(g_ceph_context, finished, result);
+  }
   // ---------------------------------------------
   // locking
   // noop unless overloaded.
-  virtual SimpleLock* get_lock(int type) { ceph_abort(); return 0; }
-  virtual void set_object_info(MDSCacheObjectInfo &info) { ceph_abort(); }
-  virtual void encode_lock_state(int type, ceph::buffer::list& bl) { ceph_abort(); }
-  virtual void decode_lock_state(int type, const ceph::buffer::list& bl) { ceph_abort(); }
-  virtual void finish_lock_waiters(int type, uint64_t mask, int r=0) { ceph_abort(); }
-  virtual void add_lock_waiter(int type, uint64_t mask, MDSContext *c) { ceph_abort(); }
-  virtual bool is_lock_waiting(int type, uint64_t mask) { ceph_abort(); return false; }
+  virtual SimpleLock* get_lock(int type)
+  {
+    ceph_abort();
+    return 0;
+    }
+    virtual void set_object_info(MDSCacheObjectInfo & info) { ceph_abort(); }
+    virtual void encode_lock_state(int type, ceph::buffer::list& bl) { ceph_abort(); }
+    virtual void decode_lock_state(int type, const ceph::buffer::list& bl) { ceph_abort(); }
+    virtual void finish_lock_waiters(int type, uint64_t mask, int r = 0) { ceph_abort(); }
+    virtual void add_lock_waiter(int type, uint64_t mask, MDSContext* c) { ceph_abort(); }
+    virtual bool is_lock_waiting(int type, uint64_t mask)
+    {
+      ceph_abort();
+      return false;
+    }
 
-  virtual void clear_dirty_scattered(int type) { ceph_abort(); }
+    virtual void clear_dirty_scattered(int type) { ceph_abort(); }
 
-  // ---------------------------------------------
-  // ordering
-  virtual bool is_lt(const MDSCacheObject *r) const = 0;
+    // ---------------------------------------------
+    // ordering
+    virtual bool is_lt(const MDSCacheObject* r) const = 0;
 
-  // state
- protected:
-  __u32 state = 0;     // state bits
+    // state
+protected:
+    __u32 state = 0; // state bits
 
-  // pins
-  __s32      ref = 0;       // reference count
+    // pins
+    __s32 ref = 0; // reference count
 #ifdef MDS_REF_SET
   mempool::mds_co::flat_map<int,int> ref_map;
 #endif
@@ -318,13 +328,7 @@ class MDSCacheObject {
   // replication (across mds cluster)
   unsigned replica_nonce = 0; // [replica] defined on replica
     replica_map_type replica_map;   // [auth] mds -> nonce
-
-  // ---------------------------------------------
-  // waiting
- private:
-  mempool::mds_co::compact_multimap<uint64_t, std::pair<uint64_t, MDSContext*>> waiting;
-  static uint64_t last_wait_seq;
-};
+  };
 
 inline std::ostream& operator<<(std::ostream& out, const MDSCacheObject& o) {
   o.print(out);

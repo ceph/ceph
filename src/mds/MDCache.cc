@@ -3071,8 +3071,8 @@ void MDCache::handle_mds_recovery(mds_rank_t who)
   dout(7) << "handle_mds_recovery mds." << who << dendl;
 
   // exclude all discover waiters. kick_discovers() will do the job
-  static const uint64_t i_mask = CInode::WAIT_ANY_MASK & ~CInode::WAIT_DIR;
-  static const uint64_t d_mask = CDir::WAIT_ANY_MASK & ~CDir::WAIT_DENTRY;
+  static const WaitTag i_mask = CInode::WAIT_ANY_MASK & ~CInode::WAIT_DIR;
+  static const WaitTag d_mask = CDir::WAIT_ANY_MASK & ~CDir::WAIT_DENTRY;
 
   MDSContext::vec waiters;
 
@@ -6634,7 +6634,7 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   mds->mdlog->submit_entry(le, new C_MDC_TruncateLogged(this, in, mut));
 
   // flush immediately if there are readers/writers waiting
-  if (in->is_waiter_for(CInode::WAIT_TRUNC) ||
+  if (in->has_waiter_for(CInode::WAIT_TRUNC) ||
       (in->get_caps_wanted() & (CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR)))
     mds->mdlog->flush();
 }

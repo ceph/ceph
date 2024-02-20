@@ -156,14 +156,14 @@ mds_authority_t CDentry::authority() const
 }
 
 
-void CDentry::add_waiter(uint64_t tag, MDSContext *c)
+void CDentry::add_waiter(WaitTag tag, MDSContext *c, bool ordered)
 {
   // wait on the directory?
   if (tag & (WAIT_UNFREEZE|WAIT_SINGLEAUTH)) {
     dir->add_waiter(tag, c);
     return;
   }
-  MDSCacheObject::add_waiter(tag, c);
+  MDSCacheObject::add_waiter(tag, c, ordered);
 }
 
 

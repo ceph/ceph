@@ -177,16 +177,17 @@ public:
 
   static const unsigned EXPORT_NONCE  = 1;
 
+  constexpr static WaitTag const WAIT_ID_CDIR   = WaitTag(1);
+
   // -- wait masks --
-  static const uint64_t WAIT_DENTRY       = (1<<0);  // wait for item to be in cache
-  static const uint64_t WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
-  static const uint64_t WAIT_FROZEN       = (1<<2);  // auth pins removed
-  static const uint64_t WAIT_CREATED	  = (1<<3);  // new dirfrag is logged
+  constexpr static WaitTag const WAIT_DENTRY       = WAIT_ID_CDIR.bit_mask(0);  // wait for item to be in cache
+  constexpr static WaitTag const WAIT_COMPLETE     = WAIT_ID_CDIR.bit_mask(1);  // wait for complete dir contents
+  constexpr static WaitTag const WAIT_FROZEN       = WAIT_ID_CDIR.bit_mask(2);  // auth pins removed
+  constexpr static WaitTag const WAIT_CREATED	   = WAIT_ID_CDIR.bit_mask(3);  // new dirfrag is logged
+  const static int WAIT_BITS = 4;
 
-  static const int WAIT_DNLOCK_OFFSET = 4;
-
-  static const uint64_t WAIT_ANY_MASK = (uint64_t)(-1);
-  static const uint64_t WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
+  constexpr static WaitTag const  WAIT_ANY_MASK = WAIT_ID_CDIR | (uint64_t)((1 << WAIT_BITS) - 1);
+  constexpr static WaitTag const& WAIT_ATSUBTREEROOT = MDSCacheObject::WAIT_SINGLEAUTH;
 
   // -- dump flags --
   static const int DUMP_PATH             = (1 << 0);
@@ -509,9 +510,9 @@ public:
   void add_dentry_waiter(std::string_view dentry, snapid_t snap, MDSContext *c);
   void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, MDSContext::vec& ls);
 
-  void add_waiter(uint64_t mask, MDSContext *c) override;
-  void take_waiting(uint64_t mask, MDSContext::vec& ls) override;  // may include dentry waiters
-  void finish_waiting(uint64_t mask, int result = 0);    // ditto
+  void add_waiter(WaitTag mask, MDSContext *c, bool ordered = false) override;
+  void take_waiting(WaitTag mask, MDSContext::vec& ls) override;  // may include dentry waiters
+  void finish_waiting(WaitTag mask, int result = 0);    // ditto
 
   // -- import/export --
   mds_rank_t get_export_pin(bool inherit=true) const;

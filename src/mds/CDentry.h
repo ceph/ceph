@@ -142,7 +142,7 @@ public:
   // -- wait --
   //static const int WAIT_LOCK_OFFSET = 8;
 
-  void add_waiter(uint64_t tag, MDSContext *c) override;
+  void add_waiter(WaitTag tag, MDSContext *c, bool ordered = false) override;
 
   bool is_lt(const MDSCacheObject *r) const override {
     return *this < *static_cast<const CDentry*>(r);
