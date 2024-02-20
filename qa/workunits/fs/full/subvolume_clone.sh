@@ -59,6 +59,9 @@ ceph fs subvolume snapshot create cephfs sub_0 snap_0
 # Set clone snapshot delay
 ceph config set mgr mgr/volumes/snapshot_clone_delay 15
 
+# Disable the snapshot_clone_no_wait config option
+ceph config set mgr mgr/volumes/snapshot_clone_no_wait false
+
 # Schedule few clones, some would fail with no space
 for i in $(eval echo {1..$NUM_CLONES});do ceph fs subvolume snapshot clone cephfs sub_0 snap_0 clone_$i;done
 
