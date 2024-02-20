@@ -369,6 +369,17 @@ struct transaction_manager_test_t :
     test_extents_t::delta_t mapping_delta;
   };
 
+  void disable_max_extent_size() {
+    cache->set_max_extent_size(16777216);
+    crimson::common::local_conf().set_val(
+      "seastore_max_extent_size", "16777216").get();
+  }
+  void enable_max_extent_size() {
+    cache->set_max_extent_size(8192);
+    crimson::common::local_conf().set_val(
+      "seastore_max_extent_size", "8192").get();
+  }
+
   test_transaction_t create_transaction() {
     return { create_mutate_transaction(), {} };
   }
@@ -1343,6 +1354,7 @@ struct transaction_manager_test_t :
 
   void test_remap_pin() {
     run_async([this] {
+      disable_max_extent_size();
       constexpr size_t l_offset = 32 << 10;
       constexpr size_t l_len = 32 << 10;
       constexpr size_t r_offset = 64 << 10;
@@ -1390,11 +1402,13 @@ struct transaction_manager_test_t :
       }
       replay();
       check();
+      enable_max_extent_size();
     });
   }
 
   void test_clone_and_remap_pin() {
     run_async([this] {
+      disable_max_extent_size();
       constexpr size_t l_offset = 32 << 10;
       constexpr size_t l_len = 32 << 10;
       constexpr size_t r_offset = 64 << 10;
@@ -1443,11 +1457,13 @@ struct transaction_manager_test_t :
       }
       replay();
       check();
+      enable_max_extent_size();
     });
   }
 
   void test_overwrite_pin() {
     run_async([this] {
+      disable_max_extent_size();
       constexpr size_t m_offset = 8 << 10;
       constexpr size_t m_len = 56 << 10;
       constexpr size_t l_offset = 64 << 10;
@@ -1523,11 +1539,13 @@ struct transaction_manager_test_t :
       }
       replay();
       check();
+      enable_max_extent_size();
     });
   }
 
   void test_remap_pin_concurrent() {
     run_async([this] {
+      disable_max_extent_size();
       constexpr unsigned REMAP_NUM = 32;
       constexpr size_t offset = 0;
       constexpr size_t length = 256 << 10;
@@ -1603,11 +1621,13 @@ struct transaction_manager_test_t :
       ASSERT_EQ(success + conflicted + early_exit, REMAP_NUM);
       replay();
       check();
+      enable_max_extent_size();
     });
   }
 
   void test_overwrite_pin_concurrent() {
     run_async([this] {
+      disable_max_extent_size();
       constexpr unsigned REMAP_NUM = 32;
       constexpr size_t offset = 0;
       constexpr size_t length = 256 << 10;
@@ -1717,6 +1737,7 @@ struct transaction_manager_test_t :
       ASSERT_EQ(success + conflicted + early_exit, REMAP_NUM);
       replay();
       check();
+      enable_max_extent_size();
     });
   }
 };
@@ -2117,6 +2138,7 @@ TEST_P(tm_single_device_test_t, remap_lazy_read)
   constexpr laddr_t offset = 0;
   constexpr size_t length = 256 << 10;
    run_async([this, offset] {
+    disable_max_extent_size();
     {
       auto t = create_transaction();
       auto extents = alloc_extents(
@@ -2153,6 +2175,7 @@ TEST_P(tm_single_device_test_t, remap_lazy_read)
       check();
     }
     replay();
+    enable_max_extent_size();
    });
 }
 

@@ -600,6 +600,16 @@ public:
     return epm.get_block_size();
   }
 
+#ifdef UNIT_TESTS_BUILT
+  void set_max_extent_size(extent_len_t len) {
+    max_extent_size = len;
+  }
+
+  extent_len_t get_max_extent_size() const {
+    return max_extent_size;
+  }
+#endif
+
 private:
   // This is a workaround std::move_only_function not being available,
   // not really worth generalizing at this time.
