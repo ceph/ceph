@@ -121,6 +121,11 @@ int Elector::get_my_rank() const
   return mon->rank;
 }
 
+const std::set<int>& Elector::get_quorum() const
+{
+return mon->get_quorum();
+}
+
 void Elector::reset_election()
 {
   mon->bootstrap();
