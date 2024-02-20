@@ -200,7 +200,6 @@ public:
   int get_type() const { return type->type; }
   const sm_t* get_sm() const { return type->sm; }
 
-  int get_wait_shift() const;
   int get_cap_shift() const;
   int get_cap_mask() const;
 
@@ -210,17 +209,33 @@ public:
   void encode_locked_state(ceph::buffer::list& bl) {
     parent->encode_lock_state(type->type, bl);
   }
+
+  using waitmask_t = MDSCacheObject::waitmask_t;
+  static constexpr auto WAIT_ORDERED = waitmask_t(MDSCacheObject::WAIT_ORDERED);
+  int get_wait_shift() const;
+  MDSCacheObject::waitmask_t getmask(uint64_t mask) const {
+    /* See definition of MDSCacheObject::waitmask_t for waiter bits reserved
+     * for SimpleLock.
+     */
+    static constexpr int simplelock_shift = 64;
+    auto waitmask = waitmask_t(mask);
+    int shift = get_wait_shift();
+    ceph_assert(shift < 64);
+    shift += simplelock_shift;
+    waitmask <<= shift;
+    return waitmask;
+  }
   void finish_waiters(uint64_t mask, int r=0) {
-    parent->finish_waiting(mask << get_wait_shift(), r);
+    parent->finish_waiting(getmask(mask), r);
   }
   void take_waiting(uint64_t mask, MDSContext::vec& ls) {
-    parent->take_waiting(mask << get_wait_shift(), ls);
+    parent->take_waiting(getmask(mask), ls);
   }
   void add_waiter(uint64_t mask, MDSContext *c) {
-    parent->add_waiter((mask << get_wait_shift()) | MDSCacheObject::WAIT_ORDERED, c);
+    parent->add_waiter(getmask(mask) | WAIT_ORDERED, c);
   }
   bool is_waiter_for(uint64_t mask) const {
-    return parent->is_waiter_for(mask << get_wait_shift());
+    return parent->is_waiter_for(getmask(mask));
   }
 
   bool is_cached() const {
