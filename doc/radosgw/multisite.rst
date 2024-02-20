@@ -24,49 +24,48 @@ Varieties of Multi-site Configuration
 
 .. versionadded:: Jewel
 
-Beginning with the Kraken release, Ceph supports several multi-site
-configurations for the Ceph Object Gateway:
+Since the Kraken release, Ceph has supported several multi-site configurations
+for the Ceph Object Gateway:
 
-- **Multi-zone:** A more advanced topology, the "multi-zone" configuration, is
-  possible. A multi-zone configuration consists of one zonegroup and
-  multiple zones, with each zone consisting of one or more `ceph-radosgw`
-  instances. **Each zone is backed by its own Ceph Storage Cluster.**
+- **Multi-zone:** The "multi-zone" configuration has a complex topology. A
+  multi-zone configuration consists of one zonegroup and multiple zones. Each
+  zone consists of one or more `ceph-radosgw` instances. **Each zone is backed
+  by its own Ceph Storage Cluster.**
   
   The presence of multiple zones in a given zonegroup provides disaster
   recovery for that zonegroup in the event that one of the zones experiences a
-  significant failure. Beginning with the Kraken release, each zone is active
-  and can receive write operations. A multi-zone configuration that contains
-  multiple active zones enhances disaster recovery and can also be used as a
-  foundation for content delivery networks. 
+  significant failure. Each zone is active and can receive write operations. A
+  multi-zone configuration that contains multiple active zones enhances
+  disaster recovery and can be used as a foundation for content-delivery
+  networks. 
 
 - **Multi-zonegroups:** Ceph Object Gateway supports multiple zonegroups (which
   were formerly called "regions"). Each zonegroup contains one or more zones.
-  If two zones are in the same zonegroup, and if that zonegroup is in the same
-  realm as a second zonegroup, then the objects stored in the two zones share
-  a global object namespace. This global object namespace ensures unique
-  object IDs across zonegroups and zones.
+  If two zones are in the same zonegroup and that zonegroup is in the same
+  realm as a second zonegroup, then the objects stored in the two zones share a
+  global object namespace. This global object namespace ensures unique object
+  IDs across zonegroups and zones.
 
   Each bucket is owned by the zonegroup where it was created (except where
   overridden by the :ref:`LocationConstraint<s3_bucket_placement>` on
-  bucket creation), and its object data will only replicate to other zones in
-  that zonegroup. Any request for data in that bucket that are sent to other
+  bucket creation), and its object data will replicate only to other zones in
+  that zonegroup. Any request for data in that bucket that is sent to other
   zonegroups will redirect to the zonegroup where the bucket resides.
 
   It can be useful to create multiple zonegroups when you want to share a
-  namespace of users and buckets across many zones, but isolate the object data
-  to a subset of those zones. It might be that you have several connected sites
-  that share storage, but only require a single backup for purposes of disaster
-  recovery. In such a case, it could make sense to create several zonegroups
-  with only two zones each to avoid replicating all objects to all zones.
+  namespace of users and buckets across many zones and isolate the object data
+  to a subset of those zones. Maybe you have several connected sites that share
+  storage but require only a single backup for purposes of disaster recovery.
+  In such a case, you could create several zonegroups with only two zones each
+  to avoid replicating all objects to all zones.
 
-  In other cases, it might make more sense to isolate things in separate
-  realms, with each realm having a single zonegroup. Zonegroups provide
-  flexibility by making it possible to control the isolation of data and
-  metadata separately.
+  In other cases, you might isolate data in separate realms, with each realm
+  having a single zonegroup. Zonegroups provide flexibility by making it
+  possible to control the isolation of data and metadata separately.
 
-- **Multiple Realms:** Beginning with the Kraken release, the Ceph Object
-  Gateway supports "realms", which are containers for zonegroups. Realms make
-  it possible to set policies that apply to multiple zonegroups. Realms have a
+- **Multiple Realms:** Since the Kraken release, the Ceph Object Gateway
+  supports "realms", which are containers for zonegroups. Realms make it
+  possible to set policies that apply to multiple zonegroups. Realms have a
   globally unique namespace and can contain either a single zonegroup or
   multiple zonegroups. If you choose to make use of multiple realms, you can
   define multiple namespaces and multiple configurations (this means that each
