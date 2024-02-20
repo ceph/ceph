@@ -25,7 +25,12 @@ case "$1" in
        # 1. create user if not existing
        if ! getent passwd | grep -q "^cephadm:"; then
          echo -n "Adding system user cephadm.."
-         adduser --quiet --system --disabled-password --gecos 'cephadm user for mgr/cephadm' --shell /bin/bash cephadm 2>/dev/null || true
+         adduser --quiet \
+                 --system \
+                 --disabled-password \
+                 --home /home/cephadm \
+                 --shell /bin/bash cephadm 2>/dev/null || true
+         usermod --comment "cephadm user for mgr/cephadm" cephadm
          echo "..done"
        fi
 
@@ -38,19 +43,19 @@ case "$1" in
 
        # set up (initially empty) .ssh/authorized_keys file
        if ! test -d /home/cephadm/.ssh; then
-	   mkdir /home/cephadm/.ssh
-	   chown --reference /home/cephadm /home/cephadm/.ssh
-	   chmod 0700 /home/cephadm/.ssh
+           mkdir /home/cephadm/.ssh
+           chown --reference /home/cephadm /home/cephadm/.ssh
+           chmod 0700 /home/cephadm/.ssh
        fi
        if ! test -e /home/cephadm/.ssh/authorized_keys; then
-	   touch /home/cephadm/.ssh/authorized_keys
-	   chown --reference /home/cephadm /home/cephadm/.ssh/authorized_keys
-	   chmod 0600 /home/cephadm/.ssh/authorized_keys
+           touch /home/cephadm/.ssh/authorized_keys
+           chown --reference /home/cephadm /home/cephadm/.ssh/authorized_keys
+           chmod 0600 /home/cephadm/.ssh/authorized_keys
        fi
 
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
-	:
+       :
     ;;
 
     *)
