@@ -943,9 +943,18 @@ void rgw::auth::LocalApplier::write_ops_log_entry(rgw_log_entry& entry) const
 ACLOwner rgw::auth::RoleApplier::get_aclowner() const
 {
   ACLOwner owner;
-  owner.id = token_attrs.user_id;
+  if (!role.account_id.empty()) {
+    owner.id = role.account_id;
+  } else {
+    owner.id = token_attrs.user_id;
+  }
   owner.display_name = role.name;
   return owner;
+}
+
+bool rgw::auth::RoleApplier::is_owner_of(const rgw_owner& o) const
+{
+  return match_owner(o, token_attrs.user_id, role.account_id);
 }
 
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {

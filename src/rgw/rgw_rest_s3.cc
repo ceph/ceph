@@ -6468,6 +6468,7 @@ rgw::auth::s3::STSEngine::authenticate(
     r.id = token.roleId;
     r.name = role->get_name();
     r.tenant = role->get_tenant();
+    r.account_id = role->get_account_id();
 
     for (auto& [name, policy] : role->get_info().perm_policy_map) {
       r.inline_policies.push_back(std::move(policy));
