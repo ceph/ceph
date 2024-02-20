@@ -153,7 +153,7 @@ def task(ctx, config):
         if not ctx.vip:
             # do this only once (use the first remote we see), since we only need 1
             # set of virtual IPs, regardless of how many remotes we have.
-            log.info("VIPs are {map(str, vips)}")
+            log.info(f"VIPs are {vips!r}")
             ctx.vip = {
                 'vnet': vnet,
                 'vips': vips,
