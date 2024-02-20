@@ -241,6 +241,13 @@ class Elector : public ElectionOwner, RankProvider {
   bool ever_participated() const;
   /* Retrieve monmap->size() */
   unsigned paxos_size() const;
+  /**
+  * Obtain quorum from monitor
+  *
+  * @returns quorum.
+  */
+  const std::set<int>& get_quorum() const;
+  const std::set<int>& get_dead_pinging() const {return dead_pinging;}
   /* Right now we don't disallow anybody */
   std::set<int> disallowed_leaders;
   const std::set<int>& get_disallowed_leaders() const { return disallowed_leaders; }
