@@ -15942,23 +15942,34 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
                                   Context *onfinish, bufferlist *bl,
                                   bool do_fsync, bool syncdataonly)
 {
+    int64_t retval = -1;
+
     RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
     if (!mref_reader.is_state_satisfied()) {
-      int64_t rc = -CEPHFS_ENOTCONN;
+      retval = -CEPHFS_ENOTCONN;
       if (onfinish != nullptr) {
-        onfinish->complete(rc);
+        onfinish->complete(retval);
         /* async call should always return zero to caller and allow the
         caller to wait on callback for the actual errno. */
-        rc = 0;
+        retval = 0;
       }
-      return rc;
+      return retval;
+    }
+
+    if(fh == NULL || !_ll_fh_exists(fh)) {
+      ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+      retval = -CEPHFS_EBADF;
+      if (onfinish != nullptr) {
+        onfinish->complete(retval);
+        retval = 0;
+      }
+      return retval;
     }
 
     std::scoped_lock cl(client_lock);
 
-    int64_t retval = _preadv_pwritev_locked(fh, iov, iovcnt, offset, write,
-                                            true, onfinish, bl, do_fsync,
-                                            syncdataonly);
+    retval = _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
+                                    onfinish, bl, do_fsync, syncdataonly);
     /* There are two scenarios with each having two cases to handle here
     1) async io
       1.a) r == 0:
