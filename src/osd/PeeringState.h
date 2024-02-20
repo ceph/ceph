@@ -690,6 +690,7 @@ public:
     typedef boost::mpl::list <
       boost::statechart::transition< Initialize, Reset >,
       boost::statechart::custom_reaction< NullEvt >,
+      boost::statechart::custom_reaction< PgCreateEvt >,
       boost::statechart::transition< boost::statechart::event_base, Crashed >
       > reactions;
 
@@ -711,6 +712,7 @@ public:
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< NullEvt >,
+      boost::statechart::custom_reaction< PgCreateEvt >,
       boost::statechart::custom_reaction< IntervalFlush >,
       boost::statechart::transition< boost::statechart::event_base, Crashed >
       > reactions;
@@ -737,6 +739,7 @@ public:
       boost::statechart::custom_reaction< IntervalFlush >,
       // ignored
       boost::statechart::custom_reaction< NullEvt >,
+      boost::statechart::custom_reaction< PgCreateEvt >,
       boost::statechart::custom_reaction<SetForceRecovery>,
       boost::statechart::custom_reaction<UnsetForceRecovery>,
       boost::statechart::custom_reaction<SetForceBackfill>,
@@ -867,7 +870,8 @@ public:
       boost::statechart::custom_reaction< DoRecovery>,
       boost::statechart::custom_reaction< RenewLease>,
       boost::statechart::custom_reaction< MLeaseAck>,
-      boost::statechart::custom_reaction< CheckReadable>
+      boost::statechart::custom_reaction< CheckReadable>,
+      boost::statechart::custom_reaction< PgCreateEvt >
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const QueryUnfound& q);
@@ -906,6 +910,7 @@ public:
       return discard_event();
     }
     boost::statechart::result react(const CheckReadable&);
+    boost::statechart::result react(const PgCreateEvt&);
     void all_activated_and_committed();
   };
 
