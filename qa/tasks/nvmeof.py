@@ -20,13 +20,10 @@ class Nvmeof(Task):
             version: default
             rbd:
                 pool_name: mypool
-                image_name: myimage
                 rbd_size: 1024
             gateway_config:
-                source: host.a 
-                target: client.2
-                vars:
-                    cli_version: latest
+                namespaces_count: 10
+                cli_version: latest
                     
     """
 
@@ -54,17 +51,17 @@ class Nvmeof(Task):
 
         rbd_config = self.config.get('rbd', {})
         self.poolname = rbd_config.get('pool_name', 'mypool')
-        self.rbd_image_name = rbd_config.get('image_name', 'myimage')
+        self.image_name_prefix = rbd_config.get('image_name_prefix', 'myimage')
         self.rbd_size = rbd_config.get('rbd_size', 1024*8)
 
         gateway_config = self.config.get('gateway_config', {})
-        conf_vars = gateway_config.get('vars', {})
-        self.cli_image = conf_vars.get('cli_version', 'latest')
-        self.bdev = conf_vars.get('bdev', 'mybdev')
-        self.serial = conf_vars.get('serial', 'SPDK00000000000001')
-        self.nqn = conf_vars.get('nqn', 'nqn.2016-06.io.spdk:cnode1')
-        self.port = conf_vars.get('port', '4420')
-        self.srport = conf_vars.get('srport', '5500')
+        self.namespaces_count = gateway_config.get('namespaces_count', 1)
+        self.cli_image = gateway_config.get('cli_version', 'latest')
+        self.bdev = gateway_config.get('bdev', 'mybdev')
+        self.serial = gateway_config.get('serial', 'SPDK00000000000001')
+        self.nqn = gateway_config.get('nqn', 'nqn.2016-06.io.spdk:cnode1')
+        self.port = gateway_config.get('port', '4420')
+        self.srport = gateway_config.get('srport', '5500')
 
     def deploy_nvmeof(self):
         """
@@ -97,7 +94,6 @@ class Nvmeof(Task):
                 ])
 
             poolname = self.poolname
-            imagename = self.rbd_image_name
 
             log.info(f'[nvmeof]: ceph osd pool create {poolname}')
             _shell(self.ctx, self.cluster_name, self.remote, [
@@ -115,10 +111,13 @@ class Nvmeof(Task):
                 '--placement', str(len(nodes)) + ';' + ';'.join(nodes)
             ])
 
-            log.info(f'[nvmeof]: rbd create {poolname}/{imagename} --size {self.rbd_size}')
-            _shell(self.ctx, self.cluster_name, self.remote, [
-                'rbd', 'create', f'{poolname}/{imagename}', '--size', f'{self.rbd_size}'
-            ])
+            log.info(f'[nvmeof]: creating {self.namespaces_count} images')
+            for i in range(1, int(self.namespaces_count) + 1):
+                imagename = self.image_name_prefix + str(i)
+                log.info(f'[nvmeof]: rbd create {poolname}/{imagename} --size {self.rbd_size}')
+                _shell(self.ctx, self.cluster_name, self.remote, [
+                    'rbd', 'create', f'{poolname}/{imagename}', '--size', f'{self.rbd_size}'
+                ])
 
         for role, i in daemons.items():
             remote, id_ = i
@@ -134,34 +133,29 @@ class Nvmeof(Task):
         
     def set_gateway_cfg(self):
         log.info('[nvmeof]: running set_gateway_cfg...')
-        gateway_config = self.config.get('gateway_config', {})
-        source_host = gateway_config.get('source')
-        target_host = gateway_config.get('target')
-        if not (source_host and target_host):
-            raise ConfigError('gateway_config requires "source" and "target"')
-        remote = list(self.ctx.cluster.only(source_host).remotes.keys())[0]
-        ip_address = remote.ip_address
-        gateway_name = ""
+        ip_address = self.remote.ip_address
+        gateway_names = []
+        gateway_ips = []
         nvmeof_daemons = self.ctx.daemons.iter_daemons_of_role('nvmeof', cluster=self.cluster_name)
         for daemon in nvmeof_daemons:
-            if ip_address == daemon.remote.ip_address:
-                gateway_name = daemon.name()
+            gateway_names += [daemon.name()]
+            gateway_ips += [daemon.remote.ip_address]
         conf_data = dedent(f"""
-            NVMEOF_GATEWAY_IP_ADDRESS={ip_address}
-            NVMEOF_GATEWAY_NAME={gateway_name}
+            NVMEOF_GATEWAY_IP_ADDRESSES={",".join(gateway_ips)}
+            NVMEOF_GATEWAY_NAMES={",".join(gateway_names)}
+            NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS={ip_address}
             NVMEOF_CLI_IMAGE="quay.io/ceph/nvmeof-cli:{self.cli_image}"
-            NVMEOF_BDEV={self.bdev}
-            NVMEOF_SERIAL={self.serial}
+            NVMEOF_NAMESPACES_COUNT={self.namespaces_count}
             NVMEOF_NQN={self.nqn}
             NVMEOF_PORT={self.port}
             NVMEOF_SRPORT={self.srport}
             """)
-        target_remote = list(self.ctx.cluster.only(target_host).remotes.keys())[0]
-        target_remote.write_file(
-            path=conf_file,
-            data=conf_data,
-            sudo=True
-        )
+        for remote in self.ctx.cluster.remotes.keys():
+            remote.write_file(
+                path=conf_file,
+                data=conf_data,
+                sudo=True
+            )
         log.info("[nvmeof]: executed set_gateway_cfg successfully!")
 
 
