@@ -764,10 +764,11 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       }
     } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
       std::string oid = prefix + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
-      ofs += bl_len;
       block.blockID = ofs;
       block.size = bl.length();
       block.version = version;
+      ofs += bl_len;
+
       if (!filter->get_policy_driver()->get_cache_policy()->exist_key(oid)) {
         auto ret = filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y);
         if (ret == 0) {
@@ -811,10 +812,11 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       if (bl_rem.length() == rgw_get_obj_max_req_size) {
         std::string oid = prefix + "_" + std::to_string(ofs) + "_" + std::to_string(bl_rem.length());
           if (!filter->get_policy_driver()->get_cache_policy()->exist_key(oid)) {
-          ofs += bl_rem.length();
           block.blockID = ofs;
           block.size = bl_rem.length();
           block.version = version;
+          ofs += bl_rem.length();
+
           auto ret = filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y);
           if (ret == 0) {
             ret = filter->get_cache_driver()->put(dpp, oid, bl_rem, bl_rem.length(), attrs, *y);
