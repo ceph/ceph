@@ -9017,9 +9017,12 @@ void RGWGetBucketPublicAccessBlock::execute(optional_yield y)
 
 void RGWDeleteBucketPublicAccessBlock::send_response()
 {
-  if (op_ret) {
-    set_req_state_err(s, op_ret);
+  if (!op_ret) {
+    /* A successful Delete request should return a 204 */
+    op_ret = STATUS_NO_CONTENT;
   }
+
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 }
