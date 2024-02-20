@@ -344,12 +344,13 @@ addresses, repeat this process.
 Changing a Monitor's IP address (Advanced Method)
 -------------------------------------------------
 
-There are cases in which the method outlined in :ref"`<Changing a Monitor's IP
-Address (Preferred Method)> operations_add_or_rm_mons_changing_mon_ip` cannot
-be used. For example, it might be necessary to move the cluster's monitors to a
-different network, to a different part of the datacenter, or to a different
-datacenter altogether. It is still possible to change the monitors' IP
-addresses, but a different method must be used.
+There are cases in which the method outlined in
+:ref:`operations_add_or_rm_mons_changing_mon_ip` cannot be used. For example,
+it might be necessary to move the cluster's monitors to a different network, to
+a different part of the datacenter, or to a different datacenter altogether. It
+is still possible to change the monitors' IP addresses, but a different method
+must be used.
+
 
 For such cases, a new monitor map with updated IP addresses for every monitor
 in the cluster must be generated and injected on each monitor. Although this
@@ -357,11 +358,11 @@ method is not particularly easy, such a major migration is unlikely to be a
 routine task. As stated at the beginning of this section, existing monitors are
 not supposed to change their IP addresses.
 
-Continue with the monitor configuration in the example from :ref"`<Changing a
-Monitor's IP Address (Preferred Method)>
-operations_add_or_rm_mons_changing_mon_ip` . Suppose that all of the monitors
-are to be moved from the ``10.0.0.x`` range to the ``10.1.0.x`` range, and that
-these networks are unable to communicate. Carry out the following procedure:
+Continue with the monitor configuration in the example from
+:ref:`operations_add_or_rm_mons_changing_mon_ip`. Suppose that all of the
+monitors are to be moved from the ``10.0.0.x`` range to the ``10.1.0.x`` range,
+and that these networks are unable to communicate. Carry out the following
+procedure:
 
 #. Retrieve the monitor map (``{tmp}`` is the path to the retrieved monitor
    map, and ``{filename}`` is the name of the file that contains the retrieved
