@@ -69,7 +69,7 @@ def exec(ctx, config):
                 )
 
 
-def map_vips(mip, count):
+def _map_vips(mip, count):
     vip_entries = teuth_config.get('vip', [])
     if not vip_entries:
         raise ConfigError(
@@ -146,7 +146,7 @@ def task(ctx, config):
         ip = remote.ssh.get_transport().getpeername()[0]
         log.info(f'peername {ip}')
         mip = ipaddress.ip_address(ip)
-        vnet, vips = map_vips(mip, count + 1)
+        vnet, vips = _map_vips(mip, count + 1)
         static = vips.pop(0)
         log.info(f"{remote.hostname} static {static}, vnet {vnet}")
 
