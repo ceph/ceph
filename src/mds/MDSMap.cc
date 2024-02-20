@@ -800,8 +800,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     encode(min_compat_client, bl);
   }
   encode(required_client_features, bl);
-  encode(max_xattr_size, bl);
   encode(bal_rank_mask, bl);
+  encode(max_xattr_size, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -852,7 +852,8 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     decode(cas_pool, p);
   }
 
-  // kclient ignores everything from here
+  // kclient skips most of what's below
+  // see fs/ceph/mdsmap.c for current decoding
   __u16 ev = 1;
   if (struct_v >= 2)
     decode(ev, p);
@@ -949,11 +950,11 @@ void MDSMap::decode(bufferlist::const_iterator& p)
   }
 
   if (ev >= 17) {
-    decode(max_xattr_size, p);
+    decode(bal_rank_mask, p);
   }
 
   if (ev >= 18) {
-    decode(bal_rank_mask, p);
+    decode(max_xattr_size, p);
   }
 
   /* All MDS since at least v14.0.0 understand INLINE */
