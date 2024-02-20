@@ -15758,8 +15758,14 @@ loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
 int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
+  if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
+  }
+
+  if (fh == NULL || !_ll_fh_exists(fh)) {
+    ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    return -CEPHFS_EBADF;
+  }
 
   ldout(cct, 3) << "ll_read " << fh << " " << fh->inode->ino << " " << " " << off << "~" << len << dendl;
   tout(cct) << "ll_read" << std::endl;
@@ -15896,16 +15902,22 @@ int Client::ll_commit_blocks(Inode *in,
 
 int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 {
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied()) {
+    return -CEPHFS_ENOTCONN;
+  }
+
+  if (fh == NULL || !_ll_fh_exists(fh)) {
+    ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    return -CEPHFS_EBADF;
+  }
+
   ldout(cct, 3) << "ll_write " << fh << " " << fh->inode->ino << " " << off <<
     "~" << len << dendl;
   tout(cct) << "ll_write" << std::endl;
   tout(cct) << (uintptr_t)fh << std::endl;
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
-
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
 
   /* We can't return bytes written larger than INT_MAX, clamp len to that */
   len = std::min(len, (loff_t)INT_MAX);
@@ -15920,8 +15932,14 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
+  if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
+  }
+
+  if (fh == NULL || !_ll_fh_exists(fh)) {
+    ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    return -CEPHFS_EBADF;
+  }
 
   std::scoped_lock cl(client_lock);
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
@@ -15930,8 +15948,14 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
 int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
+  if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
+  }
+
+  if (fh == NULL || !_ll_fh_exists(fh)) {
+    ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    return -CEPHFS_EBADF;
+  }
 
   std::scoped_lock cl(client_lock);
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
