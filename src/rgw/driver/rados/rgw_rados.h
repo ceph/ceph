@@ -823,10 +823,11 @@ public:
                      std::map<std::string, bufferlist>& attrs,
                      bool modify_tail, bool assume_noent,
                      void *index_op, const req_context& rctx,
+                     jspan_context& trace,
                      bool log_op = true);
       int write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,
-                     const req_context& rctx, bool log_op = true);
+                     const req_context& rctx, jspan_context& trace, bool log_op = true);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
       const req_state* get_req_state() {
         return nullptr;  /* XXX dang Only used by LTTng, and it handles null anyway */
@@ -1199,7 +1200,8 @@ public:
                void (*progress_cb)(off_t, void *),
                void *progress_data,
                const DoutPrefixProvider *dpp,
-               optional_yield y);
+               optional_yield y,
+               jspan_context& trace);
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
