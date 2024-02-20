@@ -727,6 +727,7 @@ public:
     std::string id;
     std::string name;
     std::string tenant;
+    rgw_account_id account_id;
     std::vector<std::string> inline_policies;
     std::vector<std::string> managed_policies;
   };
@@ -757,11 +758,7 @@ public:
   bool is_admin_of(const rgw_owner& o) const override {
     return false;
   }
-  bool is_owner_of(const rgw_owner& o) const override {
-    auto* uid = std::get_if<rgw_user>(&o);
-    // TODO: handle account roles
-    return uid && *uid == token_attrs.user_id;
-  }
+  bool is_owner_of(const rgw_owner& o) const override;
   bool is_identity(const Principal& p) const override;
   uint32_t get_perm_mask() const override {
     return RGW_PERM_NONE; 
