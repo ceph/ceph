@@ -151,7 +151,7 @@ generates a catalog of all objects in each placement group and compares each
 primary object to its replicas, ensuring that no objects are missing or
 mismatched. Light scrubbing checks the object size and attributes, and is
 usually done daily. Deep scrubbing reads the data and uses checksums to ensure
-data integrity, and is usually done weekly. The freqeuncies of both light
+data integrity, and is usually done weekly. The frequencies of both light
 scrubbing and deep scrubbing are determined by the cluster's configuration,
 which is fully under your control and subject to the settings explained below
 in this section.
