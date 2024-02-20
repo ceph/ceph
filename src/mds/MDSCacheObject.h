@@ -58,6 +58,16 @@ class MDSCacheObject {
  public:
   typedef mempool::mds_co::compact_map<mds_rank_t,unsigned> replica_map_type;
 
+  /* Mask for waiters. It is 128 bits to accomodate lock waiters. Its layout:
+   *
+   *  Most-significant                 Least significant
+   * [   SimpleLock 64 bits  |   MDSCacheObject 64 bits ]
+   *
+   * It is organized this way for simplicity not for compactness and because
+   * the total bits will be >64 bits.
+   */
+  using waitmask_t = std::bitset<128>;
+
   struct ptr_lt {
     bool operator()(const MDSCacheObject* l, const MDSCacheObject* r) const {
       return l->is_lt(r);
@@ -261,27 +271,39 @@ class MDSCacheObject {
   unsigned get_replica_nonce() const { return replica_nonce; }
   void set_replica_nonce(unsigned n) { replica_nonce = n; }
 
-  bool is_waiter_for(uint64_t mask, uint64_t min=0);
+  /* A uint64_t mask is accepted to accomodate existing code that expects the
+   * mask to actually be a 64 bit integer.
+   */
+  bool is_waiter_for(uint64_t mask) {
+    return is_waiter_for(waitmask_t(mask));
+  }
+  bool is_waiter_for(waitmask_t mask);
+
   virtual void add_waiter(uint64_t mask, MDSContext *c) {
+    add_waiter(waitmask_t(mask), c);
+  }
+  void add_waiter(waitmask_t mask, MDSContext *c) {
     if (waiting.empty())
       get(PIN_WAITER);
 
-    uint64_t seq = 0;
-    if (mask & WAIT_ORDERED) {
+    waiter_seq_t seq = 0;
+    if ((mask & waitmask_t(WAIT_ORDERED)).any()) {
       seq = ++last_wait_seq;
-      mask &= ~WAIT_ORDERED;
+      mask &= ~waitmask_t(WAIT_ORDERED);
+    } else {
+      /* always at the front */
+      seq = 0;
     }
-    waiting.insert(std::pair<uint64_t, std::pair<uint64_t, MDSContext*> >(
-			    mask,
-			    std::pair<uint64_t, MDSContext*>(seq, c)));
-//    pdout(10,g_conf()->debug_mds) << (mdsco_db_line_prefix(this)) 
-//			       << "add_waiter " << hex << mask << dec << " " << c
-//			       << " on " << *this
-//			       << dendl;
-    
+    waiting.insert(std::pair<waiter_seq_t, waiter>(seq, waiter(mask, c)));
   }
-  virtual void take_waiting(uint64_t mask, MDSContext::vec& ls);
-  void finish_waiting(uint64_t mask, int result = 0);
+  virtual void take_waiting(uint64_t mask, MDSContext::vec& ls) {
+    take_waiting(waitmask_t(mask), ls);
+  }
+  void take_waiting(waitmask_t mask, MDSContext::vec& ls);
+  void finish_waiting(uint64_t mask, int result = 0) {
+    finish_waiting(waitmask_t(mask), result);
+  }
+  void finish_waiting(waitmask_t mask, int result = 0);
 
   // ---------------------------------------------
   // locking
@@ -322,8 +344,13 @@ class MDSCacheObject {
   // ---------------------------------------------
   // waiting
  private:
-  mempool::mds_co::compact_multimap<uint64_t, std::pair<uint64_t, MDSContext*>> waiting;
-  static uint64_t last_wait_seq;
+  using waiter_seq_t = uint64_t;
+  struct waiter {
+    waitmask_t mask;
+    MDSContext* c;
+  };
+  mempool::mds_co::compact_multimap<waiter_seq_t, struct waiter> waiting;
+  static waiter_seq_t last_wait_seq;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const mdsco_db_line_prefix& o) {
