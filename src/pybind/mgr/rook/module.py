@@ -616,5 +616,18 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return self.rook_cluster.remove_host_label(host, label)
 
     @handle_orch_error
+    def create_osds(self, drive_group: DriveGroupSpec) -> str:
+        raise orchestrator.OrchestratorError('Creating OSDs is not supported by rook orchestrator. Please, use Rook operator.')
+
+    @handle_orch_error
+    def remove_osds(self,
+                    osd_ids: List[str],
+                    replace: bool = False,
+                    force: bool = False,
+                    zap: bool = False,
+                    no_destroy: bool = False) -> str:
+        raise orchestrator.OrchestratorError('Removing OSDs is not supported by rook orchestrator. Please, use Rook operator.')
+
+    @handle_orch_error
     def blink_device_light(self, ident_fault: str, on: bool, locs: List[orchestrator.DeviceLightLoc]) -> List[str]:
         return self.rook_cluster.blink_light(ident_fault, on, locs)
