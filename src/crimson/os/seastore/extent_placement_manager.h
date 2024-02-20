@@ -409,6 +409,14 @@ public:
       writer->prefill_fragmented_devices();
     }
   }
+
+  void set_max_extent_size(extent_len_t len) {
+    max_data_allocation_size = len;
+  }
+
+  extent_len_t get_max_extent_size() const {
+    return max_data_allocation_size;
+  }
 #endif
 
   /**
