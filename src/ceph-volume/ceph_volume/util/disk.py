@@ -6,7 +6,7 @@ import time
 from ceph_volume import process
 from ceph_volume.api import lvm
 from ceph_volume.util.system import get_file_contents
-from typing import Dict, List
+from typing import Dict, List, Any
 
 
 logger = logging.getLogger(__name__)
@@ -825,6 +825,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         block_types.append('loop')
 
     for block in block_devs:
+        metadata: Dict[str, Any] = {}
         devname = os.path.basename(block[0])
         diskname = block[1]
         if block[2] not in block_types:
@@ -832,7 +833,6 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         sysdir = os.path.join(_sys_block_path, devname)
         if block[2] == 'part':
             sysdir = os.path.join(_sys_block_path, block[3], devname)
-        metadata = {}
 
         # If the device is ceph rbd it gets excluded
         if is_ceph_rbd(diskname):
@@ -897,7 +897,9 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         metadata['size'] = float(size) * 512
         metadata['human_readable_size'] = human_readable_size(metadata['size'])
         metadata['path'] = diskname
+        metadata['devname'] = devname
         metadata['type'] = block[2]
+        metadata['parent'] = block[3]
 
         # some facts from udevadm
         p = udevadm_property(sysdir)
