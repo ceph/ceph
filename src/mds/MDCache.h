@@ -1489,6 +1489,9 @@ private:
   uint64_t kill_shutdown_at = 0;
 
   std::map<inodeno_t, MDRequestRef> quiesced_subvolumes;
+  DecayCounter quiesce_counter;
+  uint64_t quiesce_threshold;
+  std::chrono::milliseconds quiesce_sleep;
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

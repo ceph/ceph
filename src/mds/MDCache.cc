@@ -122,7 +122,10 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   filer(m->objecter, m->finisher),
   stray_manager(m, purge_queue_),
   recovery_queue(m),
-  trim_counter(g_conf().get_val<double>("mds_cache_trim_decay_rate"))
+  trim_counter(g_conf().get_val<double>("mds_cache_trim_decay_rate")),
+  quiesce_counter(g_conf().get_val<double>("mds_cache_trim_decay_rate")),
+  quiesce_threshold(g_conf().get_val<Option::size_t>("mds_cache_quiesce_threshold")),
+  quiesce_sleep(g_conf().get_val<std::chrono::milliseconds>("mds_cache_quiesce_sleep"))
 {
   migrator.reset(new Migrator(mds, this));
 
@@ -195,6 +198,15 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     cache_health_threshold = g_conf().get_val<double>("mds_health_cache_threshold");
   if (changed.count("mds_cache_mid"))
     lru.lru_set_midpoint(g_conf().get_val<double>("mds_cache_mid"));
+  if (changed.count("mds_cache_quiesce_decay_rate")) {
+    quiesce_counter = DecayCounter(g_conf().get_val<double>("mds_cache_quiesce_decay_rate"));
+  }
+  if (changed.count("mds_cache_quiesce_threshold")) {
+    quiesce_threshold = g_conf().get_val<Option::size_t>("mds_cache_quiesce_threshold");
+  }
+  if (changed.count("mds_cache_quiesce_sleep")) {
+    quiesce_sleep = g_conf().get_val<std::chrono::milliseconds>("mds_cache_quiesce_sleep");
+  }
   if (changed.count("mds_cache_trim_decay_rate")) {
     trim_counter = DecayCounter(g_conf().get_val<double>("mds_cache_trim_decay_rate"));
   }
@@ -13530,6 +13542,15 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
 
   dout(20) << __func__ << " " << *mdr << " quiescing " << *in << dendl;
 
+  if (quiesce_counter.get() > quiesce_threshold) {
+    dout(20) << __func__
+             << " quiesce counter " << quiesce_counter
+             << " threshold (" << quiesce_threshold
+             << ") reached: scheduling retry" << dendl;
+    mds->timer.add_event_after(quiesce_sleep, new C_MDS_RetryRequest(this, mdr));
+    return;
+  }
+  quiesce_counter.hit();
 
   {
     /* Acquire authpins on `in` to prevent migrations after this rank considers
