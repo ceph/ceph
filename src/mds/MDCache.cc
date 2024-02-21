@@ -13607,7 +13607,7 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
     for (auto& dir : in->get_dirfrags()) {
       for (auto& [dnk, dn] : *dir) {
         auto* in = dn->get_projected_inode();
-        if (!in) {
+        if (!in || !in->is_head()) {
           continue;
         }
 
