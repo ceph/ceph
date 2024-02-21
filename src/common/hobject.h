@@ -342,6 +342,7 @@ public:
     return operator<=>(rhs) == 0;
   }
   friend struct ghobject_t;
+  friend struct test_hobject_fmt_t;
 };
 WRITE_CLASS_ENCODER(hobject_t)
 
