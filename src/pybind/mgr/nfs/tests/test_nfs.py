@@ -1190,7 +1190,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/cephfs3"
         assert export.access_type == "RW"
         assert export.squash == "root"
-        assert export.protocols == [4]
+        assert export.protocols == [3, 4]
         assert export.fsal.name == "CEPH"
         assert export.fsal.user_id == "nfs.foo.myfs.86ca58ef"
         assert export.fsal.cephx_key == "thekeyforclientabc"
