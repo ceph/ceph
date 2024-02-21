@@ -134,8 +134,8 @@ transform_old_authinfo(CephContext* const cct,
         owner.id.emplace<rgw_account_id>(account_id);
       } else {
         owner.id = id;
-        owner.display_name = display_name;
       }
+      owner.display_name = display_name;
       return owner;
     }
 
@@ -847,8 +847,8 @@ ACLOwner rgw::auth::LocalApplier::get_aclowner() const
     owner.id = user_info.account_id;
   } else {
     owner.id = user_info.user_id;
-    owner.display_name = user_info.display_name;
   }
+  owner.display_name = user_info.display_name;
   return owner;
 }
 
