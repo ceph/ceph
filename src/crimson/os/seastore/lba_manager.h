@@ -87,6 +87,13 @@ public:
     laddr_t hint,
     LogicalCachedExtent &nextent) = 0;
 
+  using alloc_extents_ret = alloc_extent_iertr::future<
+    std::vector<LBAMappingRef>>;
+  virtual alloc_extents_ret alloc_extents(
+    Transaction &t,
+    laddr_t hint,
+    std::vector<LogicalCachedExtentRef> extents) = 0;
+
   virtual alloc_extent_ret clone_mapping(
     Transaction &t,
     laddr_t hint,
