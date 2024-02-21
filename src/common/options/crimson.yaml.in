@@ -83,6 +83,16 @@ options:
   level: dev
   desc: default logical address space reservation for seastore objects' metadata
   default: 16777216
+# TODO: implement sub-extent checksum and deprecate this configuration.
+- name: seastore_full_integrity_check
+  type: bool
+  level: dev
+  desc: Whether seastore need to fully check the integrity of each extent,
+        non-full integrity check means the integrity check might be skipped
+        during extent remapping for better performance, disable with caution
+  default: false
+# TODO: seastore_max_data_allocation_size should be dropped once the sub-extent
+#       read/checksum is implemented.
 - name: seastore_max_data_allocation_size
   type: size
   level: advanced
