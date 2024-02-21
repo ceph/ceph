@@ -822,7 +822,7 @@ out:
 
 static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 		     librados::IoCtx& io_ctx, const char *imgname,
-		     const char *path, librbd::ImageOptions& opts,
+		     const char *path, librbd::ImageOptions& opts, bool skip_create,
 		     bool no_progress, int import_format, size_t sparse_size)
 {
   int fd, r;
@@ -835,6 +835,11 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
   uint64_t order;
   if (opts.get(RBD_IMAGE_OPTION_ORDER, &order) != 0) {
     order = g_conf().get_val<uint64_t>("rbd_default_order");
+  }
+
+  if (skip_create && import_format == 1) {
+    std::cerr << "rbd: export format 1 does not support skip-create" << std::endl;
+    return -EINVAL;
   }
 
   // try to fill whole imgblklen blocks for sparsification
@@ -889,12 +894,16 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
     goto done;
   }
 
+  if (skip_create)
+    goto open_rbd;
+
   r = rbd.create4(io_ctx, imgname, size, opts);
   if (r < 0) {
     std::cerr << "rbd: image creation failed" << std::endl;
     goto done;
   }
 
+open_rbd:
   r = rbd.open(io_ctx, image, imgname);
   if (r < 0) {
     std::cerr << "rbd: failed to open image" << std::endl;
@@ -920,7 +929,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 
   r = image.close();
 err:
-  if (r < 0)
+  if (r < 0 && !skip_create)
     rbd.remove(io_ctx, imgname);
 done:
   if (r < 0)
@@ -942,6 +951,7 @@ void get_arguments(po::options_description *positional,
   at::add_sparse_size_option(options);
   at::add_no_progress_option(options);
   at::add_export_format_option(options);
+  at::add_skip_create_option(options);
 
   // TODO legacy rbd allowed import to accept both 'image'/'dest' and
   //      'pool'/'dest-pool'
@@ -1019,7 +1029,8 @@ int execute(const po::variables_map &vm,
 
   librbd::RBD rbd;
   r = do_import(rados, rbd, io_ctx, image_name.c_str(), path.c_str(),
-                opts, vm[at::NO_PROGRESS].as<bool>(), format, sparse_size);
+                opts, vm[at::SKIP_CREATE].as<bool>(), vm[at::NO_PROGRESS].as<bool>(),
+                format, sparse_size);
   if (r < 0) {
     std::cerr << "rbd: import failed: " << cpp_strerror(r) << std::endl;
     return r;

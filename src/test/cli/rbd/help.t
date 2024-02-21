@@ -773,7 +773,7 @@
   rbd help export
   usage: rbd export [--pool <pool>] [--namespace <namespace>] [--image <image>] 
                     [--snap <snap>] [--path <path>] [--no-progress] 
-                    [--export-format <export-format>] 
+                    [--export-format <export-format>] [--exclude-parent] 
                     <source-image-or-snap-spec> <path-name> 
   
   Export image to file.
@@ -793,12 +793,13 @@
     --path arg                   export file (or '-' for stdout)
     --no-progress                disable progress output
     --export-format arg          format of image file
+    --exclude-parent             exclude parent
   
   rbd help export-diff
   usage: rbd export-diff [--pool <pool>] [--namespace <namespace>] 
                          [--image <image>] [--snap <snap>] [--path <path>] 
                          [--from-snap <from-snap>] [--whole-object] 
-                         [--no-progress] 
+                         [--no-progress] [--exclude-parent] 
                          <source-image-or-snap-spec> <path-name> 
   
   Export incremental diff to file.
@@ -819,6 +820,7 @@
     --from-snap arg              snapshot starting point
     --whole-object               compare whole object
     --no-progress                disable progress output
+    --exclude-parent             exclude parent
   
   rbd help feature disable
   usage: rbd feature disable [--pool <pool>] [--namespace <namespace>] 
@@ -1212,8 +1214,8 @@
                     [--journal-object-size <journal-object-size>] 
                     [--journal-pool <journal-pool>] 
                     [--sparse-size <sparse-size>] [--no-progress] 
-                    [--export-format <export-format>] [--pool <pool>] 
-                    [--image <image>] 
+                    [--export-format <export-format>] [--skip-create] 
+                    [--pool <pool>] [--image <image>] 
                     <path-name> <dest-image-spec> 
   
   Import image from file.
@@ -1244,6 +1246,7 @@
     --sparse-size arg         sparse size in B/K/M [default: 4K]
     --no-progress             disable progress output
     --export-format arg       format of image file
+    --skip-create             skip create
   
   Image Features:
     (*) supports enabling/disabling on existing images
