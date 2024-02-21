@@ -300,16 +300,17 @@ BtreeLBAManager::_get_mapping(
     });
 }
 
-BtreeLBAManager::alloc_extent_ret
-BtreeLBAManager::_alloc_extent(
+BtreeLBAManager::alloc_extents_ret
+BtreeLBAManager::_alloc_extents(
   Transaction &t,
   laddr_t hint,
-  extent_len_t len,
-  pladdr_t addr,
-  uint32_t checksum,
-  LogicalCachedExtent* nextent,
+  std::vector<alloc_mapping_info_t> &alloc_infos,
   extent_ref_count_t refcount)
 {
+  extent_len_t total_len = 0;
+  for (auto &info : alloc_infos) {
+    total_len += info.len;
+  }
   struct state_t {
     laddr_t last_end;
 
@@ -319,77 +320,98 @@ BtreeLBAManager::_alloc_extent(
     state_t(laddr_t hint) : last_end(hint) {}
   };
 
-  LOG_PREFIX(BtreeLBAManager::_alloc_extent);
-  TRACET("{}~{}, hint={}, refcount={}", t, addr, len, hint, refcount);
+  LOG_PREFIX(BtreeLBAManager::_alloc_extents);
+  TRACET("{}~{}, hint={}, num of extents: {}, refcount={}",
+    t, alloc_infos.front().val, total_len, hint, alloc_infos.size(), refcount);
 
   auto c = get_context(t);
-  ++stats.num_alloc_extents;
+  stats.num_alloc_extents += alloc_infos.size();
   auto lookup_attempts = stats.num_alloc_extents_iter_nexts;
-  return crimson::os::seastore::with_btree_state<LBABtree, state_t>(
-    cache,
-    c,
-    hint,
-    [this, FNAME, c, hint, len, addr, lookup_attempts,
-    &t, nextent, refcount, checksum](auto &btree, auto &state) {
+  return seastar::do_with(
+    std::vector<LBAMappingRef>(),
+    [this, FNAME, &alloc_infos, hint, &t, total_len, c,
+    lookup_attempts, refcount](auto &rets) {
+    return crimson::os::seastore::with_btree_state<LBABtree, state_t>(
+      cache,
+      c,
+      hint,
+      [this, c, hint, total_len, addr=alloc_infos.front().val, &rets, refcount,
+      lookup_attempts, &t, &alloc_infos, FNAME](auto &btree, auto &state) {
       return LBABtree::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, hint),
-	[this, &state, len, addr, &t, hint, FNAME, lookup_attempts](auto &pos) {
-	  ++stats.num_alloc_extents_iter_nexts;
-	  if (pos.is_end()) {
-	    DEBUGT("{}~{}, hint={}, state: end, done with {} attempts, insert at {}",
-                   t, addr, len, hint,
-                   stats.num_alloc_extents_iter_nexts - lookup_attempts,
-                   state.last_end);
-	    state.insert_iter = pos;
-	    return typename LBABtree::iterate_repeat_ret_inner(
-	      interruptible::ready_future_marker{},
-	      seastar::stop_iteration::yes);
-	  } else if (pos.get_key() >= (state.last_end + len)) {
-	    DEBUGT("{}~{}, hint={}, state: {}~{}, done with {} attempts, insert at {} -- {}",
-                   t, addr, len, hint,
-                   pos.get_key(), pos.get_val().len,
-                   stats.num_alloc_extents_iter_nexts - lookup_attempts,
-                   state.last_end,
-                   pos.get_val());
-	    state.insert_iter = pos;
-	    return typename LBABtree::iterate_repeat_ret_inner(
-	      interruptible::ready_future_marker{},
-	      seastar::stop_iteration::yes);
-	  } else {
-	    state.last_end = pos.get_key() + pos.get_val().len;
-	    TRACET("{}~{}, hint={}, state: {}~{}, repeat ... -- {}",
-                   t, addr, len, hint,
-                   pos.get_key(), pos.get_val().len,
-                   pos.get_val());
-	    return typename LBABtree::iterate_repeat_ret_inner(
-	      interruptible::ready_future_marker{},
-	      seastar::stop_iteration::no);
-	  }
-	}).si_then([FNAME, c, addr, len, hint, &btree,
-		    &state, nextent, refcount, checksum] {
+	[this, &state, total_len, addr, &t, hint,
+	lookup_attempts, FNAME](auto &pos) {
+	++stats.num_alloc_extents_iter_nexts;
+	if (pos.is_end()) {
+	  DEBUGT("{}~{}, hint={}, state: end, done with {} attempts, insert at {}",
+		 t, addr, total_len, hint,
+		 stats.num_alloc_extents_iter_nexts - lookup_attempts,
+		 state.last_end);
+	  state.insert_iter = pos;
+	  return typename LBABtree::iterate_repeat_ret_inner(
+	    interruptible::ready_future_marker{},
+	    seastar::stop_iteration::yes);
+	} else if (pos.get_key() >= (state.last_end + total_len)) {
+	  DEBUGT("{}~{}, hint={}, state: {}~{}, done with {} attempts, insert at {} -- {}",
+		 t, addr, total_len, hint,
+		 pos.get_key(), pos.get_val().len,
+		 stats.num_alloc_extents_iter_nexts - lookup_attempts,
+		 state.last_end,
+		 pos.get_val());
+	  state.insert_iter = pos;
+	  return typename LBABtree::iterate_repeat_ret_inner(
+	    interruptible::ready_future_marker{},
+	    seastar::stop_iteration::yes);
+	} else {
+	  state.last_end = pos.get_key() + pos.get_val().len;
+	  TRACET("{}~{}, hint={}, state: {}~{}, repeat ... -- {}",
+		 t, addr, total_len, hint,
+		 pos.get_key(), pos.get_val().len,
+		 pos.get_val());
+	  return typename LBABtree::iterate_repeat_ret_inner(
+	    interruptible::ready_future_marker{},
+	    seastar::stop_iteration::no);
+	}
+      }).si_then([c, addr, hint, &btree, &state, &alloc_infos,
+		  total_len, &rets, refcount, FNAME] {
+	return trans_intr::do_for_each(
+	  alloc_infos,
+	  [c, addr, hint, &btree, &state, FNAME,
+	  total_len, &rets, refcount](auto &alloc_info) {
 	  return btree.insert(
 	    c,
 	    *state.insert_iter,
 	    state.last_end,
-	    lba_map_val_t{len, pladdr_t(addr), refcount, checksum},
-	    nextent
-	  ).si_then([&state, FNAME, c, addr, len, hint, nextent](auto &&p) {
+	    lba_map_val_t{
+	      alloc_info.len,
+	      pladdr_t(alloc_info.val),
+	      refcount,
+	      alloc_info.checksum},
+	    alloc_info.extent
+	  ).si_then([&state, c, addr, total_len, hint, FNAME,
+		    &alloc_info, &rets](auto &&p) {
 	    auto [iter, inserted] = std::move(p);
 	    TRACET("{}~{}, hint={}, inserted at {}",
-	           c.trans, addr, len, hint, state.last_end);
-	    if (nextent) {
-	      ceph_assert(addr.is_paddr());
-	      nextent->set_laddr(iter.get_key());
+		   c.trans, addr, total_len, hint, state.last_end);
+	    if (alloc_info.extent) {
+	      ceph_assert(alloc_info.val.is_paddr());
+	      alloc_info.extent->set_laddr(iter.get_key());
 	    }
 	    ceph_assert(inserted);
-	    state.ret = iter;
+	    rets.emplace_back(iter.get_pin(c));
+	    return iter.next(c).si_then([&state, &alloc_info](auto it) {
+	      state.insert_iter = it;
+	      state.last_end += alloc_info.len;
+	    });
 	  });
 	});
-    }).si_then([c](auto &&state) {
+      });
+    }).si_then([&rets](auto &&state) {
       return alloc_extent_iertr::make_ready_future<
-	LBAMappingRef>(state.ret->get_pin(c));
+	std::vector<LBAMappingRef>>(std::move(rets));
     });
+  });
 }
 
 static bool is_lba_node(const CachedExtent &e)
