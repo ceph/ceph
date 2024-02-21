@@ -92,7 +92,9 @@ class LFUDAPolicyFixture : public ::testing::Test {
       delete block;
       delete dir;
       delete cacheDriver;
-      delete policyDriver;
+      
+      if (policyDriver)
+	delete policyDriver;
     }
 
     std::string build_index(std::string bucketName, std::string oid, uint64_t offset, uint64_t size) {
@@ -265,6 +267,47 @@ TEST_F(LFUDAPolicyFixture, BackendGetBlockYield)
     conn->async_exec(req, resp, yield[ec]);
 
     conn->cancel();
+  });
+
+  io.run();
+}
+
+TEST_F(LFUDAPolicyFixture, RedisSyncTest)
+{
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
+    env->cct->_conf->rgw_lfuda_sync_frequency = 1;
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->save_y(optional_yield{io, yield});
+    policyDriver->get_cache_policy()->init(env->cct, env->dpp, io);
+  
+    cacheDriver->shutdown();
+
+    boost::system::error_code ec;
+    request req;
+    req.push("HGET", "lfuda", "age");
+    req.push("HGET", "lfuda", "minLocalWeights_sum");
+    req.push("HGET", "lfuda", "minLocalWeights_size");
+    req.push("HGET", "lfuda", "minLocalWeights_address");
+    req.push("HGET", "127.0.0.1:6379", "avgLocalWeight_sum");
+    req.push("HGET", "127.0.0.1:6379", "avgLocalWeight_size");
+    req.push("FLUSHALL");
+
+    response<std::string, std::string, std::string,
+             std::string, std::string, std::string,
+             boost::redis::ignore_t> resp;
+
+    conn->async_exec(req, resp, yield[ec]);
+
+    ASSERT_EQ((bool)ec, false);
+    EXPECT_EQ(std::get<0>(resp).value(), "1");
+    EXPECT_EQ(std::get<1>(resp).value(), "0");
+    EXPECT_EQ(std::get<2>(resp).value(), "0");
+    EXPECT_EQ(std::get<3>(resp).value(), "127.0.0.1:6379");
+    EXPECT_EQ(std::get<4>(resp).value(), "0");
+    EXPECT_EQ(std::get<4>(resp).value(), "0");
+    conn->cancel();
+    
+    delete policyDriver; 
+    policyDriver = nullptr;
   });
 
   io.run();
