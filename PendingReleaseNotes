@@ -117,6 +117,10 @@
   level storage operator (like Rook) to recreate the missing file system.
   See https://docs.ceph.com/en/latest/cephfs/administration/#file-systems
   docs for more information.
+* mgr/REST: The REST manager module will trim requests based on the 'max_requests' option.
+  Without this feature, and in the absence of manual deletion of old requests,
+  the accumulation of requests in the array can lead to Out Of Memory (OOM) issues, 
+  resulting in the Manager crashing.
 
 * CephFS: The `subvolume snapshot clone` command now depends on the config option
   `snapshot_clone_no_wait` which is used to reject the clone operation when
