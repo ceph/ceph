@@ -315,8 +315,11 @@ static int read_owner_display_name(const DoutPrefixProvider* dpp,
         RGWAccountInfo info;
         rgw::sal::Attrs attrs;
         RGWObjVersionTracker objv;
-        // don't use account names in acls. just verify that the account exists
-        return driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+        int r = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+        if (r >= 0) {
+          name = info.name;
+        }
+        return r;
       }), owner);
 }
 
