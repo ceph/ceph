@@ -426,9 +426,21 @@ public:
 #endif
 
     // The according extent might be stable or pending.
-    return cache->get_extent_if_cached(
-      t, pin->get_val(), T::TYPE
-    ).si_then([this, &t, remaps,
+    auto fut = base_iertr::make_ready_future<TCachedExtentRef<T>>();
+    if (full_extent_integrity_check) {
+      fut = read_pin<T>(t, pin->duplicate());
+    } else {
+      fut = cache->get_extent_if_cached(
+	t, pin->get_val(), T::TYPE
+      ).si_then([](auto extent) {
+	if (extent) {
+	  return extent->template cast<T>();
+	} else {
+	  return TCachedExtentRef<T>();
+	}
+      });
+    }
+    return fut.si_then([this, &t, remaps,
               original_laddr = pin->get_key(),
 	      intermediate_base = pin->is_indirect()
 				  ? pin->get_intermediate_base()
@@ -807,6 +819,8 @@ private:
 
   WritePipeline write_pipeline;
 
+  bool full_extent_integrity_check = true;
+
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
     LogicalCachedExtentRef extent);
@@ -860,16 +874,24 @@ private:
 	pref.link_child(&extent);
 	extent.maybe_set_intermediate_laddr(pref);
       }
-    ).si_then([FNAME, &t, pin=std::move(pin)](auto ref) mutable -> ret {
-      SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
+    ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) mutable -> ret {
+      auto crc = ref->calc_crc32c();
+      SUBTRACET(
+	seastore_tm,
+	"got extent -- {}, chksum in the lba tree: {}, actual chksum: {}",
+	t,
+	*ref,
+	pin->get_checksum(),
+	crc);
       assert(ref->is_fully_loaded());
       bool inconsistent = false;
       if (pin->is_indirect()) {
 	inconsistent = (pin->get_checksum() != 0);
-      } else {
-	inconsistent = !(pin->get_checksum() == 0 || // TODO: remapped extents may
-						     // not have recorded chksums
-			 pin->get_checksum() == ref->calc_crc32c());
+      } else if (full_extent_integrity_check) {
+	inconsistent = (pin->get_checksum() != crc);
+      } else { // !full_extent_integrity_check: remapped extent may be skipped
+	inconsistent = !(pin->get_checksum() == 0 ||
+			 pin->get_checksum() == crc);
       }
       if (unlikely(inconsistent)) {
 	SUBERRORT(seastore_tm,
@@ -920,16 +942,24 @@ private:
 	pref.link_child(&lextent);
 	lextent.maybe_set_intermediate_laddr(pref);
       }
-    ).si_then([FNAME, &t, pin=std::move(pin)](auto ref) {
-      SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
+    ).si_then([FNAME, &t, pin=std::move(pin), this](auto ref) {
+      auto crc = ref->calc_crc32c();
+      SUBTRACET(
+	seastore_tm,
+	"got extent -- {}, chksum in the lba tree: {}, actual chksum: {}",
+	t,
+	*ref,
+	pin->get_checksum(),
+	crc);
       assert(ref->is_fully_loaded());
       bool inconsistent = false;
       if (pin->is_indirect()) {
 	inconsistent = (pin->get_checksum() != 0);
-      } else {
-	inconsistent = !(pin->get_checksum() == 0 || // TODO: remapped extents may
-						     // not have recorded chksums
-			 pin->get_checksum() == ref->calc_crc32c());
+      } else if (full_extent_integrity_check) {
+	inconsistent = (pin->get_checksum() != crc);
+      } else { // !full_extent_integrity_check: remapped extent may be skipped
+	inconsistent = !(pin->get_checksum() == 0 ||
+			 pin->get_checksum() == crc);
       }
       if (unlikely(inconsistent)) {
 	SUBERRORT(seastore_tm,
