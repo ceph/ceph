@@ -31,6 +31,8 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
+import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-mount-details.component';
+import { HealthService } from '~/app/shared/api/health.service';
 
 @Component({
   selector: 'cd-cephfs-subvolume-list',
@@ -86,7 +88,8 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
     private modalService: ModalService,
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService,
-    private cephfsSubvolumeGroupService: CephfsSubvolumeGroupService
+    private cephfsSubvolumeGroupService: CephfsSubvolumeGroupService,
+    private healthService: HealthService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -150,6 +153,13 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         click: () => this.openModal(true)
       },
       {
+        name: this.actionLabels.ATTACH,
+        permission: 'read',
+        icon: Icons.bars,
+        disable: () => !this.selection?.hasSelection,
+        click: () => this.showAttachInfo()
+      },
+      {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
@@ -186,6 +196,23 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  showAttachInfo() {
+    const selectedSubVolume = this.selection?.selected?.[0];
+
+    this.healthService.getClusterFsid().subscribe({
+      next: (clusterId: string) => {
+        this.modalRef = this.modalService.show(CephfsMountDetailsComponent, {
+          onSubmit: () => this.modalRef.close(),
+          mountData: {
+            fsId: clusterId,
+            fsName: this.fsName,
+            rootPath: selectedSubVolume.info.path
+          }
+        });
+      }
+    });
   }
 
   openModal(edit = false) {

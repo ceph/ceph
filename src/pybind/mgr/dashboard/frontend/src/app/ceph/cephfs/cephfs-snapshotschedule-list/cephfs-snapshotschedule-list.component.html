@@ -1,0 +1,100 @@
+<cd-alert-panel
+  *ngIf="(snapScheduleModuleStatus$ | async) === false"
+  type="info"
+  spacingClass="mb-3"
+  i18n
+  class="align-items-center"
+>
+  In order to access the snapshot scheduler feature, the snap_scheduler module must be enabled
+  <button
+    class="btn btn-light mx-2"
+    type="button"
+    (click)="enableSnapshotSchedule()">
+    Enable
+  </button>
+</cd-alert-panel>
+
+<ng-template
+  #pathTpl
+  let-row="row">
+  <span
+    class="fw-bold"
+    [ngbTooltip]="fullpathTpl"
+    triggers="click:blur">
+    {{ row.pathForSelection?.split?.("@")?.[0] | path }}
+  </span>
+
+  <span
+  *ngIf="row.active; else inactiveStatusTpl">
+    <i
+      [ngClass]="[icons.success, icons.large]"
+      ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} is active"
+      class="text-success"
+    ></i>
+  </span>
+
+  <ng-template #inactiveStatusTpl>
+    <i
+      [ngClass]="[icons.warning, icons.large]"
+      class="text-warning"
+      ngbTooltip="{{ row.pathForSelection?.split?.('@')?.[0] }} has been deactivated"
+    ></i>
+  </ng-template>
+
+  <ng-template #fullpathForSelectionTpl>
+    <span
+      data-toggle="tooltip"
+      [title]="row.pathForSelection"
+      class="font-monospace"
+      >{{ row.pathForSelection?.split?.("@")?.[0] }}
+      <cd-copy-2-clipboard-button
+        *ngIf="row.pathForSelection"
+        [source]="row.pathForSelection?.split?.('@')?.[0]"
+        [byId]="false"
+        [showIconOnly]="true"
+      >
+      </cd-copy-2-clipboard-button>
+    </span>
+  </ng-template>
+</ng-template>
+
+<ng-template
+  #retentionTpl
+  let-row="row">
+  <ul *ngIf="row.retentionCopy.length; else noDataTpl">
+    <li *ngFor="let ret of row.retentionCopy">{{ ret }}</li>
+  </ul>
+</ng-template>
+
+<ng-template
+  #subvolTpl
+  let-row="row">
+  <span *ngIf="row.subvol; else noDataTpl">
+    {{row.subvol}}
+  </span>
+</ng-template>
+
+
+
+<ng-template #noDataTpl>-</ng-template>
+
+<cd-table
+  [data]="snapshotSchedules$ | async"
+  *ngIf="snapScheduleModuleStatus$ | async"
+  columnMode="flex"
+  [columns]="columns"
+  selectionType="single"
+  [hasDetails]="false"
+  (fetchData)="fetchData()"
+  (updateSelection)="updateSelection($event)"
+>
+  <div class="table-actions btn-toolbar">
+    <cd-table-actions
+      [permission]="permissions.cephfs"
+      [selection]="selection"
+      class="btn-group"
+      [tableActions]="tableActions$ | async"
+    >
+    </cd-table-actions>
+  </div>
+</cd-table>

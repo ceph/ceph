@@ -51,6 +51,7 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
 import { WizardComponent } from './wizard/wizard.component';
 import { CardComponent } from './card/card.component';
 import { CardRowComponent } from './card-row/card-row.component';
+import { CodeBlockComponent } from './code-block/code-block.component';
 import { VerticalNavigationComponent } from './vertical-navigation/vertical-navigation.component';
 
 @NgModule({
@@ -107,6 +108,7 @@ import { VerticalNavigationComponent } from './vertical-navigation/vertical-navi
     ColorClassFromTextPipe,
     CardComponent,
     CardRowComponent,
+    CodeBlockComponent,
     VerticalNavigationComponent
   ],
   providers: [],
@@ -140,6 +142,7 @@ import { VerticalNavigationComponent } from './vertical-navigation/vertical-navi
     CdLabelComponent,
     CardComponent,
     CardRowComponent,
+    CodeBlockComponent,
     VerticalNavigationComponent
   ]
 })
