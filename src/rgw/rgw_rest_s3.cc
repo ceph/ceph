@@ -6467,6 +6467,7 @@ rgw::auth::s3::STSEngine::authenticate(
     }
     r.id = token.roleId;
     r.name = role->get_name();
+    r.path = role->get_path();
     r.tenant = role->get_tenant();
     r.account_id = role->get_account_id();
 
