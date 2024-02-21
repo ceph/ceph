@@ -82,12 +82,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             default='local',
             desc='storage class name for LSO-discovered PVs',
         ),
-        Option(
-            'drive_group_interval',
-            type='float',
-            default=300.0,
-            desc='interval in seconds between re-application of applied drive_groups',
-        ),
     ]
 
     @staticmethod
@@ -126,9 +120,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self.config_notify()
         if TYPE_CHECKING:
             self.storage_class = 'foo'
-            self.drive_group_interval = 10.0
 
-        self._load_drive_groups()
         self._shutdown = threading.Event()
 
     def config_notify(self) -> None:
@@ -144,7 +136,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             self.log.debug(' mgr option %s = %s',
                            opt['name'], getattr(self, opt['name']))  # type: ignore
         assert isinstance(self.storage_class, str)
-        assert isinstance(self.drive_group_interval, float)
 
         if self._rook_cluster:
             self._rook_cluster.storage_class_name = self.storage_class
@@ -210,10 +201,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._initialized.set()
         self.config_notify()
-
-        while not self._shutdown.is_set():
-            self._apply_drivegroups(list(self._drive_group_map.values()))
-            self._shutdown.wait(self.drive_group_interval)
 
     @handle_orch_error
     def get_inventory(self, host_filter: Optional[orchestrator.InventoryFilter] = None, refresh: bool = False) -> List[orchestrator.InventoryHost]:
@@ -415,15 +402,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 running=sum_running_pods('osd')
             )
 
-            # drivegroups
-            for name, dg in self._drive_group_map.items():
-                spec[f'osd.{name}'] = orchestrator.ServiceDescription(
-                    spec=dg,
-                    last_refresh=now,
-                    size=0,
-                    running=0,
-                )
-
         if service_type == 'rbd-mirror' or service_type is None:
             # rbd-mirrors
             all_mirrors = self.rook_cluster.get_resource("cephrbdmirrors")
@@ -576,9 +554,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         elif service_type == 'rbd-mirror':
             return self.rook_cluster.rm_service('cephrbdmirrors', service_id)
         elif service_type == 'osd':
-            if service_id in self._drive_group_map:
-                del self._drive_group_map[service_id]
-                self._save_drive_groups()
             return f'Removed {service_name}'
         elif service_type == 'ingress':
             self.log.info("{0} service '{1}' does not exist".format('ingress', service_id))
@@ -634,134 +609,24 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     def remove_daemons(self, names: List[str]) -> List[str]:
         return self.rook_cluster.remove_pods(names)
 
-    def apply_drivegroups(self, specs: List[DriveGroupSpec]) -> OrchResult[List[str]]:
-        for drive_group in specs:
-            self._drive_group_map[str(drive_group.service_id)] = drive_group
-        self._save_drive_groups()
-        return OrchResult(self._apply_drivegroups(specs))
+    def add_host_label(self, host: str, label: str) -> OrchResult[str]:
+        return self.rook_cluster.add_host_label(host, label)
 
-    def _apply_drivegroups(self, ls: List[DriveGroupSpec]) -> List[str]:
-        all_hosts = raise_if_exception(self.get_hosts())
-        result_list: List[str] = []
-        for drive_group in ls:
-            matching_hosts = drive_group.placement.filter_matching_hosts(
-                lambda label=None, as_hostspec=None: all_hosts
-            )
+    def remove_host_label(self, host: str, label: str, force: bool = False) -> OrchResult[str]:
+        return self.rook_cluster.remove_host_label(host, label)
 
-            if not self.rook_cluster.node_exists(matching_hosts[0]):
-                raise RuntimeError("Node '{0}' is not in the Kubernetes "
-                               "cluster".format(matching_hosts))
+    @handle_orch_error
+    def create_osds(self, drive_group: DriveGroupSpec) -> str:
+        raise orchestrator.OrchestratorError('Creating OSDs is not supported by rook orchestrator. Please, use Rook operator.')
 
-            # Validate whether cluster CRD can accept individual OSD
-            # creations (i.e. not useAllDevices)
-            if not self.rook_cluster.can_create_osd():
-                raise RuntimeError("Rook cluster configuration does not "
-                                "support OSD creation.")
-            result_list.append(self.rook_cluster.add_osds(drive_group, matching_hosts))
-        return result_list
-
-    def _load_drive_groups(self) -> None:
-        stored_drive_group = self.get_store("drive_group_map")
-        self._drive_group_map: Dict[str, DriveGroupSpec] = {}
-        if stored_drive_group:
-            for name, dg in json.loads(stored_drive_group).items():
-                try:
-                    self._drive_group_map[name] = DriveGroupSpec.from_json(dg)
-                except ValueError as e:
-                    self.log.error(f'Failed to load drive group {name} ({dg}): {e}')
-
-    def _save_drive_groups(self) -> None:
-        json_drive_group_map = {
-            name: dg.to_json() for name, dg in self._drive_group_map.items()
-        }
-        self.set_store("drive_group_map", json.dumps(json_drive_group_map))
-
+    @handle_orch_error
     def remove_osds(self,
                     osd_ids: List[str],
                     replace: bool = False,
                     force: bool = False,
                     zap: bool = False,
-                    no_destroy: bool = False) -> OrchResult[str]:
-        assert self._rook_cluster is not None
-        if zap:
-            raise RuntimeError("Rook does not support zapping devices during OSD removal.")
-        res = self._rook_cluster.remove_osds(osd_ids, replace, force, self.mon_command)
-        return OrchResult(res)
-
-    def add_host_label(self, host: str, label: str) -> OrchResult[str]:
-        return self.rook_cluster.add_host_label(host, label)
-    
-    def remove_host_label(self, host: str, label: str, force: bool = False) -> OrchResult[str]:
-        return self.rook_cluster.remove_host_label(host, label)
-    """
-    @handle_orch_error
-    def create_osds(self, drive_group):
-        # type: (DriveGroupSpec) -> str
-        # Creates OSDs from a drive group specification.
-
-        # $: ceph orch osd create -i <dg.file>
-
-        # The drivegroup file must only contain one spec at a time.
-        # 
-
-        targets = []  # type: List[str]
-        if drive_group.data_devices and drive_group.data_devices.paths:
-            targets += [d.path for d in drive_group.data_devices.paths]
-        if drive_group.data_directories:
-            targets += drive_group.data_directories
-
-        all_hosts = raise_if_exception(self.get_hosts())
-
-        matching_hosts = drive_group.placement.filter_matching_hosts(lambda label=None, as_hostspec=None: all_hosts)
-
-        assert len(matching_hosts) == 1
-
-        if not self.rook_cluster.node_exists(matching_hosts[0]):
-            raise RuntimeError("Node '{0}' is not in the Kubernetes "
-                               "cluster".format(matching_hosts))
-
-        # Validate whether cluster CRD can accept individual OSD
-        # creations (i.e. not useAllDevices)
-        if not self.rook_cluster.can_create_osd():
-            raise RuntimeError("Rook cluster configuration does not "
-                               "support OSD creation.")
-
-        return self.rook_cluster.add_osds(drive_group, matching_hosts)
-
-        # TODO: this was the code to update the progress reference:
-        
-        @handle_orch_error
-        def has_osds(matching_hosts: List[str]) -> bool:
-
-            # Find OSD pods on this host
-            pod_osd_ids = set()
-            pods = self.k8s.list_namespaced_pod(self._rook_env.namespace,
-                                                label_selector="rook_cluster={},app=rook-ceph-osd".format(self._rook_env.cluster_name),
-                                                field_selector="spec.nodeName={0}".format(
-                                                    matching_hosts[0]
-                                                )).items
-            for p in pods:
-                pod_osd_ids.add(int(p.metadata.labels['ceph-osd-id']))
-
-            self.log.debug('pod_osd_ids={0}'.format(pod_osd_ids))
-
-            found = []
-            osdmap = self.get("osd_map")
-            for osd in osdmap['osds']:
-                osd_id = osd['osd']
-                if osd_id not in pod_osd_ids:
-                    continue
-
-                metadata = self.get_metadata('osd', "%s" % osd_id)
-                if metadata and metadata['devices'] in targets:
-                    found.append(osd_id)
-                else:
-                    self.log.info("ignoring osd {0} {1}".format(
-                        osd_id, metadata['devices'] if metadata else 'DNE'
-                    ))
-
-            return found is not None        
-    """
+                    no_destroy: bool = False) -> str:
+        raise orchestrator.OrchestratorError('Removing OSDs is not supported by rook orchestrator. Please, use Rook operator.')
 
     @handle_orch_error
     def blink_device_light(self, ident_fault: str, on: bool, locs: List[orchestrator.DeviceLightLoc]) -> List[str]:
