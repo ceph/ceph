@@ -34,7 +34,14 @@ TransactionManager::TransactionManager(
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(_epm)),
-    backref_manager(std::move(_backref_manager))
+    backref_manager(std::move(_backref_manager)),
+#ifdef UNIT_TESTS_BUILT
+    full_extent_integrity_check(false)
+#else
+    full_extent_integrity_check(
+      crimson::common::get_conf<bool>(
+        "seastore_mandate_full_extent_integrity_check"))
+#endif
 {
   epm->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);

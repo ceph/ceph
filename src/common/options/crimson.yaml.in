@@ -78,6 +78,12 @@ options:
   level: dev
   desc: default logical address space reservation for seastore objects' metadata
   default: 16777216
+- name: seastore_mandate_full_extent_integrity_check
+  type: bool
+  level: dev
+  desc: Whether seastore need check the integrity of each extent,
+        some partial loading function may be disabled by this
+  default: true
 - name: seastore_max_extent_size
   type: size
   level: advanced

@@ -435,9 +435,21 @@ public:
 
     // FIXME: paddr can be absolute and pending
     ceph_assert(pin->get_val().is_absolute());
-    return cache->get_extent_if_cached(
-      t, pin->get_val(), T::TYPE
-    ).si_then([this, &t, remaps,
+    auto fut = base_iertr::make_ready_future<TCachedExtentRef<T>>();
+    if (full_extent_integrity_check) {
+      fut = read_pin<T>(t, pin->duplicate());
+    } else {
+      fut = cache->get_extent_if_cached(
+	t, pin->get_val(), T::TYPE
+      ).si_then([](auto extent) {
+	if (extent) {
+	  return extent->template cast<T>();
+	} else {
+	  return TCachedExtentRef<T>();
+	}
+      });
+    }
+    return fut.si_then([this, &t, remaps,
               original_laddr = pin->get_key(),
 	      intermediate_base = pin->is_indirect()
 				  ? pin->get_intermediate_base()
@@ -814,6 +826,8 @@ private:
   BackrefManagerRef backref_manager;
 
   WritePipeline write_pipeline;
+
+  bool full_extent_integrity_check = true;
 
   rewrite_extent_ret rewrite_logical_extent(
     Transaction& t,
