@@ -1015,13 +1015,15 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   switch (type) {
   case extent_types_t::OBJECT_DATA_BLOCK:
     {
-      auto extents = alloc_new_data_extents<ObjectDataBlock>(t, length, hint, gen);
+      auto extents = alloc_new_data_extents<
+	ObjectDataBlock>(t, length, hint, gen);
       res.insert(res.begin(), extents.begin(), extents.end());
     }
     return res;
   case extent_types_t::TEST_BLOCK:
     {
-      auto extents = alloc_new_data_extents<TestBlock>(t, length, hint, gen);
+      auto extents = alloc_new_data_extents<
+	TestBlock>(t, length, hint, gen);
       res.insert(res.begin(), extents.begin(), extents.end());
     }
     return res;
