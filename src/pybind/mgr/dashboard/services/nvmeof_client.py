@@ -1,7 +1,6 @@
 import logging
 from typing import Optional
 
-from ..tools import str_to_bool
 from .nvmeof_conf import NvmeofGatewaysConfig
 
 logger = logging.getLogger('nvmeof_client')
@@ -33,50 +32,40 @@ else:
                 serial_number=serial_number
             ))
 
-        def create_subsystem(self, subsystem_nqn: str, serial_number: str, max_namespaces: int,
-                             ana_reporting: bool, enable_ha: bool):
+        def create_subsystem(self, subsystem_nqn: str, serial_number: str, max_namespaces: int):
             return self.stub.create_subsystem(pb2.create_subsystem_req(
                 subsystem_nqn=subsystem_nqn,
                 serial_number=serial_number,
-                max_namespaces=int(max_namespaces),
-                ana_reporting=str_to_bool(ana_reporting),
-                enable_ha=str_to_bool(enable_ha)
+                max_namespaces=int(max_namespaces)
             ))
 
-        def delete_subsystem(self, subsystem_nqn: str):
+        def delete_subsystem(self, subsystem_nqn: str, force: Optional[bool] = False):
             return self.stub.delete_subsystem(pb2.delete_subsystem_req(
-                subsystem_nqn=subsystem_nqn
+                subsystem_nqn=subsystem_nqn,
+                force=force
             ))
 
-        def list_namespaces(self, subsystem_nqn: str, nsid: Optional[int] = 1,
-                            uuid: Optional[str] = None):
+        def list_namespaces(self, subsystem_nqn: str):
             return self.stub.list_namespaces(pb2.list_namespaces_req(
-                subsystem=subsystem_nqn,
-                nsid=int(nsid),
-                uuid=uuid
+                subsystem=subsystem_nqn
             ))
 
         def create_namespace(self, rbd_pool_name: str, rbd_image_name: str,
                              subsystem_nqn: str, block_size: int = 512,
-                             nsid: Optional[int] = 1, uuid: Optional[str] = None,
-                             anagrpid: Optional[int] = 1, create_image: Optional[bool] = True,
+                             create_image: Optional[bool] = True,
                              size: Optional[int] = 1024):
             return self.stub.namespace_add(pb2.namespace_add_req(
                 rbd_pool_name=rbd_pool_name,
                 rbd_image_name=rbd_image_name,
                 subsystem_nqn=subsystem_nqn,
-                nsid=int(nsid),
                 block_size=block_size,
-                uuid=uuid,
-                anagrpid=anagrpid,
                 create_image=create_image,
                 size=size
             ))
 
-        def delete_namespace(self, subsystem_nqn: str, nsid: int):
-            return self.stub.remove_namespace(pb2.remove_namespace_req(
-                subsystem_nqn=subsystem_nqn,
-                nsid=nsid
+        def delete_namespace(self, subsystem_nqn: str):
+            return self.stub.namespace_delete(pb2.namespace_delete_req(
+                subsystem_nqn=subsystem_nqn
             ))
 
         def list_hosts(self, subsystem_nqn: str):
@@ -101,11 +90,7 @@ else:
                 subsystem=subsystem_nqn
             ))
 
-        def create_listener(self, nqn: str, gateway: str, traddr: Optional[str] = None,
-                            transport_type: Optional[str] = 'TCP',
-                            addr_family: Optional[str] = 'IPV4',
-                            transport_svc_id: Optional[int] = 4420,
-                            auto_ha_state: Optional[str] = 'AUTO_HA_UNSET'):
+        def create_listener(self, nqn: str, gateway: str, traddr: Optional[str] = None):
             traddr = None
             if traddr is None:
                 addr = self.gateway_addr
@@ -115,18 +100,11 @@ else:
             req = pb2.create_listener_req(
                 nqn=nqn,
                 gateway_name=gateway,
-                traddr=traddr,
-                trtype=pb2.TransportType.Value(transport_type.upper()),
-                adrfam=pb2.AddressFamily.Value(addr_family.lower()),
-                trsvcid=transport_svc_id,
-                auto_ha_state=pb2.AutoHAState.Value(auto_ha_state.upper())
+                traddr=traddr
             )
             return self.stub.create_listener(req)
 
-        def delete_listener(self, nqn: str, gateway: str, traddr: Optional[str] = None,
-                            transport_type: Optional[str] = 'TCP',
-                            addr_family: Optional[str] = 'IPV4',
-                            transport_svc_id: Optional[int] = 4420):
+        def delete_listener(self, nqn: str, gateway: str, traddr: Optional[str] = None):
             traddr = None
             if traddr is None:
                 addr = self.gateway_addr
@@ -136,10 +114,7 @@ else:
             return self.stub.delete_listener(pb2.delete_listener_req(
                 nqn=nqn,
                 gateway_name=gateway,
-                traddr=traddr,
-                trtype=pb2.TransportType.Value(transport_type.upper()),
-                adrfam=pb2.AddressFamily.Value(addr_family.lower()),
-                trsvcid=int(transport_svc_id)
+                traddr=traddr
             ))
 
         def gateway_info(self):
