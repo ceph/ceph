@@ -726,6 +726,7 @@ public:
   struct Role {
     std::string id;
     std::string name;
+    std::string path;
     std::string tenant;
     rgw_account_id account_id;
     std::vector<std::string> inline_policies;
