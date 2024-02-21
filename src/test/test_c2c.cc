@@ -19,12 +19,13 @@ static void usage(void)
 }
 
 
-mempool::shard_t shards[mempool::num_shards] = {0};
+mempool::shard_t *shards = new mempool::shard_t[mempool::get_num_shards()]();
 
 void sigterm_handler(int signum)
 {
   size_t total = 0;
-  for (auto& shard : shards) {
+  for (size_t i = 0; i < mempool::get_num_shards();i++) {
+    auto& shard = shards[i];
     total += shard.bytes;
   }
   std::cout << total << std::endl;

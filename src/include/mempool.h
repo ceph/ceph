@@ -27,6 +27,7 @@
 #include <boost/container/flat_map.hpp>
 
 #if defined(_GNU_SOURCE) && defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#  define MEMPOOL_SCHED_GETCPU
 #  include <sched.h>
 #endif
 
@@ -196,32 +197,18 @@ extern void set_debug_mode(bool d);
 // --------------------------------------------------------------
 class pool_t;
 
-// we shard pool stats across many shard_t's to reduce the amount
-// of cacheline ping pong.
 enum {
-  num_shard_bits = 5
-};
-enum {
-  num_shards = 1 << num_shard_bits
+#if defined(MEMPOOL_SCHED_GETCPU)
+  min_shards = 1,        //1
+#else
+  min_shards = 1<<5,     //32
+#endif
+  default_shards = 1<<5, //32
+  max_shards = 1<<7      //128
 };
 
-static size_t pick_a_shard_int() {
-#if defined(_GNU_SOURCE) && defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
-  // a thread local storage is actually just an approximation;
-  // what we truly want is a _cpu local storage_.
-  //
-  // on the architectures we care about sched_getcpu() is
-  // a syscall-handled-in-userspace (vdso!). it grabs the cpu
-  // id kernel exposes to a task on context switch.
-  return sched_getcpu() & ((1 << num_shard_bits) - 1);
-#else
-  // Dirt cheap, see:
-  //   https://fossies.org/dox/glibc-2.32/pthread__self_8c_source.html
-  size_t me = (size_t)pthread_self();
-  size_t i = (me >> CEPH_PAGE_SHIFT) & ((1 << num_shard_bits) - 1);
-  return i;
-#endif
-}
+int pick_a_shard_int(void);
+size_t get_num_shards(void);
 
 //
 // Align shard to a cacheline.
@@ -268,7 +255,7 @@ struct type_t {
   } __attribute__ ((aligned (128)));
   static_assert(sizeof(type_shard_t) == 128,
                 "type_shard_t should be cacheline-sized");
-  type_shard_t shards[num_shards];
+  std::unique_ptr<type_shard_t[]> shards = std::make_unique<type_shard_t[]>(get_num_shards());
 };
 
 struct type_info_hash {
@@ -278,7 +265,7 @@ struct type_info_hash {
 };
 
 class pool_t {
-  shard_t shard[num_shards];
+  std::unique_ptr<shard_t[]> shard = std::make_unique<shard_t[]>(get_num_shards());
 
   mutable std::mutex lock;  // only used for types list
   std::unordered_map<const char *, type_t> type_map;

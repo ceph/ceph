@@ -12,20 +12,72 @@
  *
  */
 
+#include <thread>
 #include "include/mempool.h"
 #include "include/demangle.h"
-
-#if defined(_GNU_SOURCE) && defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
-#else
-// Thread local variables should save index, not &shard[index],
-// because shard[] is defined in the class
-static thread_local size_t thread_shard_index = mempool::num_shards;
-#endif
 
 // default to debug_mode off
 bool mempool::debug_mode = false;
 
 // --------------------------------------------------------------
+
+namespace mempool {
+
+static size_t num_shard_bits;
+static size_t num_shards;
+
+static thread_local size_t thread_shard_index = max_shards;
+
+#if !defined(MEMPOOL_SCHED_GETCPU)
+// There is no cheap way of determining which core a thread is assigned to.
+// Statically assign threads to shards to minimize how many threads use the
+// same shard
+static int thread_shard_next;
+static std::mutex thread_shard_mtx;
+
+#else
+// Use sched_getcpu() to determine which core a thread is running on
+#endif
+
+}
+
+size_t mempool::get_num_shards(void) {
+  if (num_shards==0) {
+    size_t threads = std::thread::hardware_concurrency();
+    if (threads == 0) {
+      threads = default_shards;
+    }
+    if (threads < min_shards) {
+      threads = min_shards;
+    }
+    if (threads > max_shards) {
+      threads = max_shards;
+    }
+    threads--;
+    while (threads!=0) {
+      num_shard_bits++;
+      threads>>=1;
+    }
+    num_shards = 1 << num_shard_bits;
+  }
+  return num_shards;
+}
+
+int mempool::pick_a_shard_int(void) {
+#if !defined(MEMPOOL_SCHED_GETCPU)
+  if (thread_shard_index == max_shards) {
+    // Thread has not been assigned to a shard yet
+    std::lock_guard<std::mutex> lck (thread_shard_mtx);
+    thread_shard_index = thread_shard_next++ & ((1 << num_shard_bits) - 1);
+  }
+#else
+  if (thread_shard_index == max_shards) {
+    // Thread has not been assigned to a shard yet
+    thread_shard_index = sched_getcpu() & ((1 << num_shard_bits) - 1);
+  }
+#endif
+  return thread_shard_index;
+}
 
 mempool::pool_t& mempool::get_pool(mempool::pool_index_t ix)
 {
@@ -73,7 +125,7 @@ void mempool::set_debug_mode(bool d)
 size_t mempool::pool_t::allocated_bytes() const
 {
   ssize_t result = 0;
-  for (size_t i = 0; i < num_shards; ++i) {
+  for (size_t i = 0; i < get_num_shards(); ++i) {
     result += shard[i].bytes;
   }
   if (result < 0) {
@@ -86,7 +138,7 @@ size_t mempool::pool_t::allocated_bytes() const
 size_t mempool::pool_t::allocated_items() const
 {
   ssize_t result = 0;
-  for (size_t i = 0; i < num_shards; ++i) {
+  for (size_t i = 0; i < get_num_shards(); ++i) {
     result += shard[i].items;
   }
   if (result < 0) {
@@ -98,28 +150,16 @@ size_t mempool::pool_t::allocated_items() const
 
 void mempool::pool_t::adjust_count(ssize_t items, ssize_t bytes)
 {
-#if defined(_GNU_SOURCE) && defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
-  // the expected path: we alway pick the shard for a cpu core
-  // a thread is executing on.
-  const size_t shard_index = pick_a_shard_int();
-#else
-  // fallback for lack of sched_getcpu()
-  const size_t shard_index = []() {
-    if (thread_shard_index == num_shards) {
-      thread_shard_index = pick_a_shard_int();
-    }
-    return thread_shard_index;
-  }();
-#endif
-  shard[shard_index].items += items;
-  shard[shard_index].bytes += bytes;
+  const auto shid = pick_a_shard_int();
+  shard[shid].items += items;
+  shard[shid].bytes += bytes;
 }
 
 void mempool::pool_t::get_stats(
   stats_t *total,
   std::map<std::string, stats_t> *by_type) const
 {
-  for (size_t i = 0; i < num_shards; ++i) {
+  for (size_t i = 0; i < get_num_shards(); ++i) {
     total->items += shard[i].items;
     total->bytes += shard[i].bytes;
   }
@@ -130,7 +170,7 @@ void mempool::pool_t::get_stats(
       stats_t &s = (*by_type)[n];
       s.bytes = 0;
       s.items = 0;
-      for (size_t i = 0 ; i < num_shards; ++i) {
+      for (size_t i = 0 ; i < get_num_shards(); ++i) {
         s.bytes += p.second.shards[i].items * p.second.item_size;
         s.items += p.second.shards[i].items;
       }
