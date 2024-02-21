@@ -2060,6 +2060,11 @@ paths:
           type: string
       - allowEmptyValue: true
         in: query
+        name: retention_policy
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
         name: subvol
         schema:
           type: string
