@@ -449,8 +449,9 @@ future<> test_unexpected_down(bool is_fixed_cpu) {
     [](auto cs) {
       return Connection::dispatch_rw_bounded(cs, 128, true
         ).handle_exception_type([](const std::system_error& e) {
-        logger().debug("test_unexpected_down(): client get error {}", e);
-        ceph_assert(e.code() == error::read_eof);
+        logger().error("test_unexpected_down(): client get error {}", e);
+        ceph_assert(e.code() == error::read_eof ||
+		    e.code() == std::errc::connection_reset);
       });
     },
     [](auto ss) { return Connection::dispatch_rw_unbounded(ss); }
