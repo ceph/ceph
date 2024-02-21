@@ -291,7 +291,17 @@ export class CephfsSnapshotscheduleListComponent
   }
 
   deleteSnapshotSchedule() {
-    const { path, start, fs, schedule, subvol, group } = this.selection.first();
+    const { path, start, fs, schedule, subvol, group, retention } = this.selection.first();
+    const retentionPolicy = retention
+      ?.split(/\s/gi)
+      ?.filter((r: string) => !!r)
+      ?.map((r: string) => {
+        const frequency = r.substring(r.length - 1);
+        const interval = r.substring(0, r.length - 1);
+        return `${interval}-${frequency}`;
+      })
+      ?.join('|')
+      ?.toLocaleLowerCase();
 
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       itemDescription: $localize`snapshot schedule`,
@@ -305,6 +315,7 @@ export class CephfsSnapshotscheduleListComponent
             schedule,
             start,
             fs,
+            retentionPolicy,
             subvol,
             group
           })
