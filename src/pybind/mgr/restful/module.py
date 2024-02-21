@@ -24,7 +24,7 @@ from pecan.rest import RestController
 from werkzeug.serving import make_server, make_ssl_devcert
 
 from .hooks import ErrorHook
-from mgr_module import MgrModule, CommandResult, NotifyType
+from mgr_module import MgrModule, CommandResult, NotifyType, Option
 from mgr_util import build_url
 
 
@@ -194,11 +194,18 @@ class CommandsRequest(object):
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
-        {'name': 'server_addr'},
-        {'name': 'server_port'},
-        {'name': 'key_file'},
-        {'name': 'enable_auth', 'type': 'bool', 'default': True},
-        {'name': 'max_requests', 'type': 'int', 'default': 500},
+        Option(name='server_addr'),
+        Option(name='server_port'),
+        Option(name='key_file'),
+        Option(name='enable_auth',
+               type='bool',
+               default=True),
+        Option(name='max_requests',
+               type='int',
+               default=500,
+               desc='Maximum number of requests to keep in memory. '
+                    'When new request comes in, the oldest request will be removed if the number of requests exceeds the max request number. '
+                    'if un-finished request is removed, error message will be logged in the ceph-mgr log.'),
     ]
 
     COMMANDS = [
