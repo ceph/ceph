@@ -163,6 +163,33 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_cache_quiesce_decay_rate
+  type: float
+  level: advanced
+  desc: decay rate for quiescing inodes throttle
+  default: 1
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_quiesce_threshold
+  type: size
+  level: advanced
+  desc: threshold for number of inodes that can be quiesced
+  default: 512_K
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_quiesce_sleep
+  type: millisecs
+  level: advanced
+  desc: sleep time for request after passing quiesce threshold
+  default: 200
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_max_file_recover
   type: uint
   level: advanced
