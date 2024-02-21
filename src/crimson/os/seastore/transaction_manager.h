@@ -346,27 +346,18 @@ public:
     if (exts.empty()) {
       return crimson::ct_error::enospc::make();
     }
-    return seastar::do_with(
-      std::move(exts),
+    return lba_manager->alloc_extents(
+      t,
       laddr_hint,
-      [this, &t](auto &exts, auto &laddr_hint) {
-      return trans_intr::do_for_each(
-        exts,
-        [this, &t, &laddr_hint](auto &ext) {
-        return lba_manager->alloc_extent(
-          t,
-          laddr_hint,
-          *ext
-        ).si_then([&ext, &laddr_hint, &t](auto &&) mutable {
-          LOG_PREFIX(TransactionManager::alloc_extents);
-          SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
-          laddr_hint += ext->get_length();
-          return alloc_extent_iertr::now();
-        });
-      }).si_then([&exts] {
-        return alloc_extent_iertr::make_ready_future<
-          std::vector<TCachedExtentRef<T>>>(std::move(exts));
-      });
+      std::vector<LogicalCachedExtentRef>(
+	exts.begin(), exts.end()),
+      EXTENT_DEFAULT_REF_COUNT
+    ).si_then([exts=std::move(exts), &t, FNAME](auto &&) mutable {
+      for (auto &ext : exts) {
+	SUBDEBUGT(seastore_tm, "new extent: {}", t, *ext);
+      }
+      return alloc_extent_iertr::make_ready_future<
+	std::vector<TCachedExtentRef<T>>>(std::move(exts));
     });
   }
 
