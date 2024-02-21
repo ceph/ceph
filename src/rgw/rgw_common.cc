@@ -1451,30 +1451,6 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s
                                   s->iam_policy, s->iam_identity_policies, s->session_policies, op);
 }
 
-// Authorize anyone permitted by the bucket policy, identity policies, session policies and the bucket owner
-// unless explicitly denied by the policy.
-
-int verify_bucket_owner_or_policy(const DoutPrefixProvider* dpp,
-                                  req_state* const s, const uint64_t op)
-{
-  constexpr bool account_root = false; // just match owner below
-  const auto arn = ARN(s->bucket->get_key());
-  const auto effect = evaluate_iam_policies(
-      dpp, s->env, *s->auth.identity, account_root, op, arn,
-      s->iam_policy, s->iam_identity_policies, s->session_policies);
-  if (effect == Effect::Deny) {
-    return -EACCES;
-  }
-  if (effect == Effect::Allow) {
-    return 0;
-  }
-  if (s->auth.identity->is_owner_of(s->bucket_owner.id)) {
-    ldpp_dout(dpp, 10) << __func__ << ": granted to bucket owner" << dendl;
-    return 0;
-  }
-  return -EACCES;
-}
-
 
 static inline bool check_deferred_bucket_only_acl(const DoutPrefixProvider* dpp,
                                                   struct perm_state_base * const s,

@@ -1809,8 +1809,6 @@ bool verify_bucket_permission_no_policy(
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
                                         req_state * const s,
 					const int perm);
-int verify_bucket_owner_or_policy(const DoutPrefixProvider* dpp,
-				  req_state* s, const uint64_t op);
 extern bool verify_object_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
