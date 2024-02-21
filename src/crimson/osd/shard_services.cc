@@ -809,7 +809,7 @@ seastar::future<MURef<MOSDMap>> OSDSingletonState::build_incremental_map_msg(
                             monc.get_fsid(),
                             osdmap->get_encoding_features()),
                           [this, &first, FNAME, last](unsigned int map_message_max,
-                                                      auto& m) {
+                                                      auto &m) {
     m->cluster_osdmap_trim_lower_bound = superblock.cluster_osdmap_trim_lower_bound;
     m->newest_map = superblock.get_newest_map();
     auto maybe_handle_mapgap = seastar::now();
