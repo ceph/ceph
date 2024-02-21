@@ -866,11 +866,32 @@ void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUs
   user_info.user_id = this->token_attrs.user_id;
 }
 
+// Two types of substitutions need to take place
+
+// 1 - Special character substitutions - See "Special characters" under "Request information that you can use for policy variables" in (https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html#policy-vars-infotouse)
+// The following special characters are valid
+// ${*} - use where you need an * (asterisk) character.
+// ${?} - use where you need a ? (question mark) character.
+// ${$} - use where you need a $ (dollar sign) character.
+
+// 2 - Variable substitutions
+// Available variables depend on context - See "Principal key values" table under "Request information that you can use for policy variables" in "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_variables.html#policy-vars-infotouse"
+
+// AWS doesn't seem to say when the special character substitutions take place, Variables themselves can't use special characters hence, it does seem best to substitute special characters after substituting the variables.
+// that would mean substitution like "${aws:username}${$}${aws:userid}" would work...Does AWS allow this?
+// The policy editor in AWS console shows the below policy as being valid
+// "{"Version":"2012-10-17","Statement":{"Effect":"Allow","Action":"s3:*","Resource":"arn:aws:s3:::${aws:username}${$}${aws:userid}","Condition":{"StringEquals":{"s3:prefix":"${aws:username}${$}${aws:userid}"}}}}"
+
+// All available s3 condition keys are in https://docs.aws.amazon.com/IAM/latest/UserGuide/list_amazons3.html
+// All available global condition keys are in https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html#AvailableKeys
+
+//Variable substitutions take place when evaluating policy see file rgw_iam_policy.cc
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
   for (auto it: role.role_policies) {
     try {
       bufferlist bl = bufferlist::static_from_string(it);
+      ldpp_dout(dpp, 20) << "modify_request_state " << bl.to_str() << " for user " << s->user->get_id().id << dendl;
       const rgw::IAM::Policy p(s->cct, role.tenant, bl, false);
       s->iam_user_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
