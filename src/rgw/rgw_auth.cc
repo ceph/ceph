@@ -976,6 +976,9 @@ void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
 bool rgw::auth::RoleApplier::is_identity(const Principal& p) const {
   if (p.is_wildcard()) {
     return true;
+  } else if (p.is_account()) {
+    return match_account_or_tenant(role.account_id, role.tenant,
+                                   p.get_account());
   } else if (p.is_role()) {
     return p.get_id() == role.name // TODO: match path/name
         && p.get_account() == role.tenant;
