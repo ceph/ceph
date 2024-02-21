@@ -1288,7 +1288,11 @@ int RGWPutBucketTags::verify_permission(optional_yield y) {
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketTagging);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketTagging)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWPutBucketTags::execute(optional_yield y)
@@ -1324,7 +1328,11 @@ int RGWDeleteBucketTags::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketTagging);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketTagging)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWDeleteBucketTags::execute(optional_yield y)
@@ -1376,7 +1384,12 @@ int RGWPutBucketReplication::verify_permission(optional_yield y) {
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutReplicationConfiguration);
+
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutReplicationConfiguration)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWPutBucketReplication::execute(optional_yield y) {
@@ -1422,7 +1435,11 @@ int RGWDeleteBucketReplication::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3DeleteReplicationConfiguration);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3DeleteReplicationConfiguration)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWDeleteBucketReplication::execute(optional_yield y)
@@ -2826,7 +2843,11 @@ int RGWGetBucketVersioning::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketVersioning);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketVersioning)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWGetBucketVersioning::pre_exec()
@@ -2852,7 +2873,11 @@ int RGWSetBucketVersioning::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketVersioning);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketVersioning)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWSetBucketVersioning::pre_exec()
@@ -2951,7 +2976,11 @@ int RGWGetBucketWebsite::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketWebsite);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketWebsite)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWGetBucketWebsite::pre_exec()
@@ -2972,7 +3001,11 @@ int RGWSetBucketWebsite::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketWebsite);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketWebsite)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWSetBucketWebsite::pre_exec()
@@ -3019,7 +3052,11 @@ int RGWDeleteBucketWebsite::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3DeleteBucketWebsite);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3DeleteBucketWebsite)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWDeleteBucketWebsite::pre_exec()
@@ -3200,7 +3237,11 @@ int RGWGetBucketLogging::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketLogging);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketLogging)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 int RGWGetBucketLocation::verify_permission(optional_yield y)
@@ -3209,7 +3250,11 @@ int RGWGetBucketLocation::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketLocation);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketLocation)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 static int get_account_max_buckets(const DoutPrefixProvider* dpp,
@@ -6339,7 +6384,11 @@ int RGWGetCORS::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketCORS);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketCORS)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWGetCORS::execute(optional_yield y)
@@ -6361,7 +6410,11 @@ int RGWPutCORS::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketCORS);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketCORS)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWPutCORS::execute(optional_yield y)
@@ -6393,7 +6446,11 @@ int RGWDeleteCORS::verify_permission(optional_yield y)
     rgw_iam_add_buckettags(this, s);
 
   // No separate delete permission
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketCORS);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketCORS)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWDeleteCORS::execute(optional_yield y)
@@ -6487,7 +6544,11 @@ int RGWGetRequestPayment::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketRequestPayment);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketRequestPayment)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWGetRequestPayment::pre_exec()
@@ -6506,7 +6567,11 @@ int RGWSetRequestPayment::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketRequestPayment);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketRequestPayment)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWSetRequestPayment::pre_exec()
@@ -8679,7 +8744,11 @@ int RGWPutBucketObjectLock::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketObjectLockConfiguration);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketObjectLockConfiguration)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWPutBucketObjectLock::execute(optional_yield y)
@@ -8746,7 +8815,11 @@ int RGWGetBucketObjectLock::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketObjectLockConfiguration);
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketObjectLockConfiguration)) {
+    return -EACCES;
+  }
+
+  return 0;
 }
 
 void RGWGetBucketObjectLock::execute(optional_yield y)
