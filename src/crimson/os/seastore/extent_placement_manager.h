@@ -223,7 +223,9 @@ class ExtentPlacementManager {
 public:
   ExtentPlacementManager()
     : ool_segment_seq_allocator(
-          std::make_unique<SegmentSeqAllocator>(segment_type_t::OOL))
+          std::make_unique<SegmentSeqAllocator>(segment_type_t::OOL)),
+      max_data_allocation_size(crimson::common::get_conf<Option::size_t>(
+	  "seastore_max_data_allocation_size"))
   {
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
@@ -352,6 +354,7 @@ public:
     rewrite_gen_t gen
 #endif
   ) {
+    LOG_PREFIX(ExtentPlacementManager::alloc_new_data_extents);
     assert(hint < placement_hint_t::NUM_HINTS);
     assert(is_target_rewrite_generation(gen));
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
@@ -379,10 +382,20 @@ public:
       auto addrs = data_writers_by_gen[
           generation_to_writer(gen)]->alloc_paddrs(length);
       for (auto &ext : addrs) {
-        auto bp = ceph::bufferptr(
-          buffer::create_page_aligned(ext.len));
-        bp.zero();
-        allocs.emplace_back(alloc_result_t{ext.start, std::move(bp), gen});
+        auto left = ext.len;
+        while (left > 0) {
+          auto len = std::min(max_data_allocation_size, left);
+          auto bp = ceph::bufferptr(buffer::create_page_aligned(len));
+          bp.zero();
+          auto start = ext.start.is_delayed()
+                        ? ext.start
+                        : ext.start + (ext.len - left);
+          allocs.emplace_back(alloc_result_t{start, std::move(bp), gen});
+          SUBDEBUGT(seastore_epm,
+                    "allocated {} {}B extent at {}, hint={}, gen={}",
+                    t, type, len, start, hint, gen);
+          left -= len;
+        }
       }
     }
     return allocs;
@@ -1012,6 +1025,7 @@ private:
   BackgroundProcess background_process;
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
+  extent_len_t max_data_allocation_size = 0;
 
   friend class ::transaction_manager_test_t;
 };
