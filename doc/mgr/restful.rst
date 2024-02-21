@@ -77,6 +77,21 @@ If the port is not configured, *restful* will bind to port ``8003``.
 If the address it not configured, the *restful* will bind to ``::``,
 which corresponds to all available IPv4 and IPv6 addresses.
 
+Configuring the max_request
+---------------------------
+
+The maximum request size can be configured via the configuration key
+facility::
+
+  ceph config set mgr mgr/restful/$name/max_requests $NUM
+
+where ``$name`` is the ID of the ceph-mgr daemon (usually the hostname).
+by default, the max request number is :confval:`mgr/restful/max_requests`.
+when new request comes in, the oldest request will be removed if the number 
+of requests exceeds the max request number.
+if un-finished request is removed, error message will be logged in the 
+ceph-mgr log.
+
 .. _creating-an-api-user:
 
 Creating an API User
