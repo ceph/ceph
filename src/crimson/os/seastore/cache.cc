@@ -40,6 +40,8 @@ std::ostream &operator<<(std::ostream &out, const backref_entry_t &ent) {
 Cache::Cache(
   ExtentPlacementManager &epm)
   : epm(epm),
+    max_extent_size(crimson::common::get_conf<Option::size_t>(
+	  "seastore_max_extent_size")),
     lru(crimson::common::get_conf<Option::size_t>(
 	  "seastore_cache_lru_size"))
 {
@@ -1015,14 +1017,20 @@ std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
   switch (type) {
   case extent_types_t::OBJECT_DATA_BLOCK:
     {
-      auto extents = alloc_new_data_extents<ObjectDataBlock>(t, length, hint, gen);
-      res.insert(res.begin(), extents.begin(), extents.end());
+      auto extent_groups = alloc_new_data_extents<
+	ObjectDataBlock>(t, length, hint, gen);
+      for (auto &extent_group : extent_groups) {
+	res.insert(res.begin(), extent_group.begin(), extent_group.end());
+      }
     }
     return res;
   case extent_types_t::TEST_BLOCK:
     {
-      auto extents = alloc_new_data_extents<TestBlock>(t, length, hint, gen);
-      res.insert(res.begin(), extents.begin(), extents.end());
+      auto extent_groups = alloc_new_data_extents<
+	TestBlock>(t, length, hint, gen);
+      for (auto &extent_group: extent_groups) {
+	res.insert(res.begin(), extent_group.begin(), extent_group.end());
+      }
     }
     return res;
   default:

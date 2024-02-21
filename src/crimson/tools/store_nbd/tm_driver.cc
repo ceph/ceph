@@ -39,12 +39,14 @@ seastar::future<> TMDriver::write(
 	  auto off = offset;
 	  auto left = ptr.length();
 	  size_t written = 0;
-	  for (auto &ext : extents) {
-	    assert(ext->get_laddr() == (size_t)off);
-	    assert(ext->get_bptr().length() <= left);
-	    ptr.copy_out(written, ext->get_length(), ext->get_bptr().c_str());
-	    off += ext->get_length();
-	    left -= ext->get_length();
+	  for (auto &ext_group : extents) {
+	    for (auto &ext : ext_group) {
+	      assert(ext->get_laddr() == (size_t)off);
+	      assert(ext->get_bptr().length() <= left);
+	      ptr.copy_out(written, ext->get_length(), ext->get_bptr().c_str());
+	      off += ext->get_length();
+	      left -= ext->get_length();
+	    }
 	  }
 	  assert(!left);
           logger().debug("submitting transaction");

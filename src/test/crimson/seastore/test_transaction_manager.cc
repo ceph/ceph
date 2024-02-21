@@ -390,11 +390,15 @@ struct transaction_manager_test_t :
       return tm->alloc_data_extents<TestBlock>(trans, hint, len);
     }).unsafe_get0();
     assert(extents.size() == 1);
-    auto extent = extents.front();
+    auto extent_group = extents.front();
+    extent_len_t allocated_len = 0;
+    assert(extent_group.size() == 1);
+    auto extent = extent_group.front();
     extent->set_contents(contents);
     EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
-    EXPECT_EQ(len, extent->get_length());
     test_mappings.alloced(hint, *extent, t.mapping_delta);
+    allocated_len += extent->get_length();
+    EXPECT_EQ(len, allocated_len);
     return extent;
   }
 
@@ -407,14 +411,18 @@ struct transaction_manager_test_t :
       return tm->alloc_data_extents<TestBlock>(trans, hint, len);
     }).unsafe_get0();
     size_t length = 0;
-    for (auto &extent : extents) {
-      extent->set_contents(contents);
-      length += extent->get_length();
-      EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
-      test_mappings.alloced(hint, *extent, t.mapping_delta);
+    std::vector<TestBlockRef> exts;
+    for (auto &extent_group : extents) {
+      for (auto &extent : extent_group) {
+	extent->set_contents(contents);
+	length += extent->get_length();
+	EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
+	test_mappings.alloced(hint, *extent, t.mapping_delta);
+	exts.push_back(extent->template cast<TestBlock>());
+      }
     }
     EXPECT_EQ(len, length);
-    return extents;
+    return exts;
   }
 
   void alloc_extents_deemed_fail(
@@ -437,6 +445,17 @@ struct transaction_manager_test_t :
     laddr_t hint,
     extent_len_t len) {
     return alloc_extent(
+      t,
+      hint,
+      len,
+      get_random_contents());
+  }
+
+  std::vector<TestBlockRef> alloc_extents(
+    test_transaction_t &t,
+    laddr_t hint,
+    extent_len_t len) {
+    return alloc_extents(
       t,
       hint,
       len,
@@ -763,12 +782,17 @@ struct transaction_manager_test_t :
 		    *(t.t), L_ADDR_MIN, size
 		  ).si_then([&t, this, size](auto extents) {
 		    assert(extents.size() == 1);
-		    auto extent = extents.front();
-		    extent->set_contents(get_random_contents());
-		    EXPECT_FALSE(
-		      test_mappings.contains(extent->get_laddr(), t.mapping_delta));
-		    EXPECT_EQ(size, extent->get_length());
-		    test_mappings.alloced(extent->get_laddr(), *extent, t.mapping_delta);
+		    auto extent_group = extents.front();
+		    extent_len_t length = 0;
+		    for (auto &extent : extent_group) {
+		      extent->set_contents(get_random_contents());
+		      EXPECT_FALSE(
+			test_mappings.contains(extent->get_laddr(), t.mapping_delta));
+		      test_mappings.alloced(
+			extent->get_laddr(), *extent, t.mapping_delta);
+		      length += extent->get_length();
+		    }
+		    EXPECT_EQ(size, length);
 		    return seastar::now();
 		  });
 		}).si_then([&t, this] {
@@ -1152,7 +1176,9 @@ struct transaction_manager_test_t :
         ).si_then([this, ret = std::move(ret), new_len,
                    new_offset, o_laddr, &t, &bl](auto extents) mutable {
 	  assert(extents.size() == 1);
-	  auto ext = extents.front();
+	  auto ext_group = extents.front();
+	  assert(ext_group.size() == 1);
+	  auto ext = ext_group.front();
           ceph_assert(ret.size() == 2);
           auto iter = bl.cbegin();
           iter.copy(new_len, ext->get_bptr().c_str());
@@ -1188,7 +1214,9 @@ struct transaction_manager_test_t :
         ).si_then([this, ret = std::move(ret), new_offset, new_len,
                    o_laddr, &t, &bl](auto extents) mutable {
 	  assert(extents.size() == 1);
-	  auto ext = extents.front();
+	  auto ext_group = extents.front();
+	  assert(ext_group.size() == 1);
+	  auto ext = ext_group.front();
           ceph_assert(ret.size() == 1);
           auto iter = bl.cbegin();
           iter.copy(new_len, ext->get_bptr().c_str());
@@ -1219,7 +1247,9 @@ struct transaction_manager_test_t :
         ).si_then([this, ret = std::move(ret), new_len, o_laddr, &t, &bl]
           (auto extents) mutable {
 	  assert(extents.size() == 1);
-	  auto ext = extents.front();
+	  auto ext_group = extents.front();
+	  assert(ext_group.size() == 1);
+	  auto ext = ext_group.front();
           ceph_assert(ret.size() == 1);
           auto iter = bl.cbegin();
           iter.copy(new_len, ext->get_bptr().c_str());
@@ -2049,11 +2079,13 @@ TEST_P(tm_single_device_test_t, random_writes)
 	    BSIZE);
 	  auto mut = mutate_extent(t, ext);
 	  // pad out transaction
-	  auto padding = alloc_extent(
+	  auto paddings = alloc_extents(
 	    t,
 	    TOTAL + (k * PADDING_SIZE),
 	    PADDING_SIZE);
-	  dec_ref(t, padding->get_laddr());
+	  for (auto &padding : paddings) {
+	    dec_ref(t, padding->get_laddr());
+	  }
 	}
 	submit_transaction(std::move(t));
       }
@@ -2087,12 +2119,14 @@ TEST_P(tm_single_device_test_t, remap_lazy_read)
    run_async([this, offset] {
     {
       auto t = create_transaction();
-      auto extent = alloc_extent(
+      auto extents = alloc_extents(
 	t,
 	offset,
 	length,
 	'a');
-      ASSERT_EQ(offset, extent->get_laddr());
+      for (auto &extent : extents) {
+	ASSERT_EQ(offset, extent->get_laddr());
+      }
       check_mappings(t);
       submit_transaction(std::move(t));
       check();

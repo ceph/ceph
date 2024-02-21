@@ -285,13 +285,21 @@ struct lba_btree_test : btree_test_base {
 	  0,
 	  get_paddr());
       assert(extents.size() == 1);
-      auto extent = extents.front();
-      return btree.insert(
-	get_op_context(t), addr, get_map_val(len), extent.get()
-      ).si_then([addr, extent](auto p){
-	auto& [iter, inserted] = p;
-	assert(inserted);
-	extent->set_laddr(addr);
+      auto extent_group = extents.front();
+      return seastar::do_with(
+	std::move(extent_group),
+	[this, addr, &t, len, &btree](auto &extent_group) {
+	return trans_intr::do_for_each(
+	  extent_group,
+	  [this, addr, len, &t, &btree](auto &extent) {
+	  return btree.insert(
+	    get_op_context(t), addr, get_map_val(len), extent.get()
+	  ).si_then([addr, extent](auto p){
+	    auto& [iter, inserted] = p;
+	    assert(inserted);
+	    extent->set_laddr(addr);
+	  });
+	});
       });
     });
   }
@@ -469,7 +477,7 @@ struct btree_lba_manager_test : btree_test_base {
     test_transaction_t &t,
     laddr_t hint,
     size_t len) {
-    auto ret = with_trans_intr(
+    auto rets = with_trans_intr(
       *t.t,
       [=, this](auto &t) {
 	auto extents = cache->alloc_new_data_extents<TestBlock>(
@@ -479,24 +487,30 @@ struct btree_lba_manager_test : btree_test_base {
 	    0,
 	    get_paddr());
 	assert(extents.size() == 1);
-	auto extent = extents.front();
-	return lba_manager->alloc_extent(
-	  t, hint, *extent);
+	auto &extent_group = extents.front();
+	return seastar::do_with(
+	  std::vector<LogicalCachedExtentRef>(
+	    extent_group.begin(), extent_group.end()),
+	  [this, &t, hint](auto &extents) {
+	  return lba_manager->alloc_extents(t, hint, std::move(extents));
+	});
       }).unsafe_get0();
-    logger().debug("alloc'd: {}", *ret);
-    EXPECT_EQ(len, ret->get_length());
-    auto [b, e] = get_overlap(t, ret->get_key(), len);
-    EXPECT_EQ(b, e);
-    t.mappings.emplace(
-      std::make_pair(
-	ret->get_key(),
-	test_extent_t{
-	  ret->get_val(),
-	  ret->get_length(),
-	  1
-        }
-      ));
-    return ret;
+    for (auto &ret : rets) {
+      logger().debug("alloc'd: {}", *ret);
+      EXPECT_EQ(len, ret->get_length());
+      auto [b, e] = get_overlap(t, ret->get_key(), len);
+      EXPECT_EQ(b, e);
+      t.mappings.emplace(
+	std::make_pair(
+	  ret->get_key(),
+	  test_extent_t{
+	    ret->get_val(),
+	    ret->get_length(),
+	    1
+	  }
+	));
+    }
+    return rets;
   }
 
   auto decref_mapping(
@@ -636,7 +650,7 @@ TEST_F(btree_lba_manager_test, basic)
       auto t = create_transaction();
       check_mappings(t);  // check in progress transaction sees mapping
       check_mappings();   // check concurrent does not
-      auto ret = alloc_mapping(t, laddr, block_size);
+      alloc_mapping(t, laddr, block_size);
       submit_test_transaction(std::move(t));
     }
     check_mappings();     // check new transaction post commit sees it
@@ -650,7 +664,7 @@ TEST_F(btree_lba_manager_test, force_split)
       auto t = create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 5; ++j) {
-	auto ret = alloc_mapping(t, 0, block_size);
+	alloc_mapping(t, 0, block_size);
 	if ((i % 10 == 0) && (j == 3)) {
 	  check_mappings(t);
 	  check_mappings();
@@ -670,14 +684,16 @@ TEST_F(btree_lba_manager_test, force_split_merge)
       auto t = create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 5; ++j) {
-	auto ret = alloc_mapping(t, 0, block_size);
+	auto rets = alloc_mapping(t, 0, block_size);
 	// just to speed things up a bit
 	if ((i % 100 == 0) && (j == 3)) {
 	  check_mappings(t);
 	  check_mappings();
 	}
-	incref_mapping(t, ret->get_key());
-	decref_mapping(t, ret->get_key());
+	for (auto &ret : rets) {
+	  incref_mapping(t, ret->get_key());
+	  decref_mapping(t, ret->get_key());
+	}
       }
       logger().debug("submitting transaction");
       submit_test_transaction(std::move(t));

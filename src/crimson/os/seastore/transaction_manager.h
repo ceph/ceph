@@ -327,7 +327,7 @@ public:
   using alloc_extents_iertr = alloc_extent_iertr;
   template <typename T>
   using alloc_extents_ret = alloc_extents_iertr::future<
-    std::vector<TCachedExtentRef<T>>>;
+    std::vector<Cache::data_extents_group_t<T>>>;
   template <typename T>
   alloc_extents_ret<T> alloc_data_extents(
     Transaction &t,
@@ -352,20 +352,24 @@ public:
       [this, &t](auto &exts, auto &laddr_hint) {
       return trans_intr::do_for_each(
         exts,
-        [this, &t, &laddr_hint](auto &ext) {
-        return lba_manager->alloc_extent(
+        [this, &t, &laddr_hint](auto &ext_group) {
+        return lba_manager->alloc_extents(
           t,
           laddr_hint,
-          *ext
-        ).si_then([&ext, &laddr_hint, &t](auto &&) mutable {
-          LOG_PREFIX(TransactionManager::alloc_extents);
-          SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
-          laddr_hint += ext->get_length();
+          std::vector<LogicalCachedExtentRef>(
+	    ext_group.begin(), ext_group.end())
+        ).si_then([&ext_group, &laddr_hint, &t](auto &&) mutable {
+          LOG_PREFIX(TransactionManager::alloc_data_extents);
+	  for (auto &ext : ext_group) {
+	    SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}",
+	      t, *ext, laddr_hint);
+	    laddr_hint += ext->get_length();
+	  }
           return alloc_extent_iertr::now();
         });
       }).si_then([&exts] {
         return alloc_extent_iertr::make_ready_future<
-          std::vector<TCachedExtentRef<T>>>(std::move(exts));
+          std::vector<Cache::data_extents_group_t<T>>>(std::move(exts));
       });
     });
   }

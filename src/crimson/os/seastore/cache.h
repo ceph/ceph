@@ -907,7 +907,9 @@ public:
    * Note that epaddr can only be fed by the btree lba unittest for now
    */
   template <typename T>
-  std::vector<TCachedExtentRef<T>> alloc_new_data_extents(
+  using data_extents_group_t = std::vector<TCachedExtentRef<T>>;
+  template <typename T>
+  std::vector<data_extents_group_t<T>> alloc_new_data_extents(
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
     placement_hint_t hint,  ///< [in] user hint
@@ -926,20 +928,33 @@ public:
 #else
     auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen);
 #endif
-    std::vector<TCachedExtentRef<T>> extents;
+    std::vector<data_extents_group_t<T>> extents;
     for (auto &result : results) {
-      auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
-      ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
-                result.paddr,
-                hint,
-                result.gen,
-                t.get_trans_id());
-      t.add_fresh_extent(ret);
-      SUBDEBUGT(seastore_cache,
-                "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
-                t, T::TYPE, length, result.paddr,
-                hint, rewrite_gen_printer_t{result.gen}, *ret);
-      extents.emplace_back(std::move(ret));
+      auto left = result.bp.length();
+      data_extents_group_t<T> group;
+      while (left > 0) {
+	auto len = std::min(max_extent_size, left);
+	auto bp = ceph::bufferptr(result.bp, result.bp.length() - left, len);
+	auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(bp));
+	auto addr = result.paddr;
+	if (addr.is_absolute()) {
+	  addr = addr + (result.bp.length() - left);
+	}
+	ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
+		  addr,
+		  hint,
+		  result.gen,
+		  t.get_trans_id());
+	t.add_fresh_extent(ret);
+	SUBDEBUGT(seastore_cache,
+		  "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
+		  t, T::TYPE, len, ret->get_paddr(),
+		  hint, rewrite_gen_printer_t{result.gen}, *ret);
+	group.emplace_back(std::move(ret));
+	left -= len;
+      }
+      assert(left == 0);
+      extents.emplace_back(std::move(group));
     }
     return extents;
   }
@@ -1360,6 +1375,7 @@ private:
   std::vector<SegmentProvider*> segment_providers_by_device_id;
 
   transaction_id_t next_id = 0;
+  extent_len_t max_extent_size = 0;
 
   /**
    * dirty
