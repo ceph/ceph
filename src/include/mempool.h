@@ -262,7 +262,6 @@ const char *get_pool_name(pool_index_t ix);
 struct type_t {
   const char *type_name;
   size_t item_size;
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
   struct type_shard_t {
     ceph::atomic<ssize_t> items = {0}; // signed
     char __padding[128 - sizeof(ceph::atomic<ssize_t>)];
@@ -270,10 +269,6 @@ struct type_t {
   static_assert(sizeof(type_shard_t) == 128,
                 "type_shard_t should be cacheline-sized");
   type_shard_t shards[num_shards];
-#else
-// XXX: consider dropping this case for classic with perf tests
-  ceph::atomic<ssize_t> items = {0};  // signed
-#endif
 };
 
 struct type_info_hash {
@@ -366,11 +361,7 @@ public:
     shard.bytes += total;
     shard.items += n;
     if (type) {
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
       type->shards[shid].items += n;
-#else
-      type->items += n;
-#endif
     }
     T* r = reinterpret_cast<T*>(new char[total]);
     return r;
@@ -383,11 +374,7 @@ public:
     shard.bytes -= total;
     shard.items -= n;
     if (type) {
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
       type->shards[shid].items -= n;
-#else
-      type->items -= n;
-#endif
     }
     delete[] reinterpret_cast<char*>(p);
   }
@@ -399,11 +386,7 @@ public:
     shard.bytes += total;
     shard.items += n;
     if (type) {
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
       type->shards[shid].items += n;
-#else
-      type->items += n;
-#endif
     }
     char *ptr;
     int rc = ::posix_memalign((void**)(void*)&ptr, align, total);
@@ -420,11 +403,7 @@ public:
     shard.bytes -= total;
     shard.items -= n;
     if (type) {
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
       type->shards[shid].items -= n;
-#else
-      type->items -= n;
-#endif
     }
     aligned_free(p);
   }
