@@ -36,7 +36,61 @@ static int thread_shard_next;
 static std::mutex thread_shard_mtx;
 
 #else
-// Use sched_getcpu() to determine which core a thread is running on
+// Use sched_getcpu() to determine which core a thread is running on,
+// use this to assign the thread a shard and cache this value to
+// eliminate overhead of repeatedly calling sched_getcpu. Periodically
+// check the cached value to deal with non-bound threads switching cores.
+// Ideally this means that each CPU core accesses its own shard and there
+// are no shared CPU cachelines. If a thread switches cores performance
+// will be non-optimal (but atomics ensure correctness) until the switch
+// is noticed and a new shard is selected
+
+enum {
+  thread_shard_recheck_min_interval = 1,
+  thread_shard_recheck_max_interval = 10000
+};
+
+static thread_local int thread_shard_recheck_count;
+static thread_local int thread_shard_recheck_interval;
+
+// Keep statistics on how successfully we manage to track which core a thread
+// is running on
+//
+// correct_core - number of times thread to core binding is correctly tracked
+// incorrect_core - number of times thread to core binding is incorrectly tracked
+// checked_core - number of times sched_getcpu() has been called
+//
+// sched_getcpu_cost = 32 cycles
+// cacheline_ping_pong_cost = 150 cycles (intra socket), 400 cycles (inter socket)
+//
+// These costs will vary between CPU architectures, but relative difference between
+// costs is likely to be similar
+//
+// cached_algorithm_cost = checked_core * sched_getcpu_cost + incorrect_core * cacheline_ping_pong_cost
+// uncached_algorithm_cost = (correct_core + incorrect_core) * sched_getcpu_cost
+
+struct fault_stats_t {
+  ceph::atomic<size_t> correct_core = {0};
+  ceph::atomic<size_t> incorrect_core = {0};
+  ceph::atomic<size_t> checked_core = {0};
+
+  char __padding[128 - sizeof(ceph::atomic<size_t>)*2];
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_int("correct_core", correct_core );
+    f->dump_int("incorrect_core", incorrect_core);
+    f->dump_int("checked_core", checked_core);
+  }
+
+  fault_stats_t& operator+=(const fault_stats_t& o) {
+    correct_core += o.correct_core;
+    incorrect_core += o.incorrect_core;
+    checked_core += o.checked_core;
+    return *this;
+  }
+} __attribute__ ((aligned (128)));
+
+static fault_stats_t *shard_faults;
 #endif
 
 }
@@ -59,6 +113,9 @@ size_t mempool::get_num_shards(void) {
       threads>>=1;
     }
     num_shards = 1 << num_shard_bits;
+#if defined(MEMPOOL_SCHED_GETCPU)
+    shard_faults = new fault_stats_t[num_shards];
+#endif
   }
   return num_shards;
 }
@@ -74,6 +131,32 @@ int mempool::pick_a_shard_int(void) {
   if (thread_shard_index == max_shards) {
     // Thread has not been assigned to a shard yet
     thread_shard_index = sched_getcpu() & ((1 << num_shard_bits) - 1);
+    thread_shard_recheck_count = 0;
+    thread_shard_recheck_interval = thread_shard_recheck_min_interval;
+  }else if (++thread_shard_recheck_count >= thread_shard_recheck_interval) {
+    // Periodically recheck that thread has not changed cores
+    size_t new_index = sched_getcpu() & ((1 << num_shard_bits) - 1);
+    shard_faults[thread_shard_index].checked_core++;
+    thread_shard_recheck_count = 0;
+    if (thread_shard_index == new_index) {
+      // Thread has not moved, recheck less often
+      shard_faults[thread_shard_index].correct_core += thread_shard_recheck_interval;
+      if (thread_shard_recheck_interval < thread_shard_recheck_max_interval) {
+	thread_shard_recheck_interval++;
+      }
+    }else{
+      // Thread has moved, recheck more often
+      thread_shard_index = new_index;
+      shard_faults[thread_shard_index].incorrect_core += thread_shard_recheck_interval / 2;
+      int decrease = thread_shard_recheck_interval / 2;
+      if ( decrease == 0) {
+	decrease = 1;
+      }
+      thread_shard_recheck_interval -= decrease;
+      if (thread_shard_recheck_interval < thread_shard_recheck_min_interval) {
+	thread_shard_recheck_interval = thread_shard_recheck_min_interval;
+      }
+    }
   }
 #endif
   return thread_shard_index;
@@ -111,6 +194,13 @@ void mempool::dump(ceph::Formatter *f)
   }
   f->close_section();
   f->dump_object("total", total);
+#if defined(MEMPOOL_SCHED_GETCPU)
+  fault_stats_t total_fault_stats;
+  for (size_t i = 0; i < get_num_shards(); ++i) {
+      total_fault_stats += shard_faults[i];
+  }
+  f->dump_object("fault_stats", total_fault_stats);
+#endif
   f->close_section();
 }
 

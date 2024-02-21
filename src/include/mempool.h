@@ -26,7 +26,7 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 
-#if defined(_GNU_SOURCE) && defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#if defined(_GNU_SOURCE)
 #  define MEMPOOL_SCHED_GETCPU
 #  include <sched.h>
 #endif
