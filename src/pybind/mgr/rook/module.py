@@ -766,3 +766,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @handle_orch_error
     def blink_device_light(self, ident_fault: str, on: bool, locs: List[orchestrator.DeviceLightLoc]) -> List[str]:
         return self.rook_cluster.blink_light(ident_fault, on, locs)
+
+    @handle_orch_error
+    def upgrade_status(self) -> orchestrator.UpgradeStatusSpec:
+        return orchestrator.UpgradeStatusSpec()
+
+    @handle_orch_error
+    def upgrade_ls(self, image: Optional[str], tags: bool, show_all_versions: Optional[bool]) -> Dict[Any, Any]:
+        return {}
