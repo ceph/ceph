@@ -9,7 +9,7 @@ overrides:
     - \(CACHE_POOL_NO_HIT_SET\)
     - \(PG_
     - \(OSD_
-    - mons down:
+    - mons down
     conf:
       osd:
         osd debug reject backfill probability: .3
