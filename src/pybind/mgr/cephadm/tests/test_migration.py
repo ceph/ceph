@@ -330,6 +330,7 @@ def test_migrate_rgw_spec(cephadm_module: CephadmOrchestrator, rgw_spec_store_en
                                                                                 'rgw_thread_pool_size=512'],
                                                     'rgw_frontend_port': '5000',
                                                     'rgw_frontend_type': 'beast',
+                                                    'rgw_op_counters_dump_expiration': 600,
                                                 }}
         else:
             # in a real environment, we still expect the spec to be there,
