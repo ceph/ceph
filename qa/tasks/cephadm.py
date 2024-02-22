@@ -30,7 +30,6 @@ from tasks.util import chacra
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
-from tasks.vip import subst_vip
 
 CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'prometheus']
 
@@ -1415,18 +1414,19 @@ def shell(ctx, config):
         roles = teuthology.all_roles(ctx.cluster)
         config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
 
+    config = _template_transform(ctx, config, config)
     for role, cmd in config.items():
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Running commands on role %s host %s', role, remote.name)
         if isinstance(cmd, list):
             for c in cmd:
                 _shell(ctx, cluster_name, remote,
-                       ['bash', '-c', subst_vip(ctx, c)],
+                       ['bash', '-c', c],
                        extra_cephadm_args=args)
         else:
             assert isinstance(cmd, str)
             _shell(ctx, cluster_name, remote,
-                   ['bash', '-ex', '-c', subst_vip(ctx, cmd)],
+                   ['bash', '-ex', '-c', cmd],
                    extra_cephadm_args=args)
 
 
@@ -1452,7 +1452,8 @@ def apply(ctx, config):
     cluster_name = config.get('cluster', 'ceph')
 
     specs = config.get('specs', [])
-    y = subst_vip(ctx, yaml.dump_all(specs))
+    specs = _template_transform(ctx, config, specs)
+    y = yaml.dump_all(specs)
 
     log.info(f'Applying spec(s):\n{y}')
     _shell(
