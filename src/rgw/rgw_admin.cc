@@ -6822,7 +6822,7 @@ int main(int argc, const char **argv)
       }
       try {
         const rgw::IAM::Policy p(
-	  g_ceph_context, tenant, assume_role_doc,
+	  g_ceph_context, nullptr, assume_role_doc,
 	  g_ceph_context->_conf.get_val<bool>(
 	    "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
@@ -6881,7 +6881,7 @@ int main(int argc, const char **argv)
       }
 
       try {
-        const rgw::IAM::Policy p(g_ceph_context, tenant, assume_role_doc,
+        const rgw::IAM::Policy p(g_ceph_context, nullptr, assume_role_doc,
 				 g_ceph_context->_conf.get_val<bool>(
 				   "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
@@ -6976,7 +6976,7 @@ int main(int argc, const char **argv)
         perm_policy_doc = bl.to_str();
       }
       try {
-        const rgw::IAM::Policy p(g_ceph_context, tenant, perm_policy_doc,
+        const rgw::IAM::Policy p(g_ceph_context, nullptr, perm_policy_doc,
 				 g_ceph_context->_conf.get_val<bool>(
 				   "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
