@@ -5,6 +5,7 @@ overrides:
       - \(OSD_DOWN\)
       - \(PG_
       - but it is still running
+      - \(CEPHADM_STRAY_DAEMON\)
 tasks:
 - cephadm.shell:
     host.a:

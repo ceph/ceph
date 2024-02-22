@@ -12,6 +12,7 @@ overrides:
     - \(PG_AVAILABILITY\)
     - \(PG_DEGRADED\)
     - \(MON_DOWN\)
+    - \(CEPHADM_STRAY_DAEMON\)
     - missing hit_sets
     - do not have an application enabled
     - application not enabled on pool

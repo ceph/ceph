@@ -24,3 +24,7 @@ overrides:
       - PG_
       - Reduced data availability
       - stuck undersized
+      - backfill_toofull
+      - is down
+      - stuck peering
+      - acting

@@ -3,6 +3,7 @@ overrides:
     log-ignorelist:
     - Replacing daemon mds
     - FS_DEGRADED
+    - \(CEPHADM_STRAY_DAEMON\)
 roles:
 - - host.a
   - osd.0
