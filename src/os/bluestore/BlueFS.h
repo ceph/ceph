@@ -498,6 +498,10 @@ private:
   //std::vector<interval_set<uint64_t>> block_unused_too_granular;
 
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
+  std::atomic<uint64_t> pending_release = 0;
+  std::atomic<uint64_t> wait_pending_release = 0;
+  ceph::condition_variable pending_release_cond;
+  ceph::mutex pending_release_lock = ceph::make_mutex("BlueFS::pending_r_lock");
 
   std::unique_ptr<BlueFSVolumeSelector> vselector;
 
@@ -526,6 +530,7 @@ private:
   uint64_t _get_used(unsigned id) const;
   uint64_t _get_total(unsigned id) const;
 
+  void drop_pending_release(uint64_t delta);
 
   FileRef _get_file(uint64_t ino);
   void _drop_link_D(FileRef f);
@@ -562,6 +567,7 @@ private:
   void _consume_dirty(uint64_t seq);
   void _clear_dirty_set_stable_D(uint64_t seq_stable);
   void _release_pending_allocations(std::vector<interval_set<uint64_t>>& to_release);
+  void _do_release(unsigned dev, const interval_set<uint64_t>& to_release);
 
   void _flush_and_sync_log_core();
   int _flush_and_sync_log_jump_D(uint64_t jump_to);
@@ -744,8 +750,8 @@ public:
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev) const;
 
-  // handler for discard event
-  void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
+  // handler for discard completion event
+  void handle_discard_completion(unsigned dev, interval_set<uint64_t>& to_release);
 
   void flush(FileWriter *h, bool force = false);
 
