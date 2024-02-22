@@ -89,7 +89,7 @@ std::optional<rgw::IAM::Policy> get_policy_from_text(req_state* const s,
                                                      const std::string& policy_text) {
   try {
     return rgw::IAM::Policy(
-        s->cct, s->auth.identity->get_tenant(), policy_text,
+        s->cct, nullptr, policy_text,
         s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   } catch (rgw::IAM::PolicyParseException& e) {
     ldout(s->cct, 1) << "failed to parse policy: '" << policy_text

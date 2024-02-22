@@ -1009,9 +1009,12 @@ void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUs
 
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
+  // non-account identity policy is restricted to the current tenant
+  const std::string* policy_tenant = role.account_id.empty() ? &role.tenant : nullptr;
+
   for (const auto& policy : role.inline_policies) {
     try {
-      const rgw::IAM::Policy p(s->cct, role.tenant, policy, false);
+      const rgw::IAM::Policy p(s->cct, policy_tenant, policy, false);
       s->iam_identity_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been
@@ -1034,7 +1037,7 @@ void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp,
   if (!this->token_attrs.token_policy.empty()) {
     try {
       string policy = this->token_attrs.token_policy;
-      const rgw::IAM::Policy p(s->cct, role.tenant, policy, false);
+      const rgw::IAM::Policy p(s->cct, policy_tenant, policy, false);
       s->session_policies.push_back(std::move(p));
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been

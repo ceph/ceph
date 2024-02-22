@@ -326,11 +326,13 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
 
 static boost::optional<Policy>
 get_iam_policy_from_attr(CephContext* cct,
-                         const map<string, bufferlist>& attrs,
-                         const string& tenant)
+                         const map<string, bufferlist>& attrs)
 {
   if (auto i = attrs.find(RGW_ATTR_IAM_POLICY); i != attrs.end()) {
-    return Policy(cct, tenant, i->second.to_str(), false);
+    // resource policy is not restricted to the current tenant
+    const std::string* policy_tenant = nullptr;
+
+    return Policy(cct, policy_tenant, i->second.to_str(), false);
   } else {
     return none;
   }
@@ -354,7 +356,7 @@ get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
 }
 
 static void load_inline_policy(CephContext* cct, const bufferlist& bl,
-                               const string& tenant,
+                               const string* tenant,
                                std::vector<rgw::IAM::Policy>& policies)
 {
   map<string, string> policy_map;
@@ -365,7 +367,6 @@ static void load_inline_policy(CephContext* cct, const bufferlist& bl,
 }
 
 static void load_managed_policy(CephContext* cct, const bufferlist& bl,
-                                const string& tenant,
                                 std::vector<rgw::IAM::Policy>& policies)
 {
   rgw::IAM::ManagedPolicies policy_set;
@@ -380,7 +381,7 @@ static void load_managed_policy(CephContext* cct, const bufferlist& bl,
 static void load_iam_group_policies(const DoutPrefixProvider* dpp,
                                     optional_yield y,
                                     rgw::sal::Driver* driver,
-                                    const std::string& tenant,
+                                    const std::string* tenant,
                                     std::string_view group_id,
                                     std::vector<rgw::IAM::Policy>& policies)
 {
@@ -394,7 +395,7 @@ static void load_iam_group_policies(const DoutPrefixProvider* dpp,
       load_inline_policy(cct, bl->second, tenant, policies);
     }
     if (auto bl = attrs.find(RGW_ATTR_MANAGED_POLICY); bl != attrs.end()) {
-      load_managed_policy(cct, bl->second, tenant, policies);
+      load_managed_policy(cct, bl->second, policies);
     }
   }
 }
@@ -406,18 +407,22 @@ void load_iam_identity_policies(const DoutPrefixProvider* dpp,
                                 const rgw::sal::Attrs& attrs,
                                 std::vector<rgw::IAM::Policy>& policies)
 {
+  // non-account identity policy is restricted to the current tenant
+  const std::string* policy_tenant = info.account_id.empty()
+      ? &info.user_id.tenant : nullptr;
+
   // load user policies from user attrs
   CephContext* cct = dpp->get_cct();
   if (auto bl = attrs.find(RGW_ATTR_USER_POLICY); bl != attrs.end()) {
-    load_inline_policy(cct, bl->second, info.user_id.tenant, policies);
+    load_inline_policy(cct, bl->second, policy_tenant, policies);
   }
   if (auto bl = attrs.find(RGW_ATTR_MANAGED_POLICY); bl != attrs.end()) {
-    load_managed_policy(cct, bl->second, info.user_id.tenant, policies);
+    load_managed_policy(cct, bl->second, policies);
   }
 
   // load each group and its policies
   for (const auto& id : info.group_ids) {
-    load_iam_group_policies(dpp, y, driver, info.user_id.tenant, id, policies);
+    load_iam_group_policies(dpp, y, driver, policy_tenant, id, policies);
   }
 }
 
@@ -483,7 +488,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     mpobj->set_in_extra_data(true);
     object = mpobj.get();
   }
-  policy = get_iam_policy_from_attr(s->cct, bucket_attrs, bucket->get_tenant());
+  policy = get_iam_policy_from_attr(s->cct, bucket_attrs);
 
   int ret = get_obj_policy_from_attr(dpp, s->cct, driver, s->bucket_owner,
 				     acl, storage_class, object, s->yield);
@@ -703,7 +708,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
   }
 
   try {
-    s->iam_policy = get_iam_policy_from_attr(s->cct, s->bucket_attrs, s->bucket_tenant);
+    s->iam_policy = get_iam_policy_from_attr(s->cct, s->bucket_attrs);
   } catch (const std::exception& e) {
     ldpp_dout(dpp, 0) << "Error reading IAM Policy: " << e.what() << dendl;
 
@@ -2075,7 +2080,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
       ldpp_dout(this, 0) << "failed to read bucket policy" << dendl;
       return r;
     }
-    _bucket_policy = get_iam_policy_from_attr(s->cct, bucket_attrs, auth_tenant);
+    _bucket_policy = get_iam_policy_from_attr(s->cct, bucket_attrs);
     bucket_policy = &_bucket_policy;
     pbucket = ubucket.get();
   } else {
@@ -2210,7 +2215,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
           return r;
 	}
 	auto _bucket_policy = get_iam_policy_from_attr(
-	  s->cct, tmp_bucket->get_attrs(), auth_tenant);
+	  s->cct, tmp_bucket->get_attrs());
         bucket_policy = _bucket_policy.get_ptr();
 	buckets[bucket_name].swap(tmp_bucket);
         policies[bucket_name] = make_pair(bucket_acl, _bucket_policy);
@@ -5757,7 +5762,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
   if (op_ret < 0) {
     return op_ret;
   }
-  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs(), s->bucket->get_tenant());
+  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs());
   /* admin request overrides permission checks */
   if (! s->auth.identity->is_admin_of(dest_policy.get_owner().id)){
     if (dest_iam_policy != boost::none || ! s->iam_identity_policies.empty() || !s->session_policies.empty()) {
@@ -7600,7 +7605,7 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
     return false;
   }
 
-  auto policy = get_iam_policy_from_attr(s->cct, battrs, binfo.bucket.tenant);
+  auto policy = get_iam_policy_from_attr(s->cct, battrs);
 
   bucket_owner = bacl.get_owner();
 
@@ -7940,7 +7945,7 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
     return false;
   }
 
-  auto policy = get_iam_policy_from_attr(s->cct, battrs, binfo.bucket.tenant);
+  auto policy = get_iam_policy_from_attr(s->cct, battrs);
 
   bucket_owner = bacl.get_owner();
   if (policy || ! s->iam_identity_policies.empty() || !s->session_policies.empty()) {
@@ -8625,7 +8630,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
 
   try {
     const Policy p(
-      s->cct, s->bucket_tenant, data.to_str(),
+      s->cct, nullptr, data.to_str(),
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     rgw::sal::Attrs attrs(s->bucket_attrs);
     if (s->bucket_access_conf &&

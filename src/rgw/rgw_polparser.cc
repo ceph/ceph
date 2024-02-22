@@ -6,6 +6,7 @@
 #include <exception>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -19,7 +20,7 @@
 #include "rgw/rgw_iam_policy.h"
 
 // Returns true on success
-bool parse(CephContext* cct, const std::string& tenant,
+bool parse(CephContext* cct, const std::string* tenant,
            const std::string& fname, std::istream& in) noexcept
 {
   bufferlist bl;
@@ -56,7 +57,7 @@ void usage(std::string_view cmdname)
 int main(int argc, const char** argv)
 {
   std::string_view cmdname = argv[0];
-  std::string tenant;
+  std::optional<std::string> tenant;
 
   auto args = argv_to_vec(argc, argv);
   if (ceph_argparse_need_usage(args)) {
@@ -82,9 +83,10 @@ int main(int argc, const char** argv)
   }
 
   bool success = true;
+  const std::string* t = tenant ? &*tenant : nullptr;
 
   if (args.empty()) {
-    success = parse(cct.get(), tenant, "(stdin)", std::cin);
+    success = parse(cct.get(), t, "(stdin)", std::cin);
   } else {
     for (const auto& file : args) {
       std::ifstream in;
@@ -93,7 +95,7 @@ int main(int argc, const char** argv)
 	std::cerr << "Can't read " << file << std::endl;
 	success = false;
       }
-      if (!parse(cct.get(), tenant, file, in)) {
+      if (!parse(cct.get(), t, file, in)) {
 	success = false;
       }
     }
