@@ -1282,7 +1282,7 @@ void RGWPutGroupPolicy_IAM::execute(optional_yield y)
   try {
     // validate the document
     const rgw::IAM::Policy p(
-      s->cct, s->user->get_tenant(), policy_document,
+      s->cct, nullptr, policy_document,
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   } catch (rgw::IAM::PolicyParseException& e) {
     s->err.message = std::move(e.msg);
