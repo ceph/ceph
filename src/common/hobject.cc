@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <charconv>
+#include <fmt/compile.h>
+#include <fmt/core.h>
 
 #include "hobject.h"
 #include "common/Formatter.h"
@@ -14,23 +16,25 @@ using std::string;
 using ceph::bufferlist;
 using ceph::Formatter;
 
-static void append_escaped(const string &in, string *out)
+namespace {
+void escape_special_chars(const string& in, string* out)
 {
-  for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
-    if (*i == '%') {
+  for (auto c : in) {
+    if (c == '%') {
       out->push_back('%');
       out->push_back('p');
-    } else if (*i == '.') {
+    } else if (c == '.') {
       out->push_back('%');
       out->push_back('e');
-    } else if (*i == '_') {
+    } else if (c == '_') {
       out->push_back('%');
       out->push_back('u');
     } else {
-      out->push_back(*i);
+      out->push_back(c);
     }
   }
 }
+}  // namespace
 
 set<string> hobject_t::get_prefixes(
   uint32_t bits,
@@ -80,33 +84,25 @@ set<string> hobject_t::get_prefixes(
 
 string hobject_t::to_str() const
 {
-  string out;
-
-  char snap_with_hash[1000];
-  char *t = snap_with_hash;
-  const char *end = t + sizeof(snap_with_hash);
-
   uint64_t poolid(pool);
-  t += snprintf(t, end - t, "%.*llX", 16, (long long unsigned)poolid);
-
   uint32_t revhash(get_nibblewise_key_u32());
-  t += snprintf(t, end - t, ".%.*X", 8, revhash);
 
-  if (snap == CEPH_NOSNAP)
-    t += snprintf(t, end - t, ".head");
-  else if (snap == CEPH_SNAPDIR)
-    t += snprintf(t, end - t, ".snapdir");
-  else
-    t += snprintf(t, end - t, ".%llx", (long long unsigned)snap);
+  string out;
+  if (snap == CEPH_NOSNAP) {
+    out = fmt::format(FMT_COMPILE("{:016X}.{:08X}.head."), poolid, revhash);
+  } else if (snap == CEPH_SNAPDIR) {
+    out = fmt::format(FMT_COMPILE("{:016X}.{:08X}.snapdir."), poolid, revhash);
+  } else {
+    out = fmt::format(
+	FMT_COMPILE("{:016X}.{:08X}.{:X}."), poolid, revhash,
+	(unsigned long long)snap);
+  }
 
-  out.append(snap_with_hash, t);
-
+  escape_special_chars(oid.name, &out);
   out.push_back('.');
-  append_escaped(oid.name, &out);
+  escape_special_chars(get_key(), &out);
   out.push_back('.');
-  append_escaped(get_key(), &out);
-  out.push_back('.');
-  append_escaped(nspace, &out);
+  escape_special_chars(nspace, &out);
 
   return out;
 }

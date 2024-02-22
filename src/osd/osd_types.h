@@ -315,9 +315,9 @@ inline bool operator!=(const object_locator_t& l, const object_locator_t& r) {
 inline std::ostream& operator<<(std::ostream& out, const object_locator_t& loc)
 {
   out << "@" << loc.pool;
-  if (loc.nspace.length())
+  if (!loc.nspace.empty())
     out << ";" << loc.nspace;
-  if (loc.key.length())
+  if (!loc.key.empty())
     out << ":" << loc.key;
   return out;
 }

@@ -13,7 +13,7 @@
 
 #include "include/buffer.h"
 #include "include/buffer_raw.h"
-#include "include/object_fmt.h"
+#include "include/object.h"
 #include "osd/osd_types_fmt.h"
 #include "osd/scrubber/pg_scrubber.h"
 
