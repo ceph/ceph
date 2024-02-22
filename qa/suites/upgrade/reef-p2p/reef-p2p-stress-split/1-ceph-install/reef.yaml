@@ -1,0 +1,21 @@
+meta:
+- desc: |
+   install ceph/reef v18.2.0
+   Overall upgrade path is - reef-latest.point -1 => reef-latest
+tasks:
+- install:
+    tag: v18.2.0
+    exclude_packages: ['librados3']
+    extra_packages: ['librados2']
+- print: "**** done install reef v18.2.0"
+- ceph:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release reef
+      - ceph osd set-require-min-compat-client reef
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false

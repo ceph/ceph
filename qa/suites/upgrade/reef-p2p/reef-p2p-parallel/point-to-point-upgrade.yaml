@@ -1,0 +1,173 @@
+meta:
+- desc: |
+   Run ceph on two nodes, using one of them as a client,
+   with a separate client-only node.
+   Use xfs beneath the osds.
+   install ceph/reef v18.2.1 and the v18.2.x point versions
+   run workload and upgrade-sequence in parallel
+   (every point release should be tested)
+   run workload and upgrade-sequence in parallel
+   install ceph/reef  latest version
+   run workload and upgrade-sequence in parallel
+   Overall upgrade path is - reef-latest.point-1 => reef-latest.point => reef-latest
+overrides:
+  ceph:
+    log-ignorelist:
+    - reached quota
+    - scrub
+    - osd_map_max_advance
+    - wrongly marked
+    - FS_DEGRADED
+    - POOL_APP_NOT_ENABLED
+    - CACHE_POOL_NO_HIT_SET
+    - POOL_FULL
+    - SMALLER_PG
+    - pool\(s\) full
+    - OSD_DOWN
+    - missing hit_sets
+    - CACHE_POOL_NEAR_FULL
+    - PG_AVAILABILITY
+    - PG_DEGRADED
+    - application not enabled
+    - cache pools at or near target size
+    - filesystem is degraded
+    - OBJECT_MISPLACED
+    ### ref: https://tracker.ceph.com/issues/40251
+    #removed see ^ - failed to encode map
+
+    fs: xfs
+
+    conf:
+      global:
+        mon_warn_on_pool_no_app: false
+        mon_mds_skip_sanity: true
+      mon:
+        mon debug unsafe allow tier with nonempty snaps: true
+      osd:
+        osd map max advance: 1000
+        osd_class_default_list: "*"
+        osd_class_load_list: "*"
+      client:
+        rgw_crypt_require_ssl: false
+        rgw crypt s3 kms backend: testing
+        rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+roles:
+- - mon.a
+  - mds.a
+  - osd.0
+  - osd.1
+  - osd.2
+  - mgr.x
+- - mon.b
+  - mon.c
+  - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+- - client.1
+openstack:
+- volumes: # attached to each instance
+    count: 3
+    size: 30 # GB
+tasks:
+- print: "****  done reef about to install v18.2.0 "
+- install:
+    tag: v18.2.0
+    # line below can be removed its from jewel test
+    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librgw2']
+- print: "**** done v18.2.0 install"
+- ceph:
+   fs: xfs
+   add_osds_to_crush: true
+- print: "**** done ceph xfs"
+- sequential:
+   - workload
+- print: "**** done workload v18.2.0"
+
+
+#######  upgrade to v18.2.1
+- install.upgrade:
+    #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+    mon.a:
+      tag: v18.2.1
+    mon.b:
+      tag: v18.2.1
+- parallel:
+   - workload_reef
+   - upgrade-sequence_reef
+- print: "**** done parallel reef v18.2.1"
+
+####  upgrade to latest reef
+- install.upgrade:
+    mon.a:
+    mon.b:
+- parallel:
+   - workload_reef
+   - upgrade-sequence_reef
+- print: "**** done parallel reef branch"
+
+#######################
+workload:
+   sequential:
+   - workunit:
+       clients:
+         client.0:
+           - suites/blogbench.sh
+
+workload_reef:
+   full_sequential:
+   - workunit:
+       branch: reef
+       # tag: v18.2.1
+       clients:
+         client.1:
+         - rados/test.sh
+         - cls
+       env:
+         CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.mirror_snapshot'
+   - print: "**** done rados/test.sh &  cls workload_reef"
+   - sequential:
+     - rgw: [client.0]
+     - print: "**** done rgw workload_reef"
+     - rbd_fsx:
+         clients: [client.0]
+         size: 134217728
+     - print: "**** done rbd_fsx workload_reef"
+
+upgrade-sequence_reef:
+   sequential:
+   - print: "**** done branch: reef install.upgrade"
+   - ceph.restart: [mds.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [osd.0]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.1]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.2]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.3]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.4]
+   - sleep:
+       duration: 30
+   - ceph.restart: [osd.5]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mgr.x]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.a]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.b]
+   - sleep:
+       duration: 60
+   - ceph.restart: [mon.c]
+   - sleep:
+       duration: 60
+   - print: "**** done ceph.restart all reef branch mds/osd/mon"
