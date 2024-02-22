@@ -516,7 +516,10 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   if (trim) {
     interval_set<uint64_t> whole_device;
     whole_device.insert(0, b->get_size());
-    b->try_discard(whole_device, false);
+    pending_release += whole_device.size();
+    if( !b->try_discard(whole_device, false)) {
+      drop_pending_release(whole_device.size());
+    }
   }
 
   dout(1) << __func__ << " bdev " << id << " path " << path
@@ -553,14 +556,25 @@ BlockDevice* BlueFS::get_block_device(unsigned id) const
   return nullptr;
 }
 
+void BlueFS::drop_pending_release(uint64_t delta)
+{
+  ceph_assert(delta <= pending_release);
+  pending_release -= delta;
+  if (wait_pending_release && pending_release == 0) {
+    pending_release_cond.notify_all();
+  }
+}
+
 void BlueFS::handle_discard(unsigned id, interval_set<uint64_t>& to_release)
 {
   dout(10) << __func__ << " bdev " << id << dendl;
   ceph_assert(alloc[id]);
+  ceph_assert(pending_release >= to_release.size());
   alloc[id]->release(to_release);
   if (is_shared_alloc(id)) {
     shared_alloc->bluefs_used -= to_release.size();
   }
+  drop_pending_release(to_release.size());
 }
 
 uint64_t BlueFS::get_used()
@@ -638,8 +652,9 @@ void BlueFS::foreach_block_extents(
   unsigned id,
   std::function<void(uint64_t, uint32_t)> fn)
 {
-  std::lock_guard nl(nodes.lock);
   dout(10) << __func__ << " bdev " << id << dendl;
+  std::lock_guard ll(log.lock);
+  std::lock_guard nl(nodes.lock);
   ceph_assert(id < alloc.size());
   for (auto& p : nodes.file_map) {
     for (auto& q : p.second->fnode.extents) {
@@ -648,6 +663,18 @@ void BlueFS::foreach_block_extents(
       }
     }
   }
+  std::lock_guard dl(dirty.lock);
+  for (auto& p : dirty.pending_release[id]) {
+    fn(p.first, p.second);
+  }
+  wait_pending_release++;
+  if (pending_release.load()) {
+    std::unique_lock l(pending_release_lock);
+    while (pending_release.load()) {
+      pending_release_cond.wait(l);
+    }
+  }
+  wait_pending_release--;
 }
 
 int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
@@ -3318,6 +3345,7 @@ void BlueFS::_release_pending_allocations(vector<interval_set<uint64_t>>& to_rel
       if (is_shared_alloc(i)) {
         shared_alloc->bluefs_used -= to_release[i].size();
       }
+      drop_pending_release(to_release[i].size());
     }
   }
 }
@@ -3333,12 +3361,15 @@ int BlueFS::_flush_and_sync_log_LD(uint64_t want_seq)
     log.lock.unlock();
     return 0;
   }
-  
+
   ceph_assert(want_seq == 0 || want_seq <= dirty.seq_live); // illegal to request seq that was not created yet
   uint64_t seq =_log_advance_seq();
   _consume_dirty(seq);
   vector<interval_set<uint64_t>> to_release(dirty.pending_release.size());
   to_release.swap(dirty.pending_release);
+  for (unsigned i = 0; i < to_release.size(); ++i) {
+    pending_release += to_release[i].size();
+  }
   dirty.lock.unlock();
 
   _maybe_extend_log();
@@ -3368,6 +3399,10 @@ int BlueFS::_flush_and_sync_log_jump_D(uint64_t jump_to)
   _consume_dirty(seq);
   vector<interval_set<uint64_t>> to_release(dirty.pending_release.size());
   to_release.swap(dirty.pending_release);
+
+  for (unsigned i = 0; i < to_release.size(); ++i) {
+    pending_release += to_release[i].size();
+  }
   dirty.lock.unlock();
   _flush_and_sync_log_core();
 
