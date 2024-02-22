@@ -376,6 +376,12 @@ port = {default_port}
 enable_auth = False
 state_update_notify = True
 state_update_interval_sec = 5
+min_controller_id = 1
+max_controller_id = 65519
+enable_spdk_discovery_controller = False
+enable_prometheus_exporter = True
+prometheus_exporter_ssl = False
+prometheus_port = 10008
 
 [ceph]
 pool = {pool}
@@ -699,6 +705,10 @@ class TestMonitoring:
                     honor_labels: true
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
+
+                  - job_name: 'nvmeof'
+                    http_sd_configs:
+                    - url: http://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -850,6 +860,19 @@ class TestMonitoring:
                       ca_file: root_cert.pem
                     http_sd_configs:
                     - url: https://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
+                      basic_auth:
+                        username: sd_user
+                        password: sd_password
+                      tls_config:
+                        ca_file: root_cert.pem
+
+                  - job_name: 'nvmeof'
+                    honor_labels: true
+                    scheme: https
+                    tls_config:
+                      ca_file: root_cert.pem
+                    http_sd_configs:
+                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
                       basic_auth:
                         username: sd_user
                         password: sd_password
