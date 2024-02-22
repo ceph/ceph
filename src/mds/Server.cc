@@ -2449,7 +2449,8 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
 
     vector<SnapRealm*> related_realms;
     if (in) {
-      for (const auto& ri : in->get_inode()->referent_inodes) {
+      dout(20) << "set_trace_dist snaprealms of referent inodes to be sent to client" << std::hex << in->get_projected_inode()->referent_inodes << dendl;
+      for (const auto& ri : in->get_projected_inode()->referent_inodes) {
         CInode *cur = mdcache->get_inode(ri);
         if (!cur) {
           dout(3) << "set_trace_dist error: referent inode not loaded " << std::hex << ri << dendl;
@@ -7396,6 +7397,11 @@ void Server::handle_client_link(const MDRequestRef& mdr)
       return;
     }
     mdr->pin(targeti);
+    // Load referent inodes since path traverse not happening on targeti
+    CF_MDS_RetryRequestFactory cf(mdcache, mdr, true);
+    dout(15) << "handle_client_link " << "only targeti received - no path, loading referent inodes of " << *targeti << dendl;
+    if (mdcache->load_referent_inodes(targeti, cf) != 0)
+      return;
 
     if (!(mdr->locking_state & MutationImpl::SNAP2_LOCKED)) {
       CDentry *pdn = targeti->get_projected_parent_dn();
