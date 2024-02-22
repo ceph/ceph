@@ -498,6 +498,10 @@ private:
   //std::vector<interval_set<uint64_t>> block_unused_too_granular;
 
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
+  std::atomic<uint64_t> pending_release = 0;
+  std::atomic<uint64_t> wait_pending_release = 0;
+  ceph::condition_variable pending_release_cond;
+  ceph::mutex pending_release_lock = ceph::make_mutex("BlueFS::rending_r_lock");
 
   std::unique_ptr<BlueFSVolumeSelector> vselector;
 
@@ -526,6 +530,7 @@ private:
   uint64_t _get_used(unsigned id) const;
   uint64_t _get_total(unsigned id) const;
 
+  void drop_pending_release(uint64_t delta);
 
   FileRef _get_file(uint64_t ino);
   void _drop_link_D(FileRef f);
