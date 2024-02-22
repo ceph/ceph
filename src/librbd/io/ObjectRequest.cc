@@ -499,8 +499,11 @@ void AbstractObjectWriteRequest<I>::write_object() {
       cls_client::assert_snapc_seq(
         &write_op, snap_seq, cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
     } else {
-      ldout(image_ctx->cct, 20) << "guarding write" << dendl;
-      write_op.assert_exists();
+      // object is exist in object map, unneed to add stat op
+      if (image_ctx->object_map == nullptr || !m_object_may_exist) {
+        ldout(image_ctx->cct, 20) << "guarding write" << dendl;
+        write_op.assert_exists();
+      }
     }
   }
 
