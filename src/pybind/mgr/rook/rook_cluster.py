@@ -30,7 +30,6 @@ from ceph.deployment.service_spec import (
     RGWSpec,
     PlacementSpec,
     HostPlacementSpec,
-    HostPattern,
 )
 from ceph.utils import datetime_now
 from ceph.deployment.drive_selection.matchers import (
@@ -1245,7 +1244,7 @@ def node_selector_to_placement_spec(node_selector: ccl.NodeSelectorTermsItem) ->
             res.label = expression.key.split('/')[1]
         elif expression.key == "kubernetes.io/hostname":
             if expression.operator == "Exists":
-                res.host_pattern = HostPattern("*")
+                res.host_pattern = "*"
             elif expression.operator == "In": 
                 res.hosts = [HostPlacementSpec(hostname=value, network='', name='')for value in expression.values]
     return res
