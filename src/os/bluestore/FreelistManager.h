@@ -52,6 +52,8 @@ public:
   virtual void get_meta(uint64_t target_size,
   std::vector<std::pair<std::string, std::string>>*) const = 0;
 
+  virtual bool validate(uint64_t min_alloc_size) const = 0;
+
   void set_null_manager() {
     null_manager = true;
   }
