@@ -261,21 +261,21 @@ namespace ceph {
     /**
      * Return the size (in bytes) of a single chunk created by a call
      * to the **decode** method. The returned size multiplied by
-     * **get_chunk_count()** is greater or equal to **object_size**.
+     * **get_chunk_count()** is greater or equal to **stripe_width**.
      *
      * If the object size is properly aligned, the chunk size is
-     * **object_size / get_chunk_count()**. However, if
-     * **object_size** is not a multiple of **get_chunk_count** or if
+     * **stripe_width / get_chunk_count()**. However, if
+     * **stripe_width** is not a multiple of **get_chunk_count** or if
      * the implementation imposes additional alignment constraints,
      * the chunk size may be larger.
      *
      * The byte found at offset **B** of the original object is mapped
      * to chunk **B / get_chunk_size()** at offset **B % get_chunk_size()**.
      *
-     * @param [in] object_size the number of bytes of the object to **encode()**
+     * @param [in] stripe_width the number of bytes of the object to **encode()**
      * @return the size (in bytes) of a single chunk created by **encode()**
      */
-    virtual unsigned int get_chunk_size(unsigned int object_size) const = 0;
+    virtual unsigned int get_chunk_size(unsigned int stripe_width) const = 0;
 
     /**
      * Compute the smallest subset of **available** chunks that needs
