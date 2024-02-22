@@ -513,7 +513,7 @@ struct shard_id_t {
   shard_id_t() : id(0) {}
   constexpr explicit shard_id_t(int8_t _id) : id(_id) {}
 
-  operator int8_t() const { return id; }
+  constexpr operator int8_t() const { return id; }
 
   const static shard_id_t NO_SHARD;
 
