@@ -700,6 +700,9 @@ public:
 
   /// OMAP
   /// Get omap contents
+  virtual void fix_omap() {}
+  virtual void set_omap_legacy(bool legacy) {}
+  virtual bool get_omap_legacy() { return false; }
   virtual int omap_get(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap

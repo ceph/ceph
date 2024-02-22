@@ -1355,11 +1355,11 @@ public:
 
     static const std::string& calc_omap_prefix(uint8_t flags);
     static void calc_omap_header(uint8_t flags, const Onode* o,
-      std::string* out);
+      std::string* out, bool fix=false);
     static void calc_omap_key(uint8_t flags, const Onode* o,
-      const std::string& key, std::string* out);
+      const std::string& key, std::string* out, bool fix=false);
     static void calc_omap_tail(uint8_t flags, const Onode* o,
-      std::string* out);
+      std::string* out, bool fix=false);
 
     const std::string& get_omap_prefix() {
       return calc_omap_prefix(onode.flags);
@@ -2301,6 +2301,9 @@ private:
   int path_fd = -1;  ///< open handle to $path
   int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
   bool mounted = false;
+  
+  // omap
+  bool omap_legacy = false;
 
   // store open_db options:
   bool db_was_opened_read_only = true;
@@ -2785,6 +2788,9 @@ private:
   void _queue_reap_collection(CollectionRef& c);
   void _reap_collections();
 
+  void set_omap_legacy(bool legacy) override { omap_legacy = legacy; }
+  bool get_omap_legacy() override { return omap_legacy; }
+
   void _assign_nid(TransContext *txc, OnodeRef& o);
   uint64_t _assign_blobid(TransContext *txc);
 
@@ -3238,6 +3244,8 @@ public:
                              std::vector<ghobject_t> *ls,
                              ghobject_t *next) override;
 
+  void fix_omap() override;
+  void _fix_omap(CollectionHandle &ch);
   int omap_get(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap

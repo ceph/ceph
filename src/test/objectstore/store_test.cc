@@ -3607,6 +3607,100 @@ TEST_P(StoreTest, SimpleCloneTest) {
   }
 }
 
+TEST_P(StoreTest, FixOmap) {
+  if (string(GetParam()) != "bluestore") {
+    cerr << string(GetParam()) << " just test fix bluestore omap" << std::endl;
+    return;
+  }
+
+  int r;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  // old omap key type
+  store->set_omap_legacy(true);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cout << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid(hobject_t(sobject_t("omap_obj", CEPH_NOSNAP),
+			    "key", 123, -1, ""));
+  bufferlist small;
+  small.append("small");
+  map<string,bufferlist> km;
+  km["foo"] = small;
+  km["bar"].append("asdfjkasdkjdfsjkafskjsfdj");
+  bufferlist header;
+  header.append("this is a header");
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    t.omap_setkeys(cid, hoid, km);
+    t.omap_setheader(cid, hoid, header);
+    cout << "Creating object and set omap " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  {
+    BlueStore::Collection *c = static_cast<BlueStore::Collection *>(ch.get());
+    std::shared_lock l(c->lock);
+    BlueStore::OnodeRef onode1 = c->get_onode(hoid, false);
+    string head, tail;
+    onode1->get_omap_header(&head);
+    onode1->get_omap_tail(&tail);
+    ASSERT_NE(onode1->c->pool(), onode1->oid.hobj.pool);
+    cout << "onode1-> old: " << onode1->c->pool() << " proper: " << onode1->oid.hobj.pool << std::endl;
+  }
+
+  {
+    bufferlist h;
+    map<string,bufferlist> r;
+    store->omap_get(ch, hoid, &h, &r);
+    ASSERT_EQ(r.size(), km.size());
+    ASSERT_TRUE(bl_eq(header, h));
+  }
+
+  // old omap key type
+  store->set_omap_legacy(false);
+  {
+    bufferlist h;
+    map<string,bufferlist> r;
+    store->omap_get(ch, hoid, &h, &r);
+    // if use proper pool id we cann't get omap
+    ASSERT_EQ(r.size(), 0);
+    ASSERT_FALSE(bl_eq(header, h));
+  }
+
+  // just old omap key type need fix
+  store->set_omap_legacy(true);
+  store->fix_omap();
+
+  {
+    ASSERT_FALSE(store->get_omap_legacy());
+    bufferlist h;
+    map<string,bufferlist> r;
+    store->omap_get(ch, hoid, &h, &r);
+    ASSERT_EQ(r.size(), km.size());
+    ASSERT_TRUE(bl_eq(header, h));
+  }
+
+  // old omap is deleted
+  store->set_omap_legacy(true);
+  {
+    bufferlist h;
+    map<string,bufferlist> r;
+    store->omap_get(ch, hoid, &h, &r);
+    // if use proper pool id we cann't get omap
+    ASSERT_EQ(r.size(), 0);
+    ASSERT_FALSE(bl_eq(header, h));
+  }
+
+  cout << "test fix_omap success " << cid << std::endl;
+}
+
 TEST_P(StoreTest, OmapSimple) {
   int r;
   coll_t cid;
