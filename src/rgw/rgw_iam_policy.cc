@@ -264,7 +264,7 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
   keyword_hash tokens;
   std::vector<ParseState> s;
   CephContext* cct;
-  const string& tenant;
+  const string* tenant = nullptr;
   Policy& policy;
   uint32_t v = 0;
 
@@ -372,7 +372,7 @@ struct PolicyParser : public BaseReaderHandler<UTF8<>, PolicyParser> {
     v = 0;
   }
 
-  PolicyParser(CephContext* cct, const string& tenant, Policy& policy,
+  PolicyParser(CephContext* cct, const string* tenant, Policy& policy,
 	       bool reject_invalid_principals)
     : cct(cct), tenant(tenant), policy(policy),
       reject_invalid_principals(reject_invalid_principals) {}
@@ -688,16 +688,16 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
       return false;
     }
     // You can't specify resources for someone ELSE'S account.
-    if (a->account.empty() || a->account == pp->tenant ||
-	a->account == "*") {
-      if (a->account.empty() || a->account == "*")
-	a->account = pp->tenant;
+    if (a->account.empty() || pp->tenant == nullptr ||
+	a->account == *pp->tenant || a->account == "*") {
+      if (pp->tenant && (a->account.empty() || a->account == "*"))
+	a->account = *pp->tenant;
       (w->id == TokenID::Resource ? t->resource : t->notresource)
 	.emplace(std::move(*a));
     } else {
       annotate(fmt::format("Policy owned by tenant `{}` cannot grant access to "
 			   "resource owned by tenant `{}`.",
-			   pp->tenant, a->account));
+			   *pp->tenant, a->account));
       return false;
     }
   } else if (w->kind == TokenKind::cond_key) {
@@ -1797,7 +1797,7 @@ ostream& operator <<(ostream& m, const Statement& s) {
   return m << " }";
 }
 
-Policy::Policy(CephContext* cct, const string& tenant,
+Policy::Policy(CephContext* cct, const string* tenant,
 	       std::string _text,
 	       bool reject_invalid_principals)
   : text(std::move(_text)) {

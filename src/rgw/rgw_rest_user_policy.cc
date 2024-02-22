@@ -160,8 +160,12 @@ void RGWPutUserPolicy::execute(optional_yield y)
 {
   // validate the policy document
   try {
+    // non-account identity policy is restricted to the current tenant
+    const std::string* policy_tenant = account_id.empty() ?
+        &s->user->get_tenant() : nullptr;
+
     const rgw::IAM::Policy p(
-      s->cct, s->user->get_tenant(), policy,
+      s->cct, policy_tenant, policy,
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   } catch (const rgw::IAM::PolicyParseException& e) {
     ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;

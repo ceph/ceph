@@ -531,7 +531,10 @@ int RGWREST_STS::verify_permission(optional_yield y)
   //Parse the policy
   //TODO - This step should be part of Role Creation
   try {
-    const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), policy, false);
+    // resource policy is not restricted to the current tenant
+    const std::string* policy_tenant = nullptr;
+
+    const rgw::IAM::Policy p(s->cct, policy_tenant, policy, false);
     if (!s->principal_tags.empty()) {
       auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, boost::none);
       if (res != rgw::IAM::Effect::Allow) {
@@ -649,7 +652,7 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   if (! policy.empty()) {
     try {
       const rgw::IAM::Policy p(
-	s->cct, s->user->get_tenant(), policy,
+	s->cct, nullptr, policy,
 	s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     }
     catch (rgw::IAM::PolicyParseException& e) {
@@ -710,7 +713,7 @@ int RGWSTSAssumeRole::get_params()
   if (! policy.empty()) {
     try {
       const rgw::IAM::Policy p(
-	s->cct, s->user->get_tenant(), policy,
+	s->cct, nullptr, policy,
 	s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     }
     catch (rgw::IAM::PolicyParseException& e) {
