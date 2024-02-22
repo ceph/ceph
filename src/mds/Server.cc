@@ -2449,7 +2449,7 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
 
     vector<SnapRealm*> related_realms;
     if (in) {
-      dout(20) << "set_trace_dist snaprealms of referent inodes to be sent to client" << std::hex << in->get_projected_inode()->referent_inodes << dendl;
+      dout(20) << "set_trace_dist snaprealms of referent inodes to be sent to client " << std::hex << in->get_projected_inode()->referent_inodes << dendl;
       for (const auto& ri : in->get_projected_inode()->referent_inodes) {
         CInode *cur = mdcache->get_inode(ri);
         if (!cur) {
@@ -7556,7 +7556,7 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
   _inode->update_backtrace();
 
   pi.inode->add_referent_ino(newi->ino());
-  dout(20) << "_link_local " << " referent_inodes " << pi.inode->get_referent_inodes() << " referent ino " << newi->ino() << dendl;
+  dout(20) << "_link_local " << " referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << newi->ino() << dendl;
 
   //TODO layout, rstat accounting for referent inode ?
 
@@ -7603,7 +7603,7 @@ void Server::_link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *ta
   mdr->apply();
 
   auto target_inode = targeti->_get_inode();
-  dout(20) << "_link_local_finish referent inodes - " << target_inode->get_referent_inodes() << dendl;
+  dout(20) << "_link_local_finish referent inodes - " << std::hex << target_inode->get_referent_inodes() << dendl;
 
   MDRequestRef null_ref;
   mdcache->send_dentry_link(dn, null_ref, false);
@@ -7935,7 +7935,7 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
     // Link referent inode to the primary inode (targeti)
     ceph_assert(referent_ino);
     pi.inode->add_referent_ino(referent_ino);
-    dout(20) << "handle_peer_link_prep " << "referent_inodes " << pi.inode->get_referent_inodes() << " referent ino added " << referent_ino << dendl;
+    dout(20) << "handle_peer_link_prep " << "referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << referent_ino << dendl;
 
     CDentry *target_pdn = targeti->get_projected_parent_dn();
     SnapRealm *target_realm = target_pdn->get_dir()->inode->find_snaprealm();
@@ -7953,7 +7953,7 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
     // Remove referent inode from primary inode (targeti)
     ceph_assert(referent_ino);
     pi.inode->remove_referent_ino(referent_ino);
-    dout(20) << "handle_peer_link_prep " << "referent inodes " << pi.inode->get_referent_inodes() << " referent ino removed " << referent_ino << dendl;
+    dout(20) << "handle_peer_link_prep " << "referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino removed " << referent_ino << dendl;
 
     if (targeti->is_projected_snaprealm_global()) {
       ceph_assert(mdr->peer_request->desti_snapbl.length());
@@ -8453,7 +8453,7 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
   // Remove referent inode from primary link
   if (dnl->is_referent()) {
     pi.inode->remove_referent_ino(ref_in->ino());
-    dout(20) << "_unlink_local " << "referent inodes " << pi.inode->get_referent_inodes() << " removed referent inode " << ref_in->ino() << dendl;
+    dout(20) << "_unlink_local " << "referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino removed " << ref_in->ino() << dendl;
   }
 
   if (mdr->more()->desti_srnode) {
@@ -9816,7 +9816,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       if (linkmerge && destdnl->is_referent()) {
         CInode *oldrefi = destdnl->get_referent_inode();
         pi.inode->remove_referent_ino(oldrefi->ino());
-        dout(20) << "_unlink_local referent inodes " << pi.inode->get_referent_inodes() << dendl;
+        dout(20) << "_rename_prepare linkmerge referent_inodes " << std::hex << pi.inode->get_referent_inodes() << "referent ino removed " << oldrefi->ino() << dendl;
       }
       spi = pi.inode.get();
     }
