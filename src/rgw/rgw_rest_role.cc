@@ -193,7 +193,7 @@ int RGWCreateRole::init_processing(optional_yield y)
   }
   try {
     const rgw::IAM::Policy p(
-      s->cct, s->user->get_tenant(), trust_policy,
+      s->cct, nullptr, trust_policy,
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   }
   catch (rgw::IAM::PolicyParseException& e) {
@@ -564,9 +564,20 @@ int RGWPutRolePolicy::init_processing(optional_yield y)
     s->err.message = "Missing required element PolicyDocument";
     return -EINVAL;
   }
+
+  int r = load_role(this, y, driver, s->owner.id, account_id,
+                    s->user->get_tenant(), role_name, role, resource,
+                    s->err.message);
+  if (r < 0) {
+    return r;
+  }
+
   try {
+    // non-account identity policy is restricted to the current tenant
+    const rgw::sal::RGWRoleInfo& info = role->get_info();
+    const std::string* policy_tenant = account_id.empty() ? &info.tenant : nullptr;
     const rgw::IAM::Policy p(
-      s->cct, s->user->get_tenant(), perm_policy,
+      s->cct, policy_tenant, perm_policy,
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   }
   catch (rgw::IAM::PolicyParseException& e) {
@@ -574,10 +585,7 @@ int RGWPutRolePolicy::init_processing(optional_yield y)
     s->err.message = e.what();
     return -ERR_MALFORMED_DOC;
   }
-
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  return 0;
 }
 
 void RGWPutRolePolicy::execute(optional_yield y)

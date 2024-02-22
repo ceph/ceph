@@ -590,7 +590,7 @@ struct Policy {
   // when executing operations that *set* a bucket policy, but should
   // be false when reading a stored bucket policy so as not to break
   // backwards configuration.
-  Policy(CephContext* cct, const std::string& tenant,
+  Policy(CephContext* cct, const std::string* tenant,
 	 std::string text,
 	 bool reject_invalid_principals);
 

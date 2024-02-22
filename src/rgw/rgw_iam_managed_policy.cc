@@ -156,7 +156,7 @@ static constexpr std::string_view AmazonS3ReadOnlyAccess = R"(
 auto get_managed_policy(CephContext* cct, std::string_view arn)
     -> std::optional<Policy>
 {
-  const std::string tenant; // empty tenant
+  const std::string* tenant = nullptr;
   constexpr bool reject = false; // reject_invalid_principals
   if (arn == "arn:aws:iam::aws:policy/IAMFullAccess") {
     return Policy{cct, tenant, std::string{IAMFullAccess}, reject};
