@@ -2763,7 +2763,6 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool permit_dev_fallback,
 
   // we're mostly done
   dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
-  logger->inc(l_bluefs_log_compactions);
 
   // Part 4
   // Finalization. Release old space.
