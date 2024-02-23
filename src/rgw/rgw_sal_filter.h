@@ -852,8 +852,8 @@ public:
   virtual ~FilterLuaManager() = default;
 
   virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& meta_key, const std::string& old_script_key, rgw::lua::LuaRuntimeMeta& scripts_meta, rgw::lua::context ctx) override;
-  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, rgw::lua::LuaScriptMeta& new_script, std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta) override;
-  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& old_script_key, const std::string& meta_key, const std::optional<std::string> optional_script_name, std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta) override;
+  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, rgw::lua::LuaScriptMeta& new_script, rgw::lua::LuaRuntimeMeta& scripts_meta) override;
+  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& old_script_key, const std::string& meta_key, const std::optional<std::string> optional_script_name, rgw::lua::LuaRuntimeMeta& scripts_meta) override;
   virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
   virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
   virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;

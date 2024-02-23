@@ -1825,12 +1825,12 @@ namespace rgw::sal {
     return -ENOENT;
   }
 
-  int DBLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, rgw::lua::LuaScriptMeta& new_script, std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta)
+  int DBLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, rgw::lua::LuaScriptMeta& new_script, rgw::lua::LuaRuntimeMeta& scripts_meta)
   {
     return -ENOENT;
   }
 
-  int DBLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& old_script_key, const std::string& meta_key, const std::optional<std::string> optional_script_name, std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta)
+  int DBLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& old_script_key, const std::string& meta_key, const std::optional<std::string> optional_script_name, rgw::lua::LuaRuntimeMeta& scripts_meta)
   {
     return -ENOENT;
   }

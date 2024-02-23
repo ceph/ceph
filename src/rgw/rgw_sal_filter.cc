@@ -1220,7 +1220,7 @@ int FilterLuaManager::get_script(const DoutPrefixProvider* dpp,
 
 int FilterLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
 				const std::string& key, rgw::lua::LuaScriptMeta& new_script, 
-        std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta)
+        rgw::lua::LuaRuntimeMeta& scripts_meta)
 {
   return next->put_script(dpp, y, key, new_script, scripts_meta);
 }
@@ -1228,7 +1228,7 @@ int FilterLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y
 int FilterLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, 
         const std::string& old_script_key, const std::string& meta_key, 
         const std::optional<std::string> optional_script_name, 
-        std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta)
+        rgw::lua::LuaRuntimeMeta& scripts_meta)
 {
   return next->del_script(dpp, y, old_script_key, meta_key, optional_script_name, scripts_meta);
 }

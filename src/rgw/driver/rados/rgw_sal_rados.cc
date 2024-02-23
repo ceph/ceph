@@ -3123,36 +3123,35 @@ int RadosLuaManager::put_script(
   optional_yield y, 
   const std::string& key, 
   rgw::lua::LuaScriptMeta& new_script,
-  std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta
+  rgw::lua::LuaRuntimeMeta& scripts_meta
 ) {
   const std::string error_msg = "WARNING: missing pool when writing Lua script ";
   
-  // scripts_meta is null when a script name is not provided
-  if(!scripts_meta) {
+  if(new_script.name.empty()) {
     return put_object_internal<std::string>(dpp, y, key, new_script.script, error_msg);
   }
 
   // Remove existing script with the same name
   auto it = std::find_if(
-    scripts_meta.value().scripts.begin(), scripts_meta.value().scripts.end(), 
+    scripts_meta.scripts.begin(), scripts_meta.scripts.end(), 
     [&](const rgw::lua::LuaScriptMeta& curr_script) {
       return new_script.name == curr_script.name;
     }
   );
-  if (it != scripts_meta.value().scripts.end()) {
-    scripts_meta.value().scripts.erase(it);
+  if (it != scripts_meta.scripts.end()) {
+    scripts_meta.scripts.erase(it);
   }
 
   // Add new script such that vector is sorted in order of priority
   auto position = std::lower_bound(
-    scripts_meta.value().scripts.begin(), scripts_meta.value().scripts.end(), new_script, 
+    scripts_meta.scripts.begin(), scripts_meta.scripts.end(), new_script, 
     [](const rgw::lua::LuaScriptMeta& a, const rgw::lua::LuaScriptMeta& b) {
       return a.priority < b.priority;
     }
   );
-  scripts_meta.value().scripts.insert(position, new_script);
+  scripts_meta.scripts.insert(position, new_script);
 
-  return put_object_internal<rgw::lua::LuaRuntimeMeta>(dpp, y, key, scripts_meta.value(), error_msg + new_script.name);
+  return put_object_internal<rgw::lua::LuaRuntimeMeta>(dpp, y, key, scripts_meta, error_msg + new_script.name);
 }
 
 int RadosLuaManager::del_script(
@@ -3161,10 +3160,10 @@ int RadosLuaManager::del_script(
   const std::string& old_script_key,
   const std::string& meta_key,
   const std::optional<std::string> optional_script_name,
-  std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta
+  rgw::lua::LuaRuntimeMeta& scripts_meta
 ) {
   int r = 0;
-  if (optional_script_name && !scripts_meta) {
+  if (optional_script_name && scripts_meta.scripts.size() == 0) {
     ldpp_dout(dpp, 10) << "Named scripts have not been added, cannot delete a named script " << dendl;
     return 0;
   }
@@ -3178,20 +3177,20 @@ int RadosLuaManager::del_script(
   }
 
   auto it = std::find_if(
-    scripts_meta.value().scripts.begin(), scripts_meta.value().scripts.end(), 
-    [&](const rgw::lua::LuaRuntimeMeta& curr_script) {
+    scripts_meta.scripts.begin(), scripts_meta.scripts.end(), 
+    [&](const rgw::lua::LuaScriptMeta& curr_script) {
       return optional_script_name.value() == curr_script.name;
     }
   );
-  if (it != scripts_meta.value().scripts.end()) {
-    scripts_meta.value().scripts.erase(it);
+  if (it != scripts_meta.scripts.end()) {
+    scripts_meta.scripts.erase(it);
   } else {
     ldpp_dout(dpp, 10) << "Could not find script with the name " << optional_script_name.value() << dendl;
     return 0;
   }
 
   return put_object_internal<rgw::lua::LuaRuntimeMeta>(
-    dpp, y, meta_key, scripts_meta.value(),
+    dpp, y, meta_key, scripts_meta,
     "WARNING: missing pool when deleting Lua script " + optional_script_name.value());
 }
 
