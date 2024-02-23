@@ -66,9 +66,9 @@ To download it use the following command:
 
 #. Create an NVMe subsystem:
 
-.. prompt:: bash #
+   .. prompt:: bash #
    
-   podman run -it quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 subsystem add --subsystem SUSYSTEM_NQN
+      podman run -it quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 subsystem add --subsystem SUSYSTEM_NQN
 
    The subsystem NQN is a user defined string, for example ``nqn.2016-06.io.spdk:cnode1``.
 
