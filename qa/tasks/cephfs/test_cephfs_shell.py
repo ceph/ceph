@@ -1110,9 +1110,9 @@ class TestShellOpts(TestCephFSShell):
         # now: '?'
         # editor: '?'
         self.editor_val = self.get_cephfs_shell_cmd_output(
-            'set editor ?, set editor').split('\n')[2]
-        self.editor_val = self.editor_val.split(':')[1]. \
-            replace("'", "", 2).strip()
+            'set editor ?, set editor').split('\n')[4]
+        self.editor_val = self.editor_val.split()[1].strip(). \
+            replace("'", "", 2)
 
     def write_tempconf(self, confcontents):
         self.tempconfpath = self.mount_a.client_remote.mktemp(
@@ -1128,8 +1128,9 @@ class TestShellOpts(TestCephFSShell):
         # editor: 'vim'
         final_editor_val = self.get_cephfs_shell_cmd_output(
             cmd='set editor', shell_conf_path=self.tempconfpath)
-        final_editor_val = final_editor_val.split(': ')[1]
-        final_editor_val = final_editor_val.replace("'", "", 2)
+        final_editor_val = final_editor_val.split('\n')[2]
+        final_editor_val = final_editor_val.split()[1].strip(). \
+            replace("'", "", 2)
 
         self.assertNotEqual(self.editor_val, final_editor_val)
 
@@ -1145,8 +1146,9 @@ class TestShellOpts(TestCephFSShell):
         # editor: 'vim'
         final_editor_val = self.get_cephfs_shell_cmd_output(
             cmd='set editor', shell_conf_path=self.tempconfpath)
-        final_editor_val = final_editor_val.split(': ')[1]
-        final_editor_val = final_editor_val.replace("'", "", 2)
+        final_editor_val = final_editor_val.split('\n')[2]
+        final_editor_val = final_editor_val.split()[1].strip(). \
+            replace("'", "", 2)
 
         self.assertEqual(self.editor_val, final_editor_val)
 
@@ -1160,8 +1162,8 @@ class TestShellOpts(TestCephFSShell):
         final_editor_val = self.get_cephfs_shell_cmd_output(
             cmd='set editor %s, set editor' % self.editor_val,
             shell_conf_path=self.tempconfpath)
-        final_editor_val = final_editor_val.split('\n')[2]
-        final_editor_val = final_editor_val.split(': ')[1]
-        final_editor_val = final_editor_val.replace("'", "", 2)
+        final_editor_val = final_editor_val.split('\n')[4]
+        final_editor_val = final_editor_val.split()[1].strip(). \
+            replace("'", "", 2)
 
         self.assertEqual(self.editor_val, final_editor_val)
