@@ -148,7 +148,7 @@ options. By default, ``log-to-stdout`` is enabled, and ``--log-to-syslog`` is di
 vstart.sh
 ---------
 
-The following options aree handy when using ``vstart.sh``,
+The following options can be used with ``vstart.sh``.
 
 ``--crimson``
     Start ``crimson-osd`` instead of ``ceph-osd``.
