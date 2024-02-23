@@ -48,7 +48,7 @@ static rgw_raw_obj get_buckets_obj(const RGWZoneParams& zone,
 
 
 int read(const DoutPrefixProvider* dpp, optional_yield y,
-         RGWSI_SysObj& sysobj, RGWSI_SysObj_Cache& cache_svc,
+         RGWSI_SysObj& sysobj, RGWSI_SysObj_Cache* cache_svc,
          const RGWZoneParams& zone, const std::string& topic_key,
          rgw_pubsub_topic& info, RGWChainedCacheImpl<cache_entry>& cache,
          ceph::real_time* pmtime, RGWObjVersionTracker* pobjv)
@@ -82,7 +82,7 @@ int read(const DoutPrefixProvider* dpp, optional_yield y,
     return -EIO;
   }
 
-  cache.put(dpp, &cache_svc, topic_key, &entry, {&cache_info});
+  cache.put(dpp, cache_svc, topic_key, &entry, {&cache_info});
 
   if (pmtime) {
     *pmtime = entry.mtime;
@@ -263,12 +263,12 @@ class MetadataLister : public RGWMetadataLister {
 
 class MetadataHandler : public RGWMetadataHandler {
   RGWSI_SysObj& sysobj;
-  RGWSI_SysObj_Cache& cache_svc;
+  RGWSI_SysObj_Cache* cache_svc;
   RGWSI_MDLog& mdlog;
   const RGWZoneParams& zone;
   RGWChainedCacheImpl<cache_entry>& cache;
  public:
-  MetadataHandler(RGWSI_SysObj& sysobj, RGWSI_SysObj_Cache& cache_svc,
+  MetadataHandler(RGWSI_SysObj& sysobj, RGWSI_SysObj_Cache* cache_svc,
                   RGWSI_MDLog& mdlog, const RGWZoneParams& zone,
                   RGWChainedCacheImpl<cache_entry>& cache)
     : sysobj(sysobj), cache_svc(cache_svc), mdlog(mdlog),
@@ -396,7 +396,7 @@ class MetadataHandler : public RGWMetadataHandler {
 
 
 auto create_metadata_handler(RGWSI_SysObj& sysobj,
-                             RGWSI_SysObj_Cache& cache_svc,
+                             RGWSI_SysObj_Cache* cache_svc,
                              RGWSI_MDLog& mdlog, const RGWZoneParams& zone,
                              RGWChainedCacheImpl<cache_entry>& cache)
     -> std::unique_ptr<RGWMetadataHandler>

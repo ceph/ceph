@@ -44,7 +44,7 @@ struct cache_entry {
 
 /// Read topic info by metadata key.
 int read(const DoutPrefixProvider* dpp, optional_yield y,
-         RGWSI_SysObj& sysobj, RGWSI_SysObj_Cache& cache_svc,
+         RGWSI_SysObj& sysobj, RGWSI_SysObj_Cache* cache_svc,
          const RGWZoneParams& zone, const std::string& topic_key,
          rgw_pubsub_topic& info, RGWChainedCacheImpl<cache_entry>& cache,
          ceph::real_time* pmtime = nullptr,
@@ -86,7 +86,7 @@ int list_buckets(const DoutPrefixProvider* dpp, optional_yield y,
 
 /// Topic metadata handler factory.
 auto create_metadata_handler(RGWSI_SysObj& sysobj,
-                             RGWSI_SysObj_Cache& cache_svc,
+                             RGWSI_SysObj_Cache* cache_svc,
                              RGWSI_MDLog& mdlog, const RGWZoneParams& zone,
                              RGWChainedCacheImpl<cache_entry>& cache)
     -> std::unique_ptr<RGWMetadataHandler>;

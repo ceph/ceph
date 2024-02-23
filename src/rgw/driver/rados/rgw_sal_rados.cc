@@ -1145,7 +1145,7 @@ int RadosStore::read_topic_v2(const std::string& topic_name,
 {
   const RGWZoneParams& zone = svc()->zone->get_zone_params();
   const std::string key = get_topic_metadata_key(tenant, topic_name);
-  return rgwrados::topic::read(dpp, y, *svc()->sysobj, *svc()->cache,
+  return rgwrados::topic::read(dpp, y, *svc()->sysobj, svc()->cache,
                                zone, key, topic, *ctl()->meta.topic_cache,
                                nullptr, objv_tracker);
 }
