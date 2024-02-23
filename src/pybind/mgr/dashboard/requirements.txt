@@ -1,7 +1,6 @@
 bcrypt
 CherryPy
 more-itertools
-PyJWT
 pyopenssl
 requests
 Routes
