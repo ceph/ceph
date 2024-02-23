@@ -59,7 +59,7 @@ Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, jspan_context* trace_ctx 
         (void)trace_ctx; // suppress unused trace_ctx warning. until we will support the read op trace
         r.result = ctx.aio_operate(r.obj.oid, s->c, &op, &r.data);
       } else {
-        r.result = ctx.aio_operate(r.obj.oid, s->c, &op, trace_ctx);
+        r.result = ctx.aio_operate(r.obj.oid, s->c, &op, 0, trace_ctx);
       }
       if (r.result < 0) {
         // cb() won't be called, so release everything here
@@ -124,7 +124,7 @@ Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, optional_yield y, jspan_c
     return aio_abstract(std::move(ctx), std::forward<Op>(op),
                         y.get_io_context(), y.get_yield_context(), trace_ctx);
   }
-  return aio_abstract(std::move(ctx), std::forward<Op>(op), null_yield, trace_ctx);
+  return aio_abstract(std::move(ctx), std::forward<Op>(op), trace_ctx);
 }
 
 } // anonymous namespace
