@@ -612,7 +612,8 @@ def test_object_sync():
     zonegroup_conns = ZonegroupConns(zonegroup)
     buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
 
-    objnames = [ 'myobj', '_myobj', ':', '&' ]
+    objnames = [ 'myobj', '_myobj', ':', '&', '.', '..', '...',  '.o', '.o.']
+
     content = 'asdasd'
 
     # don't wait for meta sync just yet
