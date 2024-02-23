@@ -195,9 +195,6 @@ The following options aree handy when using ``vstart.sh``,
     Valid types include ``HDD``, ``SSD``(default), ``ZNS``, and ``RANDOM_BLOCK_SSD``
     Note secondary devices should not be faster than the main device.
 
-``--seastore``
-    Use SeaStore as the object store backend.
-
 To start a cluster with a single Crimson node, run::
 
   $  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x \
