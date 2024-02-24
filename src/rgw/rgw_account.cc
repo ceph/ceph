@@ -21,6 +21,8 @@
 #include "common/random_string.h"
 #include "common/utf8.h"
 
+#include "rgw_oidc_provider.h"
+#include "rgw_role.h"
 #include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -277,6 +279,66 @@ int remove(const DoutPrefixProvider* dpp,
   }
   if (ret < 0) {
     return ret;
+  }
+
+  // make sure the account is empty
+  constexpr std::string_view path_prefix; // empty
+  const std::string marker; // empty
+  constexpr uint32_t max_items = 1;
+
+  rgw::sal::UserList users;
+  ret = driver->list_account_users(dpp, y, info.id, info.tenant, path_prefix,
+                                   marker, max_items, users);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!users.users.empty()) {
+    err_msg = "The account cannot be deleted until all users are removed.";
+    return -ENOTEMPTY;
+  }
+
+  constexpr bool need_stats = false;
+  rgw::sal::BucketList buckets;
+  ret = driver->list_buckets(dpp, info.id, info.tenant, marker, marker,
+                             max_items, need_stats, buckets, y);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!buckets.buckets.empty()) {
+    err_msg = "The account cannot be deleted until all buckets are removed.";
+    return -ENOTEMPTY;
+  }
+
+  rgw::sal::RoleList roles;
+  ret = driver->list_account_roles(dpp, y, info.id, path_prefix,
+                                   marker, max_items, roles);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!roles.roles.empty()) {
+    err_msg = "The account cannot be deleted until all roles are removed.";
+    return -ENOTEMPTY;
+  }
+
+  rgw::sal::GroupList groups;
+  ret = driver->list_account_groups(dpp, y, info.id, path_prefix,
+                                    marker, max_items, groups);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!groups.groups.empty()) {
+    err_msg = "The account cannot be deleted until all groups are removed.";
+    return -ENOTEMPTY;
+  }
+
+  std::vector<RGWOIDCProviderInfo> providers;
+  ret = driver->get_oidc_providers(dpp, y, info.id, providers);
+  if (ret < 0) {
+    return ret;
+  }
+  if (!providers.empty()) {
+    err_msg = "The account cannot be deleted until all OpenIDConnectProviders are removed.";
+    return -ENOTEMPTY;
   }
 
   return driver->delete_account(dpp, y, info, objv);
