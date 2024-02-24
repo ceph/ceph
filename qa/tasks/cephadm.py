@@ -1421,15 +1421,32 @@ def shell(ctx, config):
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Running commands on role %s host %s', role, remote.name)
         if isinstance(cmd, list):
-            for c in cmd:
-                _shell(ctx, cluster_name, remote,
-                       ['bash', '-c', c],
-                       extra_cephadm_args=args)
+            for cobj in cmd:
+                sh_cmd, stdin = _shell_command(cobj)
+                _shell(
+                    ctx,
+                    cluster_name,
+                    remote,
+                    ['bash', '-c', sh_cmd],
+                    extra_cephadm_args=args,
+                    stdin=stdin,
+                )
+
         else:
             assert isinstance(cmd, str)
             _shell(ctx, cluster_name, remote,
                    ['bash', '-ex', '-c', cmd],
                    extra_cephadm_args=args)
+
+
+def _shell_command(obj):
+    if isinstance(obj, str):
+        return obj, None
+    if isinstance(obj, dict):
+        cmd = obj['cmd']
+        stdin = obj.get('stdin', None)
+        return cmd, stdin
+    raise ValueError(f'invalid command item: {obj!r}')
 
 
 def apply(ctx, config):
