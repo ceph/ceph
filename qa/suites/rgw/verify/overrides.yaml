@@ -11,6 +11,8 @@ overrides:
         rgw torrent flag: true
         rgw user counters cache: true
         rgw bucket counters cache: true
+        rgw sts key: abcdefghijklmnop
+        rgw s3 auth use sts: true
   rgw:
     compression type: random
     storage classes: LUKEWARM, FROZEN
