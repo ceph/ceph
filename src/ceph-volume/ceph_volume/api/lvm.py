@@ -976,6 +976,9 @@ def create_lv(name_prefix,
             vg = vgs[0]
         else:
             # create on if not
+            # create pv
+            create_pv(device)
+            # create vg
             vg = create_vg(device, name_prefix='ceph')
     assert(vg)
 
