@@ -313,9 +313,12 @@ public:
     encode(ui, link_bl);
 
     if (!info.user_email.empty()) {
-      if (!old_info ||
-          old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
-        ret = rgw_put_system_obj(dpp, svc.sysobj, svc.zone->get_zone_params().user_email_pool, info.user_email,
+      // only if new index changed
+      if (!old_info || !boost::iequals(info.user_email, old_info->user_email)) {
+        // store as lower case for case-insensitive matching
+        std::string oid = info.user_email;
+        boost::to_lower(oid);
+        ret = rgw_put_system_obj(dpp, svc.sysobj, svc.zone->get_zone_params().user_email_pool, oid,
                                  link_bl, exclusive, NULL, real_time(), y);
         if (ret < 0)
           return ret;
@@ -410,7 +413,7 @@ public:
     }
 
     if (!old_info.user_email.empty() &&
-        old_info.user_email != new_info.user_email) {
+        !boost::iequals(old_info.user_email, new_info.user_email)) {
       ret = svc.user->remove_email_index(dpp, old_info.user_email, y);
       if (ret < 0 && ret != -ENOENT) {
         set_err_msg("ERROR: could not remove index for email " + old_info.user_email);
@@ -523,7 +526,9 @@ int RGWSI_User_RADOS::remove_email_index(const DoutPrefixProvider *dpp,
   if (email.empty()) {
     return 0;
   }
-  rgw_raw_obj obj(svc.zone->get_zone_params().user_email_pool, email);
+  std::string oid = email;
+  boost::to_lower(oid);
+  rgw_raw_obj obj(svc.zone->get_zone_params().user_email_pool, oid);
   auto sysobj = svc.sysobj->get_obj(obj);
   return sysobj.wop().remove(dpp, y);
 }
@@ -722,7 +727,9 @@ int RGWSI_User_RADOS::get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
                                        real_time *pmtime, optional_yield y,
                                        const DoutPrefixProvider *dpp)
 {
-  return get_user_info_from_index(ctx, email, svc.zone->get_zone_params().user_email_pool,
+  std::string oid = email;
+  boost::to_lower(oid);
+  return get_user_info_from_index(ctx, oid, svc.zone->get_zone_params().user_email_pool,
                                   info, objv_tracker, pmtime, y, dpp);
 }
 
@@ -766,5 +773,7 @@ int RGWSI_User_RADOS::read_email_index(const DoutPrefixProvider* dpp,
                                        RGWUID& uid)
 {
   const rgw_pool& pool = svc.zone->get_zone_params().user_email_pool;
-  return read_index(dpp, y, svc.sysobj, pool, std::string{email}, nullptr, uid);
+  std::string oid{email};
+  boost::to_lower(oid);
+  return read_index(dpp, y, svc.sysobj, pool, oid, nullptr, uid);
 }

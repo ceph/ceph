@@ -242,9 +242,7 @@ struct RGWUserAdminOpState {
   }
 
   void set_user_email(const std::string& email) {
-   /* always lowercase email address */
     user_email = email;
-    boost::algorithm::to_lower(user_email);
     user_email_specified = true;
   }
 
