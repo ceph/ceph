@@ -156,6 +156,8 @@ public:
   }
 };
 
+struct no_touch_error_marker {};
+
 // unthrowable_wrapper ensures compilation failure when somebody
 // would like to `throw make_error<...>)()` instead of returning.
 // returning allows for the compile-time verification of future's
@@ -211,12 +213,13 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
     }
     assert_failure() = default;
 
-    void operator()(const unthrowable_wrapper&) {
+    no_touch_error_marker operator()(const unthrowable_wrapper&) {
       if (msg) {
         ceph_abort(msg);
       } else {
         ceph_abort();
       }
+      return no_touch_error_marker{};
     }
   };
 
@@ -320,44 +323,43 @@ public:
   void handle() {
     static_assert(std::is_invocable<ErrorVisitorT, ErrorT>::value,
                   "provided Error Visitor is not exhaustive");
-    // In C++ throwing an exception isn't the sole way to signal
-    // error with it. This approach nicely fits cold, infrequent cases
-    // but when applied to a hot one, it will likely hurt performance.
-    //
-    // Alternative approach is to create `std::exception_ptr` on our
-    // own and place it in the future via `make_exception_future()`.
-    // When it comes to handling, the pointer can be interrogated for
-    // pointee's type with `__cxa_exception_type()` instead of costly
-    // re-throwing (via `std::rethrow_exception()`) and matching with
-    // `catch`. The limitation here is lack of support for hierarchies
-    // of exceptions. The code below checks for exact match only while
-    // `catch` would allow to match against a base class as well.
-    // However, this shouldn't be a big issue for `errorator` as Error
-    // Visitors are already checked for exhaustiveness at compile-time.
-    //
-    // NOTE: `__cxa_exception_type()` is an extension of the language.
-    // It should be available both in GCC and Clang but a fallback
-    // (based on `std::rethrow_exception()` and `catch`) can be made
-    // to handle other platforms if necessary.
-    if (type_info == ErrorT::error_t::get_exception_ptr_type_info()) {
-      // set `state::invalid` in internals of `seastar::future` to not
-      // call `report_failed_future()` during `operator=()`.
-      [[maybe_unused]] auto&& ep = std::move(result).get_exception();
-
-      using return_t = std::invoke_result_t<ErrorVisitorT, ErrorT>;
-      if constexpr (std::is_assignable_v<decltype(result), return_t>) {
-        result = std::invoke(std::forward<ErrorVisitorT>(errfunc),
-                             ErrorT::error_t::from_exception_ptr(std::move(ep)));
-      } else if constexpr (std::is_same_v<return_t, void>) {
-        // void denotes explicit discarding
-        // execute for the sake a side effects. Typically this boils down
-        // to throwing an exception by the handler.
-        std::invoke(std::forward<ErrorVisitorT>(errfunc),
-                    ErrorT::error_t::from_exception_ptr(std::move(ep)));
-      } else {
-        result = FuturatorT::invoke(
-	  std::forward<ErrorVisitorT>(errfunc),
-	  ErrorT::error_t::from_exception_ptr(std::move(ep)));
+    using return_t = std::invoke_result_t<ErrorVisitorT, ErrorT>;
+    static_assert(!std::is_same_v<return_t, void>,
+                  "error handlers mustn't return void");
+    if constexpr (std::is_same_v<return_t, no_touch_error_marker>) {
+      return;
+    } else {
+      // In C++ throwing an exception isn't the sole way to signal
+      // error with it. This approach nicely fits cold, infrequent cases
+      // but when applied to a hot one, it will likely hurt performance.
+      //
+      // Alternative approach is to create `std::exception_ptr` on our
+      // own and place it in the future via `make_exception_future()`.
+      // When it comes to handling, the pointer can be interrogated for
+      // pointee's type with `__cxa_exception_type()` instead of costly
+      // re-throwing (via `std::rethrow_exception()`) and matching with
+      // `catch`. The limitation here is lack of support for hierarchies
+      // of exceptions. The code below checks for exact match only while
+      // `catch` would allow to match against a base class as well.
+      // However, this shouldn't be a big issue for `errorator` as Error
+      // Visitors are already checked for exhaustiveness at compile-time.
+      //
+      // NOTE: `__cxa_exception_type()` is an extension of the language.
+      // It should be available both in GCC and Clang but a fallback
+      // (based on `std::rethrow_exception()` and `catch`) can be made
+      // to handle other platforms if necessary.
+      if (type_info == ErrorT::error_t::get_exception_ptr_type_info()) {
+        // set `state::invalid` in internals of `seastar::future` to not
+        // call `report_failed_future()` during `operator=()`.
+        [[maybe_unused]] auto &&ep = std::move(result).get_exception();
+        if constexpr (std::is_assignable_v<decltype(result), return_t>) {
+          result = std::invoke(std::forward<ErrorVisitorT>(errfunc),
+                               ErrorT::error_t::from_exception_ptr(std::move(ep)));
+        } else {
+          result = FuturatorT::invoke(
+            std::forward<ErrorVisitorT>(errfunc),
+            ErrorT::error_t::from_exception_ptr(std::move(ep)));
+        }
       }
     }
   }
@@ -389,6 +391,7 @@ static constexpr auto composer(FuncHead&& head, FuncTail&&... tail) {
 	std::is_invocable_v<FuncHead, decltype(args)...> ||
 	(sizeof...(FuncTail) > 0),
       "composition is not exhaustive");
+      return no_touch_error_marker{};
     }
   };
 }
@@ -911,7 +914,7 @@ public:
     assert_all() = default;
 
     template <class ErrorT, EnableIf<ErrorT>...>
-    void operator()(ErrorT&&) {
+    no_touch_error_marker operator()(ErrorT&&) {
       static_assert(contains_once_v<std::decay_t<ErrorT>>,
                     "discarding disallowed ErrorT");
       if (msg) {
@@ -919,6 +922,7 @@ public:
       } else {
         ceph_abort();
       }
+      return no_touch_error_marker{};
     }
   };
 
@@ -1256,12 +1260,13 @@ namespace ct_error {
     assert_all() = default;
 
     template <class ErrorT>
-    void operator()(ErrorT&&) {
+    no_touch_error_marker operator()(ErrorT&&) {
       if (msg) {
         ceph_abort(msg);
       } else {
         ceph_abort();
       }
+      return no_touch_error_marker{};
     }
   };
 
