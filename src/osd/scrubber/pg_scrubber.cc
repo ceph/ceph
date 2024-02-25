@@ -1188,7 +1188,9 @@ void PgScrubber::cleanup_store(ObjectStore::Transaction* t)
     {}
     void finish(int) override {}
   };
-  m_store->cleanup(t);
+  // clearing both - just to get it to compile RRR
+  m_store->cleanup(t, scrub_level_t::shallow);
+  m_store->cleanup(t, scrub_level_t::deep);
   t->register_on_complete(new OnComplete(std::move(m_store)));
   ceph_assert(!m_store);
 }
@@ -1215,7 +1217,7 @@ void PgScrubber::on_init()
     ObjectStore::Transaction t;
     cleanup_store(&t);
     m_store.reset(
-      Scrub::Store::create(m_pg->osd->store, &t, m_pg->info.pgid, m_pg->coll));
+      Scrub::Store::create(m_pg->osd->store, &t, m_pg->info.pgid, m_pg->coll, get_logger()));
     m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t), nullptr);
   }
 
