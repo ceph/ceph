@@ -1185,6 +1185,195 @@ string IPPolicyTest::ip_address_full_example = R"(
 }
 )";
 
+class PolicyVariableTest : public ::testing::Test {
+protected:
+  intrusive_ptr<CephContext> cct;
+  static const string arbitrary_tenant;
+  static string variable_example_1;
+  static string variable_example_2;
+  static string variable_example_3;
+
+
+public:
+  PolicyVariableTest() {
+    cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
+  }
+};
+
+TEST_F(PolicyVariableTest,VariablePolicyParse1){
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(
+    p = Policy(cct.get(), arbitrary_tenant,
+         bufferlist::static_from_string(variable_example_1), true));
+  ASSERT_TRUE(p);
+
+  EXPECT_EQ(p->text, variable_example_1);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  EXPECT_EQ(*p->id, "S3PolicyVariableTest");
+  EXPECT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_EQ(*p->statements[0].sid, "VariableAllow");
+  EXPECT_TRUE(p->statements[0].princ.empty());
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  act[s3ListBucket] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 2U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::s3);
+  EXPECT_TRUE(p->statements[0].resource.begin()->region.empty());
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "example_bucket");
+  EXPECT_EQ((p->statements[0].resource.begin() + 1)->resource, "example_bucket/*");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  ASSERT_FALSE(p->statements[0].conditions.empty());
+  ASSERT_EQ(p->statements[0].conditions.size(), 1U);
+  EXPECT_EQ(p->statements[0].conditions[0].op, TokenID::StringEquals);
+  EXPECT_EQ(p->statements[0].conditions[0].key, "s3:prefix");
+  ASSERT_FALSE(p->statements[0].conditions[0].vals.empty());
+  EXPECT_EQ(p->statements[0].conditions[0].vals.size(), 1U);
+  EXPECT_EQ(p->statements[0].conditions[0].vals[0], "${aws:Resource-Tag/tag-key}");
+}
+
+TEST_F(PolicyVariableTest,VariablePolicyParse2){
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(
+    p = Policy(cct.get(), arbitrary_tenant,
+         bufferlist::static_from_string(variable_example_2), true));
+  ASSERT_TRUE(p);
+
+  EXPECT_EQ(p->text, variable_example_2);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  EXPECT_EQ(*p->id, "S3PolicyVariableTest");
+  EXPECT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_EQ(*p->statements[0].sid, "VariableAllow");
+  EXPECT_TRUE(p->statements[0].princ.empty());
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  act[s3ListBucket] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 2U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::s3);
+  EXPECT_TRUE(p->statements[0].resource.begin()->region.empty());
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "example_bucket");
+  EXPECT_EQ((p->statements[0].resource.begin() + 1)->resource, "example_bucket/*");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  ASSERT_FALSE(p->statements[0].conditions.empty());
+  ASSERT_EQ(p->statements[0].conditions.size(), 1U);
+  EXPECT_EQ(p->statements[0].conditions[0].op, TokenID::StringEquals);
+  EXPECT_EQ(p->statements[0].conditions[0].key, "s3:prefix");
+  ASSERT_FALSE(p->statements[0].conditions[0].vals.empty());
+  EXPECT_EQ(p->statements[0].conditions[0].vals.size(), 3U);
+  EXPECT_EQ(p->statements[0].conditions[0].vals[0], "${aws:username}");
+  EXPECT_EQ(p->statements[0].conditions[0].vals[1], "folderinbucket/${aws:username}");
+  EXPECT_EQ(p->statements[0].conditions[0].vals[2], "folderinbucket/${$}${aws:username}/*");
+}
+
+TEST_F(PolicyVariableTest,VariablePolicyParse3){
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(
+    p = Policy(cct.get(), arbitrary_tenant,
+         bufferlist::static_from_string(variable_example_3), true));
+  ASSERT_TRUE(p);
+
+  EXPECT_EQ(p->text, variable_example_3);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  EXPECT_EQ(*p->id, "S3PolicyVariableTest");
+  EXPECT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_EQ(*p->statements[0].sid, "VariableAllow");
+  EXPECT_TRUE(p->statements[0].princ.empty());
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  act[s3ListBucket] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 1U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::s3);
+  EXPECT_TRUE(p->statements[0].resource.begin()->region.empty());
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "${aws:username}");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  ASSERT_TRUE(p->statements[0].conditions.empty());
+  ASSERT_EQ(p->statements[0].conditions.size(), 0U);
+}
+
+string PolicyVariableTest::variable_example_1 = R"(
+{
+  "Version": "2012-10-17",
+  "Id": "S3PolicyVariableTest",
+  "Statement": {
+    "Effect": "Allow",
+    "Sid": "VariableAllow",
+    "Action": "s3:ListBucket",
+    "Resource": [
+      "arn:aws:s3:::example_bucket",
+      "arn:aws:s3:::example_bucket/*"
+    ],
+    "Condition": {
+      "StringEquals":{
+        "s3:prefix":"${aws:Resource-Tag/tag-key}"
+      }
+    }
+  }
+}
+)";
+
+string PolicyVariableTest::variable_example_2 = R"(
+{
+  "Version": "2012-10-17",
+  "Id": "S3PolicyVariableTest",
+  "Statement": {
+    "Effect": "Allow",
+    "Sid": "VariableAllow",
+    "Action": "s3:ListBucket",
+    "Resource": [
+      "arn:aws:s3:::example_bucket",
+      "arn:aws:s3:::example_bucket/*"
+    ],
+    "Condition": {
+      "StringEquals":{
+        "s3:prefix":[
+          "${aws:username}",
+          "folderinbucket/${aws:username}",
+          "folderinbucket/${$}${aws:username}/*"
+        ]
+      }
+    }
+  }
+}
+)";
+
+string PolicyVariableTest::variable_example_3 = R"(
+{
+  "Version": "2012-10-17",
+  "Id": "S3PolicyVariableTest",
+  "Statement": {
+    "Effect": "Allow",
+    "Sid": "VariableAllow",
+    "Action": "s3:ListBucket",
+    "Resource":"arn:aws:s3:::${aws:username}"
+  }
+}
+)";
+
+const string PolicyVariableTest::arbitrary_tenant = "arbitrary_tenant";
+
 TEST(MatchWildcards, Simple)
 {
   EXPECT_TRUE(match_wildcards("", ""));

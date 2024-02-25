@@ -56,20 +56,29 @@ using rapidjson::StringStream;
 
 using rgw::auth::Principal;
 
-//These are used during variable substitutions
-#if defined(__clang__)
-//TODO: Need to find the definition for clang
-#elif defined(__GNUC__) || defined(__GNUG__)
-using EnvRangeIterator = std::pair<std::__detail::_Node_iterator<std::pair<const std::__cxx11::basic_string<char>, std::__cxx11::basic_string<char> >, false, true>, std::__detail::_Node_iterator<std::pair<const std::__cxx11::basic_string<char>, std::__cxx11::basic_string<char> >, false, true> >;
-using ConstEnvRangeIterator = std::pair<std::__detail::_Node_const_iterator<std::pair<const std::__cxx11::basic_string<char>, std::__cxx11::basic_string<char> >, false, true>,std::__detail::_Node_const_iterator<std::pair<const std::__cxx11::basic_string<char>, std::__cxx11::basic_string<char> >, false, true>>;
-#elif defined(_MSC_VER)
-using EnvRangeIterator = std::pair<std::_List_iterator<std::_List_val<std::_List_simple_types<std::pair<const std::string, std::string>>>>, std::_List_iterator<std::_List_val<std::_List_simple_types<std::pair<const std::string, std::string>>>>>;
-using ConstEnvRangeIterator = std::pair<std::_List_const_iterator<std::_List_val<std::_List_simple_types<std::pair<const std::string, std::string>>>>, std::_List_const_iterator<std::_List_val<std::_List_simple_types<std::pair<const std::string, std::string>>>>>;
-#endif
 
 namespace rgw {
 namespace IAM {
 #include "rgw_iam_policy_keywords.frag.cc"
+
+//These are used during variable substitutions
+using EnvRangeIterator = decltype(std::declval<std::unordered_multimap<std::string, std::string>>().equal_range(std::string()));
+using ConstEnvRangeIterator = decltype(std::declval<const std::unordered_multimap<std::string, std::string>>().equal_range(std::string()));
+
+// The first capture group of the match is the full variable match
+// The second is the variable name
+// The third is the optional default value match
+// The fourth is the default value
+// For the match "${aws:user,'test'}"
+// Group 1 : "aws:user,'test'"
+// Group 2 : "aws:user"
+// Group 3 : ",'test'"
+// Group 4 : "test"
+// For the match "${aws:user}"
+// Group 1 : aws:user
+// Group 2 : aws:user
+//In anycase use group 2 as key to get the value from the environment
+static const std::regex varRx(R"(\$\{(([A-z-:1-9]*)(\,\s?\'(\S*)\')?)\})", std::regex_constants::ECMAScript | std::regex_constants::optimize);
 
 struct actpair {
   const char* name;
@@ -804,15 +813,12 @@ ostream& operator <<(ostream& m, const MaskedIP& ip) {
   return m;
 }
 
-ConstEnvRangeIterator getEnvRangeFromMatch(const std::string& val, const std::smatch &match, const Environment& env) {
-    std::string varKey = val.substr(match.position(), match.length());
-
-    varKey.erase(0, 2); //erase $, {
-    varKey.erase(varKey.length() - 1, 1); //erase }
-    return env.equal_range(varKey);
+ConstEnvRangeIterator getEnvRange(const std::string& Key, const Environment& env) {
+    std::cout << "Key : " << Key << std::endl;
+    return env.equal_range(Key);
 }
 
-void generatrVarStrings(const Environment& env, const std::string& val, const std::vector<smatch>& matches, std::vector<string>& current, size_t index, std::vector<string>& varStrings) {
+void generateVarStrings(const Environment& env, const std::string& val, const std::vector<smatch>& matches, std::vector<string>& current, size_t index, std::vector<string>& varStrings) {
     if (index == matches.size()) {
         //Make a copy so we don't change the original
         std::string varString = val;
@@ -820,14 +826,15 @@ void generatrVarStrings(const Environment& env, const std::string& val, const st
         for (auto i = matches.rbegin(); i != matches.rend(); ++i) {
             varString.replace(i->position(), i->length(), current.rbegin()[std::distance(matches.rbegin(), i)]);
         }
+        replaceSpecialCharacters(varString);
         varStrings.push_back(varString);
         return;
     }
     const smatch& match = matches[index];
-    const auto& range = getEnvRangeFromMatch(val, match, env);
+    const auto& range = getEnvRange(match[2].str(), env);
     for (auto itr = range.first; itr != range.second; itr++) {
         current[index] = itr->second;
-        generatrVarStrings(env, val, matches, current, index + 1, varStrings);
+        generateVarStrings(env, val, matches, current, index + 1, varStrings);
     }
 }
 
@@ -844,16 +851,18 @@ int calculateTotalCombinations(const std::vector<int>& lengths) {
 // Support "aws:RequestTag/" and "aws:ResourceTag/"
 // ToDo : Check if tag keys are added to the environment, if so, is the key as expected? eg. aws:ResourceTag/Department : TestDepartment
 
-//Problem : Evaluates only the last element in array
-// eg. '{"Version":"2012-10-17","Statement":{"Effect":"Allow","Action":"s3:*","Resource":"arn:aws:s3:::*","Condition":{"StringEquals":{"s3:prefix":["folderinbucket","${aws:username}"]}}}}'
-// Evaluates only "${aws:username}"
-//regex match in 7 steps \$\{([A-z-:]*)\}
+// In cases like this : 
+// "testfolder/${aws:nonExisting,'test'}/${aws:username}/thisstuff/${*}${aws:nonExisting,'testdefault'}"
+// notice how "aws:nonExisting" has two different defaults.
+// The condition will evaluate as :
+// "testfolder/test/${aws:username}/thisstuff/${*}testdefault"
+
 bool Condition::eval(const Environment& env) const {
-  static const std::regex rx(R"(\$\{([A-z-:1-9]*)\})",
-            std::regex_constants::ECMAScript |
-	    std::regex_constants::optimize);
   std::vector<std::string> runtime_vals;
-  dout(20) << "Evaluating condition for " << key << dendl;
+  //Dont know why but the below dout would segfault "unittest_rgw_iam_policy"
+  //`arn3 in TEST_F(PolicyTest, Eval3)`
+  //printing the same with std::cout would not segfault and would print to the console
+  // dout(20) << "Evaluating condition for " << key << dendl;
   auto i = env.find(key);
   if (op == TokenID::Null) {
     return i == env.end() ? true : false;
@@ -877,15 +886,34 @@ bool Condition::eval(const Environment& env) const {
 //   ]}}
 // See "Evaluation logic for multiple context keys or values" in https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-logic-multiple-context-keys-or-values.html
   if (isruntime) {
+    std::vector<std::string> valsWithDefaults = vals;
     //In a lot of cases there is going to be only 1 match, 2 in some, 5 seems to be a good number for optimization purposes
     std::vector<smatch> matches;
     matches.reserve(5);
-    static const std::regex rx(R"(\$\{([A-z-:1-9]*)\})", std::regex_constants::ECMAScript | std::regex_constants::optimize);
 
-    for (std::string val : vals)
+    //makesure all keys exist in the environment - replacing them with defaults later is a pain
+    for (std::string& val : valsWithDefaults) {
+        for (std::sregex_iterator Iterator{ val.begin(), val.end(), varRx }; Iterator != std::sregex_iterator(); ++Iterator) {
+            std::smatch res = *Iterator;
+            if (res[3].matched) {
+                auto range = getEnvRange(res[2].str(), env);
+                auto numberOfValues = std::distance(range.first, range.second);
+                if (numberOfValues == 0) {
+                    std::cout << "Replacing " << res.str() << " with default vlaue " << res[4].str() << std::endl;
+                    val.replace(res.position(), res.length(), res[4].str());
+                    // Resetting std::sregex_iterator to the beginning
+                    Iterator = std::sregex_iterator(val.begin(), val.end(), varRx);
+                }
+
+            }
+
+        }
+    }
+
+    for (std::string val : valsWithDefaults)
     {
       matches.clear();
-      for (std::sregex_iterator Iterator{val.begin(), val.end(), rx}; Iterator != std::sregex_iterator(); ++Iterator)
+      for (std::sregex_iterator Iterator{val.begin(), val.end(), varRx}; Iterator != std::sregex_iterator(); ++Iterator)
       {
         std::smatch res = *Iterator;
         dout(20) << "Found variable match in condition : " << res.str() << " " << res.position() << " " << res.length() << dendl;
@@ -900,7 +928,7 @@ bool Condition::eval(const Environment& env) const {
 
         const auto &match = matches[0];
 
-        const auto &it = getEnvRangeFromMatch(val, match, env);
+        const auto &it = getEnvRange(match[2].str(), env);
         for (auto itr = it.first; itr != it.second; itr++)
         {
           std::string varString = val;
@@ -919,7 +947,7 @@ bool Condition::eval(const Environment& env) const {
         // find variable keys and their ranges in the environment
         for (const smatch &match : matches)
         {
-          ranges.emplace_back(getEnvRangeFromMatch(val, match, env));
+          ranges.emplace_back(getEnvRange(match[2].str(), env));
         }
 
         std::generate(lengths.begin(), lengths.end(), [i = int(-1), ranges]() mutable
@@ -928,11 +956,11 @@ bool Condition::eval(const Environment& env) const {
                     return std::distance(ranges[i].first, ranges[i].second); });
 
         //Make sure all variables are availabe in the environment
-        auto lengthsIt = std::find_if(lengths.begin(), lengths.end(), [](int i)
-                                      { return i == 0; });
+        auto lengthsIt = std::find_if(lengths.begin(), lengths.end(), [](int i) { return i == 0; });
+
         if (lengthsIt != std::end(lengths))
         {
-          dout(0) << "The key for the variable " << matches[std::distance(lengths.begin(), lengthsIt)].str() << " doesnot exist in the environment" << dendl;
+          dout(0) << "The key for the variable match " << matches[std::distance(lengths.begin(), lengthsIt)].str() << " does not exist in the environment" << dendl;
           return false;
         }
         int totalCombinations = calculateTotalCombinations(lengths);
@@ -950,7 +978,7 @@ bool Condition::eval(const Environment& env) const {
 
         std::vector<std::string> current(matches.size());
 
-        generatrVarStrings(env, val, matches, current, 0, runtime_vals);
+        generateVarStrings(env, val, matches, current, 0, runtime_vals);
       }
     }
   }
@@ -1281,15 +1309,11 @@ Effect Statement::eval(const Environment& e,
     if (!std::any_of(resource.begin(), resource.end(),
           [&res,&e](const ARN& pattern) {
             std::vector<smatch> matches;
-            // the first capture group of the match is the variable
-            // the second is the optional default value
-            // the third is the default value
-            static const std::regex rx(R"(\$\{([A-z-:1-9]*(\,\s?\'(\S*)\')?)\})", std::regex_constants::ECMAScript | std::regex_constants::optimize);
 
-            for (std::sregex_iterator Iterator{pattern.resource.begin(), pattern.resource.end(), rx}; Iterator != std::sregex_iterator(); ++Iterator)
+            for (std::sregex_iterator Iterator{pattern.resource.begin(), pattern.resource.end(), varRx}; Iterator != std::sregex_iterator(); ++Iterator)
             {
               std::smatch res = *Iterator;
-              dout(20) << "Found variable match in condition : " << res.str() << " " << res.position() << " " << res.length() << dendl;
+              dout(20) << "Found variable match in resource : " << res.str() << " " << res.position() << " " << res.length() << dendl;
               matches.emplace_back(res);
             }
             
@@ -1299,7 +1323,7 @@ Effect Statement::eval(const Environment& e,
               std::string varString = pattern.resource;
               for(auto it = matches.rbegin(); it != matches.rend(); ++it){
 
-                auto search = e.find(it->str(1));
+                auto search = e.find(it->str(2));
                 
                 if (search == e.end() && it->operator[](2).matched) {
                   dout(0) << "Found no value for the variable " << it->str() << " in the environment" << dendl;
