@@ -149,8 +149,7 @@ options. By default, ``log-to-stdout`` is enabled, and the latter disabled.
 vstart.sh
 ---------
 
-To facilitate the development of crimson, following options would be handy when
-using ``vstart.sh``,
+The following options can be used with ``vstart.sh``.
 
 ``--crimson``
     start ``crimson-osd`` instead of ``ceph-osd``
