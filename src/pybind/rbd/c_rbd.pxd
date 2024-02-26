@@ -697,9 +697,11 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_group_info_cleanup(rbd_group_info_t *group_info,
                                 size_t group_info_size)
     int rbd_group_image_add(rados_ioctx_t group_p, const char *group_name,
-			    rados_ioctx_t image_p, const char *image_name)
+                            rados_ioctx_t image_p, const char *image_name,
+                            uint32_t flags)
     int rbd_group_image_remove(rados_ioctx_t group_p, const char *group_name,
-                               rados_ioctx_t image_p, const char *image_name)
+                               rados_ioctx_t image_p, const char *image_name,
+                               uint32_t flags)
 
     int rbd_group_image_list(rados_ioctx_t group_p,
                              const char *group_name,
