@@ -830,7 +830,7 @@ cdef nogil:
         pass
     int rbd_group_create(rados_ioctx_t p, const char *name):
         pass
-    int rbd_group_remove(rados_ioctx_t p, const char *name):
+    int rbd_group_remove(rados_ioctx_t p, const char *name, uint32_t flags):
         pass
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size):
         pass
@@ -840,10 +840,12 @@ cdef nogil:
                                 size_t group_info_size):
         pass
     int rbd_group_image_add(rados_ioctx_t group_p, const char *group_name,
-			    rados_ioctx_t image_p, const char *image_name):
+                            rados_ioctx_t image_p, const char *image_name,
+                            uint32_t flags):
         pass
     int rbd_group_image_remove(rados_ioctx_t group_p, const char *group_name,
-                               rados_ioctx_t image_p, const char *image_name):
+                               rados_ioctx_t image_p, const char *image_name,
+                               uint32_t flags):
         pass
     int rbd_group_image_list(rados_ioctx_t group_p,
                              const char *group_name,

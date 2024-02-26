@@ -69,6 +69,7 @@ int validate_mirroring_enabled(librados::IoCtx io_ctx,
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   add_group_spec_options(positional, options);
+  at::add_snap_create_options(options);
 }
 
 void get_arguments_enable(po::options_description *positional,
@@ -76,6 +77,7 @@ void get_arguments_enable(po::options_description *positional,
   add_group_spec_options(positional, options);
   positional->add_options()
     ("mode", "mirror group mode [default: snapshot]");
+  at::add_snap_create_options(options);
 }
 
 void get_arguments_disable(po::options_description *positional,
@@ -98,6 +100,14 @@ int execute_enable_disable(const po::variables_map &vm, bool enable,
     utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
+  }
+
+  uint32_t flags;
+  if (enable) {
+    r = utils::get_snap_create_flags(vm, &flags);
+    if (r < 0) {
+      return r;
+    }
   }
 
   librados::Rados rados;
@@ -124,7 +134,7 @@ int execute_enable_disable(const po::variables_map &vm, bool enable,
       std::cerr << "rbd: invalid mode name: " << mode_arg << std::endl;
       return -EINVAL;
     }
-    r = rbd.mirror_group_enable(io_ctx, group_name.c_str(), mode);
+    r = rbd.mirror_group_enable(io_ctx, group_name.c_str(), mode, flags);
   } else {
     r = rbd.mirror_group_disable(io_ctx, group_name.c_str(), force);
   }
@@ -152,6 +162,7 @@ void get_arguments_promote(po::options_description *positional,
   options->add_options()
     ("force", po::bool_switch(), "promote even if not cleanly demoted by remote cluster");
   add_group_spec_options(positional, options);
+  at::add_snap_create_options(options);
 }
 
 int execute_promote(const po::variables_map &vm,
@@ -165,6 +176,12 @@ int execute_promote(const po::variables_map &vm,
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, at::POOL_NAME, &pool_name,
     &namespace_name, GROUP_NAME, "group", &group_name, nullptr, true,
     utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+  if (r < 0) {
+    return r;
+  }
+
+  uint32_t flags;
+  r = utils::get_snap_create_flags(vm, &flags);
   if (r < 0) {
     return r;
   }
@@ -186,7 +203,7 @@ int execute_promote(const po::variables_map &vm,
 
   librbd::RBD rbd;
 
-  r = rbd.mirror_group_promote(io_ctx, group_name.c_str(), force);
+  r = rbd.mirror_group_promote(io_ctx, group_name.c_str(), flags, force);
   if (r < 0) {
     std::cerr << "rbd: error promoting group to primary" << std::endl;
     return r;
@@ -211,6 +228,12 @@ int execute_demote(const po::variables_map &vm,
     return r;
   }
 
+  uint32_t flags;
+  r = utils::get_snap_create_flags(vm, &flags);
+  if (r < 0) {
+    return r;
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
 
@@ -226,7 +249,7 @@ int execute_demote(const po::variables_map &vm,
 
   librbd::RBD rbd;
 
-  r = rbd.mirror_group_demote(io_ctx, group_name.c_str());
+  r = rbd.mirror_group_demote(io_ctx, group_name.c_str(), flags);
   if (r < 0) {
     std::cerr << "rbd: error demoting group to non-primary" << std::endl;
     return r;

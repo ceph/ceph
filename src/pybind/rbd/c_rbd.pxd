@@ -657,15 +657,17 @@ cdef extern from "rbd/librbd.h" nogil:
                           char *keys, size_t *key_len, char *values,
                           size_t *vals_len)
     int rbd_group_create(rados_ioctx_t p, const char *name)
-    int rbd_group_remove(rados_ioctx_t p, const char *name)
+    int rbd_group_remove(rados_ioctx_t p, const char *name, uint32_t flags)
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
     int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest)
     void rbd_group_info_cleanup(rbd_group_info_t *group_info,
                                 size_t group_info_size)
     int rbd_group_image_add(rados_ioctx_t group_p, const char *group_name,
-			    rados_ioctx_t image_p, const char *image_name)
+                            rados_ioctx_t image_p, const char *image_name,
+                            uint32_t flags)
     int rbd_group_image_remove(rados_ioctx_t group_p, const char *group_name,
-                               rados_ioctx_t image_p, const char *image_name)
+                               rados_ioctx_t image_p, const char *image_name,
+                               uint32_t flags)
 
     int rbd_group_image_list(rados_ioctx_t group_p,
                              const char *group_name,
