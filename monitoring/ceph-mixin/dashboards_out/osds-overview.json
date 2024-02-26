@@ -424,9 +424,24 @@
          "type": "table"
       },
       {
-         "aliasColors": { },
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  }
+               },
+               "mappings": [ ]
+            },
+            "overrides": [ ]
+         },
          "gridPos": {
             "h": 8,
             "w": 4,
@@ -434,13 +449,26 @@
             "y": 8
          },
          "id": 6,
-         "legend": {
-            "percentage": true,
-            "show": true,
-            "values": true
+         "options": {
+            "displayLabels": [
+               "percent"
+            ],
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true,
+               "values": [
+                  "percent",
+                  "value"
+               ]
+            },
+            "pieType": "pie",
+            "tooltip": {
+               "mode": "single",
+               "sort": "none"
+            }
          },
-         "legendType": "Under graph",
-         "pieType": "pie",
          "targets": [
             {
                "expr": "count by (device_class) (ceph_osd_metadata{job=~\"$job\"})",
@@ -451,15 +479,27 @@
             }
          ],
          "title": "OSD Types Summary",
-         "type": "grafana-piechart-panel",
-         "valueName": "current"
+         "type": "piechart"
       },
       {
-         "aliasColors": {
-            "Non-Encrypted": "#E5AC0E"
-         },
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  }
+               },
+               "mappings": [ ]
+            },
+            "overrides": [ ]
+         },
          "gridPos": {
             "h": 8,
             "w": 4,
@@ -467,13 +507,26 @@
             "y": 8
          },
          "id": 7,
-         "legend": {
-            "percentage": true,
-            "show": true,
-            "values": true
+         "options": {
+            "displayLabels": [
+               "percent"
+            ],
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true,
+               "values": [
+                  "percent",
+                  "value"
+               ]
+            },
+            "pieType": "pie",
+            "tooltip": {
+               "mode": "single",
+               "sort": "none"
+            }
          },
-         "legendType": "Under graph",
-         "pieType": "pie",
          "targets": [
             {
                "expr": "count(ceph_bluefs_wal_total_bytes{job=~\"$job\"})",
@@ -491,13 +544,27 @@
             }
          ],
          "title": "OSD Objectstore Types",
-         "type": "grafana-piechart-panel",
-         "valueName": "current"
+         "type": "piechart"
       },
       {
-         "aliasColors": { },
          "datasource": "$datasource",
          "description": "The pie chart shows the various OSD sizes used within the cluster",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  }
+               },
+               "mappings": [ ]
+            },
+            "overrides": [ ]
+         },
          "gridPos": {
             "h": 8,
             "w": 4,
@@ -505,13 +572,26 @@
             "y": 8
          },
          "id": 8,
-         "legend": {
-            "percentage": true,
-            "show": true,
-            "values": true
+         "options": {
+            "displayLabels": [
+               "percent"
+            ],
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true,
+               "values": [
+                  "percent",
+                  "value"
+               ]
+            },
+            "pieType": "pie",
+            "tooltip": {
+               "mode": "single",
+               "sort": "none"
+            }
          },
-         "legendType": "Under graph",
-         "pieType": "pie",
          "targets": [
             {
                "expr": "count(ceph_osd_stat_bytes{job=~\"$job\"} < 1099511627776)",
@@ -578,8 +658,7 @@
             }
          ],
          "title": "OSD Size Summary",
-         "type": "grafana-piechart-panel",
-         "valueName": "current"
+         "type": "piechart"
       },
       {
          "aliasColors": { },
