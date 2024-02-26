@@ -99,11 +99,10 @@ future<> test_bind_same(bool is_fixed_cpu) {
           return pss2->shutdown_destroy();
         });
       });
-    }, listen_ertr::all_same_way(
+    }, listen_ertr::assert_all_func(
         [saddr](const std::error_code& e) {
       logger().error("test_bind_same(): there is another instance running at {}",
                      saddr);
-      ceph_abort();
     })).then([pss1] {
       return pss1->shutdown_destroy();
     }).handle_exception([](auto eptr) {
@@ -129,11 +128,10 @@ future<> test_accept(bool is_fixed_cpu) {
           ).finally([cleanup = std::move(socket)] {});
         });
       });
-    }, listen_ertr::all_same_way(
+    }, listen_ertr::assert_all_func(
         [saddr](const std::error_code& e) {
       logger().error("test_accept(): there is another instance running at {}",
                      saddr);
-      ceph_abort();
     })).then([saddr] {
       return seastar::when_all(
         socket_connect(saddr).then([](auto socket) {
@@ -184,10 +182,10 @@ class SocketFactory {
         psf->pss = pss;
         return pss->listen(saddr
         ).safe_then([] {
-        }, listen_ertr::all_same_way([saddr](const std::error_code& e) {
+        }, listen_ertr::assert_all_func(
+	  [saddr](const std::error_code& e) {
           logger().error("dispatch_sockets(): there is another instance running at {}",
                          saddr);
-          ceph_abort();
         }));
       });
     }).then([psf, saddr] {

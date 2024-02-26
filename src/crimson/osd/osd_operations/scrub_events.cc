@@ -228,6 +228,7 @@ ScrubScan::ifut<> ScrubScan::scan_object(
     ct_error::all_same_way([FNAME, &pg, &obj, &entry](auto e) {
       DEBUGDPP("obj: {} stat error", pg, obj);
       entry.stat_error = true;
+      return seastar::now();
     })
   ).then_interruptible([FNAME, this, &pg, &obj] {
     if (deep) {
@@ -286,6 +287,7 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
 	  ct_error::all_same_way([&progress, &entry](auto e) {
 	    entry.read_error = true;
 	    progress.offset = std::nullopt;
+	    return seastar::now();
 	  })
 	).then([] {
 	  return interruptor::make_interruptible(
@@ -301,9 +303,10 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
 	).safe_then([&progress](auto bl) {
 	  progress.omap_hash << bl;
 	}).handle_error(
-	  ct_error::enodata::handle([] {}),
+	  ct_error::enodata::handle([] { return seastar::now(); }),
 	  ct_error::all_same_way([&entry](auto e) {
 	    entry.read_error = true;
+	    return seastar::now();
 	  })
 	).then([&progress] {
 	  progress.header_done = true;
@@ -360,6 +363,7 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
 		     pg, *this, obj, progress, e);
 	    progress.keys_done = true;
 	    entry.read_error = true;
+	    return seastar::now();
 	  })
 	).then([] {
 	  return interruptor::make_interruptible(

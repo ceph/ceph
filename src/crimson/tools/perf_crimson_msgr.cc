@@ -257,11 +257,10 @@ static seastar::future<> run(
           return server.msgr->bind(entity_addrvec_t{addr}
           ).safe_then([&server] {
             return server.msgr->start({&server});
-          }, crimson::net::Messenger::bind_ertr::all_same_way(
+          }, crimson::net::Messenger::bind_ertr::assert_all_func(
               [addr] (const std::error_code& e) {
             logger().error("Server: "
                            "there is another instance running at {}", addr);
-            ceph_abort();
           }));
         });
       }

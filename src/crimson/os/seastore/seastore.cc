@@ -937,10 +937,10 @@ SeaStore::Shard::get_attr(
           onode.get_metadata_hint(device->get_block_size())),
         name);
     }
-  ).handle_error(crimson::ct_error::input_output_error::handle([FNAME] {
-    ERROR("EIO when getting attrs");
-    abort();
-  }), crimson::ct_error::pass_further_all{});
+  ).handle_error(
+    crimson::ct_error::input_output_error::assert_failure{
+      "EIO when getting attrs"},
+    crimson::ct_error::pass_further_all{});
 }
 
 SeaStore::Shard::get_attrs_ertr::future<SeaStore::Shard::attrs_t>
@@ -980,10 +980,10 @@ SeaStore::Shard::get_attrs(
         return seastar::make_ready_future<omap_values_t>(std::move(attrs));
       });
     }
-  ).handle_error(crimson::ct_error::input_output_error::handle([FNAME] {
-    ERROR("EIO when getting attrs");
-    abort();
-  }), crimson::ct_error::pass_further_all{});
+  ).handle_error(
+    crimson::ct_error::input_output_error::assert_failure{
+      "EIO when getting attrs"},
+    crimson::ct_error::pass_further_all{});
 }
 
 seastar::future<struct stat> SeaStore::Shard::stat(

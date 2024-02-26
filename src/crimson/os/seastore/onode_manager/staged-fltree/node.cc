@@ -428,9 +428,8 @@ eagain_ifuture<Ref<Node>> Node::load_root(context_t c, RootNodeTracker& root_tra
   return c.nm.get_super(c.t, root_tracker
   ).handle_error_interruptible(
     eagain_iertr::pass_further{},
-    crimson::ct_error::input_output_error::handle([FNAME, c] {
+    crimson::ct_error::input_output_error::assert_failure([FNAME, c] {
       ERRORT("EIO during get_super()", c.t);
-      ceph_abort("fatal error");
     })
   ).si_then([c, &root_tracker, FNAME](auto&& _super) {
     assert(_super);
@@ -692,29 +691,25 @@ eagain_ifuture<Ref<Node>> Node::load(
   return c.nm.read_extent(c.t, addr
   ).handle_error_interruptible(
     eagain_iertr::pass_further{},
-    crimson::ct_error::input_output_error::handle(
+    crimson::ct_error::input_output_error::assert_failure(
         [FNAME, c, addr, expect_is_level_tail] {
       ERRORT("EIO -- addr={:x}, is_level_tail={}",
              c.t, addr, expect_is_level_tail);
-      ceph_abort("fatal error");
     }),
-    crimson::ct_error::invarg::handle(
+    crimson::ct_error::invarg::assert_failure(
         [FNAME, c, addr, expect_is_level_tail] {
       ERRORT("EINVAL -- addr={:x}, is_level_tail={}",
              c.t, addr, expect_is_level_tail);
-      ceph_abort("fatal error");
     }),
-    crimson::ct_error::enoent::handle(
+    crimson::ct_error::enoent::assert_failure(
         [FNAME, c, addr, expect_is_level_tail] {
       ERRORT("ENOENT -- addr={:x}, is_level_tail={}",
              c.t, addr, expect_is_level_tail);
-      ceph_abort("fatal error");
     }),
-    crimson::ct_error::erange::handle(
+    crimson::ct_error::erange::assert_failure(
         [FNAME, c, addr, expect_is_level_tail] {
       ERRORT("ERANGE -- addr={:x}, is_level_tail={}",
              c.t, addr, expect_is_level_tail);
-      ceph_abort("fatal error");
     })
   ).si_then([FNAME, c, addr, expect_is_level_tail](auto extent)
 	      -> eagain_ifuture<Ref<Node>> {
@@ -2150,9 +2145,8 @@ eagain_ifuture<Ref<LeafNode>> LeafNode::allocate_root(
     return c.nm.get_super(c.t, root_tracker
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::input_output_error::handle([FNAME, c] {
+      crimson::ct_error::input_output_error::assert_failure([FNAME, c] {
         ERRORT("EIO during get_super()", c.t);
-        ceph_abort("fatal error");
       })
     ).si_then([c, root](auto&& super) {
       assert(super);

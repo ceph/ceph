@@ -365,12 +365,11 @@ class SyntheticWorkload {
      return msgr->bind(entity_addrvec_t{addr}).safe_then(
          [this, msgr] {
        return msgr->start({&dispatcher});
-     }, crimson::net::Messenger::bind_ertr::all_same_way(
+     }, crimson::net::Messenger::bind_ertr::assert_all_func(
          [addr] (const std::error_code& e) {
        logger().error("{} test_messenger_thrash(): "
                       "there is another instance running at {}",
                        __func__, addr);
-       ceph_abort();
      }));
    }
 

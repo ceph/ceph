@@ -255,6 +255,7 @@ RecordSubmitter::roll_segment()
           has_io_error = true;
           wait_available_promise->set_value();
           wait_available_promise.reset();
+          return seastar::now();
         })
       ).handle_exception([FNAME, this](auto e) {
         ERROR("{} got exception {}, available", get_name(), e);
@@ -522,6 +523,7 @@ void RecordSubmitter::flush_current_batch()
       ERROR("{} {} records, {}, got error {}",
             get_name(), num, sizes, e);
       finish_submit_batch(p_batch, std::nullopt);
+      return seastar::now();
     })
   ).handle_exception([this, p_batch, FNAME, num, sizes=sizes](auto e) {
     ERROR("{} {} records, {}, got exception {}",
