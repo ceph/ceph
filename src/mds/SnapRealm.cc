@@ -329,7 +329,9 @@ void SnapRealm::split_at(SnapRealm *child)
   // it's a dir.
 
   // split open_children
-  dout(10) << " open_children are " << open_children << dendl;
+  if (!open_children.empty()) {
+    dout(10) << " open_children are " << open_children << dendl;
+  }
   for (set<SnapRealm*>::iterator p = open_children.begin();
        p != open_children.end(); ) {
     SnapRealm *realm = *p;
