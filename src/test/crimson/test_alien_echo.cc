@@ -179,9 +179,8 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
       return server.msgr->bind(entity_addrvec_t{addr}
       ).safe_then([&server] {
         return server.msgr->start({&server.dispatcher});
-      }, crimson::net::Messenger::bind_ertr::all_same_way([](auto& e) {
-        ceph_abort_msg("bind failed");
-      })).then([&dispatcher=server.dispatcher, count] {
+      }, crimson::net::Messenger::bind_ertr::assert_all{"bind failed"}
+      ).then([&dispatcher=server.dispatcher, count] {
         return dispatcher.on_reply.wait([&dispatcher, count] {
           return dispatcher.count >= count;
         });
