@@ -455,6 +455,7 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y)
       block->cacheObj.bucketName = std::get<0>(resp).value()[6];
       block->cacheObj.creationTime = std::get<0>(resp).value()[7];
       block->cacheObj.dirty = boost::lexical_cast<bool>(std::get<0>(resp).value()[8]);
+      block->dirty = boost::lexical_cast<bool>(std::get<0>(resp).value()[8]);
 
       {
         std::stringstream ss(boost::lexical_cast<std::string>(std::get<0>(resp).value()[9]));
