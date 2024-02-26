@@ -3836,6 +3836,18 @@ options:
   default: 60
   services:
   - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: d4n_writecache_enabled
+  type: bool
+  level: advanced
+  desc: The d4n write cache
+  default: false
+  services: 
+  - rgw
+  flags:
+  - startup
   with_legacy: true
 - name: rgw_backend_store
   type: str
@@ -4095,6 +4107,16 @@ options:
     with. This default value is also the address that a Redis server 
     with no additional configuration will use.
   default: 127.0.0.1:6379
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_cache_cleaning_interval
+  type: int
+  level: advanced
+  desc: The rgw directory port
+  default: 1000
   services: 
   - rgw
   flags:

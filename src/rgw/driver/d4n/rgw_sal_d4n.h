@@ -204,6 +204,8 @@ class D4NFilterWriter : public FilterWriter {
     const DoutPrefixProvider* save_dpp;
     bool atomic;
     optional_yield y;
+    bool d4n_writecache;
+    time_t startTime;
 
   public:
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
