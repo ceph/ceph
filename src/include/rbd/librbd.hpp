@@ -487,11 +487,14 @@ public:
                    const char *dest_group_name);
 
   int group_image_add(IoCtx& io_ctx, const char *group_name,
-		      IoCtx& image_io_ctx, const char *image_name);
+                      IoCtx& image_io_ctx, const char *image_name,
+                      uint32_t flags);
   int group_image_remove(IoCtx& io_ctx, const char *group_name,
-			 IoCtx& image_io_ctx, const char *image_name);
+                         IoCtx& image_io_ctx, const char *image_name,
+                         uint32_t flags);
   int group_image_remove_by_id(IoCtx& io_ctx, const char *group_name,
-                               IoCtx& image_io_ctx, const char *image_id);
+                               IoCtx& image_io_ctx, const char *image_id,
+                               uint32_t flags);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
                        std::vector<group_image_info_t> *images,
                        size_t group_image_info_size);
@@ -521,10 +524,13 @@ public:
   // RBD group mirroring support functions
   int mirror_group_list(IoCtx& io_ctx, std::vector<std::string> *names);
   int mirror_group_enable(IoCtx& io_ctx, const char *group_name,
-                          mirror_image_mode_t mirror_image_mode);
+                          mirror_image_mode_t mirror_image_mode,
+                          uint32_t flags);
   int mirror_group_disable(IoCtx& io_ctx, const char *group_name, bool force);
-  int mirror_group_promote(IoCtx& io_ctx, const char *group_name, bool force);
-  int mirror_group_demote(IoCtx& io_ctx, const char *group_name);
+  int mirror_group_promote(IoCtx& io_ctx, const char *group_name,
+                           uint32_t flags, bool force);
+  int mirror_group_demote(IoCtx& io_ctx, const char *group_name,
+                          uint32_t flags);
   int mirror_group_resync(IoCtx& io_ctx, const char *group_name);
   int mirror_group_create_snapshot(IoCtx& io_ctx, const char *group_name,
                                    uint32_t flags, std::string *snap_id);
