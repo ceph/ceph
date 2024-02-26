@@ -981,7 +981,9 @@ void GroupReplayer<I>::handle_get_remote_group_snapshot(
          << dendl;
     r = -EAGAIN;
   } else {
-    m_local_group_snaps[remote_group_snap_id].name = remote_group_snap.name;
+    m_local_group_snaps[remote_group_snap_id].name = m_bootstrap_request->prepare_non_primary_mirror_snap_name(
+        m_global_group_id,
+        m_local_group_snaps[remote_group_snap_id].id);
   }
 
   if (m_state == STATE_STOPPING) {
