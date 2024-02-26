@@ -3,6 +3,11 @@ overrides:
     log-ignorelist:
       - MON_DOWN
       - mons down, quorum
+      - OSDMAP_FLAGS
+      - PG_DEGRADED
+      - OSD_DOWN
+      - POOL_APP_NOT_ENABLED
+      - CACHE_POOL_NO_HIT_SET
 tasks:
 - install:
 - cephadm:
