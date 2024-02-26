@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MON_DOWN
 tasks:
 - cephadm.shell:
     env: [sha1]
