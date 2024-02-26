@@ -897,7 +897,12 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
 
   # Find gRPC installation
   # Looks for gRPCConfig.cmake file installed by gRPC's cmake installation.
-  find_package(gRPC CONFIG REQUIRED)
+  # find_package(gRPC CONFIG REQUIRED)
+  message(STATUS "FindgRPC")
+  include(FindGRPC)
+  find_package(PkgConfig REQUIRED)
+  pkg_search_module(GRPC REQUIRED grpc)
+  pkg_search_module(GRPCPP REQUIRED grpc++)
   message(STATUS "Using gRPC ${gRPC_VERSION}")
   set(_GRPC_GRPCPP gRPC::grpc++)
   if(CMAKE_CROSSCOMPILING)
