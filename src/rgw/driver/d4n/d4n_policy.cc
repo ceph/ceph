@@ -48,8 +48,12 @@ void redis_exec(std::shared_ptr<connection> conn,
   }
 }
 
-int LFUDAPolicy::init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context) {
+int LFUDAPolicy::init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver *_driver) {
+  this->cct = cct;
   dir->init(cct);
+  driver = _driver;
+  tc = std::thread(&CachePolicy::cleaning, this, dpp);
+  tc.detach();
   int result = 0;
   response<int, int, int, int> resp;
 
@@ -345,7 +349,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
   return 0;
 }
 
-void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y)
+void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, bool dirty, time_t creationTime, const rgw_user user, optional_yield y)
 {
   using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
   const std::lock_guard l(lfuda_lock);
@@ -357,16 +361,30 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
 
   erase(dpp, key, y);
   
-  LFUDAEntry *e = new LFUDAEntry(key, offset, len, version, localWeight);
+  LFUDAEntry *e = new LFUDAEntry(key, offset, len, version, dirty, creationTime, user, localWeight);
   handle_type handle = entries_heap.push(e);
   e->set_handle(handle);
   entries_map.emplace(key, e);
 
-  if (cacheDriver->set_attr(dpp, key, "user.rgw.localWeight", std::to_string(localWeight), y) < 0) 
+  std::string oid_in_cache = key;
+  if (dirty == true)
+    oid_in_cache = "D_"+key;
+
+  if (cacheDriver->set_attr(dpp, oid_in_cache, "user.rgw.localWeight", std::to_string(localWeight), y) < 0) 
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): CacheDriver set_attr method failed." << dendl;
 
   weightSum += ((localWeight < 0) ? 0 : localWeight);
 }
+
+void LFUDAPolicy::updateObj(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, time_t creationTime, const rgw_user user, std::string& etag, optional_yield y)
+{
+  eraseObj(dpp, key, y);
+  
+  const std::lock_guard l(lfuda_lock);
+  LFUDAObjEntry *e = new LFUDAObjEntry(key, version, dirty, size, creationTime, user, etag);
+  o_entries_map.emplace(key, e);
+}
+
 
 bool LFUDAPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
 {
@@ -382,6 +400,150 @@ bool LFUDAPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key, o
 
   return true;
 }
+
+bool LFUDAPolicy::eraseObj(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
+{
+  const std::lock_guard l(lfuda_lock);
+  auto p = o_entries_map.find(key);
+  if (p == o_entries_map.end()) {
+    return false;
+  }
+
+  o_entries_map.erase(p);
+
+  return true;
+}
+
+void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
+{
+  const int interval = cct->_conf->rgw_d4n_cache_cleaning_interval;
+  while(true){
+    ldpp_dout(dpp, 20) << __func__ << " : " << " Cache cleaning!" << dendl;
+    std::string name = ""; 
+    std::string b_name = ""; 
+    std::string key = ""; 
+    uint64_t len = 0;
+    rgw::sal::Attrs obj_attrs;
+    int count = 0;
+
+    for (auto it = o_entries_map.begin(); it != o_entries_map.end(); it++){
+      if ((it->second->dirty == true) && (std::difftime(time(NULL), it->second->creationTime) > interval)){ //if block is dirty and written more than interval seconds ago
+	name = it->first;
+	rgw_user c_rgw_user = it->second->user;
+
+	size_t pos = 0;
+	std::string delimiter = "_";
+	while ((pos = name.find(delimiter)) != std::string::npos) {
+	  if (count == 0){
+	    b_name = name.substr(0, pos);
+    	    name.erase(0, pos + delimiter.length());
+	  }
+	  count ++;
+	}
+	key = name;
+
+	//writing data to the backend
+	//we need to create an atomic_writer
+ 	rgw_obj_key c_obj_key = rgw_obj_key(key); 		
+	std::unique_ptr<rgw::sal::User> c_user = driver->get_user(c_rgw_user);
+
+	std::unique_ptr<rgw::sal::Bucket> c_bucket;
+        rgw_bucket c_rgw_bucket = rgw_bucket(c_rgw_user.tenant, b_name, "");
+
+	RGWBucketInfo c_bucketinfo;
+	c_bucketinfo.bucket = c_rgw_bucket;
+	c_bucketinfo.owner = c_rgw_user;
+	
+	
+    	int ret = driver->load_bucket(dpp, c_rgw_bucket, &c_bucket, null_yield);
+	if (ret < 0) {
+      	  ldpp_dout(dpp, 10) << __func__ << "(): load_bucket() returned ret=" << ret << dendl;
+      	  break;
+        }
+
+	std::unique_ptr<rgw::sal::Object> c_obj = c_bucket->get_object(c_obj_key);
+
+  ACLOwner owner{c_user->get_id(), c_user->get_display_name()};
+
+	std::unique_ptr<rgw::sal::Writer> processor =  driver->get_atomic_writer(dpp,
+				  null_yield,
+				  c_obj.get(),
+          owner,
+				  NULL,
+				  0,
+				  "");
+
+  	int op_ret = processor->prepare(null_yield);
+  	if (op_ret < 0) {
+    	  ldpp_dout(dpp, 20) << "processor->prepare() returned ret=" << op_ret << dendl;
+    	  break;
+  	}
+
+	std::string prefix = b_name+"_"+key;
+	off_t lst = it->second->size;
+  	off_t fst = 0;
+  	off_t ofs = 0;
+
+	
+  	rgw::sal::DataProcessor *filter = processor.get();
+	do {
+    	  ceph::bufferlist data;
+    	  if (fst >= lst){
+      	    break;
+    	  }
+    	  off_t cur_size = std::min<off_t>(fst + cct->_conf->rgw_max_chunk_size, lst);
+	  off_t cur_len = cur_size - fst;
+    	  std::string oid_in_cache = "D_" + prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
+    	  std::string new_oid_in_cache = prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
+    	  cacheDriver->get(dpp, oid_in_cache, 0, cur_len, data, obj_attrs, null_yield);
+    	  len = data.length();
+    	  fst += len;
+
+    	  if (len == 0) {
+      	    break;
+   	  }
+
+    	  op_ret = filter->process(std::move(data), ofs);
+    	  if (op_ret < 0) {
+      	    ldpp_dout(dpp, 20) << "processor->process() returned ret="
+          	<< op_ret << dendl;
+      	    return;
+    	  }
+
+  	  rgw::d4n::CacheBlock block;
+    	  block.cacheObj.bucketName = c_obj->get_bucket()->get_name();
+    	  block.cacheObj.objName = c_obj->get_key().get_oid();
+      	  block.size = len;
+     	  block.blockID = ofs;
+	  op_ret = dir->update_field(&block, "dirty", "false", null_yield); 
+    	  if (op_ret < 0) {
+      	    ldpp_dout(dpp, 20) << "updating dirty flag in Block directory failed!" << dendl;
+      	    return;
+    	  }
+
+    	  cacheDriver->rename(dpp, oid_in_cache, new_oid_in_cache, null_yield);
+
+    	  ofs += len;
+  	} while (len > 0);
+
+  	op_ret = filter->process({}, ofs);
+	
+  	const req_context rctx{dpp, null_yield, nullptr};
+	ceph::real_time mtime = ceph::real_clock::from_time_t(it->second->creationTime);
+        op_ret = processor->complete(lst, it->second->etag, &mtime, ceph::real_clock::from_time_t(it->second->creationTime), obj_attrs,
+                               std::nullopt, ceph::real_time(), nullptr, nullptr,
+                               nullptr, nullptr, nullptr,
+                               rctx, rgw::sal::FLAG_LOG_OP);
+
+	//data is clean now, updating in-memory metadata
+	it->second->dirty = false;
+      }
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+  }
+}
+
 
 int LRUPolicy::exist_key(std::string key)
 {
@@ -413,14 +575,24 @@ int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_y
   return 0;
 }
 
-void LRUPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y)
+void LRUPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, bool dirty, time_t creationTime, const rgw_user user, optional_yield y)
 {
   const std::lock_guard l(lru_lock);
   _erase(dpp, key, y);
-  Entry *e = new Entry(key, offset, len, version);
+  Entry *e = new Entry(key, offset, len, version, dirty, creationTime, user);
   entries_lru_list.push_back(*e);
   entries_map.emplace(key, e);
 }
+
+void LRUPolicy::updateObj(const DoutPrefixProvider* dpp, std::string& key, std::string version, bool dirty, uint64_t size, time_t creationTime, const rgw_user user, std::string& etag, optional_yield y)
+{
+  eraseObj(dpp, key, y);
+  const std::lock_guard l(lru_lock);
+  ObjEntry *e = new ObjEntry(key, version, dirty, size, creationTime, user, etag);
+  o_entries_map.emplace(key, e);
+  return;
+}
+
 
 bool LRUPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
 {
@@ -436,6 +608,17 @@ bool LRUPolicy::_erase(const DoutPrefixProvider* dpp, const std::string& key, op
   }
   entries_map.erase(p);
   entries_lru_list.erase_and_dispose(entries_lru_list.iterator_to(*(p->second)), Entry_delete_disposer());
+  return true;
+}
+
+bool LRUPolicy::eraseObj(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
+{
+  const std::lock_guard l(lru_lock);
+  auto p = o_entries_map.find(key);
+  if (p == o_entries_map.end()) {
+    return false;
+  }
+  o_entries_map.erase(p);
   return true;
 }
 
