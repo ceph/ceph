@@ -1461,6 +1461,41 @@ def _shell_command(obj):
     raise ValueError(f'invalid command item: {obj!r}')
 
 
+def exec(ctx, config):
+    """
+    This is similar to the standard 'exec' task, but does template substitutions.
+
+    TODO: this should probably be moved out of cephadm.py as it's pretty generic.
+    """
+    assert isinstance(config, dict), "task exec got invalid config"
+
+    testdir = teuthology.get_testdir(ctx)
+
+    if 'all-roles' in config and len(config) == 1:
+        a = config['all-roles']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles if not id_.startswith('host.'))
+    elif 'all-hosts' in config and len(config) == 1:
+        a = config['all-hosts']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
+
+    for role, ls in config.items():
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        log.info('Running commands on role %s host %s', role, remote.name)
+        for c in ls:
+            c.replace('$TESTDIR', testdir)
+            remote.run(
+                args=[
+                    'sudo',
+                    'TESTDIR={tdir}'.format(tdir=testdir),
+                    'bash',
+                    '-ex',
+                    '-c',
+                    _template_transform(ctx, config, c)],
+                )
+
+
 def apply(ctx, config):
     """
     Apply spec
