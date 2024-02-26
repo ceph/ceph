@@ -4154,8 +4154,7 @@ private:
   int  maybe_invalidate_allocmap(bool force = false);
   int  __restore_allocator(Allocator* alloc, const char* filename, uint64_t total_size);
   int  restore_allocator(Allocator* alloc);
-  int  read_allocation_from_drive_on_startup();
-  int  reconstruct_allocations(SimpleBitmap *smbmp, read_alloc_stats_t &stats);
+  int  rebuild_allocations();
   int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
   int  reset_fm(const std::string& new_type);
   int  compare_to_fm(Allocator *allocator);

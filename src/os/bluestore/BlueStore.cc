@@ -7355,7 +7355,7 @@ int BlueStore::_init_alloc()
       // This must mean that we had an unplanned shutdown and didn't manage to destage the allocator
       dout(0) << __func__ << "::NCB::restore_allocator() failed! Run Full Recovery from ONodes (might take a while) ..." << dendl;
       // if failed must recover from on-disk ONode internal state
-      if (read_allocation_from_drive_on_startup() != 0) {
+      if (rebuild_allocations() != 0) {
 	derr << __func__ << "::NCB::Failed Recovery" << dendl;
 	derr << __func__ << "::NCB::Ceph-OSD won't start, make sure your drives are connected and readable" << dendl;
 	derr << __func__ << "::NCB::If no HW fault is found, please report failure and consider redeploying OSD" << dendl;
@@ -19946,20 +19946,6 @@ static uint32_t flush_buffer_with_crc(BlueFS::FileWriter *p_handle, const char* 
 }
 
 //-----------------------------------------------------------------------------------
-static void clear_free_in_simple_bmap(CephContext* cct,
-  SimpleBitmap* sbmap, uint64_t offset, uint64_t length,
-  uint64_t mask, uint8_t order)
-{
-  dout(30) << "0x" << std::hex
-           << offset << "~" << length
-           << " " << mask
-           << std::dec << dendl;
-  ceph_assert((offset & mask) == 0);
-  ceph_assert((length & mask) == 0);
-  sbmap->clr(offset >> order, length >> order);
-}
-
-//-----------------------------------------------------------------------------------
 static void copy_simple_bitmap_to_allocator(SimpleBitmap* sbmap, Allocator* dest_alloc, uint64_t alloc_size)
 {
   int alloc_size_shift = std::countr_zero(alloc_size);
@@ -20571,9 +20557,16 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
       dout(20) << __func__ << "  " << shared_blob << dendl;
       uint64_t allocated = 0;
       for (auto& r : shared_blob.ref_map.ref_map) {
+        dout(30) << "0x" << std::hex
+                 << r.first << "~" << r.second.length
+                 << " " << min_alloc_size_mask
+                 << std::dec << dendl;
         ceph_assert(r.first != bluestore_pextent_t::INVALID_OFFSET);
-        clear_free_in_simple_bmap(cct, sbmap, r.first, r.second.length,
-          min_alloc_size_mask, min_alloc_size_order);
+        ceph_assert((r.first & min_alloc_size_mask) == 0);
+        ceph_assert((r.second.length & min_alloc_size_mask) == 0);
+        sbmap->clr(r.first >> min_alloc_size_order,
+                   r.second.length >> min_alloc_size_order);
+
         allocated += r.second.length;
       }
       auto &sbi = sb_info.add_or_adopt(sbid);
@@ -20669,32 +20662,11 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
 }
 
 //---------------------------------------------------------
-int BlueStore::reconstruct_allocations(SimpleBitmap *sbmap, read_alloc_stats_t &stats)
+int BlueStore::rebuild_allocations()
 {
-  // first set space used by superblock
-  auto super_length = std::max<uint64_t>(min_alloc_size, SUPER_RESERVED);
-  clear_free_in_simple_bmap(cct, sbmap, 0, super_length,
-     min_alloc_size_mask, min_alloc_size_order);
-  stats.extent_count++;
-
-  // then set all space taken by Objects
-  int ret = read_allocation_from_onodes(sbmap, stats);
+  int ret = _open_collections();
   if (ret < 0) {
-    derr << "failed read_allocation_from_onodes()" << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
-
-//---------------------------------------------------------
-int BlueStore::read_allocation_from_drive_on_startup()
-{
-  int ret = 0;
-
-  ret = _open_collections();
-  if (ret < 0) {
+    derr << "failed _open_collections()" << dendl;
     return ret;
   }
   auto shutdown_cache = make_scope_guard([&] {
@@ -20704,17 +20676,23 @@ int BlueStore::read_allocation_from_drive_on_startup()
   utime_t            start = ceph_clock_now();
   read_alloc_stats_t stats = {};
   SimpleBitmap sbmap(cct, (bdev->get_size()/ min_alloc_size));
-  sbmap.set_all(); // set everything free
-  ret = reconstruct_allocations(&sbmap, stats);
-  if (ret != 0) {
-    return ret;
+  // set everything free
+  sbmap.set_all();
+  // then set space used by superblock
+  auto super_length = std::max<uint64_t>(min_alloc_size, SUPER_RESERVED);
+  sbmap.clr(0, super_length >> min_alloc_size_order);
+
+  stats.extent_count++;
+
+  // then set all space taken by Objects
+  ret = read_allocation_from_onodes(&sbmap, stats);
+  if (ret == 0) {
+    copy_simple_bitmap_to_allocator(&sbmap, alloc, min_alloc_size);
+    need_to_destage_allocmap = true;
+
+    utime_t duration = ceph_clock_now() - start;
+    dout(1) << "::Allocation Recovery was completed in " << duration << " seconds, extent_count=" << stats.extent_count << dendl;
   }
-
-  copy_simple_bitmap_to_allocator(&sbmap, alloc, min_alloc_size);
-  need_to_destage_allocmap = true;
-
-  utime_t duration = ceph_clock_now() - start;
-  dout(1) << "::Allocation Recovery was completed in " << duration << " seconds, extent_count=" << stats.extent_count << dendl;
   return ret;
 }
 
