@@ -348,6 +348,7 @@ void SnapRealm::split_at(SnapRealm *child)
   }
 
   // split inodes_with_caps
+  uint64_t count = 0;
   for (auto p = inodes_with_caps.begin(); !p.end(); ) {
     CInode *in = *p;
     ++p;
@@ -355,10 +356,13 @@ void SnapRealm::split_at(SnapRealm *child)
     if (child->inode->is_ancestor_of(in)) {
       dout(25) << " child gets " << *in << dendl;
       in->move_to_realm(child);
+      ++count;
     } else {
       dout(25) << "    keeping " << *in << dendl;
     }
   }
+
+  dout(10) << __func__ << ": split " << count << " inodes" << dendl;
 }
 
 void SnapRealm::merge_to(SnapRealm *newparent)
