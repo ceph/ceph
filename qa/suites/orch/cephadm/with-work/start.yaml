@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-ignorelist:
       - MON_DOWN
+      - POOL_APP_NOT_ENABLED
 tasks:
 - install:
 - cephadm:
