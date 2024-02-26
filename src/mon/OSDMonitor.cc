@@ -395,7 +395,7 @@ void LastEpochClean::report(unsigned pg_num, const pg_t& pg,
   return lec.report(pg_num, pg.ps(), last_epoch_clean);
 }
 
-epoch_t LastEpochClean::get_lower_bound(const OSDMap& latest) const
+epoch_t LastEpochClean::get_lower_bound_by_pool(const OSDMap& latest) const
 {
   auto floor = latest.get_epoch();
   for (auto& pool : latest.get_pools()) {
@@ -906,12 +906,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       if (state & CEPH_OSD_UP) {
 	// could be marked up *or* down, but we're too lazy to check which
 	last_osd_report.erase(osd);
-      }
-    }
-    for (auto [osd, weight] : inc.new_weight) {
-      if (weight == CEPH_OSD_OUT) {
-        // manually marked out, so drop it
-        osd_epochs.erase(osd);
+	osd_epochs.erase(osd);
       }
     }
   }
@@ -2285,13 +2280,21 @@ version_t OSDMonitor::get_trim_to() const
   return 0;
 }
 
+/* There are two constraints on trimming:
+ * 1. we must not trim past the last_epoch_clean for any pg
+ * 2. we must not trim past the last reported epoch for any up
+ *    osds.
+ *
+ * LastEpochClean::get_lower_bound_by_pool gives a value <= constraint 1.
+ * For constraint 2, we take the min over osd_epochs, which is populated with
+ * MOSDBeacon::version, see OSDMonitor::prepare_beacon
+ */
 epoch_t OSDMonitor::get_min_last_epoch_clean() const
 {
-  auto floor = last_epoch_clean.get_lower_bound(osdmap);
-  // also scan osd epochs
-  // don't trim past the oldest reported osd epoch
+  auto floor = last_epoch_clean.get_lower_bound_by_pool(osdmap);
   for (auto [osd, epoch] : osd_epochs) {
     if (epoch < floor) {
+      ceph_assert(osdmap.is_up(osd));
       floor = epoch;
     }
   }
@@ -4399,8 +4402,8 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
 
   last_osd_report[from].first = ceph_clock_now();
   last_osd_report[from].second = beacon->osd_beacon_report_interval;
+  ceph_assert(osdmap.is_up(from));
   osd_epochs[from] = beacon->version;
-
   for (const auto& pg : beacon->pgs) {
     if (auto* pool = osdmap.get_pg_pool(pg.pool()); pool != nullptr) {
       unsigned pg_num = pool->get_pg_num();
