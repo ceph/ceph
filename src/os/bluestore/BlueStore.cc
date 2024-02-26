@@ -10812,8 +10812,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   used_blocks.resize(fm->get_alloc_units());
 
   if (bluefs) {
-    interval_set<uint64_t> bluefs_extents;
-
     bluefs->foreach_block_extents(
       bluefs_layout.shared_bdev,
       [&](uint64_t start, uint32_t len) {
@@ -19946,19 +19944,6 @@ static uint32_t flush_buffer_with_crc(BlueFS::FileWriter *p_handle, const char* 
 }
 
 //-----------------------------------------------------------------------------------
-static void copy_simple_bitmap_to_allocator(SimpleBitmap* sbmap, Allocator* dest_alloc, uint64_t alloc_size)
-{
-  int alloc_size_shift = std::countr_zero(alloc_size);
-  uint64_t offset = 0;
-  extent_t ext    = sbmap->get_next_set_extent(offset);
-  while (ext.length != 0) {
-    dest_alloc->init_add_free(ext.offset << alloc_size_shift, ext.length << alloc_size_shift);
-    offset = ext.offset + ext.length;
-    ext = sbmap->get_next_set_extent(offset);
-  }
-}
-
-//-----------------------------------------------------------------------------------
 static void write_out_allocator_trailer(CephContext* cct,
   BlueFS::FileWriter *p_handle, allocator_image_trailer* trailer)
 {
@@ -20304,7 +20289,7 @@ static int read_allocator_v2_format(CephContext* cct,
     dout(5) << "READ--read_size=" << read_size
             << ", file_size=" << file_size
             << dendl;
-    copy_simple_bitmap_to_allocator(&bitmap, dest_alloc, min_alloc_size);
+    dest_alloc->copy_in(&bitmap, min_alloc_size);
   }
   return ret;
 }
@@ -20404,20 +20389,6 @@ int BlueStore::store_allocator(Allocator* allocator0)
     return -1;
   }
   return __store_allocator(allocator.get(), nullptr, s_default_format);
-}
-
-//-----------------------------------------------------------------------------------
-Allocator* BlueStore::create_bitmap_allocator(uint64_t bdev_size) {
-  // create allocator
-  uint64_t alloc_size = min_alloc_size;
-  Allocator* alloc = Allocator::create(cct, "bitmap", bdev_size, alloc_size,
-				       "recovery");
-  if (alloc) {
-    return alloc;
-  } else {
-    derr << "Failed Allocator Creation" << dendl;
-    return nullptr;
-  }
 }
 
 //-----------------------------------------------------------------------------------
@@ -20687,7 +20658,7 @@ int BlueStore::rebuild_allocations()
   // then set all space taken by Objects
   ret = read_allocation_from_onodes(&sbmap, stats);
   if (ret == 0) {
-    copy_simple_bitmap_to_allocator(&sbmap, alloc, min_alloc_size);
+    alloc->copy_in(&sbmap, min_alloc_size);
     need_to_destage_allocmap = true;
 
     utime_t duration = ceph_clock_now() - start;
@@ -20697,36 +20668,13 @@ int BlueStore::rebuild_allocations()
 }
 
 //---------------------------------------------------------
-// compare the allocator built from Onodes with the system allocator (CF-B)
-bool BlueStore::compare_allocators(Allocator* alloc1, Allocator* alloc2)
-{
-  uint64_t capacity = std::max(alloc1->get_capacity(), alloc2->get_capacity());
-  uint64_t alloc_size =
-    std::min(alloc1->get_block_size(), alloc2->get_block_size());
-  SimpleBitmap b1(cct, capacity / alloc_size);
-  SimpleBitmap b2(cct, capacity / alloc_size);
-  uint64_t order = std::countr_zero(alloc_size);
-
-  alloc1->foreach(
-    [&](uint64_t offset, uint64_t length) {
-      b1.set(offset >> order, length >> order);
-  });
-  alloc2->foreach(
-    [&](uint64_t offset, uint64_t length) {
-      b2.set(offset >> order, length >> order);
-  });
-  return b1.compare(b2);
-}
-
-//---------------------------------------------------------
 Allocator* BlueStore::clone_allocator(Allocator *src_allocator, bool exclude_bluefs)
 {
   ceph_assert(src_allocator);
-  Allocator* allocator = create_bitmap_allocator(src_allocator->get_capacity());
-  if (!allocator) {
-    derr << "failed create_bitmap_allocator()" << dendl;
-    return nullptr;
-  }
+  Allocator* allocator =
+    Allocator::create_bitmap_allocator(
+     src_allocator->get_capacity(), min_alloc_size);
+  ceph_assert(allocator);
   ceph_assert(allocator->get_free() == 0);
 
   uint64_t num_entries = 0;
@@ -20777,31 +20725,6 @@ void BlueStore::copy_allocator_to_fm(Allocator *allocator, FreelistManager *real
 }
 
 //---------------------------------------------------------
-Allocator* BlueStore::build_allocator_from_fm(FreelistManager *real_fm)
-{
-  dout(5) << "real_fm->enumerate_next" << dendl;
-  Allocator* allocator2 = create_bitmap_allocator(bdev->get_size());
-  if (allocator2) {
-    dout(5) << "bitmap-allocator=" << allocator2 << dendl;
-  } else {
-    return nullptr;
-  }
-
-  uint64_t size2 = 0, idx2 = 0;
-  real_fm->enumerate_reset();
-  uint64_t offset, length;
-  while (real_fm->enumerate_next(db, &offset, &length)) {
-    allocator2->init_add_free(offset, length);
-    ++idx2;
-    size2 += length;
-  }
-  real_fm->enumerate_reset();
-
-  dout(5) << "size2=" << size2 << ", num2=" << idx2 << dendl;
-  return allocator2;
-}
-
-//---------------------------------------------------------
 // close the active fm and open it in a new mode like makefs()
 // but make sure to mark the full device space as allocated when
 // new_mode != null,
@@ -20830,27 +20753,6 @@ int BlueStore::reset_fm(const std::string& new_type)
     return -1;
   }
   dout(5) << "done" << dendl;
-  return 0;
-}
-
-
-//---------------------------------------------------------
-// create a temp allocator filled with allocation state from the fm
-// and compare it to the base allocator passed in
-int BlueStore::compare_to_fm(Allocator *allocator)
-{
-  dout(5) << "entry" << dendl;
-  // initialize from freelist
-  std::unique_ptr<Allocator> temp_allocator(build_allocator_from_fm(fm));
-  if (temp_allocator == nullptr) {
-    return -1;
-  }
-
-  if (!compare_allocators(allocator, temp_allocator.get())) {
-    derr << "compare_allocators failed" << dendl;
-    return -1;
-  }
-  dout(5) << "SUCCESS!!!" << dendl;
   return 0;
 }
 

@@ -312,3 +312,35 @@ void Allocator::FreeStateHistogram::foreach(
     ++i;
   }
 }
+
+void Allocator::copy_in(SimpleBitmap* sbmap, uint64_t alloc_size)
+{
+  int alloc_size_shift = std::countr_zero(alloc_size);
+  uint64_t offset = 0;
+  extent_t ext    = sbmap->get_next_set_extent(offset);
+  while (ext.length != 0) {
+    init_add_free(ext.offset << alloc_size_shift, ext.length << alloc_size_shift);
+    offset = ext.offset + ext.length;
+    ext = sbmap->get_next_set_extent(offset);
+  }
+}
+
+bool Allocator::compare_allocators(Allocator* alloc1, Allocator* alloc2)
+{
+  uint64_t capacity = std::max(alloc1->get_capacity(), alloc2->get_capacity());
+  uint64_t alloc_size =
+    std::min(alloc1->get_block_size(), alloc2->get_block_size());
+  SimpleBitmap b1(g_ceph_context, capacity / alloc_size);
+  SimpleBitmap b2(g_ceph_context, capacity / alloc_size);
+  uint64_t order = std::countr_zero(alloc_size);
+
+  alloc1->foreach(
+    [&](uint64_t offset, uint64_t length) {
+      b1.set(offset >> order, length >> order);
+  });
+  alloc2->foreach(
+    [&](uint64_t offset, uint64_t length) {
+      b2.set(offset >> order, length >> order);
+  });
+  return b1.compare(b2);
+}

@@ -518,11 +518,8 @@ public:
   int __restore_allocator(Allocator* a, const char* filename, uint64_t total_size) {
     return bstore->__restore_allocator(a, filename, total_size);
   }
-  bool compare_allocators(Allocator* alloc1, Allocator* alloc2) {
-    return bstore->compare_allocators(alloc1, alloc2);
-  }
   Allocator* create_bitmap_allocator(size_t size) {
-    return bstore->create_bitmap_allocator(size);
+    return Allocator::create_bitmap_allocator(size, bstore->min_alloc_size);
   }
 };
 
@@ -12394,7 +12391,7 @@ void doStoreAllocmapTest(ObjectStore* store, uint32_t ver, size_t alloc_size,
   dur = ceph_clock_now() - t0;
   std::cout << " Restore completed in " << dur << " seconds" << std::endl;
 
-  ASSERT_TRUE(t.compare_allocators(a.get(), a2.get()));
+  ASSERT_TRUE(Allocator::compare_allocators(a.get(), a2.get()));
 }
 
 TEST_P(StoreTestSpecificAUSize, StoreAllocmapV1Test) {

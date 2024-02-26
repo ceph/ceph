@@ -4144,22 +4144,16 @@ private:
     return out;
   }
 
-  bool  compare_allocators(Allocator* alloc1, Allocator* alloc2);
-  Allocator* create_bitmap_allocator(uint64_t bdev_size);
-  int  allocator_add_restored_entries(Allocator *allocator, const void *buff, unsigned extent_count, uint64_t *p_read_alloc_size,
-				      uint64_t  *p_extent_count, const void *v_header, BlueFS::FileReader *p_handle, uint64_t offset);
-
   int  __store_allocator(Allocator* allocator, const char* filename, uint32_t ver);
   int  store_allocator(Allocator* allocator);
-  int  maybe_invalidate_allocmap(bool force = false);
   int  __restore_allocator(Allocator* alloc, const char* filename, uint64_t total_size);
   int  restore_allocator(Allocator* alloc);
+
+  int  maybe_invalidate_allocmap(bool force = false);
   int  rebuild_allocations();
   int  read_allocation_from_onodes(SimpleBitmap *smbmp, read_alloc_stats_t& stats);
   int  reset_fm(const std::string& new_type);
-  int  compare_to_fm(Allocator *allocator);
   Allocator* clone_allocator(Allocator *src_allocator, bool exclude_bluefs);
-  Allocator* build_allocator_from_fm(FreelistManager *real_fm);
   void copy_allocator_to_fm(Allocator *allocator, FreelistManager *real_fm);
 
 
