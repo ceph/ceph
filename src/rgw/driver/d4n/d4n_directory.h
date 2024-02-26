@@ -26,6 +26,7 @@ struct CacheBlock {
   CacheObj cacheObj;
   uint64_t blockID;
   std::string version;
+  bool dirty;
   uint64_t size; /* Block size in bytes */
   int globalWeight = 0; /* LFUDA policy variable */
   std::vector<std::string> hostsList; /* List of hostnames <ip:port> of block locations */
