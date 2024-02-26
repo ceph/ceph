@@ -10,6 +10,12 @@
           [formGroup]="deletionForm"
           novalidate>
       <div class="modal-body">
+        <cd-alert-panel *ngIf="infoMessage"
+                        type="info"
+                        spacingClass="mb-3"
+                        i18n>
+          <p>{{ infoMessage }}</p>
+        </cd-alert-panel>
         <ng-container *ngTemplateOutlet="bodyTemplate; context: bodyContext"></ng-container>
         <div class="question">
           <span *ngIf="itemNames; else noNames">

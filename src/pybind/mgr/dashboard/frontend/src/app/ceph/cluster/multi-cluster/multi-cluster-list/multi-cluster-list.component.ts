@@ -16,7 +16,6 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MultiCluster } from '~/app/shared/models/multi-cluster';
-import { SummaryService } from '~/app/shared/services/summary.service';
 import { Router } from '@angular/router';
 import { CookiesService } from '~/app/shared/services/cookie.service';
 
@@ -41,11 +40,12 @@ export class MultiClusterListComponent {
   clustersTokenMap: Map<string, string> = new Map<string, string>();
   newData: any;
   modalRef: NgbModalRef;
+  hubUrl: string;
+  currentUrl: string;
 
   constructor(
     private multiClusterService: MultiClusterService,
     private router: Router,
-    private summaryService: SummaryService,
     public actionLabels: ActionLabelsI18n,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
@@ -57,6 +57,7 @@ export class MultiClusterListComponent {
         permission: 'create',
         icon: Icons.add,
         name: this.actionLabels.CONNECT,
+        disable: (selection: CdTableSelection) => this.getDisable('connect', selection),
         click: () => this.openRemoteClusterInfoModal('connect')
       },
       {
@@ -87,6 +88,8 @@ export class MultiClusterListComponent {
   ngOnInit(): void {
     this.multiClusterService.subscribe((resp: object) => {
       if (resp && resp['config']) {
+        this.hubUrl = resp['hub_url'];
+        this.currentUrl = resp['current_url'];
         const clusterDetailsArray = Object.values(resp['config']).flat();
         this.data = clusterDetailsArray;
         this.checkClusterConnectionStatus();
@@ -139,7 +142,7 @@ export class MultiClusterListComponent {
   checkClusterConnectionStatus() {
     if (this.clusterTokenStatus && this.data) {
       this.data.forEach((cluster: MultiCluster) => {
-        const clusterStatus = this.clusterTokenStatus[cluster.name];
+        const clusterStatus = this.clusterTokenStatus[cluster.name.trim()];
 
         if (clusterStatus !== undefined) {
           cluster.cluster_connection_status = clusterStatus.status;
@@ -164,18 +167,10 @@ export class MultiClusterListComponent {
       size: 'xl'
     });
     this.bsModalRef.componentInstance.submitAction.subscribe(() => {
-      this.multiClusterService.refresh();
-      this.summaryService.refresh();
       const currentRoute = this.router.url.split('?')[0];
-      if (currentRoute.includes('dashboard')) {
-        this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
-          this.router.navigate([currentRoute]);
-        });
-      } else {
-        this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
-          this.router.navigate([currentRoute]);
-        });
-      }
+      this.multiClusterService.refreshMultiCluster(currentRoute);
+      this.checkClusterConnectionStatus();
+      this.multiClusterService.isClusterAdded(true);
     });
   }
 
@@ -186,28 +181,35 @@ export class MultiClusterListComponent {
   openDeleteClusterModal() {
     const cluster = this.selection.first();
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      infoMessage: $localize`Please note that the data for the disconnected cluster will be visible for a duration of ~ 5 minutes. After this period, it will be automatically removed.`,
       actionDescription: $localize`Disconnect`,
       itemDescription: $localize`Cluster`,
       itemNames: [cluster['cluster_alias'] + ' - ' + cluster['user']],
       submitAction: () =>
         this.multiClusterService.deleteCluster(cluster['name'], cluster['user']).subscribe(() => {
           this.cookieService.deleteToken(`${cluster['name']}-${cluster['user']}`);
+          this.multiClusterService.showPrometheusDelayMessage(true);
           this.modalRef.close();
           this.notificationService.show(
             NotificationType.success,
             $localize`Disconnected cluster '${cluster['cluster_alias']}'`
           );
+          const currentRoute = this.router.url.split('?')[0];
+          this.multiClusterService.refreshMultiCluster(currentRoute);
         })
     });
   }
 
   getDisable(action: string, selection: CdTableSelection): string | boolean {
-    if (!selection.hasSelection) {
+    if (this.hubUrl !== this.currentUrl) {
+      return $localize`Please switch to the local-cluster to ${action} a remote cluster`;
+    }
+    if (!selection.hasSelection && action !== 'connect') {
       return $localize`Please select one or more clusters to ${action}`;
     }
     if (selection.hasSingleSelection) {
       const cluster = selection.first();
-      if (cluster['cluster_alias'] === 'local-cluster') {
+      if (cluster['cluster_alias'] === 'local-cluster' && action !== 'connect') {
         return $localize`Cannot ${action} local cluster`;
       }
     }

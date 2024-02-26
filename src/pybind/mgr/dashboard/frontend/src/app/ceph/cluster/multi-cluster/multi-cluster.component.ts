@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
@@ -6,17 +6,23 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { MultiClusterFormComponent } from './multi-cluster-form/multi-cluster-form.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
-import { MultiClusterPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { Router } from '@angular/router';
+
+import {
+  MultiClusterPromqls as allQueries,
+  MultiClusterPromqlsForClusterUtilization as ClusterUltilizationQueries,
+  MultiClusterPromqlsForPoolUtilization as PoolUltilizationQueries
+} from '~/app/shared/enum/dashboard-promqls.enum';
 
 @Component({
   selector: 'cd-multi-cluster',
   templateUrl: './multi-cluster.component.html',
   styleUrls: ['./multi-cluster.component.scss']
 })
-export class MultiClusterComponent implements OnInit {
+export class MultiClusterComponent implements OnInit, OnDestroy {
   COUNT_OF_UTILIZATION_CHARTS = 5;
 
   @ViewChild('nameTpl', { static: true })
@@ -56,7 +62,7 @@ export class MultiClusterComponent implements OnInit {
   isMultiCluster = true;
   clusterTokenStatus: object = {};
   localClusterName: string;
-  clusters: any;
+  clusters: any = [];
   connectionErrorsCount = 0;
 
   capacityLabels: string[] = [];
@@ -72,13 +78,38 @@ export class MultiClusterComponent implements OnInit {
   poolIOPSValues: string[] = [];
   poolCapacityValues: string[] = [];
   poolThroughputValues: string[] = [];
+  showDeletionMessage = false;
+  isClusterAdded = false;
+  selectedQueries: any;
+  PROMETHEUS_DELAY = 20000;
+  LOAD_DELAY = 5000;
+  CLUSTERS_REFRESH_INTERVAL = 30000;
+  interval: NodeJS.Timer;
+  selectedTime: any;
+  multiClusterQueries: any = {};
 
   constructor(
     private multiClusterService: MultiClusterService,
     private modalService: ModalService,
+    private router: Router,
     private prometheusService: PrometheusService,
     private dimlessBinaryPipe: DimlessBinaryPipe
-  ) {}
+  ) {
+    this.multiClusterQueries = {
+      cluster: {
+        queries: ClusterUltilizationQueries,
+        selectedTime: this.prometheusService.lastHourDateObject
+      },
+      pool: {
+        queries: PoolUltilizationQueries,
+        selectedTime: this.prometheusService.lastHourDateObject
+      },
+      all: {
+        queries: allQueries,
+        selectedTime: this.prometheusService.lastHourDateObject
+      }
+    };
+  }
 
   ngOnInit(): void {
     this.columns = [
@@ -160,7 +191,24 @@ export class MultiClusterComponent implements OnInit {
         this.clusterTokenStatus = resp;
       })
     );
-    this.getPrometheusData(this.prometheusService.lastHourDateObject);
+
+    this.isClusterAdded = this.multiClusterService.isClusterAdded();
+
+    if (this.isClusterAdded) {
+      setTimeout(() => {
+        this.getPrometheusData(this.prometheusService.lastHourDateObject);
+        this.multiClusterService.isClusterAdded(false);
+      }, this.PROMETHEUS_DELAY);
+    } else {
+      this.showDeletionMessage = this.multiClusterService.showPrometheusDelayMessage();
+      if (this.showDeletionMessage) {
+        setTimeout(() => {
+          this.getPrometheusData(this.prometheusService.lastHourDateObject);
+        }, this.LOAD_DELAY);
+      } else {
+        this.getPrometheusData(this.prometheusService.lastHourDateObject);
+      }
+    }
   }
 
   openRemoteClusterInfoModal() {
@@ -170,17 +218,69 @@ export class MultiClusterComponent implements OnInit {
     this.bsModalRef = this.modalService.show(MultiClusterFormComponent, initialState, {
       size: 'lg'
     });
+    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
+      this.loading = true;
+      setTimeout(() => {
+        const currentRoute = this.router.url.split('?')[0];
+        this.multiClusterService.refreshMultiCluster(currentRoute);
+        this.getPrometheusData(this.prometheusService.lastHourDateObject);
+      }, this.PROMETHEUS_DELAY);
+    });
   }
 
-  getPrometheusData(selectedTime: any) {
+  getPrometheusData(selectedTime: any, selectedQueries?: string) {
+    const validRangeQueries = [
+      'CLUSTER_CAPACITY_UTILIZATION',
+      'CLUSTER_IOPS_UTILIZATION',
+      'CLUSTER_THROUGHPUT_UTILIZATION',
+      'POOL_CAPACITY_UTILIZATION',
+      'POOL_IOPS_UTILIZATION',
+      'POOL_THROUGHPUT_UTILIZATION'
+    ];
+    const validQueries = [
+      'ALERTS',
+      'MGR_METADATA',
+      'HEALTH_STATUS',
+      'TOTAL_CAPACITY',
+      'USED_CAPACITY',
+      'POOLS',
+      'OSDS',
+      'CLUSTER_CAPACITY_UTILIZATION',
+      'CLUSTER_IOPS_UTILIZATION',
+      'CLUSTER_THROUGHPUT_UTILIZATION',
+      'POOL_CAPACITY_UTILIZATION',
+      'POOL_IOPS_UTILIZATION',
+      'POOL_THROUGHPUT_UTILIZATION',
+      'HOSTS',
+      'CLUSTER_ALERTS'
+    ];
+
+    if (selectedQueries) {
+      if (selectedQueries === 'poolUtilization') {
+        this.multiClusterQueries.pool['selectedTime'] = selectedTime;
+      }
+
+      if (selectedQueries === 'clusterUtilization') {
+        this.multiClusterQueries.cluster.selectedTime = selectedTime;
+      }
+    }
+
     this.prometheusService
-      .getMultiClusterQueriesData(selectedTime, queries, this.queriesResults)
+      .getMultiClusterQueriesData(
+        this.queriesResults,
+        validQueries,
+        validRangeQueries,
+        this.multiClusterQueries
+      )
       .subscribe((data: any) => {
         this.queriesResults = data;
         this.loading = false;
         this.alerts = this.queriesResults.ALERTS;
         this.getAlertsInfo();
         this.getClustersInfo();
+        this.interval = setInterval(() => {
+          this.getClustersInfo();
+        }, this.CLUSTERS_REFRESH_INTERVAL);
       });
   }
 
@@ -224,7 +324,6 @@ export class MultiClusterComponent implements OnInit {
     }
 
     const clusters: ClusterInfo[] = [];
-
     this.queriesResults.TOTAL_CAPACITY?.forEach((totalCapacityMetric: any) => {
       const clusterName = totalCapacityMetric.metric.cluster;
       const totalCapacity = parseInt(totalCapacityMetric.value[1]);
@@ -240,7 +339,7 @@ export class MultiClusterComponent implements OnInit {
       const available_capacity = totalCapacity - usedCapacity;
 
       clusters.push({
-        cluster: clusterName,
+        cluster: clusterName.trim(),
         status,
         alert,
         total_capacity: totalCapacity,
@@ -318,7 +417,6 @@ export class MultiClusterComponent implements OnInit {
       }
       labels.push(label);
     }
-    // console.log(labels)
     return labels;
   }
 
@@ -328,5 +426,14 @@ export class MultiClusterComponent implements OnInit {
       if (query[i]) values.push(query[i]?.values);
     }
     return values;
+  }
+
+  onDismissed() {
+    this.showDeletionMessage = false;
+    this.multiClusterService.showPrometheusDelayMessage(false);
+  }
+
+  ngOnDestroy(): void {
+    clearInterval(this.interval);
   }
 }
