@@ -200,7 +200,12 @@ export class PrometheusService {
     return this.http.get<any>(`${this.baseURL}/data`, { params });
   }
 
-  getMultiClusterQueriesData(selectedTime: any, queries: any, queriesResults: any) {
+  getMultiClusterQueriesData(
+    queriesResults: any,
+    validQueries: string[],
+    validRangeQueries: string[],
+    multiClusterQueries: any
+  ) {
     return new Observable((observer) => {
       this.ifPrometheusConfigured(() => {
         if (this.timerGetPrometheusDataSub) {
@@ -208,63 +213,45 @@ export class PrometheusService {
         }
 
         this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
-          selectedTime = this.updateTimeStamp(selectedTime);
+          let requests: any[] = [];
+          let queryNames: string[] = [];
 
-          const requests = [];
-          for (const queryName in queries) {
-            if (queries.hasOwnProperty(queryName)) {
-              const validRangeQueries1 = [
-                'CLUSTER_CAPACITY_UTILIZATION',
-                'CLUSTER_IOPS_UTILIZATION',
-                'CLUSTER_THROUGHPUT_UTILIZATION',
-                'POOL_CAPACITY_UTILIZATION',
-                'POOL_IOPS_UTILIZATION',
-                'POOL_THROUGHPUT_UTILIZATION'
-              ];
-              if (validRangeQueries1.includes(queryName)) {
-                const query = queries[queryName];
-                const request = this.getMultiClusterQueryRangeData({
-                  params: encodeURIComponent(query),
-                  start: selectedTime['start'],
-                  end: selectedTime['end'],
-                  step: selectedTime['step']
-                });
-                requests.push(request);
-              } else {
-                const query = queries[queryName];
-                const request = this.getMultiClusterData({
-                  params: encodeURIComponent(query),
-                  start: selectedTime['start'],
-                  end: selectedTime['end'],
-                  step: selectedTime['step']
-                });
-                requests.push(request);
+          Object.entries(multiClusterQueries).forEach(([key, _value]) => {
+            for (const queryName in multiClusterQueries[key].queries) {
+              if (multiClusterQueries[key].queries.hasOwnProperty(queryName)) {
+                const query = multiClusterQueries[key].queries[queryName];
+                const start = this.updateTimeStamp(multiClusterQueries[key].selectedTime)['start'];
+                const end = this.updateTimeStamp(multiClusterQueries[key].selectedTime)['end'];
+                const step = this.updateTimeStamp(multiClusterQueries[key].selectedTime)['step'];
+
+                if (validRangeQueries.includes(queryName)) {
+                  const request = this.getMultiClusterQueryRangeData({
+                    params: encodeURIComponent(query),
+                    start,
+                    end,
+                    step
+                  });
+                  requests.push(request);
+                  queryNames.push(queryName);
+                } else {
+                  const request = this.getMultiClusterData({
+                    params: encodeURIComponent(query),
+                    start,
+                    end,
+                    step
+                  });
+                  requests.push(request);
+                  queryNames.push(queryName);
+                }
               }
             }
-          }
+          });
 
           forkJoin(requests).subscribe(
             (responses: any[]) => {
               for (let i = 0; i < responses.length; i++) {
                 const data = responses[i];
-                const queryName = Object.keys(queries)[i];
-                const validQueries = [
-                  'ALERTS',
-                  'MGR_METADATA',
-                  'HEALTH_STATUS',
-                  'TOTAL_CAPACITY',
-                  'USED_CAPACITY',
-                  'POOLS',
-                  'OSDS',
-                  'CLUSTER_CAPACITY_UTILIZATION',
-                  'CLUSTER_IOPS_UTILIZATION',
-                  'CLUSTER_THROUGHPUT_UTILIZATION',
-                  'POOL_CAPACITY_UTILIZATION',
-                  'POOL_IOPS_UTILIZATION',
-                  'POOL_THROUGHPUT_UTILIZATION',
-                  'HOSTS',
-                  'CLUSTER_ALERTS'
-                ];
+                const queryName = queryNames[i];
                 if (data.result.length) {
                   if (validQueries.includes(queryName)) {
                     queriesResults[queryName] = data.result;

@@ -3,6 +3,8 @@ import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { TimerService } from '../services/timer.service';
 import { filter } from 'rxjs/operators';
+import { SummaryService } from '../services/summary.service';
+import { Router } from '@angular/router';
 
 @Injectable({
   providedIn: 'root'
@@ -13,7 +15,14 @@ export class MultiClusterService {
   msData$ = this.msSource.asObservable();
   private tokenStatusSource = new BehaviorSubject<any>(null);
   tokenStatusSource$ = this.tokenStatusSource.asObservable();
-  constructor(private http: HttpClient, private timerService: TimerService) {}
+  showDeletionMessage = false;
+  isClusterAddedFlag = false;
+  constructor(
+    private http: HttpClient,
+    private timerService: TimerService,
+    private summaryService: SummaryService,
+    private router: Router
+  ) {}
 
   startPolling(): Subscription {
     return this.timerService
@@ -41,7 +50,9 @@ export class MultiClusterService {
 
         if (tempMap.size > 0) {
           clustersTokenMap = tempMap;
-          dataSubscription.unsubscribe();
+          if (dataSubscription) {
+            dataSubscription.unsubscribe();
+          }
           this.checkAndStartTimer(clustersTokenMap);
         }
       }
@@ -95,6 +106,7 @@ export class MultiClusterService {
     token = '',
     hub_url = '',
     clusterFsid = '',
+    prometheusApiUrl = '',
     ssl = false,
     cert = ''
   ) {
@@ -106,6 +118,7 @@ export class MultiClusterService {
       token,
       hub_url,
       cluster_fsid: clusterFsid,
+      prometheus_api_url: prometheusApiUrl,
       ssl_verify: ssl,
       ssl_certificate: cert
     });
@@ -119,7 +132,7 @@ export class MultiClusterService {
     ssl = false,
     cert = ''
   ) {
-    return this.http.post('api/multi-cluster/reconnect_cluster', {
+    return this.http.put('api/multi-cluster/reconnect_cluster', {
       url,
       username,
       password,
@@ -168,5 +181,33 @@ export class MultiClusterService {
     params = params.set('clustersTokenMap', JSON.stringify(data));
 
     return this.http.get<object>('api/multi-cluster/check_token_status', { params });
+  }
+
+  showPrometheusDelayMessage(showDeletionMessage?: boolean) {
+    if (showDeletionMessage !== undefined) {
+      this.showDeletionMessage = showDeletionMessage;
+    }
+    return this.showDeletionMessage;
+  }
+
+  isClusterAdded(isClusterAddedFlag?: boolean) {
+    if (isClusterAddedFlag !== undefined) {
+      this.isClusterAddedFlag = isClusterAddedFlag;
+    }
+    return this.isClusterAddedFlag;
+  }
+
+  refreshMultiCluster(currentRoute: string) {
+    this.refresh();
+    this.summaryService.refresh();
+    if (currentRoute.includes('dashboard')) {
+      this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
+        this.router.navigate([currentRoute]);
+      });
+    } else {
+      this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
+        this.router.navigate([currentRoute]);
+      });
+    }
   }
 }

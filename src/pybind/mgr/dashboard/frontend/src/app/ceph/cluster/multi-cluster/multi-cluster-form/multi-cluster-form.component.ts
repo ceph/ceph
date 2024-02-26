@@ -22,13 +22,15 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
   readonly endpoints = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{2,5}\/?$/;
   readonly ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
   readonly ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
+  clusterApiUrlCmd = 'ceph mgr services';
+  prometheusApiUrlCmd = 'ceph config get mgr mgr/dashboard/PROMETHEUS_API_HOST';
+  crossOriginCmd = `ceph dashboard set-cross-origin-url ${window.location.origin}`;
   remoteClusterForm: CdFormGroup;
   showToken = false;
   connectionVerified: boolean;
   connectionMessage = '';
   private subs = new Subscription();
   showCrossOriginError = false;
-  crossOriginCmd: string;
   action: string;
   cluster: MultiCluster;
   clustersData: MultiCluster[];
@@ -99,6 +101,11 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
           showToken: true
         })
       ]),
+      prometheusApiUrl: new FormControl('', [
+        CdValidators.requiredIf({
+          showToken: true
+        })
+      ]),
       password: new FormControl('', []),
       remoteClusterUrl: new FormControl(null, {
         validators: [
@@ -152,6 +159,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     const url = this.remoteClusterForm.getValue('remoteClusterUrl');
     const updatedUrl = url.endsWith('/') ? url.slice(0, -1) : url;
     const clusterAlias = this.remoteClusterForm.getValue('clusterAlias');
+    const prometheusApiUrl = this.remoteClusterForm.getValue('prometheusApiUrl');
     const username = this.remoteClusterForm.getValue('username');
     const password = this.remoteClusterForm.getValue('password');
     const token = this.remoteClusterForm.getValue('apiToken');
@@ -210,6 +218,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
             token,
             window.location.origin,
             clusterFsid,
+            prometheusApiUrl,
             ssl,
             ssl_certificate
           )
@@ -256,7 +265,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
               this.connectionVerified = false;
               this.showCrossOriginError = true;
               this.connectionMessage = resp;
-              this.crossOriginCmd = `ceph config set mgr mgr/dashboard/cross_origin_url ${window.location.origin} `;
               this.notificationService.show(
                 NotificationType.error,
                 $localize`Connection to the cluster failed`
