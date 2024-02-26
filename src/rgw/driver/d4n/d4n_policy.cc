@@ -488,16 +488,22 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	
   	rgw::sal::DataProcessor *filter = processor.get();
 	do {
+ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << dendl;
     	  ceph::bufferlist data;
     	  if (fst >= lst){
       	    break;
     	  }
-    	  off_t cur_lst = std::min<off_t>(fst + cct->_conf->rgw_max_chunk_size, lst);
-    	  std::string oid_in_cache = "D_" + prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_lst);  	  
-    	  std::string new_oid_in_cache = prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_lst);
-    	  cacheDriver->get(dpp, oid_in_cache, fst, cur_lst, data, obj_attrs, null_yield);
+    	  off_t cur_size = std::min<off_t>(fst + cct->_conf->rgw_max_chunk_size, lst);
+	  off_t cur_len = cur_size - fst;
+    	  std::string oid_in_cache = "D_" + prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
+    	  std::string new_oid_in_cache = prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
+ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " fst is: "  << fst << dendl;
+ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " cur_len is: "  << cur_len << dendl;
+    	  cacheDriver->get(dpp, oid_in_cache, 0, cur_len, data, obj_attrs, null_yield);
     	  len = data.length();
     	  fst += len;
+ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " fst is: "  << fst << dendl;
+ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " len is: "  << len << dendl;
 
     	  if (len == 0) {
       	    break;
@@ -523,9 +529,11 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 
     	  cacheDriver->rename(dpp, oid_in_cache, new_oid_in_cache, null_yield);
 
+ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << dendl;
     	  ofs += len;
   	} while (len > 0);
 
+ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << dendl;
   	op_ret = filter->process({}, ofs);
 	
   	const req_context rctx{dpp, null_yield, nullptr};

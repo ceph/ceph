@@ -819,6 +819,9 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
 
     auto version = obj->get_instance();
 
+ldpp_dout(save_dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " offest is: "  << offset << dendl;
+ldpp_dout(save_dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " ofs is: "  << ofs << dendl;
+ldpp_dout(save_dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " bl_len is: "  << bl_len << dendl;
     std::string prefix;
     if (version.empty()) { //for versioned objects, get_oid() returns an oid with versionId added
       prefix =obj->get_bucket()->get_name() + "_" + obj->get_key().get_oid();
@@ -826,6 +829,7 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
       prefix = obj->get_bucket()->get_name() + "_" + version + "_" + obj->get_key().get_oid();
     }
 
+ldpp_dout(save_dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " prefix is: "  << prefix << dendl;
     rgw::d4n::BlockDirectory* blockDir = driver->get_block_dir();
 
     block.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address); 
@@ -886,9 +890,12 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
         block.blockID = ofs;
         block.dirty = true;
     	dirty = true;
+ldpp_dout(save_dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " ofs is: "  << ofs << dendl;
+ldpp_dout(save_dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " bl.len is: "  << bl.length() << dendl;
         ret = driver->get_policy_driver()->get_cache_policy()->eviction(save_dpp, block.size, y);
         if (ret == 0) {
           //Should we replace each put_async with put, to ensure data is actually written to the cache before updating the data structures and before the lock is released?
+	 if (bl.length() > 0) {          
           ret = driver->get_cache_driver()->put(save_dpp, key, bl, bl.length(), obj->get_attrs(), y);
           if (ret == 0) {
 	    driver->get_policy_driver()->get_cache_policy()->update(save_dpp, oid_in_cache, ofs, bl.length(), version, dirty, creationTime,  obj->get_bucket()->get_owner(), y);
@@ -917,7 +924,8 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
               ldpp_dout(save_dpp, 1) << "D4NFilterObject::D4NFilterWriteOp::process" << __func__ << "(): ERROR: wrtiting data to the cache failed!" << dendl;
 	      return ret;
 	  }
-        }
+	}
+       }
       } 
     return 0;
 }
