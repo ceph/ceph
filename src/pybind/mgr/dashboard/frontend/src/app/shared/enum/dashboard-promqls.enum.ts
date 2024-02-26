@@ -36,11 +36,17 @@ export enum MultiClusterPromqls {
   ALERTS = 'ALERTS{alertstate="firing"}',
   HOSTS = 'sum by (hostname, cluster) (group by (hostname, cluster) (ceph_osd_metadata)) or vector(0)',
   TOTAL_HOSTS = 'count by (cluster) (ceph_osd_metadata) or vector(0)',
-  CLUSTER_ALERTS = 'count by (cluster) (ALERTS{alertstate="firing"}) or vector(0)',
-  CLUSTER_CAPACITY_UTILIZATION = 'topk(2, ceph_cluster_total_used_bytes)',
-  CLUSTER_IOPS_UTILIZATION = 'topk(2, sum by (cluster) (rate(ceph_pool_wr[1m])) + sum by (cluster) (rate(ceph_pool_rd[1m])) )',
-  CLUSTER_THROUGHPUT_UTILIZATION = 'topk(2, sum by (cluster) (rate(ceph_pool_wr_bytes[1m])) + sum by (cluster) (rate(ceph_pool_rd_bytes[1m])) )',
-  POOL_CAPACITY_UTILIZATION = 'topk(2, ceph_pool_bytes_used/ceph_pool_max_avail * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata)',
-  POOL_IOPS_UTILIZATION = 'topk(2, (rate(ceph_pool_rd[1m]) + rate(ceph_pool_wr[1m])) * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata )',
-  POOL_THROUGHPUT_UTILIZATION = 'topk(2, (irate(ceph_pool_rd_bytes[1m]) + irate(ceph_pool_wr_bytes[1m])) * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata )'
+  CLUSTER_ALERTS = 'count by (cluster) (ALERTS{alertstate="firing"}) or vector(0)'
+}
+
+export enum MultiClusterPromqlsForClusterUtilization {
+  CLUSTER_CAPACITY_UTILIZATION = 'topk(5, ceph_cluster_total_used_bytes)',
+  CLUSTER_IOPS_UTILIZATION = 'topk(5, sum by (cluster) (rate(ceph_pool_wr[1m])) + sum by (cluster) (rate(ceph_pool_rd[1m])) )',
+  CLUSTER_THROUGHPUT_UTILIZATION = 'topk(5, sum by (cluster) (rate(ceph_pool_wr_bytes[1m])) + sum by (cluster) (rate(ceph_pool_rd_bytes[1m])) )'
+}
+
+export enum MultiClusterPromqlsForPoolUtilization {
+  POOL_CAPACITY_UTILIZATION = 'topk(5, ceph_pool_bytes_used/ceph_pool_max_avail * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata)',
+  POOL_IOPS_UTILIZATION = 'topk(5, (rate(ceph_pool_rd[1m]) + rate(ceph_pool_wr[1m])) * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata )',
+  POOL_THROUGHPUT_UTILIZATION = 'topk(5, (irate(ceph_pool_rd_bytes[1m]) + irate(ceph_pool_wr_bytes[1m])) * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata )'
 }

@@ -20,7 +20,7 @@
         <cd-alert-panel type="info"
                         spacingClass="mb-3"
                         i18n
-                        *ngIf="connectionVerified !== undefined && !connectionVerified && connectionMessage === 'Connection refused'">
+                        *ngIf="connectionVerified !== undefined && !connectionVerified && connectionMessage === 'Connection refused' || remoteClusterForm.getValue('showToken')">
         <p>You need to set this cluster's url as the cross origin url in the remote cluster you are trying to connect.
           You can do it by running this CLI command in your remote cluster and proceed with authentication via token.</p>
           <cd-code-block [codes]="[crossOriginCmd]"></cd-code-block>
@@ -29,7 +29,14 @@
           <label class="cd-col-form-label required"
                  for="remoteClusterUrl"
                  i18n>Cluster API URL
-            <cd-helper>Enter the Dashboard API URL. You can retrieve it from the CLI with: <b>ceph mgr services</b></cd-helper>
+            <cd-helper>
+              <span>
+                <p>Enter the Dashboard API URL. You can retrieve it from the CLI with: <b>{{ clusterApiUrlCmd }} </b>
+                  <cd-copy-2-clipboard-button [source]="clusterApiUrlCmd"
+                                              [byId]="false"></cd-copy-2-clipboard-button>
+                </p>
+              </span>
+            </cd-helper>
           </label>
           <div class="cd-col-form-input">
             <input class="form-control"
@@ -106,6 +113,32 @@
                    formControlName="clusterFsid">
             <span class="invalid-feedback"
                   *ngIf="remoteClusterForm.showError('clusterFsid', frm, 'required')"
+                  i18n>This field is required.
+            </span>
+          </div>
+        </div>
+        <div class="form-group row"
+             *ngIf="remoteClusterForm.getValue('showToken') && action !== 'edit'">
+          <label class="cd-col-form-label required"
+                 for="prometheusApiUrl"
+                 i18n>Prometheus API URL
+            <cd-helper>
+              <span>
+                <p>Enter the Prometheus API URL. You can retrieve it from the CLI with: <b>{{ prometheusApiUrlCmd }} </b>
+                  <cd-copy-2-clipboard-button [source]="prometheusApiUrlCmd"
+                                              [byId]="false"></cd-copy-2-clipboard-button>
+                </p>
+              </span>
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input id="prometheusApiUrl"
+                   name="prometheusApiUrl"
+                   class="form-control"
+                   type="text"
+                   formControlName="prometheusApiUrl">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('prometheusApiUrl', frm, 'required')"
                   i18n>This field is required.
             </span>
           </div>
@@ -211,7 +244,7 @@
             </div>
           </div>
         <div class="form-group row"
-             *ngIf="!showCrossOriginError && action !== 'edit' && !remoteClusterForm.getValue('showToken')">
+             *ngIf="!showCrossOriginError && action !== 'edit' && !remoteClusterForm.getValue('showToken') && !connectionVerified">
           <div class="cd-col-form-offset">
             <div class="custom-control">
               <button class="btn btn-primary"

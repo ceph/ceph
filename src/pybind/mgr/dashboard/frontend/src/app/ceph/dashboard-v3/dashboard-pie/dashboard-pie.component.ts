@@ -157,8 +157,10 @@ export class DashboardPieComponent implements OnChanges, OnInit {
   private prepareRawUsage(chart: Record<string, any>, data: Record<string, any>) {
     const nearFullRatioPercent = this.lowThreshold * 100;
     const fullRatioPercent = this.highThreshold * 100;
-    const percentAvailable = this.calcPercentage(data.max - data.current, data.max);
-    const percentUsed = this.calcPercentage(data.current, data.max);
+    const max = typeof data.max === 'string' ? parseFloat(data.max) : data.max;
+    const current = typeof data.current === 'string' ? parseFloat(data.current) : data.current;
+    const percentAvailable = this.calcPercentage(max - current, max);
+    const percentUsed = this.calcPercentage(current, max);
 
     if (fullRatioPercent >= 0 && percentUsed >= fullRatioPercent) {
       this.color = 'chart-color-red';

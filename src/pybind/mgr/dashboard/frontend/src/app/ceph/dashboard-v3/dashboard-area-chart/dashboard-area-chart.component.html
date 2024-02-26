@@ -24,7 +24,7 @@
   </div>
 
   <div class="col-9 d-flex flex-column">
-    <div class="chart mt-3">
+    <div [ngClass]="{'chart mt-3': !isMultiCluster, 'mt-3': isMultiCluster}">
       <canvas baseChart
               [datasets]="chartData.dataset"
               [options]="options"
