@@ -430,12 +430,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
     int count = 0;
 
     for (auto it = o_entries_map.begin(); it != o_entries_map.end(); it++){
-      //if ((it->second->dirty == true) && (std::difftime(time(NULL), it->second->creationTime) > interval)){ //if block is dirty and written more than interval seconds ago
-      ldpp_dout(dpp, 20) << "AMIN: "<< __func__ << " : " << " Cache cleaning!" << "Finding a dirty object ... " << dendl;
-      ldpp_dout(dpp, 20) << "AMIN: "<< __func__ << " : " << " Cache cleaning! dirty is: " << it->second->dirty << dendl;
       if ((it->second->dirty == true) && (std::difftime(time(NULL), it->second->creationTime) > interval)){ //if block is dirty and written more than interval seconds ago
 	name = it->first;
-        ldpp_dout(dpp, 20) << "AMIN: "<< __func__ << " : " << " Cache cleaning!" << "Object name is: " << name <<  dendl;
 	rgw_user c_rgw_user = it->second->user;
 
 	size_t pos = 0;
@@ -462,26 +458,11 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	c_bucketinfo.owner = c_rgw_user;
 	
 	
-    	ldpp_dout(dpp, 10) << __func__ << " : "  << __LINE__ << ": bucket name is " << b_name << dendl;
     	int ret = driver->load_bucket(dpp, c_rgw_bucket, &c_bucket, null_yield);
 	if (ret < 0) {
       	  ldpp_dout(dpp, 10) << __func__ << "(): load_bucket() returned ret=" << ret << dendl;
       	  break;
         }
-    	ldpp_dout(dpp, 10) << __func__ << " : "  << __LINE__ << ": bucket name is " << c_bucket->get_name() << dendl;
-	/*
-    	c_bucketinfo = bucket->get_info();
-    	ldpp_dout(dpp, 10) << __func__ << " : "  << __LINE__ << ": bucket name is " << b_name << dendl;
-	c_bucket = driver->get_bucket(c_bucketinfo);
-    	ldpp_dout(dpp, 10) << __func__ << " : "  << __LINE__ << ": bucket name is " << c_bucket->get_name() << dendl;
-	*/
-	/*
- 	int ret = driver->get_bucket(dpp, nullptr, c_rgw_bucket, &c_bucket, null_yield);
-	if (ret < 0){
-    		ldpp_dout(dpp, 10) << __func__ << " : "  << __LINE__ << " cleaning get_bucket() failed for Bucket: " << b_name << dendl;
-		continue;
-	}
-	*/
 
 	std::unique_ptr<rgw::sal::Object> c_obj = c_bucket->get_object(c_obj_key);
 
@@ -514,7 +495,6 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
     	  off_t cur_lst = std::min<off_t>(fst + cct->_conf->rgw_max_chunk_size, lst);
     	  std::string oid_in_cache = "D_" + prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_lst);  	  
     	  std::string new_oid_in_cache = prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_lst);
-      	  ldpp_dout(dpp, 20) << __func__  << ": " << __LINE__ << ": oid_in_cache is: " << oid_in_cache << dendl;
     	  cacheDriver->get(dpp, oid_in_cache, fst, cur_lst, data, obj_attrs, null_yield);
     	  len = data.length();
     	  fst += len;
@@ -523,7 +503,6 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
       	    break;
    	  }
 
-      	  ldpp_dout(dpp, 20) << __func__  << ": " << __LINE__ << ": data is: " << data.to_str() << dendl;
     	  op_ret = filter->process(std::move(data), ofs);
     	  if (op_ret < 0) {
       	    ldpp_dout(dpp, 20) << "processor->process() returned ret="
@@ -531,13 +510,11 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
       	    return;
     	  }
 
-          ldpp_dout(dpp, 20) << "AMIN: " << __func__ << __LINE__ << dendl;
   	  rgw::d4n::CacheBlock block;
     	  block.cacheObj.bucketName = c_obj->get_bucket()->get_name();
     	  block.cacheObj.objName = c_obj->get_key().get_oid();
       	  block.size = len;
      	  block.blockID = ofs;
-          ldpp_dout(dpp, 20) << "AMIN: " << __func__ << __LINE__ << dendl;
 	  op_ret = dir->update_field(&block, "dirty", "false", null_yield); 
     	  if (op_ret < 0) {
       	    ldpp_dout(dpp, 20) << "updating dirty flag in Block directory failed!" << dendl;
@@ -546,13 +523,10 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 
     	  cacheDriver->rename(dpp, oid_in_cache, new_oid_in_cache, null_yield);
 
-          ldpp_dout(dpp, 20) << "AMIN: " << __func__ << __LINE__ << dendl;
     	  ofs += len;
   	} while (len > 0);
 
-        ldpp_dout(dpp, 20) << "AMIN: " << __func__ << __LINE__ << dendl;
   	op_ret = filter->process({}, ofs);
-        ldpp_dout(dpp, 20) << "AMIN: " << __func__ << __LINE__ << ": etag:" << it->second->etag << dendl;
 	
   	const req_context rctx{dpp, null_yield, nullptr};
 	ceph::real_time mtime = ceph::real_clock::from_time_t(it->second->creationTime);
@@ -561,10 +535,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
                                nullptr, nullptr, nullptr,
                                rctx, rgw::sal::FLAG_LOG_OP);
 
-        ldpp_dout(dpp, 20) << "AMIN: " << __func__ << __LINE__ << dendl;
 	//data is clean now, updating in-memory metadata
 	it->second->dirty = false;
-        //FIXME: AMIN:  should we update Object	Directory too?
       }
     }
 

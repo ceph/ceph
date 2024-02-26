@@ -608,11 +608,6 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     block.cacheObj.objName = source->get_key().get_oid();
     block.cacheObj.bucketName = source->get_bucket()->get_name();
     std::stringstream s;
-    /*
-    utime_t ut(source->get_mtime());
-    ut.gmtime(s);
-    block.cacheObj.creationTime = s.to_time_t(); 
-    */
     block.cacheObj.creationTime = std::to_string(ceph::real_clock::to_time_t(source->get_mtime()));
     block.cacheObj.dirty = false;
     bool dirty = false;
@@ -820,12 +815,6 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
     off_t ofs = offset;
     bool dirty = true;
     rgw::d4n::CacheBlock block, existing_block;
-    /*
-    std::stringstream s;
-    utime_t ut(obj->get_mtime());
-    ut.gmtime(s);
-    std::string creationTime = s.str();
-    */
     auto creationTime = startTime;
 
     auto version = obj->get_instance();
@@ -946,12 +935,6 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 {
   bool dirty = true;
   std::vector<std::string> hostsList = {};
-  /*
-  std::stringstream s;
-  utime_t ut(obj->get_mtime());
-  ut.gmtime(s);
-  std::string creationTime = s.str();
-  */
   auto creationTime = startTime;
   std::string objEtag = etag;
 
