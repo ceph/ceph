@@ -306,9 +306,9 @@ Resize a subvolume using:
    ceph fs subvolume resize <vol_name> <subvol_name> <new_size> [--group_name <subvol_group_name>] [--no_shrink]
 
 The command resizes the subvolume quota using the size specified by ``new_size``.
-The ``--no_shrink`` flag prevents the subvolume from shrinking below the current  used size of the subvolume.
+The ``--no_shrink`` flag prevents the subvolume from shrinking below the current used size of the subvolume.
 
-The subvolume can be resized to an unlimited (but sparse) logical size by passing ``inf`` or ``infinite`` as `` new_size``.
+The subvolume can be resized to an unlimited (but sparse) logical size by passing ``inf`` or ``infinite`` as ``new_size``.
 
 Authorize cephx auth IDs, the read/read-write access to fs subvolumes:
 
@@ -771,22 +771,23 @@ Subvolume quiesce
 
 It may be needed to pause IO to a set of subvolumes of a given volume (file system).
 A good example of such case is a consistent snapshot spanning multiple subvolumes.
-Such a task arises often in an environment such as k8s, where a single deployed application
+The task arises often in an orchestrated environment such as Kubernetes, where a single deployed application
 can work with many mounted subvolumes across several hosts. When a snapshot of such a system is needed,
 the application may not find the result consistent unless the snapshots were taken
-under an active write pause.
+during an active write pause.
 
-The volumes plugin provides a tool to initiate and await such a pause across a set of subvolumes:
+The `volumes` plugin provides a tool to initiate and await such a pause across a set of subvolumes:
 
 .. prompt:: bash $ auto
 
-  $ ceph fs quiesce --set-id myset1 <vol_name> <[group_name/]sub_name...> --await
+  $ ceph fs quiesce <vol_name> --set-id myset1 <[group_name/]sub_name...> --await
   # perform actions while the IO pause is active, like taking snapshots
-  $ ceph fs quiesce --set-id myset1 --release --await
+  $ ceph fs quiesce <vol_name> --set-id myset1 --release --await
   # if successful, all members of the set were confirmed as still in pause and released from such
 
-The ``quiesce`` functionality is itself based on top of a lower level QuiesceDb service maintained by the MDS
-daemons. Volumes plugin merely maps the subvolume names to their corresponding paths on the given file system
+The ``quiesce`` functionality is itself based on a lower level QuiesceDb service provided by the MDS
+daemons, which operates at a file system path granularity. 
+The `volumes` plugin merely maps the subvolume names to their corresponding paths on the given file system
 and then issues the appropriate quiesce command to the MDS. You can learn more about the feature in the developer guides.
 
 Operations
@@ -803,8 +804,8 @@ A quiesce set can be manipulated in the following ways:
 * **query** the current state of a set by id or all active sets or all known sets
 * **cancel all** active sets in case an immediate resume of IO is required.
 
-The operations listed above are non-blocking: they perform the intended modification if it's applicable
-and get back with an up to date version of the target set, whether the operation was successful or not. 
+The operations listed above are non-blocking: they attempt the intended modification 
+and return with an up to date version of the target set, whether the operation was successful or not. 
 The set may change states as a result of the modification, and the version that's returned in the response 
 is guaranteed to be in a state consistent with this and potentialy other successful operations from 
 the same control loop batch.
@@ -813,8 +814,8 @@ Some set states are `awaitable`. We will discuss those below, but for now it's i
 any of the commands above can be amended with an **await** modifier, which will cause them to block
 on the set after applying their intended modification, as long as the resulting set state is `awaitable`.
 Such a command will block until the set reaches the awaited state, gets modified by another command,
-or transitions into another state. The reason for the unblock will be clear by the result code, while
-the contents of the response will always be the most recent set state.
+or transitions into another state. The return code will unambiguously identify the exit condition, and
+the contents of the response will always carry the latest known set state.
 
 .. image:: quiesce-set-states.svg
 
@@ -836,13 +837,13 @@ to the caller by inspecting the output
 
 .. prompt:: bash $ auto
 
-  $ ceph fs quiesce a sub1 --set-id=unique-id
+  $ ceph fs quiesce fs1 sub1 --set-id=unique-id
   {
       "epoch": 3,
-      "db_version": 1,
+      "set_version": 1,
       "sets": {
           "unique-id": {
-              "db_version": 1,
+              "version": 1,
               "age_ref": 0.0,
               "state": {
                   "name": "TIMEDOUT",
@@ -877,21 +878,21 @@ If present, the values will be applied before the action this command requests.
 
 .. prompt:: bash $ auto
 
-  $ ceph fs quiesce a --set-id=unique-id --timeout=10 > /dev/null
+  $ ceph fs quiesce fs1 --set-id=unique-id --timeout=10 > /dev/null
   Error EPERM:  
 
 It's too late for our ``unique-id`` set, as it's in a terminal state. No changes are allowed
-to sets that are in their terminal states, i.e. inactive. Let's create a new set
+to sets that are in their terminal states, i.e. inactive. Let's create a new set:
 
 .. prompt:: bash $ auto
 
-  $ ceph fs quiesce a sub1 --timeout 60
+  $ ceph fs quiesce fs1 sub1 --timeout 60
   {
       "epoch": 3,
-      "db_version": 2,
+      "set_version": 2,
       "sets": {
           "8988b419": {
-              "db_version": 2,
+              "version": 2,
               "age_ref": 0.0,
               "state": {
                   "name": "QUIESCING",
@@ -918,13 +919,13 @@ this time the set is `QUIESCING`. At this point, we can add more members to the 
 
 .. prompt:: bash $ auto
 
-  $ ceph fs quiesce a --set-id 8988b419 --include sub2 sub3
+  $ ceph fs quiesce fs1 --set-id 8988b419 --include sub2 sub3
   {
       "epoch": 3,
-      "db_version": 3,
+      "set_version": 3,
       "sets": {
           "8988b419": {
-              "db_version": 3,
+              "version": 3,
               "age_ref": 0.0,
               "state": {
                   "name": "QUIESCING",
@@ -1005,13 +1006,13 @@ from ``--await-for`` is honored.
 
 .. prompt:: bash $ auto
 
-  $ time ceph fs quiesce a sub1 --timeout=10 --await-for=2
+  $ time ceph fs quiesce fs1 sub1 --timeout=10 --await-for=2
   {
       "epoch": 6,
-      "db_version": 3,
+      "set_version": 3,
       "sets": {
           "c3c1d8de": {
-              "db_version": 3,
+              "version": 3,
               "age_ref": 0.0,
               "state": {
                   "name": "QUIESCING",
@@ -1032,7 +1033,7 @@ from ``--await-for`` is honored.
       }
   }
   Error EINPROGRESS: 
-  ceph fs quiesce a sub1 --timeout=10 --await-for=2  0.41s user 0.04s system 17% cpu 2.563 total
+  ceph fs quiesce fs1 sub1 --timeout=10 --await-for=2  0.41s user 0.04s system 17% cpu 2.563 total
 
 (there is a ~0.5 sec overhead that the ceph client adds, at least in a local debug setup)
 
@@ -1046,13 +1047,13 @@ approach to a long running multistep process under the IO pause by repeatedly ``
 .. prompt:: bash $ auto
 
   $ set -e   # (1)
-  $ ceph fs quiesce a sub1 sub2 sub3 --timeout=30 --expiration=10 --set-id="snapshots" --await # (2)
+  $ ceph fs quiesce fs1 sub1 sub2 sub3 --timeout=30 --expiration=10 --set-id="snapshots" --await # (2)
   $ ceph fs subvolume snapshot create a sub1 snap1-sub1  # (3)
-  $ ceph fs quiesce a --set-id="snapshots" --await  # (4)
+  $ ceph fs quiesce fs1 --set-id="snapshots" --await  # (4)
   $ ceph fs subvolume snapshot create a sub2 snap1-sub2  # (3)
-  $ ceph fs quiesce a --set-id="snapshots" --await  # (4)
+  $ ceph fs quiesce fs1 --set-id="snapshots" --await  # (4)
   $ ceph fs subvolume snapshot create a sub3 snap1-sub3  # (3)
-  $ ceph fs quiesce a --set-id="snapshots" --release --await  # (5)
+  $ ceph fs quiesce fs1 --set-id="snapshots" --release --await  # (5)
 
 .. warning:: This example uses arbitrary timeouts to convey the concept. In real life, the values must be carefully
   chosen in accordance with the actual system requirements and specifications.
@@ -1086,30 +1087,31 @@ a concurrent change of the set by another client. Consider this example:
 
 .. prompt:: bash $ auto
 
-  $ ceph fs quiesce a sub1 sub2 sub3 --timeout=30 --expiration=60 --set-id="snapshots" --await  # (1)
+  $ ceph fs quiesce fs1 sub1 sub2 sub3 --timeout=30 --expiration=60 --set-id="snapshots" --await  # (1)
   $ ceph fs subvolume snapshot create a sub1 snap1-sub1  # (2)
   $ ceph fs subvolume snapshot create a sub2 snap1-sub2  # (3)
   $ ceph fs subvolume snapshot create a sub3 snap1-sub3  # (4)
-  $ ceph fs quiesce a --set-id="snapshots" --release --await  # (5)
+  $ ceph fs quiesce fs1 --set-id="snapshots" --release --await  # (5)
 
 The sequence looks good, and the release `(5)` completes successfully. However, it could be that
 before snap for sub3 `(4)` is taken, another session excludes sub3 from the set, resuming its IOs
 
 .. prompt:: bash $ auto
 
-  $ ceph fs quiesce a --set-id="snapshots" --exclude sub3
+  $ ceph fs quiesce fs1 --set-id="snapshots" --exclude sub3
 
 Since removing a member from a set doesn't affect its `QUIESCED` state, the release command `(5)`
 has no reason to fail. It will ack the two unexcluded members sub1 and sub2 and report success.
 
 In order to address this or similar problems, the quiesce command supports an optimistic concurrency
-mode. To activate it, one needs to pass an ``--if-version=<db_version>`` that will be compared
+mode. To activate it, one needs to pass an ``--if-version=<version>`` that will be compared
 to the set's db version and the operation will only proceed if the values match. Otherwise, the command
 will not be executed and the return status will be ``ESTALE``.
 
 It's easy to know which version to expect of a set, since every command that modifies a set will return
 this set on the stdout, regarldess of the exit status. In the examples above one can notice that every
-set carries a ``"db_version"`` property which is the last db version where this set got modified.
+set carries a ``"version"`` property which gets updated whenever this set is modified, explicitly
+by the user or implicitly during 
 
 In the example at the beginning of this subsection, the initial quiesce command `(1)` would have returned
 the newly created set with id ``"snapshots"`` and some version, let's say ``13``. Since we don't expect any other
@@ -1118,7 +1120,7 @@ could have looked like
 
 .. prompt:: bash $ auto
 
-  $ ceph fs quiesce a --set-id="snapshots" --release --await --if-version=13 # (5)
+  $ ceph fs quiesce fs1 --set-id="snapshots" --release --await --if-version=13 # (5)
 
 This way, the result of the release command would have been ``ESTALE`` instead of 0, and we would
 know that something wasn't right with the quiesce set and our snapshots might not be consistent.
@@ -1129,14 +1131,14 @@ know that something wasn't right with the quiesce set and our snapshots might no
 
 There is another use of the ``--if-version`` argument which could come handy for automation software.
 As we have discussed earlier, it is possible to create a new quiesce set with a given set id. Drivers like
-the CSI for k8s could use their internal request id to eliminate the need to keep an additional mapping
+the CSI for Kubernetes could use their internal request id to eliminate the need to keep an additional mapping
 to the quiesce set id. However, to guarantee uniqueness, the driver may want to verify that the set is
 indeed new. For that, ``if-version=0`` may be used, and it will only create the new set if no other
 set with this id was present in the database
 
 .. prompt:: bash $ auto
 
-  $ ceph fs quiesce a sub1 sub2 sub3 --set-id="external-id" --if-version=0
+  $ ceph fs quiesce fs1 sub1 sub2 sub3 --set-id="external-id" --if-version=0
 
 .. _manila: https://github.com/openstack/manila
 .. _CSI: https://github.com/ceph/ceph-csi
