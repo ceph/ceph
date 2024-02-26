@@ -75,6 +75,7 @@ def _template_transform(ctx, config, target):
     if jenv is None:
         loader = jinja2.BaseLoader()
         jenv = jinja2.Environment(loader=loader)
+        jenv.filters['role_to_remote'] = _role_to_remote
         setattr(ctx, '_jinja_env', jenv)
     rctx = dict(ctx=ctx, config=config, cluster_name=config.get('cluster', ''))
     _vip_vars(rctx)
@@ -92,6 +93,16 @@ def _vip_vars(rctx):
         vips = ctx.vip['vips']
         for idx, vip in enumerate(vips):
             rctx[f'VIP{idx}'] = str(vip)
+
+
+@jinja2.pass_context
+def _role_to_remote(rctx, role):
+    """Return the first remote matching the given role."""
+    ctx = rctx['ctx']
+    for remote, roles in ctx.cluster.remotes.items():
+        if role in roles:
+            return remote
+    return None
 
 
 def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
