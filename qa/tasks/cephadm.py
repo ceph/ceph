@@ -112,6 +112,17 @@ def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
     )
 
 
+def _cephadm_remotes(ctx, log_excluded=False):
+    for remote, roles in ctx.cluster.remotes.items():
+        if any(r.startswith('cephadm.exclude') for r in roles):
+            if log_excluded:
+                log.info(
+                    f'Remote {remote.shortname} excluded from cephadm cluster by role'
+                )
+            continue
+        yield remote, roles
+
+
 def build_initial_config(ctx, config):
     cluster_name = config['cluster']
 
@@ -138,7 +149,7 @@ def distribute_iscsi_gateway_cfg(ctx, conf_data):
     These will help in iscsi clients with finding trusted_ip_list.
     """
     log.info('Distributing iscsi-gateway.cfg...')
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         remote.write_file(
             path='/etc/ceph/iscsi-gateway.cfg',
             data=conf_data,
@@ -367,13 +378,14 @@ def _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name):
 
 def _rm_cluster(ctx, cluster_name):
     log.info('Removing cluster...')
-    ctx.cluster.run(args=[
-        'sudo',
-        ctx.cephadm,
-        'rm-cluster',
-        '--fsid', ctx.ceph[cluster_name].fsid,
-        '--force',
-    ])
+    for remote, _ in _cephadm_remotes(ctx):
+        remote.run(args=[
+            'sudo',
+            ctx.cephadm,
+            'rm-cluster',
+            '--fsid', ctx.ceph[cluster_name].fsid,
+            '--force',
+        ])
 
 
 def _rm_cephadm(ctx):
@@ -785,7 +797,7 @@ def ceph_bootstrap(ctx, config):
                    check_status=False)
 
         # add other hosts
-        for remote in ctx.cluster.remotes.keys():
+        for remote, roles in _cephadm_remotes(ctx, log_excluded=True):
             if remote == bootstrap_remote:
                 continue
 
@@ -869,7 +881,7 @@ def ceph_mons(ctx, config):
             # This is the old way of adding mons that works with the (early) octopus
             # cephadm scheduler.
             num_mons = 1
-            for remote, roles in ctx.cluster.remotes.items():
+            for remote, roles in _cephadm_remotes(ctx):
                 for mon in [r for r in roles
                             if teuthology.is_type('mon', cluster_name)(r)]:
                     c_, _, id_ = teuthology.split_role(mon)
@@ -908,7 +920,7 @@ def ceph_mons(ctx, config):
                                 break
         else:
             nodes = []
-            for remote, roles in ctx.cluster.remotes.items():
+            for remote, roles in _cephadm_remotes(ctx):
                 for mon in [r for r in roles
                             if teuthology.is_type('mon', cluster_name)(r)]:
                     c_, _, id_ = teuthology.split_role(mon)
@@ -982,7 +994,7 @@ def ceph_mgrs(ctx, config):
     try:
         nodes = []
         daemons = {}
-        for remote, roles in ctx.cluster.remotes.items():
+        for remote, roles in _cephadm_remotes(ctx):
             for mgr in [r for r in roles
                         if teuthology.is_type('mgr', cluster_name)(r)]:
                 c_, _, id_ = teuthology.split_role(mgr)
@@ -1027,7 +1039,7 @@ def ceph_osds(ctx, config):
         # provision OSDs in numeric order
         id_to_remote = {}
         devs_by_remote = {}
-        for remote, roles in ctx.cluster.remotes.items():
+        for remote, roles in _cephadm_remotes(ctx):
             devs_by_remote[remote] = teuthology.get_scratch_devices(remote)
             for osd in [r for r in roles
                         if teuthology.is_type('osd', cluster_name)(r)]:
@@ -1111,7 +1123,7 @@ def ceph_mdss(ctx, config):
 
     nodes = []
     daemons = {}
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         for role in [r for r in roles
                     if teuthology.is_type('mds', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
@@ -1188,7 +1200,7 @@ def ceph_monitoring(daemon_type, ctx, config):
 
     nodes = []
     daemons = {}
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         for role in [r for r in roles
                     if teuthology.is_type(daemon_type, cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
@@ -1224,7 +1236,7 @@ def ceph_rgw(ctx, config):
 
     nodes = {}
     daemons = {}
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         for role in [r for r in roles
                     if teuthology.is_type('rgw', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
@@ -1267,7 +1279,7 @@ def ceph_iscsi(ctx, config):
     daemons = {}
     ips = []
 
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         for role in [r for r in roles
                      if teuthology.is_type('iscsi', cluster_name)(r)]:
             c_, _, id_ = teuthology.split_role(role)
@@ -1619,7 +1631,7 @@ def distribute_config_and_admin_keyring(ctx, config):
     """
     cluster_name = config['cluster']
     log.info('Distributing (final) config and client.admin keyring...')
-    for remote, roles in ctx.cluster.remotes.items():
+    for remote, roles in _cephadm_remotes(ctx):
         remote.write_file(
             '/etc/ceph/{}.conf'.format(cluster_name),
             ctx.ceph[cluster_name].config_file,
@@ -1712,7 +1724,7 @@ def initialize_config(ctx, config):
 
     # mon ips
     log.info('Choosing monitor IPs and ports...')
-    remotes_and_roles = ctx.cluster.remotes.items()
+    remotes_and_roles = _cephadm_remotes(ctx)
     ips = [host for (host, port) in
            (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
 
