@@ -309,7 +309,7 @@ void SnapRealm::adjust_parent()
 
 void SnapRealm::split_at(SnapRealm *child)
 {
-  dout(10) << "split_at " << *child 
+  dout(10) << __func__ << ": " << *child
 	   << " on " << *child->inode << dendl;
 
   if (inode->is_mdsdir() || !child->inode->is_dir()) {
