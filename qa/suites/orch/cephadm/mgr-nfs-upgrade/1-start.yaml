@@ -2,6 +2,8 @@ overrides:
   ceph:
     log-ignorelist:
       - MON_DOWN
+      - PG_DEGRADED
+      - PG_AVAILABILITY
 tasks:
 - cephadm.shell:
     host.a:
