@@ -353,10 +353,10 @@ void SnapRealm::split_at(SnapRealm *child)
     ++p;
     // does inode fall within the child realm?
     if (child->inode->is_ancestor_of(in)) {
-      dout(20) << " child gets " << *in << dendl;
+      dout(25) << " child gets " << *in << dendl;
       in->move_to_realm(child);
     } else {
-      dout(20) << "    keeping " << *in << dendl;
+      dout(25) << "    keeping " << *in << dendl;
     }
   }
 }
