@@ -290,6 +290,19 @@
 	Object Storage Device
                 See :term:`OSD`.
 
+        OMAP
+                "object map". A key-value store (a database) that is used to
+                reduce the time it takes to read data from and to write to the
+                Ceph cluster. RGW bucket indexes are stored as OMAPs.
+                Erasure-coded pools cannot store RADOS OMAP data structures.
+               
+                Run the command ``ceph osd df`` to see your OMAPs.
+
+                See Eleanor Cawthon's 2012 paper `A Distributed Key-Value Store
+                using Ceph
+                <https://ceph.io/assets/pdfs/CawthonKeyValueStore.pdf>`_ (17
+                pages).
+
 	OSD
                 Probably :term:`Ceph OSD`, but not necessarily. Sometimes
                 (especially in older correspondence, and especially in
