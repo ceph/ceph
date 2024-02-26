@@ -1,5 +1,6 @@
 local g = import 'grafonnet/grafana.libsonnet';
 
+
 (import 'utils.libsonnet') {
   'osds-overview.json':
     $.dashboardSchema(
@@ -195,28 +196,18 @@ local g = import 'grafonnet/grafana.libsonnet';
           true
         )
       ) + { gridPos: { x: 20, y: 0, w: 4, h: 8 } },
-      $.simplePieChart(
-        {}, '', 'OSD Types Summary'
-      )
+      $.pieChartPanel('OSD Types Summary', '', '$datasource', { x: 0, y: 8, w: 4, h: 8 }, 'table', 'bottom', true, ['percent'], { mode: 'single', sort: 'none' }, 'pie', ['percent', 'value'], 'palette-classic')
       .addTarget(
         $.addTargetSchema('count by (device_class) (ceph_osd_metadata{%(matchers)s})' % $.matchers(), '{{device_class}}')
-      ) + { gridPos: { x: 0, y: 8, w: 4, h: 8 } },
-      $.simplePieChart(
-        { 'Non-Encrypted': '#E5AC0E' }, '', 'OSD Objectstore Types'
-      )
-      .addTarget(
-        $.addTargetSchema(
-          'count(ceph_bluefs_wal_total_bytes{%(matchers)s})' % $.matchers(), 'bluestore', 'time_series', 2
-        )
-      )
-      .addTarget(
-        $.addTargetSchema(
-          'absent(ceph_bluefs_wal_total_bytes{%(matchers)s}) * count(ceph_osd_metadata{%(matchers)s})' % $.matchers(), 'filestore', 'time_series', 2
-        )
-      ) + { gridPos: { x: 4, y: 8, w: 4, h: 8 } },
-      $.simplePieChart(
-        {}, 'The pie chart shows the various OSD sizes used within the cluster', 'OSD Size Summary'
-      )
+      ),
+      $.pieChartPanel('OSD Objectstore Types', '', '$datasource', { x: 4, y: 8, w: 4, h: 8 }, 'table', 'bottom', true, ['percent'], { mode: 'single', sort: 'none' }, 'pie', ['percent', 'value'], 'palette-classic')
+      .addTarget($.addTargetSchema(
+        'count(ceph_bluefs_wal_total_bytes{%(matchers)s})' % $.matchers(), 'bluestore', 'time_series', 2
+      ))
+      .addTarget($.addTargetSchema(
+        'absent(ceph_bluefs_wal_total_bytes{job=~"$job"}) * count(ceph_osd_metadata{job=~"$job"})' % $.matchers(), 'filestore', 'time_series', 2
+      )),
+      $.pieChartPanel('OSD Size Summary', 'The pie chart shows the various OSD sizes used within the cluster', '$datasource', { x: 8, y: 8, w: 4, h: 8 }, 'table', 'bottom', true, ['percent'], { mode: 'single', sort: 'none' }, 'pie', ['percent', 'value'], 'palette-classic')
       .addTarget($.addTargetSchema(
         'count(ceph_osd_stat_bytes{%(matchers)s} < 1099511627776)' % $.matchers(), '<1TB', 'time_series', 2
       ))
@@ -243,7 +234,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ))
       .addTarget($.addTargetSchema(
         'count(ceph_osd_stat_bytes{%(matchers)s} >= 13194139533312)' % $.matchers(), '<12TB+', 'time_series', 2
-      )) + { gridPos: { x: 8, y: 8, w: 4, h: 8 } },
+      )),
       g.graphPanel.new(bars=true,
                        datasource='$datasource',
                        title='Distribution of PGs per OSD',
