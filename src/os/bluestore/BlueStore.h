@@ -3440,6 +3440,12 @@ public:
     return fsid;
   }
 
+  std::string get_block_path() const {
+    std::string res(path);
+    res += "/block";
+    return res;
+  }
+
   uint64_t estimate_objects_overhead(uint64_t num_objects) override {
     return num_objects * 300; //assuming per-object overhead is 300 bytes
   }

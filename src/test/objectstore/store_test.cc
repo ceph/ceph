@@ -7373,6 +7373,211 @@ TEST_P(StoreTestSpecificAUSize, BluestoreAllocmapSwitch2Test) {
     ASSERT_EQ(r, 0);
   }
 }
+
+TEST_P(StoreTestSpecificAUSize, BluestoreAllocmapExpandTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  SetVal(g_conf(), "bluestore_freelist_type", "bitmap");
+  SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
+
+  SetVal(g_conf(), "bluestore_block_db_path", "db");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(2ull << 30).c_str());
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+
+  // we need this as a workaround for https://tracker.ceph.com/issues/64567
+  SetVal(g_conf(), "bluestore_block_size", stringify(4ull << 30).c_str());
+
+  StartDeferred(65536);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  const PerfCounters* logger = store->get_perf_counters();
+
+  int r;
+  int poolid = 4373;
+  coll_t cid = coll_t(spg_t(pg_t(0, poolid), shard_id_t::NO_SHARD));
+
+  ObjectStore::Transaction t_fin;
+  doSomeWrites(bstore, cid, &t_fin);
+  ASSERT_EQ(0, substr_in_bluestore_superblock("\"freelist_type\": \"bitmap\""));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 0);
+
+  store_statfs_t statfs;
+  r = bstore->statfs(&statfs, nullptr);
+  ASSERT_EQ(0, r);
+  cout << "Starting in bitmap mode,"
+       << " original size = " << byte_u_t(statfs.total)
+       << ", avail = " << byte_u_t(statfs.available)
+       << std::endl;
+  uint64_t orig_total = statfs.total;
+  uint64_t orig_avail = statfs.available;
+  const uint64_t delta = 1ull << 30;
+
+  bstore->umount();
+
+  auto block_path = bstore->get_block_path();
+  int fd = ::open(block_path.c_str(), O_RDWR);
+  if (fd >= 0) {
+    struct stat st;
+    r = ::fstat(fd, &st);
+    ceph_assert(r == 0);
+    r = ::ceph_posix_fallocate(fd, st.st_size, delta);
+    ceph_assert(r == 0);
+    ::close(fd);
+  }
+
+  ASSERT_EQ(0, store->fsck(false));
+
+  bstore->mount();
+  r = bstore->statfs(&statfs, nullptr);
+  ASSERT_EQ(0, r);
+  cout << "FAllocated in bitmap mode,"
+       << " new size = " << byte_u_t(statfs.total)
+       << ", avail = " << byte_u_t(statfs.available)
+       << std::endl;
+  ASSERT_EQ(orig_total + delta, statfs.total);
+  ASSERT_EQ(orig_avail, statfs.available);
+
+  bstore->umount();
+
+  std::ostringstream sstream;
+  r = bstore->expand_devices(sstream);
+  ASSERT_EQ(0, r);
+
+  ASSERT_EQ(0, store->fsck(false));
+
+  bstore->mount();
+  r = bstore->statfs(&statfs, nullptr);
+  ASSERT_EQ(0, r);
+  cout << "Expanded in bitmap mode,"
+       << " new size = " << byte_u_t(statfs.total)
+       << ", avail = " << byte_u_t(statfs.available)
+       << std::endl;
+  ASSERT_EQ(orig_total + delta, statfs.total);
+  ASSERT_EQ(orig_avail + delta, statfs.available);
+  orig_total += delta;
+  orig_avail += delta;
+
+  cerr << "Switch allocmap to nil(created)..." << std::endl;
+  bstore->umount();
+  r = bstore->push_allocmap_to_nil(true);
+  ASSERT_EQ(0, r);
+
+  ASSERT_EQ(0, store->fsck(false));
+
+  cerr << "Expanding bdev..." << std::endl;
+  fd = ::open(block_path.c_str(), O_RDWR);
+  if (fd >= 0) {
+    struct stat st;
+    r = ::fstat(fd, &st);
+    ceph_assert(r == 0);
+    r = ::ceph_posix_fallocate(fd, st.st_size, delta);
+    ceph_assert(r == 0);
+    ::close(fd);
+  }
+
+  ASSERT_EQ(0, store->fsck(false));
+
+  cerr << "Expanding bstore..." << std::endl;
+  r = bstore->expand_devices(sstream);
+  ASSERT_EQ(0, r);
+
+  ASSERT_EQ(0, store->fsck(false));
+
+  bstore->mount();
+  r = bstore->statfs(&statfs, nullptr);
+  ASSERT_EQ(0, r);
+  cout << "Expanded in nil mode,"
+       << " new size = " << byte_u_t(statfs.total)
+       << ", avail = " << byte_u_t(statfs.available)
+       << std::endl;
+  ASSERT_EQ(orig_total + delta, statfs.total);
+  ASSERT_EQ(orig_avail + delta, statfs.available);
+  orig_total += delta;
+  orig_avail += delta;
+
+  cerr << "Switch allocmap to nil(invalidate)..." << std::endl;
+  bstore->umount();
+  r = bstore->push_allocmap_to_nil(false);
+  ASSERT_EQ(0, r);
+
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 1);
+
+  cerr << "Expanding bdev..." << std::endl;
+  fd = ::open(block_path.c_str(), O_RDWR);
+  if (fd >= 0) {
+    struct stat st;
+    r = ::fstat(fd, &st);
+    ceph_assert(r == 0);
+    r = ::ceph_posix_fallocate(fd, st.st_size, delta);
+    ceph_assert(r == 0);
+    ::close(fd);
+  }
+
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 2);
+
+  cerr << "Expanding bstore..." << std::endl;
+  r = bstore->expand_devices(sstream);
+  ASSERT_EQ(0, r);
+  // expand_devices reconstructs allocmap twice
+  // and finally persists it
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 4);
+
+  ASSERT_EQ(0, store->fsck(false));
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 4);
+
+  bstore->mount();
+  ASSERT_EQ(logger->get(l_bluestore_allocmap_rebuild), 4);
+  r = bstore->statfs(&statfs, nullptr);
+  ASSERT_EQ(0, r);
+  cout << "Expanded in nil mode,"
+       << " new size = " << byte_u_t(statfs.total)
+       << ", avail = " << byte_u_t(statfs.available)
+       << std::endl;
+  ASSERT_EQ(orig_total + delta, statfs.total);
+  ASSERT_EQ(orig_avail + delta, statfs.available);
+
+  cerr << "Switch allocmap to bitmap..." << std::endl;
+  bstore->umount();
+  r = bstore->push_allocmap_to_bitmap();
+  ASSERT_EQ(0, r);
+
+  ASSERT_EQ(0, store->fsck(false));
+
+  cerr << "Expanding bdev..." << std::endl;
+  fd = ::open(block_path.c_str(), O_RDWR);
+  if (fd >= 0) {
+    struct stat st;
+    r = ::fstat(fd, &st);
+    ceph_assert(r == 0);
+    r = ::ceph_posix_fallocate(fd, st.st_size, delta);
+    ceph_assert(r == 0);
+    ::close(fd);
+  }
+
+  cerr << "Expanding bstore..." << std::endl;
+  r = bstore->expand_devices(sstream);
+  ASSERT_EQ(0, r);
+
+  ASSERT_EQ(0, store->fsck(false));
+
+  bstore->mount();
+  r = bstore->statfs(&statfs, nullptr);
+  ASSERT_EQ(0, r);
+  cout << "Expanded in bitmap mode,"
+       << " new size = " << byte_u_t(statfs.total)
+       << ", avail = " << byte_u_t(statfs.available)
+       << std::endl;
+
+  {
+    auto ch = store->open_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t_fin));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 #endif
 
 INSTANTIATE_TEST_SUITE_P(

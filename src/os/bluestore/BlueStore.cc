@@ -9022,14 +9022,14 @@ int BlueStore::expand_devices(ostream& out)
     const char* path = p.c_str();
     if (path == nullptr) {
       derr << devid
-	    <<": can't find device path " << dendl;
+	   <<": can't find device path " << dendl;
       continue;
     }
     if (bluefs->bdev_support_label(devid)) {
       if (_set_bdev_label_size(p, size) >= 0) {
         out << devid
-          << " : size label updated to " << size
-          << std::endl;
+            << " : size label updated to " << size
+            << std::endl;
       }
     }
   }
@@ -9037,14 +9037,17 @@ int BlueStore::expand_devices(ostream& out)
   uint64_t size = bdev->get_size();
   if (size0 < size) {
     out << bluefs_layout.shared_bdev
-      << " : expanding " << " from 0x" << std::hex
-      << size0 << " to 0x" << size << std::dec << std::endl;
+        << " : expanding " << " from 0x" << std::hex
+        << size0 << " to 0x" << size << std::dec << std::endl;
+    dout(5) << __func__  << " : expanding " << " from 0x" << std::hex
+            << size0 << " to 0x" << size << std::dec
+            << dendl;
     _write_out_fm_meta(size);
     if (bdev->supported_bdev_label()) {
       if (_set_bdev_label_size(path, size) >= 0) {
         out << bluefs_layout.shared_bdev
-          << " : size label updated to " << size
-          << std::endl;
+            << " : size label updated to " << size
+            << std::endl;
       }
     }
     _close_db_and_around();
@@ -9052,8 +9055,12 @@ int BlueStore::expand_devices(ostream& out)
     // mount in read/write to sync expansion changes
     r = _mount();
     ceph_assert(r == 0);
-    if (fm && fm->is_null_manager()) {
-      // we grow the allocation range, must reflect it in the allocation file
+    if (has_null_manager() && !need_to_destage_allocmap) {
+      // we grow the allocation range,
+      // must reflect it in the allocation file if no allocmap
+      // recovery happened on mount - which is (implicitly)
+      // reflected in need_to_destage_allocmap = false
+      //
       alloc->init_add_free(size0, size - size0);
       need_to_destage_allocmap = true;
     }
