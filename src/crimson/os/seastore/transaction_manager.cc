@@ -157,10 +157,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     INFO("completed");
   }).handle_error(
     mount_ertr::pass_further{},
-    crimson::ct_error::all_same_way([] {
-      ceph_assert(0 == "unhandled error");
-      return mount_ertr::now();
-    })
+    crimson::ct_error::assert_all{"unhandled error"}
   );
 }
 
@@ -195,9 +192,7 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
     return result.refcount;
   }).handle_error_interruptible(
     ref_iertr::pass_further{},
-    ct_error::all_same_way([](auto e) {
-      ceph_assert(0 == "unhandled error, TODO");
-    }));
+    ct_error::assert_all{"unhandled error, TODO"});
 }
 
 TransactionManager::ref_ret TransactionManager::inc_ref(
@@ -457,9 +452,7 @@ TransactionManager::do_submit_transaction(
       });
     }).handle_error(
       submit_transaction_iertr::pass_further{},
-      crimson::ct_error::all_same_way([](auto e) {
-	ceph_assert(0 == "Hit error submitting to journal");
-      })
+      crimson::ct_error::assert_all{"Hit error submitting to journal"}
     );
   });
 }

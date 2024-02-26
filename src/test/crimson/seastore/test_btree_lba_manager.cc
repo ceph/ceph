@@ -176,9 +176,7 @@ struct btree_test_base :
 	  });
 	});
     }).handle_error(
-      crimson::ct_error::all_same_way([] {
-	ceph_assert(0 == "error");
-      })
+      crimson::ct_error::assert_all{"error"}
     );
   }
 
@@ -197,9 +195,7 @@ struct btree_test_base :
       epm.reset();
       cache.reset();
     }).handle_error(
-      crimson::ct_error::all_same_way([] {
-	ASSERT_FALSE("Unable to close");
-      })
+      crimson::ct_error::assert_all{"Unable to close"}
     );
   }
 };
