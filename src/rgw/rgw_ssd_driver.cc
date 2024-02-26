@@ -336,6 +336,20 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
     return 0;
 }
 
+int SSDDriver::rename(const DoutPrefixProvider* dpp, const::std::string& oldKey, const::std::string& newKey, optional_yield y)
+{
+    std::string location = partition_info.location;
+
+    int ret = std::rename((location+oldKey).c_str(), (location+newKey).c_str());
+    if (ret < 0) {
+        ldpp_dout(dpp, 0) << "SSDDriver: ERROR: failed to rename the file: " << location+oldKey << dendl;
+        return ret;
+    }
+
+    return 0;
+}
+
+
 int SSDDriver::AsyncWriteRequest::prepare_libaio_write_op(const DoutPrefixProvider *dpp, bufferlist& bl, unsigned int len, std::string key, std::string cache_location)
 {
     std::string location = cache_location + key;
@@ -398,7 +412,7 @@ void SSDDriver::AsyncWriteRequest::libaio_write_cb(sigval sigval) {
 
     ldpp_dout(op.dpp, 20) << "INFO: AsyncWriteRequest::libaio_write_yield_cb: temp_key: " << op.temp_key << dendl;
 
-    ret = rename(old_path.c_str(), new_path.c_str());
+    ret = std::rename(old_path.c_str(), new_path.c_str());
     if (ret < 0) {
         ret = errno;
         ldpp_dout(op.dpp, 0) << "ERROR: put::rename: failed to rename file: " << ret << dendl;
