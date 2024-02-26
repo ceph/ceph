@@ -725,12 +725,12 @@ SeaStore::Shard::list_objects(CollectionRef ch,
 		  LOG_PREFIX(SeaStore::list_objects);
 		  DEBUGT("got {} objects, left limit {}",
 		    t, next_objects.size(), limit);
-		  if (last && std::get<1>(ret) == pend) {
-		    std::get<1>(ret) = end;
-		  }
 		  assert(limit == 0 ||
 			 std::get<1>(ret) == pend ||
 			 std::get<1>(ret) == ghobject_t::get_max());
+		  if (last && std::get<1>(ret) == pend) {
+		    std::get<1>(ret) = end;
+		  }
 		  return list_iertr::make_ready_future<
 		    seastar::stop_iteration
 		    >(seastar::stop_iteration::no);
