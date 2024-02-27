@@ -467,6 +467,7 @@ void PrimaryLogPG::on_local_recover(
 	dout(20) << " kicking unreadable waiters on " << hoid << dendl;
 	requeue_ops(unreadable_object_entry->second);
 	waiting_for_unreadable_object.erase(unreadable_object_entry);
+	finish_unreadable_object(unreadable_object_entry->first);
       }
     }
   } else {
@@ -520,6 +521,7 @@ void PrimaryLogPG::on_global_recover(
     waiting_for_unreadable_object.erase(unreadable_object_entry);
   }
   finish_degraded_object(soid);
+  finish_unreadable_object(soid);
 }
 
 void PrimaryLogPG::schedule_recovery_work(
@@ -745,6 +747,18 @@ void PrimaryLogPG::block_write_on_degraded_snap(
   ceph_assert(objects_blocked_on_degraded_snap.count(snap.get_head()) == 0);
   objects_blocked_on_degraded_snap[snap.get_head()] = snap.snap;
   wait_for_degraded_object(snap, op);
+}
+
+void PrimaryLogPG::block_write_on_unreadable_snap(
+  const hobject_t& snap, OpRequestRef op)
+{
+  dout(20) << __func__ << ": blocking object " << snap.get_head()
+	   << " on unreadable snap " << snap << dendl;
+  // otherwise, we'd have blocked in do_op
+  ceph_assert(objects_blocked_on_unreadable_snap.count(snap.get_head()) == 0);
+  objects_blocked_on_unreadable_snap[snap.get_head()] = snap.snap;
+  // the op must be queued before calling block_write_on_unreadable_snap
+  ceph_assert(waiting_for_unreadable_object.count(snap) == 1);
 }
 
 bool PrimaryLogPG::maybe_await_blocked_head(
@@ -2196,6 +2210,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       return;
     }
 
+    if (auto blocked_iter = objects_blocked_on_unreadable_snap.find(head);
+	blocked_iter != std::end(objects_blocked_on_unreadable_snap)) {
+      hobject_t to_wait_on(head);
+      to_wait_on.snap = blocked_iter->second;
+      wait_for_unreadable_object(to_wait_on, op);
+      return;
+    }
+
     // blocked on snap?
     if (auto blocked_iter = objects_blocked_on_degraded_snap.find(head);
 	blocked_iter != std::end(objects_blocked_on_degraded_snap)) {
@@ -3468,47 +3490,56 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
   return cnt;
 }
 
-bool PrimaryLogPG::recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op)
+snapid_t PrimaryLogPG::do_recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op) 
 {
-  if (!obc->ssc || !obc->ssc->snapset.clones.size()) {
-    return false;
-  }
-  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
-  bool has_manifest_op = std::any_of(
-    begin(m->ops),
-    end(m->ops),
-    [](const auto& osd_op) {
-       return osd_op.op.op == CEPH_OSD_OP_SET_CHUNK;
-    });
-  if (!obc->obs.oi.manifest.is_chunked() && !has_manifest_op) {
-    return false;
-  }
   ceph_assert(op);
-
   const SnapSet& snapset = obc->ssc->snapset;
   auto s = std::find(snapset.clones.begin(), snapset.clones.end(), obc->obs.oi.soid.snap);
-  auto is_unreadable_snap = [this, obc, &snapset, op](auto iter) -> bool {
+  auto is_unreadable_snap = [this, obc, &snapset, op](auto iter) -> snapid_t {
     hobject_t cid = obc->obs.oi.soid;
     cid.snap = (iter == snapset.clones.end()) ? snapid_t(CEPH_NOSNAP) : *iter;
     if (is_unreadable_object(cid)) {
       dout(10) << __func__ << ": clone " << cid
 	       << " is unreadable, waiting" << dendl;
       wait_for_unreadable_object(cid, op);
-      return true;
+      return cid.snap;
     }
-    return false;
+    return snapid_t();
   };
   if (s != snapset.clones.begin()) {
-    if (is_unreadable_snap(s - 1)) {
-      return true;
+    snapid_t snap = is_unreadable_snap(s - 1);
+    if (snap != snapid_t()) {
+      return snap;
     }
   }
   if (s != snapset.clones.end()) {
-    if (is_unreadable_snap(s + 1)) {
-      return true;
+    snapid_t snap = is_unreadable_snap(s + 1);
+    if (snap != snapid_t()) {
+      return snap;
     }
   }
-  return false;
+  return snapid_t();
+}
+
+bool PrimaryLogPG::recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op)
+{
+  if (!obc->ssc || !obc->ssc->snapset.clones.size()) {
+    return false;
+  }
+  MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+  bool has_manifest_op = false;
+  for (auto& osd_op : m->ops) {
+    if (osd_op.op.op == CEPH_OSD_OP_ROLLBACK) {
+      return false;
+    } else if (osd_op.op.op == CEPH_OSD_OP_SET_CHUNK) {
+      has_manifest_op = true;	
+      break;
+    }
+  }
+  if (!obc->obs.oi.manifest.is_chunked() && !has_manifest_op) {
+    return false;
+  }
+  return do_recover_adjacent_clones(obc, op) != snapid_t();
 }
 
 ObjectContextRef PrimaryLogPG::get_prev_clone_obc(ObjectContextRef obc)
@@ -8291,6 +8322,40 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, OSDOp& op)
     block_write_on_degraded_snap(missing_oid, ctx->op);
     return ret;
   }
+  /*
+   * In rollback, if the head object is not manfest and the rollback_to is manifest,
+   * the head object will become the manifest object. At this point,
+   * we need to check adjacent clones beside the head object to calculate 
+   * correct reference count for deduped chunks because the head object is now 
+   * manifest. The reverse is also true---the head object is manifest, but the rollback_to
+   * is not manifest.
+   * Therefore, the following lines inserts the op to the waiting queue to wait until
+   * unreadable object is recovered if either adjacent clones is 
+   * unreadable to calculate chunk references.
+   */
+  auto block_write_if_unreadable = [this](ObjectContextRef obc, OpRequestRef op) {
+    snapid_t sid = do_recover_adjacent_clones(obc, op);
+    if (sid != snapid_t()) {
+      hobject_t oid = obc->obs.oi.soid; 
+      oid.snap = sid;
+      block_write_on_unreadable_snap(oid, op);
+      return -EAGAIN;
+    } 
+    return 0;
+  };
+  if (oi.has_manifest() && oi.manifest.is_chunked()) {
+    int r = block_write_if_unreadable(ctx->obc, ctx->op);
+    if (r < 0) {
+      return r;
+    }
+  }
+  if (rollback_to && rollback_to->obs.oi.has_manifest() &&
+      rollback_to->obs.oi.manifest.is_chunked()) {
+    int r = block_write_if_unreadable(rollback_to, ctx->op);
+    if (r < 0) {
+      return r;
+    }
+  }
   {
     ObjectContextRef promote_obc;
     cache_result_t tier_mode_result;
@@ -12432,6 +12497,16 @@ void PrimaryLogPG::finish_degraded_object(const hobject_t oid)
     objects_blocked_on_degraded_snap.erase(i);
 }
 
+void PrimaryLogPG::finish_unreadable_object(const hobject_t oid)
+{
+  dout(10) << __func__ << " " << oid << dendl;
+  map<hobject_t, snapid_t>::iterator i = objects_blocked_on_unreadable_snap.find(
+    oid.get_head());
+  if (i != objects_blocked_on_unreadable_snap.end() &&
+      i->second == oid.snap)
+    objects_blocked_on_unreadable_snap.erase(i);
+}
+
 void PrimaryLogPG::_committed_pushed_object(
   epoch_t epoch, eversion_t last_complete)
 {
@@ -13174,6 +13249,7 @@ void PrimaryLogPG::cancel_pull(const hobject_t &soid)
   if (is_missing_object(soid))
     recovery_state.set_last_requested(0);
   finish_degraded_object(soid);
+  finish_unreadable_object(soid);
 }
 
 void PrimaryLogPG::check_recovery_sources(const OSDMapRef& osdmap)

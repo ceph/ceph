@@ -1469,6 +1469,7 @@ protected:
   void dec_refcount_by_dirty(OpContext* ctx);
   ObjectContextRef get_prev_clone_obc(ObjectContextRef obc);
   bool recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op);
+  snapid_t do_recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op);
   void get_adjacent_clones(ObjectContextRef src_obc, 
 			   ObjectContextRef& _l, ObjectContextRef& _g);
   bool inc_refcount_by_set(OpContext* ctx, object_manifest_t& tgt,
@@ -1851,6 +1852,7 @@ public:
   }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
+  void finish_unreadable_object(const hobject_t oid);
 
   int get_manifest_ref_count(ObjectContextRef obc, std::string& fp_oid, OpRequestRef op);
 
@@ -1881,6 +1883,7 @@ public:
   void block_write_on_snap_rollback(
     const hobject_t& oid, ObjectContextRef obc, OpRequestRef op);
   void block_write_on_degraded_snap(const hobject_t& oid, OpRequestRef op);
+  void block_write_on_unreadable_snap(const hobject_t& snap, OpRequestRef op);
 
   bool maybe_await_blocked_head(const hobject_t &soid, OpRequestRef op);
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
