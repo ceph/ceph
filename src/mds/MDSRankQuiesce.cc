@@ -288,9 +288,9 @@ void MDSRank::quiesce_cluster_update() {
         }
         auto addrs = mdsmap->get_info_gid(leader).addrs;
 
-        auto ack_msg = make_message<MMDSQuiesceDbAck>(me);
+        auto ack_msg = make_message<MMDSQuiesceDbAck>();
         dout(10) << "sending ack " << ack << " to the leader " << leader << dendl;
-        ack_msg->diff_map = std::move(ack);
+        ack_msg->encode_payload_from(me, ack);
         return send_message_mds(ack_msg, addrs);
       }
     };
@@ -302,9 +302,9 @@ void MDSRank::quiesce_cluster_update() {
         return -ENOENT;
       }
       auto addrs = mdsmap->get_info_gid(to).addrs;
-      auto listing_msg = make_message<MMDSQuiesceDbListing>(me);
+      auto listing_msg = make_message<MMDSQuiesceDbListing>();
       dout(10) << "sending listing " << db << " to the peer " << to << dendl;
-      listing_msg->db_listing = std::move(db);
+      listing_msg->encode_payload_from(me, db);
       return send_message_mds(listing_msg, addrs);
     };
   }
@@ -374,38 +374,59 @@ void MDSRank::quiesce_cluster_update() {
 }
 
 bool MDSRank::quiesce_dispatch(const cref_t<Message> &m) {
-  switch(m->get_type()) {
-    case MSG_MDS_QUIESCE_DB_LISTING:
-    {
-      const auto& req = ref_cast<MMDSQuiesceDbListing>(m);
-      if (quiesce_db_manager) {
-        dout(10) << "got " << req->db_listing << " from peer " << req->gid << dendl;
-        int result = quiesce_db_manager->submit_listing_from(req->gid, std::move(req->db_listing));
-        if (result != 0) {
-          dout(3) << "error (" << result << ") submitting " << req->db_listing << " from peer " << req->gid << dendl;
+  try {
+    switch(m->get_type()) {
+      case MSG_MDS_QUIESCE_DB_LISTING:
+      {
+        const auto& req = ref_cast<MMDSQuiesceDbListing>(m);
+        mds_gid_t gid;
+        QuiesceDbListing db_listing;
+        req->decode_payload_into(gid, db_listing);
+        if (quiesce_db_manager) {
+          dout(10) << "got " << db_listing << " from peer " << gid << dendl;
+          int result = quiesce_db_manager->submit_listing_from(gid, std::move(db_listing));
+          if (result != 0) {
+            dout(3) << "error (" << result << ") submitting " << db_listing << " from peer " << gid << dendl;
+          }
+        } else {
+          dout(5) << "no db manager to process " << db_listing << dendl;
         }
-      } else {
-        dout(5) << "no db manager to process " << req->db_listing << dendl;
+        return true;
       }
-      return true;
-    }
-    case MSG_MDS_QUIESCE_DB_ACK:
-    {
-      const auto& req = ref_cast<MMDSQuiesceDbAck>(m);
-      if (quiesce_db_manager) {
-        dout(10) << "got ack " << req->diff_map << " from peer " << req->gid << dendl;
-        int result = quiesce_db_manager->submit_ack_from(req->gid, std::move(req->diff_map));
-        if (result != 0) {
-          dout(3) << "error (" << result << ") submitting an ack from peer " << req->gid << dendl;
+      case MSG_MDS_QUIESCE_DB_ACK:
+      {
+        const auto& req = ref_cast<MMDSQuiesceDbAck>(m);
+        mds_gid_t gid;
+        QuiesceMap diff_map;
+        req->decode_payload_into(gid, diff_map);
+        if (quiesce_db_manager) {
+          dout(10) << "got ack " << diff_map << " from peer " << gid << dendl;
+          int result = quiesce_db_manager->submit_ack_from(gid, std::move(diff_map));
+          if (result != 0) {
+            dout(3) << "error (" << result << ") submitting an ack from peer " << gid << dendl;
+          }
+        } else {
+          dout(5) << "no db manager to process an ack: " << diff_map << dendl;
         }
-      } else {
-        dout(5) << "no db manager to process an ack: " << req->diff_map << dendl;
+        return true;
       }
-      return true;
+      default: break;
     }
-    default:
-      return false;
   }
+  catch (const ceph::buffer::error &e) {
+    if (cct) {
+      dout(-1) << "failed to decode message of type " << m->get_type()
+                 << " v" << m->get_header().version
+                 << ": " << e.what() << dendl;
+      dout(10) << "dump: \n";
+      m->get_payload().hexdump(*_dout);
+      *_dout << dendl;
+      if (cct->_conf->ms_die_on_bad_msg) {
+        ceph_abort();
+      }
+    }
+  }
+  return false;
 }
 
 void MDSRank::quiesce_agent_setup() {
