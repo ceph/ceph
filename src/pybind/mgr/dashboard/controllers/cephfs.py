@@ -56,7 +56,7 @@ class CephFS(RESTController):
             service_spec_str = service_spec_str[:-1]
         if 'hosts' in service_spec['placement']:
             for host in service_spec['placement']['hosts']:
-                service_spec_str += f'{host},'
+                service_spec_str += f'{host} '
             service_spec_str = service_spec_str[:-1]
 
         error_code, _, err = mgr.remote('volumes', '_cmd_fs_volume_create', None,
