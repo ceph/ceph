@@ -15,7 +15,8 @@ examining, modifying, and extracting data from journals.
 
     This tool is **dangerous** because it directly modifies internal
     data structures of the file system.  Make backups, be careful, and
-    seek expert advice.  If you are unsure, do not run this tool.
+    seek expert advice.  If you are unsure, do not run this tool. As a
+    precaution, cephfs-journal-tool doesn't work on an active filesystem.
 
 Syntax
 ------
