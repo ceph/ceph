@@ -408,14 +408,15 @@ class StoreNotification : public Notification {
 protected:
   Object* obj;
   Object* src_obj;
-  rgw::notify::EventType event_type;
+  rgw::notify::EventTypeList event_types;
 
-  public:
-    StoreNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type)
-      : obj(_obj), src_obj(_src_obj), event_type(_type)
-    {}
+ public:
+  StoreNotification(Object* _obj,
+                    Object* _src_obj,
+                    rgw::notify::EventTypeList _types)
+      : obj(_obj), src_obj(_src_obj), event_types(std::move(_types)) {}
 
-    virtual ~StoreNotification() = default;
+  virtual ~StoreNotification() = default;
 };
 
 class StoreWriter : public Writer {

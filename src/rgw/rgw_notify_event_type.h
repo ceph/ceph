@@ -29,8 +29,12 @@ namespace rgw::notify {
     ObjectSyncedCreate                   = 0x10000,
     ObjectSyncedDelete                   = 0x20000,
     ObjectSyncedDeletionMarkerCreated    = 0x40000,
-    UnknownEvent                         = 0x100000
-  };
+    LifecycleExpiration                    = 0xF00000,
+    LifecycleExpirationDelete              = 0x100000,
+    LifecycleExpirationDeleteMarkerCreated = 0x200000,
+    LifecycleTransition                    = 0xF000000,
+    UnknownEvent                           = 0x10000000
+};
 
   using EventTypeList = std::vector<EventType>;
 

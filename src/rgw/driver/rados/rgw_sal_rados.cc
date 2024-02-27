@@ -1084,9 +1084,19 @@ std::unique_ptr<Notification> RadosStore::get_notification(
   return std::make_unique<RadosNotification>(s, this, obj, src_obj, s, event_type, y, object_name);
 }
 
-std::unique_ptr<Notification> RadosStore::get_notification(const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y)
-{
-  return std::make_unique<RadosNotification>(dpp, this, obj, src_obj, event_type, _bucket, _user_id, _user_tenant, _req_id, y);
+std::unique_ptr<Notification> RadosStore::get_notification(
+    const DoutPrefixProvider* dpp,
+    rgw::sal::Object* obj,
+    rgw::sal::Object* src_obj,
+    const rgw::notify::EventTypeList& event_types,
+    rgw::sal::Bucket* _bucket,
+    std::string& _user_id,
+    std::string& _user_tenant,
+    std::string& _req_id,
+    optional_yield y) {
+  return std::make_unique<RadosNotification>(dpp, this, obj, src_obj,
+                                             event_types, _bucket, _user_id,
+                                             _user_tenant, _req_id, y);
 }
 
 std::string RadosStore::topics_oid(const std::string& tenant) const {
@@ -3007,13 +3017,13 @@ std::unique_ptr<LCSerializer> RadosLifecycle::get_serializer(const std::string& 
 
 int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags)
 {
-  return rgw::notify::publish_reserve(dpp, *store->svc()->site, event_type, res, obj_tags);
+  return rgw::notify::publish_reserve(dpp, *store->svc()->site, event_types, res, obj_tags);
 }
 
 int RadosNotification::publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
 				     const ceph::real_time& mtime, const std::string& etag, const std::string& version)
 {
-  return rgw::notify::publish_commit(obj, size, mtime, etag, version, event_type, res, dpp);
+  return rgw::notify::publish_commit(obj, size, mtime, etag, version, res, dpp);
 }
 
 int RadosAtomicWriter::prepare(optional_yield y)

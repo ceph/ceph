@@ -787,40 +787,52 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
         // send notification that object was successfully synced
         std::string user_id = "rgw sync";
         std::string req_id = "0";
-        		
+
         RGWObjTags obj_tags;
         auto iter = attrs.find(RGW_ATTR_TAGS);
         if (iter != attrs.end()) {
           try {
             auto it = iter->second.cbegin();
             obj_tags.decode(it);
-          } catch (buffer::error &err) {
-            ldpp_dout(dpp, 1) << "ERROR: " << __func__ << ": caught buffer::error couldn't decode TagSet " << dendl;
+          } catch (buffer::error& err) {
+            ldpp_dout(dpp, 1)
+                << "ERROR: " << __func__
+                << ": caught buffer::error couldn't decode TagSet " << dendl;
           }
         }
 
-        // NOTE: we create a mutable copy of bucket.get_tenant as the get_notification function expects a std::string&, not const
+        // NOTE: we create a mutable copy of bucket.get_tenant as the
+        // get_notification function expects a std::string&, not const
         std::string tenant(dest_bucket.get_tenant());
 
-        std::unique_ptr<rgw::sal::Notification> notify 
-                 = store->get_notification(dpp, &dest_obj, nullptr, rgw::notify::ObjectSyncedCreate,
-                  &dest_bucket, user_id,
-                  tenant,
-                  req_id, null_yield);
+        std::unique_ptr<rgw::sal::Notification> notify =
+            store->get_notification(
+                dpp, &dest_obj, nullptr, {rgw::notify::ObjectSyncedCreate},
+                &dest_bucket, user_id, tenant, req_id, null_yield);
 
-        auto notify_res = static_cast<rgw::sal::RadosNotification*>(notify.get())->get_reservation();
-        int ret = rgw::notify::publish_reserve(dpp, *store->svc()->site, rgw::notify::ObjectSyncedCreate, notify_res, &obj_tags);
+        auto notify_res =
+            static_cast<rgw::sal::RadosNotification*>(notify.get())
+                ->get_reservation();
+        int ret = rgw::notify::publish_reserve(
+            dpp, *store->svc()->site, {rgw::notify::ObjectSyncedCreate},
+            notify_res, &obj_tags);
         if (ret < 0) {
-          ldpp_dout(dpp, 1) << "ERROR: reserving notification failed, with error: " << ret << dendl;
+          ldpp_dout(dpp, 1)
+              << "ERROR: reserving notification failed, with error: " << ret
+              << dendl;
           // no need to return, the sync already happened
         } else {
-          ret = rgw::notify::publish_commit(&dest_obj, *bytes_transferred, ceph::real_clock::now(), etag, dest_obj.get_instance(), rgw::notify::ObjectSyncedCreate, notify_res, dpp);
+          ret = rgw::notify::publish_commit(
+              &dest_obj, *bytes_transferred, ceph::real_clock::now(), etag,
+              dest_obj.get_instance(), notify_res, dpp);
           if (ret < 0) {
-            ldpp_dout(dpp, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
+            ldpp_dout(dpp, 1)
+                << "ERROR: publishing notification failed, with error: " << ret
+                << dendl;
           }
         }
       }
-      
+
       if (counters) {
         if (bytes_transferred) {
           counters->inc(sync_counters::l_fetch, *bytes_transferred);

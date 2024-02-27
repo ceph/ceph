@@ -1907,7 +1907,8 @@ def test_ps_s3_lifecycle_on_master():
     notification_name = bucket_name + NOTIFICATION_SUFFIX
     topic_conf_list = [{'Id': notification_name,
                         'TopicArn': topic_arn,
-                        'Events': ['s3:ObjectLifecycle:Expiration:*']
+                        'Events': ['s3:ObjectLifecycle:Expiration:*',
+                                   's3:LifecycleExpiration:*']
                        }]
     s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
     response, status = s3_notification_conf.set_config()
@@ -1927,14 +1928,14 @@ def test_ps_s3_lifecycle_on_master():
 
     time_diff = time.time() - start_time
     print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
-    
+
     # create lifecycle policy
     client = boto3.client('s3',
             endpoint_url='http://'+conn.host+':'+str(conn.port),
             aws_access_key_id=conn.aws_access_key_id,
             aws_secret_access_key=conn.aws_secret_access_key)
     yesterday = datetime.date.today() - datetime.timedelta(days=1)
-    response = client.put_bucket_lifecycle_configuration(Bucket=bucket_name, 
+    response = client.put_bucket_lifecycle_configuration(Bucket=bucket_name,
             LifecycleConfiguration={'Rules': [
                 {
                     'ID': 'rule1',
@@ -1956,8 +1957,11 @@ def test_ps_s3_lifecycle_on_master():
     print('total number of objects: ' + str(len(keys)))
     event_keys = []
     events = http_server.get_and_reset_events()
+    assert_equal(number_of_objects * 2, len(events))
     for event in events:
-        assert_equal(event['Records'][0]['eventName'], 'ObjectLifecycle:Expiration:Current')
+        assert_in(event['Records'][0]['eventName'],
+                  ['LifecycleExpiration:Delete',
+                   'ObjectLifecycle:Expiration:Current'])
         event_keys.append(event['Records'][0]['s3']['object']['key'])
     for key in keys:
         key_found = False
