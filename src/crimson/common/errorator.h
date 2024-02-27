@@ -933,14 +933,6 @@ public:
     }
   };
 
-  struct discard_all {
-    template <class ErrorT, EnableIf<ErrorT>...>
-    void operator()(ErrorT&&) {
-      static_assert(contains_once_v<std::decay_t<ErrorT>>,
-                    "discarding disallowed ErrorT");
-    }
-  };
-
   template <typename T>
   static future<T> make_errorator_future(seastar::future<T>&& fut) {
     return std::move(fut);
@@ -1312,12 +1304,6 @@ namespace ct_error {
     template <class ErrorT>
     decltype(auto) operator()(ErrorT&& e) {
       return std::forward<ErrorT>(e);
-    }
-  };
-
-  struct discard_all {
-    template <class ErrorT>
-    void operator()(ErrorT&&) {
     }
   };
 
