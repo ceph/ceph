@@ -543,6 +543,9 @@ public:
     void inc_inodes_blocked() {
       inodes_blocked++;
     }
+    void inc_inodes_dropped() {
+      inodes_dropped++;
+    }
     uint64_t get_inodes() const {
       return inodes;
     }
@@ -566,6 +569,7 @@ public:
       f->dump_unsigned("inodes", inodes);
       f->dump_unsigned("inodes_quiesced", inodes_quiesced);
       f->dump_unsigned("inodes_blocked", inodes_blocked);
+      f->dump_unsigned("inodes_dropped", inodes_dropped);
       f->open_array_section("failed");
       for (auto& [mdr, rc] : failed) {
         f->open_object_section("failure");
@@ -580,6 +584,7 @@ private:
     uint64_t inodes = 0;
     uint64_t inodes_quiesced = 0;
     uint64_t inodes_blocked = 0;
+    uint64_t inodes_dropped = 0;
     std::map<MDRequestRef, int> failed;
   };
   class C_MDS_QuiescePath : public MDSInternalContext {
@@ -602,13 +607,24 @@ private:
       }
     }
     std::shared_ptr<QuiesceStatistics> qs = std::make_shared<QuiesceStatistics>();
-    std::chrono::milliseconds delay = 0ms;
-    bool splitauth = false;
     MDCache *cache;
     MDRequestRef mdr;
     Context* finisher = nullptr;
   };
   MDRequestRef quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *f = nullptr, std::chrono::milliseconds delay = 0ms);
+  MDRequestRef get_quiesce_inode_op(CInode* in) {
+    if (in->is_quiesced()) {
+      auto mut = in->quiescelock.get_xlock_by();
+      ceph_assert(mut); /* that would be weird */
+      auto* mdr = dynamic_cast<MDRequestImpl*>(mut.get());
+      ceph_assert(mdr); /* also would be weird */
+      ceph_assert(mdr->internal_op == CEPH_MDS_OP_QUIESCE_INODE);
+      return MDRequestRef(mdr);
+    } else {
+      return MDRequestRef();
+    }
+  }
+  void add_quiesce(CInode* parent, CInode* in);
 
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
@@ -1496,7 +1512,6 @@ private:
 
   uint64_t kill_shutdown_at = 0;
 
-  std::map<inodeno_t, MDRequestRef> quiesced_subvolumes;
   DecayCounter quiesce_counter;
   uint64_t quiesce_threshold;
   std::chrono::milliseconds quiesce_sleep;

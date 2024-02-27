@@ -3198,6 +3198,14 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 
   DECODE_FINISH(blp);
 
+  // add inode?
+  if (added) {
+    mdcache->add_inode(in);
+    dout(10) << "added " << *in << dendl;
+  } else {
+    dout(10) << "  had " << *in << dendl;
+  }
+
   // link before state  -- or not!  -sage
   if (dn->get_linkage()->get_inode() != in) {
     ceph_assert(!dn->get_linkage()->get_inode());
@@ -3207,14 +3215,6 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   if (in->is_dir())
     dn->dir->pop_lru_subdirs.push_back(&in->item_pop_lru);
  
-  // add inode?
-  if (added) {
-    mdcache->add_inode(in);
-    dout(10) << "added " << *in << dendl;
-  } else {
-    dout(10) << "  had " << *in << dendl;
-  }
-
   if (in->get_inode()->is_dirty_rstat())
     in->mark_dirty_rstat();
 

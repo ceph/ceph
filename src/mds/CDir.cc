@@ -639,6 +639,11 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
     in->snaprealm->adjust_parent();
   else if (in->is_any_caps())
     in->move_to_realm(inode->find_snaprealm());
+
+  bool is_quiesced = inode->is_quiesced();
+  if (is_quiesced) {
+    mdcache->add_quiesce(inode, in);
+  }
 }
 
 void CDir::unlink_inode(CDentry *dn, bool adjust_lru)
