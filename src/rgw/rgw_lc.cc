@@ -535,10 +535,10 @@ static bool zonegroup_lc_check(const DoutPrefixProvider *dpp, rgw::sal::Zone* zo
   });
 }
 
-static int remove_expired_obj(
-  const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool remove_indeed,
-  rgw::notify::EventType event_type)
-{
+static int remove_expired_obj(const DoutPrefixProvider* dpp,
+                              lc_op_ctx& oc,
+                              bool remove_indeed,
+                              const rgw::notify::EventTypeList& event_types) {
   auto& driver = oc.driver;
   auto& bucket_info = oc.bucket->get_info();
   auto& o = oc.o;
@@ -575,10 +575,9 @@ static int remove_expired_obj(
   del_op->params.unmod_since = meta.mtime;
 
   // notification supported only for RADOS driver for now
-  notify = driver->get_notification(dpp, obj.get(), nullptr, event_type,
-				   oc.bucket, lc_id,
-				   const_cast<std::string&>(oc.bucket->get_tenant()),
-				   lc_req_id, null_yield);
+  notify = driver->get_notification(
+      dpp, obj.get(), nullptr, event_types, oc.bucket, lc_id,
+      const_cast<std::string&>(oc.bucket->get_tenant()), lc_req_id, null_yield);
 
   ret = notify->publish_reserve(dpp, nullptr);
   if ( ret < 0) {
@@ -871,10 +870,9 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
       std::unique_ptr<rgw::sal::Notification> notify
 	= driver->get_notification(
-	  this, sal_obj.get(), nullptr, event_type,
-	  target, lc_id,
-	  const_cast<std::string&>(target->get_tenant()),
-	  lc_req_id, null_yield);
+          this, sal_obj.get(), nullptr, {event_type}, target, lc_id,
+          const_cast<std::string&>(target->get_tenant()), lc_req_id,
+          null_yield);
       auto version_id = obj.key.instance;
 
       ret = notify->publish_reserve(this, nullptr);
@@ -1144,8 +1142,10 @@ public:
     auto& o = oc.o;
     int r;
     if (o.is_delete_marker()) {
-      r = remove_expired_obj(oc.dpp, oc, true,
-			     rgw::notify::ObjectExpirationDeleteMarker);
+      r = remove_expired_obj(
+          oc.dpp, oc, true,
+          {rgw::notify::ObjectExpirationDeleteMarker,
+           rgw::notify::LifecycleExpirationDeleteMarkerCreated});
       if (r < 0) {
 	ldpp_dout(oc.dpp, 0) << "ERROR: current is-dm remove_expired_obj "
 			 << oc.bucket << ":" << o.key
@@ -1159,7 +1159,8 @@ public:
     } else {
       /* ! o.is_delete_marker() */
       r = remove_expired_obj(oc.dpp, oc, !oc.bucket->versioned(),
-			     rgw::notify::ObjectExpirationCurrent);
+                             {rgw::notify::ObjectExpirationCurrent,
+                              rgw::notify::LifecycleExpirationDelete});
       if (r < 0) {
 	ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj "
 			 << oc.bucket << ":" << o.key
@@ -1207,7 +1208,7 @@ public:
   int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true,
-			       rgw::notify::ObjectExpirationNoncurrent);
+                               {rgw::notify::ObjectExpirationNoncurrent});
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
 		       << oc.bucket << ":" << o.key
@@ -1252,7 +1253,8 @@ public:
   int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true,
-			       rgw::notify::ObjectExpirationDeleteMarker);
+        {rgw::notify::ObjectExpirationDeleteMarker,
+         rgw::notify::LifecycleExpirationDeleteMarkerCreated});
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (delete marker expiration) "
 		       << oc.bucket << ":" << o.key
@@ -1330,21 +1332,23 @@ public:
     /* If bucket is versioned, create delete_marker for current version
      */
     if (! oc.bucket->versioned()) {
-      ret = remove_expired_obj(oc.dpp, oc, true, rgw::notify::ObjectTransition);
+      ret =
+          remove_expired_obj(oc.dpp, oc, true, {rgw::notify::ObjectTransition});
       ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
                             << ") not versioned flags: " << oc.o.flags << dendl;
     } else {
       /* versioned */
       if (oc.o.is_current() && !oc.o.is_delete_marker()) {
         ret = remove_expired_obj(oc.dpp, oc, false,
-                                 rgw::notify::ObjectTransitionCurrent);
+                                 {rgw::notify::ObjectTransitionCurrent,
+                                  rgw::notify::LifecycleTransition});
         ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
                               << ") current & not delete_marker"
                               << " versioned_epoch:  " << oc.o.versioned_epoch
                               << "flags: " << oc.o.flags << dendl;
       } else {
         ret = remove_expired_obj(oc.dpp, oc, true,
-                                 rgw::notify::ObjectTransitionNoncurrent);
+                                 {rgw::notify::ObjectTransitionNoncurrent});
         ldpp_dout(oc.dpp, 20)
             << "delete_tier_obj Object(key:" << oc.o.key << ") not current "
             << "versioned_epoch:  " << oc.o.versioned_epoch
@@ -1371,17 +1375,20 @@ public:
       return ret;
     }
 
-    const auto event_type = (bucket->versioned() &&
-			     oc.o.is_current() && !oc.o.is_delete_marker()) ?
-      rgw::notify::ObjectTransitionCurrent :
-      rgw::notify::ObjectTransitionNoncurrent;
+    rgw::notify::EventTypeList event_types;
+    if (bucket->versioned() && oc.o.is_current() && !oc.o.is_delete_marker()) {
+      event_types.insert(event_types.end(),
+                         {rgw::notify::ObjectTransitionCurrent,
+                          rgw::notify::LifecycleTransition});
+    } else {
+      event_types.push_back(rgw::notify::ObjectTransitionNoncurrent);
+    }
 
-    std::unique_ptr<rgw::sal::Notification> notify
-      = oc.driver->get_notification(
-	oc.dpp, obj.get(), nullptr, event_type,
-	bucket, lc_id,
-	const_cast<std::string&>(oc.bucket->get_tenant()),
-	lc_req_id, null_yield);
+    std::unique_ptr<rgw::sal::Notification> notify =
+        oc.driver->get_notification(
+            oc.dpp, obj.get(), nullptr, event_types, bucket, lc_id,
+            const_cast<std::string&>(oc.bucket->get_tenant()), lc_req_id,
+            null_yield);
     auto version_id = oc.o.key.instance;
 
     ret = notify->publish_reserve(oc.dpp, nullptr);

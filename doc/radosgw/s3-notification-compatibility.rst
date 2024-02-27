@@ -97,6 +97,14 @@ Event Types
 +--------------------------------------------------------+-----------------------------------------+
 | ``s3:ObjectLifecycle:Transition:NonCurrent``           | Ceph extension                          |
 +--------------------------------------------------------+-----------------------------------------+
+| ``s3:LifecycleExpiration:*``                           | Supported. Equivalent to: s3:LifecycleExpiration:Delete, s3:LifecycleExpiration:DeleteMarkerCreated|
++--------------------------------------------------------+-----------------------------------------+
+| ``s3:LifecycleExpiration:Delete``                      | Supported. Equivalent to: s3:ObjectLifecycle:Expiration:Current.|
++--------------------------------------------------------+-----------------------------------------+
+| ``s3:LifecycleExpiration:DeleteMarkerCreated``         | Supported. Equivalent to: s3:ObjectLifecycle:Expiration:DeleteMarker.|
++--------------------------------------------------------+-----------------------------------------+
+| ``s3:LifecycleTransition``                             | Supported. Equivalent to: s3:ObjectLifecycle:Transition:Current|
++--------------------------------------------------------+-----------------------------------------+
 | ``s3:ObjectSynced:*``                                  | Ceph extension                          |
 +--------------------------------------------------------+-----------------------------------------+
 | ``s3:ObjectSynced:Create``                             | Ceph Extension                          |
