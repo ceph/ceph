@@ -1,0 +1,15 @@
+bcrypt
+CherryPy
+more-itertools
+pyopenssl
+requests
+Routes
+-e ../../../python-common
+prettytable
+pytest
+pyyaml
+natsort
+setuptools
+jsonpatch
+grpcio==1.46.5
+grpcio-tools==1.46.5
