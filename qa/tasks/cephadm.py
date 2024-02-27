@@ -1429,6 +1429,10 @@ def _expand_roles(ctx, config):
         a = config['all-hosts']
         roles = teuthology.all_roles(ctx.cluster)
         config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
+    elif 'all-roles' in config or 'all-hosts' in config:
+        raise ValueError(
+            'all-roles/all-hosts may not be combined with any other roles'
+        )
     return config
 
 
