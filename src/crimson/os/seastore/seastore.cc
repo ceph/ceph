@@ -937,7 +937,9 @@ SeaStore::Shard::get_attrs(
     [=, this](auto &t, auto& onode) {
       auto& layout = onode.get_layout();
       return omap_list(onode, layout.xattr_root, t, std::nullopt,
-        OMapManager::omap_list_config_t().with_inclusive(false, false)
+        OMapManager::omap_list_config_t()
+	  .with_inclusive(false, false)
+	  .without_max()
       ).si_then([&layout, &t, FNAME](auto p) {
         auto& attrs = std::get<1>(p);
         ceph::bufferlist bl;
