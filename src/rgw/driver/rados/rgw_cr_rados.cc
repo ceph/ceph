@@ -806,15 +806,18 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
         std::string tenant(dest_bucket.get_tenant());
 
         std::unique_ptr<rgw::sal::Notification> notify =
-            store->get_notification(
-                dpp, &dest_obj, nullptr, {rgw::notify::ObjectSyncedCreate},
-                &dest_bucket, user_id, tenant, req_id, null_yield);
+            store->get_notification(dpp, &dest_obj, nullptr,
+                                    {rgw::notify::ObjectSyncedCreate,
+                                     rgw::notify::ReplicationCreate},
+                                    &dest_bucket, user_id, tenant, req_id,
+                                    null_yield);
 
         auto notify_res =
             static_cast<rgw::sal::RadosNotification*>(notify.get())
                 ->get_reservation();
         int ret = rgw::notify::publish_reserve(
-            dpp, *store->svc()->site, {rgw::notify::ObjectSyncedCreate},
+            dpp, *store->svc()->site,
+            {rgw::notify::ObjectSyncedCreate, rgw::notify::ReplicationCreate},
             notify_res, &obj_tags);
         if (ret < 0) {
           ldpp_dout(dpp, 1)
