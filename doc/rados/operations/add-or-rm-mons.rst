@@ -448,7 +448,135 @@ and inject the modified monitor map into each new monitor.
 Migration to the new location is now complete. The monitors should operate
 successfully.
 
+Using cephadm to change the public network
+==========================================
 
+Overview
+--------
+
+The procedure in this overview section provides only the broad outlines of
+using ``cephadm`` to change the public network.
+
+#. Create backups of all keyrings, configuration files, and the current monmap.
+
+#. Stop the cluster and disable ``ceph.target`` to prevent the daemons from
+   starting.
+
+#. Move the servers and power them on.
+
+#. Change the network setup as desired.
+
+
+Example Procedure 
+-----------------
+
+.. note:: In this procedure, the "old network" has addresses of the form
+   ``10.10.10.0/24`` and the "new network" has addresses of the form
+   ``192.168.160.0/24``.
+
+#. Enter the shell of the first monitor:
+
+   .. prompt:: bash #
+
+      cephadm shell --name mon.reef1
+
+#. Extract the current monmap from ``mon.reef1``:
+
+   .. prompt:: bash #
+      
+      ceph-mon -i reef1 --extract-monmap monmap
+
+#. Print the content of the monmap:
+
+   .. prompt:: bash #
+
+      monmaptool --print monmap
+
+   ::
+
+      monmaptool: monmap file monmap
+      epoch 5
+      fsid 2851404a-d09a-11ee-9aaa-fa163e2de51a
+      last_changed 2024-02-21T09:32:18.292040+0000
+      created 2024-02-21T09:18:27.136371+0000
+      min_mon_release 18 (reef)
+      election_strategy: 1
+      0: [v2:10.10.10.11:3300/0,v1:10.10.10.11:6789/0] mon.reef1
+      1: [v2:10.10.10.12:3300/0,v1:10.10.10.12:6789/0] mon.reef2
+      2: [v2:10.10.10.13:3300/0,v1:10.10.10.13:6789/0] mon.reef3
+
+#. Remove monitors with old addresses:
+
+   .. prompt:: bash #
+
+      monmaptool --rm reef1 --rm reef2 --rm reef3 monmap
+
+#. Add monitors with new addresses:
+
+   .. prompt:: bash #
+
+      monmaptool --addv reef1 [v2:192.168.160.11:3300/0,v1:192.168.160.11:6789/0] --addv reef2 [v2:192.168.160.12:3300/0,v1:192.168.160.12:6789/0] --addv reef3 [v2:192.168.160.13:3300/0,v1:192.168.160.13:6789/0] monmap
+  
+#. Verify that the changes to the monmap have been made successfully:
+
+   .. prompt:: bash #
+
+      monmaptool --print monmap 
+
+   ::
+
+      monmaptool: monmap file monmap
+      epoch 4
+      fsid 2851404a-d09a-11ee-9aaa-fa163e2de51a
+      last_changed 2024-02-21T09:32:18.292040+0000
+      created 2024-02-21T09:18:27.136371+0000
+      min_mon_release 18 (reef)
+      election_strategy: 1
+      0: [v2:192.168.160.11:3300/0,v1:192.168.160.11:6789/0] mon.reef1
+      1: [v2:192.168.160.12:3300/0,v1:192.168.160.12:6789/0] mon.reef2
+      2: [v2:192.168.160.13:3300/0,v1:192.168.160.13:6789/0] mon.reef3
+
+#. Inject the new monmap into the Ceph cluster:
+
+   .. prompt:: bash #
+
+      ceph-mon -i reef1 --inject-monmap monmap
+
+#. Repeat the steps above for all other monitors in the cluster.
+
+#. Update ``/var/lib/ceph/{FSID}/mon.{MON}/config``.
+
+#. Start the monitors.
+
+#. Update the ceph ``public_network``:
+
+   .. prompt:: bash #
+
+      ceph config set mon public_network 192.168.160.0/24
+
+#. Update the configuration files of the managers
+   (``/var/lib/ceph/{FSID}/mgr.{mgr}/config``) and start them. Orchestrator
+   will now be available, but it will attempt to connect to the old network
+   because the host list contains the old addresses.
+
+#. Update the host addresses by running commands of the following form:
+
+   .. prompt:: bash #
+
+      ceph orch host set-addr reef1 192.168.160.11
+      ceph orch host set-addr reef2 192.168.160.12
+      ceph orch host set-addr reef3 192.168.160.13
+
+#. Wait a few minutes for the orchestrator to connect to each host.
+
+#. Reconfigure the OSDs so that their config files are automatically updated:
+   
+   .. prompt:: bash #
+    
+      ceph orch reconfig osd
+
+*The above procedure was developed by Eugen Block and was successfully tested
+in February 2024 on Ceph version 18.2.1 (Reef).*
 
 .. _Manual Deployment: ../../../install/manual-deployment
 .. _Monitor Bootstrap: ../../../dev/mon-bootstrap
