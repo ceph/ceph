@@ -585,12 +585,20 @@ private:
   void queue_scrub_event_msg(PG* pg,
 			     Scrub::scrub_prio_t with_priority,
 			     unsigned int qu_priority,
-			     Scrub::act_token_t act_token);
+			     Scrub::act_token_t act_token,
+			     uint64_t cost);
 
   /// An alternative version of queue_scrub_event_msg(), in which the queuing priority is
   /// provided by the executing scrub (i.e. taken from PgScrubber::m_flags)
   template <class MSG_TYPE>
-  void queue_scrub_event_msg(PG* pg, Scrub::scrub_prio_t with_priority);
+  void queue_scrub_event_msg(PG* pg, Scrub::scrub_prio_t with_priority, uint64_t cost);
+  template <class MSG_TYPE>
+  void queue_scrub_event_msg_default_cost(PG* pg, Scrub::scrub_prio_t with_priority);
+  template <class MSG_TYPE>
+  void queue_scrub_event_msg_default_cost(PG* pg,
+		                          Scrub::scrub_prio_t with_priority,
+					  unsigned int qu_priority,
+					  Scrub::act_token_t act_token);
   int64_t get_scrub_cost();
 
   utime_t defer_recovery_until;
