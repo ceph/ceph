@@ -45,6 +45,7 @@ redmine_login=""
 redmine_user_id=""
 setup_ok=""
 this_script=$(basename "$full_path")
+gh_pr_template="../../../ceph/.github/pull_request_template.md"
 
 if [[ $* == *--debug* ]]; then
     set -x
@@ -1699,6 +1700,11 @@ if [ "$PR_PHASE" ] ; then
         [ "$original_issue" ] && desc="${desc}\nparent tracker: $(number_to_url "redmine" "${original_issue}")"
     fi
     desc="${desc}\n\nthis backport was staged using ceph-backport.sh version ${SCRIPT_VERSION}\nfind the latest version at ${github_endpoint}/blob/main/src/script/ceph-backport.sh"
+    desc="$desc\n\n"
+
+    while read line; do
+        desc="$desc$line"
+    done < ${gh_pr_template}
     
     debug "Generating backport PR title"
     if [ "$original_pr" ] ; then
