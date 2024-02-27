@@ -23,20 +23,24 @@ void set_event_id(std::string& id, const std::string& hash, const utime_t& ts) {
 }
 
 void rgw_s3_key_filter::dump(Formatter *f) const {
+  if (!has_content()) {
+    return;
+  }
+  f->open_array_section("FilterRules");
   if (!prefix_rule.empty()) {
-    f->open_object_section("FilterRule");
+    f->open_object_section("");
     ::encode_json("Name", "prefix", f);
     ::encode_json("Value", prefix_rule, f);
     f->close_section();
   }
   if (!suffix_rule.empty()) {
-    f->open_object_section("FilterRule");
+    f->open_object_section("");
     ::encode_json("Name", "suffix", f);
     ::encode_json("Value", suffix_rule, f);
     f->close_section();
   }
   if (!regex_rule.empty()) {
-    f->open_object_section("FilterRule");
+    f->open_object_section("");
     ::encode_json("Name", "regex", f);
     ::encode_json("Value", regex_rule, f);
     f->close_section();
@@ -97,8 +101,12 @@ bool rgw_s3_key_filter::has_content() const {
 }
 
 void rgw_s3_key_value_filter::dump(Formatter *f) const {
+  if (!has_content()) {
+    return;
+  }
+  f->open_array_section("FilterRules");
   for (const auto& key_value : kv) {
-    f->open_object_section("FilterRule");
+    f->open_object_section("");
     ::encode_json("Name", key_value.first, f);
     ::encode_json("Value", key_value.second, f);
     f->close_section();
