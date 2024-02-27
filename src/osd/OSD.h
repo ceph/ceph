@@ -118,6 +118,8 @@ public:
 
   void enqueue_back(OpSchedulerItem&& qi);
   void enqueue_front(OpSchedulerItem&& qi);
+  /// scheduler cost per io, only valid for mclock, asserts for wpq
+  double get_cost_per_io() const;
 
   void maybe_inject_dispatch_delay() {
     if (g_conf()->osd_debug_inject_dispatch_delay_probability > 0) {
@@ -1619,6 +1621,11 @@ protected:
       for (auto p : oncommits) {
 	p->complete(0);
       }
+    }
+
+    double get_cost_per_io() const {
+      auto &sdata = osd->shards[0];
+      return sdata->scheduler->get_cost_per_io();
     }
   } op_shardedwq;
 
