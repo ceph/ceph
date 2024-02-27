@@ -58,6 +58,14 @@ namespace rgw::notify {
       return "s3:LifecycleExpiration:DeleteMarkerCreated";
     case LifecycleTransition:
       return "s3:LifecycleTransition";
+    case Replication:
+      return "s3:Replication:*";
+    case ReplicationCreate:
+      return "s3:Replication:Create";
+    case ReplicationDelete:
+      return "s3:Replication:Delete";
+    case ReplicationDeletionMarkerCreated:
+      return "s3:Replication:DeletionMarkerCreated";
     case UnknownEvent:
         return "s3:UnknownEvent";
     }
@@ -119,6 +127,14 @@ namespace rgw::notify {
       return LifecycleExpirationDeleteMarkerCreated;
     if (s == "s3:LifecycleTransition")
       return LifecycleTransition;
+    if (s == "s3:Replication:*")
+      return Replication;
+    if (s == "s3:Replication:Create")
+      return ReplicationCreate;
+    if (s == "s3:Replication:Delete")
+      return ReplicationDelete;
+    if (s == "s3:Replication:DeletionMarkerCreated")
+      return ReplicationDeletionMarkerCreated;
     return UnknownEvent;
   }
 
