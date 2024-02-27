@@ -33,7 +33,11 @@ namespace rgw::notify {
     LifecycleExpirationDelete              = 0x100000,
     LifecycleExpirationDeleteMarkerCreated = 0x200000,
     LifecycleTransition                    = 0xF000000,
-    UnknownEvent                           = 0x10000000
+    Replication                            = 0xF0000000,
+    ReplicationCreate                      = 0x10000000,
+    ReplicationDelete                      = 0x20000000,
+    ReplicationDeletionMarkerCreated       = 0x40000000,
+    UnknownEvent                           = 0x100000000
 };
 
   using EventTypeList = std::vector<EventType>;
