@@ -938,17 +938,19 @@ SeaStore::Shard::get_attrs(
       auto& layout = onode.get_layout();
       return omap_list(onode, layout.xattr_root, t, std::nullopt,
         OMapManager::omap_list_config_t().with_inclusive(false, false)
-      ).si_then([&layout](auto p) {
+      ).si_then([&layout, &t, FNAME](auto p) {
         auto& attrs = std::get<1>(p);
         ceph::bufferlist bl;
         if (layout.oi_size) {
           bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
           attrs.emplace(OI_ATTR, std::move(bl));
+         DEBUGT("set oi from onode layout", t);
         }
         if (layout.ss_size) {
           bl.clear();
           bl.append(ceph::bufferptr(&layout.ss[0], layout.ss_size));
           attrs.emplace(SS_ATTR, std::move(bl));
+         DEBUGT("set ss from onode layout", t);
         }
         return seastar::make_ready_future<omap_values_t>(std::move(attrs));
       });
@@ -1841,6 +1843,7 @@ SeaStore::Shard::_setattrs(
       }
       onode->update_object_info(*ctx.transaction, val);
       aset.erase(it);
+      DEBUGT("set oi in onode layout", *ctx.transaction);
     } else {
       onode->clear_object_info(*ctx.transaction);
     }
@@ -1855,15 +1858,18 @@ SeaStore::Shard::_setattrs(
       }
       onode->update_snapset(*ctx.transaction, val);
       aset.erase(it);
+      DEBUGT("set ss in onode layout", *ctx.transaction);
     } else {
       onode->clear_snapset(*ctx.transaction);
     }
   }
 
   if (aset.empty()) {
+    DEBUGT("all attrs set in onode layout", *ctx.transaction);
     return fut;
   }
 
+  DEBUGT("set attrs in omap", *ctx.transaction);
   return fut.si_then(
     [this, onode, &ctx, aset=std::move(aset)]() mutable {
     return _omap_set_kvs(
