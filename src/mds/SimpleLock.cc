@@ -115,8 +115,18 @@ void SimpleLock::_print(std::ostream& out) const
   out << get_state_name(get_state());
   if (!get_gather_set().empty())
     out << " g=" << get_gather_set();
-  if (is_leased())
-    out << " l";
+  {
+    std::string flags;
+    if (is_leased())
+      flags += "l";
+    if (is_cached())
+      flags += "c";
+    if (needs_recover())
+      flags += "r";
+    if (!flags.empty()) {
+      out << " " << flags;
+    }
+  }
   if (is_rdlocked())
     out << " r=" << get_num_rdlocks();
   if (is_wrlocked())
