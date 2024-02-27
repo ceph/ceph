@@ -71,6 +71,17 @@ def normalize_path(path: str) -> str:
     return path
 
 
+def validate_cephfs_path(mgr: 'Module', fs_name: str, path: str) -> None:
+    try:
+        cephfs_path_is_dir(mgr, fs_name, path)
+    except NotADirectoryError:
+        raise NFSException(f"path {path} is not a dir", -errno.ENOTDIR)
+    except cephfs.ObjectNotFound:
+        raise NFSObjectNotFound(f"path {path} does not exist")
+    except cephfs.Error as e:
+        raise NFSException(e.args[1], -e.args[0])
+
+
 class NFSRados:
     def __init__(self, rados: 'Rados', namespace: str) -> None:
         self.rados = rados
@@ -675,6 +686,8 @@ class ExportMgr:
             if not check_fs(self.mgr, fs_name):
                 raise FSNotFound(fs_name)
 
+            validate_cephfs_path(self.mgr, fs_name, path)
+
             user_id = f"nfs.{cluster_id}.{ex_id}"
             if "user_id" in fsal and fsal["user_id"] != user_id:
                 raise NFSInvalidOperation(f"export FSAL user_id must be '{user_id}'")
@@ -701,14 +714,7 @@ class ExportMgr:
                              clients: list = [],
                              sectype: Optional[List[str]] = None) -> Dict[str, Any]:
 
-        try:
-            cephfs_path_is_dir(self.mgr, fs_name, path)
-        except NotADirectoryError:
-            raise NFSException(f"path {path} is not a dir", -errno.ENOTDIR)
-        except cephfs.ObjectNotFound:
-            raise NFSObjectNotFound(f"path {path} does not exist")
-        except cephfs.Error as e:
-            raise NFSException(e.args[1], -e.args[0])
+        validate_cephfs_path(self.mgr, fs_name, path)
 
         pseudo_path = normalize_path(pseudo_path)
 
