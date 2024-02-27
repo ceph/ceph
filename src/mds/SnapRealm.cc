@@ -328,6 +328,19 @@ void SnapRealm::split_at(SnapRealm *child)
 
   // it's a dir.
 
+  if (child->inode->get_projected_parent_dir()->inode->is_stray()) {
+    if (child->inode->containing_realm) {
+      dout(10) << " moving unlinked directory inode" << dendl;
+      child->inode->move_to_realm(child);
+    } else {
+      /* This shouldn't happen because an unlinked directory will have caps
+       * issued to the caller executing rmdir (for today's clients).
+       */
+      dout(10) << " skipping unlinked directory inode w/o caps" << dendl;
+    }
+    return;
+  }
+
   // split open_children
   if (!open_children.empty()) {
     dout(10) << " open_children are " << open_children << dendl;
