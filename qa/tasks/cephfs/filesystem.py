@@ -1347,14 +1347,21 @@ class Filesystem(MDSCluster):
             out.append((rank, f(perf)))
         return out
 
-    def read_cache(self, path, depth=None, rank=None):
-        cmd = ["dump", "tree", path]
+    def read_cache(self, root, depth=None, path=None, rank=0, status=None):
+        name = self.get_rank(rank=rank, status=status)['name']
+        cmd = ["dump", "tree", root]
         if depth is not None:
             cmd.append(depth.__str__())
-        result = self.rank_asok(cmd, rank=rank)
+        if path:
+            cmd.append(f'--path={path}')
+        result = self.rank_asok(cmd, rank=rank, status=status)
         if result is None or len(result) == 0:
             raise RuntimeError("Path not found in cache: {0}".format(path))
-
+        if path:
+            mds_remote = self.mon_manager.find_remote('mds', name)
+            blob = misc.get_file(mds_remote, path, sudo=True).decode('utf-8')
+            log.debug(f"read {len(blob)}B of cache")
+            result = json.loads(blob)
         return result
 
     def wait_for_state(self, goal_state, reject=None, timeout=None, mds_id=None, rank=None):
