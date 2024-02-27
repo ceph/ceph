@@ -194,6 +194,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   and the new feature bit for more information.
 
 * cls_cxx_gather is marked as deprecated.
+* CephFS: cephfs-journal-tool is guarded against running on an online file system.
+  The 'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset' and
+  'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset --force'
+  commands require '--yes-i-really-really-mean-it'.
 
 >=18.0.0
 
