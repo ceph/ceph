@@ -2965,10 +2965,13 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   } else if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
     // lock?
     if (in->filelock.is_stable()) {
-      if (in->get_target_loner() >= 0)
-	file_excl(&in->filelock);
-      else
-	simple_lock(&in->filelock);
+      auto wanted = in->get_caps_wanted();
+      if (in->get_target_loner() >= 0 && (wanted & CEPH_CAP_ANY_FILE_WR)) {
+        dout(10) << "check_inode_max_size requesting file_excl for wanted caps " << ccap_string(wanted) << " " << *in << dendl;
+        file_excl(&in->filelock);
+      } else {
+        simple_lock(&in->filelock);
+      }
     }
     if (!in->filelock.can_wrlock(in->get_loner())) {
       dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
@@ -5584,7 +5587,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
             << " other_issued=" << gcap_string(other_issued)
 	    << " xlocker_issued=" << gcap_string(xlocker_issued)
 	    << dendl;
-    if (!((loner_wanted|loner_issued) & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) ||
+    if (!((loner_wanted|loner_issued) & (CEPH_CAP_ANY_FILE_WR >> CEPH_CAP_SFILE)) ||
 	(other_wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GRD)) ||
 	(in->is_dir() && in->multiple_nonstale_caps())) {  // FIXME.. :/
       dout(20) << " should lose it" << dendl;
@@ -5617,7 +5620,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
 	   in->get_target_loner() >= 0 &&
 	   (in->is_dir() ?
 	    !in->has_subtree_or_exporting_dirfrag() :
-	    (wanted & (CEPH_CAP_GEXCL|CEPH_CAP_GWR|CEPH_CAP_GBUFFER)))) {
+	    (wanted & (CEPH_CAP_ANY_FILE_WR >> CEPH_CAP_SFILE)))) {
     dout(7) << "file_eval stable, bump to loner " << *lock
 	    << " on " << *lock->get_parent() << dendl;
     file_excl(lock, need_issue);
