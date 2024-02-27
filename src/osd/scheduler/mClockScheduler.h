@@ -261,6 +261,10 @@ public:
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set<std::string> &changed) final;
+
+  double get_cost_per_io() const {
+    return osd_bandwidth_cost_per_io;
+  }
 private:
   // Enqueue the op to the high priority queue
   void enqueue_high(unsigned prio, OpSchedulerItem &&item, bool front = false);
