@@ -662,6 +662,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_file() const    { return get_inode()->is_file(); }
   bool is_symlink() const { return get_inode()->is_symlink(); }
   bool is_dir() const     { return get_inode()->is_dir(); }
+  bool is_quiesced() const { return quiescelock.is_xlocked(); }
 
   bool is_head() const { return last == CEPH_NOSNAP; }
 
@@ -866,6 +867,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   int count_nonstale_caps();
   bool multiple_nonstale_caps();
+
+  int get_caps_quiesce_mask() const;
 
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
@@ -1106,7 +1109,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * quiescelock.
    */
 
-  SimpleLock quiescelock; // FIXME not part of mempool
+  LocalLockC quiescelock; // FIXME not part of mempool
   LocalLockC versionlock; // FIXME not part of mempool
   SimpleLock authlock; // FIXME not part of mempool
   SimpleLock linklock; // FIXME not part of mempool

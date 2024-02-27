@@ -255,9 +255,9 @@ ostream& operator<<(ostream& out, const CInode& in)
     out << " " << in.filelock;
   if (!in.xattrlock.is_sync_and_unlocked())
     out << " " << in.xattrlock;
-  if (!in.versionlock.is_sync_and_unlocked())  
+  if (in.versionlock.is_locked())
     out << " " << in.versionlock;
-  if (!in.quiescelock.is_sync_and_unlocked())
+  if (in.quiescelock.is_locked())
     out << " " << in.quiescelock;
 
   // hack: spit out crap on which clients have caps
@@ -2882,6 +2882,7 @@ bool CInode::freeze_inode(int auth_pin_allowance)
   const static int lock_types[] = {
     CEPH_LOCK_IVERSION, CEPH_LOCK_IFILE, CEPH_LOCK_IAUTH, CEPH_LOCK_ILINK, CEPH_LOCK_IDFT,
     CEPH_LOCK_IXATTR, CEPH_LOCK_ISNAP, CEPH_LOCK_INEST, CEPH_LOCK_IFLOCK, CEPH_LOCK_IPOLICY, 0
+    //TODO: add iquiesce here?
   };
   for (int i = 0; lock_types[i]; ++i) {
     auto lock = get_lock(lock_types[i]);
@@ -3532,13 +3533,23 @@ void CInode::export_client_caps(map<client_t,Capability::Export>& cl)
   }
 }
 
+int CInode::get_caps_quiesce_mask() const
+{
+  if (is_quiesced()) {
+    // what we allow to our clients for a quiesced node
+    return CEPH_CAP_ANY_RD | CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER | CEPH_CAP_PIN;
+  } else {
+    return CEPH_CAP_ANY;
+  }
+}
+
   // caps allowed
 int CInode::get_caps_liked() const
 {
   if (is_dir())
-    return CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED;  // but not, say, FILE_RD|WR|WRBUFFER
+    return get_caps_quiesce_mask() & (CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED); // but not, say, FILE_RD|WR|WRBUFFER
   else
-    return CEPH_CAP_ANY & ~CEPH_CAP_FILE_LAZYIO;
+    return get_caps_quiesce_mask() & (CEPH_CAP_ANY & ~CEPH_CAP_FILE_LAZYIO);
 }
 
 int CInode::get_caps_allowed_ever() const
@@ -3558,30 +3569,33 @@ int CInode::get_caps_allowed_ever() const
 
 int CInode::get_caps_allowed_by_type(int type) const
 {
-  return 
+  return get_caps_quiesce_mask() & (
     CEPH_CAP_PIN |
     (filelock.gcaps_allowed(type) << filelock.get_cap_shift()) |
     (authlock.gcaps_allowed(type) << authlock.get_cap_shift()) |
     (xattrlock.gcaps_allowed(type) << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_allowed(type) << linklock.get_cap_shift());
+    (linklock.gcaps_allowed(type) << linklock.get_cap_shift())
+  );
 }
 
 int CInode::get_caps_careful() const
 {
-  return 
+  return get_caps_quiesce_mask() & (
     (filelock.gcaps_careful() << filelock.get_cap_shift()) |
     (authlock.gcaps_careful() << authlock.get_cap_shift()) |
     (xattrlock.gcaps_careful() << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_careful() << linklock.get_cap_shift());
+    (linklock.gcaps_careful() << linklock.get_cap_shift())
+  );
 }
 
 int CInode::get_xlocker_mask(client_t client) const
 {
-  return 
+  return get_caps_quiesce_mask() & (
     (filelock.gcaps_xlocker_mask(client) << filelock.get_cap_shift()) |
     (authlock.gcaps_xlocker_mask(client) << authlock.get_cap_shift()) |
     (xattrlock.gcaps_xlocker_mask(client) << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
+    (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift())
+  );
 }
 
 int CInode::get_caps_allowed_for_client(Session *session, Capability *cap,
@@ -3679,6 +3693,14 @@ int CInode::get_caps_wanted(int *ploner, int *pother, int shift, int mask) const
       other |= p.second;
       //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
     }
+
+  // we adjust wanted caps to prevent unnecessary lock transitions
+  // don't worry, when the quiesce lock is dropped
+  // the whole thing will get evaluated again, with a fixed mask
+  loner &= get_caps_quiesce_mask();
+  other &= get_caps_quiesce_mask();
+  w &= get_caps_quiesce_mask();
+
   if (ploner) *ploner = (loner >> shift) & mask;
   if (pother) *pother = (other >> shift) & mask;
   return (w >> shift) & mask;
@@ -4370,7 +4392,6 @@ void CInode::_decode_locks_state_for_replica(bufferlist::const_iterator& p, bool
     snaplock.mark_need_recover();
     flocklock.mark_need_recover();
     policylock.mark_need_recover();
-    quiescelock.mark_need_recover();
   }
   DECODE_FINISH(p);
 }

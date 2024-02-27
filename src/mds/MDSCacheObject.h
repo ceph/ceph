@@ -294,7 +294,7 @@ class MDSCacheObject {
       /* always at the front */
       seq = 0;
     }
-    waiting.insert(std::pair<waiter_seq_t, waiter>(seq, waiter(mask, c)));
+    waiting.insert(std::pair<waiter_seq_t, waiter>(seq, waiter{mask, c}));
   }
   virtual void take_waiting(uint64_t mask, MDSContext::vec& ls) {
     take_waiting(waitmask_t(mask), ls);

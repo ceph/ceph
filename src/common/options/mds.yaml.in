@@ -87,7 +87,7 @@ options:
   type: bool
   level: advanced
   desc: allow recursive quiesce across auth boundaries
-  default: false
+  default: true
   services:
   - mds
   flags:

@@ -17,6 +17,7 @@
 #include <string>
 #include <string_view>
 #include <map>
+#include <memory>
 
 #include "MDCache.h"
 #include "MDSRank.h"
@@ -115,6 +116,14 @@ protected:
 public:
   explicit MDCacheLogContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
+
+struct QuiesceInodeState {
+  MDRequestRef qrmdr;
+  std::shared_ptr<MDCache::QuiesceStatistics> qs;
+  std::chrono::milliseconds delay = 0ms;
+  bool splitauth = false;
+};
+using QuiesceInodeStateRef = std::shared_ptr<QuiesceInodeState>;
 
 MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   mds(m),
@@ -9787,6 +9796,10 @@ void MDCache::request_forward(const MDRequestRef& mdr, mds_rank_t who, int port)
 
 void MDCache::dispatch_request(const MDRequestRef& mdr)
 {
+  if (mdr->dead) {
+    dout(20) << __func__ << ": dead " << *mdr << dendl;
+    return;
+  }
   if (mdr->client_request) {
     mds->server->dispatch_client_request(mdr);
   } else if (mdr->peer_request) {
@@ -9905,24 +9918,28 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
       mdr->clear_ambiguous_auth();
     if (!mdr->more()->waiting_for_finish.empty())
       mds->queue_waiters(mdr->more()->waiting_for_finish);
+    uint64_t count = 0;
     for (auto& [in, reqid] : mdr->more()->quiesce_ops) {
       if (auto it = active_requests.find(reqid); it != active_requests.end()) {
         auto qimdr = it->second;
         dout(20) << "killing quiesce op " << *qimdr << dendl;
         request_kill(qimdr);
+        if (!(++count % mds->heartbeat_reset_grace())) {
+          mds->heartbeat_reset();
+        }
       }
     }
   }
 
-  if (mdr->internal_op == CEPH_MDS_OP_QUIESCE_PATH) {
-    /* This construction is obviously not performant but it's rarely done and only for subvolumes */
-    for (auto it = quiesced_subvolumes.begin(); it != quiesced_subvolumes.end();) {
-      if (it->second == mdr) {
-        it = quiesced_subvolumes.erase(it);
-      } else {
-        ++it;
-      }
+  switch(mdr->internal_op) {
+    case CEPH_MDS_OP_QUIESCE_INODE: {
+      auto* qisp = static_cast<QuiesceInodeStateRef*>(mdr->internal_op_private);
+      delete qisp;
+      mdr->internal_op_private = nullptr;
+      break;
     }
+    default:
+      break;
   }
 
   request_drop_locks(mdr);
@@ -13518,27 +13535,28 @@ void MDCache::clear_dirty_bits_for_stray(CInode* diri) {
 
 void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
 {
-  if (mdr->killed) {
-    dout(20) << __func__ << " " << *mdr << " not dispatching killed " << *mdr << dendl;
-    return;
-  } else if (mdr->internal_op_finish == nullptr) {
+  if (mdr->internal_op_finish == nullptr) {
     dout(20) << __func__ << " " << *mdr << " already finished quiesce" << dendl;
     return;
   }
 
-  auto* qfinisher = static_cast<C_MDS_QuiescePath*>(mdr->internal_op_private);
-  auto delay = qfinisher->delay;
-  auto splitauth = qfinisher->splitauth;
-  auto& qs = *qfinisher->qs;
-  auto qrmdr = qfinisher->mdr;
+  auto& qis = *static_cast<QuiesceInodeStateRef*>(mdr->internal_op_private);
+  auto& qrmdr = qis->qrmdr;
+  auto& qops = qrmdr->more()->quiesce_ops;
+  auto& qs = *qis->qs;
+  auto& delay = qis->delay;
+  auto& splitauth = qis->splitauth;
 
   CInode *in = get_inode(mdr->get_filepath().get_ino());
   if (in == nullptr) {
-    qs.add_failed(mdr, -CEPHFS_ENOENT);
-    mds->server->respond_to_request(mdr, -CEPHFS_ENOENT);
+    /* It has been trimmed from cache before we could acquire locks/pins, complete quietly. */
+    qops.erase(in); // allow a future try if it comes back into cache
+    qs.inc_inodes_dropped();
+    mds->server->respond_to_request(mdr, 0);
     return;
   }
-  const bool is_root = (mdr->get_filepath().get_ino() == mdr->get_filepath2().get_ino());
+
+  [[maybe_unused]] const bool is_root = (mdr->get_filepath().get_ino() == mdr->get_filepath2().get_ino());
 
   dout(20) << __func__ << " " << *mdr << " quiescing " << *in << dendl;
 
@@ -13552,77 +13570,69 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
   }
   quiesce_counter.hit();
 
-  {
-    /* Acquire authpins on `in` to prevent migrations after this rank considers
-     * it (and its children) quiesced.
-     */
+  /* Acquire cap-related locks. This pushes the lock state in the right
+   * direction.
+   *
+   * The quiescelock, once held exclusively, prevents future operations from
+   * acquiring the cap-related locks. It also prevents issuance of caps to
+   * clients.
+   *
+   * Because we're dropping the cap-related locks, other MDS can still complete
+   * operations requiring those locks or issue caps. This protocol necessarily
+   * requires that all ranks cooperatively quiesce the same tree. This is
+   * effected through the QuiesceDB.
+   *
+   * The xlock on the quiescelock is important to prevent future requests from
+   * blocking on other inode locks while holding path traversal locks.  See dev
+   * doc doc/dev/mds_internals/quiesce.rst for more details.
+   */
 
-    MutationImpl::LockOpVec lov;
-    if (!mds->locker->acquire_locks(mdr, lov, nullptr, {in}, false, true)) {
+  ceph_assert(in->is_auth() || splitauth);
+
+  if (in->is_quiesced()) {
+    auto qimdr = get_quiesce_inode_op(in);
+    if (qimdr != mdr) {
+      dout(5) << __func__ << ": already quiesced by " << *qimdr << dendl;
+      qs.add_failed(mdr, -CEPHFS_EINPROGRESS);
+      mds->server->respond_to_request(mdr, -CEPHFS_EINPROGRESS);
       return;
     }
   }
 
-  /* TODO: Consider:
-   *
-   *  rank0 is auth for /foo
-   *  rank1 quiesces /foo with no dirents in cache (and stops)
-   *  rank0 begins quiescing /foo
-   *  rank0 exports a dirfrag of /foo/bar to rank1 (/foo/bar is not authpinned by rank1 nor by rank0 (yet))
-   *  rank1 discovers relevant paths in /foo/bar
-   *  rank1 now has /foo/bar in cache and may issue caps / execute operations
-   *
-   * The solution is probably to have rank1 mark /foo has STATE_QUIESCED and reject export ops from rank0.
-   */
-
-  if (in->is_auth()) {
-    /* Acquire rdlocks on anything which prevents writing.
-     *
-     * Because files are treated specially allowing multiple reader/writers, we
-     * need an xlock here to recall all write caps. This unfortunately means
-     * there can be no readers.
-     *
-     * The xlock on the quiescelock is important to prevent future requests
-     * from blocking on other inode locks while holding path traversal locks.
-     * See dev doc doc/dev/mds_internals/quiesce.rst for more details.
-     */
-
+  if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
     MutationImpl::LockOpVec lov;
     lov.add_rdlock(&in->authlock);
-    lov.add_rdlock(&in->dirfragtreelock);
     lov.add_rdlock(&in->filelock);
     lov.add_rdlock(&in->linklock);
-    lov.add_rdlock(&in->nestlock);
-    lov.add_rdlock(&in->policylock);
-    // N.B.: NO xlock/wrlock on quiescelock; we need to allow access to mksnap/lookup
-    // This is an unfortunate inconsistency. It may be possible to circumvent
-    // this issue by having those ops acquire the quiscelock only if necessary.
-    if (is_root) {
-      lov.add_rdlock(&in->quiescelock);
-    } else {
-      lov.add_xlock(&in->quiescelock); /* !! */
-    }
-    lov.add_rdlock(&in->snaplock);
+    lov.add_xlock(&in->quiescelock); /* !! */
     lov.add_rdlock(&in->xattrlock);
     if (!mds->locker->acquire_locks(mdr, lov, nullptr, {in}, false, true)) {
       return;
     }
-  } else if (!splitauth) {
-    dout(5) << "auth is split and splitauth is false: " << *in << dendl;
-    qs.add_failed(mdr, -CEPHFS_EPERM);
-    mds->server->respond_to_request(mdr, -CEPHFS_EPERM);
-    return;
-  }
+    mdr->locking_state |= MutationImpl::ALL_LOCKED;
 
-  if (in->get_projected_inode()->get_quiesce_block()) {
-    dout(10) << __func__ << " quiesce is blocked for this inode; dropping locks!" << dendl;
-    mdr->mark_event("quiesce blocked");
-    mds->locker->drop_locks(mdr.get());
-    /* keep authpins! */
-    qs.inc_inodes_blocked();
-    mdr->internal_op_finish->complete(0);
-    mdr->internal_op_finish = nullptr;
-    return;
+    if (in->get_projected_inode()->get_quiesce_block()) {
+      dout(10) << __func__ << " quiesce is blocked for this inode; dropping locks!" << dendl;
+      mdr->mark_event("quiesce blocked");
+      mds->locker->drop_locks(mdr.get());
+      /* keep authpins! */
+      qs.inc_inodes_blocked();
+      auto* c = mdr->internal_op_finish;
+      mdr->internal_op_finish = nullptr; // prevent ::request_kill recursion
+      c->complete(0);
+      return;
+    }
+
+    if (splitauth) {
+      /* Once we have the queiscelock, we no longer need these locks.  However,
+       * if splitauth==false, the replicas do not try quiescing so we must keep
+       * them locked.
+       */
+      mds->locker->drop_lock(mdr.get(), &in->authlock);
+      mds->locker->drop_lock(mdr.get(), &in->filelock);
+      mds->locker->drop_lock(mdr.get(), &in->linklock);
+      mds->locker->drop_lock(mdr.get(), &in->xattrlock);
+    }
   }
 
   if (in->is_dir()) {
@@ -13635,7 +13645,6 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
       }
     }
     MDSGatherBuilder gather(g_ceph_context, new C_MDS_RetryRequest(this, mdr));
-    auto& qops = qrmdr->more()->quiesce_ops;
     for (auto& dir : in->get_dirfrags()) {
       for (auto& [dnk, dn] : *dir) {
         auto* in = dn->get_projected_inode();
@@ -13645,18 +13654,14 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
 
         if (auto it = qops.find(in); it != qops.end()) {
           dout(25) << __func__ << ": existing quiesce metareqid: "  << it->second << dendl;
-          if (auto reqit = active_requests.find(it->second); reqit != active_requests.end()) {
-            auto& qimdr = reqit->second;
-            dout(25) << __func__ << ": found in-progress " << qimdr << dendl;
-            continue;
-          }
+          continue;
         }
         dout(10) << __func__ << ": scheduling op to quiesce " << *in << dendl;
 
         MDRequestRef qimdr = request_start_internal(CEPH_MDS_OP_QUIESCE_INODE);
         qimdr->set_filepath(filepath(in->ino()));
         qimdr->internal_op_finish = gather.new_sub();
-        qimdr->internal_op_private = qfinisher;
+        qimdr->internal_op_private = new QuiesceInodeStateRef(qis);
         qops[in] = qimdr->reqid;
         qs.inc_inodes();
         if (delay > 0ms) {
@@ -13687,19 +13692,43 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
   }
 
   qs.inc_inodes_quiesced();
-  mdr->internal_op_finish->complete(0);
-  mdr->internal_op_finish = nullptr;
+  auto* c = mdr->internal_op_finish;
+  mdr->internal_op_finish = nullptr; // prevent ::request_kill recursion
+  c->complete(0);
 
   /* do not respond/complete so locks are not lost, parent request will complete */
 }
 
-void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
+void MDCache::add_quiesce(CInode* parent, CInode* in)
 {
-  if (mdr->killed) {
-    dout(20) << __func__ << " not dispatching killed " << *mdr << dendl;
+  ceph_assert(parent->is_quiesced());
+  auto mdr = get_quiesce_inode_op(parent);
+
+  auto& qis = *static_cast<QuiesceInodeStateRef*>(mdr->internal_op_private);
+  auto& qrmdr = qis->qrmdr;
+  auto& qs = *qis->qs;
+  auto& qops = qrmdr->more()->quiesce_ops;
+
+  if (auto it = qops.find(in); it != qops.end()) {
+    dout(25) << __func__ << ": existing quiesce metareqid: "  << it->second << dendl;
     return;
   }
+  dout(10) << __func__ << ": scheduling op to quiesce " << *in << dendl;
 
+  MDRequestRef qimdr = request_start_internal(CEPH_MDS_OP_QUIESCE_INODE);
+  qimdr->set_filepath(filepath(in->ino()));
+  qimdr->internal_op_finish = new LambdaContext([](int r) {});
+  qimdr->internal_op_private = new QuiesceInodeStateRef(qis);
+  qops[in] = qimdr->reqid;
+  qs.inc_inodes();
+  dispatch_request(qimdr);
+  if (!(qs.inc_heartbeat_count() % mds->heartbeat_reset_grace())) {
+    mds->heartbeat_reset();
+  }
+}
+
+void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
+{
   if (!mds->is_active()) {
     dout(20) << __func__ << " is not active!" << dendl;
     mds->server->respond_to_request(mdr, -CEPHFS_EAGAIN);
@@ -13712,8 +13741,11 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
 
   C_MDS_QuiescePath* qfinisher = static_cast<C_MDS_QuiescePath*>(mdr->internal_op_finish);
   auto& qs = *qfinisher->qs;
-  auto delay = qfinisher->delay = g_conf().get_val<std::chrono::milliseconds>("mds_cache_quiesce_delay");
-  auto splitauth = qfinisher->splitauth = g_conf().get_val<bool>("mds_cache_quiesce_splitauth");
+  auto delay = g_conf().get_val<std::chrono::milliseconds>("mds_cache_quiesce_delay");
+  auto splitauth = g_conf().get_val<bool>("mds_cache_quiesce_splitauth");
+
+  QuiesceInodeStateRef qis = std::make_shared<QuiesceInodeState>();
+  *qis = {mdr, qfinisher->qs, delay, splitauth};
 
   CInode* diri = nullptr;
   CF_MDS_RetryRequestFactory cf(this, mdr, true);
@@ -13736,22 +13768,18 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     return;
   }
 
-  if (auto [it, inserted] = quiesced_subvolumes.try_emplace(diri->ino(), mdr); !inserted) {
-    if (!it->second) {
-      it->second = mdr;
-    } else if (it->second != mdr) {
-      dout(5) << __func__ << ": quiesce operation already in flight: " << it->second << dendl;
-      mds->server->respond_to_request(mdr, -CEPHFS_EINPROGRESS);
-      return;
-    }
-  }
-
   qfinisher->mdr = mdr;
 
-  for (auto& [qimdr, rc] : qs.get_failed()) {
-    dout(5) << __func__ << ": op " << *qimdr << " failed with " << rc << "!" << dendl;
-    mds->server->respond_to_request(mdr, rc);
-    return;
+  {
+    int myrc = 0;
+    for (auto& [qimdr, rc] : qs.get_failed()) {
+      dout(5) << __func__ << ": op " << *qimdr << " failed with " << rc << "!" << dendl;
+      myrc = rc;
+    }
+    if (myrc) {
+      mds->server->respond_to_request(mdr, myrc);
+      return;
+    }
   }
 
   if (!diri->is_auth() && !splitauth) {
@@ -13762,7 +13790,7 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     qimdr->set_filepath(filepath(diri->ino()));
     qimdr->set_filepath2(filepath(diri->ino())); /* is_root! */
     qimdr->internal_op_finish = new C_MDS_RetryRequest(this, mdr);
-    qimdr->internal_op_private = qfinisher;
+    qimdr->internal_op_private = new QuiesceInodeStateRef(qis);
     qops[diri] = qimdr->reqid;
     qs.inc_inodes();
     if (delay > 0ms) {
@@ -13779,8 +13807,9 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
   }
 
   if (qfinisher) {
-    qfinisher->complete(0);
-    mdr->internal_op_finish = nullptr;
+    auto* c = mdr->internal_op_finish;
+    mdr->internal_op_finish = nullptr; // prevent ::request_kill recursion
+    c->complete(0);
   }
   mdr->result = 0;
 
