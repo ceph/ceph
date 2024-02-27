@@ -343,6 +343,10 @@ public:
       std::vector<OnodeRef> &d_onodes,
       ceph::os::Transaction::iterator &i);
 
+    tm_ret _remove_omaps(
+      internal_context_t &ctx,
+      OnodeRef &onode,
+      omap_root_t &&omap_root);
     tm_ret _remove(
       internal_context_t &ctx,
       OnodeRef &onode);
