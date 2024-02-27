@@ -19,13 +19,8 @@
 #include "mds/QuiesceDbEncoding.h"
 
 class MMDSQuiesceDbAck final : public MMDSOp {
-public:
-  mds_gid_t gid;
-  mutable QuiesceMap diff_map;
-
 protected:
-  MMDSQuiesceDbAck(mds_gid_t gid) : MMDSOp{MSG_MDS_QUIESCE_DB_ACK}, gid(gid) {}
-  MMDSQuiesceDbAck() : MMDSQuiesceDbAck(MDS_GID_NONE) {}
+  MMDSQuiesceDbAck() : MMDSOp{MSG_MDS_QUIESCE_DB_ACK} {}
   ~MMDSQuiesceDbAck() final {}
 
 public:
@@ -35,6 +30,11 @@ public:
   }
 
   void encode_payload(uint64_t features) override
+  {
+    // noop to prevent unnecessary overheads
+  }
+
+  void encode_payload_from(mds_gid_t const&gid, QuiesceMap const&diff_map)
   {
     using ceph::encode;
 
@@ -47,6 +47,11 @@ public:
   }
 
   void decode_payload() override {
+    // noop to prevent unnecessary overheads
+  }
+
+  void decode_payload_into(mds_gid_t &gid, QuiesceMap &diff_map) const
+  {
     using ceph::decode;
     auto p = payload.cbegin();
     DECODE_START(1, p);

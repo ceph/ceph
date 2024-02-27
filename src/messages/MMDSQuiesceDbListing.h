@@ -19,13 +19,8 @@
 #include "mds/QuiesceDbEncoding.h"
 
 class MMDSQuiesceDbListing final : public MMDSOp {
-public:
-  mds_gid_t gid;
-  mutable QuiesceDbListing db_listing;
-
 protected:
-  MMDSQuiesceDbListing(mds_gid_t gid) : MMDSOp{MSG_MDS_QUIESCE_DB_LISTING}, gid(gid) {}
-  MMDSQuiesceDbListing() : MMDSQuiesceDbListing(MDS_GID_NONE) {}
+  MMDSQuiesceDbListing() : MMDSOp{MSG_MDS_QUIESCE_DB_LISTING} {}
   ~MMDSQuiesceDbListing() final {}
 
 public:
@@ -34,7 +29,11 @@ public:
 
   }
 
-  void encode_payload(uint64_t features) override
+  void encode_payload(uint64_t features) override { 
+    // noop to prevent unnecessary overheads
+  }
+
+  void encode_payload_from(mds_gid_t const& gid, QuiesceDbListing const& db_listing)
   {
     using ceph::encode;
 
@@ -47,6 +46,11 @@ public:
   }
 
   void decode_payload() override {
+    // noop to prevent unnecessary overheads
+  }
+
+  void decode_payload_into(mds_gid_t &gid, QuiesceDbListing &db_listing) const
+  {
     using ceph::decode;
     auto p = payload.cbegin();
     DECODE_START(1, p);
