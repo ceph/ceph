@@ -12,11 +12,11 @@ options:
   level: advanced
   desc: The maximum number concurrent IO operations, 0 for unlimited
   default: 0
-- name: crimson_alien_op_num_threads
+- name: crimson_alien_num_threads_per_core
   type: uint
   level: advanced
-  desc: The number of threads for serving alienized ObjectStore
-  default: 6
+  desc: The number of threads for each core of serving alienized ObjectStore
+  default: 4
   flags:
   - startup
 - name: crimson_seastar_cpu_cores
@@ -25,7 +25,7 @@ options:
   desc: CPU cores on which seastar reactor threads will run in cpuset(7) format, smp::count is deduced from this option
   flags:
   - startup
-- name: crimson_alien_thread_cpu_cores
+- name: crimson_alien_cpu_cores
   type: str
   level: advanced
   desc: CPU cores on which alienstore threads will run in cpuset(7) format

@@ -102,7 +102,7 @@ seastar::future<> AlienStore::start()
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
   }
   auto cpu_cores = seastar::resource::parse_cpuset(
-    get_conf<std::string>("crimson_alien_thread_cpu_cores"));
+    get_conf<std::string>("crimson_alien_cpu_cores"));
   //  crimson_alien_thread_cpu_cores are assigned to alien threads.
   if (!cpu_cores.has_value()) {
     // no core isolation by default, seastar_cpu_cores will be
@@ -111,9 +111,9 @@ seastar::future<> AlienStore::start()
       get_conf<std::string>("crimson_seastar_cpu_cores"));
     ceph_assert(cpu_cores.has_value());
   }
-  const auto num_threads =
-    get_conf<uint64_t>("crimson_alien_op_num_threads");
-  tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, cpu_cores);
+  const auto num_threads_per_core =
+    get_conf<uint64_t>("crimson_alien_num_threads_per_core");
+  tp = std::make_unique<crimson::os::ThreadPool>(num_threads_per_core * (*cpu_cores).size() , 128, cpu_cores);
   return tp->start();
 }
 
