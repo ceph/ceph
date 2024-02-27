@@ -1,3 +1,4 @@
+import errno
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ from tasks.cephfs.cephfs_test_case import CephFSTestCase
 log = logging.getLogger(__name__)
 
 INODE_RE = re.compile(r'\[inode 0x([0-9a-fA-F]+)')
+CAP_RE = re.compile(r'(p)?(A[sx]+)?(L[sx]+)?(X[sx]+)?(F[sxrwcbl]+)?')
 FP_RE = re.compile(r'fp=#0x([0-9a-fA-F]+)(\S*)')
 
 # MDS uses linux defines:
@@ -43,10 +45,14 @@ class QuiesceTestCase(CephFSTestCase):
 
     def setUp(self):
         super().setUp()
+        self.config_set('mds', 'debug_mds', '25')
+        self.config_set('mds', 'mds_cache_quiesce_splitauth', 'true')
         self.run_ceph_cmd(f'fs subvolume create {self.fs.name} {self.QUIESCE_SUBVOLUME} --mode=777')
         p = self.run_ceph_cmd(f'fs subvolume getpath {self.fs.name} {self.QUIESCE_SUBVOLUME}', stdout=StringIO())
         self.mntpnt = p.stdout.getvalue().strip()
         self.subvolume = self.mntpnt
+        self.splitauth = True
+        self.archive = os.path.join(self.ctx.archive, 'quiesce')
 
     def tearDown(self):
         # restart fs so quiesce commands clean up and commands are left unkillable
@@ -54,6 +60,14 @@ class QuiesceTestCase(CephFSTestCase):
         self.fs.set_joinable()
         self.fs.wait_for_daemons()
         super().tearDown()
+
+    def _make_archive(self):
+        log.info(f"making archive directory {self.archive}")
+        try:
+            os.mkdir(self.archive)
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                raise
 
     def _configure_subvolume(self):
         for m in self.mounts:
@@ -73,11 +87,17 @@ class QuiesceTestCase(CephFSTestCase):
            p = m.run_shell_payload(self.CLIENT_WORKLOAD, wait=False, stderr=StringIO(), timeout=1)
            m.background_procs.append(p)
 
-    def _wait_for_quiesce_complete(self, reqid, rank=0, path=None):
+    def _wait_for_quiesce_complete(self, reqid, rank=0, path=None, status=None, timeout=120):
+        if path is None:
+            path = self.subvolume
+        if status is None:
+            status = self.fs.status()
         op = None
         try:
-            with safe_while(sleep=1, tries=120, action='wait for quiesce completion') as proceed:
+            with safe_while(sleep=1, tries=timeout, action='wait for quiesce completion') as proceed:
                 while proceed():
+                    if self.fs.status().hadfailover(status):
+                        raise RuntimeError("failover occurred")
                     op = self.fs.get_op(reqid, rank=rank)
                     log.debug(f"op:\n{op}")
                     self.assertEqual(op['type_data']['op_name'], 'quiesce_path')
@@ -85,15 +105,16 @@ class QuiesceTestCase(CephFSTestCase):
                         return op
         except:
             log.info(f"op:\n{op}")
-            if path is not None:
-                cache = self.fs.read_cache(path, rank=rank)
-                (fd, path) = tempfile.mkstemp()
-                with os.fdopen(fd, "wt") as f:
-                    f.write(f"{json.dumps(cache, indent=2)}")
-                    log.error(f"cache written to {path}")
-            (fd, path) = tempfile.mkstemp()
+            self._make_archive()
+            cache = self.fs.read_cache(path, rank=rank, path=f"/tmp/mds.{rank}-cache", status=status)
+            (fd, path) = tempfile.mkstemp(prefix="cache", dir=self.archive)
             with os.fdopen(fd, "wt") as f:
-                ops = self.fs.get_ops(locks=True, rank=rank)
+                os.fchmod(fd, 0o644)
+                f.write(f"{json.dumps(cache, indent=2)}")
+                log.error(f"cache written to {path}")
+            ops = self.fs.get_ops(locks=True, rank=rank, path=f"/tmp/mds.{rank}-ops", status=status)
+            (fd, path) = tempfile.mkstemp(prefix="ops", dir=self.archive)
+            with os.fdopen(fd, "wt") as f:
                 f.write(f"{json.dumps(ops, indent=2)}")
                 log.error(f"ops written to {path}")
             raise
@@ -102,36 +123,46 @@ class QuiesceTestCase(CephFSTestCase):
     FP_QUIESCE_BLOCKED = 'quiesce blocked'
     FP_QUIESCE_COMPLETE_NON_AUTH = 'quiesce complete for non-auth inode'
     FP_QUIESCE_COMPLETE_NON_AUTH_TREE = 'quiesce complete for non-auth tree'
-    def _verify_quiesce(self, rank=0, root=None, splitauth=False):
+    def _verify_quiesce(self, rank=0, root=None, splitauth=None, status=None):
         if root is None:
             root = self.subvolume
+        if splitauth is None:
+            splitauth = self.splitauth
+        if status is None:
+            status = self.fs.status()
 
-        name = self.fs.get_rank(rank=rank)['name']
-        root_ino = self.fs.read_cache(root, depth=0, rank=rank)[0]['ino']
-        ops = self.fs.get_ops(locks=True, rank=rank, path=f"/tmp/mds.{rank}-ops")
+        root_inode = self.fs.read_cache(root, depth=0, rank=rank, status=status)[0]
+        ops = self.fs.get_ops(locks=True, rank=rank, path=f"/tmp/mds.{rank}-ops", status=status)
         quiesce_inode_ops = {}
-        skipped_nonauth = False
 
-        count_q = 0
-        count_qb = 0
-        count_qna = 0
+        count_qp = 0
+        count_qi = 0
+        count_qib = 0
+        count_qina = 0
 
         for op in ops['ops']:
             try:
-                log.debug(f"op = {op}")
                 type_data = op['type_data']
                 flag_point = type_data['flag_point']
                 op_type = type_data['op_type']
                 if op_type == 'client_request' or op_type == 'peer_request':
                     continue
                 op_name = type_data['op_name']
+                op_description = op['description']
                 if op_name == "quiesce_path":
                     self.assertIn(flag_point, (self.FP_QUIESCE_COMPLETE, self.FP_QUIESCE_COMPLETE_NON_AUTH_TREE))
                     if flag_point == self.FP_QUIESCE_COMPLETE_NON_AUTH_TREE:
-                        skipped_nonauth = True
+                        self.assertFalse(splitauth)
+                        m = FP_RE.search(op_description)
+                        self.assertEqual(int(m.group(1)), 1)
+                        fp = m.group(2)
+                        if os.path.realpath(root) == os.path.realpath(fp):
+                            self.assertFalse(root_inode['is_auth'])
+                            log.debug("rank is not auth for tree and !splitauth")
+                            return
+                    count_qp += 1
                 elif op_name == "quiesce_inode":
                     # get the inode number
-                    op_description = op['description']
                     m = FP_RE.search(op_description)
                     self.assertIsNotNone(m)
                     if len(m.group(2)) == 0:
@@ -139,7 +170,7 @@ class QuiesceTestCase(CephFSTestCase):
                     else:
                         self.assertEqual(int(m.group(1)), 1)
                         fp = m.group(2)
-                        dump = self.fs.read_cache(fp, depth=0, rank=rank)
+                        dump = self.fs.read_cache(fp, depth=0, rank=rank, status=status)
                         ino = dump[0]['ino']
                     self.assertNotIn(ino, quiesce_inode_ops)
 
@@ -147,10 +178,10 @@ class QuiesceTestCase(CephFSTestCase):
 
                     locks = type_data['locks']
                     if flag_point == self.FP_QUIESCE_BLOCKED:
-                        count_qb += 1
+                        count_qib += 1
                         self.assertEqual(locks, [])
                     elif flag_point == self.FP_QUIESCE_COMPLETE_NON_AUTH:
-                        count_qna += 1
+                        count_qina += 1
                         #self.assertEqual(len(locks), 1)
                         #lock = locks[0]
                         #lock_type = lock['lock']['type']
@@ -160,7 +191,7 @@ class QuiesceTestCase(CephFSTestCase):
                         #self.assertIsNotNone(m)
                         #self.assertEqual(ino, int(m.group(1), 16))
                     else:
-                        count_q += 1
+                        count_qi += 1
                         for lock in locks:
                             lock_type = lock['lock']['type']
                             if lock_type.startswith('i'):
@@ -174,88 +205,106 @@ class QuiesceTestCase(CephFSTestCase):
                 log.error(f"op:\n{json.dumps(op, indent=2)}")
                 raise
 
-        log.info(f"q = {count_q}; qb = {count_qb}; qna = {count_qna}")
-
-        if skipped_nonauth:
-            return
-
-        for ino, op in quiesce_inode_ops.items():
-            log.debug(f"{ino}: {op['description']}")
+        log.info(f"qp = {count_qp}; qi = {count_qi}; qib = {count_qib}; qina = {count_qina}")
 
         # now verify all files in cache have an op
-        cache = self.fs.read_cache(root, rank=rank)
+        cache = self.fs.read_cache(root, rank=rank, path=f"/tmp/mds.{rank}-cache", status=status)
         visited = set()
         locks_expected = set([
           "iquiesce",
-          "isnap",
-          "ipolicy",
-          "ifile",
-          "inest",
-          "idft",
-          "iauth",
-          "ilink",
-          "ixattr",
         ])
-        for inode in cache:
-            ino = inode['ino']
-            visited.add(ino)
-            mode = inode['mode']
-            self.assertIn(ino, quiesce_inode_ops)
-            op = quiesce_inode_ops[ino]
-            type_data = op['type_data']
-            flag_point = type_data['flag_point']
-            try:
-                locks_seen = set()
-                lock_type = None
-                op_name = type_data['op_name']
-                for lock in op['type_data']['locks']:
-                    lock_type = lock['lock']['type']
-                    if lock_type == "iquiesce":
-                        if ino == root_ino:
-                            self.assertEqual(lock['flags'], 1)
-                            self.assertEqual(lock['lock']['state'], 'sync')
-                        else:
-                            self.assertEqual(lock['flags'], 4)
-                            self.assertEqual(lock['lock']['state'], 'xlock')
-                    elif lock_type == "isnap":
-                        self.assertEqual(lock['flags'], 1)
-                        self.assertEqual(lock['lock']['state'][:4], 'sync')
-                    elif lock_type == "ifile":
-                        self.assertEqual(lock['flags'], 1)
-                        self.assertEqual(lock['lock']['state'][:4], 'sync')
-                    elif lock_type in ("ipolicy", "inest", "idft", "iauth", "ilink", "ixattr"):
-                        self.assertEqual(lock['flags'], 1)
-                        self.assertEqual(lock['lock']['state'][:4], 'sync')
-                    else:
-                        # no iflock
-                        self.assertFalse(lock_type.startswith("i"))
-                    if flag_point == self.FP_QUIESCE_COMPLETE and lock_type.startswith("i"):
-                        #if op_name == "quiesce_inode":
-                        #    self.assertTrue(lock['object']['is_auth'])
-                        locks_seen.add(lock_type)
-                try:
-                    if flag_point == self.FP_QUIESCE_BLOCKED:
-                        self.assertTrue(inode['quiesce_block'])
-                        self.assertEqual(set(), locks_seen)
-                    elif flag_point == self.FP_QUIESCE_COMPLETE_NON_AUTH:
-                        self.assertFalse(inode['quiesce_block'])
-                        self.assertEqual(set(), locks_seen)
-                    else:
-                        self.assertFalse(inode['quiesce_block'])
-                        self.assertEqual(locks_expected, locks_seen)
-                except:
-                    log.error(f"{sorted(locks_expected)} != {sorted(locks_seen)}")
-                    raise
-            except:
-                log.error(f"inode:\n{json.dumps(inode, indent=2)}")
-                log.error(f"op:\n{json.dumps(op, indent=2)}")
-                log.error(f"lock_type: {lock_type}")
-                raise
+        if not splitauth:
+            locks_expected.add('iauth')
+            locks_expected.add('ifile')
+            locks_expected.add('ilink')
+            locks_expected.add('ixattr')
         try:
-            self.assertEqual(visited, quiesce_inode_ops.keys())
+            inos = set()
+            for inode in cache:
+                ino = inode['ino']
+                auth = inode['is_auth']
+                if not auth and not splitauth:
+                    continue
+                inos.add(ino)
+            self.assertLessEqual(set(inos), set(quiesce_inode_ops.keys()))
+            for inode in cache:
+                ino = inode['ino']
+                auth = inode['is_auth']
+                if not auth and not splitauth:
+                    continue
+                visited.add(ino)
+                self.assertIn(ino, quiesce_inode_ops.keys())
+                op = quiesce_inode_ops[ino]
+                type_data = op['type_data']
+                flag_point = type_data['flag_point']
+                try:
+                    locks_seen = set()
+                    lock_type = None
+                    op_name = type_data['op_name']
+                    for lock in op['type_data']['locks']:
+                        lock_type = lock['lock']['type']
+                        if lock_type == "iquiesce":
+                            self.assertEqual(lock['flags'], 4)
+                            self.assertEqual(lock['lock']['state'], 'lock')
+                            self.assertEqual(lock['lock']['num_xlocks'], 1)
+                        elif lock_type in ("ifile", "iauth", "ilink", "ixattr"):
+                            self.assertFalse(splitauth)
+                            self.assertEqual(lock['flags'], 1)
+                            self.assertEqual(lock['lock']['state'][:4], 'sync')
+                        else:
+                            # no other locks
+                            self.assertFalse(lock_type.startswith("i"))
+                        if flag_point == self.FP_QUIESCE_COMPLETE and lock_type.startswith("i"):
+                            #if op_name == "quiesce_inode":
+                            #    self.assertTrue(lock['object']['is_auth'])
+                            locks_seen.add(lock_type)
+                    try:
+                        if flag_point == self.FP_QUIESCE_BLOCKED:
+                            self.assertTrue(inode['quiesce_block'])
+                            self.assertEqual(set(), locks_seen)
+                        elif flag_point == self.FP_QUIESCE_COMPLETE_NON_AUTH:
+                            self.assertFalse(inode['quiesce_block'])
+                            self.assertEqual(set(), locks_seen)
+                        elif flag_point == self.FP_QUIESCE_COMPLETE:
+                            self.assertFalse(inode['quiesce_block'])
+                            self.assertEqual(locks_expected, locks_seen)
+                        else:
+                            self.fail(f"unexpected flag_point: {flag_point}")
+                    except:
+                        log.error(f"{sorted(locks_expected)} != {sorted(locks_seen)}")
+                        raise
+                    if flag_point in (self.FP_QUIESCE_COMPLETE_NON_AUTH, self.FP_QUIESCE_COMPLETE):
+                        for cap in inode['client_caps']:
+                            issued = cap['issued']
+                            m = CAP_RE.match(issued)
+                            if m is None:
+                                log.error(f"failed to parse client cap: {issued}")
+                                self.assertIsNotNone(m)
+                            g = m.groups()
+                            if g[1] is not None:
+                                # Ax?
+                                self.assertNotIn('x', g[1])
+                            if g[2] is not None:
+                                # Lx?
+                                self.assertNotIn('x', g[2])
+                            if g[3] is not None:
+                                # Xx?
+                                self.assertNotIn('x', g[3])
+                            if g[4] is not None:
+                                # Fxw?
+                                self.assertNotIn('x', g[4])
+                                self.assertNotIn('w', g[4])
+                except:
+                    log.error(f"inode:\n{json.dumps(inode, indent=2)}")
+                    log.error(f"op:\n{json.dumps(op, indent=2)}")
+                    log.error(f"lock_type: {lock_type}")
+                    raise
+            if count_qp == 1:
+                self.assertEqual(visited, quiesce_inode_ops.keys())
         except:
             log.error(f"cache:\n{json.dumps(cache, indent=2)}")
             log.error(f"ops:\n{json.dumps(quiesce_inode_ops, indent=2)}")
+            raise
 
         # check request/cap count is stopped
         # count inodes under /usr and count subops!
@@ -424,7 +473,7 @@ class TestQuiesce(QuiesceTestCase):
 
         J = self.fs.rank_tell(["quiesce", "path", path, '--wait'])
         reqid = self.reqid_tostr(J['op']['reqid'])
-        self._wait_for_quiesce_complete(reqid)
+        self._wait_for_quiesce_complete(reqid, path=path)
         self._verify_quiesce(root=path)
 
     def test_quiesce_path_regfile(self):
@@ -490,8 +539,41 @@ class TestQuiesce(QuiesceTestCase):
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce(root=self.subvolume)
 
-    # TODO test lookup leaf file/dir after quiesce
-    # TODO ditto path_traverse
+    def test_quiesce_find(self):
+        """
+        That a `find` can be executed on a quiesced path.
+        """
+
+        # build a tree
+        self._configure_subvolume()
+        self._client_background_workload()
+        sleep(secrets.randbelow(20)+10)
+        for m in self.mounts:
+            m.kill_background()
+            m.remount() # drop all caps
+
+        # drop cache
+        self.fs.rank_tell(["cache", "drop"])
+
+        J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
+        log.debug(f"{J}")
+        reqid = self.reqid_tostr(J['op']['reqid'])
+        self._wait_for_quiesce_complete(reqid)
+        self._verify_quiesce(root=self.subvolume)
+
+        p = self.fs.rank_tell("perf", "dump")
+        dfc1 = p['mds']['dir_fetch_complete']
+
+        # now try `find`
+        self.mount_a.run_shell_payload('find -printf ""', timeout=300)
+
+        p = self.fs.rank_tell("perf", "dump")
+        dfc2 = p['mds']['dir_fetch_complete']
+        self.assertGreater(dfc2, dfc1)
+
+        self._wait_for_quiesce_complete(reqid)
+        self._verify_quiesce(root=self.subvolume)
+
 
 class TestQuiesceMultiRank(QuiesceTestCase):
     """
@@ -520,12 +602,18 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         status = self.fs.wait_for_daemons()
         self.mds_map = self.fs.get_mds_map(status=status)
         self.ranks = list(range(self.mds_map['max_mds']))
+        # mds_cache_quiesce_splitauth is now true by default but maintain
+        # manually as well.
+        self.config_set('mds', 'mds_cache_quiesce_splitauth', 'true')
+        self.splitauth = True
 
+    @unittest.skip("!splitauth")
     def test_quiesce_path_splitauth(self):
         """
         That quiesce fails (by default) if auth is split on a path.
         """
 
+        self.config_set('mds', 'mds_cache_quiesce_splitauth', 'false')
         self._configure_subvolume()
         self.mount_a.setfattr(".", "ceph.dir.pin.distributed", "1")
         self._client_background_workload()
@@ -544,6 +632,7 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         self.mount_a.setfattr(".", "ceph.dir.pin.distributed", "1")
         self._client_background_workload()
         self._wait_distributed_subtrees(2*2, rank="all", path=self.mntpnt)
+        status = self.fs.status()
 
         sleep(secrets.randbelow(30)+10)
 
@@ -561,10 +650,9 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         for rank, op, path in ops:
             reqid = self.reqid_tostr(op['reqid'])
             log.debug(f"waiting for ({rank}, {reqid})")
-            op = self._wait_for_quiesce_complete(reqid, rank=rank, path=path)
-        # FIXME _verify_quiesce needs adjustment for multiple quiesce
-        #for rank, op, path in ops:
-        #    self._verify_quiesce(root=path, rank=rank)
+            op = self._wait_for_quiesce_complete(reqid, rank=rank, path=path, status=status)
+        for rank, op, path in ops:
+            self._verify_quiesce(root=path, rank=rank, status=status)
 
     # TODO: test for quiesce_counter
 
@@ -593,12 +681,12 @@ class TestQuiesceSplitAuth(QuiesceTestCase):
         super().setUp()
         self.config_set('mds', 'mds_export_ephemeral_random_max', '0.75')
         self.config_set('mds', 'mds_cache_quiesce_splitauth', 'true')
+        self.splitauth = True
         self.fs.set_max_mds(2)
         status = self.fs.wait_for_daemons()
         self.mds_map = self.fs.get_mds_map(status=status)
         self.ranks = list(range(self.mds_map['max_mds']))
 
-    @unittest.skip("splitauth is experimental")
     def test_quiesce_path_multirank_exports(self):
         """
         That quiesce may complete with two ranks and a basic workload.
@@ -615,9 +703,9 @@ class TestQuiesceSplitAuth(QuiesceTestCase):
         op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=1)['op']
         reqid0 = self.reqid_tostr(op0['reqid'])
         reqid1 = self.reqid_tostr(op1['reqid'])
-        op0 = self._wait_for_quiesce_complete(reqid0, rank=0)
-        op1 = self._wait_for_quiesce_complete(reqid1, rank=1)
+        op0 = self._wait_for_quiesce_complete(reqid0, rank=0, timeout=300)
+        op1 = self._wait_for_quiesce_complete(reqid1, rank=1, timeout=300)
         log.debug(f"op0 = {op0}")
         log.debug(f"op1 = {op1}")
-        self._verify_quiesce(rank=0)
-        self._verify_quiesce(rank=1)
+        self._verify_quiesce(rank=0, splitauth=True)
+        self._verify_quiesce(rank=1, splitauth=True)
