@@ -1420,6 +1420,18 @@ def stop(ctx, config):
     yield
 
 
+def _expand_roles(ctx, config):
+    if 'all-roles' in config and len(config) == 1:
+        a = config['all-roles']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles if not id_.startswith('host.'))
+    elif 'all-hosts' in config and len(config) == 1:
+        a = config['all-hosts']
+        roles = teuthology.all_roles(ctx.cluster)
+        config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
+    return config
+
+
 def shell(ctx, config):
     """
     Execute (shell) commands
@@ -1432,15 +1444,7 @@ def shell(ctx, config):
     for k in config.pop('volumes', []):
         args.extend(['-v', k])
 
-    if 'all-roles' in config and len(config) == 1:
-        a = config['all-roles']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles if not id_.startswith('host.'))
-    elif 'all-hosts' in config and len(config) == 1:
-        a = config['all-hosts']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
-
+    config = _expand_roles(ctx, config)
     config = _template_transform(ctx, config, config)
     for role, cmd in config.items():
         (remote,) = ctx.cluster.only(role).remotes.keys()
@@ -1481,18 +1485,8 @@ def exec(ctx, config):
     TODO: this should probably be moved out of cephadm.py as it's pretty generic.
     """
     assert isinstance(config, dict), "task exec got invalid config"
-
     testdir = teuthology.get_testdir(ctx)
-
-    if 'all-roles' in config and len(config) == 1:
-        a = config['all-roles']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles if not id_.startswith('host.'))
-    elif 'all-hosts' in config and len(config) == 1:
-        a = config['all-hosts']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
-
+    config = _expand_roles(ctx, config)
     for role, ls in config.items():
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Running commands on role %s host %s', role, remote.name)
