@@ -1753,6 +1753,18 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MDS_STATE_ACTIVE_ORD = MDS_STATE_ORD["up:active"]
 
     def get_quiesce_leader_info(self, fscid: str) -> Optional[dict]:
+        """
+        Helper for `tell_quiesce_leader` to chose the mds to send the command to.
+
+        Quiesce DB is managed by a leader which is selected based on the current MDSMap
+        The logic is currently implemented both here and on the MDS side,
+        see MDSRank::quiesce_cluster_update().
+
+        Ideally, this logic should be part of the MDSMonitor and the result should
+        be exposed via a dedicated field in the map, but until that is implemented
+        this function will have to be kept in sync with the corresponding logic
+        on the MDS side
+        """
         leader_info: Optional[dict] = None
 
         for fs in self.get("fs_map")['filesystems']:
@@ -1786,6 +1798,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self.log.warn("Couldn't resolve the quiesce leader for fscid %s" % fscid)
             return (-errno.ENOENT, "", "Couldn't resolve the quiesce leader for fscid %s" % fscid)
         self.log.debug("resolved quiesce leader for fscid {fscid} at daemon '{name}' gid {gid} rank {rank} ({state})".format(fscid=fscid, **qleader))
+        # We use the one_shot here to cover for cases when the mds crashes
+        # without this parameter the client may get stuck awaiting response from a dead MDS
         return self.tell_command('mds', str(qleader['gid']), cmd_dict, one_shot=True)
 
     def send_command(

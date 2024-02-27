@@ -34,7 +34,7 @@ class QuiesceAgent {
     };
 
     ~QuiesceAgent() {
-      agent_thread.kill(SIGTERM);
+      shutdown();
     }
 
     /// @brief  WARNING: will reset syncrhonously
@@ -72,7 +72,10 @@ class QuiesceAgent {
       stop_agent_thread = true;
       agent_cond.notify_all();
       l.unlock();
-      agent_thread.join();
+
+      if (agent_thread.is_started()) {
+        agent_thread.join();
+      }
 
       current.clear();
       pending.clear();

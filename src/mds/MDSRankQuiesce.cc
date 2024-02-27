@@ -349,7 +349,7 @@ void MDSRank::quiesce_cluster_update() {
             ++it;
           } else {
             // just ack.
-            dout(20) << "INTACTIVE RESPONDER: reporting '" << it->first << "' as " << it->second.state << dendl;
+            dout(20) << "INACTIVE RESPONDER: reporting '" << it->first << "' as " << it->second.state << dendl;
             it = quiesce_map.roots.erase(it);
           }
           break;
@@ -416,20 +416,20 @@ void MDSRank::quiesce_agent_setup() {
 
   using RequestHandle = QuiesceInterface::RequestHandle;
   using QuiescingRoot = std::pair<RequestHandle, Context*>;
-  auto quiesce_requests = std::make_shared<std::unordered_map<QuiesceRoot, QuiescingRoot>>();
+  auto dummy_requests = std::make_shared<std::unordered_map<QuiesceRoot, QuiescingRoot>>();
 
   QuiesceAgent::ControlInterface ci;
 
-  ci.submit_request = [this, quiesce_requests](QuiesceRoot root, Context* c)
+  ci.submit_request = [this, dummy_requests](QuiesceRoot root, Context* c)
       -> std::optional<RequestHandle> {
     auto uri = boost::urls::parse_uri_reference(root);
     if (!uri) {
       dout(5) << "error parsing the quiesce root as an URI: " << uri.error() << dendl;
       c->complete(uri.error());
       return std::nullopt;
-    } else {
-      dout(20) << "parsed root '" << root <<"' as : " << uri->path() << " " << uri->query() << dendl;
     }
+
+    dout(10) << "submit_request: " << uri << dendl;
 
     std::chrono::milliseconds quiesce_delay_ms = 0ms;
     if (auto pit = uri->params().find("delayms"); pit != uri->params().end()) {
@@ -481,7 +481,6 @@ void MDSRank::quiesce_agent_setup() {
     }
 
     auto path = uri->path();
-    dout(20) << "got request to quiesce '" << path << "'" << dendl;
 
     std::lock_guard l(mds_lock);
 
@@ -496,10 +495,10 @@ void MDSRank::quiesce_agent_setup() {
       auto mdr = mdcache->quiesce_path(filepath(path), qc, nullptr, quiesce_delay_ms);
       return mdr ? mdr->reqid : std::optional<RequestHandle>();
     } else {
-      /* dummy quiesce/fail */
+      /* we use this branch to allow for quiesce emulation for testing purposes */
       // always create a new request id
       auto req_id = metareqid_t(entity_name_t::MDS(whoami), issue_tid());
-      auto [it, inserted] = quiesce_requests->try_emplace(path, req_id, c);
+      auto [it, inserted] = dummy_requests->try_emplace(path, req_id, c);
 
       if (!inserted) {
         dout(3) << "duplicate quiesce request for root '" << it->first << "'" << dendl;
@@ -535,11 +534,12 @@ void MDSRank::quiesce_agent_setup() {
           delay = debug_quiesce_after.value();
         }
 
-        auto quiesce_task = new LambdaContext([quiesce_requests, req_id, do_fail, this](int) {
+        auto quiesce_task = new LambdaContext([dummy_requests, req_id, do_fail, this](int) {
           // the mds lock should be held by the timer
+          ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
           dout(20) << "quiesce_task: callback by the timer" << dendl;
-          auto it = std::ranges::find(*quiesce_requests, req_id, [](auto x) { return x.second.first; });
-          if (it != quiesce_requests->end() && it->second.second != nullptr) {
+          auto it = std::ranges::find(*dummy_requests, req_id, [](auto x) { return x.second.first; });
+          if (it != dummy_requests->end() && it->second.second != nullptr) {
             dout(20) << "quiesce_task: completing the root '" << it->first << "' as failed: " << do_fail << dendl;
             it->second.second->complete(do_fail ? -EBADF : 0);
             it->second.second = nullptr;
@@ -556,25 +556,30 @@ void MDSRank::quiesce_agent_setup() {
     }
   };
 
-  ci.cancel_request = [this, quiesce_requests](RequestHandle h) {
+  ci.cancel_request = [this, dummy_requests](RequestHandle h) {
     std::lock_guard l(mds_lock);
 
     if (mdcache->have_request(h)) {
       auto qimdr = mdcache->request_get(h);
       mdcache->request_kill(qimdr);
+      // no reason to waste time checking for dummy requests
       return 0;
     }
 
-    auto it = std::ranges::find(*quiesce_requests, h, [](auto x) { return x.second.first; });
-    if (it != quiesce_requests->end()) {
+    // if we get here then it could be a test (dummy) quiesce
+    auto it = std::ranges::find(*dummy_requests, h, [](auto x) { return x.second.first; });
+    if (it != dummy_requests->end()) {
       if (auto ctx = it->second.second; ctx) {
         dout(20) << "canceling request with id '" << h << "' for root '" << it->first << "'" << dendl;
         ctx->complete(-ECANCELED);
       }
-      quiesce_requests->erase(it);
+      dummy_requests->erase(it);
       return 0;
     }
 
+    // we must indicate that the handle wasn't found
+    // so that the agent can properly report a missing
+    // outstanding quiesce, preventing a RELEASED transition 
     return ENOENT;
   };
 
