@@ -3248,6 +3248,12 @@ options:
   level: dev
   default: false
   with_legacy: true
+- name: osd_skip_check_past_interval_bounds
+  type: bool
+  level: dev
+  desc: See https://tracker.ceph.com/issues/64002
+  default: false
+  with_legacy: true
 - name: osd_debug_pretend_recovery_active
   type: bool
   level: dev
