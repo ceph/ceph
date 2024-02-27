@@ -981,12 +981,11 @@ static inline bool notification_match(reservation_t& res,
   return true;
 }
 
-  int publish_reserve(const DoutPrefixProvider* dpp,
-		      const SiteConfig& site,
-		      EventType event_type,
-		      reservation_t& res,
-		      const RGWObjTags* req_tags)
-{
+int publish_reserve(const DoutPrefixProvider* dpp,
+                    const SiteConfig& site,
+                    const EventTypeList& event_types,
+                    reservation_t& res,
+                    const RGWObjTags* req_tags) {
   rgw_pubsub_bucket_topics bucket_topics;
   if (all_zonegroups_support(site, zone_features::notification_v2) &&
       res.store->stat_topics_v1(res.user_tenant, res.yield, res.dpp) == -ENOENT) {
@@ -1020,64 +1019,71 @@ static inline bool notification_match(reservation_t& res,
   for (const auto& bucket_topic : bucket_topics.topics) {
     const rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
     const rgw_pubsub_topic& topic_cfg = topic_filter.topic;
-    if (!notification_match(res, topic_filter, event_type, req_tags)) {
-      // notification does not apply to req_state
-      continue;
-    }
-    ldpp_dout(res.dpp, 20) << "INFO: notification: '" << topic_filter.s3_id <<
-        "' on topic: '" << topic_cfg.dest.arn_topic << 
-        "' and bucket: '" << res.bucket->get_name() <<
-        "' (unique topic: '" << topic_cfg.name <<
-        "') apply to event of type: '" << to_string(event_type) << "'" << dendl;
-
-    cls_2pc_reservation::id_t res_id = cls_2pc_reservation::NO_ID;
-    if (topic_cfg.dest.persistent) {
-      // TODO: take default reservation size from conf
-      constexpr auto DEFAULT_RESERVATION = 4*1024U; // 4K
-      res.size = DEFAULT_RESERVATION;
-      librados::ObjectWriteOperation op;
-      bufferlist obl;
-      int rval;
-      const auto& queue_name = topic_cfg.dest.arn_topic;
-      cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
-      auto ret = rgw_rados_operate(
-	res.dpp, res.store->getRados()->get_notif_pool_ctx(),
-	queue_name, &op, res.yield, librados::OPERATION_RETURNVEC);
-      if (ret < 0) {
-        ldpp_dout(res.dpp, 1) <<
-	  "ERROR: failed to reserve notification on queue: "
-			      << queue_name << ". error: " << ret << dendl;
-        // if no space is left in queue we ask client to slow down
-        return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
+    for (auto& event_type : event_types) {
+      if (!notification_match(res, topic_filter, event_type, req_tags)) {
+        // notification does not apply to req_state
+        continue;
       }
-      ret = cls_2pc_queue_reserve_result(obl, res_id);
-      if (ret < 0) {
-        ldpp_dout(res.dpp, 1) << "ERROR: failed to parse reservation id. error: " << ret << dendl;
-        return ret;
-      }
-    }
-    // load the topic,if there is change in topic config while it's stored in
-    // notification.
-    rgw_pubsub_topic result;
-    const RGWPubSub ps(res.store, res.user_tenant, site);
-    auto ret = ps.get_topic(res.dpp, topic_cfg.name, result, res.yield, nullptr);
-    if (ret < 0) {
-      ldpp_dout(res.dpp, 1)
-          << "INFO: failed to load topic: " << topic_cfg.name
-          << ". error: " << ret
-          << " while reserving persistent notification event" << dendl;
-      if (ret == -ENOENT) {
-        // either the topic is deleted but the corresponding notification still
-        // exist or in v2 mode the notification could have synced first but
-        // topic is not synced yet.
-        return 0;
-      }
-      ldpp_dout(res.dpp, 1)
-          << "WARN: Using the stored topic from bucket notification struct."
+      ldpp_dout(res.dpp, 20)
+          << "INFO: notification: '" << topic_filter.s3_id << "' on topic: '"
+          << topic_cfg.dest.arn_topic << "' and bucket: '"
+          << res.bucket->get_name() << "' (unique topic: '" << topic_cfg.name
+          << "') apply to event of type: '" << to_string(event_type) << "'"
           << dendl;
-      res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id);
-    } else {
-      res.topics.emplace_back(topic_filter.s3_id, result, res_id);
+
+      cls_2pc_reservation::id_t res_id = cls_2pc_reservation::NO_ID;
+      if (topic_cfg.dest.persistent) {
+        // TODO: take default reservation size from conf
+        constexpr auto DEFAULT_RESERVATION = 4 * 1024U;  // 4K
+        res.size = DEFAULT_RESERVATION;
+        librados::ObjectWriteOperation op;
+        bufferlist obl;
+        int rval;
+        const auto& queue_name = topic_cfg.dest.arn_topic;
+        cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
+        auto ret = rgw_rados_operate(
+            res.dpp, res.store->getRados()->get_notif_pool_ctx(), queue_name,
+            &op, res.yield, librados::OPERATION_RETURNVEC);
+        if (ret < 0) {
+          ldpp_dout(res.dpp, 1)
+              << "ERROR: failed to reserve notification on queue: "
+              << queue_name << ". error: " << ret << dendl;
+          // if no space is left in queue we ask client to slow down
+          return (ret == -ENOSPC) ? -ERR_RATE_LIMITED : ret;
+        }
+        ret = cls_2pc_queue_reserve_result(obl, res_id);
+        if (ret < 0) {
+          ldpp_dout(res.dpp, 1)
+              << "ERROR: failed to parse reservation id. error: " << ret
+              << dendl;
+          return ret;
+        }
+      }
+      // load the topic,if there is change in topic config while it's stored in
+      // notification.
+      rgw_pubsub_topic result;
+      const RGWPubSub ps(res.store, res.user_tenant, site);
+      auto ret =
+          ps.get_topic(res.dpp, topic_cfg.name, result, res.yield, nullptr);
+      if (ret < 0) {
+        ldpp_dout(res.dpp, 1)
+            << "INFO: failed to load topic: " << topic_cfg.name
+            << ". error: " << ret
+            << " while reserving persistent notification event" << dendl;
+        if (ret == -ENOENT) {
+          // either the topic is deleted but the corresponding notification
+          // still exist or in v2 mode the notification could have synced first
+          // but topic is not synced yet.
+          return 0;
+        }
+        ldpp_dout(res.dpp, 1)
+            << "WARN: Using the stored topic from bucket notification struct."
+            << dendl;
+        res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id,
+                                event_type);
+      } else {
+        res.topics.emplace_back(topic_filter.s3_id, result, res_id, event_type);
+      }
     }
   }
   return 0;
@@ -1088,7 +1094,6 @@ int publish_commit(rgw::sal::Object* obj,
 		   const ceph::real_time& mtime,
 		   const std::string& etag,
 		   const std::string& version,
-		   EventType event_type,
 		   reservation_t& res,
 		   const DoutPrefixProvider* dpp)
 {
@@ -1099,7 +1104,8 @@ int publish_commit(rgw::sal::Object* obj,
       continue;
     }
     event_entry_t event_entry;
-    populate_event(res, obj, size, mtime, etag, version, event_type, event_entry.event);
+    populate_event(res, obj, size, mtime, etag, version, topic.event_type,
+                   event_entry.event);
     event_entry.event.configurationId = topic.configurationId;
     event_entry.event.opaque_data = topic.cfg.opaque_data;
     if (topic.cfg.dest.persistent) { 

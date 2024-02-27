@@ -50,6 +50,14 @@ namespace rgw::notify {
       return "s3:ObjectSynced:Delete";
     case ObjectSyncedDeletionMarkerCreated:
       return "s3:ObjectSynced:DeletionMarkerCreated";
+    case LifecycleExpiration:
+      return "s3:LifecycleExpiration:*";
+    case LifecycleExpirationDelete:
+      return "s3:LifecycleExpiration:Delete";
+    case LifecycleExpirationDeleteMarkerCreated:
+      return "s3:LifecycleExpiration:DeleteMarkerCreated";
+    case LifecycleTransition:
+      return "s3:LifecycleTransition";
     case UnknownEvent:
         return "s3:UnknownEvent";
     }
@@ -103,6 +111,14 @@ namespace rgw::notify {
         return ObjectSyncedDelete;
     if (s == "s3:ObjectSynced:DeletionMarkerCreated")
         return ObjectSyncedDeletionMarkerCreated;
+    if (s == "s3:LifecycleExpiration:*")
+      return LifecycleExpiration;
+    if (s == "s3:LifecycleExpiration:Delete")
+      return LifecycleExpirationDelete;
+    if (s == "s3:LifecycleExpiration:DeleteMarkerCreated")
+      return LifecycleExpirationDeleteMarkerCreated;
+    if (s == "s3:LifecycleTransition")
+      return LifecycleTransition;
     return UnknownEvent;
   }
 

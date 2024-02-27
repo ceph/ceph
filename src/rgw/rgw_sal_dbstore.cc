@@ -1662,17 +1662,21 @@ namespace rgw::sal {
     rgw::notify::EventType event_type, optional_yield y,
     const std::string* object_name)
   {
-    return std::make_unique<DBNotification>(obj, src_obj, event_type);
+    rgw::notify::EventTypeList event_types = {event_type};
+    return std::make_unique<DBNotification>(obj, src_obj, event_types);
   }
 
   std::unique_ptr<Notification> DBStore::get_notification(
-    const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
-    rgw::sal::Object* src_obj,
-    rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
-    std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
-    optional_yield y)
-  {
-    return std::make_unique<DBNotification>(obj, src_obj, event_type);
+      const DoutPrefixProvider* dpp,
+      rgw::sal::Object* obj,
+      rgw::sal::Object* src_obj,
+      const rgw::notify::EventTypeList& event_types,
+      rgw::sal::Bucket* _bucket,
+      std::string& _user_id,
+      std::string& _user_tenant,
+      std::string& _req_id,
+      optional_yield y) {
+    return std::make_unique<DBNotification>(obj, src_obj, event_types);
   }
 
   RGWLC* DBStore::get_rgwlc(void) {

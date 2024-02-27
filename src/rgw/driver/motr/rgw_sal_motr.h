@@ -191,11 +191,13 @@ WRITE_CLASS_ENCODER(MotrAccessKey);
 
 class MotrNotification : public StoreNotification {
   public:
-    MotrNotification(Object* _obj, Object* _src_obj, rgw::notify::EventType _type) :
-        StoreNotification(_obj, _src_obj, _type) {}
-    ~MotrNotification() = default;
+  MotrNotification(Object* _obj,
+                   Object* _src_obj,
+                   const rgw::notify::EventTypeList& _types)
+      : StoreNotification(_obj, _src_obj, _types) {}
+  ~MotrNotification() = default;
 
-    virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override { return 0;}
+  virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override { return 0;}
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
 			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) override { return 0; }
 };
@@ -1006,9 +1008,16 @@ class MotrStore : public StoreDriver {
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj,
         req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) override;
-    virtual std::unique_ptr<Notification> get_notification(const DoutPrefixProvider* dpp, rgw::sal::Object* obj,
-        rgw::sal::Object* src_obj, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
-        std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y) override;
+    virtual std::unique_ptr<Notification> get_notification(
+        const DoutPrefixProvider* dpp,
+        rgw::sal::Object* obj,
+        rgw::sal::Object* src_obj,
+        const rgw::notify::EventTypeList& event_types,
+        rgw::sal::Bucket* _bucket,
+        std::string& _user_id,
+        std::string& _user_tenant,
+        std::string& _req_id,
+        optional_yield y) override;
     virtual RGWLC* get_rgwlc(void) override { return NULL; }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
 
