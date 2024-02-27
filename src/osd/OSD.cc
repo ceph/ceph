@@ -1682,6 +1682,11 @@ void OSDService::enqueue_front(OpSchedulerItem&& qi)
   osd->op_shardedwq.queue_front(std::move(qi));
 }
 
+double OSDService::get_cost_per_io() const
+{
+  return osd->op_shardedwq.get_cost_per_io();
+}
+
 void OSDService::queue_recovery_context(
   PG *pg,
   GenContext<ThreadPool::TPHandle&> *c,
