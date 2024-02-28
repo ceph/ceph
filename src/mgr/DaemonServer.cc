@@ -2889,7 +2889,7 @@ void DaemonServer::adjust_pgs()
 		     << " pgp_num_target " << p.get_pgp_num_target()
 		     << " pgp_num " << p.get_pgp_num()
 		     << " - misplaced_ratio " << misplaced_ratio
-		     << " > max " << max_misplaced
+		     << " > max_misplaced " << max_misplaced
 		     << ", deferring pgp_num update" << dendl;
 	  } else {
 	    // NOTE: this calculation assumes objects are
