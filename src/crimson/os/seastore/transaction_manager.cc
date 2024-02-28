@@ -447,12 +447,7 @@ TransactionManager::rewrite_logical_extent(
       lextent->get_user_hint(),
       // get target rewrite generation
       lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
-    lextent->get_bptr().copy_out(
-      0,
-      lextent->get_length(),
-      nlextent->get_bptr().c_str());
-    nlextent->set_laddr(lextent->get_laddr());
-    nlextent->set_modify_time(lextent->get_modify_time());
+    nlextent->rewrite(*lextent, 0);
 
     DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
@@ -489,12 +484,7 @@ TransactionManager::rewrite_logical_extent(
         bool first_extent = (off == 0);
         ceph_assert(left >= nextent->get_length());
         auto nlextent = nextent->template cast<LogicalCachedExtent>();
-        lextent->get_bptr().copy_out(
-          0,
-          nlextent->get_length(),
-          nlextent->get_bptr().c_str());
-        nlextent->set_laddr(lextent->get_laddr() + off);
-        nlextent->set_modify_time(lextent->get_modify_time());
+        nlextent->rewrite(*lextent, off);
         DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
         /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc

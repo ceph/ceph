@@ -322,6 +322,24 @@ public:
     return true;
   }
 
+  void rewrite(CachedExtent &e, extent_len_t o) {
+    if (!e.is_pending()) {
+      prior_instance = &e;
+    } else {
+      assert(e.is_mutation_pending());
+      prior_instance = e.get_prior_instance();
+    }
+    on_rewrite(e, o);
+  }
+
+  /**
+   * on_rewrite
+   *
+   * Called when this extent is rewriting another one.
+   *
+   */
+  virtual void on_rewrite(CachedExtent &, extent_len_t) = 0;
+
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
   std::ostream &print(std::ostream &out) const {
@@ -414,6 +432,10 @@ public:
   /// Returns true if extent is part of an open transaction
   bool is_pending() const {
     return is_mutable() || state == extent_state_t::EXIST_CLEAN;
+  }
+
+  bool is_rewrite() {
+    return is_initial_pending() && get_prior_instance();
   }
 
   /// Returns true if extent is stable, written and shared among transactions
@@ -783,6 +805,10 @@ protected:
     prior_instance.reset();
   }
 
+  void set_prior_instance(CachedExtentRef p) {
+    prior_instance = p;
+  }
+
   /// Sets last_committed_crc
   void set_last_committed_crc(uint32_t crc) {
     last_committed_crc = crc;
@@ -1128,6 +1154,8 @@ public:
     return false;
   }
 
+  void on_rewrite(CachedExtent&, extent_len_t) final {}
+
   std::ostream &print_detail(std::ostream &out) const final {
     return out << ", RetiredExtentPlaceholder";
   }
@@ -1212,6 +1240,17 @@ public:
   LogicalCachedExtent(T&&... t)
     : ChildableCachedExtent(std::forward<T>(t)...)
   {}
+
+  void on_rewrite(CachedExtent &extent, extent_len_t off) final {
+    assert(get_type() == extent.get_type());
+    auto &lextent = (LogicalCachedExtent&)extent;
+    lextent.get_bptr().copy_out(
+      off,
+      get_length(),
+      get_bptr().c_str());
+    set_laddr(lextent.get_laddr() + off);
+    set_modify_time(lextent.get_modify_time());
+  }
 
   bool has_laddr() const {
     return laddr != L_ADDR_NULL;
