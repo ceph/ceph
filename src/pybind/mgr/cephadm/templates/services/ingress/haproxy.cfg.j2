@@ -85,6 +85,6 @@ backend backend
     default-server {{ default_server_opts|join(" ") }}
 {% endif %}
     {% for server in servers %}
-    server {{ server.name }} {{ server.ip }}:{{ server.port }}
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check
     {% endfor %}
 {% endif %}
