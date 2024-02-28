@@ -101,6 +101,7 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
   struct Ctx : public QuiesceDbManager::RequestContext {
     std::function<void(int, const std::string&, bufferlist&)> on_finish;
     bool all = false;
+    mds_gid_t me;
 
     double sec(QuiesceTimeInterval duration) {
       return duration_cast<dd>(duration).count();
@@ -126,6 +127,7 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
 
       f->open_object_section("response"); {
         f->dump_int("epoch", response.db_version.epoch);
+        f->dump_int("leader", me);
         f->dump_int("set_version", response.db_version.set_version);
         f->open_object_section("sets"); {
           for (auto&& [set_id, set] : response.sets) {
@@ -168,8 +170,10 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
 
   auto* ctx = new Ctx();
 
+  QuiesceInterface::PeerId me = mds_gid_t(monc->get_global_id());
   ctx->on_finish = std::move(on_finish);
   ctx->all = all;
+  ctx->me = me;
 
   ctx->request.reset([&](auto& r) {
     r.set_id = set_id;
@@ -212,6 +216,12 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
   int rc = quiesce_db_manager->submit_request(ctx);
   if (rc != 0) {
     bufferlist bl;
+    auto f = Formatter::create_unique("json-pretty");
+    f->open_object_section("response");
+    f->dump_int("epoch", mdsmap->get_epoch());
+    f->dump_int("leader", mdsmap->get_quiesce_db_cluster_leader());
+    f->close_section();
+    f->flush(bl);
     // on_finish was moved there, so should only call via the ctx.
     ctx->on_finish(rc, "Error submitting the command to the local db manager", bl);
     delete ctx;
@@ -234,62 +244,35 @@ static void rebind_agent_callback(std::shared_ptr<QuiesceAgent> agt, std::shared
 
 void MDSRank::quiesce_cluster_update() {
   // the quiesce leader is the lowest rank with the highest state up to ACTIVE
-  auto less_leader = [](MDSMap::mds_info_t const* l, MDSMap::mds_info_t const* r) {
-    ceph_assert(l->rank != MDS_RANK_NONE);
-    ceph_assert(r->rank != MDS_RANK_NONE);
-    ceph_assert(l->state <= MDSMap::STATE_ACTIVE);
-    ceph_assert(r->state <= MDSMap::STATE_ACTIVE);
-    if (l->rank == r->rank) {
-      return l->state < r->state;
-    } else {
-      return l->rank > r->rank;
-    }
-  };
-
-  std::priority_queue<MDSMap::mds_info_t const*, std::vector<MDSMap::mds_info_t const*>, decltype(less_leader)> member_info(less_leader);
   QuiesceClusterMembership membership;
-
   QuiesceInterface::PeerId me = mds_gid_t(monc->get_global_id());
 
-  for (auto&& [gid, info] : mdsmap->get_mds_info()) {
-    // if it has a rank and state <= ACTIVE, it's good enough
-    // if (info.rank != MDS_RANK_NONE && info.state <= MDSMap::STATE_ACTIVE) {
-    if (info.rank != MDS_RANK_NONE && info.state == MDSMap::STATE_ACTIVE) {
-      member_info.push(&info);
-      membership.members.insert(info.global_id);
-    }
-  }
-
-  QuiesceInterface::PeerId leader = 
-    member_info.empty() 
-    ? QuiesceClusterMembership::INVALID_MEMBER 
-    : member_info.top()->global_id;
+  mdsmap->get_quiesce_db_cluster(membership.leader, membership.members);
 
   membership.epoch = mdsmap->get_epoch();
-  membership.leader = leader;
   membership.me = me;
   membership.fs_name = mdsmap->get_fs_name();
 
-  dout(5) << "epoch:" << membership.epoch << " me:" << me << " leader:" << leader << " members:" << membership.members 
+  dout(5) << "epoch:" << membership.epoch << " me:" << me << " leader:" << membership.leader << " members:" << membership.members 
     << (mdsmap->is_degraded() ? " (degraded)" : "") << dendl;
 
-  if (leader != QuiesceClusterMembership::INVALID_MEMBER) {
+  if (membership.leader != QuiesceClusterMembership::INVALID_MEMBER) {
     membership.send_ack = [=, this](QuiesceMap&& ack) {
-      if (me == leader) {
+      if (me == membership.leader) {
         // loopback
         quiesce_db_manager->submit_ack_from(me, std::move(ack));
         return 0;
       } else {
         std::lock_guard guard(mds_lock);
 
-        if (mdsmap->get_state_gid(leader) == MDSMap::STATE_NULL) {
-          dout(5) << "couldn't find the leader " << leader << " in the map" << dendl;
+        if (mdsmap->get_state_gid(membership.leader) == MDSMap::STATE_NULL) {
+          dout(5) << "couldn't find the leader " << membership.leader << " in the map" << dendl;
           return -ENOENT;
         }
-        auto addrs = mdsmap->get_info_gid(leader).addrs;
+        auto addrs = mdsmap->get_info_gid(membership.leader).addrs;
 
         auto ack_msg = make_message<MMDSQuiesceDbAck>();
-        dout(10) << "sending ack " << ack << " to the leader " << leader << dendl;
+        dout(10) << "sending ack " << ack << " to the leader " << membership.leader << dendl;
         ack_msg->encode_payload_from(me, ack);
         return send_message_mds(ack_msg, addrs);
       }
