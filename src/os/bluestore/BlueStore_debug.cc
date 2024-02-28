@@ -79,26 +79,28 @@ std::ostream &operator<<(std::ostream &out, const maybe_K &k) {
   }
   return out;
 }
-
+// cheap, not very reliable but portable detector where heap starts
+static std::unique_ptr<char> heap_begin(new char);
 std::ostream& operator<<(std::ostream& out, const BlueStore::Buffer& b);
 std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
 {
   using P = BlueStore::printer;
   out << "Blob(";
-  if (p.mode & P::ptr) {
+  if (p.mode & P::PTR) {
     out << &p.blob << " ";
   }
-  if (p.mode & P::nick) {
+  if (p.mode & P::NICK) {
     uint64_t v = uint64_t(&p.blob);
-    v = (v - 0x555550000000) / 16;
+    //Assume allocated Blobs will be 16 bytes aligned.
+    v = (v - (uintptr_t)heap_begin.get()) / 16;
     out << int_to_fancy_name(v) << " ";
   }
   const bluestore_blob_t& bblob = p.blob.get_blob();
-  if (p.mode & P::disk) {
+  if (p.mode & P::DISK) {
     //use default printer for std::vector * bluestore_pextent_t
     out << "disk=" << bblob.get_extents() << " ";
   }
-  if (p.mode & P::sdisk) {
+  if (p.mode & P::SDISK) {
     const PExtentVector& ev = bblob.get_extents();
     uint64_t bits = 0;
     for (auto i : ev) {
@@ -130,7 +132,7 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
     out << " ";
   }
   //always print lengths, if not printing use tracker
-  if (!(p.mode & (P::use | P::suse)) || bblob.is_compressed()) {
+  if (!(p.mode & (P::USE | P::SUSE)) || bblob.is_compressed()) {
     // Need to print blob logical length, no tracker printing
     // + there is no real tracker for compressed blobs
     if (bblob.is_compressed()) {
@@ -140,10 +142,10 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
       out << "len=" << std::hex << bblob.get_logical_length() << std::dec << " ";
     }
   }
-  if ((p.mode & P::use) && !bblob.is_compressed()) {
+  if ((p.mode & P::USE) && !bblob.is_compressed()) {
     out << p.blob.get_blob_use_tracker() << " ";
   }
-  if (p.mode & P::suse) {
+  if (p.mode & P::SUSE) {
     auto& tracker = p.blob.get_blob_use_tracker();
     if (bblob.is_compressed()) {
       out << "[" << std::hex << tracker.get_referenced_bytes() << std::dec << "] ";
@@ -186,18 +188,18 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
     }
   }
   if (bblob.has_csum()) {
-    if (p.mode & (P::schk | P::chk)) {
+    if (p.mode & (P::SCHK | P::CHK)) {
       out << Checksummer::get_csum_type_string(bblob.csum_type) << "/"
           << (int)bblob.csum_chunk_order << "/" << bblob.csum_data.length();
     }
-    if (p.mode & P::chk) {
+    if (p.mode & P::CHK) {
       std::vector<uint64_t> v;
       unsigned n = bblob.get_csum_count();
       for (unsigned i = 0; i < n; ++i)
         v.push_back(bblob.get_csum_item(i));
       out << std::hex << v << std::dec;
     }
-    if (p.mode & (P::schk | P::chk)) {
+    if (p.mode & (P::SCHK | P::CHK)) {
       out << " ";
     }
   }
@@ -213,16 +215,16 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
   }
   out << ")";
   // here printing Buffers
-  if (p.mode & (P::buf | P::sbuf)) {
-    std::lock_guard l(p.blob.shared_blob->get_cache()->lock);
-    if (p.mode & P::sbuf) {
+  if (p.mode & (P::BUF | P::SBUF)) {
+    std::lock_guard l(p.blob.collection->cache->lock);
+    if (p.mode & P::SBUF) {
       // summary buf mode, only print what is mapped what options are, one liner
       out << "bufs(";
       for (auto& i : p.blob.get_bc().buffer_map) {
-        out << "0x" << std::hex << i.first << "~" << i.second->length << std::dec
-          << "," << BlueStore::Buffer::get_state_name_short(i.second->state);
-        if (i.second->flags) {
-          out << "," << BlueStore::Buffer::get_flag_name(i.second->flags);
+        out << "0x" << std::hex << i.first << "~" << i.second.length << std::dec
+          << "," << BlueStore::Buffer::get_state_name_short(i.second.state);
+        if (i.second.flags) {
+          out << "," << BlueStore::Buffer::get_flag_name(i.second.flags);
         }
         out << " ";
       }
@@ -230,8 +232,8 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
     } else {
       for (auto& i : p.blob.get_bc().buffer_map) {
         out << std::endl << "  0x" << std::hex << i.first
-          << "~" << i.second->length << std::dec
-          << " " << *(i.second);
+          << "~" << i.second.length << std::dec
+          << " " << i.second;
       }
     }
   }
@@ -243,5 +245,42 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Extent::printer &p)
   out << std::hex << "0x" << p.ext.logical_offset << "~" << p.ext.length
     << ": 0x" << p.ext.blob_offset << "~" << p.ext.length << std::dec
 	<< " " << p.ext.blob->print(p.mode);
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const BlueStore::Onode::printer &p)
+{
+  using P = BlueStore::printer;
+  const BlueStore::Onode& o = p.onode;
+  uint16_t mode = p.mode;
+  out << &o << " " << o.oid
+      << " nid " << o.onode.nid
+      << " size 0x" << std::hex << o.onode.size
+      << " (" << std::dec << o.onode.size << ")"
+      << " expected_object_size " << o.onode.expected_object_size
+      << " expected_write_size " << o.onode.expected_write_size
+      << " in " << o.onode.extent_map_shards.size() << " shards"
+      << ", " << o.extent_map.spanning_blob_map.size()
+      << " spanning blobs" << std::endl;
+  const BlueStore::ExtentMap& map = o.extent_map;
+  std::set<BlueStore::Blob*> visited;
+  for (const auto& e : map.extent_map) {
+    BlueStore::Blob* b = e.blob.get();
+    if (!visited.contains(b)) {
+      out << b->print(mode) << std::endl;
+      visited.insert(b);
+    }
+  }
+  // to make printing extents in-sync with blobs
+  bool mode_extent = mode & (P::PTR | P::NICK);
+  for (const auto& e : map.extent_map) {
+    out << e.print(mode_extent) << std::endl;
+  }
+  if (mode & P::ATTRS) {
+    for (const auto& p : o.onode.attrs) {
+      out << "  attr " << p.first
+        << " len " << p.second.length() << std::endl;
+    }
+  }
   return out;
 }
