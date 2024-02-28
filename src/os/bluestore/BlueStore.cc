@@ -1861,7 +1861,8 @@ void BlueStore::BufferSpace::_dup_writing(TransContext* txc, Collection* collect
     for (auto it = writing.begin(); it != writing.end(); ++it) {
       Buffer& b = *it;
       // If no overlap is found between buffer and range to dup then continue
-      if (std::max(b.end(), offset+length) - std::min(b.offset, offset) > length + b.length) {
+      bool overlaps = offset < b.end() && end > b.offset;
+      if (!overlaps) {
         continue;
       }
 
