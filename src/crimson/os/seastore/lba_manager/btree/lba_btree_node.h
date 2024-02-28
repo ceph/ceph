@@ -194,7 +194,11 @@ struct LBALeafNode
 	iter.get_offset(),
 	*nextent);
       // child-ptr may already be correct, see LBAManager::update_mappings()
-      this->update_child_ptr(iter, nextent);
+      if (!nextent->has_parent_tracker()) {
+	this->update_child_ptr(iter, nextent);
+      }
+      assert(nextent->has_parent_tracker()
+	&& nextent->get_parent_node<LBALeafNode>().get() == this);
     }
     if (val.pladdr.is_paddr()) {
       val.pladdr = maybe_generate_relative(val.pladdr.get_paddr());
