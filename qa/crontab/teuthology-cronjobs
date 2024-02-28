@@ -31,10 +31,11 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 @daily SUITE_NAME=~/src/ceph-qa-suite_main/suites/ceph-ansible; crontab=$(teuthology-describe-tests --show-facet no $SUITE_NAME | perl -p -e 's/</&lt;/g; s/>/&gt;/g; s/&/&amp;/g') ; header=$(echo h4. $SUITE_NAME ; echo " "; echo " ") ; curl --verbose -X PUT --header 'Content-type: application/xml' --data-binary '<?xml version="1.0"?><wiki_page><text>'"$header"'&lt;pre&gt;'"$crontab"'&lt;/pre&gt;</text></wiki_page>' http://tracker.ceph.com/projects/ceph-qa-suite/wiki/ceph-ansible.xml?key=$(cat /etc/redmine-key)
 
 
-## ********** smoke tests on main, quincy, reef branches
-0 5  * * 0,2,4 CEPH_BRANCH=main; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
-0 8  * * 5 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
-7 8  * * 6 CEPH_BRANCH=reef; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
+## ********** smoke tests on main and release branches
+0 1  * * 0,2,4 CEPH_BRANCH=main; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
+0 2  * * 0     CEPH_BRANCH=squid; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
+0 3  * * 0     CEPH_BRANCH=reef; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
+0 4  * * 0     CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s smoke -k distro -e $CEPH_QA_EMAIL -p 70
 
 
 ## ********** windows tests on main branch - weekly
