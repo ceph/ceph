@@ -136,7 +136,7 @@ class QuiesceDbTest: public testing::Test {
     {
       ++epoch;
       ASSERT_GE(leader_and_replicas.size(), 1);
-      std::set<QuiesceInterface::PeerId> members(leader_and_replicas.begin(), leader_and_replicas.end());
+      std::unordered_set<QuiesceInterface::PeerId> members(leader_and_replicas.begin(), leader_and_replicas.end());
       auto leader = leader_and_replicas[0];
       for (const auto &[this_peer, mgr] : managers) {
         QuiesceClusterMembership mem = {

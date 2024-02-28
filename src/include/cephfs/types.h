@@ -48,6 +48,14 @@
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
 
+template <>
+struct std::hash<mds_gid_t> {
+  size_t operator()(const mds_gid_t& gid) const
+  {
+    return hash<uint64_t> {}(gid);
+  }
+};
+
 typedef int32_t fs_cluster_id_t;
 constexpr fs_cluster_id_t FS_CLUSTER_ID_NONE = -1;
 

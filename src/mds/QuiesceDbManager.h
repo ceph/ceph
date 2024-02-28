@@ -19,14 +19,6 @@
 #include <set>
 #include <queue>
 
-template <>
-struct std::hash<mds_gid_t> {
-  size_t operator()(const mds_gid_t& gid) const
-  {
-    return hash<uint64_t> {}(gid);
-  }
-};
-
 struct QuiesceClusterMembership {
   static const QuiesceInterface::PeerId INVALID_MEMBER;
 
@@ -36,7 +28,7 @@ struct QuiesceClusterMembership {
 
   QuiesceInterface::PeerId me = INVALID_MEMBER;
   QuiesceInterface::PeerId leader = INVALID_MEMBER;
-  std::set<QuiesceInterface::PeerId> members;
+  std::unordered_set<QuiesceInterface::PeerId> members;
 
   // A courier interface to decouple from the messaging layer
   // Failures can be ignored, manager will call this repeatedly if needed
@@ -69,7 +61,7 @@ class QuiesceDbManager {
 
     // ============================
     // quiesce db leader interface: 
-    //    -> EPERM unless this is the leader
+    //    -> ENOTTY unless this is the leader
     
     // client interface to the DB
     int submit_request(RequestContext* ctx) {
