@@ -456,19 +456,20 @@ class VolumeClient(CephfsClient["Module"]):
         volname    = cmd['vol_name']
         default_group_name  = cmd.get('group_name', None)
         roots = []
-        fscid = None
+        leader_gid = cmd.get('with_leader', None)
 
         with open_volume(self, volname) as fs_handle:
-            fscid = fs_handle.get_fscid()
+            if leader_gid is None:
+                fscid = fs_handle.get_fscid()
+                leader_gid = self.mgr.get_quiesce_leader_gid(fscid)
+                if leader_gid is None:
+                    return -errno.ENOENT, "", "Couldn't resolve the quiesce leader for volume %s (%s)" % (volname, fscid)
 
             if cmd.get('leader', False):
-                leader_info = self.mgr.get_quiesce_leader_info(fscid)
-                if leader_info is None:
-                    return -errno.ENOENT, "", "Couldn't resolve the quiesce leader for volume %s (%s)" % (volname, fscid)
                 return (
                     0,
-                    "mds.%d" % leader_info['gid'],
-                    "Resolved the quiesce leader for volume '{volname}' as daemon '{name}' ({gid}) {state} rank {rank}".format(volname=volname, **leader_info)
+                    "mds.%d" % leader_gid,
+                    "Resolved the quiesce leader for volume '{volname}' as gid {gid}".format(volname=volname, gid=leader_gid)
                 )
 
 
@@ -493,7 +494,7 @@ class VolumeClient(CephfsClient["Module"]):
         cmd['roots'] = roots
         cmd['prefix'] = 'quiesce db'
 
-        return self.mgr.tell_quiesce_leader(fscid, cmd)
+        return self.mgr.tell_quiesce_leader(leader_gid, cmd)
 
     def set_user_metadata(self, **kwargs):
         ret        = 0, "", ""

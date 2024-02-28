@@ -129,6 +129,8 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   int load_metadata(std::map<mds_gid_t, Metadata>& m);
   void count_metadata(const std::string& field, ceph::Formatter *f);
 
+  void assign_quiesce_db_leader(FSMap &fsmap);
+
 public:
   void print_fs_summary(std::ostream& out) {
     get_fsmap().print_fs_summary(out);

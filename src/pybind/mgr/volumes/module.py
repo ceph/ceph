@@ -291,7 +291,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                    'name=all,type=CephBool,req=false '
                    'name=cancel,type=CephBool,req=false '
                    'name=group_name,type=CephString,req=false '
-                   'name=leader,type=CephBool,req=false ',
+                   'name=leader,type=CephBool,req=false '
+                   'name=with_leader,type=CephInt,range=0,req=false ',
             'desc': "Manage quiesce sets of subvolumes",
             'perm': 'rw'
         },

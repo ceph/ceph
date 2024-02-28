@@ -1731,42 +1731,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         ))
 
         return r
-    
-    MDS_STATE_ORD = {
-        "down:dne":              0, # CEPH_MDS_STATE_DNE,
-        "down:stopped":         -1, # CEPH_MDS_STATE_STOPPED,
-        "down:damaged":         15, # CEPH_MDS_STATE_DAMAGED,
-        "up:boot":              -4, # CEPH_MDS_STATE_BOOT,
-        "up:standby":           -5, # CEPH_MDS_STATE_STANDBY,
-        "up:standby-replay":    -8, # CEPH_MDS_STATE_STANDBY_REPLAY,
-        "up:oneshot-replay":    -9, # CEPH_MDS_STATE_REPLAYONCE,
-        "up:creating":          -6, # CEPH_MDS_STATE_CREATING,
-        "up:starting":          -7, # CEPH_MDS_STATE_STARTING,
-        "up:replay":             8, # CEPH_MDS_STATE_REPLAY,
-        "up:resolve":            9, # CEPH_MDS_STATE_RESOLVE,
-        "up:reconnect":         10, # CEPH_MDS_STATE_RECONNECT,
-        "up:rejoin":            11, # CEPH_MDS_STATE_REJOIN,
-        "up:clientreplay":      12, # CEPH_MDS_STATE_CLIENTREPLAY,
-        "up:active":            13, # CEPH_MDS_STATE_ACTIVE,
-        "up:stopping":          14, # CEPH_MDS_STATE_STOPPING,
-    }
-    MDS_STATE_ACTIVE_ORD = MDS_STATE_ORD["up:active"]
 
-    def get_quiesce_leader_info(self, fscid: str) -> Optional[dict]:
-        """
-        Helper for `tell_quiesce_leader` to chose the mds to send the command to.
-
-        Quiesce DB is managed by a leader which is selected based on the current MDSMap
-        The logic is currently implemented both here and on the MDS side,
-        see MDSRank::quiesce_cluster_update().
-
-        Ideally, this logic should be part of the MDSMonitor and the result should
-        be exposed via a dedicated field in the map, but until that is implemented
-        this function will have to be kept in sync with the corresponding logic
-        on the MDS side
-        """
-        leader_info: Optional[dict] = None
-
+    def get_quiesce_leader_gid(self, fscid: str) -> Optional[int]:
+        leader_gid : Optional[int] = None
         for fs in self.get("fs_map")['filesystems']:
             if fscid != fs["id"]:
                 continue
@@ -1774,33 +1741,30 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             # quiesce leader is the lowest rank
             # with the highest state
             mdsmap = fs["mdsmap"]
-            for info in mdsmap['info'].values():
-                if info['rank'] == -1:
-                    continue
-                if leader_info is None:
-                    leader_info = info
-                else:
-                    if info['rank'] < leader_info['rank']:
-                        leader_info = info
-                    elif info['rank'] == leader_info['rank']:
-                        state_ord = self.MDS_STATE_ORD.get(info['state'])
-                        # if there are more than one daemons with the same rank
-                        # only one of them can be active
-                        if state_ord == self.MDS_STATE_ACTIVE_ORD:
-                            leader_info = info
+            leader_gid = mdsmap.get("qdb_leader", None)
             break
 
-        return leader_info
+        return leader_gid
 
-    def tell_quiesce_leader(self, fscid: str, cmd_dict: dict) -> Tuple[int, str, str]:
-        qleader = self.get_quiesce_leader_info(fscid)
-        if qleader is None:
-            self.log.warn("Couldn't resolve the quiesce leader for fscid %s" % fscid)
-            return (-errno.ENOENT, "", "Couldn't resolve the quiesce leader for fscid %s" % fscid)
-        self.log.debug("resolved quiesce leader for fscid {fscid} at daemon '{name}' gid {gid} rank {rank} ({state})".format(fscid=fscid, **qleader))
-        # We use the one_shot here to cover for cases when the mds crashes
-        # without this parameter the client may get stuck awaiting response from a dead MDS
-        return self.tell_command('mds', str(qleader['gid']), cmd_dict, one_shot=True)
+    def tell_quiesce_leader(self, leader: int, cmd_dict: dict) -> Tuple[int, str, str]:
+        max_retries = 5
+        for _ in range(max_retries):
+            # We use "one_shot" here to cover for cases when the mds crashes
+            # without this parameter the client may get stuck awaiting response from a dead MDS
+            # (which is particularly bad for the volumes plugin finisher thread)
+            rc, stdout, stderr = self.tell_command('mds', str(leader), cmd_dict, one_shot=True)
+            if rc == -errno.ENOTTY:
+                try:
+                    resp = json.loads(stdout)
+                    leader = int(resp['leader'])
+                    self.log.info("Retrying a quiesce db command with leader %d" % leader)
+                except Exception as e:
+                    self.log.error("Couldn't parse ENOTTY response from an mds with error: %s\n%s" % (str(e), stdout))
+                    break
+            else:
+                break
+
+        return (rc, stdout, stderr)
 
     def send_command(
             self,
