@@ -157,6 +157,43 @@ struct FixedKVNode : ChildableCachedExtent {
       (get_node_size() - offset - 1) * sizeof(ChildableCachedExtent*));
   }
 
+  virtual bool have_children() const = 0;
+
+  void on_rewrite(CachedExtent &extent, extent_len_t off) final {
+    assert(get_type() == extent.get_type());
+    assert(off == 0);
+    auto &foreign_extent = (FixedKVNode&)extent;
+    range = get_node_meta();
+
+    if (have_children()) {
+      if (!foreign_extent.is_pending()) {
+	copy_sources.emplace(&foreign_extent);
+      } else {
+	ceph_assert(foreign_extent.is_mutation_pending());
+	copy_sources.emplace(
+	  foreign_extent.get_prior_instance()->template cast<FixedKVNode>());
+	children = std::move(foreign_extent.children);
+	adjust_ptracker_for_children();
+      }
+    }
+    
+    /* This is a bit underhanded.  Any relative addrs here must necessarily
+     * be record relative as we are rewriting a dirty extent.  Thus, we
+     * are using resolve_relative_addrs with a (likely negative) block
+     * relative offset to correct them to block-relative offsets adjusted
+     * for our new transaction location.
+     *
+     * Upon commit, these now block relative addresses will be interpretted
+     * against the real final address.
+     */
+    if (!get_paddr().is_absolute()) {
+      // backend_type_t::SEGMENTED
+      assert(get_paddr().is_record_relative());
+      resolve_relative_addrs(
+	make_record_relative_paddr(0).block_relative_to(get_paddr()));
+    } // else: backend_type_t::RANDOM_BLOCK
+  }
+
   FixedKVNode& get_stable_for_key(node_key_t key) const {
     ceph_assert(is_pending());
     if (is_mutation_pending()) {
@@ -488,10 +525,6 @@ struct FixedKVNode : ChildableCachedExtent {
     reset_parent_tracker();
   }
 
-  bool is_rewrite() {
-    return is_initial_pending() && get_prior_instance();
-  }
-
   void on_initial_write() final {
     // All in-memory relative addrs are necessarily block-relative
     resolve_relative_addrs(get_paddr());
@@ -563,6 +596,10 @@ struct FixedKVInternalNode
   FixedKVInternalNode(const FixedKVInternalNode &rhs)
     : FixedKVNode<NODE_KEY>(rhs),
       node_layout_t(this->get_bptr().c_str()) {}
+
+  bool have_children() const final {
+    return true;
+  }
 
   bool is_leaf_and_has_children() const final {
     return false;
@@ -976,6 +1013,10 @@ struct FixedKVLeafNode
       node_layout_t(this->get_bptr().c_str()) {}
 
   static constexpr bool do_has_children = has_children;
+
+  bool have_children() const final {
+    return do_has_children;
+  }
 
   bool is_leaf_and_has_children() const final {
     return has_children;
