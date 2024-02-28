@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-ignorelist:
       - MON_DOWN
+      - mons down, quorum
       - PG_DEGRADED
       - PG_AVAILABILITY
 tasks:

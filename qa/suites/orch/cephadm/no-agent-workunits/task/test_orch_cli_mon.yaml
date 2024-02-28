@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-ignorelist:
       - MON_DOWN
+      - mons down, quorum
 roles:
 - - host.a
   - osd.0

@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-ignorelist:
       - MON_DOWN
+      - mons down, quorum
       - POOL_APP_NOT_ENABLED
 roles:
 - - host.a
