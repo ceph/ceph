@@ -88,5 +88,9 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 ### upgrade runs for squid release
 ###### on smithi
 
-25 02 * * 4 CEPH_BRANCH=main; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s upgrade:reef-x -k distro -e $CEPH_QA_EMAIL --suite-branch main --suite-repo https://github.com/ceph/ceph.git --ceph-repo https://github.com/ceph/ceph.git -p 50 --force-priority
+00 00 * * 5   CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=upgrade;         KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 32 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 165
 
+### upgrade runs for main
+###### on smithi
+
+00 00 * * 6   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=upgrade;          KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 32 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 160
