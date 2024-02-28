@@ -73,16 +73,11 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 ## !!!! the client suites below MUST use --suite-branch octopus, pacific (see https://tracker.ceph.com/issues/24021)
 
-20 01 * * 4 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-octopus-quincy -k distro -e $CEPH_QA_EMAIL --suite-branch octopus --suite-repo https://github.com/ceph/ceph.git --ceph-repo https://github.com/ceph/ceph.git -p 50 --force-priority
-
-25 01 * * 4 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-pacific-quincy -k distro -e $CEPH_QA_EMAIL --suite-branch pacific --suite-repo https://github.com/ceph/ceph.git --ceph-repo https://github.com/ceph/ceph.git -p 50 --force-priority
-
-22 14 * * 5 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s upgrade:octopus-x --subset 111/120000 -e $CEPH_QA_EMAIL -k distro -p 100 --force-priority
-
-23 14 * * 5 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s upgrade:pacific-x --subset 111/120000 -e $CEPH_QA_EMAIL -k distro -p 100 --force-priority
-
-35 01 * * 7  CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s upgrade/quincy-p2p -k distro -e $CEPH_QA_EMAIL -p 75 --force-priority
-
+20 01 * * 1 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-octopus-quincy -k distro -e $CEPH_QA_EMAIL --suite-branch octopus --suite-repo https://github.com/ceph/ceph.git --ceph-repo https://github.com/ceph/ceph.git -p 175
+25 01 * * 1 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s upgrade-clients/client-upgrade-pacific-quincy -k distro -e $CEPH_QA_EMAIL --suite-branch pacific --suite-repo https://github.com/ceph/ceph.git --ceph-repo https://github.com/ceph/ceph.git -p 175
+30 01 * * 1 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 120000 $CEPH_BRANCH $MACHINE_NAME upgrade:octopus-x $CEPH_QA_EMAIL distro -p 175
+35 01 * * 1 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 120000 $CEPH_BRANCH $MACHINE_NAME upgrade:pacific-x $CEPH_QA_EMAIL distro -p 175
+40 01 * * 1 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s upgrade/quincy-p2p -k distro -e $CEPH_QA_EMAIL -p 175
 
 ### upgrade runs for reef release
 ###### on smithi
