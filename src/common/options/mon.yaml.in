@@ -1249,14 +1249,6 @@ options:
   services:
   - mon
   with_legacy: true
-- name: mon_osd_max_creating_pgs
-  type: int
-  level: advanced
-  desc: maximum number of PGs the mon will create at once
-  default: 1024
-  services:
-  - mon
-  with_legacy: true
 - name: mon_osd_max_initial_pgs
   type: int
   level: advanced
