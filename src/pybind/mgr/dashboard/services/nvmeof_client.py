@@ -91,7 +91,6 @@ else:
             ))
 
         def create_listener(self, nqn: str, gateway: str, traddr: Optional[str] = None):
-            traddr = None
             if traddr is None:
                 addr = self.gateway_addr
                 ip_address, _ = addr.split(':')
@@ -105,7 +104,6 @@ else:
             return self.stub.create_listener(req)
 
         def delete_listener(self, nqn: str, gateway: str, traddr: Optional[str] = None):
-            traddr = None
             if traddr is None:
                 addr = self.gateway_addr
                 ip_address, _ = addr.split(':')
