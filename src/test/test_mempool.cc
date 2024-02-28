@@ -406,8 +406,8 @@ TEST(mempool, btree_map_test)
 
 TEST(mempool, check_shard_select)
 {
-  const size_t samples = mempool::num_shards * 30;
-  std::atomic_int shards[mempool::num_shards] = {0};
+  const size_t samples = mempool::get_num_shards() * 30;
+  std::atomic_int shards[mempool::get_num_shards()] = {0};
   std::vector<std::thread> workers;
   for (size_t i = 0; i < samples; i++) {
     workers.push_back(
@@ -423,7 +423,7 @@ TEST(mempool, check_shard_select)
 
 #if !defined(MEMPOOL_SCHED_GETCPU)
   size_t missed = 0;
-  for (size_t i = 0; i < mempool::num_shards; i++) {
+  for (size_t i = 0; i < mempool::get_num_shards(); i++) {
     if (shards[i] != 30) {
       // Each shard is expected to have exactly 30 threads
       missed++;

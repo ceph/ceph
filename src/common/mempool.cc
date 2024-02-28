@@ -74,7 +74,7 @@ struct fault_stats_t {
   ceph::atomic<size_t> incorrect_core = {0};
   ceph::atomic<size_t> checked_core = {0};
 
-  char __padding[128 - sizeof(ceph::atomic<size_t>)*2];
+  char __padding[128 - sizeof(ceph::atomic<size_t>)*3];
 
   void dump(ceph::Formatter *f) const {
     f->dump_int("correct_core", correct_core );
@@ -89,34 +89,31 @@ struct fault_stats_t {
     return *this;
   }
 } __attribute__ ((aligned (128)));
+static_assert(sizeof(fault_stats_t) == 128, "fault_stats_t should be cacheline-sized");
 
-static fault_stats_t *shard_faults;
+static std::unique_ptr<fault_stats_t[]> shard_faults;
 #endif
 
 }
 
 size_t mempool::get_num_shards(void) {
-  if (num_shards==0) {
-    size_t threads = std::thread::hardware_concurrency();
+  static std::once_flag once;
+  std::call_once(once,[&]() {
+    unsigned int threads = std::thread::hardware_concurrency();
     if (threads == 0) {
       threads = default_shards;
     }
-    if (threads < min_shards) {
-      threads = min_shards;
-    }
-    if (threads > max_shards) {
-      threads = max_shards;
-    }
+    threads = std::clamp<unsigned int>( threads, min_shards, max_shards );
     threads--;
-    while (threads!=0) {
+    while (threads != 0) {
       num_shard_bits++;
       threads>>=1;
     }
     num_shards = 1 << num_shard_bits;
 #if defined(MEMPOOL_SCHED_GETCPU)
-    shard_faults = new fault_stats_t[num_shards];
+    shard_faults = std::make_unique<fault_stats_t[]>(num_shards);
 #endif
-  }
+  });
   return num_shards;
 }
 

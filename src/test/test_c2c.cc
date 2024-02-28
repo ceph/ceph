@@ -29,7 +29,8 @@ void sigterm_handler(int signum)
     total += shard.bytes;
   }
   std::cout << total << std::endl;
-  exit(0);
+  signal(SIGTERM,SIG_DFL);
+  raise(SIGTERM);
 }
 
 int main(int argc, const char **argv)
