@@ -864,7 +864,8 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
 
     // clip diff to size of object (in case it was truncated)
     interval_set<uint64_t> zero_interval;
-    if (end_size < prev_end_size) {
+    if (end_size < prev_end_size &&
+        (m_list_snaps_flags & LIST_SNAPS_FLAG_WHOLE_OBJECT) == 0) {
       zero_interval.insert(end_size, prev_end_size - end_size);
       zero_interval.intersection_of(object_interval);
 
