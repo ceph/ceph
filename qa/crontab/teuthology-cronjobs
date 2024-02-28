@@ -41,8 +41,10 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 ## ********** windows tests on main branch - weekly
 # 00 03 * * 1 CEPH_BRANCH=main; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s windows -k distro -e $CEPH_QA_EMAIL
 
+
 ## ********** crimson tests on main branch - weekly
 # 01 01 * * 0 CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=crimson-rados; KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 100000 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
+
 
 ## ********** teuthology/nop on main branch - daily
 0 0 * * * CEPH_BRANCH=main; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 10 -m $MACHINE_NAME -s teuthology/nop -k distro -e $CEPH_QA_EMAIL -p 50
