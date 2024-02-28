@@ -1,7 +1,7 @@
 import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { AbstractControl, FormArray, FormControl, FormGroup, Validators } from '@angular/forms';
 import { NgbActiveModal, NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
-import { uniq } from 'lodash';
+import { padStart, uniq } from 'lodash';
 import { Observable, OperatorFunction, of, timer } from 'rxjs';
 import { catchError, debounceTime, distinctUntilChanged, map, switchMap } from 'rxjs/operators';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
@@ -224,9 +224,11 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
 
   parseDatetime(date: NgbDateStruct, time?: NgbTimeStruct): string {
     if (!date || !time) return null;
-    return `${date.year}-${date.month}-${date.day}T${time.hour || '00'}:${time.minute || '00'}:${
-      time.second || '00'
-    }`;
+    return `${date.year}-${padStart(date.month.toString(), 2, '0')}-${padStart(
+      date.day.toString(),
+      2,
+      '0'
+    )}T${time.hour || '00'}:${time.minute || '00'}:${time.second || '00'}`;
   }
   parseSchedule(interval: number, frequency: string): string {
     return `${interval}${frequency}`;
