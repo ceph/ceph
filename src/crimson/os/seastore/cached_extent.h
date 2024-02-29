@@ -453,7 +453,8 @@ public:
 
   /// Returns true if extent has a pending delta
   bool is_mutation_pending() const {
-    return state == extent_state_t::MUTATION_PENDING;
+    return state == extent_state_t::MUTATION_PENDING
+      || state == extent_state_t::EXIST_MUTATION_PENDING;
   }
 
   /// Returns true if extent is a fresh extent
