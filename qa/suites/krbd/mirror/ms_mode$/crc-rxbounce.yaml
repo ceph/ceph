@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd default map options: ms_mode=crc,rxbounce
