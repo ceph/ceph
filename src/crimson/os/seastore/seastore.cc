@@ -1591,10 +1591,10 @@ SeaStore::Shard::_clone_omaps(
   OnodeRef &d_onode,
   const omap_type_t otype)
 {
-  return trans_intr::repeat([&ctx, onode, d_onode, this, otype] {
+  return trans_intr::repeat([&ctx, onode, d_onode, this, otype]() mutable {
     return seastar::do_with(
       std::optional<std::string>(std::nullopt),
-      [&ctx, onode, d_onode, this, otype](auto &start) {
+      [&ctx, onode, d_onode, this, otype](auto &start) mutable {
       auto& layout = onode->get_layout();
       return omap_list(
 	*onode,
