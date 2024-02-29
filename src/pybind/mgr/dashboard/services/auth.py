@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+from typing import Optional
 import base64
 import hashlib
 import hmac
@@ -15,6 +16,7 @@ import cherrypy
 from .. import mgr
 from ..exceptions import ExpiredSignatureError, InvalidAlgorithmError, InvalidTokenError
 from .access_control import LocalAuthenticator, UserDoesNotExist
+
 
 cherrypy.config.update({
     'response.headers.server': 'Ceph-Dashboard',
@@ -96,11 +98,13 @@ class JwtManager(object):
         return decoded_message
 
     @classmethod
-    def gen_token(cls, username):
+    def gen_token(cls, username, ttl: Optional[int] = None):
         if not cls._secret:
             cls.init()
-        ttl = mgr.get_module_option('jwt_token_ttl', cls.JWT_TOKEN_TTL)
-        ttl = int(ttl)
+        if ttl is None:
+            ttl = mgr.get_module_option('jwt_token_ttl', cls.JWT_TOKEN_TTL)
+        else:
+            ttl = int(ttl) * 24 * 60 * 60  # convert days to seconds
         now = int(time.time())
         payload = {
             'iss': 'ceph-dashboard',

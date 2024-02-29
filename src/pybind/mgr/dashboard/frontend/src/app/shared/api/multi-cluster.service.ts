@@ -96,7 +96,8 @@ export class MultiClusterService {
     hub_url = '',
     clusterFsid = '',
     ssl = false,
-    cert = ''
+    cert = '',
+    ttl = ''
   ) {
     return this.http.post('api/multi-cluster/auth', {
       url,
@@ -107,7 +108,8 @@ export class MultiClusterService {
       hub_url,
       cluster_fsid: clusterFsid,
       ssl_verify: ssl,
-      ssl_certificate: cert
+      ssl_certificate: cert,
+      ttl: ttl
     });
   }
 

@@ -55,11 +55,12 @@ class MultiCluster(RESTController):
     @EndpointDoc("Authenticate to a remote cluster")
     def auth(self, url: str, cluster_alias: str, username: str,
              password=None, token=None, hub_url=None, cluster_fsid=None,
-             prometheus_api_url=None, ssl_verify=False, ssl_certificate=None):
+             prometheus_api_url=None, ssl_verify=False, ssl_certificate=None, ttl =None):
         if password:
             payload = {
                 'username': username,
-                'password': password
+                'password': password,
+                'ttl': ttl
             }
             content = self._proxy('POST', url, 'api/auth', payload=payload)
             if 'token' not in content:
