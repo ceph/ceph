@@ -1367,6 +1367,8 @@ class TestMirroringCommands(CephFSTestCase):
 class TestFsAuthorize(CephFSTestCase):
     client_id = 'testuser'
     client_name = 'client.' + client_id
+    CLIENTS_REQUIRED = 2
+    MDSS_REQUIRED = 3
 
     def test_single_path_r(self):
         PERM = 'r'
@@ -1405,6 +1407,46 @@ class TestFsAuthorize(CephFSTestCase):
         self.captester.conduct_neg_test_for_write_caps(sudo_write=True)
         self.captester.conduct_neg_test_for_chown_caps()
         self.captester.conduct_neg_test_for_truncate_caps()
+
+    def test_multifs_single_path_rootsquash(self):
+        """
+        Test root_squash with multi fs
+        """
+        self.fs1 = self.fs
+        self.fs2 = self.mds_cluster.newfs('testcephfs2')
+        self.mount_b.remount(cephfs_name=self.fs2.name)
+        self.captesters = (CapTester(self.mount_a), CapTester(self.mount_b))
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
+        # Authorize client to fs1
+        PERM = 'rw'
+        FS_AUTH_CAPS = (('/', PERM, 'root_squash'),)
+        self.captester = CapTester(self.mount_a, '/')
+        self.fs1.authorize(self.client_id, FS_AUTH_CAPS)
+
+        # Authorize client to fs2
+        self.fs2.authorize(self.client_id, FS_AUTH_CAPS)
+        keyring = self.fs.mon_manager.get_keyring(self.client_id)
+
+        self._remount(self.mount_a, self.fs1.name, keyring)
+        self._remount(self.mount_b, self.fs2.name, keyring)
+        # testing MDS caps...
+        # Since root_squash is set in client caps, client can read but not
+        # write even though access level is set to "rw" on both fses
+        self.captester[0].conduct_pos_test_for_read_caps()
+        self.captester[0].conduct_pos_test_for_open_caps()
+        self.captester[0].conduct_neg_test_for_write_caps(sudo_write=True)
+        self.captester[0].conduct_neg_test_for_chown_caps()
+        self.captester[0].conduct_neg_test_for_truncate_caps()
+
+        self.captester[1].conduct_pos_test_for_read_caps()
+        self.captester[1].conduct_pos_test_for_open_caps()
+        self.captester[1].conduct_neg_test_for_write_caps(sudo_write=True)
+        self.captester[1].conduct_neg_test_for_chown_caps()
+        self.captester[1].conduct_neg_test_for_truncate_caps()
 
     def test_single_path_rootsquash_issue_56067(self):
         """
