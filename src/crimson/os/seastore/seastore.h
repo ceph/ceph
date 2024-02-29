@@ -359,6 +359,16 @@ public:
       uint64_t offset, size_t len,
       ceph::bufferlist &&bl,
       uint32_t fadvise_flags);
+    enum class omap_type_t : uint8_t {
+      XATTR = 0,
+      OMAP,
+      NUM_TYPES
+    };
+    tm_ret _clone_omaps(
+      internal_context_t &ctx,
+      OnodeRef &onode,
+      OnodeRef &d_onode,
+      const omap_type_t otype);
     tm_ret _clone(
       internal_context_t &ctx,
       OnodeRef &onode,
