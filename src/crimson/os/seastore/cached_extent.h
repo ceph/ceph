@@ -281,7 +281,7 @@ public:
    * with the states of Cache and can't wait till transaction
    * completes.
    */
-  virtual void on_replace_prior(Transaction &t) {}
+  virtual void on_replace_prior() {}
 
   /**
    * on_invalidated
@@ -1309,7 +1309,7 @@ public:
   virtual ~LogicalCachedExtent();
 
 protected:
-  void on_replace_prior(Transaction &t) final;
+  void on_replace_prior() final;
 
   virtual void apply_delta(const ceph::bufferlist &bl) = 0;
 
