@@ -3,12 +3,6 @@
 SCRIPTNAME="$(basename "${0}")"
 BASEDIR="$(readlink -f "$(dirname "${0}")")"
 
-if [ ! -d .git ]; then
-    echo "$SCRIPTNAME: Full path to the script: $BASEDIR/$SCRIPTNAME"
-    echo "$SCRIPTNAME: No .git present. Run this from the base dir of the git checkout."
-    exit 1
-fi
-
 # Running the script from a directory containing a colon anywhere in the path
 # will expose us to the dreaded "[BUG] npm run [command] failed if the directory
 # path contains colon" bug https://github.com/npm/cli/issues/633

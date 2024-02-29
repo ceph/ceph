@@ -353,6 +353,8 @@ BuildRequires:  libubsan
 BuildRequires:  libasan
 BuildRequires:  protobuf-devel
 BuildRequires:  protobuf-compiler
+BuildRequires:  clang >= 16.0.0
+BuildRequires:  gcc-toolset-13-libatomic-devel
 %if 0%{?rhel} == 8
 BuildRequires:  %{gts_prefix}-annobin
 BuildRequires:  %{gts_prefix}-annobin-plugin-gcc
@@ -1353,10 +1355,10 @@ export LDFLAGS="$RPM_LD_FLAGS"
 
 %if 0%{with seastar}
 # seastar uses longjmp() to implement coroutine. and this annoys longjmp_chk()
-export CXXFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
+export CXXFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g' | sed -e 's/-ffat-lto-objects//g' | sed -e 's/-specs=/usr/lib/rpm/redhat/redhat-hardened-cc1//g')
 # remove from CFLAGS too because it causes the arrow submodule to fail with:
 #   warning _FORTIFY_SOURCE requires compiling with optimization (-O)
-export CFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g')
+export CFLAGS=$(echo $RPM_OPT_FLAGS | sed -e 's/-Wp,-D_FORTIFY_SOURCE=2//g' | sed -e 's/-ffat-lto-objects//g' | sed -e 's/-specs=/usr/lib/rpm/redhat/redhat-hardened-cc1//g')
 %endif
 
 env | sort
@@ -1370,6 +1372,10 @@ cmake .. \
 %if 0%{?suse_version} == 1500
     -DCMAKE_C_COMPILER=gcc-11 \
     -DCMAKE_CXX_COMPILER=g++-11 \
+%endif
+%if 0%{with seastar}
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
 %endif
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
