@@ -620,6 +620,15 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   federated_user.tenant = role_tenant;
   federated_user.ns = "oidc";
 
+  if (account) {
+    // we don't need shadow users for account roles because bucket ownership,
+    // quota, and stats are tracked by the account instead of the user
+    user_info.user_id = std::move(federated_user);
+    user_info.display_name = user_name;
+    user_info.type = TYPE_WEB;
+    return;
+  }
+
   std::unique_ptr<rgw::sal::User> user = driver->get_user(federated_user);
 
   //Check in oidc namespace
