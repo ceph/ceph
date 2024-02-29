@@ -141,6 +141,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
         ]
       }),
       ssl: new FormControl(false),
+      ttl: new FormControl(15),
       ssl_cert: new FormControl('', {
         validators: [
           CdValidators.requiredIf({
@@ -178,6 +179,10 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     this.activeModal.close();
   }
 
+  convertToHours(value: number): number {
+    return value * 24; // Convert days to hours
+  }
+
   onSubmit() {
     const url = this.remoteClusterForm.getValue('remoteClusterUrl');
     const updatedUrl = url.endsWith('/') ? url.slice(0, -1) : url;
@@ -186,7 +191,9 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     const password = this.remoteClusterForm.getValue('password');
     const token = this.remoteClusterForm.getValue('apiToken');
     const clusterFsid = this.remoteClusterForm.getValue('clusterFsid');
+    const prometheusApiUrl = this.remoteClusterForm.getValue('prometheusApiUrl');
     const ssl = this.remoteClusterForm.getValue('ssl');
+    const ttl = this.convertToHours(this.remoteClusterForm.getValue('ttl'));
     const ssl_certificate = this.remoteClusterForm.getValue('ssl_cert')?.trim();
 
     const commonSubscribtion = {
@@ -212,7 +219,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
       case 'reconnect':
         this.subs.add(
           this.multiClusterService
-            .reConnectCluster(updatedUrl, username, password, token, ssl, ssl_certificate)
+            .reConnectCluster(updatedUrl, username, password, token, ssl, ssl_certificate, ttl)
             .subscribe(commonSubscribtion)
         );
         break;
@@ -227,8 +234,10 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
               token,
               window.location.origin,
               clusterFsid,
+              prometheusApiUrl,
               ssl,
-              ssl_certificate
+              ssl_certificate,
+              ttl
             )
             .subscribe(commonSubscribtion)
         );
