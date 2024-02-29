@@ -189,6 +189,24 @@
           </div>
         </div>
         <div class="form-group row"
+             *ngIf="!remoteClusterForm.getValue('showToken') && action !== 'edit'">
+          <label class="cd-col-form-label"
+                 for="ttl"
+                 i18n>Login Expiration</label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="ttl"
+                    formControlName="ttl"
+                    name="ttl">
+              <option value="1">1 day</option>
+              <option value="7">1 week</option>
+              <option value="15"
+                      [selected]="true">15 days</option>
+              <option value="30">30 days</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group row"
              *ngIf="action !== 'edit'">
           <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
