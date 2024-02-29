@@ -887,7 +887,6 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
   # Looks for protobuf-config.cmake file installed by Protobuf's cmake installation.
   option(protobuf_MODULE_COMPATIBLE TRUE)
   find_package(Protobuf REQUIRED)
-
   set(_REFLECTION grpc++_reflection)
   if(CMAKE_CROSSCOMPILING)
     find_program(_PROTOBUF_PROTOC protoc)
@@ -903,7 +902,6 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
   find_package(PkgConfig REQUIRED)
   pkg_search_module(GRPC REQUIRED grpc)
   pkg_search_module(GRPCPP REQUIRED grpc++)
-  message(STATUS "Using gRPC ${gRPC_VERSION}")
   set(_GRPC_GRPCPP gRPC::grpc++)
   if(CMAKE_CROSSCOMPILING)
     find_program(_GRPC_CPP_PLUGIN_EXECUTABLE grpc_cpp_plugin)
@@ -977,8 +975,11 @@ if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
     mon
     global-static
     ceph-common
+    ${Protobuf_LIBRARY}
     ${_REFLECTION}
+    ${GRPC_LIBRARY}
     ${_GRPC_GRPCPP}
+    absl_synchronization
     )
   install(TARGETS ceph-nvmeof-monitor-client DESTINATION bin)
 endif()
