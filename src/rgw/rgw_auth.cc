@@ -5,6 +5,7 @@
 #include <string>
 #include <variant>
 
+#include "common/errno.h"
 #include "rgw_common.h"
 #include "rgw_auth.h"
 #include "rgw_quota.h"
@@ -64,78 +65,60 @@ static bool match_principal(std::string_view path,
 }
 
 static bool match_owner(const rgw_owner& owner, const rgw_user& uid,
-                        std::string_view account_id)
+                        const std::optional<RGWAccountInfo>& account)
 {
   return std::visit(fu2::overload(
       [&uid] (const rgw_user& u) { return u == uid; },
-      [&account_id] (const rgw_account_id& a) { return a == account_id; }
-      ), owner);
+      [&account] (const rgw_account_id& a) {
+        return account && a == account->id;
+      }), owner);
 }
 
-static bool match_account_or_tenant(const rgw_account_id& account_id,
+static bool match_account_or_tenant(const std::optional<RGWAccountInfo>& account,
                                     std::string_view tenant,
                                     std::string_view expected)
 {
-  if (!account_id.empty()) {
-    return account_id == expected;
-  } else {
-    return tenant == expected;
-  }
+  return (account && account->id == expected)
+      || (tenant == expected);
 }
 
-std::unique_ptr<rgw::auth::Identity>
-transform_old_authinfo(CephContext* const cct,
-                       const rgw_user& auth_id,
-                       const std::string& display_name,
-                       const std::string& path,
-                       const rgw_account_id& account_id,
-                       const int perm_mask,
-                       const bool is_admin,
-                       const uint32_t type)
+auto transform_old_authinfo(const RGWUserInfo& user,
+                            std::optional<RGWAccountInfo> account)
+  -> std::unique_ptr<rgw::auth::Identity>
 {
   /* This class is not intended for public use. Should be removed altogether
    * with this function after moving all our APIs to the new authentication
    * infrastructure. */
   class DummyIdentityApplier : public rgw::auth::Identity {
-    CephContext* const cct;
-
     /* For this particular case it's OK to use rgw_user structure to convey
      * the identity info as this was the policy for doing that before the
      * new auth. */
     const rgw_user id;
     const std::string display_name;
     const std::string path;
-    const rgw_account_id account_id;
-    const int perm_mask;
     const bool is_admin;
     const uint32_t type;
+    const std::optional<RGWAccountInfo> account;
   public:
-    DummyIdentityApplier(CephContext* const cct,
-                         const rgw_user& auth_id,
-                         const std::string display_name,
-                         const std::string path,
-                         const rgw_account_id& account_id,
-                         const int perm_mask,
-                         const bool is_admin,
-                         const uint32_t type)
-      : cct(cct),
-        id(auth_id),
-        display_name(display_name),
-        path(path),
-        account_id(account_id),
-        perm_mask(perm_mask),
-        is_admin(is_admin),
-        type(type) {
-    }
+    DummyIdentityApplier(const RGWUserInfo& user,
+                         std::optional<RGWAccountInfo> account)
+      : id(user.user_id),
+        display_name(user.display_name),
+        path(user.path),
+        is_admin(user.admin),
+        type(user.type),
+        account(std::move(account))
+    {}
 
     ACLOwner get_aclowner() const {
       ACLOwner owner;
-      if (!account_id.empty()) {
-        owner.id.emplace<rgw_account_id>(account_id);
+      if (account) {
+        owner.id = account->id;
+        owner.display_name = account->name;
       } else {
         owner.id = id;
+        owner.display_name = display_name;
       }
-      owner.display_name = display_name;
       return owner;
     }
 
@@ -148,19 +131,19 @@ transform_old_authinfo(CephContext* const cct,
     }
 
     bool is_owner_of(const rgw_owner& o) const override {
-      return match_owner(o, id, account_id);
+      return match_owner(o, id, account);
     }
 
     bool is_identity(const Principal& p) const override {
       if (p.is_wildcard()) {
         return true;
       } else if (p.is_account()) {
-        return match_account_or_tenant(account_id, id.tenant,
+        return match_account_or_tenant(account, id.tenant,
                                        p.get_account());
       } else if (p.is_user()) {
         std::string_view no_subuser;
         // account users can match both account- and tenant-based arns
-        if (!account_id.empty() && p.get_account() == account_id) {
+        if (account && p.get_account() == account->id) {
           return match_principal(path, display_name, no_subuser, p.get_id());
         } else {
           return p.get_account() == id.tenant
@@ -171,7 +154,7 @@ transform_old_authinfo(CephContext* const cct,
     }
 
     uint32_t get_perm_mask() const override {
-      return perm_mask;
+      return RGW_PERM_FULL_CONTROL;
     }
 
     uint32_t get_identity_type() const override {
@@ -191,30 +174,35 @@ transform_old_authinfo(CephContext* const cct,
 
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
-          << ", perm_mask=" << perm_mask
           << ", is_admin=" << is_admin << ")";
     }
   };
 
-  return std::make_unique<DummyIdentityApplier>(
-      cct, auth_id, display_name, path, account_id,
-      perm_mask, is_admin, type);
+  return std::make_unique<DummyIdentityApplier>(user, std::move(account));
 }
 
-std::unique_ptr<rgw::auth::Identity>
-transform_old_authinfo(const req_state* const s)
+auto transform_old_authinfo(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            rgw::sal::Driver* driver,
+                            const RGWUserInfo& user)
+  -> tl::expected<std::unique_ptr<Identity>, int>
 {
-  const RGWUserInfo& info = s->user->get_info();
-  return transform_old_authinfo(s->cct,
-                                info.user_id,
-                                info.display_name,
-                                info.path,
-                                info.account_id,
-                                s->perm_mask,
-  /* System user has admin permissions by default - it's supposed to pass
-   * through any security check. */
-                                s->system_request,
-                                info.type);
+  std::optional<RGWAccountInfo> account;
+  if (!user.account_id.empty()) {
+    account.emplace();
+    rgw::sal::Attrs attrs; // ignored
+    RGWObjVersionTracker objv; // ignored
+    int r = driver->load_account_by_id(dpp, y, user.account_id,
+                                       *account, attrs, objv);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to load account "
+          << user.account_id << " for user " << user.user_id
+          << ": " << cpp_strerror(r) << dendl;
+      return tl::unexpected(r);
+    }
+  }
+
+  return transform_old_authinfo(user, std::move(account));
 }
 
 } /* namespace auth */
@@ -454,10 +442,29 @@ rgw::auth::Strategy::add_engine(const Control ctrl_flag,
   auth_stack.push_back(std::make_pair(std::cref(engine), ctrl_flag));
 }
 
+ACLOwner rgw::auth::WebIdentityApplier::get_aclowner() const
+{
+  ACLOwner owner;
+  if (account) {
+    owner.id = account->id;
+    owner.display_name = account->name;
+  } else {
+    owner.id = rgw_user{role_tenant, sub, "oidc"};
+    owner.display_name = user_name;
+  }
+  return owner;
+}
+
+bool rgw::auth::WebIdentityApplier::is_owner_of(const rgw_owner& o) const
+{
+  return match_owner(o, rgw_user{role_tenant, sub, "oidc"}, account);
+}
+
 void rgw::auth::WebIdentityApplier::to_str(std::ostream& out) const
 {
   out << "rgw::auth::WebIdentityApplier(sub =" << sub
       << ", user_name=" << user_name
+      << ", role_id=" << role_id
       << ", provider_id =" << iss << ")";
 }
 
@@ -619,6 +626,7 @@ const std::string rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY;
 ACLOwner rgw::auth::RemoteApplier::get_aclowner() const
 {
   ACLOwner owner;
+  // TODO: handle account ownership
   owner.id = info.acct_user;
   owner.display_name = info.acct_name;
   return owner;
@@ -843,12 +851,13 @@ const std::string rgw::auth::LocalApplier::NO_ACCESS_KEY;
 ACLOwner rgw::auth::LocalApplier::get_aclowner() const
 {
   ACLOwner owner;
-  if (!user_info.account_id.empty()) {
-    owner.id = user_info.account_id;
+  if (account) {
+    owner.id = account->id;
+    owner.display_name = account->name;
   } else {
     owner.id = user_info.user_id;
+    owner.display_name = user_info.display_name;
   }
-  owner.display_name = user_info.display_name;
   return owner;
 }
 
@@ -858,12 +867,11 @@ uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvide
   uint32_t mask = rgw_perms_from_aclspec_default_strategy(
       user_info.user_id.to_str(), aclspec, dpp);
 
-  if (!user_info.account_id.empty()) {
+  if (account) {
     // account users also match acl grants to the account id. in aws, grantees
     // ONLY refer to accounts. but we continue to match user grants to preserve
     // access when moving legacy users into new accounts
-    mask |= rgw_perms_from_aclspec_default_strategy(
-        user_info.account_id, aclspec, dpp);
+    mask |= rgw_perms_from_aclspec_default_strategy(account->id, aclspec, dpp);
   }
 
   return mask;
@@ -876,20 +884,18 @@ bool rgw::auth::LocalApplier::is_admin_of(const rgw_owner& o) const
 
 bool rgw::auth::LocalApplier::is_owner_of(const rgw_owner& o) const
 {
-  return match_owner(o, user_info.user_id, user_info.account_id);
+  return match_owner(o, user_info.user_id, account);
 }
 
 bool rgw::auth::LocalApplier::is_identity(const Principal& p) const {
   if (p.is_wildcard()) {
     return true;
   } else if (p.is_account()) {
-    return match_account_or_tenant(user_info.account_id,
-                                   user_info.user_id.tenant,
+    return match_account_or_tenant(account, user_info.user_id.tenant,
                                    p.get_account());
   } else if (p.is_user()) {
     // account users can match both account- and tenant-based arns
-    if (!user_info.account_id.empty() &&
-        p.get_account() == user_info.account_id) {
+    if (account && p.get_account() == account->id) {
       return match_principal(user_info.path, user_info.display_name,
                              subuser, p.get_id());
     } else {
@@ -943,18 +949,19 @@ void rgw::auth::LocalApplier::write_ops_log_entry(rgw_log_entry& entry) const
 ACLOwner rgw::auth::RoleApplier::get_aclowner() const
 {
   ACLOwner owner;
-  if (!role.account_id.empty()) {
-    owner.id = role.account_id;
+  if (role.account) {
+    owner.id = role.account->id;
+    owner.display_name = role.account->name;
   } else {
     owner.id = token_attrs.user_id;
+    owner.display_name = role.name;
   }
-  owner.display_name = role.name;
   return owner;
 }
 
 bool rgw::auth::RoleApplier::is_owner_of(const rgw_owner& o) const
 {
-  return match_owner(o, token_attrs.user_id, role.account_id);
+  return match_owner(o, token_attrs.user_id, role.account);
 }
 
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
@@ -977,12 +984,12 @@ bool rgw::auth::RoleApplier::is_identity(const Principal& p) const {
   if (p.is_wildcard()) {
     return true;
   } else if (p.is_account()) {
-    return match_account_or_tenant(role.account_id, role.tenant,
+    return match_account_or_tenant(role.account, role.tenant,
                                    p.get_account());
   } else if (p.is_role()) {
     std::string_view no_subuser;
     // account roles can match both account- and tenant-based arns
-    return match_account_or_tenant(role.account_id, role.tenant, p.get_account())
+    return match_account_or_tenant(role.account, role.tenant, p.get_account())
         && match_principal(role.path, role.name, no_subuser, p.get_id());
   } else if (p.is_assumed_role()) {
     string role_session = role.name + "/" + token_attrs.role_session_name; //role/role-session
@@ -1010,7 +1017,7 @@ void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUs
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
   // non-account identity policy is restricted to the current tenant
-  const std::string* policy_tenant = role.account_id.empty() ? &role.tenant : nullptr;
+  const std::string* policy_tenant = role.account ? nullptr : &role.tenant;
 
   for (const auto& policy : role.inline_policies) {
     try {
@@ -1079,7 +1086,7 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     rgw_get_anon_user(user_info);
 
     auto apl = \
-      apl_factory->create_apl_local(cct, s, user_info,
+      apl_factory->create_apl_local(cct, s, user_info, std::nullopt,
                                     rgw::auth::LocalApplier::NO_SUBUSER,
                                     std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
     return result_t::grant(std::move(apl));

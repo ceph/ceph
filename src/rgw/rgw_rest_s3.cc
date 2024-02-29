@@ -6291,6 +6291,21 @@ rgw::auth::s3::LocalEngine::authenticate(
     }
   }*/
 
+  std::optional<RGWAccountInfo> account;
+  if (!user->get_info().account_id.empty()) {
+    account.emplace();
+    rgw::sal::Attrs attrs; // ignored
+    RGWObjVersionTracker objv; // ignored
+    int r = driver->load_account_by_id(dpp, y, user->get_info().account_id,
+                                       *account, attrs, objv);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to load account "
+          << user->get_info().account_id << " for user " << *user
+          << ": " << cpp_strerror(r) << dendl;
+      return result_t::deny(-EPERM);
+    }
+  }
+
   const auto iter = user->get_info().access_keys.find(access_key_id);
   if (iter == std::end(user->get_info().access_keys)) {
     ldpp_dout(dpp, 0) << "ERROR: access key not encoded in user info" << dendl;
@@ -6300,7 +6315,7 @@ rgw::auth::s3::LocalEngine::authenticate(
 
   /* Ignore signature for HTTP OPTIONS */
   if (s->op_type == RGW_OP_OPTIONS_CORS) {
-    auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
+    auto apl = apl_factory->create_apl_local(cct, s, user->get_info(), std::move(account),
                                              k.subuser, std::nullopt, access_key_id);
     return result_t::grant(std::move(apl), completer_factory(k.key));
   }
@@ -6320,7 +6335,7 @@ rgw::auth::s3::LocalEngine::authenticate(
     return result_t::reject(-ERR_SIGNATURE_NO_MATCH);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
+  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(), std::move(account),
                                            k.subuser, std::nullopt, access_key_id);
   return result_t::grant(std::move(apl), completer_factory(k.key));
 }
@@ -6455,7 +6470,6 @@ rgw::auth::s3::STSEngine::authenticate(
   }
 
   // Get all the authorization info
-  std::unique_ptr<rgw::sal::User> user;
   rgw_user user_id;
   string role_id;
   rgw::auth::RoleApplier::Role r;
@@ -6469,23 +6483,27 @@ rgw::auth::s3::STSEngine::authenticate(
     r.name = role->get_name();
     r.path = role->get_path();
     r.tenant = role->get_tenant();
-    r.account_id = role->get_account_id();
+
+    const auto& account_id = role->get_account_id();
+    if (!account_id.empty()) {
+      r.account.emplace();
+      rgw::sal::Attrs attrs; // ignored
+      RGWObjVersionTracker objv; // ignored
+      int ret = driver->load_account_by_id(dpp, y, account_id,
+                                           *r.account, attrs, objv);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to load account "
+            << account_id << " for role " << r.name
+            << ": " << cpp_strerror(ret) << dendl;
+        return result_t::deny(-EPERM);
+      }
+    }
 
     for (auto& [name, policy] : role->get_info().perm_policy_map) {
       r.inline_policies.push_back(std::move(policy));
     }
     for (auto& arn : role->get_info().managed_policies.arns) {
       r.managed_policies.push_back(std::move(arn));
-    }
-  }
-
-  user = driver->get_user(token.user);
-  if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
-    // get user info
-    int ret = user->load_user(dpp, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
-      return result_t::reject(-EPERM);
     }
   }
 
@@ -6500,11 +6518,41 @@ rgw::auth::s3::STSEngine::authenticate(
     t_attrs.token_claims = std::move(token.token_claims);
     t_attrs.token_issued_at = std::move(token.issued_at);
     t_attrs.principal_tags = std::move(token.principal_tags);
-    auto apl = role_apl_factory->create_apl_role(cct, s, r, t_attrs);
+    auto apl = role_apl_factory->create_apl_role(cct, s, std::move(r),
+                                                 std::move(t_attrs));
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   } else { // This is for all local users of type TYPE_RGW|ROOT|NONE
+    if (token.user.empty()) {
+      ldpp_dout(dpp, 5) << "ERROR: got session token with empty user id" << dendl;
+      return result_t::reject(-EPERM);
+    }
+    // load user info
+    auto user = driver->get_user(token.user);
+    int ret = user->load_user(dpp, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
+      return result_t::reject(-EPERM);
+    }
+
+    std::optional<RGWAccountInfo> account;
+    if (!user->get_info().account_id.empty()) {
+      account.emplace();
+      rgw::sal::Attrs attrs; // ignored
+      RGWObjVersionTracker objv; // ignored
+      int r = driver->load_account_by_id(dpp, y, user->get_info().account_id,
+                                         *account, attrs, objv);
+      if (r < 0) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to load account "
+            << user->get_info().account_id << " for user " << *user
+            << ": " << cpp_strerror(r) << dendl;
+        return result_t::deny(-EPERM);
+      }
+    }
+
     string subuser;
-    auto apl = local_apl_factory->create_apl_local(cct, s, user->get_info(), subuser, token.perm_mask, std::string(_access_key_id));
+    auto apl = local_apl_factory->create_apl_local(cct, s, user->get_info(),
+                                                   std::move(account), subuser,
+                                                   token.perm_mask, std::string(_access_key_id));
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   }
 }
