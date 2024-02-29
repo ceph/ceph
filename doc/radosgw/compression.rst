@@ -32,7 +32,7 @@ recompressed.
 
 Compression settings apply to all new objects uploaded to buckets using this
 placement target. Compression can be disabled by setting the ``type`` to an
-empty string or ``none``.
+empty string or ``none``. The valid types are ``zlib`` and ``zstd``.
 
 For example::
 
@@ -103,3 +103,12 @@ size of compressed data, in bytes and kilobytes respectively.
 
 .. _`Server-Side Encryption`: ../encryption
 .. _`Multisite Configuration`: ../multisite
+
+Compression Tuning
+==================
+
+The compression level and window size is controlled by the ceph configuration parameters::
+
+  compressor_zlib_level
+  compressor_zlib_winsize
+  compressor_zstd_level
