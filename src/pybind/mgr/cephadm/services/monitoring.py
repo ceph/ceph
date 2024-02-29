@@ -433,6 +433,13 @@ class PrometheusService(CephadmService):
             'nvmeof_sd_url': nvmeof_sd_url,
         }
 
+        ip_to_bind_to = ''
+        if spec.only_bind_port_on_networks and spec.networks:
+            assert daemon_spec.host is not None
+            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec) or ''
+            if ip_to_bind_to:
+                daemon_spec.port_ips = {str(port): ip_to_bind_to}
+
         web_context = {
             'prometheus_web_user': prometheus_user,
             'prometheus_web_password': password_hash(prometheus_password),
@@ -459,6 +466,7 @@ class PrometheusService(CephadmService):
                     },
                     'retention_time': retention_time,
                     'retention_size': retention_size,
+                    'ip_to_bind_to': ip_to_bind_to,
                     'web_config': '/etc/prometheus/web.yml'
                 }
         else:
@@ -467,7 +475,8 @@ class PrometheusService(CephadmService):
                     'prometheus.yml': self.mgr.template.render('services/prometheus/prometheus.yml.j2', context)
                 },
                 'retention_time': retention_time,
-                'retention_size': retention_size
+                'retention_size': retention_size,
+                'ip_to_bind_to': ip_to_bind_to
             }
 
         # include alerts, if present in the container
