@@ -513,7 +513,23 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     throw ret;
   }
 
+  std::optional<RGWAccountInfo> account;
+  if (!user->get_info().account_id.empty()) {
+    account.emplace();
+    rgw::sal::Attrs attrs; // ignored
+    RGWObjVersionTracker objv; // ignored
+    int r = driver->load_account_by_id(dpp, y, user->get_info().account_id,
+                                       *account, attrs, objv);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to load account "
+          << user->get_info().account_id << " for user " << *user
+          << ": " << cpp_strerror(r) << dendl;
+      return result_t::deny(-EPERM);
+    }
+  }
+
   auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
+                                           std::move(account),
                                            extract_swift_subuser(swift_user),
                                            std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
   return result_t::grant(std::move(apl));
@@ -633,6 +649,21 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     throw ret;
   }
 
+  std::optional<RGWAccountInfo> account;
+  if (!user->get_info().account_id.empty()) {
+    account.emplace();
+    rgw::sal::Attrs attrs; // ignored
+    RGWObjVersionTracker objv; // ignored
+    int r = driver->load_account_by_id(dpp, s->yield, user->get_info().account_id,
+                                       *account, attrs, objv);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to load account "
+          << user->get_info().account_id << " for user " << *user
+          << ": " << cpp_strerror(r) << dendl;
+      return result_t::deny(-EPERM);
+    }
+  }
+
   ldpp_dout(dpp, 10) << "swift_user=" << swift_user << dendl;
 
   const auto siter = user->get_info().swift_keys.find(swift_user);
@@ -668,6 +699,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   }
 
   auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
+                                           std::move(account),
                                            extract_swift_subuser(swift_user),
                                            std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
   return result_t::grant(std::move(apl));

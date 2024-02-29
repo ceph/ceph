@@ -502,8 +502,24 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
         ldpp_dout(dpp, 0) << "Role not found: name:" << role_name << " tenant: " << role_tenant << dendl;
         return result_t::deny(-EACCES);
       }
+
+      std::optional<RGWAccountInfo> account;
+      if (!role_account.empty()) {
+        account.emplace();
+        rgw::sal::Attrs attrs; // ignored
+        RGWObjVersionTracker objv; // ignored
+        ret = driver->load_account_by_id(dpp, y, role_account,
+                                         *account, attrs, objv);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "Role account " << role_account << " not found" << dendl;
+          return result_t::deny(-EACCES);
+        }
+      }
+
       boost::optional<multimap<string,string>> role_tags = role->get_tags();
-      auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, role->get_tenant(), *t, role_tags, princ_tags);
+      auto apl = apl_factory->create_apl_web_identity(
+          cct, s, role->get_id(), role_session, role_tenant,
+          *t, role_tags, princ_tags, std::move(account));
       return result_t::grant(std::move(apl));
     }
     return result_t::deny(-EACCES);

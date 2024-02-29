@@ -247,7 +247,8 @@ namespace rgw {
       /* FIXME: remove this after switching all handlers to the new
        * authentication infrastructure. */
       if (! s->auth.identity) {
-	s->auth.identity = rgw::auth::transform_old_authinfo(s);
+	s->auth.identity = rgw::auth::transform_old_authinfo(
+            io->get_user(), std::nullopt);
       }
 
       ldpp_dout(s, 2) << "reading op permissions" << dendl;
@@ -377,7 +378,8 @@ namespace rgw {
     /* FIXME: remove this after switching all handlers to the new authentication
      * infrastructure. */
     if (! s->auth.identity) {
-      s->auth.identity = rgw::auth::transform_old_authinfo(s);
+      s->auth.identity = rgw::auth::transform_old_authinfo(
+          io_ctx.get_user(), std::nullopt);
     }
 
     ldpp_dout(s, 2) << "reading op permissions" << dendl;
@@ -563,9 +565,10 @@ namespace rgw {
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;
+      return ret;
     }
     user_info = user->get_info();
-    return ret;
+    return 0;
   }
 
   int RGWLibRequest::read_permissions(RGWOp* op, optional_yield y) {
