@@ -19,7 +19,6 @@ import { MultiCluster } from '~/app/shared/models/multi-cluster';
 import { Router } from '@angular/router';
 import { CookiesService } from '~/app/shared/services/cookie.service';
 import { Observable, Subscription } from 'rxjs';
-import { SettingsService } from '~/app/shared/api/settings.service';
 
 @Component({
   selector: 'cd-multi-cluster-list',
@@ -31,7 +30,8 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
   table: TableComponent;
   @ViewChild('urlTpl', { static: true })
   public urlTpl: TemplateRef<any>;
-
+  @ViewChild('durationTpl', { static: true })
+  durationTpl: TemplateRef<any>;
   private subs = new Subscription();
   permissions: Permissions;
   tableActions: CdTableAction[];
@@ -50,7 +50,6 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
 
   constructor(
     private multiClusterService: MultiClusterService,
-    private settingsService: SettingsService,
     private router: Router,
     public actionLabels: ActionLabelsI18n,
     private notificationService: NotificationService,
@@ -95,14 +94,24 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.multiClusterService.subscribe((resp: object) => {
         if (resp && resp['config']) {
+          this.hubUrl = resp['hub_url'];
+          this.currentUrl = resp['current_url'];
           const clusterDetailsArray = Object.values(resp['config']).flat();
           this.data = clusterDetailsArray;
           this.checkClusterConnectionStatus();
+          this.data.forEach((cluster: any) => {
+            cluster['remainingTimeWithoutSeconds'] = 0;
+            if (cluster['ttl'] && cluster['ttl'] > 0) {
+              cluster['ttl'] = cluster['ttl'] * 1000;
+              cluster['remainingTimeWithoutSeconds'] = this.getRemainingTimeWithoutSeconds(
+                cluster['ttl']
+              );
+              cluster['remainingDays'] = this.getRemainingDays(cluster['ttl']);
+            }
+          });
         }
       })
     );
-
-    this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
 
     this.columns = [
       {
@@ -138,6 +147,12 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
         prop: 'user',
         name: $localize`User`,
         flexGrow: 2
+      },
+      {
+        prop: 'ttl',
+        name: $localize`Token expires`,
+        flexGrow: 2,
+        cellTemplate: this.durationTpl
       }
     ];
 
@@ -149,21 +164,35 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
     );
   }
 
-  ngOnDestroy() {
+  ngOnDestroy(): void {
     this.subs.unsubscribe();
+  }
+
+  getRemainingDays(time: number): number {
+    if (time === undefined || time == null) {
+      return undefined;
+    }
+    if (time < 0) {
+      return 0;
+    }
+    const toDays = 1000 * 60 * 60 * 24;
+    return Math.max(0, Math.floor(time / toDays));
+  }
+
+  getRemainingTimeWithoutSeconds(time: number): number {
+    return Math.floor(time / (1000 * 60)) * 60 * 1000;
   }
 
   checkClusterConnectionStatus() {
     if (this.clusterTokenStatus && this.data) {
       this.data.forEach((cluster: MultiCluster) => {
-        const clusterStatus = this.clusterTokenStatus[cluster.name.trim()];
-
+        const clusterStatus = this.clusterTokenStatus[cluster.name];
         if (clusterStatus !== undefined) {
           cluster.cluster_connection_status = clusterStatus.status;
+          cluster.ttl = clusterStatus.time_left;
         } else {
           cluster.cluster_connection_status = 2;
         }
-
         if (cluster.cluster_alias === 'local-cluster') {
           cluster.cluster_connection_status = 0;
         }

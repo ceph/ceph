@@ -61,3 +61,24 @@
   </a>
 </ng-template>
 
+<ng-template #durationTpl
+             let-column="column"
+             let-value="value"
+             let-row="row">
+  <span *ngIf="row.remainingTimeWithoutSeconds > 0 && row.cluster_alias !== 'local-cluster'">
+    <i *ngIf="row.remainingDays < 8"
+       i18n-title
+       title="Cluster's token is about to expire"
+       [class.icon-danger-color]="row.remainingDays < 2"
+       [class.icon-warning-color]="row.remainingDays < 8"
+       class="{{ icons.warning }}"></i>
+    <span title="{{ value | cdDate }}">{{ row.remainingTimeWithoutSeconds / 1000 | duration }}</span>
+  </span>
+  <span *ngIf="row.remainingTimeWithoutSeconds <= 0 && row.remainingDays <=0 && row.cluster_alias !== 'local-cluster'">
+    <i i18n-title
+       title="Cluster's token has expired"
+       class="{{ icons.danger }}"></i>
+    <span class="text-danger">Token expired</span>
+  </span>
+  <span *ngIf="row.cluster_alias === 'local-cluster'">N/A</span>
+</ng-template>

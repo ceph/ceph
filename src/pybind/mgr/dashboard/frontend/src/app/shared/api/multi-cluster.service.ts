@@ -30,12 +30,29 @@ export class MultiClusterService {
       .subscribe(this.getClusterObserver());
   }
 
+  getTempMap(clustersConfig: any) {
+    const tempMap = new Map<string, { token: string; user: string }>();
+    Object.keys(clustersConfig).forEach((clusterKey: string) => {
+      const clusterDetailsList = clustersConfig[clusterKey];
+      clusterDetailsList.forEach((clusterDetails: any) => {
+        if (clusterDetails['token'] && clusterDetails['name'] && clusterDetails['user']) {
+          tempMap.set(clusterDetails['name'], {
+            token: clusterDetails['token'],
+            user: clusterDetails['user']
+          });
+        }
+      });
+    });
+    return tempMap;
+  }
+
   startClusterTokenStatusPolling() {
     let clustersTokenMap = new Map<string, { token: string; user: string }>();
     const dataSubscription = this.subscribe((resp: any) => {
       const clustersConfig = resp['config'];
-      const tempMap = new Map<string, { token: string; user: string }>();
+      let tempMap = new Map<string, { token: string; user: string }>();
       if (clustersConfig) {
+        tempMap = this.getTempMap(clustersConfig);
         Object.keys(clustersConfig).forEach((clusterKey: string) => {
           const clusterDetailsList = clustersConfig[clusterKey];
           clusterDetailsList.forEach((clusterDetails: any) => {
@@ -74,6 +91,14 @@ export class MultiClusterService {
     return this.getCluster().subscribe(this.getClusterObserver());
   }
 
+  refreshTokenStatus() {
+    this.subscribe((resp: any) => {
+      const clustersConfig = resp['config'];
+      let tempMap = this.getTempMap(clustersConfig);
+      return this.checkTokenStatus(tempMap).subscribe(this.getClusterTokenStatusObserver());
+    });
+  }
+
   subscribe(next: (data: any) => void, error?: (error: any) => void) {
     return this.msData$.pipe(filter((value) => !!value)).subscribe(next, error);
   }
@@ -108,7 +133,8 @@ export class MultiClusterService {
     clusterFsid = '',
     prometheusApiUrl = '',
     ssl = false,
-    cert = ''
+    cert = '',
+    ttl: number
   ) {
     return this.http.post('api/multi-cluster/auth', {
       url,
@@ -120,7 +146,8 @@ export class MultiClusterService {
       cluster_fsid: clusterFsid,
       prometheus_api_url: prometheusApiUrl,
       ssl_verify: ssl,
-      ssl_certificate: cert
+      ssl_certificate: cert,
+      ttl: ttl
     });
   }
 
@@ -130,7 +157,8 @@ export class MultiClusterService {
     password: string,
     token = '',
     ssl = false,
-    cert = ''
+    cert = '',
+    ttl: number
   ) {
     return this.http.put('api/multi-cluster/reconnect_cluster', {
       url,
@@ -138,7 +166,8 @@ export class MultiClusterService {
       password,
       token,
       ssl_verify: ssl,
-      ssl_certificate: cert
+      ssl_certificate: cert,
+      ttl: ttl
     });
   }
 
@@ -181,6 +210,7 @@ export class MultiClusterService {
 
   refreshMultiCluster(currentRoute: string) {
     this.refresh();
+    this.refreshTokenStatus();
     this.summaryService.refresh();
     if (currentRoute.includes('dashboard')) {
       this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
