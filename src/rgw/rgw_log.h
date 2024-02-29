@@ -102,9 +102,11 @@ struct rgw_log_entry {
   std::string subuser;
   bool temp_url {false};
   delete_multi_obj_op_meta delete_multi_obj_meta;
+  rgw_account_id account_id;
+  std::string role_id;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(14, 5, bl);
+    ENCODE_START(15, 5, bl);
     // old object/bucket owner ids, encoded in full in v8
     std::string empty_owner_id;
     encode(empty_owner_id, bl);
@@ -138,10 +140,12 @@ struct rgw_log_entry {
     encode(subuser, bl);
     encode(temp_url, bl);
     encode(delete_multi_obj_meta, bl);
+    encode(account_id, bl);
+    encode(role_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(14, 5, 5, p);
+    DECODE_START_LEGACY_COMPAT_LEN(15, 5, 5, p);
     std::string object_owner_id;
     std::string bucket_owner_id;
     decode(object_owner_id, p);
@@ -209,6 +213,10 @@ struct rgw_log_entry {
     }
     if (struct_v >= 14) {
       decode(delete_multi_obj_meta, p);
+    }
+    if (struct_v >= 15) {
+      decode(account_id, p);
+      decode(role_id, p);
     }
     DECODE_FINISH(p);
   }

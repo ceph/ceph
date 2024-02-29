@@ -497,6 +497,7 @@ public:
   const std::string& get_tenant() const override {
     return role_tenant;
   }
+  void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   struct Factory {
     virtual ~Factory() {}
@@ -792,6 +793,7 @@ public:
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return {}; }
   const std::string& get_tenant() const override { return role.tenant; }
+  void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
 
