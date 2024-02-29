@@ -16263,7 +16263,9 @@ int BlueStore::_do_alloc_write(
     if (!g_conf()->bluestore_debug_omit_block_device_write) {
       if (data_size < prefer_deferred_size_snapshot) {
 	dout(20) << __func__ << " deferring 0x" << std::hex
-		 << l->length() << std::dec << " write via deferred" << dendl;
+		 << l->length()  << " write via deferred, pds=0x"
+                 << prefer_deferred_size_snapshot
+                 << std::dec<< dendl;
 	bluestore_deferred_op_t *op = _get_deferred_op(txc, l->length());
 	op->op = bluestore_deferred_op_t::OP_WRITE;
 	int r = wi.b->get_blob().map(
