@@ -33,15 +33,10 @@ public:
     // noop to prevent unnecessary overheads
   }
 
-  void encode_payload_from(mds_gid_t const& gid, QuiesceDbListing const& db_listing)
+  void encode_payload_from(QuiesceDbPeerListing const& peer_listing)
   {
-    using ceph::encode;
-
-    ceph_assert(gid != MDS_GID_NONE);
-
-    ENCODE_START(1, 1, payload);
-    encode(gid, payload);
-    encode(db_listing, payload);
+    ENCODE_START(QuiesceDbEncoding::version, QuiesceDbEncoding::compat, payload);
+    encode(peer_listing, payload);
     ENCODE_FINISH(payload);
   }
 
@@ -49,13 +44,11 @@ public:
     // noop to prevent unnecessary overheads
   }
 
-  void decode_payload_into(mds_gid_t &gid, QuiesceDbListing &db_listing) const
+  void decode_payload_into(QuiesceDbPeerListing &peer_listing) const
   {
-    using ceph::decode;
     auto p = payload.cbegin();
-    DECODE_START(1, p);
-    decode(gid, p);
-    decode(db_listing, p);
+    DECODE_START(QuiesceDbEncoding::version, p);
+    decode(peer_listing, p);
     DECODE_FINISH(p);
   }
 
