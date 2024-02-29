@@ -11,6 +11,7 @@
 #include "msg/msg_types.h"
 #include "msg/Dispatcher.h"
 #include "common/ceph_mutex.h"
+#include "common/perf_counters.h"
 #include "include/common_fwd.h"
 #include "messages/MMDSMetrics.h"
 
@@ -55,6 +56,7 @@ private:
   // drop this lock when calling ->send_message_mds() else mds might
   // deadlock
   ceph::mutex lock = ceph::make_mutex("MetricAggregator::lock");
+  CephContext *m_cct;
   MDSRank *mds;
   MgrClient *mgrc;
 
@@ -71,6 +73,9 @@ private:
   std::map<mds_rank_t, entity_addrvec_t> active_rank_addrs;
 
   bool stopping = false;
+
+  PerfCounters *m_perf_counters;
+  std::map<std::pair<entity_inst_t, mds_rank_t>, PerfCounters*> client_perf_counters;
 
   void handle_mds_metrics(const cref_t<MMDSMetrics> &m);
 
