@@ -2138,7 +2138,8 @@ bool RGWFormPost::is_integral()
 
   try {
     get_owner_info(s, s->user->get_info());
-    s->auth.identity = rgw::auth::transform_old_authinfo(s);
+    s->auth.identity = rgw::auth::transform_old_authinfo(
+        s->user->get_info(), std::nullopt);
   } catch (...) {
     ldpp_dout(this, 5) << "cannot get user_info of account's owner" << dendl;
     return false;

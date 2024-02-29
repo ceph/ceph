@@ -56,20 +56,22 @@ class STSAuthStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
+                            std::optional<RGWAccountInfo> account,
                             const std::string& subuser,
                             const std::optional<uint32_t>& perm_mask,
                             const std::string& access_key_id) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask, access_key_id));
+      rgw::auth::LocalApplier(cct, user_info, std::move(account),
+                              subuser, perm_mask, access_key_id));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
   aplptr_t create_apl_role(CephContext* const cct,
                             const req_state* const s,
-                            const rgw::auth::RoleApplier::Role& role,
-                            const rgw::auth::RoleApplier::TokenAttrs& token_attrs) const override {
+                            RoleApplier::Role role,
+                            RoleApplier::TokenAttrs token_attrs) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      rgw::auth::RoleApplier(cct, role, token_attrs));
+      rgw::auth::RoleApplier(cct, std::move(role), std::move(token_attrs)));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -113,8 +115,8 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
                              const rgw::auth::RemoteApplier::AuthInfo &info) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      rgw::auth::RemoteApplier(cct, driver, std::move(acl_alg), info,
-                               implicit_tenant_context,
+      rgw::auth::RemoteApplier(cct, driver, std::move(acl_alg),
+                               info, implicit_tenant_context,
                                rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
@@ -174,11 +176,13 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
+                            std::optional<RGWAccountInfo> account,
                             const std::string& subuser,
                             const std::optional<uint32_t>& perm_mask,
                             const std::string& access_key_id) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask, access_key_id));
+      rgw::auth::LocalApplier(cct, user_info, std::move(account),
+                              subuser, perm_mask, access_key_id));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }

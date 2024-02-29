@@ -366,7 +366,13 @@ int process_request(const RGWProcessEnv& penv,
     /* FIXME: remove this after switching all handlers to the new authentication
      * infrastructure. */
     if (nullptr == s->auth.identity) {
-      s->auth.identity = rgw::auth::transform_old_authinfo(s);
+      auto result = rgw::auth::transform_old_authinfo(
+          op, yield, driver, s->user->get_info());
+      if (!result) {
+        abort_early(s, op, result.error(), handler, yield);
+        goto done;
+      }
+      s->auth.identity = std::move(result).value();
     }
 
     ldpp_dout(op, 2) << "normalizing buckets and tenants" << dendl;

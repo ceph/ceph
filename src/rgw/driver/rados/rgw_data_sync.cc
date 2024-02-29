@@ -2645,13 +2645,12 @@ class RGWUserPermHandler {
         return ret;
       }
 
-      info->identity = rgw::auth::transform_old_authinfo(sync_env->cct, uid,
-                                                         info->user_info.display_name,
-                                                         info->user_info.path,
-                                                         info->user_info.account_id,
-                                                         RGW_PERM_FULL_CONTROL,
-                                                         false, /* system_request? */
-                                                         info->user_info.type);
+      auto result = rgw::auth::transform_old_authinfo(
+          sync_env->dpp, null_yield, sync_env->driver, info->user_info);
+      if (!result) {
+        return result.error();
+      }
+      info->identity = std::move(result).value();
 
       map<string, bufferlist> uattrs;
 
