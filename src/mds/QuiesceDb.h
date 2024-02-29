@@ -119,6 +119,10 @@ using QuiesceSetId = std::string;
 using QuiesceRoot = std::string;
 using QuiesceSetVersion = uint64_t;
 
+namespace QuiesceInterface {
+  using PeerId = mds_gid_t;
+}
+
 struct QuiesceDbVersion {
   epoch_t epoch;
   QuiesceSetVersion set_version;
@@ -563,7 +567,7 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const QuiesceDbRequest& req)
 ///         contain all sets that have their version > than the last acked by the peer.
 struct QuiesceDbListing {
   QuiesceDbVersion db_version = {0, 0};
-  /// @brief  Crusially, the precise `db_age` must be included in every db listing
+  /// @brief  Crucially, the precise `db_age` must be included in every db listing
   ///         This data is used by all replicas to update their calculated DB TIME ZERO.
   ///         All events in the database are measured relative to the DB TIME ZERO
   QuiesceTimeInterval db_age = QuiesceTimeInterval::zero();
@@ -598,6 +602,18 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const QuiesceDbListing& dbl)
   }
 
   return os << "q-db[v:" << dbl.db_version << " sets:" << active << "/" << inactive << "]";
+}
+
+struct QuiesceDbPeerListing {
+  QuiesceInterface::PeerId origin;
+  QuiesceDbListing db;
+};
+
+template <class CharT, class Traits>
+static std::basic_ostream<CharT, Traits>&
+operator<<(std::basic_ostream<CharT, Traits>& os, const QuiesceDbPeerListing& dbl)
+{
+  return os << dbl.db << " from " << dbl.origin;
 }
 
 /// @brief  `QuiesceMap` is a root-centric representation of the quiesce database
@@ -662,6 +678,18 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const QuiesceMap& map)
   return os << "q-map[v:" << map.db_version << " roots:" << active << "/" << inactive << "]";
 }
 
+struct QuiesceDbPeerAck {
+  QuiesceInterface::PeerId origin;
+  QuiesceMap diff_map;
+};
+
+template <class CharT, class Traits>
+static std::basic_ostream<CharT, Traits>&
+operator<<(std::basic_ostream<CharT, Traits>& os, const QuiesceDbPeerAck& ack)
+{
+  return os << "ack " << ack.diff_map << " from " << ack.origin;
+}
+
 inline QuiesceTimeInterval interval_saturate_add(QuiesceTimeInterval lhs, QuiesceTimeInterval rhs)
 {
   // assuming an unsigned time interval.
@@ -685,7 +713,6 @@ inline QuiesceTimePoint interval_saturate_add_now(QuiesceTimeInterval interval) 
 };
 
 namespace QuiesceInterface {
-  using PeerId = mds_gid_t;
   /// @brief  A callback from the manager to the agent with an up-to-date root list
   ///         The map is mutable and will be used as synchronous agent ack if the return value is true
   using AgentNotify = std::function<bool(QuiesceMap&)>;

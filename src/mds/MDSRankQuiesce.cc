@@ -260,7 +260,7 @@ void MDSRank::quiesce_cluster_update() {
     membership.send_ack = [=, this](QuiesceMap&& ack) {
       if (me == membership.leader) {
         // loopback
-        quiesce_db_manager->submit_ack_from(me, std::move(ack));
+        quiesce_db_manager->submit_peer_ack({me, std::move(ack)});
         return 0;
       } else {
         std::lock_guard guard(mds_lock);
@@ -273,7 +273,7 @@ void MDSRank::quiesce_cluster_update() {
 
         auto ack_msg = make_message<MMDSQuiesceDbAck>();
         dout(10) << "sending ack " << ack << " to the leader " << membership.leader << dendl;
-        ack_msg->encode_payload_from(me, ack);
+        ack_msg->encode_payload_from({me, std::move(ack)});
         return send_message_mds(ack_msg, addrs);
       }
     };
@@ -287,7 +287,7 @@ void MDSRank::quiesce_cluster_update() {
       auto addrs = mdsmap->get_info_gid(to).addrs;
       auto listing_msg = make_message<MMDSQuiesceDbListing>();
       dout(10) << "sending listing " << db << " to the peer " << to << dendl;
-      listing_msg->encode_payload_from(me, db);
+      listing_msg->encode_payload_from({me, std::move(db)});
       return send_message_mds(listing_msg, addrs);
     };
   }
@@ -363,16 +363,16 @@ bool MDSRank::quiesce_dispatch(const cref_t<Message> &m) {
       {
         const auto& req = ref_cast<MMDSQuiesceDbListing>(m);
         mds_gid_t gid;
-        QuiesceDbListing db_listing;
-        req->decode_payload_into(gid, db_listing);
+        QuiesceDbPeerListing peer_listing;
+        req->decode_payload_into(peer_listing);
         if (quiesce_db_manager) {
-          dout(10) << "got " << db_listing << " from peer " << gid << dendl;
-          int result = quiesce_db_manager->submit_listing_from(gid, std::move(db_listing));
+          dout(10) << "got " << peer_listing << dendl;
+          int result = quiesce_db_manager->submit_peer_listing(std::move(peer_listing));
           if (result != 0) {
-            dout(3) << "error (" << result << ") submitting " << db_listing << " from peer " << gid << dendl;
+            dout(3) << "error (" << result << ") submitting " << peer_listing << dendl;
           }
         } else {
-          dout(5) << "no db manager to process " << db_listing << dendl;
+          dout(5) << "no db manager to process " << peer_listing << dendl;
         }
         return true;
       }
@@ -380,16 +380,16 @@ bool MDSRank::quiesce_dispatch(const cref_t<Message> &m) {
       {
         const auto& req = ref_cast<MMDSQuiesceDbAck>(m);
         mds_gid_t gid;
-        QuiesceMap diff_map;
-        req->decode_payload_into(gid, diff_map);
+        QuiesceDbPeerAck peer_ack;
+        req->decode_payload_into(peer_ack);
         if (quiesce_db_manager) {
-          dout(10) << "got ack " << diff_map << " from peer " << gid << dendl;
-          int result = quiesce_db_manager->submit_ack_from(gid, std::move(diff_map));
+          dout(10) << "got " << peer_ack << dendl;
+          int result = quiesce_db_manager->submit_peer_ack(std::move(peer_ack));
           if (result != 0) {
-            dout(3) << "error (" << result << ") submitting an ack from peer " << gid << dendl;
+            dout(3) << "error (" << result << ") submitting and ack from " << peer_ack.origin << dendl;
           }
         } else {
-          dout(5) << "no db manager to process an ack: " << diff_map << dendl;
+          dout(5) << "no db manager to process " << peer_ack << dendl;
         }
         return true;
       }

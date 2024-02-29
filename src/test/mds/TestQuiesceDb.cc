@@ -151,7 +151,7 @@ class QuiesceDbTest: public testing::Test {
             if (epoch == this->epoch) {
               if (this->managers.contains(recipient)) {
                 dout(10) << "listing from " << me << " (leader=" << leader << ") to " << recipient << " for version " << listing.db_version << " with " << listing.sets.size() << " sets" << dendl;
-                this->managers[recipient]->submit_listing_from(me, std::move(listing));
+                this->managers[recipient]->submit_peer_listing({me, std::move(listing)});
                 comms_cond.notify_all();
                 return 0;
               }
@@ -181,7 +181,7 @@ class QuiesceDbTest: public testing::Test {
                     it++;
                   }
                 }
-                this->managers[leader]->submit_ack_from(me, std::move(diff_map));
+                this->managers[leader]->submit_peer_ack({me, std::move(diff_map)});
                 comms_cond.notify_all();
                 l.unlock();
                 while(!done_hooks.empty()) {
