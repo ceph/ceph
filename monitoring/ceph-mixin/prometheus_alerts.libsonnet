@@ -846,5 +846,150 @@
         },
       ],
     },
+    {
+      name: 'nvmeof',
+      rules: [
+        {
+          alert: 'NVMeoFSubsystemNamespaceLimit',
+          'for': '1m',
+          expr: '(count by(nqn) (ceph_nvmeof_subsystem_namespace_metadata)) >= ceph_nvmeof_subsystem_namespace_limit',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: '{{ $labels.nqn }} subsystem has reached its maximum number of namespaces %(cluster)s' % $.MultiClusterSummary(),
+            description: 'Subsystems have a max namespace limit defined at creation time. This alert means that no more namespaces can be added to {{ $labels.nqn }}',
+          },
+        },
+        {
+          alert: 'NVMeoFTooManyGateways',
+          'for': '1m',
+          expr: 'count(ceph_nvmeof_gateway_info) > %.2f' % [$._config.NVMeoFMaxGatewaysPerCluster],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Max supported gateways exceeded %(cluster)s' % $.MultiClusterSummary(),
+            description: 'You may create many gateways, but %(NVMeoFMaxGatewaysPerCluster)d is the tested limit' % $._config,
+          },
+        },
+        {
+          alert: 'NVMeoFMaxGatewayGroupSize',
+          'for': '1m',
+          expr: 'count by(group) (ceph_nvmeof_gateway_info) > %.2f' % [$._config.NVMeoFMaxGatewaysPerGroup],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Max gateways within a gateway group ({{ $labels.group }}) exceeded %(cluster)s' % $.MultiClusterSummary(),
+            description: 'You may create many gateways in a gateway group, but %(NVMeoFMaxGatewaysPerGroup)d is the tested limit' % $._config,
+          },
+        },
+        {
+          alert: 'NVMeoFSingleGatewayGroup',
+          'for': '5m',
+          expr: 'count by(group) (ceph_nvmeof_gateway_info) == 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'The gateway group {{ $labels.group }} consists of a single gateway - HA is not possible %(cluster)s' % $.MultiClusterSummary(),
+            description: 'Although a single member gateway group is valid, it should only be used for test purposes',
+          },
+        },
+        {
+          alert: 'NVMeoFHighGatewayCPU',
+          'for': '10m',
+          expr: 'label_replace(avg by(instance) (rate(ceph_nvmeof_reactor_seconds_total{mode="busy"}[1m])),"instance","$1","instance","(.*):.*") > %.2f' % [$._config.NVMeoFHighGatewayCPU],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'CPU used by {{ $labels.instance }} NVMe-oF Gateway is high %(cluster)s' % $.MultiClusterSummary(),
+            description: 'Typically, high CPU may indicate degraded performance. Consider increasing the number of reactor cores',
+          },
+        },
+        {
+          alert: 'NVMeoFGatewayOpenSecurity',
+          'for': '5m',
+          expr: 'ceph_nvmeof_subsystem_metadata{allow_any_host="yes"}',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Subsystem {{ $labels.nqn }} has been defined without host level security %(cluster)s' % $.MultiClusterSummary(),
+            description: 'It is good practice to ensure subsystems use host security to reduce the risk of unexpected data loss',
+          },
+        },
+        {
+          alert: 'NVMeoFTooManySubsystems',
+          'for': '1m',
+          expr: 'count by(gateway_host) (label_replace(ceph_nvmeof_subsystem_metadata,"gateway_host","$1","instance","(.*):.*")) > %.2f' % [$._config.NVMeoFMaxSubsystemsPerGateway],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'The number of subsystems defined to the gateway exceeds supported values %(cluster)s' % $.MultiClusterSummary(),
+            description: 'Although you may continue to create subsystems in {{ $labels.gateway_host }}, the configuration may not be supported',
+          },
+        },
+        {
+          alert: 'NVMeoFVersionMismatch',
+          'for': '1h',
+          expr: 'count(count by(version) (ceph_nvmeof_gateway_info)) > 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'The cluster has different NVMe-oF gateway releases active %(cluster)s' % $.MultiClusterSummary(),
+            description: 'This may indicate an issue with deployment. Check cephadm logs',
+          },
+        },
+        {
+          alert: 'NVMeoFHighClientCount',
+          'for': '1m',
+          expr: 'ceph_nvmeof_subsystem_host_count > %.2f' % [$._config.NVMeoFHighClientCount],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'The number of clients connected to {{ $labels.nqn }} is too high %(cluster)s' % $.MultiClusterSummary(),
+            description: 'The supported limit for clients connecting to a subsystem is %(NVMeoFHighClientCount)d' % $._config,
+          },
+        },
+        {
+          alert: 'NVMeoFHighHostCPU',
+          'for': '10m',
+          expr: '100-((100*(avg by(host) (label_replace(rate(node_cpu_seconds_total{mode="idle"}[5m]),"host","$1","instance","(.*):.*")) * on(host) group_right label_replace(ceph_nvmeof_gateway_info,"host","$1","instance","(.*):.*")))) >= %.2f' % [$._config.NVMeoFHighHostCPU],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'The CPU is high ({{ $value }}%%) on NVMeoF Gateway host ({{ $labels.host }}) %(cluster)s' % $.MultiClusterSummary(),
+            description: 'High CPU on a gateway host can lead to CPU contention and performance degradation',
+          },
+        },
+        {
+          alert: 'NVMeoFInterfaceDown',
+          'for': '30s',
+          expr: 'ceph_nvmeof_subsystem_listener_iface_info{operstate="down"}',
+          labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.14.1' },
+          annotations: {
+            summary: 'Network interface {{ $labels.device }} is down %(cluster)s' % $.MultiClusterSummary(),
+            description: 'A NIC used by one or more subsystems is in a down state',
+          },
+        },
+        {
+          alert: 'NVMeoFInterfaceDuplex',
+          'for': '30s',
+          expr: 'ceph_nvmeof_subsystem_listener_iface_info{duplex!="full"}',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Network interface {{ $labels.device }} is not running in full duplex mode %(cluster)s' % $.MultiClusterSummary(),
+            description: 'Until this is resolved, performance from the gateway will be degraded',
+          },
+        },
+        {
+          alert: 'NVMeoFHighReadLatency',
+          'for': '5m',
+          expr: 'label_replace((avg by(instance) ((rate(ceph_nvmeof_bdev_read_seconds_total[1m]) / rate(ceph_nvmeof_bdev_reads_completed_total[1m])))),"gateway","$1","instance","(.*):.*") > %.2f' % [$._config.NVMeoFHighClientReadLatency / 1000],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'The average read latency over the last 5 mins has reached %(NVMeoFHighClientReadLatency)d ms or more on {{ $labels.gateway }}' % $._config,
+            description: 'High latencies may indicate a constraint within the cluster e.g. CPU, network. Please investigate',
+          },
+        },
+        {
+          alert: 'NVMeoFHighWriteLatency',
+          'for': '5m',
+          expr: 'label_replace((avg by(instance) ((rate(ceph_nvmeof_bdev_write_seconds_total[5m]) / rate(ceph_nvmeof_bdev_writes_completed_total[5m])))),"gateway","$1","instance","(.*):.*") > %.2f' % [$._config.NVMeoFHighClientWriteLatency / 1000],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'The average write latency over the last 5 mins has reached %(NVMeoFHighClientWriteLatency)d ms or more on {{ $labels.gateway }}' % $._config,
+            description: 'High latencies may indicate a constraint within the cluster e.g. CPU, network. Please investigate',
+          },
+        },
+      ],
+    },
   ],
 }
