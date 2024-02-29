@@ -155,6 +155,23 @@
                   i18n>This field is required.</span>
           </div>
         </div>
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="ttl"
+                 i18n>ttl (in days)
+            <cd-helper>Specify the duration (in days) for which the authentication will be valid. Use a longer TTL for extended access, e.g. 10, to connect your cluster for a specific period.</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input id="ttl"
+                   name="ttl"
+                   class="form-control"
+                   type="text"
+                   formControlName="ttl">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('ttl', frm, 'pattern')"
+                  i18n>The entered value needs to be a number.</span>
+          </div>
+        </div>
         <div class="form-group row"
              *ngIf="action !== 'edit'">
           <div class="cd-col-form-offset">
