@@ -9,6 +9,8 @@
 * RADOS: `get_pool_is_selfmanaged_snaps_mode` C++ API has been deprecated
   due to being prone to false negative results.  It's safer replacement is
   `pool_is_in_selfmanaged_snaps_mode`.
+* RBD: The option ``--image-id`` has been added to `rbd children` CLI command,
+  so it can be run for images in the trash.
 
 >=19.0.0
 

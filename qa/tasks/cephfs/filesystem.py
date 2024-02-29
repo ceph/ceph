@@ -765,7 +765,7 @@ class Filesystem(MDSCluster):
                 assert(isinstance(subvols['create'], int))
                 assert(subvols['create'] > 0)
 
-                self.run_ceph_cmd('fs', 'subvolumegroup', 'create', self.name, 'qa')
+                self.mon_manager.raw_cluster_cmd('fs', 'subvolumegroup', 'create', self.name, 'qa')
                 subvol_options = self.fs_config.get('subvol_options', '')
 
                 for sv in range(0, subvols['create']):
