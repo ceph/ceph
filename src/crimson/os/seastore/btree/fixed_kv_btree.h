@@ -588,6 +588,13 @@ public:
                 : true);
             }
           }
+        } else if (child == RESERVATION_PTR) {
+          if constexpr(
+            !std::is_base_of_v<typename internal_node_t::base_t,
+                               child_node_t>) {
+            assert(i->get_val().pladdr.is_paddr());
+            assert(i->get_val().pladdr.get_paddr() == P_ADDR_ZERO);
+          }
         }
       } else {
         ceph_abort("impossible");
