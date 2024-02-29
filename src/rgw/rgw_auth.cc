@@ -280,6 +280,12 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return id.tenant;
     }
 
+    void write_ops_log_entry(rgw_log_entry& entry) const override {
+      if (account) {
+        entry.account_id = account->id;
+      }
+    }
+
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
           << ", is_admin=" << is_admin << ")";
@@ -583,6 +589,14 @@ void rgw::auth::WebIdentityApplier::to_str(std::ostream& out) const
       << ", user_name=" << user_name
       << ", role_id=" << role_id
       << ", provider_id =" << iss << ")";
+}
+
+void rgw::auth::WebIdentityApplier::write_ops_log_entry(rgw_log_entry& entry) const
+{
+  if (account) {
+    entry.account_id = account->id;
+  }
+  entry.role_id = role_id;
 }
 
 string rgw::auth::WebIdentityApplier::get_idp_url() const
@@ -913,6 +927,9 @@ void rgw::auth::RemoteApplier::write_ops_log_entry(rgw_log_entry& entry) const
 {
   entry.access_key_id = info.access_key_id;
   entry.subuser = info.subuser;
+  if (account) {
+    entry.account_id = account->id;
+  }
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */
@@ -1094,6 +1111,9 @@ void rgw::auth::LocalApplier::write_ops_log_entry(rgw_log_entry& entry) const
 {
   entry.access_key_id = access_key_id;
   entry.subuser = subuser;
+  if (account) {
+    entry.account_id = account->id;
+  }
 }
 
 ACLOwner rgw::auth::RoleApplier::get_aclowner() const
@@ -1162,6 +1182,14 @@ void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUs
 {
   /* Load the user id */
   user_info.user_id = this->token_attrs.user_id;
+}
+
+void rgw::auth::RoleApplier::write_ops_log_entry(rgw_log_entry& entry) const
+{
+  if (role.account) {
+    entry.account_id = role.account->id;
+  }
+  entry.role_id = role.id;
 }
 
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const

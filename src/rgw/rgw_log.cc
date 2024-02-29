@@ -697,6 +697,8 @@ void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
   e->bucket_id = "10";
   e->trans_id = "trans_id";
   e->identity_type = TYPE_RGW;
+  e->account_id = "account_id";
+  e->role_id = "role_id";
   o.push_back(e);
   o.push_back(new rgw_log_entry);
 }
@@ -723,4 +725,10 @@ void rgw_log_entry::dump(Formatter *f) const
   f->dump_string("bucket_id", bucket_id);
   f->dump_string("trans_id", trans_id);
   f->dump_unsigned("identity_type", identity_type);
+  if (!account_id.empty()) {
+    f->dump_string("account_id", account_id);
+  }
+  if (!role_id.empty()) {
+    f->dump_string("role_id", role_id);
+  }
 }
