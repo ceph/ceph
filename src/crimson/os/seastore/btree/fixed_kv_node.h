@@ -716,7 +716,7 @@ struct FixedKVInternalNode
     return CachedExtentRef(new node_type_t(*this));
   };
 
-  void on_replace_prior(Transaction&) final {
+  void on_replace_prior() final {
     ceph_assert(!this->is_rewrite());
     this->set_children_from_prior_instance();
     auto &prior = (this_type_t&)(*this->get_prior_instance());
@@ -1108,7 +1108,7 @@ struct FixedKVLeafNode
       true);
   }
 
-  void on_replace_prior(Transaction&) final {
+  void on_replace_prior() final {
     ceph_assert(!this->is_rewrite());
     if constexpr (has_children) {
       this->set_children_from_prior_instance();

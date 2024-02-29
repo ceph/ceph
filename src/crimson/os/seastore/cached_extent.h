@@ -278,7 +278,7 @@ public:
    * with the states of Cache and can't wait till transaction
    * completes.
    */
-  virtual void on_replace_prior(Transaction &t) {}
+  virtual void on_replace_prior() {}
 
   /**
    * on_invalidated
@@ -1265,7 +1265,7 @@ public:
 
   std::ostream &_print_detail(std::ostream &out) const final;
 
-  void on_replace_prior(Transaction &t) final;
+  void on_replace_prior() final;
 
   struct modified_region_t {
     extent_len_t offset;
