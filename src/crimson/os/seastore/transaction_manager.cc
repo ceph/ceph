@@ -335,7 +335,7 @@ TransactionManager::update_lba_mappings(
         if (!extent->get_last_committed_crc()) {
           extent->set_last_committed_crc(extent->calc_crc32c());
         }
-        assert(extent->get_crc32c() == extent->get_last_committed_crc());
+        assert(extent->calc_crc32c() == extent->get_last_committed_crc());
         lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
       } else {
         pextents.emplace_back(extent);

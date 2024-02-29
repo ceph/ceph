@@ -1043,7 +1043,7 @@ CachedExtentRef Cache::duplicate_for_write(
   if (i->is_exist_clean()) {
     i->version++;
     i->state = CachedExtent::extent_state_t::EXIST_MUTATION_PENDING;
-    i->last_committed_crc = i->get_crc32c();
+    i->last_committed_crc = i->calc_crc32c();
     // deepcopy the buffer of exist clean extent beacuse it shares
     // buffer with original clean extent.
     auto bp = i->get_bptr();
@@ -1155,7 +1155,7 @@ record_t Cache::prepare_record(
     i->prepare_commit();
 
     assert(i->get_version() > 0);
-    auto final_crc = i->get_crc32c();
+    auto final_crc = i->calc_crc32c();
     if (i->get_type() == extent_types_t::ROOT) {
       SUBTRACET(seastore_t, "writing out root delta {}B -- {}",
                 t, delta_length, *i);
@@ -1530,7 +1530,7 @@ void Cache::complete_commit(
       is_inline = true;
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
-    assert(i->get_last_committed_crc() == i->get_crc32c());
+    assert(i->get_last_committed_crc() == i->calc_crc32c());
     i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
 
