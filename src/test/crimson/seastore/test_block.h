@@ -80,7 +80,7 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
   }
 
   test_extent_desc_t get_desc() {
-    return { get_length(), get_crc32c() };
+    return { get_length(), calc_crc32c() };
   }
 
   void apply_delta(const ceph::bufferlist &bl) final;

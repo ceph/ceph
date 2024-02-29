@@ -874,7 +874,7 @@ private:
       assert(ref->is_fully_loaded());
       ceph_assert(pin->get_checksum() == 0 || // TODO: remapped extents may
 					      // not have recorded chksums
-	pin->get_checksum() == ref->get_crc32c());
+	pin->get_checksum() == ref->calc_crc32c());
       return pin_to_extent_ret<T>(
 	interruptible::ready_future_marker{},
 	std::move(ref));
@@ -920,7 +920,7 @@ private:
       assert(ref->is_fully_loaded());
       ceph_assert(pin->get_checksum() == 0 || // TODO: remapped extents may
 					      // not have recorded chksums
-	pin->get_checksum() == ref->get_crc32c());
+	pin->get_checksum() == ref->calc_crc32c());
       return pin_to_extent_by_type_ret(
 	interruptible::ready_future_marker{},
 	std::move(ref->template cast<LogicalCachedExtent>()));
@@ -974,7 +974,7 @@ private:
       fut = lba_manager->alloc_extent(
 	t, remap_laddr, remap_length, remap_paddr,
 	//TODO: oringal_bptr must be present if crc is enabled
-	(original_bptr.has_value() ? ext->get_crc32c() : 0),
+	(original_bptr.has_value() ? ext->calc_crc32c() : 0),
 	*ext);
     } else {
       fut = lba_manager->clone_mapping(

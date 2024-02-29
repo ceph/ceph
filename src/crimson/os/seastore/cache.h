@@ -1689,13 +1689,13 @@ private:
 	if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
 	  extent->state = CachedExtent::extent_state_t::CLEAN;
 	  /* TODO: crc should be checked against LBA manager */
-	  extent->last_committed_crc = extent->get_crc32c();
+	  extent->last_committed_crc = extent->calc_crc32c();
 
 	  extent->on_clean_read();
 	} else if (extent->state == CachedExtent::extent_state_t::EXIST_CLEAN ||
           extent->state == CachedExtent::extent_state_t::CLEAN) {
 	  /* TODO: crc should be checked against LBA manager */
-	  extent->last_committed_crc = extent->get_crc32c();
+	  extent->last_committed_crc = extent->calc_crc32c();
         } else {
 	  ceph_assert(!extent->is_valid());
 	}

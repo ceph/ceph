@@ -541,7 +541,7 @@ public:
   }
 
   /// Returns crc32c of buffer
-  virtual uint32_t get_crc32c() const {
+  virtual uint32_t calc_crc32c() const {
     return ceph_crc32c(
       1,
       reinterpret_cast<const unsigned char *>(get_bptr().c_str()),
@@ -791,7 +791,7 @@ protected:
   }
 
   void update_checksum() {
-    auto crc = get_crc32c();
+    auto crc = calc_crc32c();
     set_last_committed_crc(crc);
     update_in_extent_chksum_field(crc);
   }
@@ -1255,7 +1255,7 @@ public:
   void apply_delta_and_adjust_crc(
     paddr_t base, const ceph::bufferlist &bl) final {
     apply_delta(bl);
-    set_last_committed_crc(get_crc32c());
+    set_last_committed_crc(calc_crc32c());
   }
 
   bool is_logical() const final {
