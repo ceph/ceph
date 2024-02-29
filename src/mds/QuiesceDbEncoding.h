@@ -15,6 +15,11 @@
 #include "include/encoding.h"
 #include <stdint.h>
 
+struct QuiesceDbEncoding {
+  static constexpr int version = 1;
+  static constexpr int compat = 1;
+};
+
 void encode(QuiesceDbVersion const& v, bufferlist& bl, uint64_t features = 0)
 {
   encode(v.epoch, bl, features);
@@ -131,6 +136,18 @@ void decode(QuiesceDbListing& listing, bufferlist::const_iterator& p)
   decode(listing.sets, p);
 }
 
+void encode(QuiesceDbPeerListing const& listing, bufferlist& bl, uint64_t features = 0)
+{
+  encode(listing.origin, bl, features);
+  encode(listing.db, bl, features);
+}
+
+void decode(QuiesceDbPeerListing& listing, bufferlist::const_iterator& p)
+{
+  decode(listing.origin, p);
+  decode(listing.db, p);
+}
+
 void encode(QuiesceMap::RootInfo const& root, bufferlist& bl, uint64_t features = 0)
 {
   encode(root.state, bl, features);
@@ -155,3 +172,14 @@ void decode(QuiesceMap& map, bufferlist::const_iterator& p)
   decode(map.roots, p);
 }
 
+void encode(QuiesceDbPeerAck const& ack, bufferlist& bl, uint64_t features = 0)
+{
+  encode(ack.origin, bl, features);
+  encode(ack.diff_map, bl, features);
+}
+
+void decode(QuiesceDbPeerAck& ack, bufferlist::const_iterator& p)
+{
+  decode(ack.origin, p);
+  decode(ack.diff_map, p);
+}

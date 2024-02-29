@@ -34,15 +34,10 @@ public:
     // noop to prevent unnecessary overheads
   }
 
-  void encode_payload_from(mds_gid_t const&gid, QuiesceMap const&diff_map)
+  void encode_payload_from(QuiesceDbPeerAck const& ack)
   {
-    using ceph::encode;
-
-    ceph_assert(gid != MDS_GID_NONE);
-
-    ENCODE_START(1, 1, payload);
-    encode(gid, payload);
-    encode(diff_map, payload);
+    ENCODE_START(QuiesceDbEncoding::version, QuiesceDbEncoding::compat, payload);
+    encode(ack, payload);
     ENCODE_FINISH(payload);
   }
 
@@ -50,13 +45,11 @@ public:
     // noop to prevent unnecessary overheads
   }
 
-  void decode_payload_into(mds_gid_t &gid, QuiesceMap &diff_map) const
+  void decode_payload_into(QuiesceDbPeerAck &ack) const
   {
-    using ceph::decode;
     auto p = payload.cbegin();
-    DECODE_START(1, p);
-    decode(gid, p);
-    decode(diff_map, p);
+    DECODE_START(QuiesceDbEncoding::version, p);
+    decode(ack, p);
     DECODE_FINISH(p);
   }
 

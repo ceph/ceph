@@ -75,19 +75,20 @@ class QuiesceDbManager {
       submit_condition.notify_all();
       return 0;
     }
+  
     // acks the messaging system
-    int submit_ack_from(QuiesceInterface::PeerId sender, const QuiesceMap& diff_map) {
+    int submit_peer_ack(QuiesceDbPeerAck&& ack) {
       std::lock_guard l(submit_mutex);
 
       if (!cluster_membership || !cluster_membership->is_leader()) {
         return -EPERM;
       }
 
-      if (!cluster_membership->members.contains(sender)) {
+      if (!cluster_membership->members.contains(ack.origin)) {
         return -ESTALE;
       }
 
-      pending_acks.push({ sender, diff_map });
+      pending_acks.push(std::move(ack));
       submit_condition.notify_all();
       return 0;
     }
@@ -97,18 +98,18 @@ class QuiesceDbManager {
     //    -> EPERM if this is the leader
 
     // process an incoming listing from a leader
-    int submit_listing_from(QuiesceInterface::PeerId sender, QuiesceDbListing&& listing) {
+    int submit_peer_listing(QuiesceDbPeerListing&& listing) {
       std::lock_guard l(submit_mutex);
 
       if (!cluster_membership) {
         return -EPERM;
       }
 
-      if (cluster_membership->epoch != listing.db_version.epoch) {
+      if (cluster_membership->epoch != listing.db.db_version.epoch) {
         return -ESTALE;
       }
 
-      pending_db_updates.push({sender, std::move(listing)});
+      pending_db_updates.push(std::move(listing));
       submit_condition.notify_all();
       return 0;
     }
@@ -187,8 +188,8 @@ class QuiesceDbManager {
 
     std::optional<AgentCallback> agent_callback;
     std::optional<QuiesceClusterMembership> cluster_membership;
-    std::queue<std::pair<QuiesceInterface::PeerId, QuiesceDbListing>> pending_db_updates;
-    std::queue<std::pair<QuiesceInterface::PeerId, QuiesceMap>> pending_acks;
+    std::queue<QuiesceDbPeerListing> pending_db_updates;
+    std::queue<QuiesceDbPeerAck> pending_acks;
     std::deque<RequestContext*> pending_requests;
 
     class QuiesceDbThread : public Thread {

@@ -256,7 +256,7 @@ QuiesceTimeInterval QuiesceDbManager::replica_upkeep(decltype(pending_db_updates
 {
   // as a replica, we only care about the latest update
   while (db_updates.size() > 1) {
-    dout(10) << "skipping an older update from " << db_updates.front().first << " version " << db_updates.front().second.db_version << dendl;
+    dout(10) << "skipping an older update from " << db_updates.front().origin << " version " << db_updates.front().db.db_version << dendl;
     db_updates.pop();
   }
 
@@ -265,7 +265,7 @@ QuiesceTimeInterval QuiesceDbManager::replica_upkeep(decltype(pending_db_updates
     return QuiesceTimeInterval::max();
   }
 
-  QuiesceDbListing &update = db_updates.back().second;
+  QuiesceDbListing &update = db_updates.back().db;
 
   if (update.db_version.epoch != membership.epoch) {
     dout(10) << "ignoring db update from another epoch: " << update.db_version << " != " << db_version() << dendl;
@@ -317,7 +317,8 @@ bool QuiesceDbManager::leader_bootstrap(decltype(pending_db_updates)&& db_update
 
   // only consider db submissions from unknown peers
   while (!unknown_peers.empty() && !db_updates.empty()) {
-    auto &[from, update] = db_updates.front();
+    auto &from = db_updates.front().origin;
+    auto &update = db_updates.front().db;
     if (update.db_version.epoch == membership.epoch && unknown_peers.erase(from) > 0) {
       // see if this peer's version is newer than mine
       if (db.set_version < update.db_version.set_version) {
