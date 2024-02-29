@@ -263,11 +263,18 @@
                 Ceph-specific information about devices and its relationship
                 with OSDs.
 
-	:ref:`MDS<cephfs_add_remote_mds>`
+	MDS
                 The Ceph **M**\eta\ **D**\ata **S**\erver daemon. Also referred
                 to as "ceph-mds". The Ceph metadata server daemon must be
                 running in any Ceph cluster that runs the CephFS file system.
-                The MDS stores all filesystem metadata. 
+                The MDS stores all filesystem metadata. :term:`Client`\s work
+                together with either a single MDS or a group of MDSes to
+                maintain a distributed metadata cache that is required by
+                CephFS.
+
+                See :ref:`Deploying Metadata Servers<cephfs_add_remote_mds>`.
+
+                See the :ref:`ceph-mds man page<ceph_mds_man>`.
 
 	MGR
                 The Ceph manager software, which collects all the state from
