@@ -353,6 +353,7 @@ BuildRequires:  libubsan
 BuildRequires:  libasan
 BuildRequires:  protobuf-devel
 BuildRequires:  protobuf-compiler
+BuildRequires:  clang >= 16.0.0
 %if 0%{?rhel} == 8
 BuildRequires:  %{gts_prefix}-annobin
 BuildRequires:  %{gts_prefix}-annobin-plugin-gcc
@@ -1463,6 +1464,8 @@ cmake .. \
 %if 0%{with seastar}
     -DWITH_SEASTAR:BOOL=ON \
     -DWITH_JAEGER:BOOL=OFF \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_CXX_COMPILER=clang++ \
 %endif
     -DWITH_GRAFANA:BOOL=ON \
 %if 0%{with cephadm_bundling}
