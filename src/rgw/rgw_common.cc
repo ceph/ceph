@@ -1324,7 +1324,7 @@ bool verify_requester_payer_permission(struct perm_state_base *s)
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               struct perm_state_base * const s,
-			      const rgw_bucket& bucket,
+                              const rgw::ARN& arn,
                               bool account_root,
                               const RGWAccessControlPolicy& user_acl,
                               const RGWAccessControlPolicy& bucket_acl,
@@ -1338,10 +1338,10 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 
   if (bucket_policy) {
     ldpp_dout(dpp, 16) << __func__ << ": policy: " << bucket_policy.get()
-		       << " resource: " << ARN(bucket) << dendl;
+		       << " resource: " << arn << dendl;
   }
   const auto effect = evaluate_iam_policies(
-      dpp, s->env, *s->identity, account_root, op, ARN(bucket),
+      dpp, s->env, *s->identity, account_root, op, arn,
       bucket_policy, identity_policies, session_policies);
   if (effect == Effect::Deny) {
     return false;
@@ -1356,7 +1356,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               req_state * const s,
-			      const rgw_bucket& bucket,
+                              const rgw::ARN& arn,
                               const RGWAccessControlPolicy& user_acl,
                               const RGWAccessControlPolicy& bucket_acl,
 			      const boost::optional<Policy>& bucket_policy,
@@ -1373,20 +1373,20 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
           << s->bucket_owner.id << " != " << s->owner.id << dendl;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
-      return verify_bucket_permission(dpp, &ps, bucket, account_root, {}, {}, {},
+      return verify_bucket_permission(dpp, &ps, arn, account_root, {}, {}, {},
                                       user_policies, session_policies, op)
-          && verify_bucket_permission(dpp, &ps, bucket, false, user_acl,
+          && verify_bucket_permission(dpp, &ps, arn, false, user_acl,
                                       bucket_acl, bucket_policy, {}, {}, op);
     } else {
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
-      return verify_bucket_permission(dpp, &ps, bucket, account_root, {}, {},
+      return verify_bucket_permission(dpp, &ps, arn, account_root, {}, {},
                                       bucket_policy, user_policies,
                                       session_policies, op);
     }
   }
   constexpr bool account_root = false;
-  return verify_bucket_permission(dpp, &ps, bucket, account_root,
+  return verify_bucket_permission(dpp, &ps, arn, account_root,
                                   user_acl, bucket_acl,
                                   bucket_policy, user_policies,
                                   session_policies, op);
@@ -1441,14 +1441,21 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state
                                             perm);
 }
 
-bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op)
+bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state* s,
+                              const rgw::ARN& arn, uint64_t op)
+{
+  return verify_bucket_permission(dpp, s, arn, s->user_acl, s->bucket_acl,
+                                  s->iam_policy, s->iam_identity_policies,
+                                  s->session_policies, op);
+}
+
+bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state* s, uint64_t op)
 {
   if (rgw::sal::Bucket::empty(s->bucket)) {
     // request is missing a bucket name
     return false;
   }
-  return verify_bucket_permission(dpp, s, s->bucket->get_key(), s->user_acl, s->bucket_acl,
-                                  s->iam_policy, s->iam_identity_policies, s->session_policies, op);
+  return verify_bucket_permission(dpp, s, ARN(s->bucket->get_key()), op);
 }
 
 
