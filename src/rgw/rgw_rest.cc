@@ -1572,12 +1572,6 @@ int RGWCompleteMultipart_ObjStore::get_params(optional_yield y)
   std::tie(op_ret, data) = read_all_input(s, max_size);
   if (op_ret < 0)
     return op_ret;
-  
-  const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
-  if (bypass_gov_header) {
-    std::string bypass_gov_decoded = url_decode(bypass_gov_header);
-    bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
-  }
 
   return 0;
 }

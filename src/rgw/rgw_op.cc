@@ -6547,28 +6547,6 @@ int RGWCompleteMultipart::verify_permission(optional_yield y)
   rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
 
   if (s->iam_policy || ! s->iam_user_policies.empty() || ! s->session_policies.empty()) {
-    if (s->bucket->get_info().obj_lock_enabled() && bypass_governance_mode) {
-      auto r = eval_identity_or_session_policies(this, s->iam_user_policies, s->env,
-                                  rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket->get_key(), s->object->get_name()));
-      if (r == Effect::Deny) {
-        bypass_perm = false;
-      } else if (r == Effect::Pass && s->iam_policy) {
-        ARN arn(s->bucket->get_key(), s->object->get_name());
-        r = s->iam_policy->eval(s->env, *s->auth.identity, rgw::IAM::s3BypassGovernanceRetention, arn);    
-        if (r == Effect::Deny) {
-          bypass_perm = false;
-        }
-      } else if (r == Effect::Pass && !s->session_policies.empty()) {
-        r = eval_identity_or_session_policies(this, s->session_policies, s->env,
-                               rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket->get_key(), s->object->get_name()));
-        if (r == Effect::Deny) {
-          bypass_perm = false;
-        }
-      } else if (r == Effect::Pass) {
-        bypass_perm = false;
-      }
-      bypass_governance_mode &= bypass_perm;
-    }
     auto identity_policy_res = eval_identity_or_session_policies(this, s->iam_user_policies, s->env,
                                               rgw::IAM::s3PutObject,
                                               s->object->get_obj());
