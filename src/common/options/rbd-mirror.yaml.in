@@ -111,7 +111,7 @@ options:
 - name: rbd_mirror_image_policy_rebalance_timeout
   type: float
   level: advanced
-  desc: number of seconds policy should be idle before trigerring reshuffle (rebalance)
+  desc: number of seconds policy should be idle before triggering reshuffle (rebalance)
     of images
   default: 0
   services:

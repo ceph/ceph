@@ -16,11 +16,11 @@
       [data]="data$ | async"
       [columns]="meta.table.columns"
       [columnMode]="meta.table.columnMode"
-      [toolHeader]="meta.table.toolHeader"
-      selectionType="single"
       (setExpandedRow)="setExpandedRow($event)"
+      [hasDetails]="meta.detail_columns.length > 0"
+      [selectionType]="meta.table.selectionType"
       (updateSelection)="updateSelection($event)"
-      [hasDetails]="meta.detail_columns.length > 0">
+      [toolHeader]="meta.table.toolHeader">
     <div class="table-actions btn-toolbar">
       <cd-table-actions [permission]="permission"
                         [selection]="selection"
@@ -36,7 +36,7 @@
           <tr *ngFor="let column of meta.detail_columns">
             <td i18n
                 class="bold">{{ column }}</td>
-            <td> {{ expandedRow[column] }} </td>
+            <td><pre>{{ expandedRow[column] }}</pre></td>
           </tr>
         </tbody>
       </table>
@@ -61,4 +61,16 @@
 <ng-template #durationTpl
              let-value="value">
   <span>{{ value | duration }}</span>
+</ng-template>
+
+<ng-template #exportDataModalTpl>
+  <div class="d-flex flex-column align-items-center w-100 gap-3">
+    <textarea readonly
+              class="form-control w-100 bg-light height-400"
+              id="authExportArea">{{ modalState.authExportData }}</textarea>
+    <cd-copy-2-clipboard-button class="align-self-end"
+                                source="authExportArea">
+
+    </cd-copy-2-clipboard-button>
+  </div>
 </ng-template>

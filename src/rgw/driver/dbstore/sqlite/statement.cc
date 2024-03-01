@@ -58,6 +58,21 @@ static int bind_index(const DoutPrefixProvider* dpp,
   return index;
 }
 
+void bind_null(const DoutPrefixProvider* dpp, const stmt_binding& stmt,
+               const char* name)
+{
+  const int index = bind_index(dpp, stmt, name);
+
+  int result = ::sqlite3_bind_null(stmt.get(), index);
+  auto ec = std::error_code{result, sqlite::error_category()};
+  if (ec != sqlite::errc::ok) {
+    ldpp_dout(dpp, 1) << "binding failed on parameter name="
+        << name << dendl;
+    sqlite3* db = ::sqlite3_db_handle(stmt.get());
+    throw sqlite::error(db, ec);
+  }
+}
+
 void bind_text(const DoutPrefixProvider* dpp, const stmt_binding& stmt,
                const char* name, std::string_view value)
 {
@@ -103,10 +118,10 @@ void eval0(const DoutPrefixProvider* dpp, const stmt_execution& stmt)
   if (ec != sqlite::errc::done) {
     const char* errmsg = ::sqlite3_errmsg(db);
     ldpp_dout(dpp, 20) << "evaluation failed: " << errmsg
-        << " (" << ec << ")\nstatement: " << sql.get() << dendl;
+        << " (" << ec << ")\nstatement: " << (sql ? sql.get() : "") << dendl;
     throw sqlite::error(errmsg, ec);
   }
-  ldpp_dout(dpp, 20) << "evaluation succeeded: " << sql.get() << dendl;
+  ldpp_dout(dpp, 20) << "evaluation succeeded: " << (sql ? sql.get() : "") << dendl;
 }
 
 void eval1(const DoutPrefixProvider* dpp, const stmt_execution& stmt)
@@ -122,10 +137,10 @@ void eval1(const DoutPrefixProvider* dpp, const stmt_execution& stmt)
     sqlite3* db = ::sqlite3_db_handle(stmt.get());
     const char* errmsg = ::sqlite3_errmsg(db);
     ldpp_dout(dpp, 1) << "evaluation failed: " << errmsg << " (" << ec
-        << ")\nstatement: " << sql.get() << dendl;
+        << ")\nstatement: " << (sql ? sql.get() : "") << dendl;
     throw sqlite::error(errmsg, ec);
   }
-  ldpp_dout(dpp, 20) << "evaluation succeeded: " << sql.get() << dendl;
+  ldpp_dout(dpp, 20) << "evaluation succeeded: " << (sql ? sql.get() : "") << dendl;
 }
 
 int column_int(const stmt_execution& stmt, int column)
@@ -166,14 +181,14 @@ auto read_text_rows(const DoutPrefixProvider* dpp,
       sqlite3* db = ::sqlite3_db_handle(stmt.get());
       const char* errmsg = ::sqlite3_errmsg(db);
       ldpp_dout(dpp, 1) << "evaluation failed: " << errmsg << " (" << ec
-          << ")\nstatement: " << sql.get() << dendl;
+          << ")\nstatement: " << (sql ? sql.get() : "") << dendl;
       throw sqlite::error(errmsg, ec);
     }
     entries[count] = column_text(stmt, 0);
     ++count;
   }
   ldpp_dout(dpp, 20) << "statement evaluation produced " << count
-      << " results: " << sql.get() << dendl;
+      << " results: " << (sql ? sql.get() : "") << dendl;
 
   return entries.first(count);
 }

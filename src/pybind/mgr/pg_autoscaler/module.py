@@ -135,12 +135,6 @@ class PgAutoscaler(MgrModule):
                        '`PG_NUM` before being accepted. Cannot be less than 1.0'),
             default=3.0,
             min=1.0),
-        Option(
-            name='noautoscale',
-            type='bool',
-            desc='global autoscale flag',
-            long_desc=('Option to turn on/off the autoscaler for all pools'),
-            default=False),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -155,7 +149,6 @@ class PgAutoscaler(MgrModule):
             self.sleep_interval = 60
             self.mon_target_pg_per_osd = 0
             self.threshold = 3.0
-            self.noautoscale = False
 
     def config_notify(self) -> None:
         for opt in self.NATIVE_OPTIONS:
@@ -238,7 +231,7 @@ class PgAutoscaler(MgrModule):
                     p['pg_num_target'],
 #                    p['pg_num_ideal'],
                     final,
-                    p['pg_autoscale_mode'],
+                    'off' if self.has_noautoscale_flag() else p['pg_autoscale_mode'],
                     str(p['bulk'])
                 ])
             return 0, table.get_string(), ''
@@ -260,16 +253,20 @@ class PgAutoscaler(MgrModule):
             self.remote('progress', 'complete', ev.ev_id)
             del self._event[pool_id]
 
-    def set_autoscale_mode_all_pools(self, status: str) -> None:
-        osdmap = self.get_osdmap()
-        pools = osdmap.get_pools_by_name()
-        for pool_name, _ in pools.items():
-            self.mon_command({
-                'prefix': 'osd pool set',
-                'pool': pool_name,
-                'var': 'pg_autoscale_mode',
-                'val': status
-            })
+    def has_noautoscale_flag(self) -> bool:
+        flags = self.get_osdmap().dump().get('flags', '')
+        if 'noautoscale' in flags:
+            return True
+        else:
+            return False
+
+    def has_norecover_flag(self) -> bool:
+        flags = self.get_osdmap().dump().get('flags', '')
+        if 'norecover' in flags:
+            return True
+        else:
+            return False
+
     @CLIWriteCommand("osd pool get noautoscale")
     def get_noautoscale(self) -> Tuple[int, str, str]:
         """
@@ -277,10 +274,7 @@ class PgAutoscaler(MgrModule):
         are setting the autoscaler on or off as well
         as newly created pools in the future.
         """
-
-        if self.noautoscale == None:
-            raise TypeError("noautoscale cannot be None")
-        elif self.noautoscale:
+        if self.has_noautoscale_flag():
             return 0, "", "noautoscale is on"
         else:
             return 0, "", "noautoscale is off"
@@ -289,21 +283,23 @@ class PgAutoscaler(MgrModule):
     def unset_noautoscale(self) -> Tuple[int, str, str]:
         """
         Unset the noautoscale flag so all pools will
-        have autoscale enabled (including newly created
-        pools in the future).
+        go back to its previous mode. Newly created
+        pools in the future will autoscaler on by default.
         """
-        if not self.noautoscale:
+        if not self.has_noautoscale_flag():
             return 0, "", "noautoscale is already unset!"
         else:
-            self.set_module_option("noautoscale", False)
             self.mon_command({
                 'prefix': 'config set',
                 'who': 'global',
                 'name': 'osd_pool_default_pg_autoscale_mode',
                 'value': 'on'
             })
-            self.set_autoscale_mode_all_pools("on")
-            return 0, "", "noautoscale is unset, all pools now have autoscale on"
+            self.mon_command({
+                'prefix': 'osd unset',
+                'key': 'noautoscale'
+            })
+            return 0, "", "noautoscale is unset, all pools now back to its previous mode"
 
     @CLIWriteCommand("osd pool set noautoscale")
     def set_noautoscale(self) -> Tuple[int, str, str]:
@@ -313,25 +309,30 @@ class PgAutoscaler(MgrModule):
         and complete all on-going progress events
         regarding PG-autoscaling.
         """
-        if self.noautoscale:
+        if self.has_noautoscale_flag():
             return 0, "", "noautoscale is already set!"
         else:
-            self.set_module_option("noautoscale", True)
             self.mon_command({
                 'prefix': 'config set',
                 'who': 'global',
                 'name': 'osd_pool_default_pg_autoscale_mode',
                 'value': 'off'
             })
-            self.set_autoscale_mode_all_pools("off")
+            self.mon_command({
+                'prefix': 'osd set',
+                'key': 'noautoscale'
+            })
             self.complete_all_progress_events()
             return 0, "", "noautoscale is set, all pools now have autoscale off"
 
     def serve(self) -> None:
         self.config_notify()
         while not self._shutdown.is_set():
-            self._maybe_adjust()
-            self._update_progress_events()
+            if not self.has_noautoscale_flag() and not self.has_norecover_flag():
+                osdmap = self.get_osdmap()
+                pools = osdmap.get_pools_by_name()
+                self._maybe_adjust(osdmap, pools)
+                self._update_progress_events(osdmap, pools)
             self._shutdown.wait(timeout=self.sleep_interval)
 
     def shutdown(self) -> None:
@@ -340,6 +341,7 @@ class PgAutoscaler(MgrModule):
 
     def identify_subtrees_and_overlaps(self,
                                        osdmap: OSDMap,
+                                       pools: Dict[str, Dict[str, Any]],
                                        crush: CRUSHMap,
                                        result: Dict[int, CrushSubtreeResourceStatus],
                                        overlapped_roots: Set[int],
@@ -348,7 +350,7 @@ class PgAutoscaler(MgrModule):
               Set[int]]:
 
         # We identify subtrees and overlapping roots from osdmap
-        for pool_id, pool in osdmap.get_pools().items():
+        for pool_name, pool in pools.items():
             crush_rule = crush.get_rule_by_id(pool['crush_rule'])
             assert crush_rule is not None
             cr_name = crush_rule['rule_name']
@@ -365,7 +367,7 @@ class PgAutoscaler(MgrModule):
                         overlapped_roots.add(prev_root_id)
                         overlapped_roots.add(root_id)
                         self.log.warning("pool %s won't scale due to overlapping roots: %s",
-                                       pool['pool_name'], overlapped_roots)
+                                      pool_name, overlapped_roots)
                         self.log.warning("Please See: https://docs.ceph.com/en/"
                                          "latest/rados/operations/placement-groups"
                                          "/#automated-scaling")
@@ -376,8 +378,8 @@ class PgAutoscaler(MgrModule):
             result[root_id] = s
             s.root_ids.append(root_id)
             s.osds |= osds
-            s.pool_ids.append(pool_id)
-            s.pool_names.append(pool['pool_name'])
+            s.pool_ids.append(pool['pool'])
+            s.pool_names.append(pool_name)
             s.pg_current += pool['pg_num_target'] * pool['size']
             target_ratio = pool['options'].get('target_size_ratio', 0.0)
             if target_ratio:
@@ -385,11 +387,12 @@ class PgAutoscaler(MgrModule):
             else:
                 target_bytes = pool['options'].get('target_size_bytes', 0)
                 if target_bytes:
-                    s.total_target_bytes += target_bytes * osdmap.pool_raw_used_rate(pool_id)
+                    s.total_target_bytes += target_bytes * osdmap.pool_raw_used_rate(pool['pool'])
         return roots, overlapped_roots
 
     def get_subtree_resource_status(self,
                                     osdmap: OSDMap,
+                                    pools: Dict[str, Dict[str, Any]],
                                     crush: CRUSHMap) -> Tuple[Dict[int, CrushSubtreeResourceStatus],
                                                               Set[int]]:
         """
@@ -402,8 +405,9 @@ class PgAutoscaler(MgrModule):
         roots: List[CrushSubtreeResourceStatus] = []
         overlapped_roots: Set[int] = set()
         # identify subtrees and overlapping roots
-        roots, overlapped_roots = self.identify_subtrees_and_overlaps(osdmap,
-                                                                      crush, result, overlapped_roots, roots)
+        roots, overlapped_roots = self.identify_subtrees_and_overlaps(
+            osdmap, pools, crush, result, overlapped_roots, roots
+        )
         # finish subtrees
         all_stats = self.get('osd_stats')
         for s in roots:
@@ -561,7 +565,6 @@ class PgAutoscaler(MgrModule):
 
             raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
 
-            pool_logical_used = pool_stats[pool_id]['stored']
             bias = p['options'].get('pg_autoscale_bias', 1.0)
             target_bytes = 0
             # ratio takes precedence if both are set
@@ -569,10 +572,10 @@ class PgAutoscaler(MgrModule):
                 target_bytes = p['options'].get('target_size_bytes', 0)
 
             # What proportion of space are we using?
-            actual_raw_used = pool_logical_used * raw_used_rate
+            actual_raw_used = pool_stats[pool_id]['bytes_used']
             actual_capacity_ratio = float(actual_raw_used) / capacity
 
-            pool_raw_used = max(pool_logical_used, target_bytes) * raw_used_rate
+            pool_raw_used = max(actual_raw_used, target_bytes * raw_used_rate)
             capacity_ratio = float(pool_raw_used) / capacity
 
             self.log.info("effective_target_ratio {0} {1} {2} {3}".format(
@@ -616,7 +619,7 @@ class PgAutoscaler(MgrModule):
                 'crush_root_id': root_id,
                 'pg_autoscale_mode': p['pg_autoscale_mode'],
                 'pg_num_target': p['pg_num_target'],
-                'logical_used': pool_logical_used,
+                'logical_used': float(actual_raw_used)/raw_used_rate,
                 'target_bytes': target_bytes,
                 'raw_used_rate': raw_used_rate,
                 'subtree_capacity': capacity,
@@ -645,7 +648,7 @@ class PgAutoscaler(MgrModule):
         assert threshold >= 1.0
 
         crush_map = osdmap.get_crush()
-        root_map, overlapped_roots = self.get_subtree_resource_status(osdmap, crush_map)
+        root_map, overlapped_roots = self.get_subtree_resource_status(osdmap, pools, crush_map)
         df = self.get('df')
         pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
 
@@ -669,31 +672,51 @@ class PgAutoscaler(MgrModule):
 
         return (ret, root_map)
 
-    def _update_progress_events(self) -> None:
-        if self.noautoscale:
+    def _get_pool_by_id(self,
+                     pools: Dict[str, Dict[str, Any]],
+                     pool_id: int) -> Optional[Dict[str, Any]]:
+        # Helper for getting pool data by pool_id
+        for pool_name, p in pools.items():
+            if p['pool'] == pool_id:
+                return p
+        self.log.debug('pool not found')
+        return None
+
+    def _update_progress_events(self,
+                                osdmap: OSDMap,
+                                pools: Dict[str, Dict[str, Any]]) -> None:
+        # Update progress events if necessary
+        if self.has_noautoscale_flag():
+            self.log.debug("noautoscale_flag is set.")
             return
-        osdmap = self.get_osdmap()
-        pools = osdmap.get_pools()
         for pool_id in list(self._event):
             ev = self._event[pool_id]
-            pool_data = pools.get(pool_id)
-            if pool_data is None or pool_data['pg_num'] == pool_data['pg_num_target'] or ev.pg_num == ev.pg_num_target:
+            pool_data = self._get_pool_by_id(pools, pool_id)
+            if (
+                pool_data is None
+                or pool_data["pg_num"] == pool_data["pg_num_target"]
+                or ev.pg_num == ev.pg_num_target
+            ):
                 # pool is gone or we've reached our target
                 self.remote('progress', 'complete', ev.ev_id)
                 del self._event[pool_id]
                 continue
             ev.update(self, (ev.pg_num - pool_data['pg_num']) / (ev.pg_num - ev.pg_num_target))
 
-    def _maybe_adjust(self) -> None:
-        if self.noautoscale:
-            return
+    def _maybe_adjust(self,
+                      osdmap: OSDMap,
+                      pools: Dict[str, Dict[str, Any]]) -> None:
+        # Figure out which pool needs pg adjustments
         self.log.info('_maybe_adjust')
-        osdmap = self.get_osdmap()
+        if self.has_noautoscale_flag():
+            self.log.debug("noautoscale_flag is set.")
+            return
         if osdmap.get_require_osd_release() < 'nautilus':
             return
-        pools = osdmap.get_pools_by_name()
+
         self.log.debug("pool: {0}".format(json.dumps(pools, indent=4,
                                 sort_keys=True)))
+
         ps, root_map = self._get_pool_status(osdmap, pools)
 
         # Anyone in 'warn', set the health message for them and then
@@ -726,7 +749,7 @@ class PgAutoscaler(MgrModule):
                     p['pg_num_final'])
                 if p['pg_num_final'] > p['pg_num_target']:
                     too_few.append(msg)
-                else:
+                elif p['pg_num_final'] < p['pg_num_target']:
                     too_many.append(msg)
             if not p['would_adjust']:
                 continue

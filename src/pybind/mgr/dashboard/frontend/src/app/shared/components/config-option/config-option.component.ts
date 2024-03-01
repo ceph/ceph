@@ -1,5 +1,5 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { FormControl, NgForm } from '@angular/forms';
+import { UntypedFormControl, NgForm } from '@angular/forms';
 
 import _ from 'lodash';
 
@@ -48,7 +48,7 @@ export class ConfigOptionComponent implements OnInit {
   private createForm() {
     this.optionsForm.addControl(this.optionsFormGroupName, this.optionsFormGroup);
     this.optionNames.forEach((optionName) => {
-      this.optionsFormGroup.addControl(optionName, new FormControl(null));
+      this.optionsFormGroup.addControl(optionName, new UntypedFormControl(null));
     });
   }
 

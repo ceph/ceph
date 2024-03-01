@@ -70,7 +70,7 @@ public:
 
   ceph::condition_variable *caller_cond = NULL;   // who to take up
   ceph::condition_variable *dispatch_cond = NULL; // who to kick back
-  std::list<ceph::condition_variable*> waitfor_safe;
+  std::list<Context*> waitfor_safe;
 
   InodeRef target;
   UserPerm perms;
@@ -80,6 +80,8 @@ public:
     unsafe_target_item(this) {
     memset(&head, 0, sizeof(head));
     head.op = op;
+    head.owner_uid = -1;
+    head.owner_gid = -1;
   }
   ~MetaRequest();
 
@@ -153,6 +155,13 @@ public:
     return v == 0;
   }
 
+  void set_inode_owner_uid_gid(unsigned u, unsigned g) {
+    /* it makes sense to set owner_{u,g}id only for OPs which create inodes */
+    ceph_assert(IS_CEPH_MDS_OP_NEWINODE(head.op));
+    head.owner_uid = u;
+    head.owner_gid = g;
+  }
+
   // normal fields
   void set_tid(ceph_tid_t t) { tid = t; }
   void set_oldest_client_tid(ceph_tid_t t) { head.oldest_client_tid = t; }
@@ -163,7 +172,7 @@ public:
   void set_alternate_name(std::string an) { alternate_name = an; }
   void set_string2(const char *s) { path2.set_path(std::string_view(s), 0); }
   void set_caller_perms(const UserPerm& _perms) {
-    perms.shallow_copy(_perms);
+    perms = _perms;
     head.caller_uid = perms.uid();
     head.caller_gid = perms.gid();
   }

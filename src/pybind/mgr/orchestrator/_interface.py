@@ -30,8 +30,20 @@ except ImportError:
 import yaml
 
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec, MDSSpec, TunedProfileSpec
+from ceph.deployment.service_spec import (
+    ArgumentList,
+    ArgumentSpec,
+    GeneralArgList,
+    IngressSpec,
+    IscsiServiceSpec,
+    MDSSpec,
+    NFSServiceSpec,
+    RGWSpec,
+    SNMPGatewaySpec,
+    ServiceSpec,
+    TunedProfileSpec,
+    NvmeofServiceSpec
+)
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -347,7 +359,83 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_host(self, host: str, force: bool, offline: bool) -> OrchResult[str]:
+    def hardware_light(self, light_type: str, action: str, hostname: str, device: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Light a chassis or device ident LED.
+
+        :param light_type: led type (chassis or device).
+        :param action: set or get status led.
+        :param hostname: the name of the host.
+        :param device: the device id (when light_type = 'device')
+        """
+        raise NotImplementedError()
+
+    def hardware_powercycle(self, hostname: str, yes_i_really_mean_it: bool = False) -> OrchResult[str]:
+        """
+        Reboot a host.
+
+        :param hostname: the name of the host being rebooted.
+        """
+        raise NotImplementedError()
+
+    def hardware_shutdown(self, hostname: str, force: Optional[bool] = False, yes_i_really_mean_it: bool = False) -> OrchResult[str]:
+        """
+        Shutdown a host.
+
+        :param hostname: the name of the host to shutdown.
+        """
+        raise NotImplementedError()
+
+    def hardware_status(self, hostname: Optional[str] = None, category: Optional[str] = 'summary') -> OrchResult[str]:
+        """
+        Display hardware status.
+
+        :param category: category
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
+    def node_proxy_summary(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy summary
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
+    def node_proxy_fullreport(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy full report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
+    def node_proxy_firmwares(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy firmwares report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
+    def node_proxy_criticals(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy criticals report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
+    def node_proxy_common(self, category: str, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy generic report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
+    def remove_host(self, host: str, force: bool, offline: bool, rm_crush_entry: bool) -> OrchResult[str]:
         """
         Remove a host from the orchestrator inventory.
 
@@ -355,7 +443,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def drain_host(self, hostname: str, force: bool = False) -> OrchResult[str]:
+    def drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False, zap_osd_devices: bool = False) -> OrchResult[str]:
         """
         drain all daemons from a host
 
@@ -478,6 +566,7 @@ class Orchestrator(object):
             'crash': self.apply_crash,
             'grafana': self.apply_grafana,
             'iscsi': self.apply_iscsi,
+            'nvmeof': self.apply_nvmeof,
             'mds': self.apply_mds,
             'mgr': self.apply_mgr,
             'mon': self.apply_mon,
@@ -589,12 +678,14 @@ class Orchestrator(object):
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
                     force: bool = False,
-                    zap: bool = False) -> OrchResult[str]:
+                    zap: bool = False,
+                    no_destroy: bool = False) -> OrchResult[str]:
         """
         :param osd_ids: list of OSD IDs
         :param replace: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
         :param force: Forces the OSD removal process without waiting for the data to be drained first.
         :param zap: Zap/Erase all devices associated with the OSDs (DESTROYS DATA)
+        :param no_destroy: Do not destroy associated VGs/LVs with the OSD.
 
 
         .. note:: this can only remove OSDs that were successfully
@@ -664,12 +755,24 @@ class Orchestrator(object):
         """Update iscsi cluster"""
         raise NotImplementedError()
 
+    def apply_nvmeof(self, spec: NvmeofServiceSpec) -> OrchResult[str]:
+        """Update nvmeof cluster"""
+        raise NotImplementedError()
+
     def apply_prometheus(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update prometheus cluster"""
         raise NotImplementedError()
 
     def get_prometheus_access_info(self) -> OrchResult[Dict[str, str]]:
         """get prometheus access information"""
+        raise NotImplementedError()
+
+    def set_alertmanager_access_info(self, user: str, password: str) -> OrchResult[str]:
+        """set alertmanager access information"""
+        raise NotImplementedError()
+
+    def set_prometheus_access_info(self, user: str, password: str) -> OrchResult[str]:
+        """set prometheus access information"""
         raise NotImplementedError()
 
     def get_alertmanager_access_info(self) -> OrchResult[Dict[str, str]]:
@@ -786,6 +889,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'haproxy': 'ingress',
         'keepalived': 'ingress',
         'iscsi': 'iscsi',
+        'nvmeof': 'nvmeof',
         'rbd-mirror': 'rbd-mirror',
         'cephfs-mirror': 'cephfs-mirror',
         'nfs': 'nfs',
@@ -800,6 +904,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
         'agent': 'agent',
+        'node-proxy': 'node-proxy',
         'snmp-gateway': 'snmp-gateway',
         'elasticsearch': 'elasticsearch',
         'jaeger-agent': 'jaeger-agent',
@@ -818,6 +923,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'osd': ['osd'],
         'ingress': ['haproxy', 'keepalived'],
         'iscsi': ['iscsi'],
+        'nvmeof': ['nvmeof'],
         'rbd-mirror': ['rbd-mirror'],
         'cephfs-mirror': ['cephfs-mirror'],
         'nfs': ['nfs'],
@@ -831,6 +937,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'crash': ['crash'],
         'container': ['container'],
         'agent': ['agent'],
+        'node-proxy': ['node-proxy'],
         'snmp-gateway': ['snmp-gateway'],
         'elasticsearch': ['elasticsearch'],
         'jaeger-agent': ['jaeger-agent'],
@@ -855,6 +962,17 @@ class UpgradeStatusSpec(object):
         self.progress: Optional[str] = None  # How many of the daemons have we upgraded
         self.message = ""  # Freeform description
         self.is_paused: bool = False  # Is the upgrade paused?
+
+    def to_json(self) -> dict:
+        return {
+            'in_progress': self.in_progress,
+            'target_image': self.target_image,
+            'which': self.which,
+            'services_complete': self.services_complete,
+            'progress': self.progress,
+            'message': self.message,
+            'is_paused': self.is_paused,
+        }
 
 
 def handle_type_error(method: FuncT) -> FuncT:
@@ -930,8 +1048,8 @@ class DaemonDescription(object):
                  deployed_by: Optional[List[str]] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  ) -> None:
 
         #: Host is at the same granularity as InventoryHost
@@ -996,8 +1114,23 @@ class DaemonDescription(object):
 
         self.is_active = is_active
 
-        self.extra_container_args = extra_container_args
-        self.extra_entrypoint_args = extra_entrypoint_args
+        self.extra_container_args: Optional[ArgumentList] = None
+        self.extra_entrypoint_args: Optional[ArgumentList] = None
+        if extra_container_args:
+            self.extra_container_args = ArgumentSpec.from_general_args(
+                extra_container_args)
+        if extra_entrypoint_args:
+            self.extra_entrypoint_args = ArgumentSpec.from_general_args(
+                extra_entrypoint_args)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
+            for v in value:
+                tname = str(type(v))
+                if 'ArgumentSpec' not in tname:
+                    raise TypeError(f"{name} is not all ArgumentSpec values: {v!r}(is {type(v)} in {value!r}")
+
+        super().__setattr__(name, value)
 
     @property
     def status(self) -> Optional[DaemonDescriptionStatus]:
@@ -1222,7 +1355,7 @@ class DaemonDescription(object):
         return DaemonDescription.from_json(self.to_json())
 
     @staticmethod
-    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription') -> Any:
+    def yaml_representer(dumper: 'yaml.Dumper', data: 'DaemonDescription') -> yaml.Node:
         return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 
@@ -1355,7 +1488,7 @@ class ServiceDescription(object):
         return cls(spec=spec, events=events, **c_status)
 
     @staticmethod
-    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceDescription') -> Any:
+    def yaml_representer(dumper: 'yaml.Dumper', data: 'ServiceDescription') -> yaml.Node:
         return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 
@@ -1369,7 +1502,7 @@ class InventoryFilter(object):
 
     Typical use:
 
-      filter by host when presentig UI workflow for configuring
+      filter by host when presenting UI workflow for configuring
       a particular server.
       filter by label when not all of estate is Ceph servers,
       and we want to only learn about the Ceph servers.
@@ -1569,7 +1702,7 @@ class OrchestratorClientMixin(Orchestrator):
 
     >>> import mgr_module
     >>> #doctest: +SKIP
-    ... class MyImplentation(mgr_module.MgrModule, Orchestrator):
+    ... class MyImplementation(mgr_module.MgrModule, Orchestrator):
     ...     def __init__(self, ...):
     ...         self.orch_client = OrchestratorClientMixin()
     ...         self.orch_client.set_mgr(self.mgr))
@@ -1577,7 +1710,7 @@ class OrchestratorClientMixin(Orchestrator):
 
     def set_mgr(self, mgr: MgrModule) -> None:
         """
-        Useable in the Dashbord that uses a global ``mgr``
+        Useable in the Dashboard that uses a global ``mgr``
         """
 
         self.__mgr = mgr  # Make sure we're not overwriting any other `mgr` properties

@@ -158,7 +158,7 @@ public:
   void clear_all_progress_events();
   void get_progress_events(std::map<std::string,ProgressEvent>* events);
 
-  void register_client(std::string_view name, std::string addrs);
+  void register_client(std::string_view name, std::string addrs, bool replace);
   void unregister_client(std::string_view name, std::string addrs);
 
   void config_notify();
@@ -216,7 +216,6 @@ public:
       std::string *err);
 
   int init();
-  void shutdown();
 
   void start_one(PyModuleRef py_module);
 

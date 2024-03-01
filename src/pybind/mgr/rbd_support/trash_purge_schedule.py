@@ -16,24 +16,32 @@ class TrashPurgeScheduleHandler:
     SCHEDULE_OID = "rbd_trash_purge_schedule"
     REFRESH_DELAY_SECONDS = 60.0
 
-    lock = Lock()
-    condition = Condition(lock)
-    thread = None
-
     def __init__(self, module: Any) -> None:
+        self.lock = Lock()
+        self.condition = Condition(self.lock)
         self.module = module
         self.log = module.log
         self.last_refresh_pools = datetime(1970, 1, 1)
 
-        self.init_schedule_queue()
-
+        self.stop_thread = False
         self.thread = Thread(target=self.run)
+
+    def setup(self) -> None:
+        self.init_schedule_queue()
         self.thread.start()
+
+    def shutdown(self) -> None:
+        self.log.info("TrashPurgeScheduleHandler: shutting down")
+        self.stop_thread = True
+        if self.thread.is_alive():
+            self.log.debug("TrashPurgeScheduleHandler: joining thread")
+            self.thread.join()
+        self.log.info("TrashPurgeScheduleHandler: shut down")
 
     def run(self) -> None:
         try:
             self.log.info("TrashPurgeScheduleHandler: starting")
-            while True:
+            while not self.stop_thread:
                 refresh_delay = self.refresh_pools()
                 with self.lock:
                     (ns_spec, wait_time) = self.dequeue()
@@ -45,6 +53,9 @@ class TrashPurgeScheduleHandler:
                 with self.lock:
                     self.enqueue(datetime.now(), pool_id, namespace)
 
+        except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
+            self.log.exception("TrashPurgeScheduleHandler: client blocklisted")
+            self.module.client_blocklisted.set()
         except Exception as ex:
             self.log.fatal("Fatal runtime error: {}\n{}".format(
                 ex, traceback.format_exc()))
@@ -54,6 +65,8 @@ class TrashPurgeScheduleHandler:
             with self.module.rados.open_ioctx2(int(pool_id)) as ioctx:
                 ioctx.set_namespace(namespace)
                 rbd.RBD().trash_purge(ioctx, datetime.now())
+        except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
+            raise
         except Exception as e:
             self.log.error("exception when purging {}/{}: {}".format(
                 pool_id, namespace, e))
@@ -114,6 +127,8 @@ class TrashPurgeScheduleHandler:
             pool_namespaces += rbd.RBD().namespace_list(ioctx)
         except rbd.OperationNotSupported:
             self.log.debug("namespaces not supported")
+        except rbd.ConnectionShutdown:
+            raise
         except Exception as e:
             self.log.error("exception when scanning pool {}: {}".format(
                 pool_name, e))

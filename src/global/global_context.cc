@@ -20,6 +20,17 @@
 #include "crimson/common/config_proxy.h"
 #endif
 
+#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+namespace ceph::global {
+int __attribute__((weak)) g_conf_set_val(const std::string& key, const std::string& s) {
+  return 0;
+}
+
+int __attribute__((weak)) g_conf_rm_val(const std::string& key) {
+  return 0;
+}
+}
+#endif
 
 /*
  * Global variables for use from process context.
@@ -33,6 +44,24 @@ ConfigProxy& g_conf() {
   return g_ceph_context->_conf;
 #endif
 }
+
+#ifdef WITH_ALIEN
+int g_conf_set_val(const std::string& key, const std::string& s)
+{
+  if (g_ceph_context != NULL)
+    return g_ceph_context->_conf.set_val(key, s);
+
+  return 0;
+}
+
+int g_conf_rm_val(const std::string& key)
+{
+  if (g_ceph_context != NULL)
+    return g_ceph_context->_conf.rm_val(key);
+
+  return 0;
+}
+#endif
 
 const char *g_assert_file = 0;
 int g_assert_line = 0;

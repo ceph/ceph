@@ -37,6 +37,11 @@ void PyFormatter::open_object_section(std::string_view name)
   cursor = dict;
 }
 
+void PyFormatter::dump_null(std::string_view name)
+{
+  dump_pyobject(name, Py_None);
+}
+
 void PyFormatter::dump_unsigned(std::string_view name, uint64_t u)
 {
   PyObject *p = PyLong_FromUnsignedLong(u);

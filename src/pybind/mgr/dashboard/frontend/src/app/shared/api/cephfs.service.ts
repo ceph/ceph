@@ -6,6 +6,7 @@ import { Observable } from 'rxjs';
 
 import { cdEncode } from '../decorators/cd-encode';
 import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
+import { shareReplay } from 'rxjs/operators';
 
 @cdEncode
 @Injectable({
@@ -21,12 +22,12 @@ export class CephfsService {
     return this.http.get(`${this.baseURL}`);
   }
 
-  lsDir(id: number, path?: string): Observable<CephfsDir[]> {
-    let apiPath = `${this.baseUiURL}/${id}/ls_dir?depth=2`;
+  lsDir(id: number, path?: string, depth: number = 2): Observable<CephfsDir[]> {
+    let apiPath = `${this.baseUiURL}/${id}/ls_dir?depth=${depth}`;
     if (path) {
       apiPath += `&path=${encodeURIComponent(path)}`;
     }
-    return this.http.get<CephfsDir[]>(apiPath);
+    return this.http.get<CephfsDir[]>(apiPath).pipe(shareReplay());
   }
 
   getCephfs(id: number) {
@@ -47,6 +48,10 @@ export class CephfsService {
 
   getMdsCounters(id: string) {
     return this.http.get(`${this.baseURL}/${id}/mds_counters`);
+  }
+
+  getFsRootDirectory(id: string) {
+    return this.http.get(`${this.baseURL}/${id}/get_root_directory`);
   }
 
   mkSnapshot(id: number, path: string, name?: string) {
@@ -71,6 +76,36 @@ export class CephfsService {
     return this.http.put(`${this.baseURL}/${id}/quota`, quotas, {
       observe: 'response',
       params
+    });
+  }
+
+  create(name: string, serviceSpec: object) {
+    return this.http.post(
+      this.baseURL,
+      { name: name, service_spec: serviceSpec },
+      {
+        observe: 'response'
+      }
+    );
+  }
+
+  isCephFsPool(pool: any) {
+    return _.indexOf(pool.application_metadata, 'cephfs') !== -1 && !pool.pool_name.includes('/');
+  }
+
+  remove(name: string) {
+    return this.http.delete(`${this.baseURL}/remove/${name}`, {
+      observe: 'response'
+    });
+  }
+
+  rename(vol_name: string, new_vol_name: string) {
+    let requestBody = {
+      name: vol_name,
+      new_name: new_vol_name
+    };
+    return this.http.put(`${this.baseURL}/rename`, requestBody, {
+      observe: 'response'
     });
   }
 }

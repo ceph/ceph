@@ -47,6 +47,7 @@ static inline const auto MDS_FEATURE_INCOMPAT_INLINE = CompatSet::Feature(7, "md
 static inline const auto MDS_FEATURE_INCOMPAT_NOANCHOR = CompatSet::Feature(8, "no anchor table");
 static inline const auto MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 = CompatSet::Feature(9, "file layout v2");
 static inline const auto MDS_FEATURE_INCOMPAT_SNAPREALM_V2 = CompatSet::Feature(10, "snaprealm v2");
+static inline const auto MDS_FEATURE_INCOMPAT_MINORLOGSEGMENTS = CompatSet::Feature(11, "minor log segments");
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
 
@@ -243,6 +244,15 @@ public:
   bool allows_standby_replay() const { return test_flag(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY); }
   bool was_standby_replay_ever_allowed() const { return ever_allowed_features & CEPH_MDSMAP_ALLOW_STANDBY_REPLAY; }
 
+  void set_balance_automate() {
+    set_flag(CEPH_MDSMAP_BALANCE_AUTOMATE);
+    ever_allowed_features |= CEPH_MDSMAP_BALANCE_AUTOMATE;
+    explicitly_allowed_features |= CEPH_MDSMAP_BALANCE_AUTOMATE;
+  }
+  void clear_balance_automate() { clear_flag(CEPH_MDSMAP_BALANCE_AUTOMATE); }
+  bool allows_balance_automate() const { return test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE); }
+  bool was_balance_automate_ever_allowed() const { return ever_allowed_features & CEPH_MDSMAP_BALANCE_AUTOMATE; }
+
   void set_multimds_snaps_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS);
     ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS;
@@ -381,7 +391,7 @@ public:
   }
 
   // features
-  uint64_t get_up_features();
+  uint64_t get_up_features() const;
 
   /**
    * Get MDS ranks which are in but not up.
@@ -668,14 +678,15 @@ protected:
 
   bool inline_data_enabled = false;
 
-  uint64_t cached_up_features = 0;
 private:
   inline static const std::map<int, std::string> flag_display = {
     {CEPH_MDSMAP_NOT_JOINABLE, "joinable"}, //inverse for user display
     {CEPH_MDSMAP_ALLOW_SNAPS, "allow_snaps"},
     {CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS, "allow_multimds_snaps"},
     {CEPH_MDSMAP_ALLOW_STANDBY_REPLAY, "allow_standby_replay"},
-    {CEPH_MDSMAP_REFUSE_CLIENT_SESSION, "refuse_client_session"}
+    {CEPH_MDSMAP_REFUSE_CLIENT_SESSION, "refuse_client_session"},
+    {CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS, "refuse_standby_for_another_fs"},
+    {CEPH_MDSMAP_BALANCE_AUTOMATE, "balance_automate"}
   };
 };
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)

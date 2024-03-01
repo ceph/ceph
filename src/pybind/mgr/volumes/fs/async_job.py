@@ -6,6 +6,7 @@ import traceback
 from collections import deque
 from mgr_util import lock_timeout_log, CephfsClient
 
+from .operations.volume import list_volumes
 from .exception import NotImplementedException
 
 log = logging.getLogger(__name__)
@@ -35,16 +36,23 @@ class JobThread(threading.Thread):
             vol_job = None
             try:
                 # fetch next job to execute
-                with self.async_job.lock:
+                with lock_timeout_log(self.async_job.lock):
                     while True:
                         if self.should_reconfigure_num_threads():
                             log.info("thread [{0}] terminating due to reconfigure".format(thread_name))
                             self.async_job.threads.remove(self)
                             return
+                        timo = self.async_job.wakeup_timeout
+                        if timo is not None:
+                            vols = [e['name'] for e in list_volumes(self.vc.mgr)]
+                            missing = set(vols) - set(self.async_job.q)
+                            for m in missing:
+                                self.async_job.jobs[m] = []
+                                self.async_job.q.append(m)
                         vol_job = self.async_job.get_job()
                         if vol_job:
                             break
-                        self.async_job.cv.wait()
+                        self.async_job.cv.wait(timeout=timo)
                     self.async_job.register_async_job(vol_job[0], vol_job[1], thread_id)
 
                 # execute the job (outside lock)
@@ -64,12 +72,12 @@ class JobThread(threading.Thread):
             finally:
                 # when done, unregister the job
                 if vol_job:
-                    with self.async_job.lock:
+                    with lock_timeout_log(self.async_job.lock):
                         self.async_job.unregister_async_job(vol_job[0], vol_job[1], thread_id)
                 time.sleep(1)
         log.error("thread [{0}] reached exception limit, bailing out...".format(thread_name))
         self.vc.cluster_log("thread {0} bailing out due to exception".format(thread_name))
-        with self.async_job.lock:
+        with lock_timeout_log(self.async_job.lock):
             self.async_job.threads.remove(self)
 
     def should_reconfigure_num_threads(self):
@@ -84,7 +92,6 @@ class JobThread(threading.Thread):
 
     def reset_cancel(self):
         self.cancel_event.clear()
-
 
 class AsyncJobs(threading.Thread):
     """
@@ -105,6 +112,9 @@ class AsyncJobs(threading.Thread):
     via `should_cancel()` lambda passed to `execute_job()`.
     """
 
+    # not made configurable on purpose
+    WAKEUP_TIMEOUT = 5.0
+
     def __init__(self, volume_client, name_pfx, nr_concurrent_jobs):
         threading.Thread.__init__(self, name="{0}.tick".format(name_pfx))
         self.vc = volume_client
@@ -123,12 +133,24 @@ class AsyncJobs(threading.Thread):
         self.name_pfx = name_pfx
         # each async job group uses its own libcephfs connection (pool)
         self.fs_client = CephfsClient(self.vc.mgr)
+        self.wakeup_timeout = None
 
         self.threads = []
         for i in range(self.nr_concurrent_jobs):
             self.threads.append(JobThread(self, volume_client, name="{0}.{1}".format(self.name_pfx, i)))
             self.threads[-1].start()
         self.start()
+
+    def set_wakeup_timeout(self):
+        with self.lock:
+            # not made configurable on purpose
+            self.wakeup_timeout = AsyncJobs.WAKEUP_TIMEOUT
+            self.cv.notifyAll()
+
+    def unset_wakeup_timeout(self):
+        with self.lock:
+            self.wakeup_timeout = None
+            self.cv.notifyAll()
 
     def run(self):
         log.debug("tick thread {} starting".format(self.name))
@@ -150,7 +172,7 @@ class AsyncJobs(threading.Thread):
     def shutdown(self):
         self.stopping.set()
         self.cancel_all_jobs()
-        with self.lock:
+        with lock_timeout_log(self.lock):
             self.cv.notifyAll()
         self.join()
 

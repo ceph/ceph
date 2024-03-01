@@ -395,7 +395,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   void expect_list_snaps(MockTestImageCtx &mock_image_ctx,
                         const librados::snap_set_t& snap_set, int r) {
     auto io_context = *mock_image_ctx.get_data_io_context();
-    io_context.read_snap(CEPH_SNAPDIR);
+    io_context.set_read_snap(CEPH_SNAPDIR);
     auto& mock_io_ctx = librados::get_mock_io_ctx(mock_image_ctx.rados_api,
                                                   io_context);
     EXPECT_CALL(mock_io_ctx, list_snaps(_, _))
@@ -1926,7 +1926,7 @@ TEST_F(TestMockIoObjectRequest, ListSnapsWholeObject) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  mock_image_ctx.parent = &mock_image_ctx;
+  mock_image_ctx.snaps = {3};
 
   InSequence seq;
 
@@ -1937,13 +1937,120 @@ TEST_F(TestMockIoObjectRequest, ListSnapsWholeObject) {
   clone_info.cloneid = 3;
   clone_info.snaps = {3};
   clone_info.overlap = std::vector<std::pair<uint64_t,uint64_t>>{{0, 1}};
-  clone_info.size = 4194304;
+  clone_info.size = mock_image_ctx.layout.object_size;
   snap_set.clones.push_back(clone_info);
 
   clone_info.cloneid = CEPH_NOSNAP;
   clone_info.snaps = {};
   clone_info.overlap = {};
-  clone_info.size = 4194304;
+  clone_info.size = mock_image_ctx.layout.object_size;
+  snap_set.clones.push_back(clone_info);
+
+  expect_list_snaps(mock_image_ctx, snap_set, 0);
+
+  {
+    SnapshotDelta snapshot_delta;
+    C_SaferCond ctx;
+    auto req = MockObjectListSnapsRequest::create(
+      &mock_image_ctx, 0, {{0, mock_image_ctx.layout.object_size - 1}},
+      {3, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
+    req->send();
+    ASSERT_EQ(0, ctx.wait());
+
+    SnapshotDelta expected_snapshot_delta;
+    expected_snapshot_delta[{CEPH_NOSNAP,CEPH_NOSNAP}].insert(
+      1, mock_image_ctx.layout.object_size - 2,
+      {SPARSE_EXTENT_STATE_DATA, mock_image_ctx.layout.object_size - 2});
+    EXPECT_EQ(expected_snapshot_delta, snapshot_delta);
+  }
+
+  expect_list_snaps(mock_image_ctx, snap_set, 0);
+
+  {
+    SnapshotDelta snapshot_delta;
+    C_SaferCond ctx;
+    auto req = MockObjectListSnapsRequest::create(
+      &mock_image_ctx, 0, {{0, mock_image_ctx.layout.object_size - 1}},
+      {3, CEPH_NOSNAP}, LIST_SNAPS_FLAG_WHOLE_OBJECT, {}, &snapshot_delta,
+      &ctx);
+    req->send();
+    ASSERT_EQ(0, ctx.wait());
+
+    SnapshotDelta expected_snapshot_delta;
+    expected_snapshot_delta[{CEPH_NOSNAP,CEPH_NOSNAP}].insert(
+      0, mock_image_ctx.layout.object_size - 1,
+      {SPARSE_EXTENT_STATE_DATA, mock_image_ctx.layout.object_size - 1});
+    EXPECT_EQ(expected_snapshot_delta, snapshot_delta);
+  }
+}
+
+TEST_F(TestMockIoObjectRequest, ListSnapsWholeObjectEndSize) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.snaps = {3};
+
+  InSequence seq;
+
+  librados::snap_set_t snap_set;
+  snap_set.seq = 3;
+  librados::clone_info_t clone_info;
+
+  clone_info.cloneid = CEPH_NOSNAP;
+  clone_info.snaps = {};
+  clone_info.overlap = {};
+  // smaller than object extent (i.e. the op) to test end_size handling
+  clone_info.size = mock_image_ctx.layout.object_size - 2;
+  snap_set.clones.push_back(clone_info);
+
+  expect_list_snaps(mock_image_ctx, snap_set, 0);
+
+  {
+    SnapshotDelta snapshot_delta;
+    C_SaferCond ctx;
+    auto req = MockObjectListSnapsRequest::create(
+      &mock_image_ctx, 0, {{0, mock_image_ctx.layout.object_size - 1}},
+      {4, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
+    req->send();
+    ASSERT_EQ(0, ctx.wait());
+
+    EXPECT_TRUE(snapshot_delta.empty());
+  }
+
+  expect_list_snaps(mock_image_ctx, snap_set, 0);
+
+  {
+    SnapshotDelta snapshot_delta;
+    C_SaferCond ctx;
+    auto req = MockObjectListSnapsRequest::create(
+      &mock_image_ctx, 0, {{0, mock_image_ctx.layout.object_size - 1}},
+      {4, CEPH_NOSNAP}, LIST_SNAPS_FLAG_WHOLE_OBJECT, {}, &snapshot_delta,
+      &ctx);
+    req->send();
+    ASSERT_EQ(0, ctx.wait());
+
+    EXPECT_TRUE(snapshot_delta.empty());
+  }
+}
+
+TEST_F(TestMockIoObjectRequest, ListSnapsNoSnapsInSnapSet) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.snaps = {3};
+
+  InSequence seq;
+
+  librados::snap_set_t snap_set;
+  snap_set.seq = 3;
+  librados::clone_info_t clone_info;
+
+  clone_info.cloneid = 3;
+  clone_info.snaps = {};
+  clone_info.overlap = {};
+  clone_info.size = 0;
   snap_set.clones.push_back(clone_info);
 
   expect_list_snaps(mock_image_ctx, snap_set, 0);
@@ -1960,7 +2067,147 @@ TEST_F(TestMockIoObjectRequest, ListSnapsWholeObject) {
   expected_snapshot_delta[{CEPH_NOSNAP,CEPH_NOSNAP}].insert(
     0, mock_image_ctx.layout.object_size - 1,
     {SPARSE_EXTENT_STATE_DATA, mock_image_ctx.layout.object_size - 1});
-  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
+  EXPECT_EQ(expected_snapshot_delta, snapshot_delta);
+}
+
+TEST(SparseExtents, Split) {
+  SparseExtents extents;
+  extents.insert(50, 100, {SPARSE_EXTENT_STATE_DATA, 100});
+  extents.erase(80, 30);
+  extents.insert(45, 10, {SPARSE_EXTENT_STATE_ZEROED, 10});
+  extents.insert(140, 20, {SPARSE_EXTENT_STATE_DNE, 20});
+  extents.insert(125, 5, {SPARSE_EXTENT_STATE_ZEROED, 5});
+
+  SparseExtents expected_extents = {
+    {45, {10, {SPARSE_EXTENT_STATE_ZEROED, 10}}},
+    {55, {25, {SPARSE_EXTENT_STATE_DATA, 25}}},
+    {110, {15, {SPARSE_EXTENT_STATE_DATA, 15}}},
+    {125, {5, {SPARSE_EXTENT_STATE_ZEROED, 5}}},
+    {130, {10, {SPARSE_EXTENT_STATE_DATA, 10}}},
+    {140, {20, {SPARSE_EXTENT_STATE_DNE, 20}}}
+  };
+  EXPECT_EQ(expected_extents, extents);
+}
+
+TEST(SparseExtents, Merge) {
+  SparseExtents extents;
+  extents.insert(50, 100, {SPARSE_EXTENT_STATE_DATA, 100});
+  extents.insert(30, 15, {SPARSE_EXTENT_STATE_ZEROED, 15});
+  extents.insert(45, 10, {SPARSE_EXTENT_STATE_DATA, 10});
+  extents.insert(200, 40, {SPARSE_EXTENT_STATE_DNE, 40});
+  extents.insert(160, 25, {SPARSE_EXTENT_STATE_DNE, 25});
+  extents.insert(140, 20, {SPARSE_EXTENT_STATE_DATA, 20});
+  extents.insert(25, 5, {SPARSE_EXTENT_STATE_ZEROED, 5});
+  extents.insert(185, 15, {SPARSE_EXTENT_STATE_DNE, 15});
+
+  SparseExtents expected_extents = {
+    {25, {20, {SPARSE_EXTENT_STATE_ZEROED, 20}}},
+    {45, {115, {SPARSE_EXTENT_STATE_DATA, 115}}},
+    {160, {80, {SPARSE_EXTENT_STATE_DNE, 80}}}
+  };
+  EXPECT_EQ(expected_extents, extents);
+}
+
+TEST(SparseBufferlist, Split) {
+  bufferlist bl;
+  bl.append(std::string(5, '1'));
+  bl.append(std::string(25, '2'));
+  bl.append(std::string(30, '3'));
+  bl.append(std::string(15, '4'));
+  bl.append(std::string(5, '5'));
+  bl.append(std::string(10, '6'));
+  bl.append(std::string(10, '7'));
+  bufferlist expected_bl1;
+  expected_bl1.append(std::string(25, '2'));
+  bufferlist expected_bl2;
+  expected_bl2.append(std::string(15, '4'));
+  bufferlist expected_bl3;
+  expected_bl3.append(std::string(10, '6'));
+
+  SparseBufferlist extents;
+  extents.insert(50, 100, {SPARSE_EXTENT_STATE_DATA, 100, std::move(bl)});
+  extents.erase(80, 30);
+  extents.insert(45, 10, {SPARSE_EXTENT_STATE_ZEROED, 10});
+  extents.insert(140, 20, {SPARSE_EXTENT_STATE_DNE, 20});
+  extents.insert(125, 5, {SPARSE_EXTENT_STATE_ZEROED, 5});
+
+  SparseBufferlist expected_extents = {
+    {45, {10, {SPARSE_EXTENT_STATE_ZEROED, 10}}},
+    {55, {25, {SPARSE_EXTENT_STATE_DATA, 25, std::move(expected_bl1)}}},
+    {110, {15, {SPARSE_EXTENT_STATE_DATA, 15, std::move(expected_bl2)}}},
+    {125, {5, {SPARSE_EXTENT_STATE_ZEROED, 5}}},
+    {130, {10, {SPARSE_EXTENT_STATE_DATA, 10, std::move(expected_bl3)}}},
+    {140, {20, {SPARSE_EXTENT_STATE_DNE, 20}}}
+  };
+  EXPECT_EQ(expected_extents, extents);
+}
+
+TEST(SparseBufferlist, SplitData) {
+  bufferlist bl1;
+  bl1.append(std::string(100, '1'));
+  bufferlist bl2;
+  bl2.append(std::string(15, '2'));
+  bufferlist bl3;
+  bl3.append(std::string(40, '3'));
+  bufferlist bl4;
+  bl4.append(std::string(10, '4'));
+  bufferlist expected_bl1 = bl2;
+  bufferlist expected_bl2;
+  expected_bl2.append(std::string(35, '1'));
+  bufferlist expected_bl3 = bl4;
+  bufferlist expected_bl4;
+  expected_bl4.append(std::string(30, '1'));
+  bufferlist expected_bl5;
+  expected_bl5.append(std::string(5, '3'));
+  bufferlist expected_bl6;
+  expected_bl6.append(std::string(15, '3'));
+
+  SparseBufferlist extents;
+  extents.insert(50, 100, {SPARSE_EXTENT_STATE_DATA, 100, std::move(bl1)});
+  extents.insert(40, 15, {SPARSE_EXTENT_STATE_DATA, 15, std::move(bl2)});
+  extents.insert(130, 40, {SPARSE_EXTENT_STATE_DATA, 40, std::move(bl3)});
+  extents.erase(135, 20);
+  extents.insert(90, 10, {SPARSE_EXTENT_STATE_DATA, 10, std::move(bl4)});
+
+  SparseBufferlist expected_extents = {
+    {40, {15, {SPARSE_EXTENT_STATE_DATA, 15, std::move(expected_bl1)}}},
+    {55, {35, {SPARSE_EXTENT_STATE_DATA, 35, std::move(expected_bl2)}}},
+    {90, {10, {SPARSE_EXTENT_STATE_DATA, 10, std::move(expected_bl3)}}},
+    {100, {30, {SPARSE_EXTENT_STATE_DATA, 30, std::move(expected_bl4)}}},
+    {130, {5, {SPARSE_EXTENT_STATE_DATA, 5, std::move(expected_bl5)}}},
+    {155, {15, {SPARSE_EXTENT_STATE_DATA, 15, std::move(expected_bl6)}}}
+  };
+  EXPECT_EQ(expected_extents, extents);
+}
+
+TEST(SparseBufferlist, Merge) {
+  bufferlist bl1;
+  bl1.append(std::string(100, '1'));
+  bufferlist bl2;
+  bl2.append(std::string(10, '2'));
+  bufferlist bl3;
+  bl3.append(std::string(20, '3'));
+  bufferlist expected_bl;
+  expected_bl.append(std::string(10, '2'));
+  expected_bl.append(std::string(85, '1'));
+  expected_bl.append(std::string(20, '3'));
+
+  SparseBufferlist extents;
+  extents.insert(50, 100, {SPARSE_EXTENT_STATE_DATA, 100, std::move(bl1)});
+  extents.insert(30, 15, {SPARSE_EXTENT_STATE_ZEROED, 15});
+  extents.insert(45, 10, {SPARSE_EXTENT_STATE_DATA, 10, std::move(bl2)});
+  extents.insert(200, 40, {SPARSE_EXTENT_STATE_DNE, 40});
+  extents.insert(160, 25, {SPARSE_EXTENT_STATE_DNE, 25});
+  extents.insert(140, 20, {SPARSE_EXTENT_STATE_DATA, 20, std::move(bl3)});
+  extents.insert(25, 5, {SPARSE_EXTENT_STATE_ZEROED, 5});
+  extents.insert(185, 15, {SPARSE_EXTENT_STATE_DNE, 15});
+
+  SparseBufferlist expected_extents = {
+    {25, {20, {SPARSE_EXTENT_STATE_ZEROED, 20}}},
+    {45, {115, {SPARSE_EXTENT_STATE_DATA, 115, std::move(expected_bl)}}},
+    {160, {80, {SPARSE_EXTENT_STATE_DNE, 80}}}
+  };
+  EXPECT_EQ(expected_extents, extents);
 }
 
 } // namespace io

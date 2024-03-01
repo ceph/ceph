@@ -1,0 +1,154 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">Migrate Single Site to Multi-site
+    <cd-helper>
+      <span>Migrate from a single-site deployment with a default zone group and zone to a multi-site system</span>
+    </cd-helper>
+  </ng-container>
+
+  <ng-container class="modal-content">
+    <form name="multisiteMigrateForm"
+          #formDir="ngForm"
+          [formGroup]="multisiteMigrateForm"
+          novalidate>
+    <div class="modal-body">
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="realmName"
+               i18n>Realm Name</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Realm name..."
+                 id="realmName"
+                 name="realmName"
+                 formControlName="realmName">
+          <span class="invalid-feedback"
+                *ngIf="multisiteMigrateForm.showError('realmName', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="multisiteMigrateForm.showError('realmName', formDir, 'uniqueName')"
+                i18n>The chosen realm name is already in use.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zonegroupName"
+               i18n>Rename default zone group</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Zone group name..."
+                 id="zonegroupName"
+                 name="zonegroupName"
+                 formControlName="zonegroupName">
+          <span class="invalid-feedback"
+                *ngIf="multisiteMigrateForm.showError('zonegroupName', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="multisiteMigrateForm.showError('zonegroupName', formDir, 'uniqueName')"
+                i18n>The chosen zone group name is already in use.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zonegroup_endpoints"
+               i18n>Zone group Endpoints
+        </label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="e.g, http://ceph-node-00.com:80"
+                 id="zonegroup_endpoints"
+                 name="zonegroup_endpoints"
+                 formControlName="zonegroup_endpoints">
+          <span class="invalid-feedback"
+                *ngIf="multisiteMigrateForm.showError('zonegroup_endpoints', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="multisiteMigrateForm.showError('zonegroup_endpoints', formDir, 'endpoint')"
+                i18n>Please enter a valid IP address.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zoneName"
+               i18n>Rename default zone</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Zone name..."
+                 id="zoneName"
+                 name="zoneName"
+                 formControlName="zoneName">
+          <span class="invalid-feedback"
+                *ngIf="multisiteMigrateForm.showError('zoneName', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="multisiteMigrateForm.showError('zoneName', formDir, 'uniqueName')"
+                i18n>The chosen zone name is already in use.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zone_endpoints"
+               i18n>Zone Endpoints
+        </label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="e.g, http://ceph-node-00.com:80"
+                 id="zone_endpoints"
+                 name="zone_endpoints"
+                 formControlName="zone_endpoints">
+          <span class="invalid-feedback"
+                *ngIf="multisiteMigrateForm.showError('zone_endpoints', formDir, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="multisiteMigrateForm.showError('zone_endpoints', formDir, 'endpoint')"
+                i18n>Please enter a valid IP address.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="access_key"
+               i18n>S3 access key
+          <cd-helper>
+            <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the access key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
+          </cd-helper>
+        </label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="e.g."
+                 id="access_key"
+                 name="access_key"
+                 formControlName="access_key">
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="access_key"
+               i18n>S3 secret key
+          <cd-helper>
+            <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the secret key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
+          </cd-helper>
+        </label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="e.g."
+                 id="secret_key"
+                 name="secret_key"
+                 formControlName="secret_key">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [submitText]="actionLabels.MIGRATE + ' ' + 'to Multi-site'"
+                            [form]="multisiteMigrateForm"></cd-form-button-panel>
+    </div>
+    </form>
+  </ng-container>
+</cd-modal>

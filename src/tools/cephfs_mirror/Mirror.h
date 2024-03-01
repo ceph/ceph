@@ -77,6 +77,7 @@ private:
 
     uint64_t pool_id; // for restarting blocklisted mirror instance
     bool action_in_progress = false;
+    bool restarting = false;
     std::list<Context *> action_ctxs;
     std::unique_ptr<FSMirror> fs_mirror;
   };
@@ -100,11 +101,10 @@ private:
   std::unique_ptr<ClusterWatcher> m_cluster_watcher;
   std::map<Filesystem, MirrorAction> m_mirror_actions;
 
-  utime_t m_last_blocklist_check;
-  utime_t m_last_failure_check;
-
   RadosRef m_local;
   std::unique_ptr<ServiceDaemon> m_service_daemon;
+
+  PerfCounters *m_perf_counters;
 
   int init_mon_client();
 
@@ -132,6 +132,21 @@ private:
   void update_fs_mirrors();
 
   void reopen_logs();
+
+  void _set_restarting(const Filesystem &filesystem) {
+    auto &mirror_action = m_mirror_actions.at(filesystem);
+    mirror_action.restarting = true;
+  }
+
+  void _unset_restarting(const Filesystem &filesystem) {
+    auto &mirror_action = m_mirror_actions.at(filesystem);
+    mirror_action.restarting = false;
+  }
+
+  bool _is_restarting(const Filesystem &filesystem) {
+    auto &mirror_action = m_mirror_actions.at(filesystem);
+    return mirror_action.restarting;
+  }
 };
 
 } // namespace mirror

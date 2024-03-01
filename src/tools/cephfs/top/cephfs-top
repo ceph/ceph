@@ -168,8 +168,8 @@ class FSTopBase(object):
                 return False
         return True
 
-    def __build_clients(self, fs):
-        fs_meta = self.dump_json.setdefault(fs, {})
+    def __build_clients(self, fs, clients_json):
+        fs_meta = clients_json.setdefault(fs, {})
         fs_key = self.stats_json[GLOBAL_METRICS_KEY].get(fs, {})
         clients = fs_key.keys()
         for client_id in clients:
@@ -249,13 +249,32 @@ class FSTopBase(object):
             self.stats_json = self.perf_stats_query()
             if fs_name:  # --dumpfs
                 if fs_name in fs_list:
-                    self.__build_clients(fs_name)
+                    self.__build_clients(fs_name, clients_json=self.dump_json)
                 else:
                     sys.stdout.write(f"Filesystem {fs_name} not available\n")
                     return
             else:  # --dump
+                num_clients = num_mounts = num_kclients = num_libs = 0
+                for fs_name in fs_list:
+                    client_metadata = self.stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
+                    client_cnt = len(client_metadata)
+                    if client_cnt:
+                        num_clients = num_clients + client_cnt
+                        num_mounts = num_mounts + len(
+                            [client for client, metadata in client_metadata.items() if
+                             CLIENT_METADATA_MOUNT_POINT_KEY in metadata
+                             and metadata[CLIENT_METADATA_MOUNT_POINT_KEY] != 'N/A'])
+                        num_kclients = num_kclients + len(
+                            [client for client, metadata in client_metadata.items() if
+                             "kernel_version" in metadata])
+                        num_libs = num_clients - (num_mounts + num_kclients)
+                self.dump_json.update({'date': datetime.now().ctime()})
+                client_count = self.dump_json.setdefault("client_count", {})
+                client_count.update({'total_clients': num_clients, 'fuse': num_mounts,
+                                     'kclient': num_kclients, 'libcephfs': num_libs})
+                clients_json = self.dump_json.setdefault("filesystems", {})
                 for fs in fs_list:
-                    self.__build_clients(fs)
+                    self.__build_clients(fs, clients_json)
             sys.stdout.write(json.dumps(self.dump_json))
             sys.stdout.write("\n")
 
@@ -1192,11 +1211,11 @@ if __name__ == '__main__':
                         help='Path to cluster configuration file')
     parser.add_argument('--selftest', dest='selftest', action='store_true',
                         help='Run in selftest mode')
-    parser.add_argument('-d', '--delay', dest='delay', choices=range(1, 26),
+    parser.add_argument('-d', '--delay', metavar='DELAY', dest='delay', choices=range(1, 26),
                         default=DEFAULT_REFRESH_INTERVAL,
                         type=int,
                         help='Refresh interval in seconds '
-                        f'(default: {DEFAULT_REFRESH_INTERVAL})')
+                        f'(default: {DEFAULT_REFRESH_INTERVAL}, range: 1 - 25)')
     parser.add_argument('--dump', dest='dump', action='store_true',
                         help='Dump the metrics to stdout')
     parser.add_argument('--dumpfs', action='append',

@@ -143,13 +143,8 @@ void CreatePrimaryRequest<I>::handle_create_snapshot(int r) {
 
 template <typename I>
 void CreatePrimaryRequest<I>::refresh_image() {
-  // if snapshot created via remote RPC, refresh is required to retrieve
-  // the snapshot id
-  if (m_snap_id == nullptr) {
-    unlink_peer();
-    return;
-  }
-
+  // refresh is required to retrieve the snapshot id (if snapshot
+  // created via remote RPC) and complete flag (regardless)
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << dendl;
 
@@ -170,7 +165,7 @@ void CreatePrimaryRequest<I>::handle_refresh_image(int r) {
     return;
   }
 
-  {
+  if (m_snap_id != nullptr) {
     std::shared_lock image_locker{m_image_ctx->image_lock};
     *m_snap_id = m_image_ctx->get_snap_id(
       cls::rbd::MirrorSnapshotNamespace{}, m_snap_name);
@@ -182,6 +177,7 @@ void CreatePrimaryRequest<I>::handle_refresh_image(int r) {
 
 template <typename I>
 void CreatePrimaryRequest<I>::unlink_peer() {
+  // TODO: Document semantics for unlink_peer
   uint64_t max_snapshots = m_image_ctx->config.template get_val<uint64_t>(
     "rbd_mirroring_max_mirroring_snapshots");
   ceph_assert(max_snapshots >= 3);
@@ -189,61 +185,69 @@ void CreatePrimaryRequest<I>::unlink_peer() {
   std::string peer_uuid;
   uint64_t snap_id = CEPH_NOSNAP;
 
-  for (auto &peer : m_mirror_peer_uuids) {
+  {
     std::shared_lock image_locker{m_image_ctx->image_lock};
-    size_t count = 0;
-    uint64_t unlink_snap_id = 0;
-    for (auto &snap_it : m_image_ctx->snap_info) {
-      auto info = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
-        &snap_it.second.snap_namespace);
-      if (info == nullptr) {
-        continue;
-      }
-      if (info->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
-        // reset counters -- we count primary snapshots after the last promotion
-        count = 0;
-        unlink_snap_id = 0;
-        continue;
-      }
-      // call UnlinkPeerRequest only if the snapshot is linked with this peer
-      // or if it's not linked with any peer (happens if mirroring is enabled
-      // on a pool with no peers configured or if UnlinkPeerRequest gets
-      // interrupted)
-      if (info->mirror_peer_uuids.size() == 0) {
-        peer_uuid = peer;
-        snap_id = snap_it.first;
-        break;
-      }
-      if (info->mirror_peer_uuids.count(peer) == 0) {
-        continue;
-      }
-      count++;
-      if (count == max_snapshots) {
-        unlink_snap_id = snap_it.first;
-      }
-      if (count > max_snapshots) {
-        peer_uuid = peer;
-        snap_id = unlink_snap_id;
-        break;
+    for (const auto& peer : m_mirror_peer_uuids) {
+      for (const auto& snap_info_pair : m_image_ctx->snap_info) {
+        auto info = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+          &snap_info_pair.second.snap_namespace);
+        if (info == nullptr) {
+          continue;
+        }
+        if (info->mirror_peer_uuids.empty() ||
+            (info->mirror_peer_uuids.count(peer) != 0 &&
+             info->is_primary() && !info->complete)) {
+          peer_uuid = peer;
+          snap_id = snap_info_pair.first;
+          goto do_unlink;
+        }
       }
     }
-    if (snap_id != CEPH_NOSNAP) {
-      break;
+    for (const auto& peer : m_mirror_peer_uuids) {
+      size_t count = 0;
+      uint64_t unlink_snap_id = 0;
+      for (const auto& snap_info_pair : m_image_ctx->snap_info) {
+        auto info = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+          &snap_info_pair.second.snap_namespace);
+        if (info == nullptr) {
+          continue;
+        }
+        if (info->state != cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
+          // reset counters -- we count primary snapshots after the last
+          // promotion
+          count = 0;
+          unlink_snap_id = 0;
+          continue;
+        }
+        if (info->mirror_peer_uuids.count(peer) == 0) {
+          // snapshot is not linked with this peer
+          continue;
+        }
+        count++;
+        if (count == max_snapshots) {
+          unlink_snap_id = snap_info_pair.first;
+        }
+        if (count > max_snapshots) {
+          peer_uuid = peer;
+          snap_id = unlink_snap_id;
+          goto do_unlink;
+        }
+      }
     }
   }
 
-  if (snap_id == CEPH_NOSNAP) {
-    finish(0);
-    return;
-  }
+  finish(0);
+  return;
 
+do_unlink:
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << "peer=" << peer_uuid << ", snap_id=" << snap_id << dendl;
 
   auto ctx = create_context_callback<
     CreatePrimaryRequest<I>,
     &CreatePrimaryRequest<I>::handle_unlink_peer>(this);
-  auto req = UnlinkPeerRequest<I>::create(m_image_ctx, snap_id, peer_uuid, ctx);
+  auto req = UnlinkPeerRequest<I>::create(m_image_ctx, snap_id, peer_uuid, true,
+                                          ctx);
   req->send();
 }
 

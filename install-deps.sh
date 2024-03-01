@@ -36,8 +36,6 @@ ARCH=$(uname -m)
 function munge_ceph_spec_in {
     local with_seastar=$1
     shift
-    local with_zbd=$1
-    shift
     local for_make_check=$1
     shift
     local OUTFILE=$1
@@ -45,9 +43,6 @@ function munge_ceph_spec_in {
     # http://rpm.org/user_doc/conditional_builds.html
     if $with_seastar; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
-    fi
-    if $with_zbd; then
-        sed -i -e 's/%bcond_with zbd/%bcond_without zbd/g' $OUTFILE
     fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
@@ -146,58 +141,87 @@ function install_pkg_on_ubuntu {
     fi
 }
 
+boost_ver=1.82
+
+function clean_boost_on_ubuntu {
+    ci_debug "Running clean_boost_on_ubuntu() in install-deps.sh"
+    # Find currently installed version. If there are multiple
+    # versions, they end up newline separated
+    local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
+                              cut -d' ' -f2 |
+                              cut -d'.' -f1,2 |
+			      sort -u)
+    # If installed_ver contains whitespace, we can't really count on it,
+    # but otherwise, bail out if the version installed is the version
+    # we want.
+    if test -n "$installed_ver" &&
+	    echo -n "$installed_ver" | tr '[:space:]' ' ' | grep -v -q ' '; then
+	if echo "$installed_ver" | grep -q "^$boost_ver"; then
+	    return
+        fi
+    fi
+
+    # Historical packages
+    $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost*.list
+    # Currently used
+    $SUDO rm -f /etc/apt/sources.list.d/libboost.list
+    # Refresh package list so things aren't in the available list.
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
+    # Remove all ceph-libboost packages. We have an early return if
+    # the desired version is already (and the only) version installed,
+    # so no need to spare it.
+    if test -n "$installed_ver"; then
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y --fix-missing remove "ceph-libboost*"
+	# When an error occurs during `apt-get remove ceph-libboost*`, ceph-libboost* packages
+	# may be not removed, so use `dpkg` to force remove ceph-libboost*.
+	local ceph_libboost_pkgs=$(dpkg -l | grep ceph-libboost* | awk '{print $2}' |
+		                        awk -F: '{print $1}')
+	if test -n "$ceph_libboost_pkgs"; then
+	    ci_debug "Force remove ceph-libboost* packages $ceph_libboost_pkgs"
+	    $SUDO dpkg --purge --force-all $ceph_libboost_pkgs
+	fi
+    fi
+}
+
 function install_boost_on_ubuntu {
     ci_debug "Running install_boost_on_ubuntu() in install-deps.sh"
-    local ver=1.79
+    # Once we get to this point, clean_boost_on_ubuntu() should ensure
+    # that there is no more than one installed version.
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
                               cut -d'.' -f1,2)
     if test -n "$installed_ver"; then
-        if echo "$installed_ver" | grep -q "^$ver"; then
+        if echo "$installed_ver" | grep -q "^$boost_ver"; then
             return
-        else
-            $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove "ceph-libboost.*${installed_ver}.*"
-            $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost${installed_ver}.list
         fi
     fi
     local codename=$1
     local project=libboost
-    local sha1=892ab89e76b91b505ffbf083f6fb7f2a666d4132
+    local sha1=2804368f5b807ba8334b0ccfeb8af191edeb996f
     install_pkg_on_ubuntu \
         $project \
         $sha1 \
         $codename \
         check \
-        ceph-libboost-atomic$ver-dev \
-        ceph-libboost-chrono$ver-dev \
-        ceph-libboost-container$ver-dev \
-        ceph-libboost-context$ver-dev \
-        ceph-libboost-coroutine$ver-dev \
-        ceph-libboost-date-time$ver-dev \
-        ceph-libboost-filesystem$ver-dev \
-        ceph-libboost-iostreams$ver-dev \
-        ceph-libboost-program-options$ver-dev \
-        ceph-libboost-python$ver-dev \
-        ceph-libboost-random$ver-dev \
-        ceph-libboost-regex$ver-dev \
-        ceph-libboost-system$ver-dev \
-        ceph-libboost-test$ver-dev \
-        ceph-libboost-thread$ver-dev \
-        ceph-libboost-timer$ver-dev
-}
+        ceph-libboost-atomic${boost_ver}-dev \
+        ceph-libboost-chrono${boost_ver}-dev \
+        ceph-libboost-container${boost_ver}-dev \
+        ceph-libboost-context${boost_ver}-dev \
+        ceph-libboost-coroutine${boost_ver}-dev \
+        ceph-libboost-date-time${boost_ver}-dev \
+        ceph-libboost-filesystem${boost_ver}-dev \
+        ceph-libboost-iostreams${boost_ver}-dev \
+        ceph-libboost-program-options${boost_ver}-dev \
+        ceph-libboost-python${boost_ver}-dev \
+        ceph-libboost-random${boost_ver}-dev \
+        ceph-libboost-regex${boost_ver}-dev \
+        ceph-libboost-system${boost_ver}-dev \
+        ceph-libboost-test${boost_ver}-dev \
+        ceph-libboost-thread${boost_ver}-dev \
+        ceph-libboost-timer${boost_ver}-dev \
+	|| ci_debug "ceph-libboost package unavailable, you can build the submodule"
 
-function install_libzbd_on_ubuntu {
-    ci_debug "Running install_libzbd_on_ubuntu() in install-deps.sh"
-    local codename=$1
-    local project=libzbd
-    local sha1=1fadde94b08fab574b17637c2bebd2b1e7f9127b
-    install_pkg_on_ubuntu \
-        $project \
-        $sha1 \
-        $codename \
-        check \
-        libzbd-dev
 }
 
 motr_pkgs_url='https://github.com/Seagate/cortx-motr/releases/download/2.0.0-rgw'
@@ -270,10 +294,7 @@ function populate_wheelhouse() {
     pip $PIP_OPTS $install \
       'setuptools >= 0.8' 'pip >= 21.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
     if test $# != 0 ; then
-        # '--use-feature=fast-deps --use-deprecated=legacy-resolver' added per
-        # https://github.com/pypa/pip/issues/9818 These should be able to be
-        # removed at some point in the future.
-        pip --use-feature=fast-deps --use-deprecated=legacy-resolver $PIP_OPTS $install $@ || return 1
+        pip $PIP_OPTS $install $@ || return 1
     fi
 }
 
@@ -351,7 +372,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/libtool \
         devel/google-perftools \
         lang/cython \
-        databases/leveldb \
         net/openldap24-client \
         archivers/snappy \
         archivers/liblz4 \
@@ -393,13 +413,15 @@ if [ x$(uname)x = xFreeBSDx ]; then
     exit
 else
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
-    [ $WITH_ZBD ] && with_zbd=true || with_zbd=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     [ $WITH_RADOSGW_MOTR ] && with_rgw_motr=true || with_rgw_motr=false
     source /etc/os-release
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
         echo "Using apt-get to install dependencies"
+	# Put this before any other invocation of apt so it can clean
+	# up in a broken case.
+        clean_boost_on_ubuntu
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             if ! $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
                 # try again. ported over from run-make.sh (orignally e278295)
@@ -419,12 +441,10 @@ else
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
-                $with_zbd && install_libzbd_on_ubuntu bionic
                 ;;
             *Focal*)
                 ensure_decent_gcc_on_ubuntu 11 focal
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
-                $with_zbd && install_libzbd_on_ubuntu focal
                 ;;
             *Jammy*)
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
@@ -504,6 +524,8 @@ else
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
+                elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
+                    $SUDO dnf config-manager --set-enabled crb
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
@@ -516,7 +538,7 @@ else
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             $SUDO dnf install -y $INSTALL_EXTRA_PACKAGES
         fi
-        munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out

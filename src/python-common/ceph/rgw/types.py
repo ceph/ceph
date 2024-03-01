@@ -117,7 +117,6 @@ class RGWPeriod(JSONObj):
         self.epoch = period_dict['epoch']
         self.master_zone = period_dict['master_zone']
         self.master_zonegroup = period_dict['master_zonegroup']
-        self.realm_name = period_dict['realm_name']
         self.realm_id = period_dict['realm_id']
         pm = period_dict['period_map']
         self.zonegroups_by_id = {}

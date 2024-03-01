@@ -11,7 +11,6 @@ if(WITH_LIBCEPHFS)
     deleg.cc
     monconfig.cc
     vxattr.cc
-    snapdiff.cc
   )
   target_link_libraries(ceph_test_libcephfs
     ceph-common
@@ -21,6 +20,20 @@ if(WITH_LIBCEPHFS)
     ${CMAKE_DL_LIBS}
     )
   install(TARGETS ceph_test_libcephfs
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+  add_executable(ceph_test_libcephfs_snapdiff
+    main.cc
+    snapdiff.cc
+  )
+  target_link_libraries(ceph_test_libcephfs_snapdiff
+    ceph-common
+    cephfs
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${CMAKE_DL_LIBS}
+    )
+  install(TARGETS ceph_test_libcephfs_snapdiff
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   add_executable(ceph_test_libcephfs_suidsgid
@@ -56,7 +69,8 @@ if(WITH_LIBCEPHFS)
     add_executable(ceph_test_libcephfs_reclaim
       reclaim.cc
     )
-    target_link_libraries(ceph_test_libcephfs_reclaim
+  target_link_libraries(ceph_test_libcephfs_reclaim
+      ceph-common
       cephfs
       ${UNITTEST_LIBS}
       ${EXTRALIBS}
@@ -69,7 +83,8 @@ if(WITH_LIBCEPHFS)
   add_executable(ceph_test_libcephfs_lazyio
     lazyio.cc
   )
-  target_link_libraries(ceph_test_libcephfs_lazyio
+target_link_libraries(ceph_test_libcephfs_lazyio
+    ceph-common
     cephfs
     librados
     ${UNITTEST_LIBS}
@@ -80,7 +95,6 @@ if(WITH_LIBCEPHFS)
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   add_executable(ceph_test_libcephfs_access
-    test.cc
     access.cc
   )
   target_link_libraries(ceph_test_libcephfs_access

@@ -10,10 +10,11 @@ directly to specific OSDs. For this reason, tracking system faults
 requires finding the `placement group`_ (PG) and the underlying OSDs at the
 root of the problem.
 
-.. tip:: A fault in one part of the cluster might prevent you from accessing a 
-   particular object, but that doesn't mean that you are prevented from accessing other objects.
-   When you run into a fault, don't panic. Just follow the steps for monitoring
-   your OSDs and placement groups, and then begin troubleshooting.
+.. tip:: A fault in one part of the cluster might prevent you from accessing a
+   particular object, but that doesn't mean that you are prevented from
+   accessing other objects.  When you run into a fault, don't panic. Just
+   follow the steps for monitoring your OSDs and placement groups, and then
+   begin troubleshooting.
 
 Ceph is self-repairing. However, when problems persist, monitoring OSDs and
 placement groups will help you identify the problem.
@@ -22,17 +23,18 @@ placement groups will help you identify the problem.
 Monitoring OSDs
 ===============
 
-An OSD's status is as follows: it is either in the cluster (``in``) or out of the cluster
-(``out``); likewise, it is either up and running (``up``) or down and not
-running (``down``). If an OSD is ``up``, it can be either ``in`` the cluster
-(if so, you can read and write data) or ``out`` of the cluster. If the OSD was previously
-``in`` the cluster but was recently moved ``out`` of the cluster, Ceph will migrate its
-PGs to other OSDs. If an OSD is ``out`` of the cluster, CRUSH will                               
-not assign any PGs to that OSD. If an OSD is ``down``, it should also be
-``out``.
+An OSD is either *in* service (``in``) or *out* of service (``out``). An OSD is
+either running and reachable (``up``), or it is not running and not
+reachable (``down``). 
 
-.. note:: If an OSD is ``down`` and ``in``, then there is a problem and the cluster 
-   is not in a healthy state.
+If an OSD is ``up``, it may be either ``in`` service (clients can read and
+write data) or it is ``out`` of service. If the OSD was ``in`` but then due to a failure or a manual action was set to the ``out`` state, Ceph will migrate placement groups to the other OSDs to maintin the configured redundancy.  
+
+If an OSD is ``out`` of service, CRUSH will not assign placement groups to it.
+If an OSD is ``down``, it will also be ``out``.
+
+.. note:: If an OSD is ``down`` and ``in``, there is a problem and this
+   indicates that the cluster is not in a healthy state.
 
 .. ditaa::
 
@@ -117,11 +119,12 @@ pseudo-random placement that takes into account the failure domains that you
 have set in your `CRUSH map`_; for this reason, PGs are rarely assigned to
 immediately adjacent OSDs in a large cluster.
 
-Ceph processes a client request using the **Acting Set**, which is the set of
-OSDs that will actually handle the requests since they have a full and working
-version of a placement group shard. The set of OSDs that should contain a shard
-of a particular placement group as the **Up Set**, i.e. where data is
-moved/copied to (or planned to be).
+Ceph processes client requests with the **Acting Set** of OSDs: this is the set
+of OSDs that currently have a full and working version of a PG shard and that
+are therefore responsible for handling requests. By contrast, the **Up Set** is
+the set of OSDs that contain a shard of a specific PG. Data is moved or copied
+to the **Up Set**, or planned to be moved or copied, to the **Up Set**. See
+:ref:`Placement Group Concepts <rados_operations_pg_concepts>`.
 
 Sometimes an OSD in the Acting Set is ``down`` or otherwise unable to
 service requests for objects in the PG. When this kind of situation

@@ -28,11 +28,17 @@ public:
  * as HandshakeListener
  */
 private:
-  void notify_out() final;
+  seastar::future<> notify_out(
+      cc_seq_t cc_seq) final;
 
-  void notify_out_fault(const char *, std::exception_ptr) final;
+  seastar::future<> notify_out_fault(
+      cc_seq_t cc_seq,
+      const char *where,
+      std::exception_ptr,
+      io_handler_state) final;
 
-  void notify_mark_down() final;
+  seastar::future<> notify_mark_down(
+      cc_seq_t cc_seq) final;
 
 /*
 * as ProtocolV2 to be called by SocketConnection
@@ -41,26 +47,45 @@ public:
   void start_connect(const entity_addr_t& peer_addr,
                      const entity_name_t& peer_name);
 
-  void start_accept(SocketRef&& socket,
+  void start_accept(SocketFRef&& socket,
                     const entity_addr_t& peer_addr);
 
   seastar::future<> close_clean_yielded();
 
 #ifdef UNIT_TESTS_BUILT
+  bool is_ready() const {
+    return state == state_t::READY;
+  }
+
+  bool is_standby() const {
+    return state == state_t::STANDBY;
+  }
+
   bool is_closed_clean() const {
     return closed_clean;
   }
 
   bool is_closed() const {
-    return closed;
+    return state == state_t::CLOSING;
   }
 
 #endif
 private:
-  seastar::future<> wait_exit_io() {
-    if (exit_io.has_value()) {
-      return exit_io->get_shared_future();
+  using io_state_t = IOHandler::io_state_t;
+
+  seastar::future<> wait_switch_io_shard() {
+    if (pr_switch_io_shard.has_value()) {
+      return pr_switch_io_shard->get_shared_future();
     } else {
+      return seastar::now();
+    }
+  }
+
+  seastar::future<> wait_exit_io() {
+    if (pr_exit_io.has_value()) {
+      return pr_exit_io->get_shared_future();
+    } else {
+      assert(!need_exit_io);
       return seastar::now();
     }
   }
@@ -92,7 +117,15 @@ private:
     return statenames[static_cast<int>(state)];
   }
 
-  void trigger_state(state_t state, IOHandler::io_state_t io_state, bool reentrant);
+  void trigger_state_phase1(state_t new_state);
+
+  void trigger_state_phase2(state_t new_state, io_state_t new_io_state);
+
+  void trigger_state(state_t new_state, io_state_t new_io_state) {
+    ceph_assert_always(!pr_switch_io_shard.has_value());
+    trigger_state_phase1(new_state);
+    trigger_state_phase2(new_state, new_io_state);
+  }
 
   template <typename Func, typename T>
   void gated_execute(const char *what, T &who, Func &&func) {
@@ -215,6 +248,11 @@ private:
 
   IOHandler &io_handler;
 
+  // asynchronously populated from io_handler
+  io_handler_state io_states;
+
+  proto_crosscore_ordering_t crosscore;
+
   bool has_socket = false;
 
   // the socket exists and it is not shutdown
@@ -222,16 +260,19 @@ private:
 
   FrameAssemblerV2Ref frame_assembler;
 
-  std::optional<seastar::shared_promise<>> exit_io;
+  bool need_notify_out = false;
+
+  std::optional<seastar::shared_promise<>> pr_switch_io_shard;
+
+  bool need_exit_io = false;
+
+  std::optional<seastar::shared_promise<>> pr_exit_io;
 
   AuthConnectionMetaRef auth_meta;
 
   crimson::common::Gated gate;
 
-  bool closed = false;
-
-  // become valid only after closed == true
-  seastar::shared_future<> closed_clean_fut;
+  seastar::shared_promise<> pr_closed_clean;
 
 #ifdef UNIT_TESTS_BUILT
   bool closed_clean = false;

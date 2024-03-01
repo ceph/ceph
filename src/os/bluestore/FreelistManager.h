@@ -26,7 +26,6 @@ public:
   static void setup_merge_operators(KeyValueDB *db, const std::string &type);
 
   virtual int create(uint64_t size, uint64_t granularity,
-		     uint64_t zone_size, uint64_t first_sequential_zone,
 		     KeyValueDB::Transaction txn) = 0;
 
   virtual int init(KeyValueDB *kvdb, bool db_in_read_only,
@@ -52,6 +51,8 @@ public:
 
   virtual void get_meta(uint64_t target_size,
   std::vector<std::pair<std::string, std::string>>*) const = 0;
+
+  virtual bool validate(uint64_t min_alloc_size) const = 0;
 
   void set_null_manager() {
     null_manager = true;

@@ -40,7 +40,8 @@ target_link_libraries(
 
 add_executable(unittest-object-data-handler
   test_object_data_handler.cc
-  ../gtest_seastar.cc)
+  ../gtest_seastar.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/lsan_suppressions.cc)
 add_ceph_unittest(unittest-object-data-handler
   --memory 256M --smp 1)
 target_link_libraries(
@@ -52,7 +53,8 @@ target_link_libraries(
 
 add_executable(unittest-collection-manager
   test_collection_manager.cc
-  ../gtest_seastar.cc)
+  ../gtest_seastar.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/lsan_suppressions.cc)
 add_ceph_test(unittest-collection-manager
   unittest-collection-manager --memory 256M --smp 1)
 target_link_libraries(

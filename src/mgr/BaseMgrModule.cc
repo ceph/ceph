@@ -92,22 +92,13 @@ public:
 
       auto set_fn = PyObject_GetAttrString(python_completion, "complete");
       ceph_assert(set_fn != nullptr);
-
-      auto pyR = PyLong_FromLong(r);
-      auto pyOutBl = PyUnicode_FromString(outbl.to_str().c_str());
-      auto pyOutS = PyUnicode_FromString(outs.c_str());
-      auto args = PyTuple_Pack(3, pyR, pyOutBl, pyOutS);
-      Py_DECREF(pyR);
-      Py_DECREF(pyOutBl);
-      Py_DECREF(pyOutS);
-
-      auto rtn = PyObject_CallObject(set_fn, args);
-      if (rtn != nullptr) {
-	Py_DECREF(rtn);
+      auto rtn = PyObject_CallFunction(set_fn, "(iss)", r, outbl.to_str().c_str(), outs.c_str());
+      if (rtn == nullptr) {
+        PyErr_Print();
+      } else {
+        Py_DECREF(rtn);
       }
-      Py_DECREF(args);
       Py_DECREF(set_fn);
-
       Py_DECREF(python_completion);
       python_completion = nullptr;
     }
@@ -1388,12 +1379,15 @@ ceph_is_authorized(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_register_client(BaseMgrModule *self, PyObject *args)
 {
-  char *addrs = nullptr;
-  if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
+  const char* _name = nullptr;
+  char* addrs = nullptr;
+  int replace = 0;
+  if (!PyArg_ParseTuple(args, "zsp:ceph_register_client", &_name, &addrs, &replace)) {
     return nullptr;
   }
+  auto name = _name ? std::string(_name) : std::string(self->this_module->get_name());
   without_gil([&] {
-    self->py_modules->register_client(self->this_module->get_name(), addrs);
+    self->py_modules->register_client(name, addrs, replace);
   });
   Py_RETURN_NONE;
 }
@@ -1401,12 +1395,14 @@ ceph_register_client(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_unregister_client(BaseMgrModule *self, PyObject *args)
 {
-  char *addrs = nullptr;
-  if (!PyArg_ParseTuple(args, "s:ceph_unregister_client", &addrs)) {
+  const char* _name = nullptr;
+  char* addrs = nullptr;
+  if (!PyArg_ParseTuple(args, "zs:ceph_unregister_client", &_name, &addrs)) {
     return nullptr;
   }
+  auto name = _name ? std::string(_name) : std::string(self->this_module->get_name());
   without_gil([&] {
-    self->py_modules->unregister_client(self->this_module->get_name(), addrs);
+    self->py_modules->unregister_client(name, addrs);
   });
   Py_RETURN_NONE;
 }

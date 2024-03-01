@@ -281,8 +281,8 @@ class TestScrubChecks(CephFSTestCase):
             all_damage = self.fs.rank_tell(["damage", "ls"], mds_rank)
             damage = [d for d in all_damage if d['ino'] == ino and d['damage_type'] == dtype]
             for d in damage:
-                self.fs.mon_manager.raw_cluster_cmd(
-                    'tell', 'mds.{0}'.format(self.fs.get_active_names()[mds_rank]),
+                self.run_ceph_cmd(
+                    'tell', f'mds.{self.fs.get_active_names()[mds_rank]}',
                     "damage", "rm", str(d['id']))
             return len(damage) > 0
 
@@ -374,7 +374,7 @@ class TestScrubChecks(CephFSTestCase):
         test flag scrub_mdsdir
         """
         self.scrub_with_stray_evaluation(self.fs, self.mount_a, "/",
-                                         "scrub_mdsdir")
+                                         "recursive,scrub_mdsdir")
 
     @staticmethod
     def json_validator(json_out, rc, element, expected_value):

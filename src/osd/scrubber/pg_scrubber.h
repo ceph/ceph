@@ -20,7 +20,7 @@ Main Scrubber interfaces:
 └────────────────────────────────┬──────────────────┘
                                  │
                                  │
-                                 │ ownes & uses
+                                 │ owns & uses
                                  │
                                  │
                                  │
@@ -43,7 +43,7 @@ Main Scrubber interfaces:
 │         PrimaryLogScrub                           │       │
 └─────┬───────────────────┬─────────────────────────┘       │
       │                   │                         implements
-      │    ownes & uses   │                                 │
+      │    owns & uses    │                                 │
       │                   │       ┌─────────────────────────▼──────┐
       │                   │       │    <<ScrubMachineListener>>    │
       │                   │       └─────────▲──────────────────────┘
@@ -82,112 +82,13 @@ Main Scrubber interfaces:
 #include "osd_scrub_sched.h"
 #include "scrub_backend.h"
 #include "scrub_machine_lstnr.h"
+#include "scrub_reservations.h"
 
 namespace Scrub {
 class ScrubMachine;
 struct BuildMap;
+class LocalResourceWrapper;
 
-/**
- * Reserving/freeing scrub resources at the replicas.
- *
- * When constructed - sends reservation requests to the acting_set.
- * A rejection triggers a "couldn't acquire the replicas' scrub resources"
- * event. All previous requests, whether already granted or not, are explicitly
- * released.
- *
- * Timeouts:
- *
- *  Slow-Secondary Warning:
- *  Once at least half of the replicas have accepted the reservation, we start
- *  reporting any secondary that takes too long (more than <conf> milliseconds
- *  after the previous response received) to respond to the reservation request.
- *  (Why? because we have encountered real-life situations where a specific OSD
- *  was systematically very slow (e.g. 5 seconds) to respond to the reservation
- *  requests, slowing the scrub process to a crawl).
- *
- *  Reservation Timeout:
- *  We limit the total time we wait for the replicas to respond to the
- *  reservation request. If we don't get all the responses (either Grant or
- *  Reject) within <conf> milliseconds, we give up and release all the
- *  reservations we have acquired so far.
- *  (Why? because we have encountered instances where a reservation request was
- *  lost - either due to a bug or due to a network issue.)
- *
- * A note re performance: I've measured a few container alternatives for
- * m_reserved_peers, with its specific usage pattern. Std::set is extremely
- * slow, as expected. flat_set is only slightly better. Surprisingly -
- * std::vector (with no sorting) is better than boost::small_vec. And for
- * std::vector: no need to pre-reserve.
- */
-class ReplicaReservations {
-  using clock = std::chrono::system_clock;
-  using tpoint_t = std::chrono::time_point<clock>;
-
-  PG* m_pg;
-  std::set<pg_shard_t> m_acting_set;
-  OSDService* m_osds;
-  std::vector<pg_shard_t> m_waited_for_peers;
-  std::vector<pg_shard_t> m_reserved_peers;
-  bool m_had_rejections{false};
-  int m_pending{-1};
-  const pg_info_t& m_pg_info;
-  ScrubQueue::ScrubJobRef m_scrub_job;	///< a ref to this PG's scrub job
-  const ConfigProxy& m_conf;
-
-  // detecting slow peers (see 'slow-secondary' above)
-  std::chrono::milliseconds m_timeout;
-  std::optional<tpoint_t> m_timeout_point;
-
-  void release_replica(pg_shard_t peer, epoch_t epoch);
-
-  void send_all_done();	 ///< all reservations are granted
-
-  /// notify the scrubber that we have failed to reserve replicas' resources
-  void send_reject();
-
-  std::optional<tpoint_t> update_latecomers(tpoint_t now_is);
-
- public:
-  std::string m_log_msg_prefix;
-
-  /**
-   *  quietly discard all knowledge about existing reservations. No messages
-   *  are sent to peers.
-   *  To be used upon interval change, as we know the the running scrub is no
-   *  longer relevant, and that the replicas had reset the reservations on
-   *  their side.
-   */
-  void discard_all();
-
-  ReplicaReservations(PG* pg,
-                      pg_shard_t whoami,
-                      ScrubQueue::ScrubJobRef scrubjob,
-                      const ConfigProxy& conf); 
-
-  ~ReplicaReservations();
-
-  void handle_reserve_grant(OpRequestRef op, pg_shard_t from);
-
-  void handle_reserve_reject(OpRequestRef op, pg_shard_t from);
-
-  // if timing out on receiving replies from our replicas:
-  void handle_no_reply_timeout();
-
-  std::ostream& gen_prefix(std::ostream& out) const;
-};
-
-/**
- *  wraps the local OSD scrub resource reservation in an RAII wrapper
- */
-class LocalReservation {
-  OSDService* m_osds;
-  bool m_holding_local_reservation{false};
-
- public:
-  explicit LocalReservation(OSDService* osds);
-  ~LocalReservation();
-  bool is_reserved() const { return m_holding_local_reservation; }
-};
 
 /**
  * Once all replicas' scrub maps are received, we go on to compare the maps.
@@ -322,11 +223,11 @@ class PgScrubber : public ScrubPgIF,
 
   void send_local_map_done(epoch_t epoch_queued) final;
 
-  void send_maps_compared(epoch_t epoch_queued) final;
-
   void send_get_next_chunk(epoch_t epoch_queued) final;
 
   void send_scrub_is_finished(epoch_t epoch_queued) final;
+
+  void send_granted_by_reserver(const AsyncScrubResData& req) final;
 
   /**
    *  we allow some number of preemptions of the scrub, which mean we do
@@ -340,19 +241,12 @@ class PgScrubber : public ScrubPgIF,
 			      const hobject_t& end) final;
 
   /**
-   *  we are a replica being asked by the Primary to reserve OSD resources for
-   *  scrubbing
+   * route incoming replica-reservations requests/responses to the
+   * appropriate handler.
+   * As the ReplicaReservations object is to be owned by the ScrubMachine, we
+   * send all relevant messages to the ScrubMachine.
    */
-  void handle_scrub_reserve_request(OpRequestRef op) final;
-
-  void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from) final;
-  void handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from) final;
-  void handle_scrub_reserve_release(OpRequestRef op) final;
-  void discard_replica_reservations() final;
-  void clear_scrub_reservations() final;  // PG::clear... fwds to here
-  void unreserve_replicas() final;
-  void on_replica_reservation_timeout() final;
-
+  void handle_scrub_reserve_msgs(OpRequestRef op) final;
 
   // managing scrub op registration
 
@@ -360,9 +254,9 @@ class PgScrubber : public ScrubPgIF,
 
   void rm_from_osd_scrubbing() final;
 
-  void on_pg_activate(const requested_scrub_t& request_flags) final;
+  void schedule_scrub_with_osd() final;
 
-  void scrub_requested(
+  scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
       scrub_type_t scrub_type,
       requested_scrub_t& req_flags) final;
@@ -378,6 +272,16 @@ class PgScrubber : public ScrubPgIF,
   void handle_query_state(ceph::Formatter* f) final;
 
   pg_scrubbing_status_t get_schedule() const final;
+
+  void on_operator_periodic_cmd(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    int64_t offset) final;
+
+  void on_operator_forced_scrub(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    requested_scrub_t& request_flags) final;
 
   void dump_scrubber(ceph::Formatter* f,
 		     const requested_scrub_t& request_flags) const final;
@@ -412,7 +316,9 @@ class PgScrubber : public ScrubPgIF,
 
   void on_new_interval() final;
 
-  void scrub_clear_state() final;
+  void on_primary_active_clean() final;
+
+  void on_replica_activate() final;
 
   bool is_queued_or_active() const final;
 
@@ -455,10 +361,14 @@ class PgScrubber : public ScrubPgIF,
   // the I/F used by the state-machine (i.e. the implementation of
   // ScrubMachineListener)
 
-  CephContext* get_cct() const final { return m_pg->cct; }
   LogChannelRef &get_clog() const final;
   int get_whoami() const final;
   spg_t get_spgid() const final { return m_pg->get_pgid(); }
+  PG* get_pg() const final { return m_pg; }
+  PerfCounters& get_counters_set() const final;
+
+  /// delay next retry of this PG after a replica reservation failure
+  void flag_reservations_failure();
 
   scrubber_callback_cancel_token_t schedule_callback_after(
     ceph::timespan duration, scrubber_callback_t &&cb);
@@ -481,6 +391,9 @@ class PgScrubber : public ScrubPgIF,
   {
     return m_pg->recovery_state.is_primary();
   }
+
+  /// is this scrub more than just regular periodic scrub?
+  [[nodiscard]] bool is_high_priority() const final;
 
   void set_state_name(const char* name) final
   {
@@ -507,10 +420,7 @@ class PgScrubber : public ScrubPgIF,
   void on_replica_init() final;
   void replica_handling_done() final;
 
-  /// the version of 'scrub_clear_state()' that does not try to invoke FSM
-  /// services (thus can be called from FSM reactions)
   void clear_pgscrub_state() final;
-
 
   std::chrono::milliseconds get_scrub_sleep_time() const final;
   void queue_for_scrub_resched(Scrub::scrub_prio_t prio) final;
@@ -521,6 +431,8 @@ class PgScrubber : public ScrubPgIF,
 
   void scrub_finish() final;
 
+  void penalize_next_scrub(Scrub::delay_cause_t cause) final;
+
   ScrubMachineListener::MsgAndEpoch prep_replica_map_msg(
     Scrub::PreemptionNoted was_preempted) final;
 
@@ -528,9 +440,6 @@ class PgScrubber : public ScrubPgIF,
     const ScrubMachineListener::MsgAndEpoch& preprepared) final;
 
   void send_preempted_replica() final;
-
-  void send_remotes_reserved(epoch_t epoch_queued) final;
-  void send_reservation_failure(epoch_t epoch_queued) final;
 
   /**
    *  does the PG have newer updates than what we (the scrubber) know?
@@ -547,20 +456,14 @@ class PgScrubber : public ScrubPgIF,
 
   int build_replica_map_chunk() final;
 
-  void reserve_replicas() final;
-
-  void set_reserving_now() final;
+  bool set_reserving_now() final;
   void clear_reserving_now() final;
 
   [[nodiscard]] bool was_epoch_changed() const final;
 
   void set_queued_or_active() final;
-  /// Clears `m_queued_or_active` and restarts snaptrimming
+  /// Clears `m_queued_or_active` and restarts snap-trimming
   void clear_queued_or_active() final;
-
-  void dec_scrubs_remote() final;
-
-  void advance_token() final;
 
   void mark_local_map_ready() final;
 
@@ -568,11 +471,8 @@ class PgScrubber : public ScrubPgIF,
 
   std::string dump_awaited_maps() const final;
 
-  void set_scrub_begin_time() final;
+  void set_scrub_duration(std::chrono::milliseconds duration) final;
 
-  void set_scrub_duration() final;
-
-  utime_t scrub_begin_stamp;
   std::ostream& gen_prefix(std::ostream& out) const final;
 
   /// facilitate scrub-backend access to SnapMapper mappings
@@ -597,7 +497,7 @@ class PgScrubber : public ScrubPgIF,
   virtual void _scrub_clear_state() {}
 
   utime_t m_scrub_reg_stamp;		///< stamp we registered for
-  ScrubQueue::ScrubJobRef m_scrub_job;	///< the scrub-job used by the OSD to
+  Scrub::ScrubJobRef m_scrub_job;	///< the scrub-job used by the OSD to
 					///< schedule us
 
   ostream& show(ostream& out) const override;
@@ -646,12 +546,15 @@ class PgScrubber : public ScrubPgIF,
 
   void requeue_waiting() const { m_pg->requeue_ops(m_pg->waiting_for_scrub); }
 
+  /// Modify the token identifying the current replica scrub operation
+  void advance_token();
+
   /**
    *  mark down some parameters of the initiated scrub:
    *  - the epoch when started;
    *  - the depth of the scrub requested (from the PG_STATE variable)
    */
-  void reset_epoch(epoch_t epoch_queued);
+  void reset_epoch() final;
 
   void run_callbacks();
 
@@ -711,13 +614,18 @@ class PgScrubber : public ScrubPgIF,
 
   epoch_t m_last_aborted{};  // last time we've noticed a request to abort
 
-  // 'optional', as 'ReplicaReservations' & 'LocalReservation' are
-  // 'RAII-designed' to guarantee un-reserving when deleted.
-  std::optional<Scrub::ReplicaReservations> m_reservations;
-  std::optional<Scrub::LocalReservation> m_local_osd_resource;
+  /**
+   * once we acquire the local OSD resource, this is set to a wrapper that
+   * guarantees that the resource will be released when the scrub is done
+   */
+  std::unique_ptr<Scrub::LocalResourceWrapper> m_local_osd_resource;
 
-  void cleanup_on_finish();  // scrub_clear_state() as called for a Primary when
-			     // Active->NotActive
+  /**
+   * clearing the scrubber state & the PG's scrub-related flags
+   * (calls clear_pgscrub_state()).
+   * Also - publishes the PG stats.
+   */
+  void cleanup_on_finish();
 
  protected:
   PG* const m_pg;
@@ -755,11 +663,20 @@ class PgScrubber : public ScrubPgIF,
   epoch_t m_epoch_start{0};  ///< the actual epoch when scrubbing started
 
   /**
-   * (replica) a tag identifying a specific scrub "session". Incremented
-   * whenever the Primary releases the replica scrub resources. When the scrub
-   * session is terminated (even if the interval remains unchanged, as might
-   * happen following an asok no-scrub command), stale scrub-resched messages
-   *  triggered by the backend will be discarded.
+   * (replica) a tag identifying a specific replica operation, i.e. the
+   * creation of the replica scrub map for a single chunk.
+   *
+   * Background: the backend is asynchronous, and the specific
+   * operations are size-limited. While the scrubber handles a specific
+   * request, it is continuously triggered to poll the backend for the
+   * full results for the chunk handled.
+   * Once the chunk request becomes obsolete, either following an interval
+   * change or if a new request was received, we must not send the stale
+   * data to the primary. The polling of the obsolete chunk request must
+   * stop, and the stale backend response should be discarded.
+   * In other words - the token should be read as saying "the primary has
+   * lost interest in the results of all operations identified by mismatched
+   * token values".
    */
   Scrub::act_token_t m_current_token{1};
 
@@ -853,11 +770,28 @@ class PgScrubber : public ScrubPgIF,
 
   void update_op_mode_text();
 
+  std::string_view get_op_mode_text() const final;
+
  private:
   /**
    * initiate a deep-scrub after the current scrub ended with errors.
    */
   void request_rescrubbing(requested_scrub_t& req_flags);
+
+  /**
+   * combine cluster & pool configuration options into a single struct
+   * of scrub-related parameters.
+   */
+  Scrub::sched_conf_t populate_config_params() const;
+
+  /**
+   * determine the time when the next scrub should be scheduled
+   *
+   * based on the planned scrub's flags, time of last scrub, and
+   * the pool's scrub configuration.
+   */
+  Scrub::sched_params_t determine_scrub_time(
+      const pool_opts_t& pool_conf) const;
 
   /*
    * Select a range of objects to scrub.
@@ -872,14 +806,6 @@ class PgScrubber : public ScrubPgIF,
   bool select_range();
 
   std::list<Context*> m_callbacks;
-
-  /**
-   * send a replica (un)reservation request to the acting set
-   *
-   * @param opcode - one of MOSDScrubReserve::REQUEST
-   *                  or MOSDScrubReserve::RELEASE
-   */
-  void message_all_replicas(int32_t opcode, std::string_view op_text);
 
   hobject_t m_max_end;	///< Largest end that may have been sent to replicas
   ScrubMapBuilder m_primary_scrubmap_pos;

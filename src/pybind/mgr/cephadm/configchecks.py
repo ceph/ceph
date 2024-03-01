@@ -150,7 +150,7 @@ class CephadmCheckDefinition:
             "description": self.description,
             "name": self.name,
             "status": self.status,
-            "valid": True if self.func else False
+            "valid": True if getattr(self, 'func', None) else False
         }
 
 
@@ -167,7 +167,7 @@ class CephadmConfigChecks:
                                    "os_subscription",
                                    self._check_subscription),
             CephadmCheckDefinition(mgr, "CEPHADM_CHECK_PUBLIC_MEMBERSHIP",
-                                   "check that all hosts have a NIC on the Ceph public_netork",
+                                   "check that all hosts have a NIC on the Ceph public_network",
                                    "public_network",
                                    self._check_public_network),
             CephadmCheckDefinition(mgr, "CEPHADM_CHECK_MTU",
@@ -696,7 +696,7 @@ class CephadmConfigChecks:
         self.active_checks = []
         self.skipped_checks = []
 
-        # process all healthchecks that are not explcitly disabled
+        # process all healthchecks that are not explicitly disabled
         for health_check in self.health_checks:
             if check_config.get(health_check.name, '') != 'disabled':
                 self.active_checks.append(health_check.name)

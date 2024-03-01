@@ -661,6 +661,7 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
                                                CephContext* cct,
                                                RGWGetObj_Filter* next,
                                                std::unique_ptr<BlockCrypt> crypt,
+                                               std::vector<size_t> parts_len,
                                                optional_yield y)
     :
     RGWGetObj_Filter(next),
@@ -671,7 +672,8 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
     ofs(0),
     end(0),
     cache(),
-    y(y)
+    y(y),
+    parts_len(std::move(parts_len))
 {
   block_size = this->crypt->get_block_size();
 }
@@ -679,8 +681,10 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
 RGWGetObj_BlockDecrypt::~RGWGetObj_BlockDecrypt() {
 }
 
-int RGWGetObj_BlockDecrypt::read_manifest(const DoutPrefixProvider *dpp, bufferlist& manifest_bl) {
-  parts_len.clear();
+int RGWGetObj_BlockDecrypt::read_manifest_parts(const DoutPrefixProvider *dpp,
+                                                const bufferlist& manifest_bl,
+                                                std::vector<size_t>& parts_len)
+{
   RGWObjManifest manifest;
   if (manifest_bl.length()) {
     auto miter = manifest_bl.cbegin();
@@ -697,10 +701,8 @@ int RGWGetObj_BlockDecrypt::read_manifest(const DoutPrefixProvider *dpp, bufferl
       }
       parts_len.back() += mi.get_stripe_size();
     }
-    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
-      for (size_t i = 0; i<parts_len.size(); i++) {
-        ldpp_dout(dpp, 20) << "Manifest part " << i << ", size=" << parts_len[i] << dendl;
-      }
+    for (size_t i = 0; i<parts_len.size(); i++) {
+      ldpp_dout(dpp, 20) << "Manifest part " << i << ", size=" << parts_len[i] << dendl;
     }
   }
   return 0;
@@ -971,8 +973,8 @@ std::string expand_key_name(req_state *s, const std::string_view&t)
   return r;
 }
 
-static int get_sse_s3_bucket_key(req_state *s,
-                          std::string &key_id)
+static int get_sse_s3_bucket_key(req_state *s, optional_yield y,
+                                 std::string &key_id)
 {
   int res;
   std::string saved_key;
@@ -991,7 +993,7 @@ static int get_sse_s3_bucket_key(req_state *s,
     ldpp_dout(s, 5) << "Found KEK ID: " << key_id << dendl;
   }
   if (saved_key != key_id) {
-    res = create_sse_s3_bucket_key(s, s->cct, key_id);
+    res = create_sse_s3_bucket_key(s, key_id, y);
     if (res != 0) {
       return res;
     }
@@ -1004,7 +1006,7 @@ static int get_sse_s3_bucket_key(req_state *s,
       if (res != -ECANCELED) {
         break;
       }
-      res = s->bucket->try_refresh_info(s, nullptr);
+      res = s->bucket->try_refresh_info(s, nullptr, s->yield);
       if (res != 0) {
         break;
       }
@@ -1018,7 +1020,7 @@ static int get_sse_s3_bucket_key(req_state *s,
   return 0;
 }
 
-int rgw_s3_prepare_encrypt(req_state* s,
+int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string, std::string>& crypt_http_responses)
@@ -1167,7 +1169,7 @@ int rgw_s3_prepare_encrypt(req_state* s,
         set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
         set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
         std::string actual_key;
-        res = make_actual_key_from_kms(s, s->cct, attrs, actual_key);
+        res = make_actual_key_from_kms(s, attrs, y, actual_key);
         if (res != 0) {
           ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
           s->err.message = "Failed to retrieve the actual key, kms-keyid: " + std::string(key_id);
@@ -1191,23 +1193,20 @@ int rgw_s3_prepare_encrypt(req_state* s,
         crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = std::string(key_id);
         crypt_http_responses["x-amz-server-side-encryption-context"] = std::move(cooked_context);
         return 0;
-      } else if (req_sse == "AES256") {
-        /* SSE-S3: fall through to logic to look for vault or test key */
-      } else {
+      } else if (req_sse != "AES256") {
         ldpp_dout(s, 5) << "ERROR: Invalid value for header x-amz-server-side-encryption"
                          << dendl;
         s->err.message = "Server Side Encryption with KMS managed key requires "
           "HTTP header x-amz-server-side-encryption : aws:kms or AES256";
         return -EINVAL;
       }
-    } else {
-  /*no encryption*/
-      return 0;
-    }
 
-    /* from here on we are only handling SSE-S3 (req_sse=="AES256") */
+      if (s->cct->_conf->rgw_crypt_sse_s3_backend != "vault") {
+        s->err.message = "Request specifies Server Side Encryption "
+            "but server configuration does not support this.";
+        return -EINVAL;
+      }
 
-    if (s->cct->_conf->rgw_crypt_sse_s3_backend == "vault") {
       ldpp_dout(s, 5) << "RGW_ATTR_BUCKET_ENCRYPTION ALGO: "
               <<  req_sse << dendl;
       std::string_view context = "";
@@ -1216,7 +1215,7 @@ int rgw_s3_prepare_encrypt(req_state* s,
         return res;
 
       std::string key_id;
-      res = get_sse_s3_bucket_key(s, key_id);
+      res = get_sse_s3_bucket_key(s, y, key_id);
       if (res != 0) {
         return res;
       }
@@ -1227,7 +1226,7 @@ int rgw_s3_prepare_encrypt(req_state* s,
       set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256");
       set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
       std::string actual_key;
-      res = make_actual_key_from_sse_s3(s, s->cct, attrs, actual_key);
+      res = make_actual_key_from_sse_s3(s, attrs, y, actual_key);
       if (res != 0) {
         ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
         s->err.message = "Failed to retrieve the actual key";
@@ -1250,10 +1249,7 @@ int rgw_s3_prepare_encrypt(req_state* s,
       crypt_http_responses["x-amz-server-side-encryption"] = "AES256";
 
       return 0;
-    }
-
-    /* SSE-S3 and no backend, check if there is a test key */
-    if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
+    } else if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
       std::string master_encryption_key;
       try {
         master_encryption_key = from_base64(s->cct->_conf->rgw_crypt_default_encryption_key);
@@ -1292,17 +1288,15 @@ int rgw_s3_prepare_encrypt(req_state* s,
       ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
       return 0;
     }
-    s->err.message = "Request specifies Server Side Encryption "
-                     "but server configuration does not support this.";
-    return -EINVAL;
   }
+  return 0;
 }
 
 
-int rgw_s3_prepare_decrypt(req_state* s,
-                       map<string, bufferlist>& attrs,
-                       std::unique_ptr<BlockCrypt>* block_crypt,
-                       std::map<std::string, std::string>& crypt_http_responses)
+int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
+                           map<string, bufferlist>& attrs,
+                           std::unique_ptr<BlockCrypt>* block_crypt,
+                           std::map<std::string, std::string>& crypt_http_responses)
 {
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
@@ -1406,7 +1400,7 @@ int rgw_s3_prepare_decrypt(req_state* s,
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
-    res = reconstitute_actual_key_from_kms(s, s->cct, attrs, actual_key);
+    res = reconstitute_actual_key_from_kms(s, attrs, y, actual_key);
     if (res != 0) {
       ldpp_dout(s, 10) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
       s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id;
@@ -1476,7 +1470,7 @@ int rgw_s3_prepare_decrypt(req_state* s,
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
-    res = reconstitute_actual_key_from_sse_s3(s, s->cct, attrs, actual_key);
+    res = reconstitute_actual_key_from_sse_s3(s, attrs, y, actual_key);
     if (res != 0) {
       ldpp_dout(s, 10) << "ERROR: failed to retrieve actual key" << dendl;
       s->err.message = "Failed to retrieve the actual key";
@@ -1503,7 +1497,7 @@ int rgw_s3_prepare_decrypt(req_state* s,
   return 0;
 }
 
-int rgw_remove_sse_s3_bucket_key(req_state *s)
+int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y)
 {
   int res;
   auto key_id { expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template) };
@@ -1529,7 +1523,7 @@ int rgw_remove_sse_s3_bucket_key(req_state *s)
     return 0;
   }
   ldpp_dout(s, 5) << "Removing valid KEK ID: " << saved_key << dendl;
-  res = remove_sse_s3_bucket_key(s, s->cct, saved_key);
+  res = remove_sse_s3_bucket_key(s, saved_key, y);
   if (res != 0) {
     ldpp_dout(s, 0) << "ERROR: Unable to remove KEK ID: " << saved_key << " got " << res << dendl;
   }
@@ -1541,7 +1535,7 @@ int rgw_remove_sse_s3_bucket_key(req_state *s)
 *	I've left some commented out lines above.  They are there for
 *	a reason, which I will explain.  The "canonical" json constructed
 *	by the code above as a crypto context must take a json object and
-*	turn it into a unique determinstic fixed form.  For most json
+*	turn it into a unique deterministic fixed form.  For most json
 *	types this is easy.  The hardest problem that is handled above is
 *	detailing with unicode strings; they must be turned into
 *	NFC form and sorted in a fixed order.  Numbers, however,

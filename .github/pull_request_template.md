@@ -22,7 +22,9 @@
 ## Contribution Guidelines
 - To sign and title your commits, please refer to [Submitting Patches to Ceph](https://github.com/ceph/ceph/blob/main/SubmittingPatches.rst).
 
-- If you are submitting a fix for a stable branch (e.g. "pacific"), please refer to [Submitting Patches to Ceph - Backports](https://github.com/ceph/ceph/blob/master/SubmittingPatches-backports.rst) for the proper workflow.
+- If you are submitting a fix for a stable branch (e.g. "quincy"), please refer to [Submitting Patches to Ceph - Backports](https://github.com/ceph/ceph/blob/master/SubmittingPatches-backports.rst) for the proper workflow.
+
+- When filling out the below checklist, you may click boxes directly in the GitHub web UI.  When entering or editing the entire PR message in the GitHub web UI editor, you may also select a checklist item by adding an `x` between the brackets: `[x]`.  Spaces and capitalization matter when checking off items this way.
 
 ## Checklist
 - Tracker (select at least one)
@@ -62,4 +64,5 @@
 - `jenkins test ceph-volume all`
 - `jenkins test ceph-volume tox`
 - `jenkins test windows`
+- `jenkins test rook e2e`
 </details>

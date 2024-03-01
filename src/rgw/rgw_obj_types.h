@@ -432,7 +432,7 @@ struct rgw_raw_obj {
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(6, 6, bl);
+    ENCODE_START(6, 6, bl);
     encode(pool, bl);
     encode(oid, bl);
     encode(loc, bl);
@@ -475,6 +475,7 @@ struct rgw_raw_obj {
   }
 
   void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_raw_obj*>& o);
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(rgw_raw_obj)

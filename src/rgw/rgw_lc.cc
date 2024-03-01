@@ -39,7 +39,11 @@
 #include "services/svc_tier_rados.h"
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_lifecycle
+
+
+constexpr int32_t hours_in_a_day = 24;
+constexpr int32_t secs_in_a_day = hours_in_a_day * 60 * 60;
 
 using namespace std;
 
@@ -216,13 +220,13 @@ void *RGWLC::LCWorker::entry() {
     std::unique_ptr<rgw::sal::Bucket> all_buckets; // empty restriction
     utime_t start = ceph_clock_now();
     if (should_work(start)) {
-      ldpp_dout(dpp, 2) << "life cycle: start" << dendl;
+      ldpp_dout(dpp, 2) << "life cycle: start worker=" << ix << dendl;
       int r = lc->process(this, all_buckets, false /* once */);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "ERROR: do life cycle process() returned error r="
-			  << r << dendl;
+			  << r << " worker=" << ix << dendl;
       }
-      ldpp_dout(dpp, 2) << "life cycle: stop" << dendl;
+      ldpp_dout(dpp, 2) << "life cycle: stop worker=" << ix << dendl;
       cloud_targets.clear(); // clear cloud targets
     }
     if (lc->going_down())
@@ -233,8 +237,8 @@ void *RGWLC::LCWorker::entry() {
     utime_t next;
     next.set_from_double(end + secs);
 
-    ldpp_dout(dpp, 5) << "schedule life cycle next start time: "
-		      << rgw_to_asctime(next) << dendl;
+    ldpp_dout(dpp, 5) << "schedule life cycle next start time="
+		      << rgw_to_asctime(next) << " worker=" << ix << dendl;
 
     std::unique_lock l{lock};
     cond.wait_for(l, std::chrono::seconds(secs));
@@ -289,7 +293,7 @@ static bool obj_has_expired(const DoutPrefixProvider *dpp, CephContext *cct, cep
   utime_t base_time;
   if (cct->_conf->rgw_lc_debug_interval <= 0) {
     /* Normal case, run properly */
-    cmp = double(days)*24*60*60;
+    cmp = double(days) * secs_in_a_day;
     base_time = ceph_clock_now().round_to_day();
   } else {
     /* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
@@ -480,7 +484,7 @@ struct lc_op_ctx {
   LCObjsLister& ol;
 
   std::unique_ptr<rgw::sal::Object> obj;
-  RGWObjectCtx rctx;
+  RGWObjectCtx octx;
   const DoutPrefixProvider *dpp;
   WorkQ* wq;
 
@@ -493,7 +497,7 @@ struct lc_op_ctx {
     : cct(env.driver->ctx()), env(env), o(o), next_key_name(next_key_name),
       effective_mtime(effective_mtime),
       driver(env.driver), bucket(env.bucket), op(env.op), ol(env.ol),
-      rctx(env.driver), dpp(dpp), wq(wq)
+      octx(env.driver), dpp(dpp), wq(wq)
     {
       obj = bucket->get_object(o.key);
     }
@@ -509,6 +513,28 @@ struct lc_op_ctx {
 static std::string lc_id = "rgw lifecycle";
 static std::string lc_req_id = "0";
 
+/* do all zones in the zone group process LC? */
+static bool zonegroup_lc_check(const DoutPrefixProvider *dpp, rgw::sal::Zone* zone)
+{
+  auto& zonegroup = zone->get_zonegroup();
+  std::list<std::string> ids;
+  int ret = zonegroup.list_zones(ids);
+  if (ret < 0) {
+    return false;
+  }
+
+  return std::all_of(ids.begin(), ids.end(), [&](const auto& id) {
+    std::unique_ptr<rgw::sal::Zone> zone;
+    ret = zonegroup.get_zone_by_id(id, &zone);
+    if (ret < 0) {
+      return false;
+    }
+    const auto& tier_type = zone->get_tier_type();
+    ldpp_dout(dpp, 20) << "checking zone tier_type=" << tier_type << dendl;
+    return (tier_type == "rgw" || tier_type == "archive" || tier_type == "");
+  });
+}
+
 static int remove_expired_obj(
   const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool remove_indeed,
   rgw::notify::EventType event_type)
@@ -519,26 +545,19 @@ static int remove_expired_obj(
   auto obj_key = o.key;
   auto& meta = o.meta;
   int ret;
-  std::string version_id;
+  auto version_id = obj_key.instance; // deep copy, so not cleared below
   std::unique_ptr<rgw::sal::Notification> notify;
 
+  /* per discussion w/Daniel, Casey,and Eric, we *do need*
+   * a new sal object handle, based on the following decision
+   * to clear obj_key.instance--which happens in the case
+   * where a delete marker should be created */
   if (!remove_indeed) {
     obj_key.instance.clear();
   } else if (obj_key.instance.empty()) {
     obj_key.instance = "null";
   }
-
-  std::unique_ptr<rgw::sal::User> user;
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  std::unique_ptr<rgw::sal::Object> obj;
-
-  user = driver->get_user(bucket_info.owner);
-  ret = driver->get_bucket(user.get(), bucket_info, &bucket);
-  if (ret < 0) {
-    return ret;
-  }
-
-  obj = bucket->get_object(obj_key);
+  auto obj = oc.bucket->get_object(obj_key);
 
   RGWObjState* obj_state{nullptr};
   ret = obj->get_obj_state(dpp, &obj_state, null_yield, true);
@@ -550,15 +569,14 @@ static int remove_expired_obj(
     = obj->get_delete_op();
   del_op->params.versioning_status
     = obj->get_bucket()->get_info().versioning_status();
-  del_op->params.obj_owner.set_id(rgw_user {meta.owner});
-  del_op->params.obj_owner.set_name(meta.owner_display_name);
-  del_op->params.bucket_owner.set_id(bucket_info.owner);
+  del_op->params.obj_owner.id = rgw_user{meta.owner};
+  del_op->params.obj_owner.display_name = meta.owner_display_name;
+  del_op->params.bucket_owner.id = bucket_info.owner;
   del_op->params.unmod_since = meta.mtime;
-  del_op->params.marker_version_id = version_id;
 
   // notification supported only for RADOS driver for now
   notify = driver->get_notification(dpp, obj.get(), nullptr, event_type,
-				   bucket.get(), lc_id,
+				   oc.bucket, lc_id,
 				   const_cast<std::string&>(oc.bucket->get_tenant()),
 				   lc_req_id, null_yield);
 
@@ -570,16 +588,22 @@ static int remove_expired_obj(
       << dendl;
     return ret;
   }
-  ret =  del_op->delete_obj(dpp, null_yield);
+
+  uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
+                   ? rgw::sal::FLAG_LOG_OP : 0;
+  ret =  del_op->delete_obj(dpp, null_yield, flags);
   if (ret < 0) {
     ldpp_dout(dpp, 1) <<
-      "ERROR: publishing notification failed, with error: " << ret << dendl;
+      fmt::format("ERROR: {} failed, with error: {}", __func__, ret) << dendl;
   } else {
     // send request to notification manager
-    (void) notify->publish_commit(dpp, obj_state->size,
-				  ceph::real_clock::now(),
-				  obj_state->attrset[RGW_ATTR_ETAG].to_str(),
-				  version_id);
+    int publish_ret = notify->publish_commit(dpp, obj_state->size,
+				 ceph::real_clock::now(),
+				 obj_state->attrset[RGW_ATTR_ETAG].to_str(),
+				 version_id);
+    if (publish_ret < 0) {
+      ldpp_dout(dpp, 5) << "WARNING: notify publish_commit failed, with error: " << publish_ret << dendl;
+    }
   }
 
   return ret;
@@ -815,7 +839,6 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 				       const multimap<string, lc_op>& prefix_map,
 				       LCWorker* worker, time_t stop_at, bool once)
 {
-  MultipartMetaFilter mp_filter;
   int ret;
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
@@ -826,35 +849,74 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
    * operating on one shard at a time */
   params.allow_unordered = true;
   params.ns = RGW_OBJ_NS_MULTIPART;
-  params.access_list_filter = &mp_filter;
+  params.access_list_filter = MultipartMetaFilter;
 
-  auto pf = [&](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
+  const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
+
+  auto pf = [&](RGWLC::LCWorker *wk, WorkQ *wq, WorkItem &wi) {
+    int ret{0};
     auto wt = boost::get<std::tuple<lc_op, rgw_bucket_dir_entry>>(wi);
     auto& [rule, obj] = wt;
+
     if (obj_has_expired(this, cct, obj.meta.mtime, rule.mp_expiration)) {
       rgw_obj_key key(obj.key);
-      std::unique_ptr<rgw::sal::MultipartUpload> mpu = target->get_multipart_upload(key.name);
-      int ret = mpu->abort(this, cct);
+      auto mpu = target->get_multipart_upload(key.name);
+      auto sal_obj = target->get_object(key);
+
+      RGWObjState* obj_state{nullptr};
+      ret = sal_obj->get_obj_state(this, &obj_state, null_yield, true);
+      if (ret < 0) {
+	return ret;
+      }
+
+      std::unique_ptr<rgw::sal::Notification> notify
+	= driver->get_notification(
+	  this, sal_obj.get(), nullptr, event_type,
+	  target, lc_id,
+	  const_cast<std::string&>(target->get_tenant()),
+	  lc_req_id, null_yield);
+      auto version_id = obj.key.instance;
+
+      ret = notify->publish_reserve(this, nullptr);
+      if (ret < 0) {
+        ldpp_dout(wk->get_lc(), 0)
+            << "ERROR: reserving persistent notification for "
+               "abort_multipart_upload, ret="
+            << ret << ", thread:" << wq->thr_name()
+            << ", deferring mpu cleanup for meta:" << obj.key << dendl;
+        return ret;
+      }
+
+      ret = mpu->abort(this, cct, null_yield);
       if (ret == 0) {
+        int publish_ret = notify->publish_commit(
+            this, obj_state->size,
+	    ceph::real_clock::now(),
+            obj_state->attrset[RGW_ATTR_ETAG].to_str(),
+	    version_id);
+        if (publish_ret < 0) {
+          ldpp_dout(wk->get_lc(), 5)
+              << "WARNING: notify publish_commit failed, with error: " << ret
+              << dendl;
+        }
         if (perfcounter) {
           perfcounter->inc(l_rgw_lc_abort_mpu, 1);
         }
       } else {
-	if (ret == -ERR_NO_SUCH_UPLOAD) {
-	  ldpp_dout(wk->get_lc(), 5)
-	    << "ERROR: abort_multipart_upload failed, ret=" << ret
-	    << ", thread:" << wq->thr_name()
-	    << ", meta:" << obj.key
-	    << dendl;
-	} else {
-	  ldpp_dout(wk->get_lc(), 0)
-	    << "ERROR: abort_multipart_upload failed, ret=" << ret
-	    << ", thread:" << wq->thr_name()
-	    << ", meta:" << obj.key
-	    << dendl;
-	}
+        if (ret == -ERR_NO_SUCH_UPLOAD) {
+          ldpp_dout(wk->get_lc(), 5) << "ERROR: abort_multipart_upload "
+                                        "failed, ret="
+                                     << ret << ", thread:" << wq->thr_name()
+                                     << ", meta:" << obj.key << dendl;
+        } else {
+          ldpp_dout(wk->get_lc(), 0) << "ERROR: abort_multipart_upload "
+                                        "failed, ret="
+                                     << ret << ", thread:" << wq->thr_name()
+                                     << ", meta:" << obj.key << dendl;
+        }
       } /* abort failed */
-    } /* expired */
+    }   /* expired */
+		return ret;
   };
 
   worker->workpool->setf(pf);
@@ -863,8 +925,8 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
        ++prefix_iter) {
 
     if (worker_should_stop(stop_at, once)) {
-      ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker "
-		     << worker->ix
+      ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
+		     << worker->ix << " bucket=" << target->get_name()
 		     << dendl;
       return 0;
     }
@@ -895,8 +957,8 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
       if ((offset % 100) == 0) {
 	if (worker_should_stop(stop_at, once)) {
-	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker "
-			     << worker->ix
+	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
+			     << worker->ix << " bucket=" << target->get_name()
 			     << dendl;
 	  return 0;
 	}
@@ -1078,7 +1140,7 @@ public:
     return is_expired;
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r;
     if (o.is_delete_marker()) {
@@ -1142,7 +1204,7 @@ public:
       pass_object_lock_check(oc.driver, oc.obj.get(), dpp);
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true,
 			       rgw::notify::ObjectExpirationNoncurrent);
@@ -1187,7 +1249,7 @@ public:
     return true;
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r = remove_expired_obj(oc.dpp, oc, true,
 			       rgw::notify::ObjectExpirationDeleteMarker);
@@ -1267,26 +1329,86 @@ public:
 
     /* If bucket is versioned, create delete_marker for current version
      */
-    if (oc.bucket->versioned() && oc.o.is_current() && !oc.o.is_delete_marker()) {
-      ret = remove_expired_obj(oc.dpp, oc, false, rgw::notify::ObjectExpiration);
-      ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") current & not delete_marker" << " versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
+    if (! oc.bucket->versioned()) {
+      ret = remove_expired_obj(oc.dpp, oc, true, rgw::notify::ObjectTransition);
+      ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
+                            << ") not versioned flags: " << oc.o.flags << dendl;
     } else {
-      ret = remove_expired_obj(oc.dpp, oc, true, rgw::notify::ObjectExpiration);
-      ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") not current " << "versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
+      /* versioned */
+      if (oc.o.is_current() && !oc.o.is_delete_marker()) {
+        ret = remove_expired_obj(oc.dpp, oc, false,
+                                 rgw::notify::ObjectTransitionCurrent);
+        ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
+                              << ") current & not delete_marker"
+                              << " versioned_epoch:  " << oc.o.versioned_epoch
+                              << "flags: " << oc.o.flags << dendl;
+      } else {
+        ret = remove_expired_obj(oc.dpp, oc, true,
+                                 rgw::notify::ObjectTransitionNoncurrent);
+        ldpp_dout(oc.dpp, 20)
+            << "delete_tier_obj Object(key:" << oc.o.key << ") not current "
+            << "versioned_epoch:  " << oc.o.versioned_epoch
+            << "flags: " << oc.o.flags << dendl;
+      }
     }
+
     return ret;
   }
 
   int transition_obj_to_cloud(lc_op_ctx& oc) {
+    int ret{0};
     /* If CurrentVersion object, remove it & create delete marker */
     bool delete_object = (!oc.tier->retain_head_object() ||
                      (oc.o.is_current() && oc.bucket->versioned()));
 
-    int ret = oc.obj->transition_to_cloud(oc.bucket, oc.tier.get(), oc.o,
-					  oc.env.worker->get_cloud_targets(), oc.cct,
-					  !delete_object, oc.dpp, null_yield);
+    /* notifications */
+    auto& bucket = oc.bucket;
+    auto& obj = oc.obj;
+
+    RGWObjState* obj_state{nullptr};
+    ret = obj->get_obj_state(oc.dpp, &obj_state, null_yield, true);
     if (ret < 0) {
       return ret;
+    }
+
+    const auto event_type = (bucket->versioned() &&
+			     oc.o.is_current() && !oc.o.is_delete_marker()) ?
+      rgw::notify::ObjectTransitionCurrent :
+      rgw::notify::ObjectTransitionNoncurrent;
+
+    std::unique_ptr<rgw::sal::Notification> notify
+      = oc.driver->get_notification(
+	oc.dpp, obj.get(), nullptr, event_type,
+	bucket, lc_id,
+	const_cast<std::string&>(oc.bucket->get_tenant()),
+	lc_req_id, null_yield);
+    auto version_id = oc.o.key.instance;
+
+    ret = notify->publish_reserve(oc.dpp, nullptr);
+    if (ret < 0) {
+      ldpp_dout(oc.dpp, 1)
+	<< "ERROR: notify reservation failed, deferring transition of object k="
+	<< oc.o.key
+	<< dendl;
+      return ret;
+    }
+
+    ret = oc.obj->transition_to_cloud(oc.bucket, oc.tier.get(), oc.o,
+				      oc.env.worker->get_cloud_targets(),
+				      oc.cct, !delete_object, oc.dpp,
+				      null_yield);
+    if (ret < 0) {
+      return ret;
+    } else {
+      // send request to notification manager
+      int publish_ret =  notify->publish_commit(oc.dpp, obj_state->size,
+				    ceph::real_clock::now(),
+				    obj_state->attrset[RGW_ATTR_ETAG].to_str(),
+				    version_id);
+      if (publish_ret < 0) {
+	ldpp_dout(oc.dpp, 5) <<
+	  "WARNING: notify publish_commit failed, with error: " << publish_ret << dendl;
+      }
     }
 
     if (delete_object) {
@@ -1300,7 +1422,7 @@ public:
     return 0;
   }
 
-  int process(lc_op_ctx& oc) {
+  int process(lc_op_ctx& oc) override {
     auto& o = oc.o;
     int r;
 
@@ -1344,8 +1466,10 @@ public:
         return -EINVAL;
       }
 
+      uint32_t flags = !zonegroup_lc_check(oc.dpp, oc.driver->get_zone())
+                       ? rgw::sal::FLAG_LOG_OP : 0;
       int r = oc.obj->transition(oc.bucket, target_placement, o.meta.mtime,
-	  		         o.versioned_epoch, oc.dpp, null_yield);
+                                 o.versioned_epoch, oc.dpp, null_yield, flags);
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
 			     << oc.bucket << ":" << o.key 
@@ -1375,7 +1499,7 @@ protected:
 public:
   LCOpAction_CurrentTransition(const transition_action& _transition)
     : LCOpAction_Transition(_transition) {}
-    int process(lc_op_ctx& oc) {
+    int process(lc_op_ctx& oc) override {
       int r = LCOpAction_Transition::process(oc);
       if (r == 0) {
         if (perfcounter) {
@@ -1400,7 +1524,7 @@ public:
 				  const transition_action& _transition)
     : LCOpAction_Transition(_transition)
     {}
-    int process(lc_op_ctx& oc) {
+    int process(lc_op_ctx& oc) override {
       int r = LCOpAction_Transition::process(oc);
       if (r == 0) {
         if (perfcounter) {
@@ -1520,21 +1644,15 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   string bucket_name = result[1];
   string bucket_marker = result[2];
 
-  ldpp_dout(this, 5) << "RGWLC::bucket_lc_process ENTER " << bucket_name << dendl;
+  ldpp_dout(this, 5) << "RGWLC::bucket_lc_process ENTER bucket=" << bucket_name << dendl;
   if (unlikely(cct->_conf->rgwlc_skip_bucket_step)) {
     return 0;
   }
 
-  int ret = driver->get_bucket(this, nullptr, bucket_tenant, bucket_name, &bucket, null_yield);
+  int ret = driver->load_bucket(this, rgw_bucket(bucket_tenant, bucket_name),
+                                &bucket, null_yield);
   if (ret < 0) {
     ldpp_dout(this, 0) << "LC:get_bucket for " << bucket_name
-		       << " failed" << dendl;
-    return ret;
-  }
-
-  ret = bucket->load_bucket(this, null_yield);
-  if (ret < 0) {
-    ldpp_dout(this, 0) << "LC:load_bucket for " << bucket_name
 		       << " failed" << dendl;
     return ret;
   }
@@ -1567,7 +1685,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   try {
       config.decode(iter);
     } catch (const buffer::error& e) {
-      ldpp_dout(this, 0) << __func__ <<  "() decode life cycle config failed"
+      ldpp_dout(this, 0) << __func__ <<  "() decode life cycle config failed bucket=" << bucket_name
 			 << dendl;
       return -1;
     }
@@ -1575,7 +1693,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   /* fetch information for zone checks */
   rgw::sal::Zone* zone = driver->get_zone();
 
-  auto pf = [](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
+  auto pf = [&bucket_name](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
     auto wt =
       boost::get<std::tuple<LCOpRule, rgw_bucket_dir_entry>>(wi);
     auto& [op_rule, o] = wt;
@@ -1587,7 +1705,8 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     if (ret < 0) {
       ldpp_dout(wk->get_lc(), 20)
 	<< "ERROR: orule.process() returned ret=" << ret
-	<< "thread:" << wq->thr_name()
+	<< " thread=" << wq->thr_name()
+	<< " bucket=" << bucket_name
 	<< dendl;
     }
   };
@@ -1604,8 +1723,8 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       ++prefix_iter) {
 
     if (worker_should_stop(stop_at, once)) {
-      ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker "
-		     << worker->ix
+      ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
+		     << worker->ix << " bucket=" << bucket_name
 		     << dendl;
       return 0;
     }
@@ -1651,8 +1770,8 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       worker->workpool->enqueue(WorkItem{t1});
       if ((offset % 100) == 0) {
 	if (worker_should_stop(stop_at, once)) {
-	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker "
-			     << worker->ix
+	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
+			     << worker->ix << " bucket=" << bucket_name
 			     << dendl;
 	  return 0;
 	}
@@ -1744,7 +1863,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 
     ret = sal_lc->set_entry(obj_names[index],  entry);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on "
+      ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to set entry on "
           << obj_names[index] << dendl;
     }
 clean:
@@ -1865,8 +1984,7 @@ bool RGWLC::expired_session(time_t started)
   }
 
   time_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
-    ? cct->_conf->rgw_lc_debug_interval
-    : 24*60*60;
+    ? cct->_conf->rgw_lc_debug_interval : secs_in_a_day;
 
   auto now = time(nullptr);
 
@@ -1882,8 +2000,7 @@ bool RGWLC::expired_session(time_t started)
 time_t RGWLC::thread_stop_at()
 {
   uint64_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
-    ? cct->_conf->rgw_lc_debug_interval
-    : 24*60*60;
+    ? cct->_conf->rgw_lc_debug_interval : secs_in_a_day;
 
   return time(nullptr) + interval;
 }
@@ -1909,7 +2026,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   ret = serializer->try_lock(this, time, null_yield);
   if (ret == -EBUSY || ret == -EEXIST) {
     /* already locked by another lc processor */
-    ldpp_dout(this, 0) << "RGWLC::process() failed to acquire lock on "
+    ldpp_dout(this, 0) << "RGWLC::process_bucket() failed to acquire lock on "
 		       << obj_names[index] << dendl;
     return -EBUSY;
   }
@@ -1962,6 +2079,8 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 
   lock.unlock();
   ret = bucket_lc_process(entry->get_bucket(), worker, thread_stop_at(), once);
+  ldpp_dout(this, 5) << "RGWLC::process_bucket(): END entry 2: " << entry
+    << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
   bucket_lc_post(index, max_lock_secs, *entry, ret, worker);
 
   return ret;
@@ -1974,7 +2093,7 @@ static inline bool allow_shard_rollover(CephContext* cct, time_t now, time_t sha
    *    - the current shard has not rolled over in the last 24 hours
    */
   if (((shard_rollover_date < now) &&
-       (now - shard_rollover_date > 24*60*60)) ||
+       (now - shard_rollover_date > secs_in_a_day)) ||
       (! shard_rollover_date /* no rollover date stored */) ||
       (cct->_conf->rgw_lc_debug_interval > 0 /* defaults to -1 == disabled */)) {
     return true;
@@ -2000,7 +2119,7 @@ static inline bool already_run_today(CephContext* cct, time_t start_date)
   bdt.tm_min = 0;
   bdt.tm_sec = 0;
   begin_of_day = mktime(&bdt);
-  if (now - begin_of_day < 24*60*60)
+  if (now - begin_of_day < secs_in_a_day)
     return true;
   else
     return false;
@@ -2054,20 +2173,20 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
   utime_t lock_for_s(max_lock_secs, 0);
   const auto& lock_lambda = [&]() {
-    ret = lock->try_lock(this, lock_for_s, null_yield);
+    int ret = lock->try_lock(this, lock_for_s, null_yield);
     if (ret == 0) {
       return true;
     }
     if (ret == -EBUSY || ret == -EEXIST) {
       /* already locked by another lc processor */
       return false;
-      }
+    }
     return false;
   };
 
   SimpleBackoff shard_lock(5 /* max retries */, 50ms);
   if (! shard_lock.wait_backoff(lock_lambda)) {
-    ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
+    ldpp_dout(this, 0) << "RGWLC::process(): failed to acquire lock on "
 		       << lc_shard << " after " << shard_lock.get_retries()
 		       << dendl;
     return 0;
@@ -2116,6 +2235,15 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
       /* fetches the entry pointed to by head.bucket */
       ret = sal_lc->get_entry(lc_shard, head->get_marker(), &entry);
+      if (ret == -ENOENT) {
+        ret = sal_lc->get_next_entry(lc_shard, head->get_marker(), &entry);
+        if (ret < 0) {
+          ldpp_dout(this, 0) << "RGWLC::process() sal_lc->get_next_entry(lc_shard, "
+                             << "head.marker, entry) returned error ret==" << ret
+                             << dendl;
+          goto exit;
+        }
+      }
       if (ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::process() sal_lc->get_entry(lc_shard, head.marker, entry) "
 			   << "returned error ret==" << ret << dendl;
@@ -2142,7 +2270,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  if (head->get_marker().empty()) {
 	    ldpp_dout(this, 5) <<
 	      "RGWLC::process() cycle finished lc_shard="
-			       << lc_shard
+			       << lc_shard << " worker=" << worker->ix
 			       << dendl;
 	    head->set_shard_rollover_date(ceph_clock_now());
 	    ret = sal_lc->put_head(lc_shard, *head.get());
@@ -2162,14 +2290,14 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  if (advance_head(lc_shard, *head.get(), *entry.get(), now) < 0) {
 	    goto exit;
 	  }
-	  ldpp_dout(this, 5) << "RGWLC::process() worker ix; " << worker->ix
+	  ldpp_dout(this, 5) << "RGWLC::process() worker ix: " << worker->ix
 			     << " SKIP processing for already-processed bucket " << entry->get_bucket()
 			     << dendl;
 	  /* done with this shard */
 	  if (head->get_marker().empty()) {
 	    ldpp_dout(this, 5) <<
 	      "RGWLC::process() cycle finished lc_shard="
-			       << lc_shard
+			       << lc_shard << " worker=" << worker->ix
 			       << dendl;
 	    head->set_shard_rollover_date(ceph_clock_now());
 	    ret = sal_lc->put_head(lc_shard, *head.get());
@@ -2222,11 +2350,13 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
      * bucket is being processed */
     lock->unlock();
     ret = bucket_lc_process(entry->get_bucket(), worker, thread_stop_at(), once);
+    ldpp_dout(this, 5) << "RGWLC::process(): END entry 2: " << entry
+      << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
 
     /* postamble */
     //bucket_lc_post(index, max_lock_secs, entry, ret, worker);
     if (! shard_lock.wait_backoff(lock_lambda)) {
-      ldpp_dout(this, 0) << "RGWLC::process(): failed to aquire lock on "
+      ldpp_dout(this, 0) << "RGWLC::process(): failed to acquire lock on "
 			 << lc_shard << " after " << shard_lock.get_retries()
 			 << dendl;
       return 0;
@@ -2251,8 +2381,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       }
       ret = sal_lc->set_entry(lc_shard, *entry);
       if (ret < 0) {
-        ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on "
-                           << lc_shard
+        ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on lc_shard="
+                           << lc_shard << " entry=" << entry
                            << dendl;
         /* fatal, locked */
         goto exit;
@@ -2263,7 +2393,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     if (head->get_marker().empty()) {
       ldpp_dout(this, 5) <<
 	"RGWLC::process() cycle finished lc_shard="
-			 << lc_shard
+			 << lc_shard << " worker=" << worker->ix
 			 << dendl;
       head->set_shard_rollover_date(ceph_clock_now());
       ret = sal_lc->put_head(lc_shard,  *head.get());
@@ -2337,6 +2467,12 @@ bool RGWLC::LCWorker::should_work(utime_t& now)
   time_t tt = now.sec();
   localtime_r(&tt, &bdt);
 
+  // next-day adjustment if the configured end_hour is less than start_hour
+  if (end_hour < start_hour) {
+    bdt.tm_hour = bdt.tm_hour > end_hour ? bdt.tm_hour : bdt.tm_hour + hours_in_a_day;
+    end_hour += hours_in_a_day;
+  }
+
   if (cct->_conf->rgw_lc_debug_interval > 0) {
 	  /* We're debugging, so say we can run */
 	  return true;
@@ -2377,7 +2513,7 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
   nt = mktime(&bdt);
   secs = nt - tt;
 
-  return secs>0 ? secs : secs+24*60*60;
+  return secs > 0 ? secs : secs + secs_in_a_day;
 }
 
 RGWLC::LCWorker::~LCWorker()
@@ -2668,7 +2804,7 @@ std::string s3_expiration_header(
       if (rule_expiration.has_days()) {
 	rule_expiration_date =
 	  boost::optional<ceph::real_time>(
-	    mtime + make_timespan(double(rule_expiration.get_days())*24*60*60 - ceph::real_clock::to_time_t(mtime)%(24*60*60) + 24*60*60));
+	    mtime + make_timespan(double(rule_expiration.get_days()) * secs_in_a_day - ceph::real_clock::to_time_t(mtime)%(secs_in_a_day) + secs_in_a_day));
       }
     }
 
@@ -2747,7 +2883,7 @@ bool s3_multipart_abort_header(
     std::optional<ceph::real_time> rule_abort_date;
     if (mp_expiration.has_days()) {
       rule_abort_date = std::optional<ceph::real_time>(
-              mtime + make_timespan(mp_expiration.get_days()*24*60*60 - ceph::real_clock::to_time_t(mtime)%(24*60*60) + 24*60*60));
+              mtime + make_timespan(mp_expiration.get_days() * secs_in_a_day - ceph::real_clock::to_time_t(mtime)%(secs_in_a_day) + secs_in_a_day));
     }
 
     // update earliest abort date

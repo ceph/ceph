@@ -55,7 +55,7 @@ private:
    *            V2_GET_CREATE_TIMESTAMP             |
    *                |                               |
    *                v                               |
-   *            V2_GET_ACCESS_MODIFIY_TIMESTAMP     |
+   *            V2_GET_ACCESS_MODIFY_TIMESTAMP      |
    *                |                               |
    *                v                               |
    *            V2_GET_DATA_POOL --------------> REFRESH

@@ -40,7 +40,7 @@ TEST(ectransaction, two_writes_separated)
   ECUtil::stripe_info_t sinfo(2, 8192);
   auto plan = ECTransaction::get_write_plan(
     sinfo,
-    std::move(t),
+    *t,
     [&](const hobject_t &i) {
       ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
       return ref;
@@ -69,7 +69,7 @@ TEST(ectransaction, two_writes_nearby)
 
   auto plan = ECTransaction::get_write_plan(
     sinfo,
-    std::move(t),
+    *t,
     [&](const hobject_t &i) {
       ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
       return ref;
@@ -110,7 +110,7 @@ TEST(ectransaction, many_writes)
 
   auto plan = ECTransaction::get_write_plan(
     sinfo,
-    std::move(t),
+    *t,
     [&](const hobject_t &i) {
       ECUtil::HashInfoRef ref(new ECUtil::HashInfo(1));
       return ref;

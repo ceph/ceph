@@ -44,8 +44,13 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
         flexGrow: 2
       },
       {
-        name: $localize`Zone`,
-        prop: 'zone_name',
+        name: $localize`Port`,
+        prop: 'port',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Realm`,
+        prop: 'realm_name',
         flexGrow: 2
       },
       {
@@ -54,8 +59,8 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
         flexGrow: 2
       },
       {
-        name: $localize`Realm`,
-        prop: 'realm_name',
+        name: $localize`Zone`,
+        prop: 'zone_name',
         flexGrow: 2
       },
       {

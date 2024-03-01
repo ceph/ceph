@@ -75,7 +75,7 @@ parser.add_argument('--skip-cleanup-on-error', action='store_true',
 class CephTestException(Exception):
     msg_fmt = "An exception has been encountered."
 
-    def __init__(self, message: str = None, **kwargs):
+    def __init__(self, message: str = '', **kwargs):
         self.kwargs = kwargs
         if not message:
             message = self.msg_fmt % kwargs
@@ -520,7 +520,7 @@ class RbdTest(object):
     @classmethod
     def print_results(cls,
                       title: str = "Test results",
-                      description: str = None):
+                      description: str = ''):
         pass
 
 
@@ -551,7 +551,7 @@ class RbdFioTest(RbdTest):
 
     def __init__(self,
                  *args,
-                 fio_size_mb: int = None,
+                 fio_size_mb: int = 0,
                  iterations: int = 1,
                  workers: int = 1,
                  bs: str = "2M",
@@ -603,7 +603,7 @@ class RbdFioTest(RbdTest):
         return self.image.path
 
     @Tracer.trace
-    def _run_fio(self, fio_size_mb=None):
+    def _run_fio(self, fio_size_mb: int = 0) -> None:
         LOG.info("Starting FIO test.")
         cmd = [
             "fio", "--thread", "--output-format=json",
@@ -628,7 +628,7 @@ class RbdFioTest(RbdTest):
     @classmethod
     def print_results(cls,
                       title: str = "Benchmark results",
-                      description: str = None):
+                      description: str = ''):
         if description:
             title = "%s (%s)" % (title, description)
 
@@ -900,7 +900,7 @@ if __name__ == '__main__':
     try:
         test_cls = TESTS[args.test_name]
     except KeyError:
-        raise CephTestException("Unkown test: {}".format(args.test_name))
+        raise CephTestException("Unknown test: {}".format(args.test_name))
 
     runner = TestRunner(
         test_cls,

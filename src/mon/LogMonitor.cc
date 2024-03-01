@@ -61,6 +61,7 @@
 #include "include/str_list.h"
 #include "include/str_map.h"
 #include "include/compat.h"
+#include "include/utime_fmt.h"
 
 #define dout_subsys ceph_subsys_mon
 
@@ -743,7 +744,7 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
       pending_log.insert(pair<utime_t,LogEntry>(p->stamp, *p));
     }
   }
-  wait_for_finished_proposal(op, new C_Log(this, op));
+  wait_for_commit(op, new C_Log(this, op));
   return true;
 }
 
@@ -1039,7 +1040,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     le.msg = str_join(logtext, " ");
     pending_keys.insert(le.key());
     pending_log.insert(pair<utime_t,LogEntry>(le.stamp, le));
-    wait_for_finished_proposal(op, new Monitor::C_Command(
+    wait_for_commit(op, new Monitor::C_Command(
           mon, op, 0, string(), get_last_committed() + 1));
     return true;
   }

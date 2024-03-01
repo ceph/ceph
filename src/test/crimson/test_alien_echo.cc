@@ -8,6 +8,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
+#include "test/crimson/ctest_utils.h"
 
 #include <seastar/core/alien.hh>
 #include <seastar/core/app-template.hh>
@@ -166,7 +167,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
   if (role == echo_role::as_server) {
     return seastar::do_with(
         seastar_pingpong::Server{crimson::net::Messenger::create(
-            entity_name_t::OSD(0), "server", addr.get_nonce())},
+            entity_name_t::OSD(0), "server", addr.get_nonce(), true)},
         [addr, count](auto& server) mutable {
       std::cout << "server listening at " << addr << std::endl;
       // bind the server
@@ -193,7 +194,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
   } else {
     return seastar::do_with(
         seastar_pingpong::Client{crimson::net::Messenger::create(
-            entity_name_t::OSD(1), "client", addr.get_nonce())},
+            entity_name_t::OSD(1), "client", addr.get_nonce(), true)},
         [addr, count](auto& client) {
       std::cout << "client sending to " << addr << std::endl;
       client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
@@ -266,7 +267,7 @@ int main(int argc, char** argv)
   }
 
   auto count = vm["count"].as<unsigned>();
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   SeastarContext sc;
   auto job = sc.with_seastar([&] {
     auto fut = seastar::alien::submit_to(app.alien(), 0, [addr, role, count] {

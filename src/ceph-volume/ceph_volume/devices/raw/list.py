@@ -5,7 +5,7 @@ import logging
 from textwrap import dedent
 from ceph_volume import decorators, process
 from ceph_volume.util import disk
-
+from typing import Any, Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -66,46 +66,57 @@ class List(object):
     def __init__(self, argv):
         self.argv = argv
 
+    def is_atari_partitions(self, _lsblk: Dict[str, Any]) -> bool:
+        dev = _lsblk['NAME']
+        if _lsblk.get('PKNAME'):
+            parent = _lsblk['PKNAME']
+            try:
+                if disk.has_bluestore_label(parent):
+                    logger.warning(('ignoring child device {} whose parent {} is a BlueStore OSD.'.format(dev, parent),
+                                    'device is likely a phantom Atari partition. device info: {}'.format(_lsblk)))
+                    return True
+            except OSError as e:
+                logger.error(('ignoring child device {} to avoid reporting invalid BlueStore data from phantom Atari partitions.'.format(dev),
+                            'failed to determine if parent device {} is BlueStore. err: {}'.format(parent, e)))
+                return True
+        return False
+
+    def exclude_atari_partitions(self, _lsblk_all: Dict[str, Any]) -> List[Dict[str, Any]]:
+        return [_lsblk for _lsblk in _lsblk_all if not self.is_atari_partitions(_lsblk)]
+
     def generate(self, devs=None):
         logger.debug('Listing block devices via lsblk...')
-        info_devices = disk.lsblk_all(abspath=True)
-        if devs is None or devs == []:
+        info_devices = []
+        if not devs or not any(devs):
             # If no devs are given initially, we want to list ALL devices including children and
             # parents. Parent disks with child partitions may be the appropriate device to return if
             # the parent disk has a bluestore header, but children may be the most appropriate
             # devices to return if the parent disk does not have a bluestore header.
+            info_devices = disk.lsblk_all(abspath=True)
             devs = [device['NAME'] for device in info_devices if device.get('NAME',)]
+        else:
+            for dev in devs:
+                info_devices.append(disk.lsblk(dev, abspath=True))
+
+        # Linux kernels built with CONFIG_ATARI_PARTITION enabled can falsely interpret
+        # bluestore's on-disk format as an Atari partition table. These false Atari partitions
+        # can be interpreted as real OSDs if a bluestore OSD was previously created on the false
+        # partition. See https://tracker.ceph.com/issues/52060 for more info. If a device has a
+        # parent, it is a child. If the parent is a valid bluestore OSD, the child will only
+        # exist if it is a phantom Atari partition, and the child should be ignored. If the
+        # parent isn't bluestore, then the child could be a valid bluestore OSD. If we fail to
+        # determine whether a parent is bluestore, we should err on the side of not reporting
+        # the child so as not to give a false negative.
+        info_devices = self.exclude_atari_partitions(info_devices)
 
         result = {}
         logger.debug('inspecting devices: {}'.format(devs))
-        for dev in devs:
-            # Linux kernels built with CONFIG_ATARI_PARTITION enabled can falsely interpret
-            # bluestore's on-disk format as an Atari partition table. These false Atari partitions
-            # can be interpreted as real OSDs if a bluestore OSD was previously created on the false
-            # partition. See https://tracker.ceph.com/issues/52060 for more info. If a device has a
-            # parent, it is a child. If the parent is a valid bluestore OSD, the child will only
-            # exist if it is a phantom Atari partition, and the child should be ignored. If the
-            # parent isn't bluestore, then the child could be a valid bluestore OSD. If we fail to
-            # determine whether a parent is bluestore, we should err on the side of not reporting
-            # the child so as not to give a false negative.
-            for info_device in info_devices:
-                if 'PKNAME' in info_device and info_device['PKNAME'] != "":
-                    parent = info_device['PKNAME']
-                    try:
-                        if disk.has_bluestore_label(parent):
-                            logger.warning(('ignoring child device {} whose parent {} is a BlueStore OSD.'.format(dev, parent),
-                                            'device is likely a phantom Atari partition. device info: {}'.format(info_device)))
-                            continue
-                    except OSError as e:
-                        logger.error(('ignoring child device {} to avoid reporting invalid BlueStore data from phantom Atari partitions.'.format(dev),
-                                    'failed to determine if parent device {} is BlueStore. err: {}'.format(parent, e)))
-                        continue
-
-            bs_info = _get_bluestore_info(dev)
+        for info_device in info_devices:
+            bs_info = _get_bluestore_info(info_device['NAME'])
             if bs_info is None:
                 # None is also returned in the rare event that there is an issue reading info from
                 # a BlueStore disk, so be sure to log our assumption that it isn't bluestore
-                logger.info('device {} does not have BlueStore information'.format(dev))
+                logger.info('device {} does not have BlueStore information'.format(info_device['NAME']))
                 continue
             uuid = bs_info['osd_uuid']
             if uuid not in result:

@@ -10,7 +10,7 @@ export class RgwZonegroup {
   name: string;
   api_name: string;
   is_master: boolean;
-  endpoints: string[];
+  endpoints: string;
   hostnames: string[];
   hostnames_s3website: string[];
   master_zone: string;
@@ -39,8 +39,14 @@ export class RgwZone {
   user_swift_pool: string;
   user_uid_pool: string;
   otp_pool: string;
-  system_key: object;
+  system_key: SystemKey;
   placement_pools: any[];
   realm_id: string;
   notif_pool: string;
+  endpoints: string;
+}
+
+export class SystemKey {
+  access_key: string;
+  secret_key: string;
 }

@@ -1,3 +1,5 @@
+.. _dev_mon_elections:
+
 =================
 Monitor Elections
 =================

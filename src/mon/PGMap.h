@@ -66,6 +66,18 @@ public:
       decode(up_not_acting, p);
       decode(primary, p);
     }
+    void dump(ceph::Formatter *f) const {
+      f->dump_int("acting", acting);
+      f->dump_int("up_not_acting", up_not_acting);
+      f->dump_int("primary", primary);
+    }
+    static void generate_test_instances(std::list<pg_count*>& o) {
+      o.push_back(new pg_count);
+      o.push_back(new pg_count);
+      o.back()->acting = 1;
+      o.back()->up_not_acting = 2;
+      o.back()->primary = 3;
+    }
   };
   mempool::pgmap::unordered_map<int32_t,pg_count> num_pg_by_osd;
 
@@ -359,7 +371,8 @@ public:
   static const int STUCK_UNDERSIZED = (1<<2);
   static const int STUCK_DEGRADED = (1<<3);
   static const int STUCK_STALE = (1<<4);
-  
+  static const int STUCK_PEERING = (1<<5);
+
   PGMap()
     : version(0),
       last_osdmap_epoch(0), last_pg_scan(0)
@@ -439,12 +452,12 @@ public:
   int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
   void get_rules_avail(const OSDMap& osdmap,
 		       std::map<int,int64_t> *avail_map) const;
-  void dump(ceph::Formatter *f, bool with_net = true) const;
+  void dump(ceph::Formatter *f, bool with_net = false) const;
   void dump_basic(ceph::Formatter *f) const;
   void dump_pg_stats(ceph::Formatter *f, bool brief) const;
   void dump_pg_progress(ceph::Formatter *f) const;
   void dump_pool_stats(ceph::Formatter *f) const;
-  void dump_osd_stats(ceph::Formatter *f, bool with_net = true) const;
+  void dump_osd_stats(ceph::Formatter *f, bool with_net = false) const;
   void dump_osd_ping_times(ceph::Formatter *f) const;
   void dump_delta(ceph::Formatter *f) const;
   void dump_filtered_pg_stats(ceph::Formatter *f, std::set<pg_t>& pgs) const;

@@ -166,7 +166,11 @@ public:
   uint64_t get_features() const {
     if (features)
       return features;
+#ifdef WITH_SEASTAR
+    ceph_abort("In crimson, conn is independently maintained outside Message");
+#else
     return get_connection()->get_features();
+#endif
   }
 
   MOSDOp()
@@ -174,7 +178,7 @@ public:
       partial_decode_needed(true),
       final_decode_needed(true),
       bdata_encode(false) { }
-  MOSDOp(int inc, long tid, const hobject_t& ho, spg_t& _pgid,
+  MOSDOp(int inc, ceph_tid_t tid, const hobject_t& ho, spg_t& _pgid,
 	 epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
     : MOSDFastDispatchOp(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
@@ -344,6 +348,36 @@ struct ceph_osd_request_head {
       encode(flags, payload);
       encode(eversion_t(), payload); // reassert_version
       encode(reqid, payload);
+      encode(client_inc, payload);
+      encode(mtime, payload);
+      encode(get_object_locator(), payload);
+      encode(hobj.oid, payload);
+
+      __u16 num_ops = ops.size();
+      encode(num_ops, payload);
+      for (unsigned i = 0; i < ops.size(); i++)
+	encode(ops[i].op, payload);
+
+      encode(hobj.snap, payload);
+      encode(snap_seq, payload);
+      encode(snaps, payload);
+
+      encode(retry_attempt, payload);
+      encode(features, payload);
+    } else if (!HAVE_FEATURE(features, SERVER_SQUID)) {
+      // v8 encoding with hobject_t hash separate from pgid, no
+      // reassert version
+      header.version = 8;
+
+      encode(pgid, payload);
+      encode(hobj.get_hash(), payload);
+      encode(osdmap_epoch, payload);
+      encode(flags, payload);
+      encode(reqid, payload);
+      encode_trace(payload, features);
+
+      // -- above decoded up front; below decoded post-dispatch thread --
+
       encode(client_inc, payload);
       encode(mtime, payload);
       encode(get_object_locator(), payload);

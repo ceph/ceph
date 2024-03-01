@@ -74,6 +74,26 @@ class CephfsTest(DashboardTestCase):
         yield 1
         self.rm_dir(self.QUOTA_PATH)
 
+    def write_to_file(self, path, buf):
+        params = {'path': path, 'buf': buf}
+        self._post(f"/api/cephfs/{self.get_fs_id()}/write_to_file",
+                   params=params)
+        self.assertStatus(200)
+
+    def unlink(self, path, expectedStatus=200):
+        params = {'path': path}
+        self._delete(f"/api/cephfs/{self.get_fs_id()}/unlink",
+                     params=params)
+        self.assertStatus(expectedStatus)
+
+    def statfs(self, path):
+        params = {'path': path}
+        data = self._get(f"/api/cephfs/{self.get_fs_id()}/statfs",
+                         params=params)
+        self.assertStatus(200)
+        self.assertIsInstance(data, dict)
+        return data
+
     @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
     def test_access_permissions(self):
         fs_id = self.get_fs_id()
@@ -290,3 +310,54 @@ class CephfsTest(DashboardTestCase):
         ui_api_ls = self.ui_ls_dir('/pictures', 0)
         self.assertEqual(api_ls, ui_api_ls)
         self.rm_dir('/pictures')
+
+    def test_statfs(self):
+        self.statfs('/')
+
+        self.mk_dirs('/animal')
+        stats = self.statfs('/animal')
+        self.assertEqual(stats['bytes'], 0)
+        self.assertEqual(stats['files'], 0)
+        self.assertEqual(stats['subdirs'], 1)
+
+        buf = 'a' * 512
+        self.write_to_file('/animal/lion', buf)
+        stats = self.statfs('/animal')
+        self.assertEqual(stats['bytes'], 512)
+        self.assertEqual(stats['files'], 1)
+        self.assertEqual(stats['subdirs'], 1)
+
+        buf = 'b' * 512
+        self.write_to_file('/animal/tiger', buf)
+        stats = self.statfs('/animal')
+        self.assertEqual(stats['bytes'], 1024)
+        self.assertEqual(stats['files'], 2)
+        self.assertEqual(stats['subdirs'], 1)
+
+        self.unlink('/animal/tiger')
+        stats = self.statfs('/animal')
+        self.assertEqual(stats['bytes'], 512)
+        self.assertEqual(stats['files'], 1)
+        self.assertEqual(stats['subdirs'], 1)
+
+        self.unlink('/animal/lion')
+        stats = self.statfs('/animal')
+        self.assertEqual(stats['bytes'], 0)
+        self.assertEqual(stats['files'], 0)
+        self.assertEqual(stats['subdirs'], 1)
+
+        self.rm_dir('/animal')
+
+    def test_cephfs_clients_get_after_mds_down(self):
+        fs_id = self.get_fs_id()
+        self._get(f"/api/cephfs/{fs_id}/clients")
+        self.assertStatus(200)
+
+        self.fs.fail()
+        params = {'suppress_client_ls_errors': 'False'}
+        self._get(f"/api/cephfs/{fs_id}/clients", params=params)
+        self.assertStatus(500)
+
+        self.fs.set_joinable()
+        self._get(f"/api/cephfs/{fs_id}/clients")
+        self.assertStatus(200)

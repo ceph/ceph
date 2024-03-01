@@ -25,24 +25,150 @@
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-class BtreeLBAPin : public BtreeNodePin<laddr_t, paddr_t> {
+class BtreeLBAMapping : public BtreeNodeMapping<laddr_t, paddr_t> {
+// To support cloning, there are two kinds of lba mappings:
+// 	1. physical lba mapping: the pladdr in the value of which is the paddr of
+// 	   the corresponding extent;
+// 	2. indirect lba mapping: the pladdr in the value of which is an laddr pointing
+// 	   to the physical lba mapping that's pointing to the actual paddr of the
+// 	   extent being searched;
+//
+// Accordingly, BtreeLBAMapping may also work under two modes: indirect or direct
+// 	1. BtreeLBAMappings that come from quering an indirect lba mapping in the lba tree
+// 	   are indirect;
+// 	2. BtreeLBAMappings that come from quering a physical lba mapping in the lba tree
+// 	   are direct.
+//
+// For direct BtreeLBAMappings, there are two important fields:
+//      1. key: the laddr of the lba mapping being queried;
+//      2. paddr: the paddr recorded in the value of the lba mapping being queried.
+// For indirect BtreeLBAMappings, BtreeLBAMapping has three important fields:
+// 	1. key: the laddr key of the lba entry being queried;
+// 	2. intermediate_key: the laddr within the scope of the physical lba mapping
+// 	   that the current indirect lba mapping points to; although an indirect mapping
+// 	   points to the start of the physical lba mapping, it may change to other
+// 	   laddr after remap
+// 	3. intermediate_base: the laddr key of the physical lba mapping, intermediate_key
+// 	   and intermediate_base should be the same when doing cloning
+// 	4. intermediate_offset: intermediate_key - intermediate_base
+// 	5. intermediate_length: the length of the actual physical lba mapping
+// 	6. paddr: the paddr recorded in the physical lba mapping pointed to by the
+// 	   indirect lba mapping being queried;
+//
+// NOTE THAT, for direct BtreeLBAMappings, their intermediate_keys are the same as
+// their keys.
 public:
-  BtreeLBAPin() = default;
-  BtreeLBAPin(
+  BtreeLBAMapping(op_context_t<laddr_t> ctx)
+    : BtreeNodeMapping(ctx) {}
+  BtreeLBAMapping(
+    op_context_t<laddr_t> c,
     CachedExtentRef parent,
+    uint16_t pos,
     lba_map_val_t &val,
-    lba_node_meta_t &&meta)
-    : BtreeNodePin(
+    lba_node_meta_t meta)
+    : BtreeNodeMapping(
+	c,
 	parent,
-	val.paddr,
+	pos,
+	val.pladdr.is_paddr() ? val.pladdr.get_paddr() : P_ADDR_NULL,
 	val.len,
-	std::forward<lba_node_meta_t>(meta))
+	meta),
+      key(meta.begin),
+      indirect(val.pladdr.is_laddr()),
+      intermediate_key(indirect ? val.pladdr.get_laddr() : L_ADDR_NULL),
+      intermediate_length(indirect ? val.len : 0),
+      raw_val(val.pladdr),
+      map_val(val)
   {}
+
+  lba_map_val_t get_map_val() const {
+    return map_val;
+  }
+
+  bool is_indirect() const final {
+    return indirect;
+  }
+
+  void make_indirect(
+    laddr_t new_key,
+    extent_len_t length,
+    laddr_t interkey = L_ADDR_NULL)
+  {
+    assert(!indirect);
+    assert(value.is_paddr());
+    intermediate_base = key;
+    intermediate_key = (interkey == L_ADDR_NULL ? key : interkey);
+    indirect = true;
+    key = new_key;
+    intermediate_length = len;
+    len = length;
+  }
+
+  laddr_t get_key() const final {
+    return key;
+  }
+
+  pladdr_t get_raw_val() const {
+    return raw_val;
+  }
+
+  laddr_t get_intermediate_key() const final {
+    assert(is_indirect());
+    assert(intermediate_key != L_ADDR_NULL);
+    return intermediate_key;
+  }
+
+  laddr_t get_intermediate_base() const final {
+    assert(is_indirect());
+    assert(intermediate_base != L_ADDR_NULL);
+    return intermediate_base;
+  }
+
+  extent_len_t get_intermediate_offset() const final {
+    assert(intermediate_key >= intermediate_base);
+    assert((intermediate_key == L_ADDR_NULL)
+      == (intermediate_base == L_ADDR_NULL));
+    return intermediate_key - intermediate_base;
+  }
+
+  extent_len_t get_intermediate_length() const final {
+    assert(is_indirect());
+    assert(intermediate_length);
+    return intermediate_length;
+  }
+
+  bool is_clone() const final {
+    return get_map_val().refcount > 1;
+  }
+
+protected:
+  std::unique_ptr<BtreeNodeMapping<laddr_t, paddr_t>> _duplicate(
+    op_context_t<laddr_t> ctx) const final {
+    auto pin = std::unique_ptr<BtreeLBAMapping>(new BtreeLBAMapping(ctx));
+    pin->key = key;
+    pin->intermediate_base = intermediate_base;
+    pin->intermediate_key = intermediate_key;
+    pin->intermediate_length = intermediate_length;
+    pin->indirect = indirect;
+    pin->raw_val = raw_val;
+    pin->map_val = map_val;
+    return pin;
+  }
+private:
+  laddr_t key = L_ADDR_NULL;
+  bool indirect = false;
+  laddr_t intermediate_key = L_ADDR_NULL;
+  laddr_t intermediate_base = L_ADDR_NULL;
+  extent_len_t intermediate_length = 0;
+  pladdr_t raw_val;
+  lba_map_val_t map_val;
 };
+
+using BtreeLBAMappingRef = std::unique_ptr<BtreeLBAMapping>;
 
 using LBABtree = FixedKVBtree<
   laddr_t, lba_map_val_t, LBAInternalNode,
-  LBALeafNode, BtreeLBAPin, LBA_BLOCK_SIZE>;
+  LBALeafNode, BtreeLBAMapping, LBA_BLOCK_SIZE, true>;
 
 /**
  * BtreeLBAManager
@@ -63,7 +189,11 @@ using LBABtree = FixedKVBtree<
  */
 class BtreeLBAManager : public LBAManager {
 public:
-  BtreeLBAManager(Cache &cache);
+  BtreeLBAManager(Cache &cache)
+    : cache(cache)
+  {
+    register_metrics();
+  }
 
   mkfs_ret mkfs(
     Transaction &t) final;
@@ -80,28 +210,101 @@ public:
     Transaction &t,
     laddr_t offset) final;
 
+  alloc_extent_ret reserve_region(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len)
+  {
+    return _alloc_extent(
+      t,
+      hint,
+      len,
+      P_ADDR_ZERO,
+      P_ADDR_NULL,
+      nullptr);
+  }
+
+  alloc_extent_ret clone_mapping(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len,
+    laddr_t intermediate_key,
+    paddr_t actual_addr,
+    laddr_t intermediate_base)
+  {
+    assert(intermediate_key != L_ADDR_NULL);
+    assert(intermediate_base != L_ADDR_NULL);
+    return _alloc_extent(
+      t,
+      hint,
+      len,
+      intermediate_key,
+      actual_addr,
+      nullptr
+    ).si_then([&t, this, intermediate_base](auto indirect_mapping) {
+      assert(indirect_mapping->is_indirect());
+      return update_refcount(t, intermediate_base, 1, false
+      ).si_then([imapping=std::move(indirect_mapping)](auto p) mutable {
+	auto mapping = std::move(p.second);
+	ceph_assert(mapping->is_stable());
+	mapping->make_indirect(
+	  imapping->get_key(),
+	  imapping->get_length(),
+	  imapping->get_intermediate_key());
+	return seastar::make_ready_future<
+	  LBAMappingRef>(std::move(mapping));
+      });
+    }).handle_error_interruptible(
+      crimson::ct_error::input_output_error::pass_further{},
+      crimson::ct_error::assert_all{"unexpect enoent"}
+    );
+  }
+
   alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
-    paddr_t addr) final;
+    paddr_t addr,
+    LogicalCachedExtent &ext) final
+  {
+    return _alloc_extent(
+      t,
+      hint,
+      len,
+      addr,
+      P_ADDR_NULL,
+      &ext);
+  }
 
   ref_ret decref_extent(
     Transaction &t,
-    laddr_t addr) final {
-    return update_refcount(t, addr, -1);
+    laddr_t addr,
+    bool cascade_remove) final {
+    return update_refcount(t, addr, -1, cascade_remove
+    ).si_then([](auto p) {
+      return std::move(p.first);
+    });
   }
 
   ref_ret incref_extent(
     Transaction &t,
     laddr_t addr) final {
-    return update_refcount(t, addr, 1);
+    return update_refcount(t, addr, 1, false
+    ).si_then([](auto p) {
+      return std::move(p.first);
+    });
   }
 
-  void complete_transaction(
+  ref_ret incref_extent(
     Transaction &t,
-    std::vector<CachedExtentRef> &,
-    std::vector<CachedExtentRef> &) final;
+    laddr_t addr,
+    int delta) final {
+    ceph_assert(delta > 0);
+    return update_refcount(t, addr, delta, false
+    ).si_then([](auto p) {
+      return std::move(p.first);
+    });
+  }
 
   /**
    * init_cached_extent
@@ -114,6 +317,8 @@ public:
   init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) final;
+
+  check_child_trackers_ret check_child_trackers(Transaction &t) final;
 
   scan_mappings_ret scan_mappings(
     Transaction &t,
@@ -128,8 +333,11 @@ public:
   update_mapping_ret update_mapping(
     Transaction& t,
     laddr_t laddr,
+    extent_len_t prev_len,
     paddr_t prev_addr,
-    paddr_t paddr) final;
+    extent_len_t len,
+    paddr_t paddr,
+    LogicalCachedExtent*) final;
 
   get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
@@ -137,18 +345,9 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) final;
-
-  void add_pin(LBAPin &pin) final {
-    auto *bpin = reinterpret_cast<BtreeLBAPin*>(&pin);
-    pin_set.add_pin(bpin->get_range_pin());
-    bpin->set_parent(nullptr);
-  }
-
-  ~BtreeLBAManager();
 private:
   Cache &cache;
 
-  btree_pin_set_t<laddr_t> pin_set;
 
   struct {
     uint64_t num_alloc_extents = 0;
@@ -156,10 +355,8 @@ private:
   } stats;
 
   op_context_t<laddr_t> get_context(Transaction &t) {
-    return op_context_t<laddr_t>{cache, t, &pin_set};
+    return op_context_t<laddr_t>{cache, t};
   }
-
-  static btree_range_pin_t<laddr_t> &get_pin(CachedExtent &e);
 
   seastar::metrics::metric_group metrics;
   void register_metrics();
@@ -169,11 +366,15 @@ private:
    *
    * Updates refcount, returns resulting refcount
    */
-  using update_refcount_ret = ref_ret;
+  using update_refcount_ret_bare = std::pair<ref_update_result_t, BtreeLBAMappingRef>;
+  using update_refcount_iertr = ref_iertr;
+  using update_refcount_ret = update_refcount_iertr::future<
+    update_refcount_ret_bare>;
   update_refcount_ret update_refcount(
     Transaction &t,
     laddr_t addr,
-    int delta);
+    int delta,
+    bool cascade_remove);
 
   /**
    * _update_mapping
@@ -181,14 +382,40 @@ private:
    * Updates mapping, removes if f returns nullopt
    */
   using _update_mapping_iertr = ref_iertr;
-  using _update_mapping_ret = ref_iertr::future<lba_map_val_t>;
+  using _update_mapping_ret_bare = std::pair<lba_map_val_t, BtreeLBAMappingRef>;
+  using _update_mapping_ret = ref_iertr::future<_update_mapping_ret_bare>;
   using update_func_t = std::function<
     lba_map_val_t(const lba_map_val_t &v)
     >;
   _update_mapping_ret _update_mapping(
     Transaction &t,
     laddr_t addr,
-    update_func_t &&f);
+    update_func_t &&f,
+    LogicalCachedExtent*);
+
+  alloc_extent_ret _alloc_extent(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len,
+    pladdr_t addr,
+    paddr_t actual_addr,
+    LogicalCachedExtent*);
+
+  using _get_mapping_ret = get_mapping_iertr::future<BtreeLBAMappingRef>;
+  _get_mapping_ret _get_mapping(
+    Transaction &t,
+    laddr_t offset);
+
+  using _get_original_mappings_ret = get_mappings_ret;
+  _get_original_mappings_ret _get_original_mappings(
+    op_context_t<laddr_t> c,
+    std::list<BtreeLBAMappingRef> &pin_list);
+
+  ref_iertr::future<std::optional<std::pair<paddr_t, extent_len_t>>>
+  _decref_intermediate(
+    Transaction &t,
+    laddr_t addr,
+    extent_len_t len);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

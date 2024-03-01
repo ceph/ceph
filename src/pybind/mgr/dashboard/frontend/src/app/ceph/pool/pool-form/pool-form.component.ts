@@ -1,5 +1,5 @@
 import { Component, OnInit, Type, ViewChild } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbNav, NgbTooltip } from '@ng-bootstrap/ng-bootstrap';
@@ -120,22 +120,22 @@ export class PoolFormComponent extends CdForm implements OnInit {
 
   private createForm() {
     const compressionForm = new CdFormGroup({
-      mode: new FormControl('none'),
-      algorithm: new FormControl(''),
-      minBlobSize: new FormControl('', {
+      mode: new UntypedFormControl('none'),
+      algorithm: new UntypedFormControl(''),
+      minBlobSize: new UntypedFormControl('', {
         updateOn: 'blur'
       }),
-      maxBlobSize: new FormControl('', {
+      maxBlobSize: new UntypedFormControl('', {
         updateOn: 'blur'
       }),
-      ratio: new FormControl('', {
+      ratio: new UntypedFormControl('', {
         updateOn: 'blur'
       })
     });
 
     this.form = new CdFormGroup(
       {
-        name: new FormControl('', {
+        name: new UntypedFormControl('', {
           validators: [
             Validators.pattern(/^[.A-Za-z0-9_/-]+$/),
             Validators.required,
@@ -149,10 +149,10 @@ export class PoolFormComponent extends CdForm implements OnInit {
             })
           ]
         }),
-        poolType: new FormControl('', {
+        poolType: new UntypedFormControl('', {
           validators: [Validators.required]
         }),
-        crushRule: new FormControl(null, {
+        crushRule: new UntypedFormControl(null, {
           validators: [
             CdValidators.custom(
               'tooFewOsds',
@@ -165,18 +165,18 @@ export class PoolFormComponent extends CdForm implements OnInit {
             )
           ]
         }),
-        size: new FormControl('', {
+        size: new UntypedFormControl('', {
           updateOn: 'blur'
         }),
-        erasureProfile: new FormControl(null),
-        pgNum: new FormControl('', {
+        erasureProfile: new UntypedFormControl(null),
+        pgNum: new UntypedFormControl('', {
           validators: [Validators.required]
         }),
-        pgAutoscaleMode: new FormControl(null),
-        ecOverwrites: new FormControl(false),
+        pgAutoscaleMode: new UntypedFormControl(null),
+        ecOverwrites: new UntypedFormControl(false),
         compression: compressionForm,
-        max_bytes: new FormControl(''),
-        max_objects: new FormControl(0)
+        max_bytes: new UntypedFormControl(''),
+        max_objects: new UntypedFormControl(0)
       },
       [CdValidators.custom('form', (): null => null)]
     );

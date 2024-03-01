@@ -328,14 +328,16 @@ void Beacon::notify_health(MDSRank const *mds)
   // Detect MDS_HEALTH_TRIM condition
   // Indicates MDS is not trimming promptly
   {
-    if (mds->mdlog->get_num_segments() > (size_t)(g_conf()->mds_log_max_segments * g_conf().get_val<double>("mds_log_warn_factor"))) {
+    const auto log_max_segments = mds->mdlog->get_max_segments();
+    const auto log_warn_factor = g_conf().get_val<double>("mds_log_warn_factor");
+    if (mds->mdlog->get_num_segments() > (size_t)(log_max_segments * log_warn_factor)) {
       CachedStackStringStream css;
       *css << "Behind on trimming (" << mds->mdlog->get_num_segments()
-        << "/" << g_conf()->mds_log_max_segments << ")";
+        << "/" << log_max_segments << ")";
 
       MDSHealthMetric m(MDS_HEALTH_TRIM, HEALTH_WARN, css->strv());
       m.metadata["num_segments"] = stringify(mds->mdlog->get_num_segments());
-      m.metadata["max_segments"] = stringify(g_conf()->mds_log_max_segments);
+      m.metadata["max_segments"] = stringify(log_max_segments);
       health.metrics.push_back(m);
     }
   }
@@ -494,6 +496,37 @@ void Beacon::notify_health(MDSRank const *mds)
 
     MDSHealthMetric m(MDS_HEALTH_CACHE_OVERSIZED, HEALTH_WARN, css->strv());
     health.metrics.push_back(m);
+  }
+
+  // Report laggy client(s) due to laggy OSDs
+  {
+    bool defer_client_eviction =
+    g_conf().get_val<bool>("defer_client_eviction_on_laggy_osds")
+    && mds->objecter->with_osdmap([](const OSDMap &map) {
+      return map.any_osd_laggy(); });
+    auto&& laggy_clients = mds->server->get_laggy_clients();
+    if (defer_client_eviction && !laggy_clients.empty()) {
+      if (laggy_clients.size() <= (size_t)g_conf()->mds_health_summarize_threshold) {
+	std::vector<MDSHealthMetric> laggy_clients_metrics;
+	for (const auto& laggy_client: laggy_clients) {
+	  CachedStackStringStream css;
+	  *css << "Client " << laggy_client << " is laggy; not evicted"
+	       << " because some OSD(s) is/are laggy";
+	  MDSHealthMetric m(MDS_HEALTH_CLIENTS_LAGGY, HEALTH_WARN, css->strv());
+	  laggy_clients_metrics.emplace_back(std::move(m));
+	}
+	auto&& m = laggy_clients_metrics;
+	health.metrics.insert(std::end(health.metrics), std::cbegin(m),
+			      std::cend(m));
+      } else {
+	CachedStackStringStream css;
+	*css << "Many client (" << laggy_clients.size()
+	     << ") are laggy; not evicting since some OSD(s) are laggy";
+	MDSHealthMetric m(MDS_HEALTH_CLIENTS_LAGGY_MANY, HEALTH_WARN, css->strv());
+	m.metadata["client_count"] = stringify(laggy_clients.size());
+	health.metrics.push_back(std::move(m));
+      }
+    }
   }
 }
 

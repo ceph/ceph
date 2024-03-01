@@ -400,6 +400,10 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
         CLS_LOG(10, "INFO: queue_list_entries(): not enough data to read data, breaking out!");
         break;
       }
+      if (!op.end_marker.empty() && entry.marker == op.end_marker) {
+        last_marker = entry.marker;
+        break;
+      }
       op_ret.entries.emplace_back(entry);
       // Resetting some values
       offset_populated = false;
@@ -414,11 +418,17 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
       }
     } while(index < bl_chunk.length());
 
-    CLS_LOG(10, "INFO: num_ops: %lu and op.max is %lu\n", num_ops, op.max);
+    CLS_LOG(10, "INFO: num_ops: %lu and op.max is %lu, last_marker: %s and op.end_marker is %s\n",
+            num_ops, op.max, last_marker.c_str(), op.end_marker.c_str());
 
-    if (num_ops == op.max) {
-      next_marker = cls_queue_marker{(entry_start_offset + index), gen};
-      CLS_LOG(10, "INFO: queue_list_entries(): num_ops is same as op.max, hence breaking out from outer loop with next offset: %lu", next_marker.offset);
+    if (num_ops == op.max || (!op.end_marker.empty() && op.end_marker == last_marker)) {
+      if (!op.end_marker.empty()) {
+        next_marker.from_str(op.end_marker.c_str());
+      } else {
+        next_marker = cls_queue_marker{(entry_start_offset + index), gen};
+      }
+      CLS_LOG(10, "INFO: queue_list_entries(): either num_ops is same as op.max or last_marker is same as op.end_marker, "
+                  "hence breaking out from outer loop with next offset: %lu", next_marker.offset);
       break;
     }
 

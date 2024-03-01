@@ -1168,11 +1168,13 @@ inline namespace v14_2_0 {
 
     // compound object operations
     int operate(const std::string& oid, ObjectWriteOperation *op);
-    int operate(const std::string& oid, ObjectWriteOperation *op, int flags, const jspan_context *trace_info = nullptr);
+    int operate(const std::string& oid, ObjectWriteOperation *op, int flags);
+    int operate(const std::string& oid, ObjectWriteOperation *op, int flags, const jspan_context *trace_info);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl);
     int operate(const std::string& oid, ObjectReadOperation *op, bufferlist *pbl, int flags);
     int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op);
-    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags, const jspan_context *trace_info = nullptr);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags);
+    int aio_operate(const std::string& oid, AioCompletion *c, ObjectWriteOperation *op, int flags, const jspan_context *trace_info);
     /**
      * Schedule an async write operation with explicit snapshot parameters
      *
@@ -1477,8 +1479,11 @@ inline namespace v14_2_0 {
     int get_pool_stats(std::list<std::string>& v,
                        std::string& category,
 		       std::map<std::string, stats_map>& stats);
-    /// check if pool has selfmanaged snaps
-    bool get_pool_is_selfmanaged_snaps_mode(const std::string& poolname);
+
+    /// check if pool has or had selfmanaged snaps
+    bool get_pool_is_selfmanaged_snaps_mode(const std::string& poolname)
+      __attribute__ ((deprecated));
+    int pool_is_in_selfmanaged_snaps_mode(const std::string& poolname);
 
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);

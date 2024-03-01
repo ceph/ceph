@@ -101,16 +101,16 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
   size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
   optional_yield y;
+  std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
 
   int process(bufferlist& cipher, size_t part_ofs, size_t size);
 
-protected:
-  std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
 public:
   RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
                          CephContext* cct,
                          RGWGetObj_Filter* next,
                          std::unique_ptr<BlockCrypt> crypt,
+                         std::vector<size_t> parts_len,
                          optional_yield y);
   virtual ~RGWGetObj_BlockDecrypt();
 
@@ -121,7 +121,9 @@ public:
                           off_t bl_len) override;
   virtual int flush() override;
 
-  int read_manifest(const DoutPrefixProvider *dpp, bufferlist& manifest_bl);
+  static int read_manifest_parts(const DoutPrefixProvider *dpp,
+                                 const bufferlist& manifest_bl,
+                                 std::vector<size_t>& parts_len);
 }; /* RGWGetObj_BlockDecrypt */
 
 
@@ -145,13 +147,13 @@ public:
 }; /* RGWPutObj_BlockEncrypt */
 
 
-int rgw_s3_prepare_encrypt(req_state* s,
+int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string,
                                     std::string>& crypt_http_responses);
 
-int rgw_s3_prepare_decrypt(req_state* s,
+int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string,
@@ -166,7 +168,7 @@ static inline void set_attr(std::map<std::string, bufferlist>& attrs,
   attrs[key] = std::move(bl);
 }
 
-static inline std::string get_str_attribute(std::map<std::string, bufferlist>& attrs,
+static inline std::string get_str_attribute(const std::map<std::string, bufferlist>& attrs,
                                             const char *name)
 {
   auto iter = attrs.find(name);
@@ -176,4 +178,4 @@ static inline std::string get_str_attribute(std::map<std::string, bufferlist>& a
   return iter->second.to_str();
 }
 
-int rgw_remove_sse_s3_bucket_key(req_state *s);
+int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y);

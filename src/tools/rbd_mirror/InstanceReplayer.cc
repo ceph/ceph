@@ -334,6 +334,8 @@ void InstanceReplayer<I>::start_image_replayer(
 
   std::string global_image_id = image_replayer->get_global_image_id();
   if (!image_replayer->is_stopped()) {
+    dout(10) << "image replayer is not stopped for global_image_id="
+             << global_image_id << dendl;
     return;
   } else if (image_replayer->is_blocklisted()) {
     derr << "global_image_id=" << global_image_id << ": blocklisted detected "
@@ -348,6 +350,8 @@ void InstanceReplayer<I>::start_image_replayer(
     image_replayer->destroy();
     return;
   } else if (m_manual_stop) {
+    dout(10) << "image replayer manually stopped for global_image_id="
+             << global_image_id << dendl;
     return;
   }
 

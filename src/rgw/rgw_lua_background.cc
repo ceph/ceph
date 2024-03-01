@@ -56,15 +56,15 @@ int RGWTable::increment_by(lua_State* L) {
   return 0;
 }
 
-Background::Background(rgw::sal::Driver* driver,
-    CephContext* cct,
-      const std::string& luarocks_path,
-      int execute_interval) :
-    execute_interval(execute_interval),
-    dp(cct, dout_subsys, "lua background: "),
-    lua_manager(driver->get_lua_manager()),
-    cct(cct),
-    luarocks_path(luarocks_path) {}
+Background::Background(rgw::sal::Driver* _driver,
+    CephContext* _cct,
+    rgw::sal::LuaManager* _lua_manager,
+    int _execute_interval) :
+    execute_interval(_execute_interval)
+    , dp(_cct, dout_subsys, "lua background: ")
+    , lua_manager(_lua_manager)
+    , cct(_cct)
+{}
 
 void Background::shutdown(){
   stopped = true;
@@ -97,7 +97,6 @@ void Background::pause() {
 }
 
 void Background::resume(rgw::sal::Driver* driver) {
-  lua_manager = driver->get_lua_manager();
   paused = false;
   cond.notify_all();
 }
@@ -108,7 +107,7 @@ int Background::read_script() {
     return -EAGAIN;
   }
   std::string tenant;
-  return rgw::lua::read_script(&dp, lua_manager.get(), tenant, null_yield, rgw::lua::context::background, rgw_script);
+  return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script);
 }
 
 const BackgroundMapValue Background::empty_table_value;
@@ -126,13 +125,23 @@ const BackgroundMapValue& Background::get_table_value(const std::string& key) co
 //(2) Executes the script
 //(3) Sleep (configurable)
 void Background::run() {
-  lua_State* const L = luaL_newstate();
-  rgw::lua::lua_state_guard lguard(L);
-  open_standard_libs(L);
-  set_package_path(L, luarocks_path);
-  create_debug_action(L, cct);
-  create_background_metatable(L);
   const DoutPrefixProvider* const dpp = &dp;
+  lua_state_guard lguard(cct->_conf->rgw_lua_max_memory_per_state, dpp);
+  auto L = lguard.get();
+  if (!L) {
+    ldpp_dout(dpp, 1) << "Failed to create state for Lua background thread" << dendl;
+    return;
+  }
+  try {
+    open_standard_libs(L);
+  set_package_path(L, lua_manager->luarocks_path());
+    create_debug_action(L, cct);
+    create_background_metatable(L);
+  } catch (const std::runtime_error& e) { 
+    ldpp_dout(dpp, 1) << "Failed to create initial setup of Lua background thread. error " 
+      << e.what() << dendl;
+    return;
+  }
 
   while (!stopped) {
     if (paused) {
@@ -145,6 +154,7 @@ void Background::run() {
       }
       ldpp_dout(dpp, 10) << "Lua background thread resumed" << dendl;
     }
+    
     const auto rc = read_script();
     if (rc == -ENOENT || rc == -EAGAIN) {
       // either no script or paused, nothing to do
@@ -159,7 +169,7 @@ void Background::run() {
           ldpp_dout(dpp, 1) << "Lua ERROR: " << err << dendl;
           failed = true;
         }
-      } catch (const std::exception& e) {
+      } catch (const std::runtime_error& e) {
         ldpp_dout(dpp, 1) << "Lua ERROR: " << e.what() << dendl;
         failed = true;
       }
@@ -174,7 +184,14 @@ void Background::run() {
 }
 
 void Background::create_background_metatable(lua_State* L) {
-  create_metatable<rgw::lua::RGWTable>(L, true, &rgw_map, &table_mutex);
+  static const char* background_table_name = "RGW";
+  create_metatable<RGWTable>(L, "", background_table_name, true, &rgw_map, &table_mutex);
+  lua_getglobal(L, background_table_name);
+  ceph_assert(lua_istable(L, -1));
+}
+
+void Background::set_manager(rgw::sal::LuaManager* _lua_manager) {
+  lua_manager = _lua_manager;
 }
 
 } //namespace rgw::lua

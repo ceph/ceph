@@ -47,30 +47,31 @@ class HostControllerTest(ControllerTestCase):
 
         def _get_hosts(sources=None):
             if sources == 'ceph':
-                return hosts[0]
+                return [hosts[0]]
             if sources == 'orchestrator':
                 return hosts[1:]
             if sources == 'ceph, orchestrator':
-                return hosts[2]
+                return [hosts[2]]
             return hosts
 
-        mock_get_hosts.side_effect = _get_hosts
+        with patch_orch(True, hosts=hosts):
+            mock_get_hosts.side_effect = _get_hosts
+            self._get(self.URL_HOST, version=APIVersion(1, 1))
+            self.assertStatus(200)
+            self.assertJsonBody(hosts)
 
-        self._get(self.URL_HOST, version=APIVersion(1, 1))
-        self.assertStatus(200)
-        self.assertJsonBody(hosts)
+            self._get('{}?sources=ceph'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self.assertStatus(200)
+            self.assertJsonBody([hosts[0]])
 
-        self._get('{}?sources=ceph'.format(self.URL_HOST), version=APIVersion(1, 1))
-        self.assertStatus(200)
-        self.assertJsonBody(hosts[0])
+            self._get('{}?sources=orchestrator'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self.assertStatus(200)
+            self.assertJsonBody(hosts[1:])
 
-        self._get('{}?sources=orchestrator'.format(self.URL_HOST), version=APIVersion(1, 1))
-        self.assertStatus(200)
-        self.assertJsonBody(hosts[1:])
-
-        self._get('{}?sources=ceph,orchestrator'.format(self.URL_HOST), version=APIVersion(1, 1))
-        self.assertStatus(200)
-        self.assertJsonBody(hosts)
+            self._get('{}?sources=ceph,orchestrator'.format(self.URL_HOST),
+                      version=APIVersion(1, 1))
+            self.assertStatus(200)
+            self.assertJsonBody(hosts)
 
     @mock.patch('dashboard.controllers.host.get_hosts')
     def test_host_list_with_facts(self, mock_get_hosts):
@@ -105,7 +106,9 @@ class HostControllerTest(ControllerTestCase):
                 'orchestrator': False
             },
             'cpu_count': 1,
-            'memory_total_kb': 1024
+            'memory_total_kb': 1024,
+            'services': [],
+            'service_instances': [{'type': 'mon', 'count': 1}]
         }, {
             'hostname': 'host-1',
             'sources': {
@@ -113,31 +116,38 @@ class HostControllerTest(ControllerTestCase):
                 'orchestrator': True
             },
             'cpu_count': 2,
-            'memory_total_kb': 1024
+            'memory_total_kb': 1024,
+            'services': [],
+            'service_instances': [{'type': 'mon', 'count': 1}]
         }]
         # test with orchestrator available
         with patch_orch(True, hosts=hosts_without_facts) as fake_client:
             mock_get_hosts.return_value = hosts_without_facts
-            fake_client.hosts.get_facts.return_value = hosts_facts
+
+            def get_facts_mock(hostname: str):
+                if hostname == 'host-0':
+                    return [hosts_facts[0]]
+                return [hosts_facts[1]]
+            fake_client.hosts.get_facts.side_effect = get_facts_mock
             # test with ?facts=true
-            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 3))
             self.assertStatus(200)
             self.assertHeader('Content-Type',
-                              APIVersion(1, 2).to_mime_type())
+                              APIVersion(1, 3).to_mime_type())
             self.assertJsonBody(hosts_with_facts)
 
             # test with ?facts=false
-            self._get('{}?facts=false'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self._get('{}?facts=false'.format(self.URL_HOST), version=APIVersion(1, 3))
             self.assertStatus(200)
             self.assertHeader('Content-Type',
-                              APIVersion(1, 2).to_mime_type())
+                              APIVersion(1, 3).to_mime_type())
             self.assertJsonBody(hosts_without_facts)
 
         # test with orchestrator available but orch backend!=cephadm
         with patch_orch(True, missing_features=['get_facts']) as fake_client:
             mock_get_hosts.return_value = hosts_without_facts
             # test with ?facts=true
-            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 3))
             self.assertStatus(400)
 
         # test with no orchestrator available
@@ -145,14 +155,14 @@ class HostControllerTest(ControllerTestCase):
             mock_get_hosts.return_value = hosts_without_facts
 
             # test with ?facts=true
-            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self._get('{}?facts=true'.format(self.URL_HOST), version=APIVersion(1, 3))
             self.assertStatus(400)
 
             # test with ?facts=false
-            self._get('{}?facts=false'.format(self.URL_HOST), version=APIVersion(1, 1))
+            self._get('{}?facts=false'.format(self.URL_HOST), version=APIVersion(1, 3))
             self.assertStatus(200)
             self.assertHeader('Content-Type',
-                              APIVersion(1, 2).to_mime_type())
+                              APIVersion(1, 3).to_mime_type())
             self.assertJsonBody(hosts_without_facts)
 
     def test_get_1(self):
@@ -472,21 +482,14 @@ class TestHosts(unittest.TestCase):
 
         with patch_orch(True, hosts=orch_hosts):
             hosts = get_hosts()
-            self.assertEqual(len(hosts), 3)
+            self.assertEqual(len(hosts), 2)
             checks = {
-                'localhost': {
-                    'sources': {
-                        'ceph': True,
-                        'orchestrator': False
-                    },
-                    'labels': []
-                },
                 'node1': {
                     'sources': {
-                        'ceph': True,
+                        'ceph': False,
                         'orchestrator': True
                     },
-                    'labels': ['bar', 'foo']
+                    'labels': ['foo', 'bar']
                 },
                 'node2': {
                     'sources': {

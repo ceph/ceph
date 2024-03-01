@@ -127,8 +127,8 @@ Monitor databases might grow in size when there are placement groups that have
 not reached an ``active+clean`` state in a long time.
 
 This alert might also indicate that the monitor's database is not properly
-compacting, an issue that has been observed with some older versions of leveldb
-and rocksdb. Forcing a compaction with ``ceph daemon mon.<id> compact`` might
+compacting, an issue that has been observed with some older versions of
+RocksDB. Forcing a compaction with ``ceph daemon mon.<id> compact`` might
 shrink the database's on-disk size.
 
 This alert might also indicate that the monitor has a bug that prevents it from
@@ -522,6 +522,16 @@ Since this migration can take a considerable amount of time to complete, we
 recommend that you begin the process well in advance of any update to Reef or
 to later releases.
 
+OSD_UNREACHABLE
+_______________
+
+Registered v1/v2 public address of one or more OSD(s) is/are out of the
+defined `public_network` subnet, which will prevent these unreachable OSDs
+from communicating with ceph clients properly.
+
+Even though these unreachable OSDs are in up state, rados clients
+will hang till TCP timeout before erroring out due to this inconsistency.
+
 POOL_FULL
 _________
 
@@ -842,6 +852,8 @@ This message can be silenced by disabling self-heal behavior (that is, setting
 ``mgr/devicehealth/self_heal`` to ``false``), by adjusting
 ``mgr/devicehealth/mark_out_threshold``, or by addressing whichever condition
 is preventing data from being migrated off of the ailing OSD(s).
+
+.. _rados_health_checks_device_health_toomany:
 
 DEVICE_HEALTH_TOOMANY
 _____________________
@@ -1224,8 +1236,8 @@ The health check will be silenced for a specific pool only if
 POOL_APP_NOT_ENABLED
 ____________________
 
-A pool exists that contains one or more objects, but the pool has not been
-tagged for use by a particular application.
+A pool exists but the pool has not been tagged for use by a particular
+application.
 
 To resolve this issue, tag the pool for use by an application. For
 example, if the pool is used by RBD, run the following command:
@@ -1403,6 +1415,31 @@ other performance issue with the OSDs.
 
 The exact size of the snapshot trim queue is reported by the ``snaptrimq_len``
 field of ``ceph pg ls -f json-detail``.
+
+Stretch Mode
+------------
+
+INCORRECT_NUM_BUCKETS_STRETCH_MODE
+__________________________________
+
+Stretch mode currently only support 2 dividing buckets with OSDs, this warning suggests
+that the number of dividing buckets is not equal to 2 after stretch mode is enabled.
+You can expect unpredictable failures and MON assertions until the condition is fixed.
+
+We encourage you to fix this by removing additional dividing buckets or bump the
+number of dividing buckets to 2.
+
+UNEVEN_WEIGHTS_STRETCH_MODE
+___________________________
+
+The 2 dividing buckets must have equal weights when stretch mode is enabled.
+This warning suggests that the 2 dividing buckets have uneven weights after
+stretch mode is enabled. This is not immediately fatal, however, you can expect
+Ceph to be confused when trying to process transitions between dividing buckets.
+
+We encourage you to fix this by making the weights even on both dividing buckets.
+This can be done by making sure the combined weight of the OSDs on each dividing
+bucket are the same.
 
 Miscellaneous
 -------------

@@ -128,42 +128,6 @@ class TestEnableSystemdUnits(object):
 
 class TestValidateDevices(object):
 
-    def test_filestore_missing_journal(self):
-        activation = activate.Activate([])
-        with pytest.raises(RuntimeError) as error:
-            activation.validate_devices({'type': 'filestore', 'data': {}})
-        assert 'Unable to activate filestore OSD due to missing devices' in str(error.value)
-
-    def test_filestore_missing_data(self):
-        activation = activate.Activate([])
-        with pytest.raises(RuntimeError) as error:
-            activation.validate_devices({'type': 'filestore', 'journal': {}})
-        assert 'Unable to activate filestore OSD due to missing devices' in str(error.value)
-
-    def test_filestore_journal_device_found(self, capsys):
-        activation = activate.Activate([])
-        with pytest.raises(RuntimeError):
-            activation.validate_devices({'type': 'filestore', 'journal': {}})
-        stdout, stderr = capsys.readouterr()
-        assert "devices found: ['journal']" in stderr
-
-    def test_filestore_data_device_found(self, capsys):
-        activation = activate.Activate([])
-        with pytest.raises(RuntimeError):
-            activation.validate_devices({'type': 'filestore', 'data': {}})
-        stdout, stderr = capsys.readouterr()
-        assert "devices found: ['data']" in stderr
-
-    def test_filestore_with_all_devices(self):
-        activation = activate.Activate([])
-        result = activation.validate_devices({'type': 'filestore', 'journal': {}, 'data': {}})
-        assert result is True
-
-    def test_filestore_without_type(self):
-        activation = activate.Activate([])
-        result = activation.validate_devices({'journal': {}, 'data': {}})
-        assert result is True
-
     def test_bluestore_with_all_devices(self):
         activation = activate.Activate([])
         result = activation.validate_devices({'type': 'bluestore', 'data': {}, 'block': {}})

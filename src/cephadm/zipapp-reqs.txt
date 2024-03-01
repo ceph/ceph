@@ -1,0 +1,16 @@
+# Requirements for the cephadm zipapp (aka the binary).
+#
+# IMPORTANT: The cephadm binary is expected to be portable across python
+# versions and CPU architectures. Dependencies are copied into the zipapp
+# by the build script and must not require compiled C (or C++, Rust, etc)
+# modules. Modules that have an optional C accelerator but can fall back
+# to pure python are OK. When you add a package to this list verify that
+# build.py creates the zipapp with only python files.
+#
+# IMPORTANT: This file is only used for installing the requirements that
+# cephaadm needs for the tox/unit tests. The actual zipapp is build using
+# the build.py script. The PY_REQUIREMENTS value in that script *must*
+# be kept in sync with this list.
+#
+MarkupSafe >= 2.1.3, <2.2
+Jinja2 >= 3.1.2, <3.2

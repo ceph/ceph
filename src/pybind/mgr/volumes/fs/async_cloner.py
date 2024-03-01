@@ -191,7 +191,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
 def set_quota_on_clone(fs_handle, clone_volumes_pair):
     src_path = clone_volumes_pair[1].snapshot_data_path(clone_volumes_pair[2])
     dst_path = clone_volumes_pair[0].path
-    quota = None # type: Optional[int]
+    quota: Optional[int] = None
     try:
         quota = int(fs_handle.getxattr(src_path, 'ceph.quota.max_bytes').decode('utf-8'))
     except cephfs.NoData:
@@ -205,7 +205,7 @@ def set_quota_on_clone(fs_handle, clone_volumes_pair):
         except cephfs.Error as e:
              raise VolumeException(-e.args[0], e.args[1])
 
-    quota_files = None # type: Optional[int]
+    quota_files: Optional[int] = None
     try:
         quota_files = int(fs_handle.getxattr(src_path, 'ceph.quota.max_files').decode('utf-8'))
     except cephfs.NoData:
@@ -221,19 +221,25 @@ def set_quota_on_clone(fs_handle, clone_volumes_pair):
 
 def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(fs_client, volname) as fs_handle:
-        with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
-            src_path = clone_volumes[1].snapshot_data_path(clone_volumes[2])
-            dst_path = clone_volumes[0].path
+        with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname,
+                                       groupname, subvolname) \
+            as (subvol0, subvol1, subvol2):
+            src_path = subvol1.snapshot_data_path(subvol2)
+            dst_path = subvol0.path
+            # XXX: this is where cloning (of subvolume's snapshots) actually
+            # happens.
             bulk_copy(fs_handle, src_path, dst_path, should_cancel)
-            set_quota_on_clone(fs_handle, clone_volumes)
+            set_quota_on_clone(fs_handle, (subvol0, subvol1, subvol2))
 
 def update_clone_failure_status(fs_client, volspec, volname, groupname, subvolname, ve):
     with open_volume_lockless(fs_client, volname) as fs_handle:
-        with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
+        with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname,
+                                       groupname, subvolname) \
+            as (subvol0, subvol1, subvol2) :
             if ve.errno == -errno.EINTR:
-                clone_volumes[0].add_clone_failure(-ve.errno, "user interrupted clone operation")
+                subvol0.add_clone_failure(-ve.errno, "user interrupted clone operation")
             else:
-                clone_volumes[0].add_clone_failure(-ve.errno, ve.error_str)
+                subvol0.add_clone_failure(-ve.errno, ve.error_str)
 
 def log_clone_failure(volname, groupname, subvolname, ve):
     if ve.errno == -errno.EINTR:
@@ -261,8 +267,10 @@ def handle_clone_failed(fs_client, volspec, volname, index, groupname, subvolnam
     try:
         with open_volume(fs_client, volname) as fs_handle:
             # detach source but leave the clone section intact for later inspection
-            with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
-                clone_volumes[1].detach_snapshot(clone_volumes[2], index)
+            with open_clone_subvolume_pair(fs_client, fs_handle, volspec,
+                                           volname, groupname, subvolname) \
+                as (subvol0, subvol1, subvol2):
+                subvol1.detach_snapshot(subvol2, index)
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
@@ -270,9 +278,11 @@ def handle_clone_failed(fs_client, volspec, volname, index, groupname, subvolnam
 def handle_clone_complete(fs_client, volspec, volname, index, groupname, subvolname, should_cancel):
     try:
         with open_volume(fs_client, volname) as fs_handle:
-            with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
-                clone_volumes[1].detach_snapshot(clone_volumes[2], index)
-                clone_volumes[0].remove_clone_source(flush=True)
+            with open_clone_subvolume_pair(fs_client, fs_handle, volspec,
+                                           volname, groupname, subvolname) \
+                as (subvol0, subvol1, subvol2):
+                subvol1.detach_snapshot(subvol2, index)
+                subvol0.remove_clone_source(flush=True)
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
@@ -287,9 +297,14 @@ def start_clone_sm(fs_client, volspec, volname, index, groupname, subvolname, st
             time.sleep(snapshot_clone_delay)
             log.info("Delayed cloning ({0}, {1}, {2}) -- by {3} seconds".format(volname, groupname, subvolname, snapshot_clone_delay))
         while not finished:
+            # XXX: this is where request operation is mapped to relevant
+            # function.
             handler = state_table.get(current_state, None)
             if not handler:
                 raise VolumeException(-errno.EINVAL, "invalid clone state: \"{0}\"".format(current_state))
+            # XXX: this is where the requested operation for subvolume's
+            # snapshot clone is performed. the function for the request
+            # operation is run through "handler".
             (next_state, finished) = handler(fs_client, volspec, volname, index, groupname, subvolname, should_cancel)
             if next_state:
                 log.debug("({0}, {1}, {2}) transition state [\"{3}\" => \"{4}\"]".format(volname, groupname, subvolname,\
@@ -322,9 +337,10 @@ class Cloner(AsyncJobs):
     this relies on a simple state machine (which mimics states from SubvolumeOpSm class) as
     the driver. file types supported are directories, symbolic links and regular files.
     """
-    def __init__(self, volume_client, tp_size, snapshot_clone_delay):
+    def __init__(self, volume_client, tp_size, snapshot_clone_delay, clone_no_wait):
         self.vc = volume_client
         self.snapshot_clone_delay = snapshot_clone_delay
+        self.snapshot_clone_no_wait = clone_no_wait
         self.state_table = {
             SubvolumeStates.STATE_PENDING      : handle_clone_pending,
             SubvolumeStates.STATE_INPROGRESS   : handle_clone_in_progress,
@@ -339,6 +355,9 @@ class Cloner(AsyncJobs):
 
     def reconfigure_snapshot_clone_delay(self, timeout):
         self.snapshot_clone_delay = timeout
+
+    def reconfigure_reject_clones(self, clone_no_wait):
+        self.snapshot_clone_no_wait = clone_no_wait
 
     def is_clone_cancelable(self, clone_state):
         return not (SubvolumeOpSm.is_complete_state(clone_state) or SubvolumeOpSm.is_failed_state(clone_state))

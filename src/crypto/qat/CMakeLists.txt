@@ -12,8 +12,8 @@ add_library(ceph_crypto_qat SHARED ${qat_crypto_plugin_srcs})
 add_dependencies(crypto_plugins ceph_crypto_qat)
 
 target_link_libraries(ceph_crypto_qat PRIVATE
-                      QatDrv::qat_s
-                      QatDrv::usdm_drv_s
+                      QAT::qat
+                      QAT::usdm
                       spawn)
 
 add_dependencies(crypto_plugins ceph_crypto_qat)

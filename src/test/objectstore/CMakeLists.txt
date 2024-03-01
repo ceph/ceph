@@ -138,3 +138,15 @@ if(WITH_BLUESTORE)
   install(TARGETS ceph_test_alloc_replay
     DESTINATION bin)
 endif()
+
+# fragmentation simulator
+add_library(ObjectStoreImitator OBJECT ObjectStoreImitator.cc)
+
+add_executable(ceph_test_fragmentation_sim
+  Fragmentation_simulator.cc
+  $<TARGET_OBJECTS:ObjectStoreImitator>)
+add_ceph_unittest(ceph_test_fragmentation_sim)
+target_link_libraries(ceph_test_fragmentation_sim os global)
+
+set_target_properties(ceph_test_fragmentation_sim PROPERTIES COMPILE_FLAGS
+"${UNITTEST_CXX_FLAGS}")

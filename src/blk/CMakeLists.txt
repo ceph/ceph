@@ -20,11 +20,6 @@ if(WITH_SPDK)
     spdk/NVMEDevice.cc)
 endif()
 
-if(WITH_ZBD)
-  list(APPEND libblk_srcs
-    zoned/HMSMRDevice.cc)
-endif()
-
 if(libblk_srcs)
   add_library(blk STATIC ${libblk_srcs})
   target_include_directories(blk PRIVATE "./")
@@ -37,10 +32,6 @@ endif(HAVE_LIBAIO)
 if(WITH_SPDK)
   target_link_libraries(blk
     PRIVATE spdk::spdk)
-endif()
-
-if(WITH_ZBD)
-  target_link_libraries(blk PRIVATE ${ZBD_LIBRARIES})
 endif()
 
 if(WITH_BLUESTORE_PMEM)
@@ -57,11 +48,5 @@ if(WITH_EVENTTRACE)
 endif()
 
 if(WITH_LIBURING)
-  if(WITH_SYSTEM_LIBURING)
-    find_package(uring REQUIRED)
-  else()
-    include(Builduring)
-    build_uring()
-  endif()
   target_link_libraries(blk PRIVATE uring::uring)
 endif()

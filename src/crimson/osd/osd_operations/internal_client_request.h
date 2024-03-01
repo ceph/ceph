@@ -39,7 +39,7 @@ private:
   void print(std::ostream &) const final;
   void dump_detail(Formatter *f) const final;
 
-  CommonPGPipeline& pp();
+  CommonPGPipeline& client_pp();
 
   seastar::future<> do_process();
 

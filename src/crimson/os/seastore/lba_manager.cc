@@ -16,8 +16,12 @@ LBAManager::update_mappings(
     return update_mapping(
       t,
       extent->get_laddr(),
+      extent->get_length(),
       extent->get_prior_paddr_and_reset(),
-      extent->get_paddr()
+      extent->get_length(),
+      extent->get_paddr(),
+      nullptr	// all the extents should have already been
+		// added to the fixed_kv_btree
     );
   });
 }

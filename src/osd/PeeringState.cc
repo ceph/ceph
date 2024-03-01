@@ -922,6 +922,10 @@ static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
 
 void PeeringState::check_past_interval_bounds() const
 {
+  // See: https://tracker.ceph.com/issues/64002
+  if (cct->_conf.get_val<bool>("osd_skip_check_past_interval_bounds")) {
+    return;
+  }
   // cluster_osdmap_trim_lower_bound gives us a bound on needed
   // intervals, see doc/dev/osd_internals/past_intervals.rst
   auto oldest_epoch = pl->cluster_osdmap_trim_lower_bound();
@@ -992,13 +996,7 @@ int PeeringState::clamp_recovery_priority(int priority, int pool_recovery_priori
   priority += pool_recovery_priority;
 
   // Clamp to valid range
-  if (priority > max) {
-    return max;
-  } else if (priority < OSD_RECOVERY_PRIORITY_MIN) {
-    return OSD_RECOVERY_PRIORITY_MIN;
-  } else {
-    return priority;
-  }
+  return std::clamp<int>(priority, OSD_RECOVERY_PRIORITY_MIN, max);
 }
 
 unsigned PeeringState::get_recovery_priority()
@@ -1224,7 +1222,11 @@ void PeeringState::proc_renew_lease()
 {
   assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   renew_lease(pl->get_mnow());
-  send_lease();
+  if (actingset.size() > 1) {
+    send_lease();
+  } else {
+    pl->recheck_readable();
+  }
   schedule_renew_lease();
 }
 
@@ -2166,9 +2168,11 @@ void PeeringState::choose_async_recovery_ec(
   const OSDMapRef osdmap) const
 {
   set<pair<int, pg_shard_t> > candidates_by_cost;
+  unsigned want_acting_size = 0;
   for (uint8_t i = 0; i < want->size(); ++i) {
     if ((*want)[i] == CRUSH_ITEM_NONE)
       continue;
+    ++want_acting_size;
 
     // Considering log entries to recover is accurate enough for
     // now. We could use minimum_to_decode_with_cost() later if
@@ -2201,6 +2205,7 @@ void PeeringState::choose_async_recovery_ec(
       candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
+  ceph_assert(candidates_by_cost.size() <= want_acting_size);
 
   psdout(20) << "candidates by cost are: " << candidates_by_cost
 	     << dendl;
@@ -2211,7 +2216,10 @@ void PeeringState::choose_async_recovery_ec(
     pg_shard_t cur_shard = rit->second;
     vector<int> candidate_want(*want);
     candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
-    if (recoverable(candidate_want)) {
+    ceph_assert(want_acting_size > 0);
+    --want_acting_size;
+    if ((want_acting_size >= pool.info.min_size) &&
+	recoverable(candidate_want)) {
       want->swap(candidate_want);
       async_recovery->insert(cur_shard);
     }
@@ -2745,8 +2753,9 @@ void PeeringState::activate(
 	 ++i) {
       if (*i == pg_whoami) continue;
       pg_shard_t peer = *i;
-      ceph_assert(peer_info.count(peer));
-      pg_info_t& pi = peer_info[peer];
+      auto pi_it = peer_info.find(peer);
+      ceph_assert(pi_it != peer_info.end());
+      pg_info_t& pi = pi_it->second;
 
       psdout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
@@ -2755,8 +2764,9 @@ void PeeringState::activate(
       #else
       MRef<MOSDPGLog> m;
       #endif
-      ceph_assert(peer_missing.count(peer));
-      pg_missing_t& pm = peer_missing[peer];
+      auto pm_it = peer_missing.find(peer);
+      ceph_assert(pm_it != peer_missing.end());
+      pg_missing_t& pm = pm_it->second;
 
       bool needs_past_intervals = pi.dne();
 
@@ -2923,21 +2933,24 @@ void PeeringState::activate(
 	     ++i) {
 	  if (*i == pg_whoami) continue;
 	  psdout(10) << ": adding " << *i << " as a source" << dendl;
-	  ceph_assert(peer_missing.count(*i));
-	  ceph_assert(peer_info.count(*i));
+	  auto pi_it = peer_info.find(*i);
+	  ceph_assert(pi_it != peer_info.end());
+	  auto pm_it = peer_missing.find(*i);
+	  ceph_assert(pm_it != peer_missing.end());
 	  missing_loc.add_source_info(
 	    *i,
-	    peer_info[*i],
-	    peer_missing[*i],
+	    pi_it->second,
+	    pm_it->second,
             ctx.handle);
         }
       }
       for (auto i = peer_missing.begin(); i != peer_missing.end(); ++i) {
 	if (is_acting_recovery_backfill(i->first))
 	  continue;
-	ceph_assert(peer_info.count(i->first));
+	auto pi_it = peer_info.find(i->first);
+	ceph_assert(pi_it != peer_info.end());
 	search_for_missing(
-	  peer_info[i->first],
+	  pi_it->second,
 	  i->second,
 	  i->first,
 	  ctx);
@@ -2958,6 +2971,8 @@ void PeeringState::activate(
 
     state_set(PG_STATE_ACTIVATING);
     pl->on_activate(std::move(to_trim));
+  } else {
+    pl->on_replica_activate();
   }
   if (acting_set_writeable()) {
     PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
@@ -3636,8 +3651,9 @@ void PeeringState::update_calc_stats()
       if (is_backfill_target(peer.first)) {
         missing = std::max((int64_t)0, num_objects - peer_num_objects);
       } else {
-        if (peer_missing.count(peer.first)) {
-          missing = peer_missing[peer.first].num_missing();
+	auto pm_it = peer_missing.find(peer.first);
+        if (pm_it != peer_missing.end()) {
+          missing = pm_it->second.num_missing();
         } else {
           psdout(20) << "no peer_missing found for "
 		     << peer.first << dendl;
@@ -3880,8 +3896,6 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
 
   pg_stat_t pre_publish = info.stats;
   pre_publish.stats.add(unstable_stats);
-  utime_t cutoff = now;
-  cutoff -= cct->_conf->osd_pg_stat_report_interval_max;
 
   // share (some of) our purged_snaps via the pg_stats. limit # of intervals
   // because we don't want to make the pg_stat_t structures too expensive.
@@ -3896,8 +3910,24 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   psdout(20) << "reporting purged_snaps "
 	     << pre_publish.purged_snaps << dendl;
 
+  // when there is no change in osdmap,
+  // update info.stats.reported_epoch by the number of time seconds.
+  utime_t cutoff_time = now;
+  cutoff_time -=
+      cct->_conf.get_val<int64_t>("osd_pg_stat_report_interval_max_seconds");
+  const bool is_time_expired = cutoff_time > info.stats.last_fresh;
+
+  // 500 epoch osdmaps are also the minimum number of osdmaps that mon must retain.
+  // if info.stats.reported_epoch less than current osdmap epoch exceeds 500 osdmaps,
+  // it can be considered that the one reported by pgid is too old and needs to be updated.
+  // to facilitate mon trim osdmaps
+  epoch_t cutoff_epoch = info.stats.reported_epoch;
+  cutoff_epoch +=
+      cct->_conf.get_val<int64_t>("osd_pg_stat_report_interval_max_epochs");
+  const bool is_epoch_behind = cutoff_epoch < get_osdmap_epoch();
+
   if (pg_stats_publish && pre_publish == *pg_stats_publish &&
-      info.stats.last_fresh > cutoff) {
+      (!is_epoch_behind && !is_time_expired)) {
     psdout(15) << "publish_stats_to_osd " << pg_stats_publish->reported_epoch
 	       << ": no change since " << info.stats.last_fresh << dendl;
     return std::nullopt;
@@ -4090,12 +4120,14 @@ void PeeringState::merge_new_log_entries(
        ++i) {
     pg_shard_t peer(*i);
     if (peer == pg_whoami) continue;
-    ceph_assert(peer_missing.count(peer));
-    ceph_assert(peer_info.count(peer));
-    pg_missing_t& pmissing(peer_missing[peer]);
+    auto pm_it = peer_missing.find(peer);
+    ceph_assert(pm_it != peer_missing.end());
+    auto pi_it = peer_info.find(peer);
+    ceph_assert(pi_it != peer_info.end());
+    pg_missing_t& pmissing(pm_it->second);
     psdout(20) << "peer_missing for " << peer
 	       << " = " << pmissing << dendl;
-    pg_info_t& pinfo(peer_info[peer]);
+    pg_info_t& pinfo = pi_it->second;
     bool invalidate_stats = PGLog::append_log_entries_update_missing(
       pinfo.last_backfill,
       entries,
@@ -5966,14 +5998,12 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
     return forward_event();
   }
   psdout(10) << "Active advmap" << dendl;
-  bool need_publish = false;
 
   pl->on_active_advmap(advmap.osdmap);
   if (ps->dirty_big_info) {
     // share updated purged_snaps to mgr/mon so that we (a) stop reporting
     // purged snaps and (b) perhaps share more snaps that we have purged
     // but didn't fit in pg_stat_t.
-    need_publish = true;
     ps->share_pg_info();
   }
 
@@ -6015,18 +6045,9 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
       ps->state_set(PG_STATE_UNDERSIZED);
     }
     // degraded changes will be detected by call from publish_stats_to_osd()
-    need_publish = true;
   }
 
-  // if we haven't reported our PG stats in a long time, do so now.
-  if (ps->info.stats.reported_epoch + ps->cct->_conf->osd_pg_stat_report_interval_max < advmap.osdmap->get_epoch()) {
-    psdout(20) << "reporting stats to osd after " << (advmap.osdmap->get_epoch() - ps->info.stats.reported_epoch)
-		       << " epochs" << dendl;
-    need_publish = true;
-  }
-
-  if (need_publish)
-    pl->publish_stats_to_osd();
+  pl->publish_stats_to_osd();
 
   if (ps->check_prior_readable_down_osds(advmap.osdmap)) {
     pl->recheck_readable();
@@ -6129,10 +6150,9 @@ boost::statechart::result PeeringState::Active::react(const MInfoRec& infoevt)
   // may be telling us they have activated (and committed) but we can't
   // share that until _everyone_ does the same.
   if (ps->is_acting_recovery_backfill(infoevt.from) &&
-      ps->peer_activated.count(infoevt.from) == 0) {
+      ps->peer_activated.insert(infoevt.from).second) {
     psdout(10) << " peer osd." << infoevt.from
 	       << " activated and committed" << dendl;
-    ps->peer_activated.insert(infoevt.from);
     ps->blocked_by.erase(infoevt.from.shard);
     pl->publish_stats_to_osd();
     if (ps->peer_activated.size() == ps->acting_recovery_backfill.size()) {
@@ -6216,8 +6236,8 @@ boost::statechart::result PeeringState::Active::react(
   const ActivateCommitted &evt)
 {
   DECLARE_LOCALS;
-  ceph_assert(!ps->peer_activated.count(ps->pg_whoami));
-  ps->peer_activated.insert(ps->pg_whoami);
+  auto p = ps->peer_activated.insert(ps->pg_whoami);
+  ceph_assert(p.second);
   psdout(10) << "_activate_committed " << evt.epoch
 	     << " peer_activated now " << ps->peer_activated
 	     << " last_interval_started "
@@ -6316,6 +6336,22 @@ boost::statechart::result PeeringState::Active::react(const CheckReadable &evt)
 {
   DECLARE_LOCALS;
   pl->recheck_readable();
+  return discard_event();
+}
+
+boost::statechart::result PeeringState::Active::react(const PgCreateEvt &evt)
+{
+  DECLARE_LOCALS;
+  pg_t pgid = context< PeeringMachine >().spgid.pgid;
+
+  psdout(10) << __func__ << " receive PgCreateEvt"
+             << " is_peered=" << ps->is_peered() << dendl;
+
+  if (ps->is_peered()) {
+    psdout(10) << __func__ << " pg is peered, reply pg_created" << dendl;
+    pl->send_pg_created(pgid);
+  }
+
   return discard_event();
 }
 
@@ -6666,7 +6702,7 @@ void PeeringState::ToDelete::exit()
 PeeringState::WaitDeleteReserved::WaitDeleteReserved(my_context ctx)
   : my_base(ctx),
     NamedState(context< PeeringMachine >().state_history,
-	       "Started/ToDelete/WaitDeleteReseved")
+	       "Started/ToDelete/WaitDeleteReserved")
 {
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;

@@ -12,9 +12,18 @@
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
 releases:
+  reef:
+    target_eol: 2025-08-01
+    releases:
+      - version: 18.2.0
+        released: 2023-08-07
+      - version: 18.2.1
+        released: 2023-12-18
   quincy:
     target_eol: 2024-06-01
     releases:
+      - version: 17.2.7
+        released: 2023-10-30
       - version: 17.2.6
         released: 2023-04-10
       - version: 17.2.5
@@ -31,8 +40,12 @@ releases:
         released: 2022-04-19
 
   pacific:
-    target_eol: 2023-06-01
+    target_eol: 2023-10-01
     releases:
+      - version: 16.2.14
+        released: 2023-08-30
+      - version: 16.2.13
+        released: 2023-05-09
       - version: 16.2.12
         released: 2023-04-14
       - version: 16.2.11

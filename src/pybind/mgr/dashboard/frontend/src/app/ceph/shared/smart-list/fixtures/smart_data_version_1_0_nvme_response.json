@@ -79,7 +79,7 @@
         "Local Time is:                      Thu Oct 24 10:17:06 2019 CEST",
         "Firmware Updates (0x16):            3 Slots, no Reset required",
         "Optional Admin Commands (0x0017):   Security Format Frmw_DL Self_Test",
-        "Optional NVM Commands (0x005f):     Comp Wr_Unc DS_Mngmt Wr_Zero Sav/Sel_Feat Timestmp",
+        "Optional NVM Commands (0x005f):     Comp Wr_Unc DS_Mngmt Wr_Zero Sav/Sel_Feat Timestamp",
         "Maximum Data Transfer Size:         512 Pages",
         "Warning  Comp. Temp. Threshold:     85 Celsius",
         "Critical Comp. Temp. Threshold:     85 Celsius",

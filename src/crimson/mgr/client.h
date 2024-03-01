@@ -24,7 +24,7 @@ namespace crimson::mgr
 // implement WithStats if you want to report stats to mgr periodically
 class WithStats {
 public:
-  virtual seastar::future<MessageURef> get_stats() const = 0;
+  virtual seastar::future<MessageURef> get_stats() = 0;
   virtual ~WithStats() {}
 };
 
@@ -40,7 +40,7 @@ private:
   std::optional<seastar::future<>> ms_dispatch(
       crimson::net::ConnectionRef conn, Ref<Message> m) override;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) final;
-  void ms_handle_connect(crimson::net::ConnectionRef conn) final;
+  void ms_handle_connect(crimson::net::ConnectionRef conn, seastar::shard_id) final;
   seastar::future<> handle_mgr_map(crimson::net::ConnectionRef conn,
 				   Ref<MMgrMap> m);
   seastar::future<> handle_mgr_conf(crimson::net::ConnectionRef conn,
@@ -56,6 +56,10 @@ private:
   crimson::net::ConnectionRef conn;
   seastar::timer<seastar::lowres_clock> report_timer;
   crimson::common::Gated gate;
+  uint64_t last_config_bl_version = 0;
+  std::string service_name, daemon_name;
+
+  void _send_report();
 };
 
 inline std::ostream& operator<<(std::ostream& out, const Client& client) {

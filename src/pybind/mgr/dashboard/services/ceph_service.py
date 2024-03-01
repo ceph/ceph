@@ -294,6 +294,36 @@ class CephService(object):
         return {}
 
     @classmethod
+    def set_multisite_config(cls, realm_name, zonegroup_name, zone_name, daemon_name):
+        full_daemon_name = 'rgw.' + daemon_name
+
+        KMS_CONFIG = [
+            ['rgw_realm', realm_name],
+            ['rgw_zonegroup', zonegroup_name],
+            ['rgw_zone', zone_name]
+        ]
+
+        for (key, value) in KMS_CONFIG:
+            if value == 'null':
+                continue
+            CephService.send_command('mon', 'config set',
+                                     who=name_to_config_section(full_daemon_name),
+                                     name=key, value=value)
+        return {}
+
+    @classmethod
+    def get_realm_tokens(cls):
+        tokens_info = mgr.remote('rgw', 'get_realm_tokens')
+        return tokens_info
+
+    @classmethod
+    def import_realm_token(cls, realm_token, zone_name, port, placement_spec):
+        tokens_info = mgr.remote('rgw', 'import_realm_token', zone_name=zone_name,
+                                 realm_token=realm_token, port=port, placement=placement_spec,
+                                 start_radosgw=True)
+        return tokens_info
+
+    @classmethod
     def get_pool_pg_status(cls, pool_name):
         # type: (str) -> dict
         pool = cls.get_pool_by_attribute('pool_name', pool_name)
@@ -302,13 +332,14 @@ class CephService(object):
         return mgr.get("pg_summary")['by_pool'][pool['pool'].__str__()]
 
     @staticmethod
-    def send_command(srv_type, prefix, srv_spec='', **kwargs):
-        # type: (str, str, Optional[str], Any) -> Any
+    def send_command(srv_type, prefix, srv_spec='', to_json=True, inbuf='', **kwargs):
+        # type: (str, str, Optional[str], bool, str, Any) -> Any
         """
         :type prefix: str
         :param srv_type: mon |
         :param kwargs: will be added to argdict
         :param srv_spec: typically empty. or something like "<fs_id>:0"
+        :param to_json: if true return as json format
 
         :raises PermissionError: See rados.make_ex
         :raises ObjectNotFound: See rados.make_ex
@@ -323,11 +354,12 @@ class CephService(object):
         """
         argdict = {
             "prefix": prefix,
-            "format": "json",
         }
+        if to_json:
+            argdict["format"] = "json"
         argdict.update({k: v for k, v in kwargs.items() if v is not None})
         result = CommandResult("")
-        mgr.send_command(result, srv_type, srv_spec, json.dumps(argdict), "")
+        mgr.send_command(result, srv_type, srv_spec, json.dumps(argdict), "", inbuf=inbuf)
         r, outb, outs = result.wait()
         if r != 0:
             logger.error("send_command '%s' failed. (r=%s, outs=\"%s\", kwargs=%s)", prefix, r,

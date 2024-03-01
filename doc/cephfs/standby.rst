@@ -66,11 +66,11 @@ laggy daemon.
 
 Each file system may specify a minimum number of standby daemons in order to be
 considered healthy. This number includes daemons in the ``standby-replay`` state
-waiting for a ``rank`` to fail. Note that a ``standby-replay`` daemon will not
-be assigned to take over a failure for another ``rank`` or a failure in a
-different CephFS file system). The pool of standby daemons not in ``replay``
-counts towards any file system count.
-Each file system may set the desired number of standby daemons by:
+waiting for a ``rank`` to fail. (Note, the monitors will not assign a
+``standby-replay`` daemon to take over a failure for another ``rank`` or a
+failure in a different CephFS file system). The pool of standby daemons not in
+``replay`` counts towards any file system count.  Each file system may set the
+desired number of standby daemons by:
 
 ::
 
@@ -118,10 +118,16 @@ enforces this affinity.
 When failing over MDS daemons, a cluster's monitors will prefer standby daemons with
 ``mds_join_fs`` equal to the file system ``name`` with the failed ``rank``.  If no
 standby exists with ``mds_join_fs`` equal to the file system ``name``, it will
-choose an unqualified standby (no setting for ``mds_join_fs``) for the replacement,
-or any other available standby, as a last resort. Note, this does not change the
-behavior that ``standby-replay`` daemons are always selected before
-other standbys.
+choose an unqualified standby (no setting for ``mds_join_fs``) for the replacement.
+As a last resort, a standby for another filesystem will be chosen, although this
+behavior can be disabled:
+
+::
+
+    ceph fs set <fs name> refuse_standby_for_another_fs true
+
+Note, configuring MDS file system affinity does not change the behavior that
+``standby-replay`` daemons are always selected before other standbys.
 
 Even further, the monitors will regularly examine the CephFS file systems even when
 stable to check if a standby with stronger affinity is available to replace an

@@ -100,24 +100,26 @@ public:
   // with other message types than just the `MOSDOp`. The type erasure
   // happens in the ctor of `OpsExecuter`.
   struct ExecutableMessage {
-    virtual const crimson::net::ConnectionFRef &get_connection() const = 0;
     virtual osd_reqid_t get_reqid() const = 0;
     virtual utime_t get_mtime() const = 0;
     virtual epoch_t get_map_epoch() const = 0;
     virtual entity_inst_t get_orig_source_inst() const = 0;
     virtual uint64_t get_features() const = 0;
     virtual bool has_flag(uint32_t flag) const = 0;
+    virtual entity_name_t get_source() const = 0;
   };
 
   template <class ImplT>
   class ExecutableMessagePimpl final : ExecutableMessage {
     const ImplT* pimpl;
+    // In crimson, conn is independently maintained outside Message.
+    const crimson::net::ConnectionXcoreRef conn;
   public:
-    ExecutableMessagePimpl(const ImplT* pimpl) : pimpl(pimpl) {
+    ExecutableMessagePimpl(const ImplT* pimpl,
+                           const crimson::net::ConnectionXcoreRef conn)
+      : pimpl(pimpl), conn(conn) {
     }
-    const crimson::net::ConnectionFRef &get_connection() const final {
-      return pimpl->get_connection();
-    }
+
     osd_reqid_t get_reqid() const final {
       return pimpl->get_reqid();
     }
@@ -131,7 +133,13 @@ public:
       return pimpl->get_map_epoch();
     }
     entity_inst_t get_orig_source_inst() const final {
-      return pimpl->get_orig_source_inst();
+      // We can't get the origin source address from the message
+      // since (In Crimson) the connection is maintained
+      // outside of the Message.
+      return entity_inst_t(get_source(), conn->get_peer_addr());
+    }
+    entity_name_t get_source() const final {
+      return pimpl->get_source();
     }
     uint64_t get_features() const final {
       return pimpl->get_features();
@@ -177,6 +185,7 @@ private:
     ceph::static_ptr<ExecutableMessage,
                      sizeof(ExecutableMessagePimpl<void>)>;
   abstracted_msg_t msg;
+  crimson::net::ConnectionXcoreRef conn;
   std::optional<osd_op_params_t> osd_op_params;
   bool user_modify = false;
   ceph::os::Transaction txn;
@@ -190,7 +199,6 @@ private:
     pg_log_entry_t log_entry;
 
     void apply_to(
-      const eversion_t& at_version,
       std::vector<pg_log_entry_t>& log_entries,
       ObjectContext& processed_obc) &&;
   };
@@ -364,6 +372,7 @@ private:
               ObjectContextRef obc,
               const OpInfo& op_info,
               abstracted_msg_t&& msg,
+              crimson::net::ConnectionXcoreRef conn,
               const SnapContext& snapc);
 
 public:
@@ -372,6 +381,7 @@ public:
               ObjectContextRef obc,
               const OpInfo& op_info,
               const MsgT& msg,
+              crimson::net::ConnectionXcoreRef conn,
               const SnapContext& snapc)
     : OpsExecuter(
         std::move(pg),
@@ -379,7 +389,9 @@ public:
         op_info,
         abstracted_msg_t{
           std::in_place_type_t<ExecutableMessagePimpl<MsgT>>{},
-          &msg},
+          &msg,
+          conn},
+        conn,
         snapc) {
   }
 
@@ -437,7 +449,7 @@ public:
 
   version_t get_last_user_version() const;
 
-  std::pair<object_info_t, ObjectContextRef> prepare_clone(
+  ObjectContextRef prepare_clone(
     const hobject_t& coid);
 
   void apply_stats();
@@ -510,7 +522,6 @@ OpsExecuter::flush_changes_n_do_ops_effects(
       txn
     ).then_interruptible([mut_func=std::move(mut_func),
                           this](auto&& log_entries) mutable {
-      apply_stats();
       auto [submitted, all_completed] =
         std::forward<MutFunc>(mut_func)(std::move(txn),
                                         std::move(obc),

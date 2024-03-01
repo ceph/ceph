@@ -83,6 +83,7 @@ set(common_srcs
   options.cc
   page.cc
   perf_counters.cc
+  perf_counters_cache.cc
   perf_counters_collection.cc
   perf_counters_key.cc
   perf_histogram.cc
@@ -191,7 +192,7 @@ target_compile_definitions(common-common-objs PRIVATE
   "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\""
-  $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>)
+  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
 add_dependencies(common-common-objs legacy-option-headers)
 
 set(common_mountcephfs_srcs
@@ -229,7 +230,8 @@ elseif(HAVE_ARMV8_CRC)
     crc32c_aarch64.c)
 endif(HAVE_INTEL)
 
-add_library(crc32 STATIC ${crc32_srcs})
+add_library(crc32 OBJECT ${crc32_srcs})
+
 if(HAVE_ARMV8_CRC)
   set_target_properties(crc32 PROPERTIES
     COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")

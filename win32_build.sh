@@ -58,7 +58,25 @@ if [[ -z $OS ]]; then
         ;;
     esac
 fi
-export OS="$OS"
+
+# The main advantages of mingw-llvm:
+# * not affected by the libstdc++/winpthread rw lock bugs
+# * can generate pdb debug symbols, which are compatible with WinDBG
+TOOLCHAIN=${TOOLCHAIN:-"mingw-llvm"}
+
+case "$TOOLCHAIN" in
+    mingw-llvm)
+        echo "Using mingw-llvm."
+        USE_MINGW_LLVM=1
+        ;;
+    mingw-gcc)
+        echo "Using mingw-gcc"
+        ;;
+    *)
+        echo "Unsupported toolchain: $TOOLCHAIN."
+        echo "Allowed toolchains: mingw-llvm or mingw-gcc."
+esac
+
 
 # We'll have to be explicit here since auto-detecting doesn't work
 # properly when cross compiling.
@@ -74,9 +92,7 @@ if [[ -z $CMAKE_BUILD_TYPE ]]; then
   CMAKE_BUILD_TYPE=Release
 fi
 
-# Some tests can't use shared libraries yet due to unspecified dependencies.
-# We'll do a static build by default for now.
-ENABLE_SHARED=${ENABLE_SHARED:-OFF}
+ENABLE_SHARED=${ENABLE_SHARED:-ON}
 
 binDir="$BUILD_DIR/bin"
 strippedBinDir="$BUILD_DIR/bin_stripped"
@@ -126,8 +142,12 @@ cd $BUILD_DIR
 
 if [[ ! -f ${depsToolsetDir}/completed ]]; then
     echo "Preparing dependencies: $DEPS_DIR. Log: ${BUILD_DIR}/build_deps.log"
-    NUM_WORKERS=$NUM_WORKERS DEPS_DIR=$DEPS_DIR OS="$OS"\
-        "$SCRIPT_DIR/win32_deps_build.sh" | tee "${BUILD_DIR}/build_deps.log"
+    NUM_WORKERS=$NUM_WORKERS \
+        DEPS_DIR=$DEPS_DIR \
+        OS="$OS" \
+        ENABLE_SHARED=$ENABLE_SHARED \
+        USE_MINGW_LLVM=$USE_MINGW_LLVM \
+            "$SCRIPT_DIR/win32_deps_build.sh" | tee "${BUILD_DIR}/build_deps.log"
 fi
 
 # Due to distribution specific mingw settings, the mingw.cmake file
@@ -161,7 +181,9 @@ fi
 cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D MINGW_LINK_DIRECTORIES="$linkDirs" \
       -D CMAKE_TOOLCHAIN_FILE="$MINGW_CMAKE_FILE" \
+      -D WITH_FMT_HEADER_ONLY=ON \
       -D WITH_LIBCEPHSQLITE=OFF \
+      -D WITH_QATLIB=OFF -D WITH_QATZIP=OFF \
       -D WITH_RDMA=OFF -D WITH_OPENLDAP=OFF \
       -D WITH_GSSAPI=OFF -D WITH_XFS=OFF \
       -D WITH_FUSE=OFF -D WITH_DOKAN=ON \
@@ -211,11 +233,22 @@ if [[ -z $SKIP_DLL_COPY ]]; then
         $lz4Dir/lib/dll/liblz4-1.dll
         $sslDir/bin/libcrypto-1_1-x64.dll
         $sslDir/bin/libssl-1_1-x64.dll
-        $mingwTargetLibDir/libstdc++-6.dll
-        $mingwTargetLibDir/libgcc_s_seh-1.dll
-        $mingwTargetLibDir/libssp*.dll
-        $mingwLibpthreadDir/libwinpthread-1.dll
-        $boostDir/lib/*.dll)
+        $mingwLibpthreadDir/libwinpthread-1.dll)
+    if [[ $ENABLE_SHARED == "ON" ]]; then
+        required_dlls+=(
+            $boostDir/lib/*.dll
+        )
+    fi
+    if [[ -n $USE_MINGW_LLVM ]]; then
+        required_dlls+=(
+            $mingwTargetLibDir/libc++.dll
+            $mingwTargetLibDir/libunwind.dll)
+    else
+        required_dlls+=(
+            $mingwTargetLibDir/libstdc++-6.dll
+            $mingwTargetLibDir/libssp*.dll
+            $mingwTargetLibDir/libgcc_s_seh-1.dll)
+    fi
     echo "Copying required dlls to $binDir."
     cp ${required_dlls[@]} $binDir
 fi

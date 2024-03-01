@@ -88,7 +88,7 @@ class RGWBucketReshard {
                  bool verbose,
                  std::ostream *os,
 		 Formatter *formatter,
-                 const DoutPrefixProvider *dpp);
+                 const DoutPrefixProvider *dpp, optional_yield y);
 public:
 
   // pass nullptr for the final parameter if no outer reshard lock to
@@ -98,17 +98,17 @@ public:
 		   const std::map<std::string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, ReshardFaultInjector& f,
-              int max_op_entries, const DoutPrefixProvider *dpp,
+              int max_op_entries, const DoutPrefixProvider *dpp, optional_yield y,
               bool verbose = false, std::ostream *out = nullptr,
               ceph::Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
   int get_status(const DoutPrefixProvider *dpp, std::list<cls_rgw_bucket_instance_entry> *status);
-  int cancel(const DoutPrefixProvider* dpp);
+  int cancel(const DoutPrefixProvider* dpp, optional_yield y);
 
   static int clear_resharding(rgw::sal::RadosStore* store,
 			      RGWBucketInfo& bucket_info,
 			      std::map<std::string, bufferlist>& bucket_attrs,
-                              const DoutPrefixProvider* dpp);
+                              const DoutPrefixProvider* dpp, optional_yield y);
 
   static uint32_t get_max_prime_shards() {
     return *std::crbegin(reshard_primes);
@@ -175,8 +175,8 @@ public:
   // too large by refusing to reshard the bucket until the old logs get trimmed
   static constexpr size_t max_bilog_history = 4;
 
-  static bool can_reshard(const RGWBucketInfo& bucket,
-                          const RGWSI_Zone* zone_svc);
+  static bool should_zone_reshard_now(const RGWBucketInfo& bucket,
+				      const RGWSI_Zone* zone_svc);
 }; // RGWBucketReshard
 
 
@@ -224,18 +224,18 @@ protected:
 
 public:
   RGWReshard(rgw::sal::RadosStore* _store, bool _verbose = false, std::ostream *_out = nullptr, Formatter *_formatter = nullptr);
-  int add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
-  int update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info);
+  int add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry, optional_yield y);
+  int update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, optional_yield y);
   int get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
-  int remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entry& entry);
+  int remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entry& entry, optional_yield y);
   int list(const DoutPrefixProvider *dpp, int logshard_num, std::string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
   int clear_bucket_resharding(const DoutPrefixProvider *dpp, const std::string& bucket_instance_oid, cls_rgw_reshard_entry& entry);
 
   /* reshard thread */
   int process_entry(const cls_rgw_reshard_entry& entry, int max_entries,
-                    const DoutPrefixProvider *dpp);
-  int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp);
-  int process_all_logshards(const DoutPrefixProvider *dpp);
+                    const DoutPrefixProvider *dpp, optional_yield y);
+  int process_single_logshard(int logshard_num, const DoutPrefixProvider *dpp, optional_yield y);
+  int process_all_logshards(const DoutPrefixProvider *dpp, optional_yield y);
   bool going_down();
   void start_processor();
   void stop_processor();

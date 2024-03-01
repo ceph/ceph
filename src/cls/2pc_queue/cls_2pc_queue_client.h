@@ -19,6 +19,8 @@ void cls_2pc_queue_init(librados::ObjectWriteOperation& op, const std::string& q
 #ifndef CLS_CLIENT_HIDE_IOCTX
 // return capacity (bytes)
 int cls_2pc_queue_get_capacity(librados::IoCtx& io_ctx, const std::string& queue_name, uint64_t& size);
+// return the number of committed entries and size (bytes)
+int cls_2pc_queue_get_topic_stats(librados::IoCtx& io_ctx, const std::string& queue_name, uint32_t& committed_entries, uint64_t& size);
 
 // make a reservation on the queue (in bytes) and number of expected entries (to calculate overhead)
 // return a reservation id if reservations is possible, 0 otherwise
@@ -37,7 +39,12 @@ int cls_2pc_queue_list_reservations(librados::IoCtx& io_ctx, const std::string& 
 // after answer is received, call cls_2pc_queue_get_capacity_result() to parse the results
 void cls_2pc_queue_get_capacity(librados::ObjectReadOperation& op,  bufferlist* obl, int* prval);
 
+// optionally async method for getting capacity (bytes)
+// after answer is received, call cls_2pc_queue_get_topic_stats_result() to parse the results
+void cls_2pc_queue_get_topic_stats(librados::ObjectReadOperation& op,  bufferlist* obl, int* prval);
+
 int cls_2pc_queue_get_capacity_result(const bufferlist& bl, uint64_t& size);
+int cls_2pc_queue_get_topic_stats_result(const bufferlist& bl, uint32_t& committed_entries, uint64_t& size);
 
 // optionally async method for making a reservation on the queue (in bytes) and number of expected entries (to calculate overhead)
 // notes: 
@@ -80,5 +87,8 @@ void cls_2pc_queue_expire_reservations(librados::ObjectWriteOperation& op,
         ceph::coarse_real_time stale_time);
 
 // remove all entries up to the given marker
-void cls_2pc_queue_remove_entries(librados::ObjectWriteOperation& op, const std::string& end_marker);
+// if there is no race condition, providing the number of entries_to_remove is recommended, as it is more efficient.
+// if there is no guarantee against two clienst deleting entries at the same time, you can leave the entries_to_remove unprovided or input zero entries_to_remove
+// the function will count how many entries it needs to removed
+void cls_2pc_queue_remove_entries(librados::ObjectWriteOperation& op, const std::string& end_marker, uint64_t entries_to_remove=0);
 

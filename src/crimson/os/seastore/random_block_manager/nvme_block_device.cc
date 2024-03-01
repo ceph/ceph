@@ -22,13 +22,21 @@ namespace {
 
 namespace crimson::os::seastore::random_block_device::nvme {
 
+NVMeBlockDevice::mkfs_ret NVMeBlockDevice::mkfs(device_config_t config) {
+  using crimson::common::get_conf;
+  return shard_devices.local().do_primary_mkfs(config,
+    seastar::smp::count,
+    get_conf<Option::size_t>("seastore_cbjournal_size") 
+  );
+}
+
 open_ertr::future<> NVMeBlockDevice::open(
   const std::string &in_path,
   seastar::open_flags mode) {
   return seastar::do_with(in_path, [this, mode](auto& in_path) {
     return seastar::file_stat(in_path).then([this, mode, in_path](auto stat) {
       return seastar::open_file_dma(in_path, mode).then([=, this](auto file) {
-        device = file;
+        device = std::move(file);
         logger().debug("open");
         // Get SSD's features from identify_controller and namespace command.
         // Do identify_controller first, and then identify_namespace.
@@ -68,7 +76,7 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
     return seastar::open_file_dma(in_path, mode).then([this](
       auto file) {
       assert(io_device.size() > stream_index_to_open);
-      io_device[stream_index_to_open] = file;
+      io_device[stream_index_to_open] = std::move(file);
       return io_device[stream_index_to_open].fcntl(
         F_SET_FILE_RW_HINT,
         (uintptr_t)&stream_index_to_open).then([this](auto ret) {
@@ -82,7 +90,13 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
 NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
 {
   logger().debug(" mount ");
-  return do_mount();
+  return shard_devices.invoke_on_all([](auto &local_device) {
+    return local_device.do_shard_mount(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+        "Invalid error in RBMDevice::do_mount"
+    });
+  });
 }
 
 write_ertr::future<> NVMeBlockDevice::write(

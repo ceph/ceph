@@ -931,6 +931,62 @@ TEST(LibRadosAio, SimpleStatPP) {
   ASSERT_EQ(sizeof(buf), psize);
 }
 
+TEST(LibRadosAio, OperateMtime)
+{
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+
+  time_t set_mtime = 1457129052;
+  {
+    auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+    librados::ObjectWriteOperation op;
+    op.mtime(&set_mtime);
+    op.create(false);
+    ASSERT_EQ(0, test_data.m_ioctx.aio_operate(test_data.m_oid, c.get(), &op));
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, c->wait_for_complete());
+    }
+    ASSERT_EQ(0, c->get_return_value());
+  }
+  {
+    uint64_t size;
+    timespec mtime;
+    ASSERT_EQ(0, test_data.m_ioctx.stat2(test_data.m_oid, &size, &mtime));
+    EXPECT_EQ(0, size);
+    EXPECT_EQ(set_mtime, mtime.tv_sec);
+    EXPECT_EQ(0, mtime.tv_nsec);
+  }
+}
+
+TEST(LibRadosAio, OperateMtime2)
+{
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+
+  timespec set_mtime{1457129052, 123456789};
+  {
+    auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+    librados::ObjectWriteOperation op;
+    op.mtime2(&set_mtime);
+    op.create(false);
+    ASSERT_EQ(0, test_data.m_ioctx.aio_operate(test_data.m_oid, c.get(), &op));
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, c->wait_for_complete());
+    }
+    ASSERT_EQ(0, c->get_return_value());
+  }
+  {
+    uint64_t size;
+    timespec mtime;
+    ASSERT_EQ(0, test_data.m_ioctx.stat2(test_data.m_oid, &size, &mtime));
+    EXPECT_EQ(0, size);
+    EXPECT_EQ(set_mtime.tv_sec, mtime.tv_sec);
+    EXPECT_EQ(set_mtime.tv_nsec, mtime.tv_nsec);
+  }
+}
+
 TEST(LibRadosAio, StatRemovePP) {
   AioTestDataPP test_data;
   ASSERT_EQ("", test_data.init());
@@ -2368,6 +2424,7 @@ TEST(LibRadosAio, PoolEIOFlag) {
 
 // This test case reproduces https://tracker.ceph.com/issues/57152
 TEST(LibRadosAio, MultiReads) {
+  SKIP_IF_CRIMSON();
 
   // here we test multithreaded aio reads
 

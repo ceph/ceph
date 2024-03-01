@@ -17,6 +17,8 @@ export class ImageListComponent implements OnInit, OnDestroy {
   syncTmpl: TemplateRef<any>;
   @ViewChild('progressTmpl', { static: true })
   progressTmpl: TemplateRef<any>;
+  @ViewChild('entriesBehindPrimaryTpl', { static: true })
+  entriesBehindPrimaryTpl: TemplateRef<any>;
 
   subs: Subscription;
 
@@ -66,7 +68,12 @@ export class ImageListComponent implements OnInit, OnDestroy {
         flexGrow: 2
       },
       { prop: 'bytes_per_second', name: $localize`Bytes per second`, flexGrow: 2 },
-      { prop: 'entries_behind_primary', name: $localize`Entries behind primary`, flexGrow: 2 }
+      {
+        prop: 'entries_behind_primary',
+        name: $localize`Entries behind primary`,
+        cellTemplate: this.entriesBehindPrimaryTpl,
+        flexGrow: 2
+      }
     ];
 
     this.image_ready.columns = [

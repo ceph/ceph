@@ -5,7 +5,7 @@ import { BehaviorSubject, EMPTY, Observable, of, Subscription } from 'rxjs';
 import { catchError, delay, mergeMap, repeat, tap } from 'rxjs/operators';
 
 import { Motd, MotdService } from '~/app/shared/api/motd.service';
-import { whenPageVisible } from '../rxjs/operators/page-visibilty.operator';
+import { whenPageVisible } from '../rxjs/operators/page-visibility.operator';
 
 @Injectable({
   providedIn: 'root'

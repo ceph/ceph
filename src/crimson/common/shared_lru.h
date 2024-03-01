@@ -83,6 +83,7 @@ public:
     cache.clear();
   }
   shared_ptr_t find(const K& key);
+  K cached_key_lower_bound();
   // return the last element that is not greater than key
   shared_ptr_t lower_bound(const K& key);
   // return the first element that is greater than key
@@ -144,6 +145,15 @@ SharedLRU<K,V>::find(const K& key)
     cache.insert(key, val);
   }
   return val;
+}
+
+template<class K, class V>
+K SharedLRU<K,V>::cached_key_lower_bound()
+{
+  if (weak_refs.empty()) {
+    return {};
+  }
+  return weak_refs.begin()->first;
 }
 
 template<class K, class V>

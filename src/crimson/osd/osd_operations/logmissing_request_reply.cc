@@ -21,7 +21,7 @@ namespace crimson::osd {
 LogMissingRequestReply::LogMissingRequestReply(
   crimson::net::ConnectionRef&& conn,
   Ref<MOSDPGUpdateLogMissingReply> &&req)
-  : conn{std::move(conn)},
+  : l_conn{std::move(conn)},
     req{std::move(req)}
 {}
 
@@ -46,10 +46,17 @@ void LogMissingRequestReply::dump_detail(Formatter *f) const
 
 ConnectionPipeline &LogMissingRequestReply::get_connection_pipeline()
 {
-  return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
+  return get_osd_priv(&get_local_connection()
+         ).replicated_request_conn_pipeline;
 }
 
-ClientRequest::PGPipeline &LogMissingRequestReply::pp(PG &pg)
+PerShardPipeline &LogMissingRequestReply::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_replicated_request_pipeline();
+}
+
+ClientRequest::PGPipeline &LogMissingRequestReply::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
 }
@@ -61,8 +68,17 @@ seastar::future<> LogMissingRequestReply::with_pg(
 
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    return pg->do_update_log_missing_reply(std::move(req));
-  }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
+    return pg->do_update_log_missing_reply(req
+    ).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
+    });
+  }, [](std::exception_ptr) {
+    return seastar::now();
+  }, pg).finally([this, ref=std::move(ref)] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
+  });
 }
 
 }

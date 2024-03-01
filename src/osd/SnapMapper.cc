@@ -99,11 +99,11 @@ int OSDriver::get_keys(
   using crimson::os::FuturizedStore;
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, keys
-  ).safe_then([out] (FuturizedStore::omap_values_t&& vals) {
+  ).safe_then([out] (FuturizedStore::Shard::omap_values_t&& vals) {
     // just the difference in comparator (`std::less<>` in omap_values_t`)
-    reinterpret_cast<FuturizedStore::omap_values_t&>(*out) = std::move(vals);
+    reinterpret_cast<FuturizedStore::Shard::omap_values_t&>(*out) = std::move(vals);
     return 0;
-  }, FuturizedStore::read_errorator::all_same_way([] (auto& e) {
+  }, FuturizedStore::Shard::read_errorator::all_same_way([] (auto& e) {
     assert(e.value() > 0);
     return -e.value();
   }))); // this requires seastar::thread
@@ -118,7 +118,7 @@ int OSDriver::get_next(
   using crimson::os::FuturizedStore;
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, key
-  ).safe_then_unpack([&key, next] (bool, FuturizedStore::omap_values_t&& vals) {
+  ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
     CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
     if (auto nit = std::begin(vals); nit == std::end(vals)) {
       CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
@@ -129,7 +129,7 @@ int OSDriver::get_next(
       *next = *nit;
       return 0;
     }
-  }, FuturizedStore::read_errorator::all_same_way([] {
+  }, FuturizedStore::Shard::read_errorator::all_same_way([] {
     CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
     return -EINVAL;
   }))); // this requires seastar::thread
@@ -144,12 +144,12 @@ int OSDriver::get_next_or_current(
   using crimson::os::FuturizedStore;
   // let's try to get current first
   return interruptor::green_get(os->omap_get_values(
-    ch, hoid, FuturizedStore::omap_keys_t{key}
-  ).safe_then([&key, next_or_current] (FuturizedStore::omap_values_t&& vals) {
+    ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
+  ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
     assert(vals.size() == 1);
     *next_or_current = std::make_pair(key, std::move(vals[0]));
     return 0;
-  }, FuturizedStore::read_errorator::all_same_way(
+  }, FuturizedStore::Shard::read_errorator::all_same_way(
     [next_or_current, &key, this] {
     // no current, try next
     return get_next(key, next_or_current);
@@ -278,6 +278,22 @@ void SnapMapper::object_snaps::decode(ceph::buffer::list::const_iterator &bl)
   decode(oid, bl);
   decode(snaps, bl);
   DECODE_FINISH(bl);
+}
+
+void SnapMapper::object_snaps::dump(ceph::Formatter *f) const
+{
+  f->dump_stream("oid") << oid;
+  f->dump_stream("snaps") << snaps;
+}
+
+void SnapMapper::object_snaps::generate_test_instances(
+  std::list<object_snaps *> &o)
+{
+  o.push_back(new object_snaps);
+  o.push_back(new object_snaps);
+  o.back()->oid = hobject_t(sobject_t("name", CEPH_NOSNAP));
+  o.back()->snaps.insert(1);
+  o.back()->snaps.insert(2);
 }
 
 bool SnapMapper::check(const hobject_t &hoid) const
@@ -438,7 +454,7 @@ void SnapMapper::clear_snaps(
   to_remove.insert(to_object_key(oid));
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
-      dout(20) << __func__ << " rm " << i << dendl;
+      dout(20) << __func__ << "::rm " << i << dendl;
     }
   }
   backend.remove_keys(to_remove, t);
@@ -457,7 +473,7 @@ void SnapMapper::set_snaps(
   dout(20) << __func__ << " " << oid << " " << in.snaps << dendl;
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_set) {
-      dout(20) << __func__ << " set " << i.first << dendl;
+      dout(20) << __func__ << "::set " << i.first << dendl;
     }
   }
   backend.set_keys(to_set, t);
@@ -540,36 +556,48 @@ void SnapMapper::add_oid(
   backend.set_keys(to_add, t);
 }
 
-int SnapMapper::get_next_objects_to_trim(
+// reset the prefix iterator to the first prefix hash
+void SnapMapper::reset_prefix_itr(snapid_t snap, const char *s)
+{
+  if (prefix_itr_snap == CEPH_NOSNAP) {
+    dout(10) << __func__ << "::from <CEPH_NOSNAP> to <" << snap << "> ::" << s << dendl;
+  }
+  else if (snap == CEPH_NOSNAP) {
+    dout(10) << __func__ << "::from <"<< prefix_itr_snap << "> to <CEPH_NOSNAP> ::" << s << dendl;
+  }
+  else if (prefix_itr_snap == snap) {
+    dout(10) << __func__ << "::with the same snapid <" << snap << "> ::" << s << dendl;
+  }
+  else {
+    // This is unexpected!!
+    dout(10) << __func__ << "::from <"<< prefix_itr_snap << "> to <" << snap << "> ::" << s << dendl;
+  }
+  prefix_itr_snap = snap;
+  prefix_itr      = prefixes.begin();
+}
+
+void SnapMapper::get_objects_by_prefixes(
   snapid_t snap,
   unsigned max,
   vector<hobject_t> *out)
 {
-  ceph_assert(out);
-  ceph_assert(out->empty());
-
-  // if max would be 0, we return ENOENT and the caller would mistakenly
-  // trim the snaptrim queue
-  ceph_assert(max > 0);
-  int r = 0;
-
-  /// \todo cache the prefixes-set in update_bits()
-  for (set<string>::iterator i = prefixes.begin();
-       i != prefixes.end() && out->size() < max && r == 0;
-       ++i) {
-    string prefix(get_prefix(pool, snap) + *i);
+  /// maintain the prefix_itr between calls to avoid searching depleted prefixes
+  for ( ; prefix_itr != prefixes.end(); prefix_itr++) {
+    string prefix(get_prefix(pool, snap) + *prefix_itr);
     string pos = prefix;
     while (out->size() < max) {
       pair<string, ceph::buffer::list> next;
-      r = backend.get_next(pos, &next);
+      // access RocksDB (an expensive operation!)
+      int r = backend.get_next(pos, &next);
       dout(20) << __func__ << " get_next(" << pos << ") returns " << r
 	       << " " << next << dendl;
       if (r != 0) {
-	break; // Done
+	return; // Done
       }
 
       if (next.first.substr(0, prefix.size()) !=
 	  prefix) {
+	// TBD: we access the DB twice for the first object of each iterator...
 	break; // Done with this prefix
       }
 
@@ -583,14 +611,62 @@ int SnapMapper::get_next_objects_to_trim(
       out->push_back(next_decoded.second);
       pos = next.first;
     }
+
+    if (out->size() >= max) {
+      return;
+    }
   }
+}
+
+int SnapMapper::get_next_objects_to_trim(
+  snapid_t snap,
+  unsigned max,
+  vector<hobject_t> *out)
+{
+  dout(20) << __func__ << "::snapid=" << snap << dendl;
+  ceph_assert(out);
+  ceph_assert(out->empty());
+
+  // if max would be 0, we return ENOENT and the caller would mistakenly
+  // trim the snaptrim queue
+  ceph_assert(max > 0);
+
+  // The prefix_itr is bound to a prefix_itr_snap so if we trim another snap
+  // we must reset the prefix_itr (should not happen normally)
+  if (prefix_itr_snap != snap) {
+    if (prefix_itr_snap == CEPH_NOSNAP) {
+      reset_prefix_itr(snap, "Trim begins");
+    }
+    else {
+      reset_prefix_itr(snap, "Unexpected snap change");
+    }
+  }
+
+  // when reaching the end of the DB reset the prefix_ptr and verify
+  // we didn't miss objects which were added after we started trimming
+  // This should never happen in reality because the snap was logically deleted
+  // before trimming starts (and so no new clone-objects could be added)
+  // For more info see PG::filter_snapc()
+  //
+  // We still like to be extra careful and run one extra loop over all prefixes
+  get_objects_by_prefixes(snap, max, out);
+  if (unlikely(out->size() == 0)) {
+    reset_prefix_itr(snap, "Second pass trim");
+    get_objects_by_prefixes(snap, max, out);
+
+    if (unlikely(out->size() > 0)) {
+      derr << __func__ << "::New Clone-Objects were added to Snap " << snap
+	   << " after trimming was started" << dendl;
+    }
+    reset_prefix_itr(CEPH_NOSNAP, "Trim was completed successfully");
+  }
+
   if (out->size() == 0) {
     return -ENOENT;
   } else {
     return 0;
   }
 }
-
 
 int SnapMapper::remove_oid(
   const hobject_t &oid,
@@ -621,7 +697,7 @@ int SnapMapper::_remove_oid(
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
-      dout(20) << __func__ << " rm " << i << dendl;
+      dout(20) << __func__ << "::rm " << i << dendl;
     }
   }
   backend.remove_keys(to_remove, t);

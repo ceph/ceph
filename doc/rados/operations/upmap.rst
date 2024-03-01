@@ -1,7 +1,8 @@
 .. _upmap:
 
+=======================================
 Using pg-upmap
-==============
+=======================================
 
 In Luminous v12.2.z and later releases, there is a *pg-upmap* exception table
 in the OSDMap that allows the cluster to explicitly map specific PGs to
@@ -10,6 +11,9 @@ in most cases, uniformly distribute PGs across OSDs.
 
 However, there is an important caveat when it comes to this new feature: it
 requires all clients to understand the new *pg-upmap* structure in the OSDMap.
+
+Online Optimization
+===================
 
 Enabling
 --------
@@ -40,17 +44,17 @@ command:
 
    ceph features
 
-Balancer module
+Balancer Module
 ---------------
 
 The `balancer` module for ``ceph-mgr`` will automatically balance the number of
 PGs per OSD. See :ref:`balancer`
 
-Offline optimization
---------------------
+Offline Optimization
+====================
 
-Upmap entries are updated with an offline optimizer that is built into
-``osdmaptool``.
+Upmap entries are updated with an offline optimizer that is built into the
+:ref:`osdmaptool`.
 
 #. Grab the latest copy of your osdmap:
 

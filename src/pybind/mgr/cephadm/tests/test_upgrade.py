@@ -7,6 +7,7 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
 from cephadm.upgrade import CephadmUpgrade, UpgradeState
 from cephadm.ssh import HostConnectionError
+from cephadm.utils import ContainerInspectInfo
 from orchestrator import OrchestratorError, DaemonDescription
 from .fixtures import _run_cephadm, wait, with_host, with_service, \
     receive_agent_metadata, async_side_effect
@@ -80,6 +81,30 @@ def test_upgrade_resume_clear_health_warnings(_rm_health_warning, cephadm_module
             _rm_health_warning.assert_has_calls(calls_list, any_order=True)
 
 
+@mock.patch('cephadm.upgrade.CephadmUpgrade._get_current_version', lambda _: (17, 2, 6))
+@mock.patch("cephadm.serve.CephadmServe._get_container_image_info")
+def test_upgrade_check_with_ceph_version(_get_img_info, cephadm_module: CephadmOrchestrator):
+    # This test was added to avoid screwing up the image base so that
+    # when the version was added to it it made an incorrect image
+    # The issue caused the image to come out as
+    # quay.io/ceph/ceph:v18:v18.2.0
+    # see https://tracker.ceph.com/issues/63150
+    _img = ''
+
+    def _fake_get_img_info(img_name):
+        nonlocal _img
+        _img = img_name
+        return ContainerInspectInfo(
+            'image_id',
+            '18.2.0',
+            'digest'
+        )
+
+    _get_img_info.side_effect = _fake_get_img_info
+    cephadm_module.upgrade_check('', '18.2.0')
+    assert _img == 'quay.io/ceph/ceph:v18.2.0'
+
+
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 @pytest.mark.parametrize("use_repo_digest",
                          [
@@ -92,11 +117,11 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
             cephadm_module.set_container_image('global', 'from_image')
             cephadm_module.use_repo_digest = use_repo_digest
             with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)),
-                              CephadmOrchestrator.apply_mgr, '', status_running=True),\
+                              CephadmOrchestrator.apply_mgr, '', status_running=True), \
                 mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name",
-                           return_value='foo'),\
+                           return_value='foo'), \
                 mock.patch("cephadm.module.CephadmOrchestrator.version",
-                           new_callable=mock.PropertyMock) as version_mock,\
+                           new_callable=mock.PropertyMock) as version_mock, \
                 mock.patch("cephadm.module.CephadmOrchestrator.get",
                            return_value={
                                # capture fields in both mon and osd maps

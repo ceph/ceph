@@ -29,6 +29,7 @@
 #include "common/sharedptr_registry.hpp"
 #include "common/shared_cache.hpp"
 #include "ReplicatedBackend.h"
+#include "ECBackend.h"
 #include "PGTransaction.h"
 #include "cls/cas/cls_cas_ops.h"
 
@@ -55,7 +56,9 @@ void put_with_id(PrimaryLogPG *pg, uint64_t id);
 
 struct inconsistent_snapset_wrapper;
 
-class PrimaryLogPG : public PG, public PGBackend::Listener {
+class PrimaryLogPG : public PG,
+		     public PGBackend::Listener,
+		     public ECListener {
   friend class OSD;
   friend class Watch;
   friend class PrimaryLogScrub;
@@ -301,6 +304,8 @@ public:
   }
 
   /// Listener methods
+  void add_temp_obj(const hobject_t &oid) override { get_pgbackend()->add_temp_obj(oid); }
+  void clear_temp_obj(const hobject_t &oid) override { get_pgbackend()->clear_temp_obj(oid); }
   DoutPrefixProvider *get_dpp() override {
     return this;
   }
@@ -391,11 +396,24 @@ public:
   const std::map<pg_shard_t, pg_missing_t> &get_shard_missing() const override {
     return recovery_state.get_peer_missing();
   }
-  using PGBackend::Listener::get_shard_missing;
+  const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const override {
+    auto m = maybe_get_shard_missing(peer);
+    ceph_assert(m);
+    return *m;
+  }
   const std::map<pg_shard_t, pg_info_t> &get_shard_info() const override {
     return recovery_state.get_peer_info();
   }
-  using PGBackend::Listener::get_shard_info;
+  const pg_info_t &get_shard_info(pg_shard_t peer) const override {
+    if (peer == primary_shard()) {
+      return get_info();
+    } else {
+      std::map<pg_shard_t, pg_info_t>::const_iterator i =
+        get_shard_info().find(peer);
+      ceph_assert(i != get_shard_info().end());
+      return i->second;
+    }
+  }
   const pg_missing_tracker_t &get_local_missing() const override {
     return recovery_state.get_pg_log().get_missing();
   }
@@ -543,7 +561,8 @@ public:
   }
 
   void schedule_recovery_work(
-    GenContext<ThreadPool::TPHandle&> *c) override;
+    GenContext<ThreadPool::TPHandle&> *c,
+    uint64_t cost) override;
 
   pg_shard_t whoami_shard() const override {
     return pg_whoami;
@@ -1450,6 +1469,7 @@ protected:
   void dec_refcount_by_dirty(OpContext* ctx);
   ObjectContextRef get_prev_clone_obc(ObjectContextRef obc);
   bool recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op);
+  snapid_t do_recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op);
   void get_adjacent_clones(ObjectContextRef src_obc, 
 			   ObjectContextRef& _l, ObjectContextRef& _g);
   bool inc_refcount_by_set(OpContext* ctx, object_manifest_t& tgt,
@@ -1477,7 +1497,7 @@ public:
   ~PrimaryLogPG() override;
 
   void do_command(
-    const std::string_view& prefix,
+    std::string_view prefix,
     const cmdmap_t& cmdmap,
     const ceph::buffer::list& idata,
     std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish) override;
@@ -1531,12 +1551,6 @@ private:
   /// generate a new temp object name (for recovery)
   hobject_t get_temp_recovery_object(const hobject_t& target,
 				     eversion_t version) override;
-  int get_recovery_op_priority() const {
-    int64_t pri = 0;
-    pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
-    return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
-  }
-
 public:
   coll_t get_coll() {
     return coll;
@@ -1838,6 +1852,7 @@ public:
   }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
+  void finish_unreadable_object(const hobject_t oid);
 
   int get_manifest_ref_count(ObjectContextRef obc, std::string& fp_oid, OpRequestRef op);
 
@@ -1868,6 +1883,7 @@ public:
   void block_write_on_snap_rollback(
     const hobject_t& oid, ObjectContextRef obc, OpRequestRef op);
   void block_write_on_degraded_snap(const hobject_t& oid, OpRequestRef op);
+  void block_write_on_unreadable_snap(const hobject_t& snap, OpRequestRef op);
 
   bool maybe_await_blocked_head(const hobject_t &soid, OpRequestRef op);
   void wait_for_blocked_object(const hobject_t& soid, OpRequestRef op);
@@ -1897,6 +1913,21 @@ public:
   void on_shutdown() override;
   bool check_failsafe_full() override;
   bool maybe_preempt_replica_scrub(const hobject_t& oid) override;
+  struct ECListener *get_eclistener() override;
+  const pg_missing_const_i * maybe_get_shard_missing(
+    pg_shard_t peer) const {
+    if (peer == primary_shard()) {
+      return &get_local_missing();
+    } else {
+      std::map<pg_shard_t, pg_missing_t>::const_iterator i =
+        get_shard_missing().find(peer);
+      if (i == get_shard_missing().end()) {
+        return nullptr;
+      } else {
+        return &(i->second);
+      }
+    }
+  }
   int rep_repair_primary_object(const hobject_t& soid, OpContext *ctx);
 
   // attr cache handling

@@ -5,21 +5,52 @@
 FindPython3
 -----------
 
+.. versionadded:: 3.12
+
 Find Python 3 interpreter, compiler and development environment (include
 directories and libraries).
 
-Three components are supported:
+.. versionadded:: 3.19
+  When a version is requested, it can be specified as a simple value or as a
+  range. For a detailed description of version range usage and capabilities,
+  refer to the :command:`find_package` command.
+
+The following components are supported:
 
 * ``Interpreter``: search for Python 3 interpreter
 * ``Compiler``: search for Python 3 compiler. Only offered by IronPython.
 * ``Development``: search for development artifacts (include directories and
-  libraries)
+  libraries).
+
+  .. versionadded:: 3.18
+    This component includes two sub-components which can be specified
+    independently:
+
+    * ``Development.Module``: search for artifacts for Python 3 module
+      developments.
+    * ``Development.Embed``: search for artifacts for Python 3 embedding
+      developments.
+
+  .. versionadded:: 3.26
+
+    * ``Development.SABIModule``: search for artifacts for Python 3 module
+      developments using the
+      `Stable Application Binary Interface <https://docs.python.org/3/c-api/stable.html>`_.
+      This component is available only for version ``3.2`` and upper.
+
 * ``NumPy``: search for NumPy include directories.
 
-If no ``COMPONENTS`` is specified, ``Interpreter`` is assumed.
+.. versionadded:: 3.14
+  Added the ``NumPy`` component.
+
+If no ``COMPONENTS`` are specified, ``Interpreter`` is assumed.
+
+If component ``Development`` is specified, it implies sub-components
+``Development.Module`` and ``Development.Embed``.
 
 To ensure consistent versions between components ``Interpreter``, ``Compiler``,
-``Development`` and ``NumPy``, specify all components at the same time::
+``Development`` (or one of its sub-components) and ``NumPy``, specify all
+components at the same time::
 
   find_package (Python3 COMPONENTS Interpreter Development)
 
@@ -31,24 +62,45 @@ for you.
 
 .. note::
 
-  If components ``Interpreter`` and ``Development`` are both specified, this
-  module search only for interpreter with same platform architecture as the one
-  defined by ``CMake`` configuration. This contraint does not apply if only
-  ``Interpreter`` component is specified.
+  If components ``Interpreter`` and ``Development`` (or one of its
+  sub-components) are both specified, this module search only for interpreter
+  with same platform architecture as the one defined by CMake
+  configuration. This constraint does not apply if only ``Interpreter``
+  component is specified.
 
 Imported Targets
 ^^^^^^^^^^^^^^^^
 
-This module defines the following :ref:`Imported Targets <Imported Targets>`
-(when :prop_gbl:`CMAKE_ROLE` is ``PROJECT``):
+This module defines the following :ref:`Imported Targets <Imported Targets>`:
+
+.. versionchanged:: 3.14
+  :ref:`Imported Targets <Imported Targets>` are only created when
+  :prop_gbl:`CMAKE_ROLE` is ``PROJECT``.
 
 ``Python3::Interpreter``
   Python 3 interpreter. Target defined if component ``Interpreter`` is found.
 ``Python3::Compiler``
   Python 3 compiler. Target defined if component ``Compiler`` is found.
+
+``Python3::Module``
+  .. versionadded:: 3.15
+
+  Python 3 library for Python module. Target defined if component
+  ``Development.Module`` is found.
+
+``Python3::SABIModule``
+  .. versionadded:: 3.26
+
+  Python 3 library for Python module using the Stable Application Binary
+  Interface. Target defined if component ``Development.SABIModule`` is found.
+
 ``Python3::Python``
-  Python 3 library. Target defined if component ``Development`` is found.
+  Python 3 library for Python embedding. Target defined if component
+  ``Development.Embed`` is found.
+
 ``Python3::NumPy``
+  .. versionadded:: 3.14
+
   NumPy library for Python 3. Target defined if component ``NumPy`` is found.
 
 Result Variables
@@ -70,26 +122,43 @@ This module will set the following variables in your project
     * Anaconda
     * Canopy
     * IronPython
+    * PyPy
 ``Python3_STDLIB``
   Standard platform independent installation directory.
 
-  Information returned by
-  ``distutils.sysconfig.get_python_lib(plat_specific=False,standard_lib=True)``.
+  Information returned by ``sysconfig.get_path('stdlib')``.
 ``Python3_STDARCH``
   Standard platform dependent installation directory.
 
-  Information returned by
-  ``distutils.sysconfig.get_python_lib(plat_specific=True,standard_lib=True)``.
+  Information returned by ``sysconfig.get_path('platstdlib')``.
 ``Python3_SITELIB``
   Third-party platform independent installation directory.
 
-  Information returned by
-  ``distutils.sysconfig.get_python_lib(plat_specific=False,standard_lib=False)``.
+  Information returned by ``sysconfig.get_path('purelib')``.
 ``Python3_SITEARCH``
   Third-party platform dependent installation directory.
 
-  Information returned by
-  ``distutils.sysconfig.get_python_lib(plat_specific=True,standard_lib=False)``.
+  Information returned by ``sysconfig.get_path('platlib')``.
+
+``Python3_SOABI``
+  .. versionadded:: 3.17
+
+  Extension suffix for modules.
+
+  Information computed from ``sysconfig.get_config_var('EXT_SUFFIX')`` or
+  ``sysconfig.get_config_var('SOABI')`` or
+  ``python3-config --extension-suffix``.
+
+``Python3_SOSABI``
+  .. versionadded:: 3.26
+
+  Extension suffix for modules using the Stable Application Binary Interface.
+
+  Information computed from ``importlib.machinery.EXTENSION_SUFFIXES`` if the
+  COMPONENT ``Interpreter`` was specified. Otherwise, the extension is ``abi3``
+  except for ``Windows``, ``MSYS`` and ``CYGWIN`` for which this is an empty
+  string.
+
 ``Python3_Compiler_FOUND``
   System has the Python 3 compiler.
 ``Python3_COMPILER``
@@ -97,16 +166,60 @@ This module will set the following variables in your project
 ``Python3_COMPILER_ID``
   A short string unique to the compiler. Possible values include:
     * IronPython
+
+``Python3_DOTNET_LAUNCHER``
+  .. versionadded:: 3.18
+
+  The ``.Net`` interpreter. Only used by ``IronPython`` implementation.
+
 ``Python3_Development_FOUND``
+
   System has the Python 3 development artifacts.
+
+``Python3_Development.Module_FOUND``
+  .. versionadded:: 3.18
+
+  System has the Python 3 development artifacts for Python module.
+
+``Python3_Development.SABIModule_FOUND``
+  .. versionadded:: 3.26
+
+  System has the Python 3 development artifacts for Python module using the
+  Stable Application Binary Interface.
+
+``Python3_Development.Embed_FOUND``
+  .. versionadded:: 3.18
+
+  System has the Python 3 development artifacts for Python embedding.
+
 ``Python3_INCLUDE_DIRS``
+
   The Python 3 include directories.
+
+``Python3_LINK_OPTIONS``
+  .. versionadded:: 3.19
+
+  The Python 3 link options. Some configurations require specific link options
+  for a correct build and execution.
+
 ``Python3_LIBRARIES``
   The Python 3 libraries.
 ``Python3_LIBRARY_DIRS``
   The Python 3 library directories.
 ``Python3_RUNTIME_LIBRARY_DIRS``
   The Python 3 runtime library directories.
+``Python3_SABI_LIBRARIES``
+  .. versionadded:: 3.26
+
+  The Python 3 libraries for the Stable Application Binary Interface.
+``Python3_SABI_LIBRARY_DIRS``
+  .. versionadded:: 3.26
+
+  The Python 3 ``SABI`` library directories.
+``Python3_RUNTIME_SABI_LIBRARY_DIRS``
+  .. versionadded:: 3.26
+
+  The Python 3 runtime ``SABI`` library directories.
 ``Python3_VERSION``
   Python 3 version.
 ``Python3_VERSION_MAJOR``
@@ -115,11 +228,25 @@ This module will set the following variables in your project
   Python 3 minor version.
 ``Python3_VERSION_PATCH``
   Python 3 patch version.
+
+``Python3_PyPy_VERSION``
+  .. versionadded:: 3.18
+
+  Python 3 PyPy version.
+
 ``Python3_NumPy_FOUND``
+  .. versionadded:: 3.14
+
   System has the NumPy.
+
 ``Python3_NumPy_INCLUDE_DIRS``
-  The NumPy include directries.
+  .. versionadded:: 3.14
+
+  The NumPy include directories.
+
 ``Python3_NumPy_VERSION``
+  .. versionadded:: 3.14
+
   The NumPy version.
 
 Hints
@@ -134,43 +261,280 @@ Hints
   * If set to TRUE, search **only** for static libraries.
   * If set to FALSE, search **only** for shared libraries.
 
+  .. note::
+
+    This hint will be ignored on ``Windows`` because static libraries are not
+    available on this platform.
+
+``Python3_FIND_ABI``
+  .. versionadded:: 3.16
+
+  This variable defines which ABIs, as defined in :pep:`3149`, should be
+  searched.
+
+  .. note::
+
+    If ``Python3_FIND_ABI`` is not defined, any ABI will be searched.
+
+  The ``Python3_FIND_ABI`` variable is a 3-tuple specifying, in that order,
+  ``pydebug`` (``d``), ``pymalloc`` (``m``) and ``unicode`` (``u``) flags.
+  Each element can be set to one of the following:
+
+  * ``ON``: Corresponding flag is selected.
+  * ``OFF``: Corresponding flag is not selected.
+  * ``ANY``: The two possibilities (``ON`` and ``OFF``) will be searched.
+
+  From this 3-tuple, various ABIs will be searched starting from the most
+  specialized to the most general. Moreover, ``debug`` versions will be
+  searched **after** ``non-debug`` ones.
+
+  For example, if we have::
+
+    set (Python3_FIND_ABI "ON" "ANY" "ANY")
+
+  The following flags combinations will be appended, in that order, to the
+  artifact names: ``dmu``, ``dm``, ``du``, and ``d``.
+
+  And to search any possible ABIs::
+
+    set (Python3_FIND_ABI "ANY" "ANY" "ANY")
+
+  The following combinations, in that order, will be used: ``mu``, ``m``,
+  ``u``, ``<empty>``, ``dmu``, ``dm``, ``du`` and ``d``.
+
+  .. note::
+
+    This hint is useful only on ``POSIX`` systems. So, on ``Windows`` systems,
+    when ``Python3_FIND_ABI`` is defined, ``Python`` distributions from
+    `python.org <https://www.python.org/>`_ will be found only if value for
+    each flag is ``OFF`` or ``ANY``.
+
+``Python3_FIND_STRATEGY``
+  .. versionadded:: 3.15
+
+  This variable defines how lookup will be done.
+  The ``Python3_FIND_STRATEGY`` variable can be set to one of the following:
+
+  * ``VERSION``: Try to find the most recent version in all specified
+    locations.
+    This is the default if policy :policy:`CMP0094` is undefined or set to
+    ``OLD``.
+  * ``LOCATION``: Stops lookup as soon as a version satisfying version
+    constraints is founded.
+    This is the default if policy :policy:`CMP0094` is set to ``NEW``.
+
+  See also ``Python3_FIND_UNVERSIONED_NAMES``.
+
 ``Python3_FIND_REGISTRY``
+  .. versionadded:: 3.13
+
   On Windows the ``Python3_FIND_REGISTRY`` variable determine the order
   of preference between registry and environment variables.
-  the ``Python3_FIND_REGISTRY`` variable can be set to empty or one of the
-  following:
+  The ``Python3_FIND_REGISTRY`` variable can be set to one of the following:
 
   * ``FIRST``: Try to use registry before environment variables.
     This is the default.
   * ``LAST``: Try to use registry after environment variables.
   * ``NEVER``: Never try to use registry.
 
-``CMAKE_FIND_FRAMEWORK``
-  On OS X the :variable:`CMAKE_FIND_FRAMEWORK` variable determine the order of
+``Python3_FIND_FRAMEWORK``
+  .. versionadded:: 3.15
+
+  On macOS the ``Python3_FIND_FRAMEWORK`` variable determine the order of
   preference between Apple-style and unix-style package components.
+  This variable can take same values as :variable:`CMAKE_FIND_FRAMEWORK`
+  variable.
 
   .. note::
 
     Value ``ONLY`` is not supported so ``FIRST`` will be used instead.
 
+  If ``Python3_FIND_FRAMEWORK`` is not defined, :variable:`CMAKE_FIND_FRAMEWORK`
+  variable will be used, if any.
+
+``Python3_FIND_VIRTUALENV``
+  .. versionadded:: 3.15
+
+  This variable defines the handling of virtual environments managed by
+  ``virtualenv`` or ``conda``. It is meaningful only when a virtual environment
+  is active (i.e. the ``activate`` script has been evaluated). In this case, it
+  takes precedence over ``Python3_FIND_REGISTRY`` and ``CMAKE_FIND_FRAMEWORK``
+  variables.  The ``Python3_FIND_VIRTUALENV`` variable can be set to one of the
+  following:
+
+  * ``FIRST``: The virtual environment is used before any other standard
+    paths to look-up for the interpreter. This is the default.
+  * ``ONLY``: Only the virtual environment is used to look-up for the
+    interpreter.
+  * ``STANDARD``: The virtual environment is not used to look-up for the
+    interpreter but environment variable ``PATH`` is always considered.
+    In this case, variable ``Python3_FIND_REGISTRY`` (Windows) or
+    ``CMAKE_FIND_FRAMEWORK`` (macOS) can be set with value ``LAST`` or
+    ``NEVER`` to select preferably the interpreter from the virtual
+    environment.
+
+  .. versionadded:: 3.17
+    Added support for ``conda`` environments.
+
+  .. note::
+
+    If the component ``Development`` is requested, it is **strongly**
+    recommended to also include the component ``Interpreter`` to get expected
+    result.
+
+``Python3_FIND_IMPLEMENTATIONS``
+  .. versionadded:: 3.18
+
+  This variable defines, in an ordered list, the different implementations
+  which will be searched. The ``Python3_FIND_IMPLEMENTATIONS`` variable can
+  hold the following values:
+
+  * ``CPython``: this is the standard implementation. Various products, like
+    ``Anaconda`` or ``ActivePython``, rely on this implementation.
+  * ``IronPython``: This implementation use the ``CSharp`` language for
+    ``.NET Framework`` on top of the `Dynamic Language Runtime` (``DLR``).
+    See `IronPython <https://ironpython.net>`_.
+  * ``PyPy``: This implementation use ``RPython`` language and
+    ``RPython translation toolchain`` to produce the python interpreter.
+    See `PyPy <https://www.pypy.org>`_.
+
+  The default value is:
+
+  * Windows platform: ``CPython``, ``IronPython``
+  * Other platforms: ``CPython``
+
+  .. note::
+
+    This hint has the lowest priority of all hints, so even if, for example,
+    you specify ``IronPython`` first and ``CPython`` in second, a python
+    product based on ``CPython`` can be selected because, for example with
+    ``Python3_FIND_STRATEGY=LOCATION``, each location will be search first for
+    ``IronPython`` and second for ``CPython``.
+
+  .. note::
+
+    When ``IronPython`` is specified, on platforms other than ``Windows``, the
+    ``.Net`` interpreter (i.e. ``mono`` command) is expected to be available
+    through the ``PATH`` variable.
+
+``Python3_FIND_UNVERSIONED_NAMES``
+  .. versionadded:: 3.20
+
+  This variable defines how the generic names will be searched. Currently, it
+  only applies to the generic names of the interpreter, namely, ``python3`` and
+  ``python``.
+  The ``Python3_FIND_UNVERSIONED_NAMES`` variable can be set to one of the
+  following values:
+
+  * ``FIRST``: The generic names are searched before the more specialized ones
+    (such as ``python3.5`` for example).
+  * ``LAST``: The generic names are searched after the more specialized ones.
+    This is the default.
+  * ``NEVER``: The generic name are not searched at all.
+
+  See also ``Python3_FIND_STRATEGY``.
+
+Artifacts Specification
+^^^^^^^^^^^^^^^^^^^^^^^
+
+.. versionadded:: 3.16
+
+To solve special cases, it is possible to specify directly the artifacts by
+setting the following variables:
+
+``Python3_EXECUTABLE``
+  The path to the interpreter.
+
+``Python3_COMPILER``
+  The path to the compiler.
+
+``Python3_DOTNET_LAUNCHER``
+  .. versionadded:: 3.18
+
+  The ``.Net`` interpreter. Only used by ``IronPython`` implementation.
+
+``Python3_LIBRARY``
+  The path to the library. It will be used to compute the
+  variables ``Python3_LIBRARIES``, ``Python3_LIBRARY_DIRS`` and
+  ``Python3_RUNTIME_LIBRARY_DIRS``.
+
+``Python3_SABI_LIBRARY``
+  .. versionadded:: 3.26
+
+  The path to the library for Stable Application Binary Interface. It will be
+  used to compute the variables ``Python3_SABI_LIBRARIES``,
+  ``Python3_SABI_LIBRARY_DIRS`` and ``Python3_RUNTIME_SABI_LIBRARY_DIRS``.
+
+``Python3_INCLUDE_DIR``
+  The path to the directory of the ``Python`` headers. It will be used to
+  compute the variable ``Python3_INCLUDE_DIRS``.
+
+``Python3_NumPy_INCLUDE_DIR``
+  The path to the directory of the ``NumPy`` headers. It will be used to
+  compute the variable ``Python3_NumPy_INCLUDE_DIRS``.
+
 .. note::
 
-  If a Python virtual environment is configured, set variable
-  ``Python_FIND_REGISTRY`` (Windows) or ``CMAKE_FIND_FRAMEWORK`` (macOS) with
-  value ``LAST`` or ``NEVER`` to select it preferably.
+  All paths must be absolute. Any artifact specified with a relative path
+  will be ignored.
+
+.. note::
+
+  When an artifact is specified, all ``HINTS`` will be ignored and no search
+  will be performed for this artifact.
+
+  If more than one artifact is specified, it is the user's responsibility to
+  ensure the consistency of the various artifacts.
+
+By default, this module supports multiple calls in different directories of a
+project with different version/component requirements while providing correct
+and consistent results for each call. To support this behavior, CMake cache
+is not used in the traditional way which can be problematic for interactive
+specification. So, to enable also interactive specification, module behavior
+can be controlled with the following variable:
+
+``Python3_ARTIFACTS_INTERACTIVE``
+  .. versionadded:: 3.18
+
+  Selects the behavior of the module. This is a boolean variable:
+
+  * If set to ``TRUE``: Create CMake cache entries for the above artifact
+    specification variables so that users can edit them interactively.
+    This disables support for multiple version/component requirements.
+  * If set to ``FALSE`` or undefined: Enable multiple version/component
+    requirements.
 
 Commands
 ^^^^^^^^
 
 This module defines the command ``Python3_add_library`` (when
 :prop_gbl:`CMAKE_ROLE` is ``PROJECT``), which has the same semantics as
-:command:`add_library`, but takes care of Python module naming rules
-(only applied if library is of type ``MODULE``), and adds a dependency to target
-``Python3::Python``::
+:command:`add_library` and adds a dependency to target ``Python3::Python`` or,
+when library type is ``MODULE``, to target ``Python3::Module`` or
+``Python3::SABIModule`` (when ``USE_SABI`` option is specified) and takes care
+of Python module naming rules::
 
-  Python3_add_library (my_module MODULE src1.cpp)
+  Python3_add_library (<name> [STATIC | SHARED | MODULE [USE_SABI <version>] [WITH_SOABI]]
+                       <source1> [<source2> ...])
 
-If library type is not specified, ``MODULE`` is assumed.
+If the library type is not specified, ``MODULE`` is assumed.
+
+.. versionadded:: 3.17
+  For ``MODULE`` library type, if option ``WITH_SOABI`` is specified, the
+  module suffix will include the ``Python3_SOABI`` value, if any.
+
+.. versionadded:: 3.26
+  For ``MODULE`` type, if the option ``USE_SABI`` is specified, the
+  preprocessor definition ``Py_LIMITED_API`` will be specified, as ``PRIVATE``,
+  for the target ``<name>`` with the value computed from ``<version>`` argument.
+  The expected format for ``<version>`` is ``major[.minor]``, where each
+  component is a numeric value. If ``minor`` component is specified, the
+  version should be, at least, ``3.2`` which is the version where the
+  `Stable Application Binary Interface <https://docs.python.org/3/c-api/stable.html>`_
+  was introduced. Specifying only major version ``3`` is equivalent to ``3.2``.
+
+  When option ``WITH_SOABI`` is also specified,  the module suffix will include
+  the ``Python3_SOSABI`` value, if any.
 #]=======================================================================]
 
 

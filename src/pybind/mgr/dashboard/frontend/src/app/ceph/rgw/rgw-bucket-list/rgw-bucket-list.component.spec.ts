@@ -87,7 +87,7 @@ describe('RgwBucketListComponent', () => {
     });
   });
 
-  it('should test if bucket data is tranformed correctly', () => {
+  it('should test if bucket data is transformed correctly', () => {
     rgwBucketServiceListSpy.and.returnValue(
       of([
         {

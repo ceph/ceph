@@ -67,7 +67,6 @@ BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
 }
 
 int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
-				  uint64_t zone_size, uint64_t first_sequential_zone,
 				  KeyValueDB::Transaction txn)
 {
   bytes_per_block = granularity;
@@ -610,4 +609,20 @@ void BitmapFreelistManager::get_meta(
   }
   res->emplace_back("bfm_bytes_per_block", stringify(bytes_per_block));
   res->emplace_back("bfm_blocks_per_key", stringify(blocks_per_key));
+}
+
+bool BitmapFreelistManager::validate(uint64_t min_alloc_size) const
+{
+  bool ret = true;
+  auto my_alloc_size = get_alloc_size();
+  ceph_assert(my_alloc_size);
+  ceph_assert(min_alloc_size);
+  if (!is_null_manager() &&
+       ((min_alloc_size < my_alloc_size) || (min_alloc_size % my_alloc_size))) {
+    derr << __func__ << " inconsistent alloc units:" << std::hex
+         << "0x" << get_alloc_size() << " vs. 0x" << min_alloc_size
+         << std::dec << dendl;
+    ret = false;
+  }
+  return ret;
 }

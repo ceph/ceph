@@ -182,34 +182,7 @@ public:
     inc_last_seq();
     return last_sent;
   }
-  int confirm_receipt(ceph_seq_t seq, unsigned caps) {
-    int was_revoking = (_issued & ~_pending);
-    if (seq == last_sent) {
-      _revokes.clear();
-      _issued = caps;
-      // don't add bits
-      _pending &= caps;
-    } else {
-      // can i forget any revocations?
-      while (!_revokes.empty() && _revokes.front().seq < seq)
-	_revokes.pop_front();
-      if (!_revokes.empty()) {
-	if (_revokes.front().seq == seq)
-	  _revokes.begin()->before = caps;
-	calc_issued();
-      } else {
-	// seq < last_sent
-	_issued = caps | _pending;
-      }
-    }
-
-    if (was_revoking && _issued == _pending) {
-      item_revoking_caps.remove_myself();
-      item_client_revoking_caps.remove_myself();
-      maybe_clear_notable();
-    }
-    return was_revoking & ~_issued; // return revoked
-  }
+  int confirm_receipt(ceph_seq_t seq, unsigned caps);
   // we may get a release racing with revocations, which means our revokes will be ignored
   // by the client.  clean them out of our _revokes history so we don't wait on them.
   void clean_revoke_from(ceph_seq_t li) {
@@ -408,7 +381,7 @@ private:
   ceph_seq_t mseq = 0;
 
   int suppress = 0;
-  unsigned state = 0;
+  uint32_t state = 0;
 
   int lock_cache_allowed = 0;
 };

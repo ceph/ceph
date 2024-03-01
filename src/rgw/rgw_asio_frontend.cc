@@ -3,10 +3,15 @@
 
 #include <atomic>
 #include <ctime>
-#include <thread>
 #include <vector>
 
-#include <boost/asio.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/v6_only.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
+
 #include <boost/intrusive/list.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
@@ -46,14 +51,8 @@ namespace ssl = boost::asio::ssl;
 
 struct Connection;
 
-// use explicit executor types instead of the type-erased boost::asio::executor
-using executor_type = boost::asio::io_context::executor_type;
-
-using tcp_socket = boost::asio::basic_stream_socket<tcp, executor_type>;
-using tcp_stream = boost::beast::basic_stream<tcp, executor_type>;
-
 using timeout_timer = rgw::basic_timeout_timer<ceph::coarse_mono_clock,
-      executor_type, Connection>;
+      boost::asio::any_io_executor, Connection>;
 
 static constexpr size_t parse_buffer_size = 65536;
 using parse_buffer = boost::beast::flat_static_buffer<parse_buffer_size>;
@@ -70,12 +69,12 @@ class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
   timeout_timer& timeout;
-  yield_context yield;
+  spawn::yield_context yield;
   parse_buffer& buffer;
   boost::system::error_code fatal_ec;
  public:
   StreamIO(CephContext *cct, Stream& stream, timeout_timer& timeout,
-           rgw::asio::parser_type& parser, yield_context yield,
+           rgw::asio::parser_type& parser, spawn::yield_context yield,
            parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
@@ -96,7 +95,7 @@ class StreamIO : public rgw::asio::ClientIO {
       ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
       if (ec == boost::asio::error::broken_pipe) {
         boost::system::error_code ec_ignored;
-        stream.lowest_layer().shutdown(tcp_socket::shutdown_both, ec_ignored);
+        stream.lowest_layer().shutdown(tcp::socket::shutdown_both, ec_ignored);
       }
       if (!fatal_ec) {
         fatal_ec = ec;
@@ -167,8 +166,15 @@ struct log_ms_remainder {
 };
 std::ostream& operator<<(std::ostream& out, const log_ms_remainder& m) {
   using namespace std::chrono;
-  return out << std::setfill('0') << std::setw(3)
+
+  std::ios oldState(nullptr);
+  oldState.copyfmt(out);
+
+  out << std::setfill('0') << std::setw(3)
       << duration_cast<milliseconds>(m.t.time_since_epoch()).count() % 1000;
+
+  out.copyfmt(oldState);
+  return out;
 }
 
 // log time in apache format: day/month/year:hour:minute:second zone
@@ -183,7 +189,7 @@ std::ostream& operator<<(std::ostream& out, const log_apache_time& a) {
       << std::put_time(local, " %z");
 };
 
-using SharedMutex = ceph::async::SharedMutex<boost::asio::io_context::executor_type>;
+using SharedMutex = ceph::async::SharedMutex<boost::asio::any_io_executor>;
 
 template <typename Stream>
 void handle_connection(boost::asio::io_context& context,
@@ -194,7 +200,7 @@ void handle_connection(boost::asio::io_context& context,
                        rgw::dmclock::Scheduler *scheduler,
                        const std::string& uri_prefix,
                        boost::system::error_code& ec,
-                       yield_context yield)
+                       spawn::yield_context yield)
 {
   // don't impose a limit on the body, since we read it in pieces
   static constexpr size_t body_limit = std::numeric_limits<size_t>::max();
@@ -345,17 +351,17 @@ void handle_connection(boost::asio::io_context& context,
 struct Connection : boost::intrusive::list_base_hook<>,
                     boost::intrusive_ref_counter<Connection>
 {
-  tcp_socket socket;
+  tcp::socket socket;
   parse_buffer buffer;
 
-  explicit Connection(tcp_socket&& socket) noexcept
+  explicit Connection(tcp::socket&& socket) noexcept
       : socket(std::move(socket)) {}
 
   void close(boost::system::error_code& ec) {
     socket.close(ec);
   }
 
-  tcp_socket& get_socket() { return socket; }
+  tcp::socket& get_socket() { return socket; }
 };
 
 class ConnectionList {
@@ -394,8 +400,9 @@ class ConnectionList {
 namespace dmc = rgw::dmclock;
 class AsioFrontend {
   RGWProcessEnv& env;
+  boost::intrusive_ptr<CephContext> cct{env.driver->ctx()};
   RGWFrontendConfig* conf;
-  boost::asio::io_context context;
+  boost::asio::io_context& context;
   std::string uri_prefix;
   ceph::timespan request_timeout = std::chrono::milliseconds(REQUEST_TIMEOUT);
   size_t header_limit = 16384;
@@ -414,7 +421,7 @@ class AsioFrontend {
   struct Listener {
     tcp::endpoint endpoint;
     tcp::acceptor acceptor;
-    tcp_socket socket;
+    tcp::socket socket;
     bool use_ssl = false;
     bool use_nodelay = false;
 
@@ -425,22 +432,19 @@ class AsioFrontend {
 
   ConnectionList connections;
 
-  // work guard to keep run() threads busy while listeners are paused
-  using Executor = boost::asio::io_context::executor_type;
-  std::optional<boost::asio::executor_work_guard<Executor>> work;
-
-  std::vector<std::thread> threads;
   std::atomic<bool> going_down{false};
 
-  CephContext* ctx() const { return env.driver->ctx(); }
+  CephContext* ctx() const { return cct.get(); }
   std::optional<dmc::ClientCounters> client_counters;
   std::unique_ptr<dmc::ClientConfig> client_config;
   void accept(Listener& listener, boost::system::error_code ec);
 
  public:
   AsioFrontend(RGWProcessEnv& env, RGWFrontendConfig* conf,
-	       dmc::SchedulerCtx& sched_ctx)
-    : env(env), conf(conf), pause_mutex(context.get_executor())
+	       dmc::SchedulerCtx& sched_ctx,
+	       boost::asio::io_context& context)
+    : env(env), conf(conf), context(context),
+      pause_mutex(context.get_executor())
   {
     auto sched_t = dmc::get_scheduler_t(ctx());
     switch(sched_t){
@@ -462,7 +466,9 @@ class AsioFrontend {
   }
 
   int init();
-  int run();
+  int run() {
+    return 0;
+  }
   void stop();
   void join();
   void pause();
@@ -480,7 +486,7 @@ unsigned short parse_port(const char *input, boost::system::error_code& ec)
   }
   return port;
 }
-	
+
 tcp::endpoint parse_endpoint(boost::asio::string_view input,
                              unsigned short default_port,
                              boost::system::error_code& ec)
@@ -500,7 +506,7 @@ tcp::endpoint parse_endpoint(boost::asio::string_view input,
       return endpoint;
     }
     if (addr_end + 1 < input.size()) {
-      // :port must must follow [ipv6]
+      // :port must follow [ipv6]
       if (input[addr_end + 1] != ':') {
         ec = boost::asio::error::invalid_argument;
         return endpoint;
@@ -1016,11 +1022,11 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   if (l.use_ssl) {
     spawn::spawn(context,
-      [this, s=std::move(stream)] (yield_context yield) mutable {
+      [this, s=std::move(stream)] (spawn::yield_context yield) mutable {
         auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream
-        boost::asio::ssl::stream<tcp_socket&> stream{conn->socket, *ssl_context};
+        boost::asio::ssl::stream<tcp::socket&> stream{conn->socket, *ssl_context};
         auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
         // do ssl handshake
         boost::system::error_code ec;
@@ -1047,7 +1053,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   {
 #endif // WITH_RADOSGW_BEAST_OPENSSL
     spawn::spawn(context,
-      [this, s=std::move(stream)] (yield_context yield) mutable {
+      [this, s=std::move(stream)] (spawn::yield_context yield) mutable {
         auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
         auto c = connections.add(*conn);
         auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
@@ -1055,37 +1061,15 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         handle_connection(context, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),
                           uri_prefix, ec, yield);
-        conn->socket.shutdown(tcp_socket::shutdown_both, ec);
+        conn->socket.shutdown(tcp::socket::shutdown_both, ec);
       }, make_stack_allocator());
   }
 }
 
-int AsioFrontend::run()
-{
-  auto cct = ctx();
-  const int thread_count = cct->_conf->rgw_thread_pool_size;
-  threads.reserve(thread_count);
-
-  ldout(cct, 4) << "frontend spawning " << thread_count << " threads" << dendl;
-
-  // the worker threads call io_context::run(), which will return when there's
-  // no work left. hold a work guard to keep these threads going until join()
-  work.emplace(boost::asio::make_work_guard(context));
-
-  for (int i = 0; i < thread_count; i++) {
-    threads.emplace_back([this]() noexcept {
-      // request warnings on synchronous librados calls in this thread
-      is_asio_thread = true;
-      // Have uncaught exceptions kill the process and give a
-      // stacktrace, not be swallowed.
-      context.run();
-    });
-  }
-  return 0;
-}
-
 void AsioFrontend::stop()
 {
+  ceph_assert(!is_asio_thread);
+
   ldout(ctx(), 4) << "frontend initiating shutdown..." << dendl;
 
   going_down = true;
@@ -1105,13 +1089,6 @@ void AsioFrontend::join()
   if (!going_down) {
     stop();
   }
-  work.reset();
-
-  ldout(ctx(), 4) << "frontend joining threads..." << dendl;
-  for (auto& thread : threads) {
-    thread.join();
-  }
-  ldout(ctx(), 4) << "frontend done" << dendl;
 }
 
 void AsioFrontend::pause()
@@ -1155,14 +1132,16 @@ void AsioFrontend::unpause()
 class RGWAsioFrontend::Impl : public AsioFrontend {
  public:
   Impl(RGWProcessEnv& env, RGWFrontendConfig* conf,
-       rgw::dmclock::SchedulerCtx& sched_ctx)
-    : AsioFrontend(env, conf, sched_ctx) {}
+       rgw::dmclock::SchedulerCtx& sched_ctx,
+       boost::asio::io_context& context)
+    : AsioFrontend(env, conf, sched_ctx, context) {}
 };
 
 RGWAsioFrontend::RGWAsioFrontend(RGWProcessEnv& env,
                                  RGWFrontendConfig* conf,
-				 rgw::dmclock::SchedulerCtx& sched_ctx)
-  : impl(new Impl(env, conf, sched_ctx))
+				 rgw::dmclock::SchedulerCtx& sched_ctx,
+				 boost::asio::io_context& context)
+  : impl(new Impl(env, conf, sched_ctx, context))
 {
 }
 

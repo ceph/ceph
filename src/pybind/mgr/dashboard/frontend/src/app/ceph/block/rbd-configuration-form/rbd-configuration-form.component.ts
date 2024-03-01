@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 
 import _ from 'lodash';
 import { ReplaySubject } from 'rxjs';
@@ -113,7 +113,7 @@ export class RbdConfigurationFormComponent implements OnInit {
     const configFormGroup = new CdFormGroup({});
 
     this.rbdConfigurationService.getWritableOptionFields().forEach((c) => {
-      let control: FormControl;
+      let control: UntypedFormControl;
       if (
         c.type === RbdConfigurationType.milliseconds ||
         c.type === RbdConfigurationType.iops ||
@@ -125,7 +125,7 @@ export class RbdConfigurationFormComponent implements OnInit {
             initialValue = configList['value'];
           }
         });
-        control = new FormControl(initialValue, Validators.min(0));
+        control = new UntypedFormControl(initialValue, Validators.min(0));
       } else {
         throw new Error(
           `Type ${c.type} is unknown, you may need to add it to RbdConfiguration class`

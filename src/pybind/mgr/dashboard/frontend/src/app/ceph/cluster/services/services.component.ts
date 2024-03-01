@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
@@ -39,6 +39,8 @@ const BASE_URL = 'services';
 export class ServicesComponent extends ListWithDetails implements OnChanges, OnInit {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
+  @ViewChild('runningTpl', { static: true })
+  public runningTpl: TemplateRef<any>;
 
   @Input() hostname: string;
 
@@ -68,6 +70,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
   services: Array<CephServiceSpec> = [];
   isLoadingServices = false;
   selection: CdTableSelection = new CdTableSelection();
+  icons = Icons;
 
   constructor(
     private actionLabels: ActionLabelsI18n,
@@ -87,8 +90,8 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         icon: Icons.add,
         click: () => this.openModal(),
         name: this.actionLabels.CREATE,
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
-        disable: (selection: CdTableSelection) => this.getDisable('create', selection)
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+        // disable: (selection: CdTableSelection) => this.getDisable('create', selection)
       },
       {
         permission: 'update',
@@ -155,13 +158,9 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       },
       {
         name: $localize`Running`,
-        prop: 'status.running',
-        flexGrow: 1
-      },
-      {
-        name: $localize`Size`,
-        prop: 'status.size',
-        flexGrow: 1
+        prop: 'status',
+        flexGrow: 1,
+        cellTemplate: this.runningTpl
       },
       {
         name: $localize`Last Refreshed`,

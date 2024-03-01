@@ -77,3 +77,76 @@ where the properties of a service specification are:
     below the directory `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
     The absolute path of the directory where the file will be created must
     exist. Use the `dirs` property to create them if necessary.
+* ``init_containers``
+    A list of "init container" definitions. An init container exists to
+    run prepratory steps before the primary container starts. Init containers
+    are optional. One or more container can be defined.
+    Each definition can contain the following fields:
+
+    * ``image``
+        The name of the container image. If left unspecified, the init
+        container will inherit the image value from the top level spec.
+    * ``entrypoint``
+        Customize the default entrypoint of the image.
+    * ``entrypoint_args``
+        Arguments that will be passed to the entrypoint. Behaves the same
+        as the generic ``extra_entrypoint_args`` field.
+    * ``volume_mounts``
+        Same as the Custom Container spec's ``volume_mounts`` - selects what
+        volumes will be mounted into the init container. If left unspecified,
+        the init container will inherit the primary container's value(s).
+    * ``envs``
+        A list of environment variables.
+    * ``privileged``
+        A boolean indicate if the container should run with privileges or not. If
+        left unspecified, the init container will inherit the primary container's
+        value.
+
+
+Example with init containers:
+
+.. code-block:: yaml
+
+    service_type: container
+    service_id: foo
+    placement:
+        ...
+    spec:
+      image: quay.io/example/foosystem:latest
+      entrypoint: /usr/bin/foo
+      uid: 1000
+      gid: 1000
+      ports:
+        - 8889
+      dirs:
+        - CONFIG_DIR
+        - DATA_DIR
+      volume_mounts:
+        CONFIG_DIR: /etc/foo
+        DATA_DIR: /var/lib/foo
+      files:
+        CONFIG_DIR/foo.conf:
+          - db_path=/var/lib/foo/db
+      init_containers:
+        - image: quay.io/example/curly:howard
+          entrypoint: bash
+          entrypoint_args:
+            - argument: "-c"
+            - argument: "[ -f /var/lib/foo/db ] || curl -o /var/lib/foo/sample.dat https://foo.example.com/samples/1.dat"
+          volume_mounts:
+            DATA_DIR: /var/lib/foo
+        - entrypoint: /usr/bin/foo-initialize-db
+          entrypoint_args:
+            - "--option=threads=8"
+        - entrypoint: /usr/local/bin/import-sample-datasets.sh
+          entrypoint_args:
+            - "/var/lib/foo/sample.dat"
+          envs:
+            - FOO_SOURCE_MISSING=ignore
+            - FOO_CLEANUP=yes
+
+
+.. note:: Init containers are currently implemented as a step that runs
+   before the service is started and is subject to start-up timeouts.
+   The total run time of all init containers can not exceed 200 seconds
+   or the service will fail to start.

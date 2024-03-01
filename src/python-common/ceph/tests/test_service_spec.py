@@ -6,9 +6,19 @@ import yaml
 
 import pytest
 
-from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
-    ServiceSpec, RGWSpec, NFSServiceSpec, IscsiServiceSpec, AlertManagerSpec, \
-    CustomContainerSpec, GrafanaSpec, PrometheusSpec
+from ceph.deployment.service_spec import (
+    AlertManagerSpec,
+    ArgumentSpec,
+    CustomContainerSpec,
+    GrafanaSpec,
+    HostPlacementSpec,
+    IscsiServiceSpec,
+    NFSServiceSpec,
+    PlacementSpec,
+    PrometheusSpec,
+    RGWSpec,
+    ServiceSpec,
+)
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
 
@@ -53,6 +63,8 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
         (GrafanaSpec(protocol='-https'), True, '^Invalid protocol'),
         (GrafanaSpec(protocol='http'), False, ''),
         (GrafanaSpec(protocol='https'), False, ''),
+        (GrafanaSpec(anonymous_access=False), True, '^Either initial'),  # we require inital_admin_password if anonymous_access is False
+        (GrafanaSpec(anonymous_access=False, initial_admin_password='test'), False, ''),
     ])
 def test_apply_grafana(spec: GrafanaSpec, raise_exception: bool, msg: str):
     if  raise_exception:
@@ -132,11 +144,13 @@ def test_apply_prometheus(spec: PrometheusSpec, raise_exception: bool, msg: str)
         ('2 host1 host2', "PlacementSpec(count=2, hosts=[HostPlacementSpec(hostname='host1', network='', name=''), HostPlacementSpec(hostname='host2', network='', name='')])"),
         ('label:foo', "PlacementSpec(label='foo')"),
         ('3 label:foo', "PlacementSpec(count=3, label='foo')"),
-        ('*', "PlacementSpec(host_pattern='*')"),
-        ('3 data[1-3]', "PlacementSpec(count=3, host_pattern='data[1-3]')"),
-        ('3 data?', "PlacementSpec(count=3, host_pattern='data?')"),
-        ('3 data*', "PlacementSpec(count=3, host_pattern='data*')"),
+        ('*', "PlacementSpec(host_pattern=HostPattern(pattern='*', pattern_type=PatternType.fnmatch))"),
+        ('3 data[1-3]', "PlacementSpec(count=3, host_pattern=HostPattern(pattern='data[1-3]', pattern_type=PatternType.fnmatch))"),
+        ('3 data?', "PlacementSpec(count=3, host_pattern=HostPattern(pattern='data?', pattern_type=PatternType.fnmatch))"),
+        ('3 data*', "PlacementSpec(count=3, host_pattern=HostPattern(pattern='data*', pattern_type=PatternType.fnmatch))"),
         ("count-per-host:4 label:foo", "PlacementSpec(count_per_host=4, label='foo')"),
+        ('regex:Foo[0-9]|Bar[0-9]', "PlacementSpec(host_pattern=HostPattern(pattern='Foo[0-9]|Bar[0-9]', pattern_type=PatternType.regex))"),
+        ('3 regex:Foo[0-9]|Bar[0-9]', "PlacementSpec(count=3, host_pattern=HostPattern(pattern='Foo[0-9]|Bar[0-9]', pattern_type=PatternType.regex))"),
     ])
 def test_parse_placement_specs(test_input, expected):
     ret = PlacementSpec.from_string(test_input)
@@ -149,6 +163,9 @@ def test_parse_placement_specs(test_input, expected):
         ("host=a host*"),
         ("host=a label:wrong"),
         ("host? host*"),
+        ("host? regex:host*"),
+        ("regex:host? host*"),
+        ("regex:host? regex:host*"),
         ('host=a count-per-host:0'),
         ('host=a count-per-host:-10'),
         ('count:2 count-per-host:1'),
@@ -301,6 +318,13 @@ placement:
   host_pattern: '*'
 unmanaged: true
 ---
+service_type: crash
+service_name: crash
+placement:
+  host_pattern:
+    pattern: Foo[0-9]|Bar[0-9]
+    pattern_type: regex
+---
 service_type: rgw
 service_id: default-rgw-realm.eu-central-1.1
 service_name: rgw.default-rgw-realm.eu-central-1.1
@@ -341,12 +365,14 @@ spec:
 service_type: grafana
 service_name: grafana
 spec:
+  anonymous_access: true
   port: 1234
   protocol: https
 ---
 service_type: grafana
 service_name: grafana
 spec:
+  anonymous_access: true
   initial_admin_password: secure
   port: 1234
   protocol: https
@@ -361,6 +387,7 @@ placement:
   - host3
 spec:
   backend_service: rgw.foo
+  first_virtual_router_id: 50
   frontend_port: 8080
   monitor_port: 8081
   virtual_ip: 192.168.20.1/24
@@ -960,3 +987,296 @@ def test_service_spec_validation_error(y, error_match):
     with pytest.raises(SpecValidationError) as err:
         specObj = ServiceSpec.from_json(data)
     assert err.match(error_match)
+
+
+@pytest.mark.parametrize("y, ec_args, ee_args, ec_final_args, ee_final_args", [
+    pytest.param("""
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
+
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+""",
+    None,
+    None,
+    None,
+    None,
+    id="no_extra_args"),
+    pytest.param("""
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  extra_entrypoint_args:
+  - "--lasers=blue"
+  - "--enable-confetti"
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
+
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+""",
+    None,
+    ["--lasers=blue", "--enable-confetti"],
+    None,
+    ["--lasers=blue", "--enable-confetti"],
+    id="only_extra_entrypoint_args_spec"),
+    pytest.param("""
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
+
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+extra_entrypoint_args:
+- "--lasers blue"
+- "--enable-confetti"
+""",
+    None,
+    ["--lasers blue", "--enable-confetti"],
+    None,
+    ["--lasers", "blue", "--enable-confetti"],
+    id="only_extra_entrypoint_args_toplevel"),
+    pytest.param("""
+service_type: nfs
+service_id: mynfs
+service_name: nfs.mynfs
+spec:
+  port: 1234
+  extra_entrypoint_args:
+  - "--lasers=blue"
+  - "--title=Custom NFS Options"
+  extra_container_args:
+  - "--cap-add=CAP_NET_BIND_SERVICE"
+  - "--oom-score-adj=12"
+""",
+    ["--cap-add=CAP_NET_BIND_SERVICE", "--oom-score-adj=12"],
+    ["--lasers=blue", "--title=Custom NFS Options"],
+    ["--cap-add=CAP_NET_BIND_SERVICE", "--oom-score-adj=12"],
+    ["--lasers=blue", "--title=Custom", "NFS", "Options"],
+    id="both_kinds_nfs"),
+    pytest.param("""
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
+
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+extra_entrypoint_args:
+- argument: "--lasers=blue"
+  split: true
+- argument: "--enable-confetti"
+""",
+    None,
+    [
+        {"argument": "--lasers=blue", "split": True},
+        {"argument": "--enable-confetti", "split": False},
+    ],
+    None,
+    [
+        "--lasers=blue",
+        "--enable-confetti",
+    ],
+    id="only_extra_entrypoint_args_obj_toplevel"),
+    pytest.param("""
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
+
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+  extra_entrypoint_args:
+  - argument: "--lasers=blue"
+    split: true
+  - argument: "--enable-confetti"
+""",
+    None,
+    [
+        {"argument": "--lasers=blue", "split": True},
+        {"argument": "--enable-confetti", "split": False},
+    ],
+    None,
+    [
+        "--lasers=blue",
+        "--enable-confetti",
+    ],
+    id="only_extra_entrypoint_args_obj_indented"),
+    pytest.param("""
+service_type: nfs
+service_id: mynfs
+service_name: nfs.mynfs
+spec:
+  port: 1234
+extra_entrypoint_args:
+- argument: "--lasers=blue"
+- argument: "--title=Custom NFS Options"
+extra_container_args:
+- argument: "--cap-add=CAP_NET_BIND_SERVICE"
+- argument: "--oom-score-adj=12"
+""",
+    [
+        {"argument": "--cap-add=CAP_NET_BIND_SERVICE", "split": False},
+        {"argument": "--oom-score-adj=12", "split": False},
+    ],
+    [
+        {"argument": "--lasers=blue", "split": False},
+        {"argument": "--title=Custom NFS Options", "split": False},
+    ],
+    [
+        "--cap-add=CAP_NET_BIND_SERVICE",
+        "--oom-score-adj=12",
+    ],
+    [
+        "--lasers=blue",
+        "--title=Custom NFS Options",
+    ],
+    id="both_kinds_obj_nfs"),
+])
+def test_extra_args_handling(y, ec_args, ee_args, ec_final_args, ee_final_args):
+    data = yaml.safe_load(y)
+    spec_obj = ServiceSpec.from_json(data)
+
+    assert ArgumentSpec.map_json(spec_obj.extra_container_args) == ec_args
+    assert ArgumentSpec.map_json(spec_obj.extra_entrypoint_args) == ee_args
+    if ec_final_args is None:
+        assert spec_obj.extra_container_args is None
+    else:
+        ec_res = []
+        for args in spec_obj.extra_container_args:
+            ec_res.extend(args.to_args())
+        assert ec_res == ec_final_args
+    if ee_final_args is None:
+        assert spec_obj.extra_entrypoint_args is None
+    else:
+        ee_res = []
+        for args in spec_obj.extra_entrypoint_args:
+            ee_res.extend(args.to_args())
+        assert ee_res == ee_final_args

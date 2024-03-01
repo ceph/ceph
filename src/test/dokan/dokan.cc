@@ -39,6 +39,18 @@ std::string get_uuid() {
     return suffix.to_string();
 }
 
+std::string to_upper(std::string& in) {
+    std::string out = in;
+
+    std::transform(
+        out.begin(), out.end(), out.begin(),
+        [](unsigned char c){
+          return std::toupper(c);
+        });
+
+    return out;
+}
+
 bool move_eof(HANDLE handle, LARGE_INTEGER offset) {
 
     // Move file pointer to FILE_BEGIN + offset
@@ -145,7 +157,18 @@ void map_dokan_with_maxpath(
     const char* mountpoint,
     uint64_t max_path_len)
 {
-    SubProcess* new_mount = new SubProcess("ceph-dokan");
+    SubProcess* new_mount = nullptr;
+
+    bool expect_failure = max_path_len < 256 || max_path_len > 4096;
+    if (expect_failure) {
+        new_mount = new SubProcessTimed(
+            "ceph-dokan",
+            SubProcess::CLOSE, SubProcess::CLOSE, SubProcess::CLOSE,
+            MOUNT_POLL_ATTEMPT * MOUNT_POLL_INTERVAL_MS / 1000);
+    } else {
+        new_mount = new SubProcess("ceph-dokan");
+    }
+
     new_mount->add_cmd_args("map", "--debug", "--dokan-stderr",
                             "--win-vol-name", "TestCeph",
                             "--win-vol-serial", TEST_VOL_SERIAL,
@@ -155,11 +178,27 @@ void map_dokan_with_maxpath(
 
     *mount = new_mount;
     ASSERT_EQ(new_mount->spawn(), 0);
-    if (256 <= max_path_len && max_path_len <= 4096) {
-        ASSERT_EQ(wait_for_mount(mountpoint), 0);
+    if (expect_failure) {
+        ASSERT_NE(0, new_mount->join());
     } else {
-        ASSERT_NE(wait_for_mount(mountpoint), 0);
+        ASSERT_EQ(wait_for_mount(mountpoint), 0);
     }
+}
+
+void map_dokan_case_insensitive(SubProcess** mount, const char* mountpoint,
+                                bool force_lowercase=false) {
+    SubProcess* new_mount = new SubProcess("ceph-dokan");
+
+    new_mount->add_cmd_args("map", "--win-vol-name", "TestCeph",
+                            "--win-vol-serial", TEST_VOL_SERIAL,
+                            "-l", mountpoint, "--case-insensitive", NULL);
+    if (force_lowercase) {
+        new_mount->add_cmd_args("--force-lowercase", NULL);
+    }
+
+    *mount = new_mount;
+    ASSERT_EQ(new_mount->spawn(), 0);
+    ASSERT_EQ(wait_for_mount(mountpoint), 0);
 }
 
 void unmap_dokan(SubProcess* mount, const char* mountpoint) {
@@ -242,16 +281,9 @@ TEST_F(DokanTests, test_mount_read_only) {
     ASSERT_TRUE(fs::exists(mountpoint + success_file_path));
     ASSERT_EQ(read_file(mountpoint + success_file_path), data);
 
-    std::string exception_msg(
-        "filesystem error: cannot remove: No such device ["
-        + mountpoint + success_file_path + "]");
+    // The actual exception message is runtime dependent.
     EXPECT_THROW({
-        try {
-            fs::remove(mountpoint + success_file_path);
-        } catch(const fs::filesystem_error &e) {
-            EXPECT_STREQ(e.what(), exception_msg.c_str());
-            throw;
-        }
+        fs::remove(mountpoint + success_file_path);
     }, fs::filesystem_error);
     unmap_dokan(mount, mountpoint.c_str());
 
@@ -768,4 +800,62 @@ TEST_F(DokanTests, test_create_dispositions) {
 
     // clean-up
     ASSERT_TRUE(fs::remove(file_path));
+}
+
+TEST_F(DokanTests, test_case_sensitive) {
+    std::string test_dir = DEFAULT_MOUNTPOINT"test_dir" + get_uuid() + "\\";
+    std::string lower_file_path = test_dir + "file_" + get_uuid();
+    std::string upper_file_path = to_upper(lower_file_path);
+
+    ASSERT_TRUE(fs::create_directory(test_dir));
+    std::ofstream{lower_file_path};
+
+    ASSERT_TRUE(fs::exists(lower_file_path));
+    ASSERT_FALSE(fs::exists(upper_file_path));
+
+    // clean-up
+    fs::remove_all(test_dir);
+}
+
+void test_case_insensitive(bool force_lowercase) {
+    std::string mountpoint = "Q:\\";
+    std::string test_dir = mountpoint + "test_dir" + get_uuid() + "/";
+    std::string file_name = "file_" + get_uuid();
+    std::string lower_file_path = test_dir + file_name;
+    std::string upper_file_path = to_upper(lower_file_path);
+
+    SubProcess* mount = nullptr;
+    map_dokan_case_insensitive(&mount, mountpoint.c_str(), force_lowercase);
+
+    ASSERT_TRUE(fs::create_directory(test_dir));
+    std::ofstream{upper_file_path};
+
+    ASSERT_TRUE(fs::exists(lower_file_path));
+    ASSERT_TRUE(fs::exists(upper_file_path));
+
+    std::vector<std::string> paths;
+    for (const auto & entry : fs::recursive_directory_iterator(test_dir)) {
+        paths.push_back(entry.path().filename().generic_string());
+    }
+
+    bool found_lowercase = std::find(
+        begin(paths), end(paths), file_name) != end(paths);
+    bool found_uppercase = std::find(
+        begin(paths), end(paths), to_upper(file_name)) != end(paths);
+
+    ASSERT_EQ(found_lowercase, force_lowercase);
+    ASSERT_NE(found_uppercase, force_lowercase);
+
+    // clean-up
+    fs::remove_all(test_dir);
+
+    unmap_dokan(mount, mountpoint.c_str());
+}
+
+TEST_F(DokanTests, test_case_insensitive_force_lower) {
+    test_case_insensitive(true);
+}
+
+TEST_F(DokanTests, test_case_insensitive_force_upper) {
+   test_case_insensitive(false);
 }

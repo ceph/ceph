@@ -29,7 +29,7 @@ TEST_F(TestNeoRADOS, MakeWithLibRADOS) {
 
   // provide pool that doesn't exists -- just testing round-trip
   ASSERT_THROW(
-    rados.execute({"dummy-obj"}, std::numeric_limits<int64_t>::max(),
+    rados.execute({"dummy-obj"}, IOContext{std::numeric_limits<int64_t>::max()},
                   std::move(op), nullptr, ceph::async::use_blocked),
     boost::system::system_error);
 }

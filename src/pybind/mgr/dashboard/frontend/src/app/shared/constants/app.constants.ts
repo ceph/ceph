@@ -139,6 +139,11 @@ export class ActionLabelsI18n {
   RESYNC: string;
   EXPORT: string;
   IMPORT: any;
+  MIGRATE: string;
+  START_UPGRADE: string;
+  ACTIVATE: string;
+  DEACTIVATE: string;
+  ATTACH: string;
 
   constructor() {
     /* Create a new item */
@@ -147,6 +152,8 @@ export class ActionLabelsI18n {
     this.EXPORT = $localize`Export`;
 
     this.IMPORT = $localize`Import`;
+
+    this.MIGRATE = $localize`Migrate`;
 
     /* Destroy an existing item */
     this.DELETE = $localize`Delete`;
@@ -212,6 +219,13 @@ export class ActionLabelsI18n {
     this.REMOVE_SCHEDULING = $localize`Remove Scheduling`;
     this.PROMOTE = $localize`Promote`;
     this.DEMOTE = $localize`Demote`;
+
+    this.START_UPGRADE = $localize`Start Upgrade`;
+
+    this.ACTIVATE = $localize`Activate`;
+    this.DEACTIVATE = $localize`Deactivate`;
+
+    this.ATTACH = $localize`Attach`;
   }
 }
 

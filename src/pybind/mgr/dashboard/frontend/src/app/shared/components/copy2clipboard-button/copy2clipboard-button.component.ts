@@ -17,13 +17,16 @@ export class Copy2ClipboardButtonComponent {
   @Input()
   byId = true;
 
+  @Input()
+  showIconOnly = false;
+
   icons = Icons;
 
   constructor(private toastr: ToastrService) {}
 
   private getText(): string {
     const element = document.getElementById(this.source) as HTMLInputElement;
-    return element.value;
+    return element?.value || element?.textContent;
   }
 
   @HostListener('click')

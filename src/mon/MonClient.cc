@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <iterator>
 #include <random>
+
+#include <boost/asio/post.hpp>
 #include <boost/range/adaptor/map.hpp>
 #include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/algorithm/copy.hpp>
@@ -154,11 +156,8 @@ int MonClient::get_monmap_and_config()
     if (r < 0) {
       return r;
     }
-    r = authenticate(std::chrono::duration<double>(cct->_conf.get_val<std::chrono::seconds>("client_mount_timeout")).count());
-    if (r == -ETIMEDOUT) {
-      shutdown();
-      continue;
-    }
+    r = authenticate(
+      cct->_conf.get_val<std::chrono::seconds>("client_mount_timeout").count());
     if (r < 0) {
       break;
     }
@@ -709,6 +708,11 @@ void MonClient::_finish_auth(int auth_err)
   if (!auth_err && active_con) {
     ceph_assert(auth);
     _check_auth_tickets();
+  } else if (auth_err == -EAGAIN && !active_con) {
+    ldout(cct,10) << __func__ 
+                  << " auth returned EAGAIN, reopening the session to try again"
+                  << dendl;
+    _reopen_session();
   }
   auth_cond.notify_all();
 }
@@ -746,6 +750,10 @@ void MonClient::_reopen_session(int rank)
   authenticate_err = 1;  // == in progress
 
   _start_hunting();
+
+  if (rank == -1) {
+    rank = cct->_conf.get_val<int64_t>("mon_client_target_rank");
+  }
 
   if (rank >= 0) {
     _add_conn(rank);
@@ -1600,7 +1608,7 @@ int MonClient::handle_auth_request(
     // for some channels prior to nautilus (osd heartbeat), we
     // tolerate the lack of an authorizer.
     if (!con->get_messenger()->require_authorizer) {
-      handle_authentication_dispatcher->ms_handle_authentication(con);
+      handle_authentication_dispatcher->ms_handle_fast_authentication(con);
       return 1;
     }
     return -EACCES;
@@ -1638,7 +1646,7 @@ int MonClient::handle_auth_request(
     &auth_meta->connection_secret,
     ac);
   if (isvalid) {
-    handle_authentication_dispatcher->ms_handle_authentication(con);
+    handle_authentication_dispatcher->ms_handle_fast_authentication(con);
     return 1;
   }
   if (!more && !was_challenge && auth_meta->authorizer_challenge) {

@@ -39,7 +39,7 @@ start_ceph() {
     # start rbd-mirror daemon in the cluster
     KEY=$(ceph auth get client.admin --format=json | jq -r .[0].key)
     MON_CLUSTER_1=$(grep "mon host" ${FULL_PATH_BUILD_DIR}/run/1/ceph.conf | awk '{print $4}')
-    ${FULL_PATH_BUILD_DIR}/bin/rbd-mirror --mon_host $MON_CLUSTER_1 --key $KEY -c ${FULL_PATH_BUILD_DIR}/run/1/ceph.conf &
+    ${FULL_PATH_BUILD_DIR}/bin/rbd-mirror --mon_host $MON_CLUSTER_1 --key $KEY -c ${FULL_PATH_BUILD_DIR}/run/1/ceph.conf
 
     set +x
 }
@@ -50,6 +50,11 @@ stop() {
         for cluster in ${CLUSTERS[@]}; do
             ../src/mstop.sh $cluster
         done
+        pids=$(pgrep rbd-mirror)
+        if [ -n "$pids" ]; then
+            echo Killing rbd-mirror processes: $pids
+            kill -9 $pids
+        fi
     fi
     exit $1
 }

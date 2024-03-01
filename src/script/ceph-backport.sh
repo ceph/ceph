@@ -45,6 +45,7 @@ redmine_login=""
 redmine_user_id=""
 setup_ok=""
 this_script=$(basename "$full_path")
+gh_pr_template="../../../ceph/.github/pull_request_template.md"
 
 if [[ $* == *--debug* ]]; then
     set -x
@@ -94,6 +95,11 @@ declare -A comp_hash=(
 )
 
 declare -A flagged_pr_hash=()
+
+function run {
+    printf '%s\n' "$*" >&2
+    "$@"
+}
 
 function abort_due_to_setup_problem {
     error "problem detected in your setup"
@@ -228,27 +234,29 @@ function cherry_pick_phase {
             false
         fi
     fi
+    base_sha="$(printf '%s' "${remote_api_output}" | jq -r .base.sha)"
+    head_sha="$(printf '%s' "${remote_api_output}" | jq -r .head.sha)"
     merged=$(echo "${remote_api_output}" | jq -r '.merged')
     if [ "$merged" = "true" ] ; then
-        true
-    else
-        error "${original_pr_url} is not merged yet"
-        info "Cowardly refusing to perform automated cherry-pick"
-        false
-    fi
-    number_of_commits=$(echo "${remote_api_output}" | jq '.commits')
-    if [ "$number_of_commits" -eq "$number_of_commits" ] 2>/dev/null ; then
-        # \$number_of_commits is set, and is an integer
-        if [ "$number_of_commits" -eq "1" ] ; then
-            singular_or_plural_commit="commit"
-        else
-            singular_or_plural_commit="commits"
+        # Use the merge commit in case the branch HEAD changes after merge.
+        merge_commit_sha=$(printf '%s' "$remote_api_output" | jq -r '.merge_commit_sha')
+        if [ -z "$merge_commit_sha" ]; then
+            error "Could not determine the merge commit of ${original_pr_url}"
+            bail_out_github_api "$remote_api_output"
+            false
         fi
+        cherry_pick_sha="${merge_commit_sha}^..${merge_commit_sha}^2"
     else
-        error "Could not determine the number of commits in ${original_pr_url}"
-        bail_out_github_api "$remote_api_output"
+        if [ "$FORCE" ] ; then
+            warning "${original_pr_url} is not merged yet"
+            info "--force was given, so continuing anyway"
+            cherry_pick_sha="${base_sha}..${head_sha}"
+        else
+            error "${original_pr_url} is not merged yet"
+            info "Cowardly refusing to perform automated cherry-pick"
+            false
+        fi
     fi
-    info "Found $number_of_commits $singular_or_plural_commit in $original_pr_url"
 
     set -x
     git fetch "$upstream_remote"
@@ -289,33 +297,16 @@ function cherry_pick_phase {
 
     set +x
     maybe_restore_set_x
-    info "Attempting to cherry pick $number_of_commits commits from ${original_pr_url} into local branch $local_branch"
-    offset="$((number_of_commits - 1))" || true
-    for ((i=offset; i>=0; i--)) ; do
-        info "Running \"git cherry-pick -x\" on $(git log --oneline --max-count=1 --no-decorate "pr-${original_pr}~${i}")"
-        sha1_to_cherry_pick=$(git rev-parse --verify "pr-${original_pr}~${i}")
-        set -x
-        if git cherry-pick -x "$sha1_to_cherry_pick" ; then
-            set +x
-            maybe_restore_set_x
-        else
-            set +x
-            maybe_restore_set_x
-            [ "$VERBOSE" ] && git status
-            error "Cherry pick failed"
-            info "Next, manually fix conflicts and complete the current cherry-pick"
-            if [ "$i" -gt "0" ] >/dev/null 2>&1 ; then
-                info "Then, cherry-pick the remaining commits from ${original_pr_url}, i.e.:"
-                for ((j=i-1; j>=0; j--)) ; do
-                    info "-> missing commit: $(git log --oneline --max-count=1 --no-decorate "pr-${original_pr}~${j}")"
-                done
-                info "Finally, re-run the script"
-            else
-                info "Then re-run the script"
-            fi
-            false
-        fi
-    done
+    info "Attempting to cherry pick ${original_pr_url} into local branch $local_branch"
+    if ! run git cherry-pick -x "$cherry_pick_sha"; then
+        [ "$VERBOSE" ] && git status
+        error "Cherry pick failed due to conflicts?"
+        info "Manually fix conflicts and complete the current cherry-pick:"
+        info "    git cherry-pick --continue"
+        info "Finally, re-run this script"
+        false
+    fi
+
     info "Cherry picking completed without conflicts"
 }
 
@@ -1709,6 +1700,11 @@ if [ "$PR_PHASE" ] ; then
         [ "$original_issue" ] && desc="${desc}\nparent tracker: $(number_to_url "redmine" "${original_issue}")"
     fi
     desc="${desc}\n\nthis backport was staged using ceph-backport.sh version ${SCRIPT_VERSION}\nfind the latest version at ${github_endpoint}/blob/main/src/script/ceph-backport.sh"
+    desc="$desc\n\n"
+
+    while read line; do
+        desc="$desc$line"
+    done < ${gh_pr_template}
     
     debug "Generating backport PR title"
     if [ "$original_pr" ] ; then

@@ -23,8 +23,12 @@
 #include <string>
 #include <string_view>
 
+#include <fmt/compile.h>
+#include <fmt/format.h>
+
 #include "include/rados.h"
 #include "include/unordered_map.h"
+#include "common/Formatter.h"
 
 #include "hash.h"
 #include "encoding.h"
@@ -57,6 +61,15 @@ struct object_t {
   void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
     decode(name, bl);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_string("name", name);
+  }
+
+  static void generate_test_instances(std::list<object_t*>& o) {
+    o.push_back(new object_t);
+    o.push_back(new object_t("myobject"));
   }
 };
 WRITE_CLASS_ENCODER(object_t)
@@ -102,10 +115,10 @@ struct file_object_t {
 struct snapid_t {
   uint64_t val;
   // cppcheck-suppress noExplicitConstructor
-  snapid_t(uint64_t v=0) : val(v) {}
+  constexpr snapid_t(uint64_t v=0) : val(v) {}
   snapid_t operator+=(snapid_t o) { val += o.val; return *this; }
   snapid_t operator++() { ++val; return *this; }
-  operator uint64_t() const { return val; }
+  constexpr operator uint64_t() const { return val; }
 };
 
 inline void encode(snapid_t i, ceph::buffer::list &bl) {
@@ -143,6 +156,25 @@ inline std::ostream& operator<<(std::ostream& out, const snapid_t& s) {
     return out << std::hex << s.val << std::dec;
 }
 
+namespace fmt {
+template <>
+struct formatter<snapid_t> {
+
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const snapid_t& snp, FormatContext& ctx) const
+  {
+    if (snp == CEPH_NOSNAP) {
+      return fmt::format_to(ctx.out(), "head");
+    }
+    if (snp == CEPH_SNAPDIR) {
+      return fmt::format_to(ctx.out(), "snapdir");
+    }
+    return fmt::format_to(ctx.out(), FMT_COMPILE("{:x}"), snp.val);
+  }
+};
+} // namespace fmt
 
 struct sobject_t {
   object_t oid;
@@ -169,6 +201,14 @@ struct sobject_t {
     using ceph::decode;
     decode(oid, bl);
     decode(snap, bl);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_stream("oid") << oid;
+    f->dump_stream("snap") << snap;
+  }
+  static void generate_test_instances(std::list<sobject_t*>& o) {
+    o.push_back(new sobject_t);
+    o.push_back(new sobject_t(object_t("myobject"), 123));
   }
 };
 WRITE_CLASS_ENCODER(sobject_t)

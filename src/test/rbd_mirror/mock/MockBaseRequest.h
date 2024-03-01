@@ -21,6 +21,6 @@ struct MockBaseRequest : public BaseRequest {
 };
 
 } // namespace mirror
-} // namepace rbd
+} // namespace rbd
 
 #endif // CEPH_MOCK_BASE_REQUEST_H

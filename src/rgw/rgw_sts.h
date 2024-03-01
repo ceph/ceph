@@ -238,7 +238,6 @@ class STSService {
   rgw_user user_id;
   std::unique_ptr<rgw::sal::RGWRole> role;
   rgw::auth::Identity* identity;
-  int storeARN(const DoutPrefixProvider *dpp, std::string& arn, optional_yield y);
 public:
   STSService() = default;
   STSService(CephContext* cct, rgw::sal::Driver* driver, rgw_user user_id,

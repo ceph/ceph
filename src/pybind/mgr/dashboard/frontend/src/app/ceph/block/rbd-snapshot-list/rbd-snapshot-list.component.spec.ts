@@ -7,7 +7,6 @@ import { NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { MockComponent } from 'ng-mocks';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
-import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
@@ -86,7 +85,6 @@ describe('RbdSnapshotListComponent', () => {
   describe('api delete request', () => {
     let called: boolean;
     let rbdService: RbdService;
-    let rbdMirroringService: RbdMirroringService;
     let notificationService: NotificationService;
     let authStorageService: AuthStorageService;
 
@@ -95,7 +93,6 @@ describe('RbdSnapshotListComponent', () => {
       const modalService = TestBed.inject(ModalService);
       const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
       called = false;
-      rbdMirroringService = new RbdMirroringService(null, null);
       rbdService = new RbdService(null, null);
       notificationService = new NotificationService(null, null, null);
       authStorageService = new AuthStorageService();
@@ -106,7 +103,6 @@ describe('RbdSnapshotListComponent', () => {
         null,
         null,
         rbdService,
-        rbdMirroringService,
         null,
         notificationService,
         null,
@@ -205,7 +201,8 @@ describe('RbdSnapshotListComponent', () => {
           null,
           null,
           null,
-          TestBed.inject(ActionLabelsI18n)
+          TestBed.inject(ActionLabelsI18n),
+          null
         );
         ref.componentInstance.onSubmit = new Subject();
         return ref;
@@ -291,7 +288,7 @@ describe('RbdSnapshotListComponent', () => {
 
     it('should be disabled with version 1 and protected false', () => {
       const selection = new CdTableSelection([{ name: 'someName', is_protected: false }]);
-      const disableDesc = actions.getCloneDisableDesc(selection, ['layering']);
+      const disableDesc = actions.getCloneDisableDesc(selection);
       expect(disableDesc).toBe('Snapshot must be protected in order to clone.');
     });
 
@@ -302,8 +299,25 @@ describe('RbdSnapshotListComponent', () => {
     ])('should be enabled with version %d and protected %s', (version, is_protected) => {
       actions.cloneFormatVersion = version;
       const selection = new CdTableSelection([{ name: 'someName', is_protected: is_protected }]);
-      const disableDesc = actions.getCloneDisableDesc(selection, ['layering']);
+      const disableDesc = actions.getCloneDisableDesc(selection);
       expect(disableDesc).toBe(false);
+    });
+  });
+
+  describe('protect button disable state', () => {
+    let actions: RbdSnapshotActionsModel;
+
+    beforeEach(() => {
+      fixture.detectChanges();
+      const rbdService = TestBed.inject(RbdService);
+      const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
+      actions = new RbdSnapshotActionsModel(actionLabelsI18n, [], rbdService);
+    });
+
+    it('should be disabled if layering not supported', () => {
+      const selection = new CdTableSelection([{ name: 'someName', is_protected: false }]);
+      const disableDesc = actions.getProtectDisableDesc(selection, ['deep-flatten', 'fast-diff']);
+      expect(disableDesc).toBe('The layering feature needs to be enabled on parent image');
     });
   });
 });

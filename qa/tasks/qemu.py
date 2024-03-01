@@ -654,7 +654,7 @@ def task(ctx, config):
                         action: create / clone / none (optional, defaults to create)
                         image_name: <image name> (optional)
                         parent_name: <parent_name> (if action == clone),
-                        type: filesystem / block (optional, defaults to fileystem)
+                        type: filesystem / block (optional, defaults to filesystem)
                         image_url: <URL> (optional),
                         image_size: <MiB> (optional)
                         encryption_format: luks1 / luks2 / none (optional, defaults to none)

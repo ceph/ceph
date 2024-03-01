@@ -11,3 +11,4 @@ overrides:
       - has not responded to cap revoke by MDS for over
       - MDS_CLIENT_LATE_RELEASE
       - responding to mclientcaps
+      - RECENT_CRASH

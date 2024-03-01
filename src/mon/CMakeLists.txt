@@ -40,7 +40,7 @@ add_library(mon STATIC
 target_link_libraries(mon
   kv
   heap_profiler
-  fmt::fmt)
+  ${FMT_LIB})
 if(WITH_JAEGER)
   target_link_libraries(mon jaeger_base)
 endif()

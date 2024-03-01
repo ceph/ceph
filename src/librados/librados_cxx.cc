@@ -29,6 +29,7 @@
 
 #include "librados/AioCompletionImpl.h"
 #include "librados/IoCtxImpl.h"
+#include "librados/ObjectOperationImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
 #include "librados/RadosXattrIter.h"
@@ -87,18 +88,6 @@ static TracepointProvider::Traits tracepoint_traits("librados_tp.so", "rados_tra
  * |          RadosClient                 |
  * +--------------------------------------+
  */
-
-namespace librados {
-
-struct ObjectOperationImpl {
-  ::ObjectOperation o;
-  real_time rt;
-  real_time *prt;
-
-  ObjectOperationImpl() : prt(NULL) {}
-};
-
-}
 
 size_t librados::ObjectOperation::size()
 {
@@ -1528,6 +1517,14 @@ int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperat
   return io_ctx_impl->operate(obj, &o->impl->o, (ceph::real_time *)o->impl->prt);
 }
 
+int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, int flags)
+{
+  object_t obj(oid);
+  if (unlikely(!o->impl))
+    return -EINVAL;
+  return io_ctx_impl->operate(obj, &o->impl->o, (ceph::real_time *)o->impl->prt, translate_flags(flags));
+}
+
 int librados::IoCtx::operate(const std::string& oid, librados::ObjectWriteOperation *o, int flags, const jspan_context* otel_trace)
 {
   object_t obj(oid);
@@ -1559,8 +1556,20 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   if (unlikely(!o->impl))
     return -EINVAL;
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
-				  io_ctx_impl->snapc, 0);
+				  io_ctx_impl->snapc, o->impl->prt, 0);
 }
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+				 ObjectWriteOperation *o, int flags)
+{
+  object_t obj(oid);
+  if (unlikely(!o->impl))
+    return -EINVAL;
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
+				  io_ctx_impl->snapc, o->impl->prt,
+				  translate_flags(flags), nullptr);
+}
+
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 				 ObjectWriteOperation *o, int flags, const jspan_context* otel_trace)
 {
@@ -1568,7 +1577,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   if (unlikely(!o->impl))
     return -EINVAL;
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
-				  io_ctx_impl->snapc,
+				  io_ctx_impl->snapc, o->impl->prt,
 				  translate_flags(flags), nullptr, otel_trace);
 }
 
@@ -1585,7 +1594,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
-				  snapc, 0);
+				  snapc, o->impl->prt, 0);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -1602,7 +1611,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
-          snapc, 0, trace_info);
+          snapc, o->impl->prt, 0, trace_info);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -1618,7 +1627,7 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   for (size_t i = 0; i < snaps.size(); ++i)
     snv[i] = snaps[i];
   SnapContext snapc(snap_seq, snv);
-  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc, snapc,
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc, snapc, o->impl->prt,
                                   translate_flags(flags), trace_info);
 }
 
@@ -2730,9 +2739,16 @@ int librados::Rados::get_pool_stats(std::list<string>& v,
   return -EOPNOTSUPP;
 }
 
+// deprecated, use pool_is_in_selfmanaged_snaps_mode() instead
 bool librados::Rados::get_pool_is_selfmanaged_snaps_mode(const std::string& pool)
 {
-  return client->get_pool_is_selfmanaged_snaps_mode(pool);
+  // errors are ignored, prone to false negative results
+  return client->pool_is_in_selfmanaged_snaps_mode(pool) > 0;
+}
+
+int librados::Rados::pool_is_in_selfmanaged_snaps_mode(const std::string& pool)
+{
+  return client->pool_is_in_selfmanaged_snaps_mode(pool);
 }
 
 int librados::Rados::cluster_stat(cluster_stat_t& result)

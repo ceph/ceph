@@ -280,7 +280,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 Monitor::~Monitor()
 {
   op_tracker.on_shutdown();
-
   delete logger;
   ceph_assert(session_map.sessions.empty());
 }
@@ -535,6 +534,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_PACIFIC);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_QUINCY);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_REEF);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SQUID);
   return compat;
 }
 
@@ -938,9 +938,6 @@ int Monitor::init()
   mgr_messenger->add_dispatcher_tail(&mgr_client);
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
   mgrmon()->prime_mgr_client();
-
-  // generate list of filestore OSDs
-  osdmon()->get_filestore_osd_list();
 
   state = STATE_PROBING;
 
@@ -2005,6 +2002,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       dout(10) << " got newer/committed monmap epoch " << newmap->get_epoch()
 	       << ", mine was " << monmap->get_epoch() << dendl;
       int epoch_diff = newmap->get_epoch() - monmap->get_epoch();
+      dout(20) << " new monmap is " << *newmap  << dendl;
       delete newmap;
       monmap->decode(m->monmap_bl);
       dout(20) << "has_ever_joined: " << has_ever_joined << dendl;
@@ -2515,6 +2513,13 @@ void Monitor::apply_monmap_to_compatset_features()
     ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_REEF));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_REEF);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_SQUID)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_SQUID));
+    // this feature should only ever be set if the quorum supports it.
+    ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_SQUID));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SQUID);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2552,6 +2557,9 @@ void Monitor::calc_quorum_requirements()
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_REEF)) {
     required_features |= CEPH_FEATUREMASK_SERVER_REEF;
+  }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_SQUID)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_SQUID;
   }
 
   // monmap
@@ -3965,8 +3973,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
     f->close_section();
 
+    mgrmon()->count_metadata("ceph_version", &mgr);
     if (!mgr.empty()) {
-      mgrmon()->count_metadata("ceph_version", &mgr);
       f->open_object_section("mgr");
       for (auto& p : mgr) {
         f->dump_int(p.first.c_str(), p.second);
@@ -3975,8 +3983,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       f->close_section();
     }
 
+    osdmon()->count_metadata("ceph_version", &osd);
     if (!osd.empty()) {
-      osdmon()->count_metadata("ceph_version", &osd);
       f->open_object_section("osd");
       for (auto& p : osd) {
         f->dump_int(p.first.c_str(), p.second);
@@ -3985,8 +3993,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       f->close_section();
     }
 
+    mdsmon()->count_metadata("ceph_version", &mds);
     if (!mds.empty()) {
-      mdsmon()->count_metadata("ceph_version", &mds);
       f->open_object_section("mds");
       for (auto& p : mds) {
         f->dump_int(p.first.c_str(), p.second);
@@ -6380,7 +6388,7 @@ int Monitor::handle_auth_request(
       &auth_meta->connection_secret,
       &auth_meta->authorizer_challenge);
     if (isvalid) {
-      ms_handle_authentication(con);
+      ms_handle_fast_authentication(con);
       return 1;
     }
     if (!more && !was_challenge && auth_meta->authorizer_challenge) {
@@ -6501,7 +6509,7 @@ int Monitor::handle_auth_request(
   }
   if (r > 0 &&
       !s->authenticated) {
-    ms_handle_authentication(con);
+    ms_handle_fast_authentication(con);
   }
 
   dout(30) << " r " << r << " reply:\n";
@@ -6539,7 +6547,7 @@ void Monitor::ms_handle_accept(Connection *con)
   }
 }
 
-int Monitor::ms_handle_authentication(Connection *con)
+int Monitor::ms_handle_fast_authentication(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     // mon <-> mon connections need no Session, and setting one up
@@ -6551,6 +6559,11 @@ int Monitor::ms_handle_authentication(Connection *con)
   MonSession *s = static_cast<MonSession*>(priv.get());
   if (!s) {
     // must be msgr2, otherwise dispatch would have set up the session.
+    if (state == STATE_SHUTDOWN) {
+      dout(10) << __func__ << " ignoring new con " << con << " (shutdown)" << dendl;
+      con->mark_down();
+      return -EACCES;
+    }
     s = session_map.new_session(
       entity_name_t(con->get_peer_type(), -1),  // we don't know yet
       con->get_peer_addrs(),
@@ -6656,14 +6669,16 @@ void Monitor::notify_new_monmap(bool can_change_external_state, bool remove_rank
 void Monitor::set_elector_disallowed_leaders(bool allow_election)
 {
   set<int> dl;
+  // inherit dl from monmap
   for (auto name : monmap->disallowed_leaders) {
     dl.insert(monmap->get_rank(name));
-  }
-  if (is_stretch_mode()) {
-    for (auto name : monmap->stretch_marked_down_mons) {
-      dl.insert(monmap->get_rank(name));
-    }
-    dl.insert(monmap->get_rank(monmap->tiebreaker_mon));
+  } // unconditionally add stretch_marked_down_mons to the new dl copy
+  for (auto name : monmap->stretch_marked_down_mons) {
+    dl.insert(monmap->get_rank(name));
+  } // add the tiebreaker_mon incase it is not in monmap->disallowed_leaders
+  if (!monmap->tiebreaker_mon.empty() &&
+      monmap->contains(monmap->tiebreaker_mon)) {
+      dl.insert(monmap->get_rank(monmap->tiebreaker_mon));
   }
 
   bool disallowed_changed = elector.set_disallowed_leaders(dl);
@@ -6684,7 +6699,9 @@ void Monitor::try_engage_stretch_mode()
   dout(20) << __func__ << dendl;
   if (stretch_mode_engaged) return;
   if (!osdmon()->is_readable()) {
+    dout(20) << "osdmon is not readable" << dendl;
     osdmon()->wait_for_readable_ctx(new CMonEnableStretchMode(this));
+    return;
   }
   if (osdmon()->osdmap.stretch_mode_enabled &&
       monmap->stretch_mode_enabled) {
@@ -6767,12 +6784,15 @@ void Monitor::go_recovery_stretch_mode()
   }
   
   if (!osdmon()->is_readable()) {
+    dout(20) << "osdmon is not readable" << dendl;
     osdmon()->wait_for_readable_ctx(new CMonGoRecovery(this));
     return;
   }
 
   if (!osdmon()->is_writeable()) {
+    dout(20) << "osdmon is not writeable" << dendl;
     osdmon()->wait_for_writeable_ctx(new CMonGoRecovery(this));
+    return;
   }
   osdmon()->trigger_recovery_stretch_mode();
 }
@@ -6808,10 +6828,14 @@ void Monitor::maybe_go_degraded_stretch_mode()
 						   &matched_down_mons);
   if (dead) {
     if (!osdmon()->is_writeable()) {
+      dout(20) << "osdmon is not writeable" << dendl;
       osdmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+      return;
     }
     if (!monmon()->is_writeable()) {
+      dout(20) << "monmon is not writeable" << dendl;
       monmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+      return;
     }
     trigger_degraded_stretch_mode(matched_down_mons, matched_down_buckets);
   }
@@ -6861,10 +6885,14 @@ void Monitor::trigger_healthy_stretch_mode()
   if (!is_degraded_stretch_mode()) return;
   if (!is_leader()) return;
   if (!osdmon()->is_writeable()) {
+    dout(20) << "osdmon is not writeable" << dendl;
     osdmon()->wait_for_writeable_ctx(new CMonGoHealthy(this));
+    return;
   }
   if (!monmon()->is_writeable()) {
+    dout(20) << "monmon is not writeable" << dendl;
     monmon()->wait_for_writeable_ctx(new CMonGoHealthy(this));
+    return;
   }
 
   ceph_assert(osdmon()->osdmap.recovering_stretch_mode);

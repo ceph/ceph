@@ -4,6 +4,8 @@
 #pragma once
 
 #include <array>
+#include <boost/algorithm/string/predicate.hpp>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -11,6 +13,7 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/container/static_vector.hpp>
+#include <boost/container/flat_map.hpp>
 
 #include "common/sstring.hh"
 #include "rgw_common.h"
@@ -256,37 +259,47 @@ public:
   const char* get_name() const noexcept override {
     return "rgw::auth::s3::AWSAuthStrategy";
   }
-};
-
+}; /* AWSAuthstrategy */
 
 class AWSv4ComplMulti : public rgw::auth::Completer,
                         public rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>,
                         public std::enable_shared_from_this<AWSv4ComplMulti> {
+
   using io_base_t = rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>;
   using signing_key_t = sha256_digest_t;
 
-  CephContext* const cct;
+  using trailer_map_t = boost::container::flat_map<std::string_view, std::string_view>;
+
+  const req_state* const s;
 
   const std::string_view date;
   const std::string_view credential_scope;
+  const uint32_t flags;
   const signing_key_t signing_key;
 
   class ChunkMeta {
     size_t data_offset_in_stream = 0;
     size_t data_length = 0;
     std::string signature;
+    uint32_t flags{FLAG_NONE};
+    uint32_t cnt;
 
     ChunkMeta(const size_t data_starts_in_stream,
               const size_t data_length,
-              const std::string_view signature)
+              const std::string_view signature,
+	      uint32_t _flags,
+	      uint32_t _cnt)
       : data_offset_in_stream(data_starts_in_stream),
         data_length(data_length),
-        signature(std::string(signature)) {
-    }
+        signature(std::string(signature)),
+	flags(_flags),
+	cnt(_cnt)
+    {}
 
-    explicit ChunkMeta(const std::string_view& signature)
-      : signature(std::string(signature)) {
-    }
+    explicit ChunkMeta(const std::string_view& signature, uint32_t _flags,
+		       uint32_t _cnt)
+      : signature(std::string(signature)), flags(_flags), cnt(_cnt)
+    {}
 
   public:
     static constexpr size_t SIG_SIZE = 64;
@@ -309,10 +322,14 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
       return signature;
     }
 
+    size_t get_offset() { return data_offset_in_stream; }
+
     /* Factory: create an object representing metadata of first, initial chunk
      * in a stream. */
-    static ChunkMeta create_first(const std::string_view& seed_signature) {
-      return ChunkMeta(seed_signature);
+    static ChunkMeta create_first(const std::string_view& seed_signature,
+				  uint32_t flags,
+				  uint32_t cnt) {
+      return ChunkMeta(seed_signature, flags, cnt);
     }
 
     /* Factory: parse a block of META_MAX_SIZE bytes and creates an object
@@ -321,37 +338,88 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
     static std::pair<ChunkMeta, size_t> create_next(CephContext* cct,
                                                     ChunkMeta&& prev,
                                                     const char* metabuf,
-                                                    size_t metabuf_len);
+                                                    size_t metabuf_len,
+						    uint32_t flags);
   } chunk_meta;
 
+  uint16_t lf_bytes;
   size_t stream_pos;
   boost::container::static_vector<char, ChunkMeta::META_MAX_SIZE> parsing_buf;
+  boost::optional<std::string_view> x_amz_trailer;
   ceph::crypto::SHA256* sha256_hash;
   std::string prev_chunk_signature;
 
   bool is_signature_mismatched();
   std::string calc_chunk_signature(const std::string& payload_hash) const;
 
-public:
+  struct ReceiveChunkResult {
+    size_t received;
+    size_t data_offset_in_stream;
+
+    ReceiveChunkResult(size_t x, size_t y)
+      : received(x), data_offset_in_stream(y)
+    {}
+  }; /* ReceiveChunkResult */
+
+  inline CephContext* cct() const {
+    return s->cct;
+  }
+
+  inline bool expect_trailer_signature() const {
+    return flags & AWSv4ComplMulti::FLAG_TRAILER_SIGNATURE;
+  }
+
+  inline void put_prop(const std::string_view k, const std::string_view v) {
+    /* assume the caller will mangle the key name, if required */
+    auto& map = const_cast<env_map_t&>(s->info.env->get_map());
+    map.insert(env_map_t::value_type(k, v));
+  }
+
+  inline void extract_trailing_headers(std::string_view x_amz_trailer,
+				       std::string_view& mut_sv_trailer,
+				       trailer_map_t& trailer_map);
+
+  std::string calc_v4_trailer_signature(const trailer_map_t& trailer_map,
+					const std::string_view last_chunk_sig);
+
+  ReceiveChunkResult recv_chunk(char* buf, size_t max, uint32_t rc_cnt, bool& eof);
+
+  public:
+
+  static constexpr uint32_t FLAG_NONE =              0x00;
+  static constexpr uint32_t FLAG_TRAILING_CHECKSUM = 0x01;
+  static constexpr uint32_t FLAG_UNSIGNED_PAYLOAD =  0x02;
+  static constexpr uint32_t FLAG_UNSIGNED_CHUNKED =  0x04;
+  static constexpr uint32_t FLAG_TRAILER_SIGNATURE = 0x08;
+
   /* We need the constructor to be public because of the std::make_shared that
    * is employed by the create() method. */
   AWSv4ComplMulti(const req_state* const s,
                   std::string_view date,
                   std::string_view credential_scope,
                   std::string_view seed_signature,
+		  uint32_t _flags,
                   const signing_key_t& signing_key)
     : io_base_t(nullptr),
-      cct(s->cct),
+      s(s),
       date(std::move(date)),
       credential_scope(std::move(credential_scope)),
+      flags(_flags),
       signing_key(signing_key),
 
       /* The evolving state. */
-      chunk_meta(ChunkMeta::create_first(seed_signature)),
+      chunk_meta(ChunkMeta::create_first(
+		   seed_signature, flags, 0 /* first call in cycle */)),
+      lf_bytes(0),
       stream_pos(0),
       sha256_hash(calc_hash_sha256_open_stream()),
-      prev_chunk_signature(std::move(seed_signature)) {
-  }
+      prev_chunk_signature(std::move(seed_signature))
+  {
+    auto cksum = s->info.env->get("HTTP_X_AMZ_TRAILER");
+    if (!! cksum) {
+      x_amz_trailer = std::string_view(cksum, std::strlen(cksum));
+    }
+  } /* AWSv4ComplMulti */
 
   ~AWSv4ComplMulti() {
     if (sha256_hash) {
@@ -371,6 +439,7 @@ public:
                           std::string_view date,
                           std::string_view credential_scope,
                           std::string_view seed_signature,
+			  uint32_t flags,
                           const boost::optional<std::string>& secret_key);
 
 };
@@ -452,6 +521,13 @@ static constexpr char AWS4_UNSIGNED_PAYLOAD_HASH[] = "UNSIGNED-PAYLOAD";
 
 static constexpr char AWS4_STREAMING_PAYLOAD_HASH[] = \
   "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
+
+/* trailing header forms */
+static constexpr char AWS4_STREAMING_UNSIGNED_PAYLOAD_TRAILER[] = \
+  "STREAMING-UNSIGNED-PAYLOAD-TRAILER";
+
+static constexpr char AWS4_STREAMING_HMAC_SHA256_PAYLOAD_TRAILER[] = \
+  "STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER";
 
 bool is_non_s3_op(RGWOpType op_type);
 
@@ -577,9 +653,29 @@ static inline const char* get_v4_exp_payload_hash(const req_info& info)
   return expected_request_payload_hash;
 }
 
-static inline bool is_v4_payload_unsigned(const char* const exp_payload_hash)
+static inline bool is_traditional_v4_unsigned_payload(const char* const exp_payload_hash)
 {
   return boost::equals(exp_payload_hash, AWS4_UNSIGNED_PAYLOAD_HASH);
+}
+
+static inline bool is_v4_payload_unsigned_chunked(const char* const exp_payload_hash)
+{
+  return boost::equals(exp_payload_hash, AWS4_STREAMING_UNSIGNED_PAYLOAD_TRAILER);
+}
+
+static inline bool is_v4_payload_unsigned(const char* const exp_payload_hash)
+{
+  return boost::contains(exp_payload_hash, "UNSIGNED-PAYLOAD");
+}
+
+static inline bool have_checksum_trailer(const char* const exp_payload_hash)
+{
+  return boost::algorithm::ends_with(exp_payload_hash, "TRAILER");
+}
+
+static inline bool expect_trailer_signature(const char* const exp_payload_hash)
+{
+  return boost::equals(exp_payload_hash, AWS4_STREAMING_HMAC_SHA256_PAYLOAD_TRAILER);
 }
 
 static inline bool is_v4_payload_empty(const req_state* const s)
@@ -595,12 +691,14 @@ static inline bool is_v4_payload_empty(const req_state* const s)
 
 static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
 {
-  return boost::equals(exp_payload_hash, AWS4_STREAMING_PAYLOAD_HASH);
+  return boost::algorithm::starts_with(exp_payload_hash, "STREAMING-");
 }
 
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
 std::string gen_v4_canonical_qs(const req_info& info, bool is_non_s3_op);
+
+std::string get_v4_canonical_method(const req_state* s);
 
 boost::optional<std::string>
 get_v4_canonical_headers(const req_info& info,

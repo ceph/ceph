@@ -29,6 +29,7 @@
 #include <boost/assign/list_of.hpp>
 #include <utility>
 #include <vector>
+#include "test/librados/crimson_utils.h"
 
 using namespace std;
 
@@ -378,6 +379,7 @@ TEST_F(TestInternal, FlattenFailsToLockImage) {
 }
 
 TEST_F(TestInternal, WriteFailsToLockImageBlocklisted) {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::Rados blocklist_rados;
@@ -411,6 +413,7 @@ TEST_F(TestInternal, WriteFailsToLockImageBlocklisted) {
 }
 
 TEST_F(TestInternal, WriteFailsToLockImageBlocklistedWatch) {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::Rados blocklist_rados;
@@ -654,6 +657,9 @@ TEST_F(TestInternal, MetadataConfApply) {
 
 TEST_F(TestInternal, SnapshotCopyup)
 {
+  //https://tracker.ceph.com/issues/58263
+  // Clone overlap is WIP
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   librbd::ImageCtx *ictx;
@@ -1304,8 +1310,7 @@ TEST_F(TestInternal, TestCoR)
   std::string config_value;
   ASSERT_EQ(0, _rados.conf_get("rbd_clone_copy_on_read", config_value));
   if (config_value == "false") {
-    std::cout << "SKIPPING due to disabled rbd_copy_on_read" << std::endl;
-    return;
+    GTEST_SKIP() << "Skipping due to disabled copy-on-read";
   }
 
   m_image_name = get_temp_image_name();

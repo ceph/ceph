@@ -37,6 +37,9 @@ export interface CephServiceAdditionalSpec {
   ssl_key: string;
   port: number;
   initial_admin_password: string;
+  rgw_realm: string;
+  rgw_zonegroup: string;
+  rgw_zone: string;
 }
 
 export interface CephServicePlacement {

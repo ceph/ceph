@@ -55,7 +55,8 @@ seastar::future<> populate_config_from_mon()
     auto auth_handler = std::make_unique<DummyAuthHandler>();
     auto msgr = crimson::net::Messenger::create(entity_name_t::CLIENT(),
                                                 "temp_mon_client",
-                                                get_nonce());
+                                                get_nonce(),
+                                                true);
     crimson::mon::Client monc{*msgr, *auth_handler};
     msgr->set_auth_client(&monc);
     msgr->start({&monc}).get();
@@ -147,17 +148,23 @@ _get_early_config(int argc, const char *argv[])
 	if (auto found = std::find_if(
 	      std::begin(early_args),
 	      std::end(early_args),
-	      [](auto* arg) { return "--smp"sv == arg; });
+	      [](auto* arg) { return "--cpuset"sv == arg; });
 	    found == std::end(early_args)) {
-
-	  // Set --smp based on crimson_seastar_smp config option
-	  ret.early_args.emplace_back("--smp");
-
-	  auto smp_config = local_conf().get_val<uint64_t>(
-	    "crimson_seastar_smp");
-
-	  ret.early_args.emplace_back(fmt::format("{}", smp_config));
-	  logger().info("get_early_config: set --smp {}", smp_config);
+	  auto smp_config = crimson::common::get_conf<std::string>("crimson_seastar_cpu_cores");
+	  if (!smp_config.empty()) {
+	    // Set --cpuset based on crimson_seastar_cpu_cores config option
+	    // --smp default is one per CPU
+	    ret.early_args.emplace_back("--cpuset");
+	    ret.early_args.emplace_back(smp_config);
+	    logger().info("get_early_config: set --cpuset {}", smp_config);
+	  } else {
+	    logger().warn("get_early_config: no cpuset specified, falling back"
+	                  " to seastar's default of: all");
+	  }
+	} else {
+	  logger().error("get_early_config: --cpuset can be "
+	                 "set only using crimson_seastar_cpu_cores");
+	  ceph_abort();
 	}
 	return 0;
       });

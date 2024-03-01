@@ -39,7 +39,7 @@ To see a list of inconsistent RADOS objects, run the following command:
    rados list-inconsistent-obj {pgid}
 
 To see a list of inconsistent snapsets in a specific PG, run the following
-commands:
+command:
 
 .. prompt:: bash #
 
@@ -87,7 +87,7 @@ as missing. In the case of replicated pools, recovery is beyond the scope of
 ``pg repair``.
 
 In the case of erasure-coded and BlueStore pools, Ceph will automatically
-perform repairs if ``osd_scrub_auto_repair`` (default ``false`) is set to
+perform repairs if ``osd_scrub_auto_repair`` (default ``false``) is set to
 ``true`` and if no more than ``osd_scrub_auto_repair_num_errors`` (default
 ``5``) errors are found.
 

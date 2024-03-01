@@ -1,0 +1,19 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd pool default size: 1
+      osd:
+        osd shutdown pgref assert: true
+roles:
+- [mon.a, mgr.x, osd.0, client.0]
+
+tasks:
+- install:
+    extra_system_packages:
+      - fio
+- ceph:
+- workunit:
+    clients:
+      all:
+        - rbd/krbd_watch_errors.sh

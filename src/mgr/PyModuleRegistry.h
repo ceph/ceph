@@ -122,9 +122,6 @@ public:
     return standby_modules != nullptr;
   }
 
-  void active_shutdown();
-  void shutdown();
-
   std::vector<MonCommand> get_commands() const;
   std::vector<ModuleCommand> get_py_commands() const;
 
@@ -202,10 +199,14 @@ public:
     return active_modules->get_services();
   }
 
-  void register_client(std::string_view name, entity_addrvec_t addrs)
+  void register_client(std::string_view name, entity_addrvec_t addrs, bool replace)
   {
     std::lock_guard l(lock);
-    clients.emplace(std::string(name), std::move(addrs));
+    auto n = std::string(name);
+    if (replace) {
+      clients.erase(n);
+    }
+    clients.emplace(n, std::move(addrs));
   }
   void unregister_client(std::string_view name, const entity_addrvec_t& addrs)
   {

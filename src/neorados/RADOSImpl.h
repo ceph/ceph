@@ -18,7 +18,7 @@
 #include <memory>
 #include <string>
 
-#include <boost/asio.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/intrusive_ptr.hpp>
 
 #include "common/ceph_context.h"

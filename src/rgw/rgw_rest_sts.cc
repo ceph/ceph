@@ -80,7 +80,7 @@ WebTokenEngine::get_role_name(const string& role_arn) const
 }
 
 std::unique_ptr<rgw::sal::RGWOIDCProvider>
-WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const
+WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss, optional_yield y) const
 {
   string tenant = get_role_tenant(role_arn);
 
@@ -104,7 +104,7 @@ WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_a
   std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
   provider->set_arn(p_arn);
   provider->set_tenant(tenant);
-  auto ret = provider->get(dpp);
+  auto ret = provider->get(dpp, y);
   if (ret < 0) {
     return nullptr;
   }
@@ -248,7 +248,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     }
 
     string role_arn = s->info.args.get("RoleArn");
-    auto provider = get_provider(dpp, role_arn, iss);
+    auto provider = get_provider(dpp, role_arn, iss, y);
     if (! provider) {
       ldpp_dout(dpp, 0) << "Couldn't get oidc provider info using input iss" << iss << dendl;
       throw -EACCES;
@@ -577,7 +577,7 @@ int RGWSTSGetSessionToken::verify_permission(optional_yield y)
                               s,
                               rgw::ARN(partition, service, "", s->user->get_tenant(), ""),
                               rgw::IAM::stsGetSessionToken)) {
-    ldpp_dout(this, 0) << "User does not have permssion to perform GetSessionToken" << dendl;
+    ldpp_dout(this, 0) << "User does not have permission to perform GetSessionToken" << dendl;
     return -EACCES;
   }
 

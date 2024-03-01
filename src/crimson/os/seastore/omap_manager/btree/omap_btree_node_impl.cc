@@ -36,7 +36,7 @@ using dec_ref_iertr = OMapInnerNode::base_iertr;
 using dec_ref_ret = dec_ref_iertr::future<>;
 template <typename T>
 dec_ref_ret dec_ref(omap_context_t oc, T&& addr) {
-  return oc.tm.dec_ref(oc.t, std::forward<T>(addr)).handle_error_interruptible(
+  return oc.tm.remove(oc.t, std::forward<T>(addr)).handle_error_interruptible(
     dec_ref_iertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error in OMapInnerNode helper dec_ref"
@@ -235,11 +235,12 @@ OMapInnerNode::list(
       return trans_intr::repeat(
         [&, config, oc, this]() -> list_iertr::future<seastar::stop_iteration>
       {
-        if (iter == liter || result.size() == config.max_result_size) {
-          complete = iter == liter;
+        if (iter == liter) {
+          complete = true;
           return list_iertr::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
+	assert(result.size() < config.max_result_size);
         auto laddr = iter->get_val();
         return omap_load_extent(
           oc, laddr,
@@ -278,8 +279,12 @@ OMapInnerNode::list(
 	      }
             }
             result.merge(std::move(child_result));
+	    if (result.size() == config.max_result_size) {
+	      return list_iertr::make_ready_future<seastar::stop_iteration>(
+		seastar::stop_iteration::yes);
+	    }
             ++iter;
-            assert(child_complete || result.size() == config.max_result_size);
+            assert(child_complete);
             return list_iertr::make_ready_future<seastar::stop_iteration>(
               seastar::stop_iteration::no);
           });
@@ -333,7 +338,10 @@ OMapInnerNode:: make_split_children(omap_context_t oc)
       return split_children_ret(
              interruptible::ready_future_marker{},
              std::make_tuple(left, right, split_into(*left, *right)));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    split_children_iertr::pass_further{}
+  );
 }
 
 OMapInnerNode::full_merge_ret
@@ -341,14 +349,17 @@ OMapInnerNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
 {
   LOG_PREFIX(OMapInnerNode::make_full_merge);
   DEBUGT("", oc.t);
-  return oc.tm.alloc_extent<OMapInnerNode>(oc.t, oc.hint,
+  return oc.tm.alloc_non_data_extent<OMapInnerNode>(oc.t, oc.hint,
     OMAP_INNER_BLOCK_SIZE)
     .si_then([this, right] (auto &&replacement) {
       replacement->merge_from(*this, *right->cast<OMapInnerNode>());
       return full_merge_ret(
         interruptible::ready_future_marker{},
         std::move(replacement));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    full_merge_iertr::pass_further{}
+  );
 }
 
 OMapInnerNode::make_balanced_ret
@@ -368,7 +379,10 @@ OMapInnerNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
              std::make_tuple(replacement_left, replacement_right,
                              balance_into_new_nodes(*this, right,
                                *replacement_left, *replacement_right)));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    make_balanced_iertr::pass_further{}
+  );
 }
 
 OMapInnerNode::merge_entry_ret
@@ -639,6 +653,7 @@ OMapLeafNode::list(
 
   for (; iter != liter && result.size() < config.max_result_size; iter++) {
     result.emplace(std::make_pair(iter->get_key(), iter->get_val()));
+    DEBUGT("found key {}", oc.t, iter->get_key());
   }
 
   complete = (iter == liter);
@@ -665,7 +680,10 @@ OMapLeafNode::make_split_children(omap_context_t oc)
       return split_children_ret(
              interruptible::ready_future_marker{},
              std::make_tuple(left, right, split_into(*left, *right)));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    split_children_iertr::pass_further{}
+  );
 }
 
 OMapLeafNode::full_merge_ret
@@ -674,13 +692,16 @@ OMapLeafNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
   ceph_assert(right->get_type() == TYPE);
   LOG_PREFIX(OMapLeafNode::make_full_merge);
   DEBUGT("this: {}", oc.t, *this);
-  return oc.tm.alloc_extent<OMapLeafNode>(oc.t, oc.hint, OMAP_LEAF_BLOCK_SIZE)
+  return oc.tm.alloc_non_data_extent<OMapLeafNode>(oc.t, oc.hint, OMAP_LEAF_BLOCK_SIZE)
     .si_then([this, right] (auto &&replacement) {
       replacement->merge_from(*this, *right->cast<OMapLeafNode>());
       return full_merge_ret(
         interruptible::ready_future_marker{},
         std::move(replacement));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    full_merge_iertr::pass_further{}
+  );
 }
 
 OMapLeafNode::make_balanced_ret
@@ -701,7 +722,10 @@ OMapLeafNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
                balance_into_new_nodes(
                  *this, right,
                  *replacement_left, *replacement_right)));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    make_balanced_iertr::pass_further{}
+  );
 }
 
 

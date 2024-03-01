@@ -6,7 +6,7 @@ roles:
   - osd.0
   - osd.1
   - osd.2
-  - client.0
+  - client.rgw
 openstack:
   - volumes: # attached to each instance
       count: 3
@@ -16,6 +16,9 @@ tasks:
 - ceph:
     pre-mgr-commands:
       - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
+- rgw: [client.rgw]
 - workunit:
     clients:
       all:

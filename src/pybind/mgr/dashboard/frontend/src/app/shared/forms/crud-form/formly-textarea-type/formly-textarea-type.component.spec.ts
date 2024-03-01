@@ -4,6 +4,7 @@ import { FormGroup } from '@angular/forms';
 import { FormlyFieldConfig, FormlyModule } from '@ngx-formly/core';
 
 import { FormlyTextareaTypeComponent } from './formly-textarea-type.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 @Component({
   template: ` <form [formGroup]="form">
@@ -20,19 +21,18 @@ class MockFormComponent {
     }
   ];
 }
+
 describe('FormlyTextareaTypeComponent', () => {
   let component: MockFormComponent;
   let fixture: ComponentFixture<MockFormComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [FormlyTextareaTypeComponent],
-      imports: [
-        FormlyModule.forRoot({
-          types: [{ name: 'input', component: FormlyTextareaTypeComponent }]
-        })
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [FormlyTextareaTypeComponent],
+    imports: [
+      FormlyModule.forRoot({
+        types: [{ name: 'input', component: FormlyTextareaTypeComponent }]
+      })
+    ]
   });
 
   beforeEach(() => {

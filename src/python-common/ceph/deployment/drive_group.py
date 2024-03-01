@@ -2,7 +2,12 @@ import enum
 import yaml
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, CustomConfig
+from ceph.deployment.service_spec import (
+    CustomConfig,
+    GeneralArgList,
+    PlacementSpec,
+    ServiceSpec,
+)
 from ceph.deployment.hostspec import SpecValidationError
 
 try:
@@ -66,7 +71,7 @@ class DeviceSelection(object):
         self.vendor = vendor
 
         #: Size specification of format LOW:HIGH.
-        #: Can also take the the form :HIGH, LOW:
+        #: Can also take the form :HIGH, LOW:
         #: or an exact value (as ceph-volume inventory reports)
         self.size:  Optional[str] = size
 
@@ -190,8 +195,8 @@ class DriveGroupSpec(ServiceSpec):
                  unmanaged=False,  # type: bool
                  filter_logic='AND',  # type: str
                  preview_only=False,  # type: bool
-                 extra_container_args=None,  # type: Optional[List[str]]
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  data_allocate_fraction=None,  # type: Optional[float]
                  method=None,  # type: Optional[OSDMethod]
                  config=None,  # type: Optional[Dict[str, str]]
@@ -288,8 +293,8 @@ class DriveGroupSpec(ServiceSpec):
         # spec: was not mandatory in octopus
         if 'spec' in args:
             args['spec'].update(cls._drive_group_spec_from_json(s_id, args['spec']))
-        else:
-            args.update(cls._drive_group_spec_from_json(s_id, args))
+        args.update(cls._drive_group_spec_from_json(
+                    s_id, {k: v for k, v in args.items() if k != 'spec'}))
 
         return super(DriveGroupSpec, cls)._from_json_impl(args)
 

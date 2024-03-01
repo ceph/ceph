@@ -30,8 +30,6 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWUserBuckets;
 
-class RGWGetUserStats_CB;
-
 /**
  * A string wrapper that includes encode/decode functions
  * for easily accessing a UID in all forms
@@ -50,6 +48,14 @@ struct RGWUID
     using ceph::decode;
     decode(s, bl);
     user_id.from_str(s);
+  }
+  void dump(Formatter *f) const {
+    f->dump_string("user_id", user_id.to_str());
+  }
+  static void generate_test_instances(std::list<RGWUID*>& o) {
+    o.push_back(new RGWUID);
+    o.push_back(new RGWUID);
+    o.back()->user_id.from_str("test:tester");
   }
 };
 WRITE_CLASS_ENCODER(RGWUID)
@@ -129,6 +135,7 @@ struct RGWUserAdminOpState {
   std::map<std::string, RGWAccessKey> op_access_keys;
   int32_t key_type{-1};
   bool access_key_exist = false;
+  std::optional<bool> access_key_active;
 
   std::set<std::string> mfa_ids;
 
@@ -269,6 +276,10 @@ struct RGWUserAdminOpState {
     access_key_exist = true;
   }
 
+  void set_access_key_active(bool active) {
+    access_key_active = active;
+  }
+
   void set_suspension(__u8 is_suspended) {
     suspended = is_suspended;
     suspension_op = true;
@@ -304,6 +315,10 @@ struct RGWUserAdminOpState {
     max_buckets = mb;
     max_buckets_specified = true;
   }
+
+  rgw::sal::Attrs get_attrs();
+
+  void set_attrs(rgw::sal::Attrs& attrs);
 
   void set_gen_access() {
     gen_access = true;
@@ -635,7 +650,7 @@ public:
   static int info(const DoutPrefixProvider *dpp,
 		  rgw::sal::Driver* driver,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher,
-		  optional_yield y);
+		  bool dump_keys, optional_yield y);
 
   static int create(const DoutPrefixProvider *dpp,
 		    rgw::sal::Driver* driver,

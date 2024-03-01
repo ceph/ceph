@@ -355,9 +355,10 @@ void SnapshotRemoveRequest<I>::handle_remove_object_map(int r) {
 template <typename I>
 void SnapshotRemoveRequest<I>::remove_image_state() {
   I &image_ctx = this->m_image_ctx;
-  auto type = cls::rbd::get_snap_namespace_type(m_snap_namespace);
 
-  if (type != cls::rbd::SNAPSHOT_NAMESPACE_TYPE_MIRROR) {
+  const auto* info = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+    &m_snap_namespace);
+  if (info == nullptr || info->is_orphan()) {
     release_snap_id();
     return;
   }

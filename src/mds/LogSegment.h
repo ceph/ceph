@@ -70,7 +70,7 @@ class LogSegment {
 
   const seq_t seq;
   uint64_t offset, end;
-  int num_events = 0;
+  uint64_t num_events = 0;
 
   // dirty items
   elist<CDir*>    dirty_dirfrags, new_dirfrags;
@@ -105,5 +105,10 @@ class LogSegment {
 
   MDSContext::vec expiry_waiters;
 };
+
+static inline std::ostream& operator<<(std::ostream& out, const LogSegment& ls) {
+  return out << "LogSegment(" << ls.seq << "/0x" << std::hex << ls.offset
+             << std::dec << " events=" << ls.num_events << ")";
+}
 
 #endif

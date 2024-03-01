@@ -33,6 +33,7 @@
 
 #define DEFAULT_SERVICE_START_TIMEOUT 120
 #define DEFAULT_IMAGE_MAP_TIMEOUT 20
+#define DISK_STATUS_POLLING_INTERVAL_MS 500
 
 #define HELP_INFO 1
 #define VERSION_INFO 2
@@ -41,9 +42,6 @@
 #define WNBD_STATUS_INACTIVE "inactive"
 
 #define DEFAULT_SERVICE_THREAD_COUNT 8
-
-static WnbdHandler* handler = nullptr;
-ceph::mutex shutdown_lock = ceph::make_mutex("RbdWnbd::ShutdownLock");
 
 struct Config {
   bool exclusive = false;

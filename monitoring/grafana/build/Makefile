@@ -1,5 +1,5 @@
 
-GRAFANA_VERSION ?= 9.4.7-1
+GRAFANA_VERSION ?= 9.4.12-1
 PIECHART_VERSION ?= "1.6.2"
 STATUS_PANEL_VERSION ?= "1.0.11"
 DASHBOARD_DIR := "../../ceph-mixin/dashboards_out"

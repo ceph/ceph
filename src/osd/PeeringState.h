@@ -389,6 +389,7 @@ public:
     virtual void on_role_change() = 0;
     virtual void on_change(ObjectStore::Transaction &t) = 0;
     virtual void on_activate(interval_set<snapid_t> to_trim) = 0;
+    virtual void on_replica_activate() {}
     virtual void on_activate_complete() = 0;
     virtual void on_new_interval() = 0;
     virtual Context *on_clean() = 0;
@@ -643,37 +644,37 @@ public:
   /* States */
   // Initial
   // Reset
-  // Start
-  //   Started
-  //     Primary
-  //       WaitActingChange
-  //       Peering
-  //         GetInfo
-  //         GetLog
-  //         GetMissing
-  //         WaitUpThru
-  //         Incomplete
-  //       Active
-  //         Activating
-  //         Clean
-  //         Recovered
-  //         Backfilling
-  //         WaitRemoteBackfillReserved
-  //         WaitLocalBackfillReserved
-  //         NotBackfilling
-  //         NotRecovering
-  //         Recovering
-  //         WaitRemoteRecoveryReserved
-  //         WaitLocalRecoveryReserved
-  //     ReplicaActive
-  //       RepNotRecovering
-  //       RepRecovering
-  //       RepWaitBackfillReserved
-  //       RepWaitRecoveryReserved
-  //     Stray
-  //     ToDelete
-  //       WaitDeleteReserved
-  //       Deleting
+  // Started
+  //   Start
+  //   Primary
+  //     WaitActingChange
+  //     Peering
+  //       GetInfo
+  //       GetLog
+  //       GetMissing
+  //       WaitUpThru
+  //       Incomplete
+  //     Active
+  //       Activating
+  //       Clean
+  //       Recovered
+  //       Backfilling
+  //       WaitRemoteBackfillReserved
+  //       WaitLocalBackfillReserved
+  //       NotBackfilling
+  //       NotRecovering
+  //       Recovering
+  //       WaitRemoteRecoveryReserved
+  //       WaitLocalRecoveryReserved
+  //   ReplicaActive
+  //     RepNotRecovering
+  //     RepRecovering
+  //     RepWaitBackfillReserved
+  //     RepWaitRecoveryReserved
+  //   Stray
+  //   ToDelete
+  //     WaitDeleteReserved
+  //     Deleting
   // Crashed
 
   struct Crashed : boost::statechart::state< Crashed, PeeringMachine >, NamedState {
@@ -689,6 +690,7 @@ public:
     typedef boost::mpl::list <
       boost::statechart::transition< Initialize, Reset >,
       boost::statechart::custom_reaction< NullEvt >,
+      boost::statechart::custom_reaction< PgCreateEvt >,
       boost::statechart::transition< boost::statechart::event_base, Crashed >
       > reactions;
 
@@ -710,6 +712,7 @@ public:
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::custom_reaction< ActMap >,
       boost::statechart::custom_reaction< NullEvt >,
+      boost::statechart::custom_reaction< PgCreateEvt >,
       boost::statechart::custom_reaction< IntervalFlush >,
       boost::statechart::transition< boost::statechart::event_base, Crashed >
       > reactions;
@@ -736,6 +739,7 @@ public:
       boost::statechart::custom_reaction< IntervalFlush >,
       // ignored
       boost::statechart::custom_reaction< NullEvt >,
+      boost::statechart::custom_reaction< PgCreateEvt >,
       boost::statechart::custom_reaction<SetForceRecovery>,
       boost::statechart::custom_reaction<UnsetForceRecovery>,
       boost::statechart::custom_reaction<SetForceBackfill>,
@@ -866,7 +870,8 @@ public:
       boost::statechart::custom_reaction< DoRecovery>,
       boost::statechart::custom_reaction< RenewLease>,
       boost::statechart::custom_reaction< MLeaseAck>,
-      boost::statechart::custom_reaction< CheckReadable>
+      boost::statechart::custom_reaction< CheckReadable>,
+      boost::statechart::custom_reaction< PgCreateEvt >
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const QueryUnfound& q);
@@ -905,6 +910,7 @@ public:
       return discard_event();
     }
     boost::statechart::result react(const CheckReadable&);
+    boost::statechart::result react(const PgCreateEvt&);
     void all_activated_and_committed();
   };
 
@@ -1568,6 +1574,47 @@ public:
   /// get priority for pg deletion
   unsigned get_delete_priority();
 
+public:
+  /**
+   * recovery_msg_priority_t
+   *
+   * Defines priority values for use with recovery messages.  The values are
+   * chosen to be reasonable for wpq during an upgrade scenarios, but are
+   * actually translated into a class in PGRecoveryMsg::get_scheduler_class()
+   */
+  enum recovery_msg_priority_t : int {
+    FORCED = 20,
+    UNDERSIZED = 15,
+    DEGRADED = 10,
+    BEST_EFFORT = 5
+  };
+
+  /// get message priority for recovery messages
+  int get_recovery_op_priority() const {
+    if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+      /* For mclock, we use special priority values which will be
+       * translated into op classes within PGRecoveryMsg::get_scheduler_class
+       */
+      if (is_forced_recovery_or_backfill()) {
+	return recovery_msg_priority_t::FORCED;
+      } else if (is_undersized()) {
+	return recovery_msg_priority_t::UNDERSIZED;
+      } else if (is_degraded()) {
+	return recovery_msg_priority_t::DEGRADED;
+      } else {
+	return recovery_msg_priority_t::BEST_EFFORT;
+      }
+    } else {
+      /* For WeightedPriorityQueue, we use pool or osd config settings to
+       * statically set the priority for recovery messages.  This special
+       * handling should probably be removed after Reef */
+      int64_t pri = 0;
+      pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+      return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
+    }
+  }
+
+private:
   bool check_prior_readable_down_osds(const OSDMapRef& map);
 
   bool adjust_need_up_thru(const OSDMapRef osdmap);
@@ -2292,13 +2339,15 @@ public:
     if (peer == pg_whoami) {
       return pg_log.get_missing();
     } else {
-      assert(peer_missing.count(peer));
-      return peer_missing.find(peer)->second;
+      auto it = peer_missing.find(peer);
+      assert(it != peer_missing.end());
+      return it->second;
     }
   }
   const pg_info_t&get_peer_info(pg_shard_t peer) const {
-    assert(peer_info.count(peer));
-    return peer_info.find(peer)->second;
+    auto it = peer_info.find(peer);
+    assert(it != peer_info.end());
+    return it->second;
   }
   bool has_peer_info(pg_shard_t peer) const {
     return peer_info.count(peer);

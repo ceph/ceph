@@ -502,5 +502,7 @@ void test_rgw_populate_bucket(rgw_bucket *b, const char *t, const char *n, const
 void test_rgw_init_bucket(rgw_bucket *bucket, const char *name);
 rgw_obj test_rgw_create_obj(const rgw_bucket& bucket, const std::string& name, const std::string& instance, const std::string& ns);
 
+
+
 #endif
 

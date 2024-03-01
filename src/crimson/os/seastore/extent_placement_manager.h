@@ -8,6 +8,7 @@
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/journal/segment_allocator.h"
+#include "crimson/os/seastore/journal/record_submitter.h"
 #include "crimson/os/seastore/transaction.h"
 #include "crimson/os/seastore/random_block_manager.h"
 #include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
@@ -34,6 +35,8 @@ public:
 
   virtual paddr_t alloc_paddr(extent_len_t length) = 0;
 
+  virtual std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) = 0;
+
   using alloc_write_ertr = base_ertr;
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
   virtual alloc_write_iertr::future<> alloc_write_ool_extents(
@@ -42,6 +45,13 @@ public:
 
   using close_ertr = base_ertr;
   virtual close_ertr::future<> close() = 0;
+
+  virtual bool can_inplace_rewrite(Transaction& t,
+    CachedExtentRef extent) = 0;
+
+#ifdef UNIT_TESTS_BUILT
+  virtual void prefill_fragmented_devices() {}
+#endif
 };
 using ExtentOolWriterRef = std::unique_ptr<ExtentOolWriter>;
 
@@ -76,6 +86,15 @@ public:
 
   paddr_t alloc_paddr(extent_len_t length) final {
     return make_delayed_temp_paddr(0);
+  }
+
+  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
+    return {alloc_paddr_result{make_delayed_temp_paddr(0), length}};
+  }
+
+  bool can_inplace_rewrite(Transaction& t,
+    CachedExtentRef extent) final {
+    return false;
   }
 
 private:
@@ -121,6 +140,29 @@ public:
     return rb_cleaner->alloc_paddr(length);
   }
 
+  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
+    assert(rb_cleaner);
+    return rb_cleaner->alloc_paddrs(length);
+  }
+
+  bool can_inplace_rewrite(Transaction& t,
+    CachedExtentRef extent) final {
+    if (!extent->is_dirty()) {
+      return false;
+    }
+    assert(t.get_src() == transaction_type_t::TRIM_DIRTY);
+    ceph_assert_always(extent->get_type() == extent_types_t::ROOT ||
+	extent->get_paddr().is_absolute());
+    return crimson::os::seastore::can_inplace_rewrite(extent->get_type());
+  }
+
+#ifdef UNIT_TESTS_BUILT
+  void prefill_fragmented_devices() final {
+    LOG_PREFIX(RandomBlockOolWriter::prefill_fragmented_devices);
+    SUBDEBUG(seastore_epm, "");
+    return rb_cleaner->prefill_fragmented_devices();
+  }
+#endif
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
@@ -198,6 +240,14 @@ public:
     background_process.set_extent_callback(cb);
   }
 
+  bool can_inplace_rewrite(Transaction& t, CachedExtentRef extent) {
+    auto writer = get_writer(placement_hint_t::REWRITE,
+      get_extent_category(extent->get_type()),
+      OOL_GENERATION);
+    ceph_assert(writer);
+    return writer->can_inplace_rewrite(t, extent);
+  }
+
   journal_type_t get_journal_type() const {
     return background_process.get_journal_type();
   }
@@ -240,12 +290,17 @@ public:
     bufferptr bp;
     rewrite_gen_t gen;
   };
-  alloc_result_t alloc_new_extent(
+  std::optional<alloc_result_t> alloc_new_non_data_extent(
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
     placement_hint_t hint,
+#ifdef UNIT_TESTS_BUILT
+    rewrite_gen_t gen,
+    std::optional<paddr_t> external_paddr = std::nullopt
+#else
     rewrite_gen_t gen
+#endif
   ) {
     assert(hint < placement_hint_t::NUM_HINTS);
     assert(is_target_rewrite_generation(gen));
@@ -254,26 +309,94 @@ public:
     data_category_t category = get_extent_category(type);
     gen = adjust_generation(category, type, hint, gen);
 
-    // XXX: bp might be extended to point to different memory (e.g. PMem)
-    // according to the allocator.
-    auto bp = ceph::bufferptr(
-      buffer::create_page_aligned(length));
-    bp.zero();
     paddr_t addr;
+#ifdef UNIT_TESTS_BUILT
+    if (unlikely(external_paddr.has_value())) {
+      assert(external_paddr->is_fake());
+      addr = *external_paddr;
+    } else if (gen == INLINE_GENERATION) {
+#else
     if (gen == INLINE_GENERATION) {
+#endif
       addr = make_record_relative_paddr(0);
-    } else if (category == data_category_t::DATA) {
-      assert(data_writers_by_gen[generation_to_writer(gen)]);
-      addr = data_writers_by_gen[
-	  generation_to_writer(gen)]->alloc_paddr(length);
     } else {
       assert(category == data_category_t::METADATA);
       assert(md_writers_by_gen[generation_to_writer(gen)]);
       addr = md_writers_by_gen[
 	  generation_to_writer(gen)]->alloc_paddr(length);
     }
-    return {addr, std::move(bp), gen};
+    assert(!(category == data_category_t::DATA));
+
+    if (addr.is_null()) {
+      return std::nullopt;
+    }
+
+    // XXX: bp might be extended to point to different memory (e.g. PMem)
+    // according to the allocator.
+    auto bp = ceph::bufferptr(
+      buffer::create_page_aligned(length));
+    bp.zero();
+
+    return alloc_result_t{addr, std::move(bp), gen};
   }
+
+  std::list<alloc_result_t> alloc_new_data_extents(
+    Transaction& t,
+    extent_types_t type,
+    extent_len_t length,
+    placement_hint_t hint,
+#ifdef UNIT_TESTS_BUILT
+    rewrite_gen_t gen,
+    std::optional<paddr_t> external_paddr = std::nullopt
+#else
+    rewrite_gen_t gen
+#endif
+  ) {
+    assert(hint < placement_hint_t::NUM_HINTS);
+    assert(is_target_rewrite_generation(gen));
+    assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
+
+    data_category_t category = get_extent_category(type);
+    gen = adjust_generation(category, type, hint, gen);
+    assert(gen != INLINE_GENERATION);
+
+    // XXX: bp might be extended to point to different memory (e.g. PMem)
+    // according to the allocator.
+    std::list<alloc_result_t> allocs;
+#ifdef UNIT_TESTS_BUILT
+    if (unlikely(external_paddr.has_value())) {
+      assert(external_paddr->is_fake());
+      auto bp = ceph::bufferptr(
+        buffer::create_page_aligned(length));
+      bp.zero();
+      allocs.emplace_back(alloc_result_t{*external_paddr, std::move(bp), gen});
+    } else {
+#else
+    {
+#endif
+      assert(category == data_category_t::DATA);
+      assert(data_writers_by_gen[generation_to_writer(gen)]);
+      auto addrs = data_writers_by_gen[
+          generation_to_writer(gen)]->alloc_paddrs(length);
+      for (auto &ext : addrs) {
+        auto bp = ceph::bufferptr(
+          buffer::create_page_aligned(ext.len));
+        bp.zero();
+        allocs.emplace_back(alloc_result_t{ext.start, std::move(bp), gen});
+      }
+    }
+    return allocs;
+  }
+
+#ifdef UNIT_TESTS_BUILT
+  void prefill_fragmented_devices() {
+    LOG_PREFIX(ExtentPlacementManager::prefill_fragmented_devices);
+    SUBDEBUG(seastore_epm, "");
+    for (auto &writer : writer_refs) {
+      writer->prefill_fragmented_devices();
+    }
+  }
+#endif
 
   /**
    * dispatch_result_t

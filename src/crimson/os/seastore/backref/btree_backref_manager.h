@@ -11,16 +11,21 @@ namespace crimson::os::seastore::backref {
 
 constexpr size_t BACKREF_BLOCK_SIZE = 4096;
 
-class BtreeBackrefPin : public BtreeNodePin<paddr_t, laddr_t> {
+class BtreeBackrefMapping : public BtreeNodeMapping<paddr_t, laddr_t> {
   extent_types_t type;
 public:
-  BtreeBackrefPin() = default;
-  BtreeBackrefPin(
+  BtreeBackrefMapping(op_context_t<paddr_t> ctx)
+    : BtreeNodeMapping(ctx) {}
+  BtreeBackrefMapping(
+    op_context_t<paddr_t> ctx,
     CachedExtentRef parent,
+    uint16_t pos,
     backref_map_val_t &val,
     backref_node_meta_t &&meta)
-    : BtreeNodePin(
+    : BtreeNodeMapping(
+	ctx,
 	parent,
+	pos,
 	val.laddr,
 	val.len,
 	std::forward<backref_node_meta_t>(meta)),
@@ -29,11 +34,22 @@ public:
   extent_types_t get_type() const final {
     return type;
   }
+
+  bool is_clone() const final {
+    return false;
+  }
+
+protected:
+  std::unique_ptr<BtreeNodeMapping<paddr_t, laddr_t>> _duplicate(
+    op_context_t<paddr_t> ctx) const final {
+    return std::unique_ptr<BtreeNodeMapping<paddr_t, laddr_t>>(
+      new BtreeBackrefMapping(ctx));
+  }
 };
 
 using BackrefBtree = FixedKVBtree<
   paddr_t, backref_map_val_t, BackrefInternalNode,
-  BackrefLeafNode, BtreeBackrefPin, BACKREF_BLOCK_SIZE>;
+  BackrefLeafNode, BtreeBackrefMapping, BACKREF_BLOCK_SIZE, false>;
 
 class BtreeBackrefManager : public BackrefManager {
 public:
@@ -78,24 +94,9 @@ public:
     Transaction &t,
     CachedExtentRef e) final;
 
-  void complete_transaction(
-    Transaction &t,
-    std::vector<CachedExtentRef> &,
-    std::vector<CachedExtentRef> &) final;
-
   rewrite_extent_ret rewrite_extent(
     Transaction &t,
     CachedExtentRef extent) final;
-
-  void add_pin(BackrefPin &pin) final {
-    auto *bpin = reinterpret_cast<BtreeBackrefPin*>(&pin);
-    pin_set.add_pin(bpin->get_range_pin());
-    bpin->set_parent(nullptr);
-  }
-  void remove_pin(BackrefPin &pin) final {
-    auto *bpin = reinterpret_cast<BtreeBackrefPin*>(&pin);
-    pin_set.retire(bpin->get_range_pin());
-  }
 
   Cache::backref_entry_query_mset_t
   get_cached_backref_entries_in_range(
@@ -108,15 +109,16 @@ public:
     paddr_t start,
     paddr_t end) final;
 
-  void cache_new_backref_extent(paddr_t paddr, extent_types_t type) final;
+  void cache_new_backref_extent(
+    paddr_t paddr,
+    paddr_t key,
+    extent_types_t type) final;
 
 private:
   Cache &cache;
 
-  btree_pin_set_t<paddr_t> pin_set;
-
   op_context_t<paddr_t> get_context(Transaction &t) {
-    return op_context_t<paddr_t>{cache, t, &pin_set};
+    return op_context_t<paddr_t>{cache, t};
   }
 };
 

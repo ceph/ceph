@@ -64,7 +64,7 @@ function discover_compiler() {
     local cxx_compiler=g++
     local c_compiler=gcc
     # ubuntu/debian ci builds prefer clang
-    for i in {14..10}; do
+    for i in {17..12}; do
         if type -t "clang-$i" > /dev/null; then
             cxx_compiler="clang++-$i"
             c_compiler="clang-$i"

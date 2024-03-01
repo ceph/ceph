@@ -115,6 +115,55 @@ public:
   }
 };
 
+namespace {
+// this allows waiting untill "finish()" is called from a different thread
+// waiting could be blocking the waiting thread or yielding, depending
+// with compilation flag support and whether the optional_yield is set
+class Waiter {
+  using Signature = void(boost::system::error_code);
+  using Completion = ceph::async::Completion<Signature>;
+  using CompletionInit = boost::asio::async_completion<spawn::yield_context, Signature>;
+  std::unique_ptr<Completion> completion = nullptr;
+  int ret;
+
+  bool done = false;
+  mutable std::mutex lock;
+  mutable std::condition_variable cond;
+
+public:
+  int wait(optional_yield y) {
+    std::unique_lock l{lock};
+    if (done) {
+      return ret;
+    }
+    if (y) {
+      boost::system::error_code ec;
+      auto&& token = y.get_yield_context()[ec];
+      CompletionInit init(token);
+      completion = Completion::create(y.get_io_context().get_executor(),
+          std::move(init.completion_handler));
+      l.unlock();
+      init.result.get();
+      return -ec.value();
+    }
+    cond.wait(l, [this]{return (done==true);});
+    return ret;
+  }
+
+  void finish(int r) {
+    std::unique_lock l{lock};
+    ret = r;
+    done = true;
+    if (completion) {
+      boost::system::error_code ec(-ret, boost::system::system_category());
+      Completion::post(std::move(completion), ec);
+    } else {
+      cond.notify_all();
+    }
+  }
+};
+} // namespace
+
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
 private:
@@ -128,7 +177,7 @@ private:
   const std::string topic;
   const std::string exchange;
   ack_level_t ack_level;
-  amqp::connection_ptr_t conn;
+  amqp::connection_id_t conn_id;
 
   bool get_verify_ssl(const RGWHTTPArgs& args) {
     bool exists;
@@ -181,79 +230,23 @@ public:
         endpoint(_endpoint), 
         topic(_topic),
         exchange(get_exchange(args)),
-        ack_level(get_ack_level(args)),
-        conn(amqp::connect(endpoint, exchange, (ack_level == ack_level_t::Broker), get_verify_ssl(args), args.get_optional("ca-location"))) {
-    if (!conn) { 
+        ack_level(get_ack_level(args)) {
+    if (!amqp::connect(conn_id, endpoint, exchange, (ack_level == ack_level_t::Broker), get_verify_ssl(args), args.get_optional("ca-location"))) {
       throw configuration_error("AMQP: failed to create connection to: " + endpoint);
     }
   }
 
-  // this allows waiting untill "finish()" is called from a different thread
-  // waiting could be blocking the waiting thread or yielding, depending
-  // with compilation flag support and whether the optional_yield is set
-  class Waiter {
-    using Signature = void(boost::system::error_code);
-    using Completion = ceph::async::Completion<Signature>;
-    std::unique_ptr<Completion> completion = nullptr;
-    int ret;
-
-    mutable std::atomic<bool> done = false;
-    mutable std::mutex lock;
-    mutable std::condition_variable cond;
-
-    template <typename ExecutionContext, typename CompletionToken>
-    auto async_wait(ExecutionContext& ctx, CompletionToken&& token) {
-      boost::asio::async_completion<CompletionToken, Signature> init(token);
-      auto& handler = init.completion_handler;
-      {
-        std::unique_lock l{lock};
-        completion = Completion::create(ctx.get_executor(), std::move(handler));
-      }
-      return init.result.get();
-    }
-
-  public:
-    int wait(optional_yield y) {
-      if (done) {
-        return ret;
-      }
-      if (y) {
-	auto& io_ctx = y.get_io_context();
-        auto& yield_ctx = y.get_yield_context();
-        boost::system::error_code ec;
-        async_wait(io_ctx, yield_ctx[ec]);
-        return -ec.value();
-      }
-      std::unique_lock l(lock);
-      cond.wait(l, [this]{return (done==true);});
-      return ret;
-    }
-
-    void finish(int r) {
-      std::unique_lock l{lock};
-      ret = r;
-      done = true;
-      if (completion) {
-        boost::system::error_code ec(-ret, boost::system::system_category());
-        Completion::post(std::move(completion), ec);
-      } else {
-        cond.notify_all();
-      }
-    }
-  };
-
   int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
-    ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return amqp::publish(conn, topic, json_format_pubsub_event(event));
+      return amqp::publish(conn_id, topic, json_format_pubsub_event(event));
     } else {
       // TODO: currently broker and routable are the same - this will require different flags but the same mechanism
-      // note: dynamic allocation of Waiter is needed when this is invoked from a beast coroutine
-      auto w = std::unique_ptr<Waiter>(new Waiter);
-      const auto rc = amqp::publish_with_confirm(conn, 
+      auto w = std::make_unique<Waiter>();
+      const auto rc = amqp::publish_with_confirm(conn_id, 
         topic,
         json_format_pubsub_event(event),
-        std::bind(&Waiter::finish, w.get(), std::placeholders::_1));
+        [wp = w.get()](int r) { wp->finish(r);}
+      );
       if (rc < 0) {
         // failed to publish, does not wait for reply
         return rc;
@@ -285,8 +278,8 @@ private:
   };
   CephContext* const cct;
   const std::string topic;
-  kafka::connection_ptr_t conn;
   const ack_level_t ack_level;
+  std::string conn_name;
 
 
   ack_level_t get_ack_level(const RGWHTTPArgs& args) {
@@ -309,78 +302,23 @@ public:
       CephContext* _cct) : 
         cct(_cct),
         topic(_topic),
-        conn(kafka::connect(_endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), args.get_optional("ca-location"), args.get_optional("mechanism"))) ,
         ack_level(get_ack_level(args)) {
-    if (!conn) { 
+    if (!kafka::connect(conn_name, _endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), 
+          args.get_optional("ca-location"), args.get_optional("mechanism"))) {
       throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
     }
   }
 
-  // this allows waiting untill "finish()" is called from a different thread
-  // waiting could be blocking the waiting thread or yielding, depending
-  // with compilation flag support and whether the optional_yield is set
-  class Waiter {
-    using Signature = void(boost::system::error_code);
-    using Completion = ceph::async::Completion<Signature>;
-    std::unique_ptr<Completion> completion = nullptr;
-    int ret;
-
-    mutable std::atomic<bool> done = false;
-    mutable std::mutex lock;
-    mutable std::condition_variable cond;
-
-    template <typename ExecutionContext, typename CompletionToken>
-    auto async_wait(ExecutionContext& ctx, CompletionToken&& token) {
-      boost::asio::async_completion<CompletionToken, Signature> init(token);
-      auto& handler = init.completion_handler;
-      {
-        std::unique_lock l{lock};
-        completion = Completion::create(ctx.get_executor(), std::move(handler));
-      }
-      return init.result.get();
-    }
-
-  public:
-    int wait(optional_yield y) {
-      if (done) {
-        return ret;
-      }
-      if (y) {
-        auto& io_ctx = y.get_io_context();
-        auto& yield_ctx = y.get_yield_context();
-        boost::system::error_code ec;
-        async_wait(io_ctx, yield_ctx[ec]);
-        return -ec.value();
-      }
-      std::unique_lock l(lock);
-      cond.wait(l, [this]{return (done==true);});
-      return ret;
-    }
-
-    void finish(int r) {
-      std::unique_lock l{lock};
-      ret = r;
-      done = true;
-      if (completion) {
-        boost::system::error_code ec(-ret, boost::system::system_category());
-        Completion::post(std::move(completion), ec);
-      } else {
-        cond.notify_all();
-      }
-    }
-  };
-
   int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
-    ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return kafka::publish(conn, topic, json_format_pubsub_event(event));
+      return kafka::publish(conn_name, topic, json_format_pubsub_event(event));
     } else {
-      // note: dynamic allocation of Waiter is needed when this is invoked from a beast coroutine
-      auto w = std::unique_ptr<Waiter>(new Waiter);
-      const auto rc = kafka::publish_with_confirm(conn, 
+      auto w = std::make_unique<Waiter>();
+      const auto rc = kafka::publish_with_confirm(conn_name, 
         topic,
         json_format_pubsub_event(event),
-        std::bind(&Waiter::finish, w.get(), std::placeholders::_1));
+        [wp = w.get()](int r) { wp->finish(r); }
+      );
       if (rc < 0) {
         // failed to publish, does not wait for reply
         return rc;
@@ -391,7 +329,7 @@ public:
 
   std::string to_str() const override {
     std::string str("Kafka Endpoint");
-    str += kafka::to_string(conn);
+    str += "\nBroker: " + conn_name;
     str += "\nTopic: " + topic;
     return str;
   }

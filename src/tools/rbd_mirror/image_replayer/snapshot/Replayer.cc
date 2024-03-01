@@ -542,6 +542,11 @@ void Replayer<I>::scan_local_mirror_snapshots(
     if (m_local_mirror_snap_ns.is_non_primary() &&
         m_local_mirror_snap_ns.primary_mirror_uuid !=
           m_state_builder->remote_mirror_uuid) {
+      if (m_local_mirror_snap_ns.is_orphan()) {
+        dout(5) << "local image being force promoted" << dendl;
+        handle_replay_complete(locker, 0, "orphan (force promoting)");
+        return;
+      }
       // TODO support multiple peers
       derr << "local image linked to unknown peer: "
            << m_local_mirror_snap_ns.primary_mirror_uuid << dendl;
@@ -1293,7 +1298,7 @@ void Replayer<I>::unlink_peer(uint64_t remote_snap_id) {
     Replayer<I>, &Replayer<I>::handle_unlink_peer>(this);
   auto req = librbd::mirror::snapshot::UnlinkPeerRequest<I>::create(
     m_state_builder->remote_image_ctx, remote_snap_id,
-    m_remote_mirror_peer_uuid, ctx);
+    m_remote_mirror_peer_uuid, false, ctx);
   req->send();
 }
 

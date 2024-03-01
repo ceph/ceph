@@ -161,74 +161,23 @@ std::unique_ptr<Object> FilterDriver::get_object(const rgw_obj_key& k)
   return std::make_unique<FilterObject>(std::move(o));
 }
 
-int FilterDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+std::unique_ptr<Bucket> FilterDriver::get_bucket(const RGWBucketInfo& i)
 {
-  std::unique_ptr<Bucket> nb;
-  int ret;
-  User* nu = nextUser(u);
-
-  ret = next->get_bucket(dpp, nu, b, &nb, y);
-  if (ret != 0)
-    return ret;
-
-  Bucket* fb = new FilterBucket(std::move(nb), u);
-  bucket->reset(fb);
-  return 0;
+  return std::make_unique<FilterBucket>(next->get_bucket(i));
 }
 
-int FilterDriver::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
+int FilterDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                              std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   std::unique_ptr<Bucket> nb;
-  int ret;
-  User* nu = nextUser(u);
-
-  ret = next->get_bucket(nu, i, &nb);
-  if (ret != 0)
-    return ret;
-
-  Bucket* fb = new FilterBucket(std::move(nb), u);
-  bucket->reset(fb);
-  return 0;
-}
-
-int FilterDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
-{
-  std::unique_ptr<Bucket> nb;
-  int ret;
-  User* nu = nextUser(u);
-
-  ret = next->get_bucket(dpp, nu, tenant, name, &nb, y);
-  if (ret != 0)
-    return ret;
-
-  Bucket* fb = new FilterBucket(std::move(nb), u);
-  bucket->reset(fb);
-  return 0;
+  const int ret = next->load_bucket(dpp, b, &nb, y);
+  *bucket = std::make_unique<FilterBucket>(std::move(nb));
+  return ret;
 }
 
 bool FilterDriver::is_meta_master()
 {
   return next->is_meta_master();
-}
-
-int FilterDriver::forward_request_to_master(const DoutPrefixProvider *dpp,
-					   User* user, obj_version* objv,
-					   bufferlist& in_data,
-					   JSONParser* jp, req_info& info,
-					   optional_yield y)
-{
-  return next->forward_request_to_master(dpp, user, objv, in_data, jp, info, y);
-}
-
-int FilterDriver::forward_iam_request_to_master(const DoutPrefixProvider *dpp,
-					       const RGWAccessKey& key,
-					       obj_version* objv,
-					       bufferlist& in_data,
-					       RGWXMLDecoder::XMLParser* parser,
-					       req_info& info,
-					       optional_yield y)
-{
-  return next->forward_iam_request_to_master(dpp, key, objv, in_data, parser, info, y);
 }
 
 std::string FilterDriver::zone_unique_id(uint64_t unique_num)
@@ -306,9 +255,9 @@ RGWCoroutinesManagerRegistry* FilterDriver::get_cr_registry()
   return next->get_cr_registry();
 }
 
-int FilterDriver::log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info)
+int FilterDriver::log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y)
 {
-    return next->log_usage(dpp, usage_info);
+    return next->log_usage(dpp, usage_info, y);
 }
 
 int FilterDriver::log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl)
@@ -336,9 +285,9 @@ void FilterDriver::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
 }
 
 int FilterDriver::set_buckets_enabled(const DoutPrefixProvider* dpp,
-				     std::vector<rgw_bucket>& buckets, bool enabled)
+				     std::vector<rgw_bucket>& buckets, bool enabled, optional_yield y)
 {
-    return next->set_buckets_enabled(dpp, buckets, enabled);
+    return next->set_buckets_enabled(dpp, buckets, enabled, y);
 }
 
 uint64_t FilterDriver::get_new_req_id()
@@ -372,9 +321,9 @@ void FilterDriver::wakeup_data_sync_shards(const DoutPrefixProvider *dpp,
   return next->wakeup_data_sync_shards(dpp, source_zone, shard_ids);
 }
 
-int FilterDriver::clear_usage(const DoutPrefixProvider *dpp)
+int FilterDriver::clear_usage(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return next->clear_usage(dpp);
+  return next->clear_usage(dpp, y);
 }
 
 int FilterDriver::read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
@@ -387,9 +336,9 @@ int FilterDriver::read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_e
 }
 
 int FilterDriver::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
-				uint64_t end_epoch)
+				uint64_t end_epoch, optional_yield y)
 {
-  return next->trim_all_usage(dpp, start_epoch, end_epoch);
+  return next->trim_all_usage(dpp, start_epoch, end_epoch, y);
 }
 
 int FilterDriver::get_config_key_val(std::string name, bufferlist* bl)
@@ -432,9 +381,9 @@ const RGWSyncModuleInstanceRef& FilterDriver::get_sync_module()
   return next->get_sync_module();
 }
 
-std::unique_ptr<LuaManager> FilterDriver::get_lua_manager()
+std::unique_ptr<LuaManager> FilterDriver::get_lua_manager(const std::string& luarocks_path)
 {
-  std::unique_ptr<LuaManager> nm = next->get_lua_manager();
+  std::unique_ptr<LuaManager> nm = next->get_lua_manager(luarocks_path);
 
   return std::make_unique<FilterLuaManager>(std::move(nm));
 }
@@ -475,9 +424,9 @@ std::unique_ptr<RGWOIDCProvider> FilterDriver::get_oidc_provider()
 
 int FilterDriver::get_oidc_providers(const DoutPrefixProvider *dpp,
 				    const std::string& tenant,
-				    std::vector<std::unique_ptr<RGWOIDCProvider>>& providers)
+				    std::vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
 {
-  return next->get_oidc_providers(dpp, tenant, providers);
+  return next->get_oidc_providers(dpp, tenant, providers, y);
 }
 
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
@@ -536,49 +485,8 @@ int FilterUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& m
 			     const std::string& end_marker, uint64_t max,
 			     bool need_stats, BucketList &buckets, optional_yield y)
 {
-  BucketList bl;
-  int ret;
-
-  buckets.clear();
-  ret = next->list_buckets(dpp, marker, end_marker, max, need_stats, bl, y);
-  if (ret < 0)
-    return ret;
-
-  buckets.set_truncated(bl.is_truncated());
-  for (auto& ent : bl.get_buckets()) {
-    buckets.add(std::make_unique<FilterBucket>(std::move(ent.second), this));
-  }
-
-  return 0;
-}
-
-int FilterUser::create_bucket(const DoutPrefixProvider* dpp,
-			      const rgw_bucket& b,
-			      const std::string& zonegroup_id,
-			      rgw_placement_rule& placement_rule,
-			      std::string& swift_ver_location,
-			      const RGWQuotaInfo * pquota_info,
-			      const RGWAccessControlPolicy& policy,
-			      Attrs& attrs,
-			      RGWBucketInfo& info,
-			      obj_version& ep_objv,
-			      bool exclusive,
-			      bool obj_lock_enabled,
-			      bool* existed,
-			      req_info& req_info,
-			      std::unique_ptr<Bucket>* bucket_out,
-			      optional_yield y)
-{
-  std::unique_ptr<Bucket> nb;
-  int ret;
-
-  ret = next->create_bucket(dpp, b, zonegroup_id, placement_rule, swift_ver_location, pquota_info, policy, attrs, info, ep_objv, exclusive, obj_lock_enabled, existed, req_info, &nb, y);
-  if (ret < 0)
-    return ret;
-
-  Bucket* fb = new FilterBucket(std::move(nb), this);
-  bucket_out->reset(fb);
-  return 0;
+  return next->list_buckets(dpp, marker, end_marker, max,
+                            need_stats, buckets, y);
 }
 
 int FilterUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
@@ -600,7 +508,7 @@ int FilterUser::read_stats(const DoutPrefixProvider *dpp,
   return next->read_stats(dpp, y, stats, last_stats_sync, last_stats_update);
 }
 
-int FilterUser::read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB* cb)
+int FilterUser::read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb)
 {
   return next->read_stats_async(dpp, cb);
 }
@@ -620,9 +528,9 @@ int FilterUser::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 }
 
 int FilterUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
-			   uint64_t end_epoch)
+			   uint64_t end_epoch, optional_yield y)
 {
-  return next->trim_usage(dpp, start_epoch, end_epoch);
+  return next->trim_usage(dpp, start_epoch, end_epoch, y);
 }
 
 int FilterUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
@@ -659,21 +567,19 @@ int FilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int ma
   return next->list(dpp, params, max, results, y);
 }
 
-int FilterBucket::remove_bucket(const DoutPrefixProvider* dpp,
-				bool delete_children,
-				bool forward_to_master,
-				req_info* req_info,
-				optional_yield y)
+int FilterBucket::remove(const DoutPrefixProvider* dpp,
+			 bool delete_children,
+			 optional_yield y)
 {
-  return next->remove_bucket(dpp, delete_children, forward_to_master, req_info, y);
+  return next->remove(dpp, delete_children, y);
 }
 
-int FilterBucket::remove_bucket_bypass_gc(int concurrent_max,
-					  bool keep_index_consistent,
-					  optional_yield y,
-					  const DoutPrefixProvider *dpp)
+int FilterBucket::remove_bypass_gc(int concurrent_max,
+				   bool keep_index_consistent,
+				   optional_yield y,
+				   const DoutPrefixProvider *dpp)
 {
-  return next->remove_bucket_bypass_gc(concurrent_max, keep_index_consistent, y, dpp);
+  return next->remove_bypass_gc(concurrent_max, keep_index_consistent, y, dpp);
 }
 
 int FilterBucket::set_acl(const DoutPrefixProvider* dpp,
@@ -682,10 +588,16 @@ int FilterBucket::set_acl(const DoutPrefixProvider* dpp,
   return next->set_acl(dpp, acl, y);
 }
 
-int FilterBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
-			      bool get_stats)
+int FilterBucket::create(const DoutPrefixProvider* dpp,
+                         const CreateParams& params,
+                         optional_yield y)
 {
-  return next->load_bucket(dpp, y, get_stats);
+  return next->create(dpp, params, y);
+}
+
+int FilterBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return next->load_bucket(dpp, y);
 }
 
 int FilterBucket::read_stats(const DoutPrefixProvider *dpp,
@@ -701,40 +613,37 @@ int FilterBucket::read_stats(const DoutPrefixProvider *dpp,
 
 int FilterBucket::read_stats_async(const DoutPrefixProvider *dpp,
 				   const bucket_index_layout_generation& idx_layout,
-				   int shard_id, RGWGetBucketStats_CB* ctx)
+				   int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx)
 {
   return next->read_stats_async(dpp, idx_layout, shard_id, ctx);
 }
 
-int FilterBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+int FilterBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                  RGWBucketEnt* ent)
 {
-  return next->sync_user_stats(dpp, y);
+  return next->sync_user_stats(dpp, y, ent);
 }
 
-int FilterBucket::update_container_stats(const DoutPrefixProvider* dpp)
+int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
+                                      uint64_t num_objs, optional_yield y)
 {
-  return next->update_container_stats(dpp);
+  return next->check_bucket_shards(dpp, num_objs, y);
 }
 
-int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp)
+int FilterBucket::chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y)
 {
-  return next->check_bucket_shards(dpp);
-}
-
-int FilterBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
-{
-  return next->chown(dpp, new_user, y);
+  return next->chown(dpp, new_owner, y);
 }
 
 int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
-			   ceph::real_time _mtime)
+			   ceph::real_time _mtime, optional_yield y)
 {
-  return next->put_info(dpp, exclusive, _mtime);
+  return next->put_info(dpp, exclusive, _mtime, y);
 }
 
-bool FilterBucket::is_owner(User* user)
+const rgw_user& FilterBucket::get_owner() const
 {
-  return next->is_owner(nextUser(user));
+  return next->get_owner();
 }
 
 int FilterBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
@@ -756,9 +665,9 @@ int FilterBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 }
 
 int FilterBucket::try_refresh_info(const DoutPrefixProvider* dpp,
-				   ceph::real_time* pmtime)
+				   ceph::real_time* pmtime, optional_yield y)
 {
-  return next->try_refresh_info(dpp, pmtime);
+  return next->try_refresh_info(dpp, pmtime, y);
 }
 
 int FilterBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
@@ -771,9 +680,9 @@ int FilterBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch
 }
 
 int FilterBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
-			     uint64_t end_epoch)
+			     uint64_t end_epoch, optional_yield y)
 {
-  return next->trim_usage(dpp, start_epoch, end_epoch);
+  return next->trim_usage(dpp, start_epoch, end_epoch, y);
 }
 
 int FilterBucket::remove_objs_from_index(const DoutPrefixProvider *dpp,
@@ -799,9 +708,9 @@ int FilterBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeou
   return next->set_tag_timeout(dpp, timeout);
 }
 
-int FilterBucket::purge_instance(const DoutPrefixProvider* dpp)
+int FilterBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->purge_instance(dpp);
+  return next->purge_instance(dpp, y);
 }
 
 std::unique_ptr<MultipartUpload> FilterBucket::get_multipart_upload(
@@ -822,13 +731,13 @@ int FilterBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  const int& max_uploads,
 				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				  std::map<std::string, bool> *common_prefixes,
-				  bool *is_truncated)
+				  bool *is_truncated, optional_yield y)
 {
   std::vector<std::unique_ptr<MultipartUpload>> nup;
   int ret;
 
   ret = next->list_multiparts(dpp, prefix, marker, delim, max_uploads, nup,
-			      common_prefixes, is_truncated);
+			      common_prefixes, is_truncated, y);
   if (ret < 0)
     return ret;
 
@@ -839,16 +748,16 @@ int FilterBucket::list_multiparts(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct)
+int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y)
 {
-  return next->abort_multiparts(dpp, cct);
+  return next->abort_multiparts(dpp, cct, y);
 }
 
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
-				bool prevent_versioning)
+				uint32_t flags)
 {
-  return next->delete_object(dpp, y, prevent_versioning);
+  return next->delete_object(dpp, y, flags);
 }
 
 int FilterObject::copy_object(User* user,
@@ -947,10 +856,11 @@ int FilterObject::transition(Bucket* bucket,
 			     const real_time& mtime,
 			     uint64_t olh_epoch,
 			     const DoutPrefixProvider* dpp,
-			     optional_yield y)
+			     optional_yield y,
+                             uint32_t flags)
 {
   return next->transition(nextBucket(bucket), placement_rule, mtime, olh_epoch,
-			  dpp, y);
+			  dpp, y, flags);
 }
 
 int FilterObject::transition_to_cloud(Bucket* bucket,
@@ -984,9 +894,9 @@ void FilterObject::set_bucket(Bucket* b)
 };
 
 int FilterObject::swift_versioning_restore(bool& restored,
-					   const DoutPrefixProvider* dpp)
+					   const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->swift_versioning_restore(restored, dpp);
+  return next->swift_versioning_restore(restored, dpp, y);
 }
 
 int FilterObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
@@ -1070,11 +980,11 @@ int FilterObject::FilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t o
 }
 
 int FilterObject::FilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
-					   optional_yield y)
+					   optional_yield y, uint32_t flags)
 {
   /* Copy params into next */
   next->params = params;
-  int ret = next->delete_obj(dpp, y);
+  int ret = next->delete_obj(dpp, y, flags);
   /* Copy result back */
   result = next->result;
   return ret;
@@ -1096,12 +1006,12 @@ int FilterMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
 int FilterMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
 				      int num_parts, int marker,
-				      int *next_marker, bool *truncated,
+				      int *next_marker, bool *truncated, optional_yield y,
 				      bool assume_unsorted)
 {
   int ret;
 
-  ret = next->list_parts(dpp, cct, num_parts, marker, next_marker, truncated,
+  ret = next->list_parts(dpp, cct, num_parts, marker, next_marker, truncated, y,
 			 assume_unsorted);
   if (ret < 0)
     return ret;
@@ -1115,9 +1025,9 @@ int FilterMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext
   return 0;
 }
 
-int FilterMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
+int FilterMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
 {
-  return next->abort(dpp, cct);
+  return next->abort(dpp, cct, y);
 }
 
 int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
@@ -1292,11 +1202,12 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx,
+                       uint32_t flags)
 {
   return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, y);
+			canceled, rctx, flags);
 }
 
 int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
@@ -1333,6 +1244,19 @@ int FilterLuaManager::list_packages(const DoutPrefixProvider* dpp, optional_yiel
                                    rgw::lua::packages_t& packages)
 {
   return next->list_packages(dpp, y, packages);
+}
+
+int FilterLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return next->reload_packages(dpp, y);
+}
+
+const std::string& FilterLuaManager::luarocks_path() const {
+  return next->luarocks_path();
+}
+
+void FilterLuaManager::set_luarocks_path(const std::string& path) {
+  next->set_luarocks_path(path);
 }
 
 } } // namespace rgw::sal

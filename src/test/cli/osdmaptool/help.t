@@ -38,5 +38,6 @@
      --save                  write modified osdmap with upmap or crush-adjust changes
      --read <file>           calculate pg upmap entries to balance pg primaries
      --read-pool <poolname>  specify which pool the read balancer should adjust
+     --osd-size-aware        account for devices of different sizes, applicable to read mode only
      --vstart                prefix upmap and read output with './bin/'
   [1]

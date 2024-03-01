@@ -673,6 +673,11 @@ arw::Status FlightServer::DoGet(const flt::ServerCallContext &context,
   ARROW_ASSIGN_OR_RAISE(FlightKey key, TicketToFlightKey(request));
   ARROW_ASSIGN_OR_RAISE(FlightData fd, get_flight_store()->get_flight(key));
 
+#if 0
+  /* load_bucket no longer requires a user parameter. Keep this code
+   * around a bit longer until we fully figure out how permissions
+   * will impact this code.
+   */
   std::unique_ptr<rgw::sal::User> user = driver->get_user(fd.user_id);
   if (user->empty()) {
     INFO << "user is empty" << dendl;
@@ -685,11 +690,12 @@ arw::Status FlightServer::DoGet(const flt::ServerCallContext &context,
     }
     INFO << "user is " << user->get_display_name() << dendl;
   }
+#endif
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-
-  ret = driver->get_bucket(&dp, &(*user), fd.tenant_name, fd.bucket_name,
-			   &bucket, null_yield);
+  ret = driver->load_bucket(&dp,
+			    rgw_bucket(fd.tenant_name, fd.bucket_name),
+                            &bucket, null_yield);
   if (ret < 0) {
     ERROR << "get_bucket returned " << ret << dendl;
     // TODO return something

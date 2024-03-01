@@ -1,0 +1,6 @@
+tasks:
+- s3tests:
+    client.0:
+      sts_tests: True
+      webidentity_tests: True
+      rgw_server: client.0

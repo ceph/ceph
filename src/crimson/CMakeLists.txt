@@ -23,7 +23,9 @@ set(crimson_common_srcs
   common/operation.cc
   common/throttle.cc
   common/tmap_helpers.cc
-  common/tri_mutex.cc)
+  common/tri_mutex.cc
+  common/buffer_seastar.cc
+  crush/CrushLocation.cc)
 
 # the specialized version of ceph-common, where
 #  - the logging is sent to Seastar backend
@@ -34,7 +36,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/bit_str.cc
   ${PROJECT_SOURCE_DIR}/src/common/bloom_filter.cc
   ${PROJECT_SOURCE_DIR}/src/common/buffer.cc
-  ${PROJECT_SOURCE_DIR}/src/common/buffer_seastar.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_argparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_context.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_crypto.cc
@@ -98,7 +99,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/crush/CrushWrapper.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushCompiler.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushTester.cc
-  ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
@@ -110,6 +110,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/mds/FSMap.cc
   ${PROJECT_SOURCE_DIR}/src/mds/FSMapUser.cc
   ${PROJECT_SOURCE_DIR}/src/mds/MDSMap.cc
+  ${PROJECT_SOURCE_DIR}/src/mds/MDSAuthCaps.cc
   ${PROJECT_SOURCE_DIR}/src/msg/msg_types.cc
   ${PROJECT_SOURCE_DIR}/src/msg/Message.cc
   ${PROJECT_SOURCE_DIR}/src/mon/PGMap.cc
@@ -120,6 +121,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/HitSet.cc
   ${PROJECT_SOURCE_DIR}/src/osd/OSDMap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
+  ${PROJECT_SOURCE_DIR}/src/common/scrub_types.cc
   ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
   ${crimson_common_srcs}
   $<TARGET_OBJECTS:common_mountcephfs_objs>
@@ -148,7 +150,7 @@ target_link_libraries(crimson-common
   PUBLIC
     ${crimson_common_public_deps}
   PRIVATE
-    crc32
+    crc32 arch
     ${crimson_common_deps}
     OpenSSL::Crypto)
 

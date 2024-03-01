@@ -4,7 +4,7 @@ Priority: optional
 Homepage: http://ceph.com/
 Vcs-Git: git://github.com/ceph/ceph.git
 Vcs-Browser: https://github.com/ceph/ceph
-Maintainer: Ceph Maintainers <ceph-maintainers@lists.ceph.com>
+Maintainer: Ceph Maintainers <ceph-maintainers@ceph.io>
 Uploaders: Ken Dreyer <kdreyer@redhat.com>,
            Alfredo Deza <adeza@redhat.com>,
 Build-Depends: automake,
@@ -20,8 +20,7 @@ Build-Depends: automake,
                git,
                golang,
                gperf,
-               g++ (>= 7),
-               hostname <pkg.ceph.check>,
+               g++ (>= 11),
                javahelper,
                jq <pkg.ceph.check>,
                jsonnet <pkg.ceph.check>,
@@ -65,6 +64,7 @@ Build-Depends: automake,
                libsqlite3-dev,
                libssl-dev,
                libtool,
+               liblmdb-dev,
                libudev-dev,
                libnl-genl-3-dev,
                libxml2-dev,
@@ -72,7 +72,6 @@ Build-Depends: automake,
                libre2-dev,
                libutf8proc-dev (>= 2.2.0),
                librdkafka-dev,
-               luarocks,
                libthrift-dev (>= 0.13.0),
                libyaml-cpp-dev (>= 0.6),
                libzstd-dev <pkg.ceph.check>,
@@ -84,20 +83,22 @@ Build-Depends: automake,
                libndctl-dev (>= 63) <pkg.ceph.pmdk>,
                libpmem-dev <pkg.ceph.pmdk>,
                libpmemobj-dev (>= 1.8) <pkg.ceph.pmdk>,
+               libprotobuf-dev <pkg.ceph.crimson>,
                ninja-build,
                nlohmann-json3-dev,
                patch,
                pkg-config,
                prometheus <pkg.ceph.check>,
+               protobuf-compiler <pkg.ceph.crimson>,
                python3-all-dev,
                python3-cherrypy3,
                python3-natsort,
-               python3-jwt <pkg.ceph.check>,
                python3-pecan <pkg.ceph.check>,
                python3-bcrypt <pkg.ceph.check>,
                tox <pkg.ceph.check>,
                python3-coverage <pkg.ceph.check>,
                python3-dateutil <pkg.ceph.check>,
+               python3-grpcio <pkg.ceph.check>,
                python3-openssl <pkg.ceph.check>,
                python3-prettytable <pkg.ceph.check>,
                python3-requests <pkg.ceph.check>,
@@ -135,9 +136,6 @@ Package: ceph-base
 Architecture: linux-any
 Depends: binutils,
          ceph-common (= ${binary:Version}),
-         debianutils,
-         findutils,
-         grep,
          logrotate,
          parted,
          psmisc,
@@ -187,8 +185,10 @@ Description: debugging symbols for ceph-base
 
 Package: cephadm
 Architecture: linux-any
-Recommends: podman (>= 2.0.2) | docker.io
-Depends: lvm2,
+Recommends: podman (>= 2.0.2) | docker.io | docker-ce
+Depends: adduser (>= 3.11),
+	 lvm2,
+	 python3,
 	 ${python3:Depends},
 Description: cephadm utility to bootstrap ceph daemons with systemd and containers
  Ceph is a massively scalable, open-source, distributed
@@ -431,7 +431,6 @@ Depends: ceph-osd (= ${binary:Version}),
          e2fsprogs,
          lvm2,
          parted,
-         util-linux,
          xfsprogs,
          ${misc:Depends},
          ${python3:Depends}
@@ -614,7 +613,8 @@ Description: debugging symbols for rbd-nbd
 
 Package: ceph-common
 Architecture: linux-any
-Depends: librbd1 (= ${binary:Version}),
+Depends: adduser (>= 3.11),
+         librbd1 (= ${binary:Version}),
          python3-cephfs (= ${binary:Version}),
          python3-ceph-argparse (= ${binary:Version}),
          python3-ceph-common (= ${binary:Version}),
@@ -759,7 +759,7 @@ Architecture: any
 Section: debug
 Priority: extra
 Depends: libsqlite3-mod-ceph (= ${binary:Version}),
-         libsqlite3-0-dbgsym
+         libsqlite3-0-dbgsym,
          ${misc:Depends},
 Description: debugging symbols for libsqlite3-mod-ceph
  A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
@@ -922,6 +922,8 @@ Section: libs
 Depends: librados2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
+         liblua5.3-dev,
+         luarocks,
 Description: RADOS Gateway client library
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
@@ -1207,14 +1209,14 @@ Description: Java Native Interface library for CephFS Java bindings
 Package: rados-objclass-dev
 Architecture: linux-any
 Section: libdevel
-Depends: librados-dev (= ${binary:Version}) ${misc:Depends},
+Depends: librados-dev (= ${binary:Version}), ${misc:Depends},
 Description: RADOS object class development kit.
  .
  This package contains development files needed for building RADOS object class plugins.
 
 Package: cephfs-shell
 Architecture: all
-Depends: ${misc:Depends}
+Depends: ${misc:Depends},
          ${python3:Depends}
 Description: interactive shell for the Ceph distributed file system
  Ceph is a massively scalable, open-source, distributed
@@ -1227,7 +1229,7 @@ Description: interactive shell for the Ceph distributed file system
 
 Package: cephfs-top
 Architecture: all
-Depends: ${misc:Depends}
+Depends: ${misc:Depends},
          ${python3:Depends}
 Description: This package provides a top(1) like utility to display various
  filesystem metrics in realtime.

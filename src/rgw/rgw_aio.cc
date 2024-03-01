@@ -33,6 +33,7 @@ struct state {
 
   state(Aio* aio, librados::IoCtx ctx, AioResult& r)
     : aio(aio), ctx(std::move(ctx)),
+    // coverity[ctor_dtor_leak:SUPPRESS]
       c(librados::Rados::aio_create_completion(&r, &cb)) {}
 };
 
@@ -89,12 +90,12 @@ struct Handler {
 template <typename Op>
 Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op,
                          boost::asio::io_context& context,
-                         yield_context yield, jspan_context* trace_ctx = nullptr) {
+                         spawn::yield_context yield, jspan_context* trace_ctx = nullptr) {
   return [ctx = std::move(ctx), op = std::move(op), &context, yield, trace_ctx] (Aio* aio, AioResult& r) mutable {
       // arrange for the completion Handler to run on the yield_context's strand
       // executor so it can safely call back into Aio without locking
       using namespace boost::asio;
-      async_completion<yield_context, void()> init(yield);
+      async_completion<spawn::yield_context, void()> init(yield);
       auto ex = get_associated_executor(init.completion_handler);
 
       librados::async_operate(context, ctx, r.obj.oid, &op, 0,
@@ -103,13 +104,13 @@ Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op,
 }
 
 
-Aio::OpFunc d3n_cache_aio_abstract(const DoutPrefixProvider *dpp, optional_yield y, off_t read_ofs, off_t read_len, std::string& location) {
-  return [dpp, y, read_ofs, read_len, location] (Aio* aio, AioResult& r) mutable {
+Aio::OpFunc d3n_cache_aio_abstract(const DoutPrefixProvider *dpp, optional_yield y, off_t read_ofs, off_t read_len, std::string& cache_location) {
+  return [dpp, y, read_ofs, read_len, cache_location] (Aio* aio, AioResult& r) mutable {
     // d3n data cache requires yield context (rgw_beast_enable_async=true)
     ceph_assert(y);
     auto c = std::make_unique<D3nL1CacheRequest>();
     lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: d3n_cache_aio_abstract(): libaio Read From Cache, oid=" << r.obj.oid << dendl;
-    c->file_aio_read_abstract(dpp, y.get_io_context(), y.get_yield_context(), location, read_ofs, read_len, aio, r);
+    c->file_aio_read_abstract(dpp, y.get_io_context(), y.get_yield_context(), cache_location, read_ofs, read_len, aio, r);
   };
 }
 
@@ -140,8 +141,8 @@ Aio::OpFunc Aio::librados_op(librados::IoCtx ctx,
 }
 
 Aio::OpFunc Aio::d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
-                              off_t read_ofs, off_t read_len, std::string& location) {
-  return d3n_cache_aio_abstract(dpp, y, read_ofs, read_len, location);
+                              off_t read_ofs, off_t read_len, std::string& cache_location) {
+  return d3n_cache_aio_abstract(dpp, y, read_ofs, read_len, cache_location);
 }
 
 } // namespace rgw

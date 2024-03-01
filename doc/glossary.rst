@@ -12,12 +12,15 @@
 	:ref:`BlueStore<rados_config_storage_devices_bluestore>`
                 OSD BlueStore is a storage back end used by OSD daemons, and
                 was designed specifically for use with Ceph. BlueStore was
-                introduced in the Ceph Kraken release. In the Ceph Luminous
-                release, BlueStore became Ceph's default storage back end,
-                supplanting FileStore. BlueStore stores objects directly on 
-                Ceph block devices without any file system interface. 
-                Since Luminous (12.2), BlueStore has been Ceph's default 
-                and recommended storage back end.
+                introduced in the Ceph Kraken release. The Luminous release of
+                Ceph promoted BlueStore to the default OSD back end,
+                supplanting FileStore. As of the Reef release, FileStore is no
+                longer available as a storage back end.
+                
+                BlueStore stores objects directly on raw block devices or
+                partitions, and does not interact with mounted file systems.
+                BlueStore uses RocksDB's key/value database to map object names
+                to block locations on disk.
 
         Bucket
                 In the context of :term:`RGW`, a bucket is a group of objects.
@@ -57,7 +60,7 @@
                 as QEMU or Xen, and (3) a hypervisor abstraction layer such as
                 ``libvirt``.
 
-	Ceph Client
+	:ref:`Ceph Client <architecture_ceph_clients>`
                 Any of the Ceph components that can access a Ceph Storage
                 Cluster. This includes the Ceph Object Gateway, the Ceph Block
                 Device, the Ceph File System, and their corresponding
@@ -213,7 +216,9 @@
 	CRUSH
                 **C**\ontrolled **R**\eplication **U**\nder **S**\calable
                 **H**\ashing. The algorithm that Ceph uses to compute object
-                storage locations.
+                storage locations. See `CRUSH: Controlled, Scalable,
+                Decentralized Placement of Replicated Data
+                <https://ceph.com/assets/pdfs/weil-crush-sc06.pdf>`_.
 
 	CRUSH rule
                 The CRUSH data placement rule that applies to a particular
@@ -258,24 +263,49 @@
                 Ceph-specific information about devices and its relationship
                 with OSDs.
 
-	:ref:`MDS<cephfs_add_remote_mds>`
+	MDS
                 The Ceph **M**\eta\ **D**\ata **S**\erver daemon. Also referred
                 to as "ceph-mds". The Ceph metadata server daemon must be
                 running in any Ceph cluster that runs the CephFS file system.
-                The MDS stores all filesystem metadata. 
+                The MDS stores all filesystem metadata. :term:`Client`\s work
+                together with either a single MDS or a group of MDSes to
+                maintain a distributed metadata cache that is required by
+                CephFS.
+
+                See :ref:`Deploying Metadata Servers<cephfs_add_remote_mds>`.
+
+                See the :ref:`ceph-mds man page<ceph_mds_man>`.
 
 	MGR
                 The Ceph manager software, which collects all the state from
                 the whole cluster in one place.
 
-	MON
+	:ref:`MON<arch_monitor>`
 		The Ceph monitor software.
+
+        Monitor Store
+                The persistent storage that is used by the Monitor. This
+                includes the Monitor's RocksDB and all related files in
+                ``/var/lib/ceph``.
 
 	Node
                 See :term:`Ceph Node`.
 
 	Object Storage Device
                 See :term:`OSD`.
+
+        OMAP
+                "object map". A key-value store (a database) that is used to
+                reduce the time it takes to read data from and to write to the
+                Ceph cluster. RGW bucket indexes are stored as OMAPs.
+                Erasure-coded pools cannot store RADOS OMAP data structures.
+               
+                Run the command ``ceph osd df`` to see your OMAPs.
+
+                See Eleanor Cawthon's 2012 paper `A Distributed Key-Value Store
+                using Ceph
+                <https://ceph.io/assets/pdfs/CawthonKeyValueStore.pdf>`_ (17
+                pages).
 
 	OSD
                 Probably :term:`Ceph OSD`, but not necessarily. Sometimes
@@ -288,18 +318,19 @@
                 mid-2010s to insist that "OSD" should refer to "Object Storage
                 Device", so it is important to know which meaning is intended. 
 
-	OSD fsid
-                This is a unique identifier used to identify an OSD. It is
-                found in the OSD path in a file called ``osd_fsid``. The
-                term ``fsid`` is used interchangeably with ``uuid``
+	OSD FSID 
+                The OSD fsid is a unique identifier that is used to identify an
+                OSD. It is found in the OSD path in a file called ``osd_fsid``.
+                The term ``FSID`` is used interchangeably with ``UUID``.
 
-	OSD id
-                The integer that defines an OSD. It is generated by the
-                monitors during the creation of each OSD.
+	OSD ID 
+                The OSD id an integer unique to each OSD (each OSD has a unique
+                OSD ID). Each OSD id is generated by the monitors during the
+                creation of its associated OSD.
 
-	OSD uuid
-                This is the unique identifier of an OSD. This term is used
-                interchangeably with ``fsid``
+	OSD UUID 
+                The OSD UUID is the unique identifier of an OSD. This term is
+                used interchangeably with ``FSID``.
 
         Period
                 In the context of :term:`RGW`, a period is the configuration
@@ -307,11 +338,38 @@
                 state of a multi-site configuration. When the period is updated,
                 the "epoch" is said thereby to have been changed.
 
+        Placement Groups (PGs)
+                Placement groups (PGs) are subsets of each logical Ceph pool.
+                Placement groups perform the function of placing objects (as a
+                group) into OSDs. Ceph manages data internally at
+                placement-group granularity: this scales better than would
+                managing individual (and therefore more numerous) RADOS
+                objects. A cluster that has a larger number of placement groups
+                (for example, 100 per OSD) is better balanced than an otherwise
+                identical cluster with a smaller number of placement groups. 
+                
+                Ceph's internal RADOS objects are each mapped to a specific
+                placement group, and each placement group belongs to exactly
+                one Ceph pool. 
+
 	:ref:`Pool<rados_pools>`
 		A pool is a logical partition used to store objects.
 
 	Pools
                 See :term:`pool`.
+
+	:ref:`Primary Affinity <rados_ops_primary_affinity>`
+                The characteristic of an OSD that governs the likelihood that
+                a given OSD will be selected as the primary OSD (or "lead
+                OSD") in an acting set. Primary affinity was introduced in
+                Firefly (v. 0.80). See :ref:`Primary Affinity
+                <rados_ops_primary_affinity>`.
+
+        Quorum	
+                Quorum is the state that exists when a majority of the
+                :ref:`Monitors<arch_monitor>` in the cluster are ``up``. A
+                minimum of three :ref:`Monitors<arch_monitor>` must exist in
+                the cluster in order for Quorum to be possible.
 
 	RADOS
                 **R**\eliable **A**\utonomic **D**\istributed **O**\bject
@@ -387,7 +445,7 @@
                 "inconsistent" (that is, the PG is marked "inconsistent"). 
 
                 There are two kinds of scrubbing: light scrubbing and deep
-                scrubbing (also called "normal scrubbing" and "deep scrubbing",
+                scrubbing (also called "shallow scrubbing" and "deep scrubbing",
                 respectively). Light scrubbing is performed daily and does
                 nothing more than confirm that a given object exists and that
                 its metadata is correct. Deep scrubbing is performed weekly and

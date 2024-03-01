@@ -6,7 +6,6 @@
 #include "rgw_service.h"
 
 
-class RGWSI_RADOS;
 class RGWSI_SysObj;
 class RGWSI_SyncModules;
 class RGWSI_Bucket_Sync;
@@ -29,7 +28,7 @@ class RGWSI_Zone : public RGWServiceInstance
   friend struct RGWServices_Def;
 
   RGWSI_SysObj *sysobj_svc{nullptr};
-  RGWSI_RADOS *rados_svc{nullptr};
+  librados::Rados* rados{nullptr};
   RGWSI_SyncModules *sync_modules_svc{nullptr};
   RGWSI_Bucket_Sync *bucket_sync_svc{nullptr};
 
@@ -58,7 +57,7 @@ class RGWSI_Zone : public RGWServiceInstance
   std::unique_ptr<rgw_sync_policy_info> sync_policy;
 
   void init(RGWSI_SysObj *_sysobj_svc,
-	    RGWSI_RADOS *_rados_svc,
+	    librados::Rados* rados_,
 	    RGWSI_SyncModules *_sync_modules_svc,
 	    RGWSI_Bucket_Sync *_bucket_sync_svc);
   int do_start(optional_yield y, const DoutPrefixProvider *dpp) override;
@@ -66,8 +65,6 @@ class RGWSI_Zone : public RGWServiceInstance
 
   int init_zg_from_period(const DoutPrefixProvider *dpp, optional_yield y);
   int init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield y);
-
-  int update_placement_map(const DoutPrefixProvider *dpp, optional_yield y);
 
   int create_default_zg(const DoutPrefixProvider *dpp, optional_yield y);
   int init_default_zone(const DoutPrefixProvider *dpp, optional_yield y);
@@ -103,6 +100,7 @@ public:
 
   bool zone_is_writeable();
   bool zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const;
+  bool zone_syncs_from(const RGWZone& source_zone) const;
   bool get_redirect_zone_endpoint(std::string *endpoint);
   bool sync_module_supports_writes() const { return writeable_zone; }
   bool sync_module_exports_data() const { return exports_data; }
@@ -136,16 +134,11 @@ public:
   int select_bucket_placement(const DoutPrefixProvider *dpp, const RGWUserInfo& user_info, const std::string& zonegroup_id,
                               const rgw_placement_rule& rule,
                               rgw_placement_rule *pselected_rule, RGWZonePlacementInfo *rule_info, optional_yield y);
-  int select_legacy_bucket_placement(const DoutPrefixProvider *dpp, RGWZonePlacementInfo *rule_info, optional_yield y);
   int select_new_bucket_location(const DoutPrefixProvider *dpp, const RGWUserInfo& user_info, const std::string& zonegroup_id,
                                  const rgw_placement_rule& rule,
                                  rgw_placement_rule *pselected_rule_name, RGWZonePlacementInfo *rule_info,
 				 optional_yield y);
   int select_bucket_location_by_rule(const DoutPrefixProvider *dpp, const rgw_placement_rule& location_rule, RGWZonePlacementInfo *rule_info, optional_yield y);
-
-  int add_bucket_placement(const DoutPrefixProvider *dpp, const rgw_pool& new_pool, optional_yield y);
-  int remove_bucket_placement(const DoutPrefixProvider *dpp, const rgw_pool& old_pool, optional_yield y);
-  int list_placement_set(const DoutPrefixProvider *dpp, std::set<rgw_pool>& names, optional_yield y);
 
   bool is_meta_master() const;
 

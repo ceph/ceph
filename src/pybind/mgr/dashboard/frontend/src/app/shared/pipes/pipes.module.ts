@@ -35,6 +35,8 @@ import { SanitizeHtmlPipe } from './sanitize-html.pipe';
 import { SearchHighlightPipe } from './search-highlight.pipe';
 import { TruncatePipe } from './truncate.pipe';
 import { UpperFirstPipe } from './upper-first.pipe';
+import { OctalToHumanReadablePipe } from './octal-to-human-readable.pipe';
+import { PathPipe } from './path.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -72,7 +74,9 @@ import { UpperFirstPipe } from './upper-first.pipe';
     HealthIconPipe,
     MgrSummaryPipe,
     MdsSummaryPipe,
-    OsdSummaryPipe
+    OsdSummaryPipe,
+    OctalToHumanReadablePipe,
+    PathPipe
   ],
   exports: [
     ArrayPipe,
@@ -108,7 +112,9 @@ import { UpperFirstPipe } from './upper-first.pipe';
     HealthIconPipe,
     MgrSummaryPipe,
     MdsSummaryPipe,
-    OsdSummaryPipe
+    OsdSummaryPipe,
+    OctalToHumanReadablePipe,
+    PathPipe
   ],
   providers: [
     ArrayPipe,
@@ -139,7 +145,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     HealthIconPipe,
     MgrSummaryPipe,
     MdsSummaryPipe,
-    OsdSummaryPipe
+    OsdSummaryPipe,
+    OctalToHumanReadablePipe
   ]
 })
 export class PipesModule {}

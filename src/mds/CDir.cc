@@ -180,7 +180,7 @@ ostream& operator<<(ostream& out, const CDir& dir)
 }
 
 
-void CDir::print(ostream& out) 
+void CDir::print(ostream& out) const
 {
   out << *this;
 }
@@ -188,7 +188,7 @@ void CDir::print(ostream& out)
 
 
 
-ostream& CDir::print_db_line_prefix(ostream& out) 
+ostream& CDir::print_db_line_prefix(ostream& out) const
 {
   return out << ceph_clock_now() << " mds." << mdcache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") ";
 }
@@ -1950,6 +1950,7 @@ CDentry *CDir::_load_dentry(
 
         if (!undef_inode) {
           mdcache->add_inode(in); // add
+	  mdcache->insert_taken_inos(in->ino());
           dn = add_primary_dentry(dname, in, std::move(alternate_name), first, last); // link
         }
         dout(12) << "_fetched  got " << *dn << " " << *in << dendl;
@@ -3751,6 +3752,7 @@ bool CDir::scrub_local()
     mdcache->repair_dirfrag_stats(this);
     scrub_infop->header->set_repaired();
     good = true;
+    mdcache->mds->damage_table.remove_dentry_damage_entry(this);
   }
   return good;
 }

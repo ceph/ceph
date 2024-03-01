@@ -20,10 +20,10 @@ class TestFSTop(CephFSTestCase):
         super(TestFSTop, self).tearDown()
 
     def _enable_mgr_stats_plugin(self):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "enable", "stats")
+        return self.get_ceph_cmd_stdout("mgr", "module", "enable", "stats")
 
     def _disable_mgr_stats_plugin(self):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "disable", "stats")
+        return self.get_ceph_cmd_stdout("mgr", "module", "disable", "stats")
 
     def _fstop_dump(self, *args):
         return self.mount_a.run_shell(['cephfs-top',
@@ -66,7 +66,7 @@ class TestFSTop(CephFSTestCase):
         Tests 'cephfs-top --dump' output is valid
         """
         def verify_fstop_metrics(metrics):
-            clients = metrics.get(self.fs.name, {})
+            clients = metrics.get('filesystems').get(self.fs.name, {})
             if str(self.mount_a.get_global_id()) in clients and \
                str(self.mount_b.get_global_id()) in clients:
                 return True
@@ -93,8 +93,8 @@ class TestFSTop(CephFSTestCase):
         # umount mount_b, mount another filesystem on it and use --dumpfs filter
         self.mount_b.umount_wait()
 
-        self.mds_cluster.mon_manager.raw_cluster_cmd("fs", "flag", "set", "enable_multiple", "true",
-                                                     "--yes-i-really-mean-it")
+        self.run_ceph_cmd("fs", "flag", "set", "enable_multiple", "true",
+                          "--yes-i-really-mean-it")
 
         # create a new filesystem
         fs_b = self.mds_cluster.newfs(name=newfs_name)

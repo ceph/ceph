@@ -11,6 +11,10 @@
 
 #include "rgw_common.h"
 
+namespace rgw::sal {
+class RadosStore;
+}
+
 struct RGWServices_Def;
 
 class RGWServiceInstance
@@ -62,7 +66,6 @@ class RGWSI_MetaBackend_SObj;
 class RGWSI_MetaBackend_OTP;
 class RGWSI_Notify;
 class RGWSI_OTP;
-class RGWSI_RADOS;
 class RGWSI_Zone;
 class RGWSI_ZoneUtils;
 class RGWSI_Quota;
@@ -74,6 +77,7 @@ class RGWSI_User;
 class RGWSI_User_RADOS;
 class RGWDataChangesLog;
 class RGWSI_Role_RADOS;
+class RGWAsyncRadosProcessor;
 
 struct RGWServices_Def
 {
@@ -93,7 +97,6 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_MetaBackend_OTP> meta_be_otp;
   std::unique_ptr<RGWSI_Notify> notify;
   std::unique_ptr<RGWSI_OTP> otp;
-  std::unique_ptr<RGWSI_RADOS> rados;
   std::unique_ptr<RGWSI_Zone> zone;
   std::unique_ptr<RGWSI_ZoneUtils> zone_utils;
   std::unique_ptr<RGWSI_Quota> quota;
@@ -104,11 +107,14 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_User_RADOS> user_rados;
   std::unique_ptr<RGWDataChangesLog> datalog_rados;
   std::unique_ptr<RGWSI_Role_RADOS> role_rados;
+  std::unique_ptr<RGWAsyncRadosProcessor> async_processor;
 
   RGWServices_Def();
   ~RGWServices_Def();
 
-  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
+  int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
+	   bool raw_storage, bool run_sync, optional_yield y,
+	   const DoutPrefixProvider *dpp);
   void shutdown();
 };
 
@@ -137,7 +143,6 @@ struct RGWServices
   RGWSI_MetaBackend *meta_be_otp{nullptr};
   RGWSI_Notify *notify{nullptr};
   RGWSI_OTP *otp{nullptr};
-  RGWSI_RADOS *rados{nullptr};
   RGWSI_Zone *zone{nullptr};
   RGWSI_ZoneUtils *zone_utils{nullptr};
   RGWSI_Quota *quota{nullptr};
@@ -147,15 +152,21 @@ struct RGWServices
   RGWSI_SysObj_Core *core{nullptr};
   RGWSI_User *user{nullptr};
   RGWSI_Role_RADOS *role{nullptr};
+  RGWAsyncRadosProcessor* async_processor;
 
-  int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp);
+  int do_init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
+	      bool raw_storage, bool run_sync, optional_yield y,
+	      const DoutPrefixProvider *dpp);
 
-  int init(CephContext *cct, bool have_cache, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp) {
-    return do_init(cct, have_cache, false, run_sync, y, dpp);
+  int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
+	   bool run_sync, optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, store, have_cache, false, run_sync, y, dpp);
   }
 
-  int init_raw(CephContext *cct, bool have_cache, optional_yield y, const DoutPrefixProvider *dpp) {
-    return do_init(cct, have_cache, true, false, y, dpp);
+  int init_raw(CephContext *cct, rgw::sal::RadosStore* store,
+	       bool have_cache, optional_yield y,
+	       const DoutPrefixProvider *dpp) {
+    return do_init(cct, store, have_cache, true, false, y, dpp);
   }
   void shutdown() {
     _svc.shutdown();

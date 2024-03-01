@@ -15,7 +15,7 @@ Deploying NFS ganesha
 =====================
 
 Cephadm deploys NFS Ganesha daemon (or set of daemons).  The configuration for
-NFS is stored in the ``nfs-ganesha`` pool and exports are managed via the
+NFS is stored in the ``.nfs`` pool and exports are managed via the
 ``ceph nfs export ...`` commands and via the dashboard.
 
 To deploy a NFS Ganesha gateway, run the following command:
@@ -112,6 +112,101 @@ A few notes:
   * The backend service (``nfs.mynfs`` in this example) should include
     a *port* property that is not 2049 to avoid conflicting with the
     ingress service, which could be placed on the same host(s).
+
+NFS with virtual IP but no haproxy
+----------------------------------
+
+Cephadm also supports deploying nfs with keepalived but not haproxy. This
+offers a virtual ip supported by keepalived that the nfs daemon can directly bind
+to instead of having traffic go through haproxy.
+
+In this setup, you'll either want to set up the service using the nfs module
+(see :ref:`nfs-module-cluster-create`) or place the ingress service first, so
+the virtual IP is present for the nfs daemon to bind to. The ingress service
+should include the attribute ``keepalive_only`` set to true. For example
+
+.. code-block:: yaml
+
+    service_type: ingress
+    service_id: nfs.foo
+    placement:
+      count: 1
+      hosts:
+      - host1
+      - host2
+      - host3
+    spec:
+      backend_service: nfs.foo
+      monitor_port: 9049
+      virtual_ip: 192.168.122.100/24
+      keepalive_only: true
+
+Then, an nfs service could be created that specifies a ``virtual_ip`` attribute
+that will tell it to bind to that specific IP.
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: foo
+    placement:
+      count: 1
+      hosts:
+      - host1
+      - host2
+      - host3
+    spec:
+      port: 2049
+      virtual_ip: 192.168.122.100
+
+Note that in these setups, one should make sure to include ``count: 1`` in the
+nfs placement, as it's only possible for one nfs daemon to bind to the virtual IP.
+
+NFS with HAProxy Protocol Support
+----------------------------------
+
+Cephadm supports deploying NFS in High-Availability mode with additional
+HAProxy protocol support. This works just like High-availability NFS but also
+supports client IP level configuration on NFS Exports.  This feature requires
+`NFS-Ganesha v5.0`_ or later.
+
+.. _NFS-Ganesha v5.0: https://github.com/nfs-ganesha/nfs-ganesha/wiki/ReleaseNotes_5
+
+To use this mode, you'll either want to set up the service using the nfs module
+(see :ref:`nfs-module-cluster-create`) or manually create services with the
+extra parameter ``enable_haproxy_protocol`` set to true. Both NFS Service and
+Ingress service must have ``enable_haproxy_protocol`` set to the same value.
+For example:
+
+.. code-block:: yaml
+
+    service_type: ingress
+    service_id: nfs.foo
+    placement:
+      count: 1
+      hosts:
+      - host1
+      - host2
+      - host3
+    spec:
+      backend_service: nfs.foo
+      monitor_port: 9049
+      virtual_ip: 192.168.122.100/24
+      enable_haproxy_protocol: true
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: foo
+    placement:
+      count: 1
+      hosts:
+      - host1
+      - host2
+      - host3
+    spec:
+      port: 2049
+      enable_haproxy_protocol: true
+
 
 Further Reading
 ===============

@@ -29,6 +29,8 @@ static const std::array feature_names
   "op_getvxattr",
   "32bits_retry_fwd",
   "new_snaprealm_info",
+  "has_owner_uidgid",
+  "client_mds_auth_caps",
 };
 static_assert(feature_names.size() == CEPHFS_FEATURE_MAX + 1);
 

@@ -23,7 +23,7 @@ Synopsis
 
 | **ceph** **df** *{detail}*
 
-| **ceph** **fs** [ *add_data_pool* \| *authorize* \| *dump* \| *feature ls* \| *flag set* \| *get* \| *ls* \| *lsflags* \| *new* \| *rename* \| *reset* \| *required_client_features add* \| *required_client_features rm* \| *rm* \| *rm_data_pool* \| *set*] ...
+| **ceph** **fs** [ *add_data_pool* \| *authorize* \| *dump* \| *feature ls* \| *flag set* \| *get* \| *ls* \| *lsflags* \| *new* \| *rename* \| *reset* \| *required_client_features add* \| *required_client_features rm* \| *rm* \| *rm_data_pool* \| *set* \| *swap* ] ...
 
 | **ceph** **fsid**
 
@@ -161,7 +161,7 @@ Usage::
 compact
 -------
 
-Causes compaction of monitor's leveldb storage.
+Causes compaction of monitor's RocksDB storage.
 
 Usage::
 
@@ -368,9 +368,16 @@ Usage::
 
     ceph fs add_data_pool <fs-name> <pool name/id>
 
-Subcommand ``authorize`` creates a new client that will be authorized for the
-given path in ``<fs_name>``. Pass ``/`` to authorize for the entire FS.
-``<perms>`` below can be ``r``, ``rw`` or ``rwp``.
+Subcommand ``authorize`` creates a new client (if the client doesn't exists
+on the cluster) that will be authorized for the given path in ``<fs_name>``.
+Pass ``/`` to authorize for the entire FS. ``<perms>`` below can be ``r``,
+``rw`` or ``rwp``.
+
+Running it for an existing client can grant the client a new capability
+(capability for a different CephFS on the same cluster or for a different
+path on the same CephFS). Or it can also change read/write permission in the
+capability that client already holds.
+
 
 Usage::
 
@@ -466,6 +473,15 @@ Subcommand ``set`` sets or updates a FS setting value for given FS name.
 Usage::
 
     ceph fs set <fs-name> <fs-setting> <value>
+
+Subcommand ``swap`` swaps the names of two Ceph file system and updates
+application tags on the pool of the file systems accordingly. Optionally,
+FSIDs of the filesystems can also be swapped along with names by passing
+``--swap-fscids``.
+
+Usage::
+
+    ceph fs swap <fs1-name> <fs1-id> <fs2-name> <fs2-id> [--swap-fscids] {--yes-i-really-meant-it}
 
 fsid
 ----

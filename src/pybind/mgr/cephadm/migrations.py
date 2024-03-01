@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec
 from cephadm.schedule import HostAssignment
+from cephadm.utils import SpecialHostLabels
 import rados
 
 from mgr_module import NFS_POOL_NAME
@@ -308,7 +309,7 @@ class Migrations:
         if 'client.admin' not in self.mgr.keys.keys:
             self.mgr._client_keyring_set(
                 entity='client.admin',
-                placement='label:_admin',
+                placement=f'label:{SpecialHostLabels.ADMIN}',
             )
         return True
 
@@ -370,6 +371,11 @@ class Migrations:
         return RGWSpec.from_json(new_spec)
 
     def rgw_spec_needs_migration(self, spec: Dict[Any, Any]) -> bool:
+        if 'spec' not in spec:
+            # if users allowed cephadm to set up most of the
+            # attributes, it's possible there is no "spec" section
+            # inside the spec. In that case, no migration is needed
+            return False
         return 'rgw_frontend_type' in spec['spec'] \
             and spec['spec']['rgw_frontend_type'] is not None \
             and spec['spec']['rgw_frontend_type'].strip() not in ['beast', 'civetweb']

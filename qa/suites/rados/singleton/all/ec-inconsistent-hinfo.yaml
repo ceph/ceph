@@ -29,6 +29,7 @@ tasks:
       - repair
       - slow request
       - unfound
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         osd min pg log entries: 5

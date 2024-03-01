@@ -17,6 +17,12 @@
 
 #include <memory>
 
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/defer.hpp>
+#include <boost/asio/dispatch.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/post.hpp>
+
 #include "bind_handler.h"
 #include "forward_handler.h"
 
@@ -181,33 +187,38 @@ class CompletionImpl final : public Completion<void(Args...), T> {
     RebindTraits2::deallocate(alloc2, static_cast<CompletionImpl*>(p), 1);
   }
 
-  static auto bind_and_forward(Handler&& h, std::tuple<Args...>&& args) {
-    return forward_handler(CompletionHandler{std::move(h), std::move(args)});
+  static auto bind_and_forward(const Executor2& ex, Handler&& h,
+                               std::tuple<Args...>&& args) {
+    return forward_handler(CompletionHandler{
+        boost::asio::bind_executor(ex, std::move(h)), std::move(args)});
   }
 
   void destroy_defer(std::tuple<Args...>&& args) override {
     auto w = std::move(work);
-    auto f = bind_and_forward(std::move(handler), std::move(args));
+    auto ex2 = w.second.get_executor();
     RebindAlloc2 alloc2 = boost::asio::get_associated_allocator(handler);
+    auto f = bind_and_forward(ex2, std::move(handler), std::move(args));
     RebindTraits2::destroy(alloc2, this);
     RebindTraits2::deallocate(alloc2, this, 1);
-    w.second.get_executor().defer(std::move(f), alloc2);
+    boost::asio::defer(boost::asio::bind_executor(ex2, std::move(f)));
   }
   void destroy_dispatch(std::tuple<Args...>&& args) override {
     auto w = std::move(work);
-    auto f = bind_and_forward(std::move(handler), std::move(args));
+    auto ex2 = w.second.get_executor();
     RebindAlloc2 alloc2 = boost::asio::get_associated_allocator(handler);
+    auto f = bind_and_forward(ex2, std::move(handler), std::move(args));
     RebindTraits2::destroy(alloc2, this);
     RebindTraits2::deallocate(alloc2, this, 1);
-    w.second.get_executor().dispatch(std::move(f), alloc2);
+    boost::asio::dispatch(std::move(f));
   }
   void destroy_post(std::tuple<Args...>&& args) override {
     auto w = std::move(work);
-    auto f = bind_and_forward(std::move(handler), std::move(args));
+    auto ex2 = w.second.get_executor();
     RebindAlloc2 alloc2 = boost::asio::get_associated_allocator(handler);
+    auto f = bind_and_forward(ex2, std::move(handler), std::move(args));
     RebindTraits2::destroy(alloc2, this);
     RebindTraits2::deallocate(alloc2, this, 1);
-    w.second.get_executor().post(std::move(f), alloc2);
+    boost::asio::post(std::move(f));
   }
   void destroy() override {
     RebindAlloc2 alloc2 = boost::asio::get_associated_allocator(handler);

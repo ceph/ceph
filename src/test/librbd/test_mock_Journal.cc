@@ -460,7 +460,7 @@ public:
     bl.append_zero(length);
 
     std::shared_lock owner_locker{mock_image_ctx.owner_lock};
-    return mock_journal->append_write_event(0, length, bl, false);
+    return mock_journal->append_write_event({{0, length}}, bl, false);
   }
 
   uint64_t when_append_compare_and_write_event(

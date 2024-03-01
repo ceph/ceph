@@ -16,7 +16,8 @@
 #define CEPH_ASYNC_BIND_HANDLER_H
 
 #include <tuple>
-#include <boost/asio.hpp>
+#include <boost/asio/associated_allocator.hpp>
+#include <boost/asio/associated_executor.hpp>
 
 namespace ceph::async {
 

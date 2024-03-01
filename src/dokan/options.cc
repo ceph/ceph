@@ -45,6 +45,11 @@ Map options:
   --max-path-len              The value of the maximum path length. Default: 256.
   --file-mode                 The access mode to be used when creating files.
   --dir-mode                  The access mode to be used when creating directories.
+  --case-insensitive          Emulate a case insensitive filesystem by normalizing
+                              paths. The original case is NOT preserved. Existing
+                              paths with a different case cannot be accessed.
+  --force-lowercase           Use lowercase when normalizing paths. Uppercase is
+                              used by default.
 
 Unmap options:
   -l [ --mountpoint ] arg     mountpoint (path or drive letter) (e.g -l x).
@@ -122,10 +127,21 @@ int parse_args(
       cfg->win_vol_name = to_wstring(win_vol_name);
     } else if (ceph_argparse_witharg(args, i, &win_vol_serial,
                                      "--win-vol-serial", (char *)NULL)) {
-      cfg->win_vol_serial = std::stoul(win_vol_serial);
+      try {
+        cfg->win_vol_serial = std::stoul(win_vol_serial);
+      } catch (std::logic_error&) {
+        *err_msg << "ceph-dokan: invalid volume serial number: " << win_vol_serial;
+        return -EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &max_path_len,
                                      "--max-path-len", (char*)NULL)) {
-      unsigned long max_path_length = std::stoul(max_path_len);
+      unsigned long max_path_length = 0;
+      try {
+        max_path_length = std::stoul(max_path_len);
+      } catch (std::logic_error&) {
+        *err_msg << "ceph-dokan: invalid maximum path length: " << max_path_len;
+        return -EINVAL;
+      }
 
       if (max_path_length > 32767) {
         *err_msg << "ceph-dokan: maximum path length should not "
@@ -141,18 +157,31 @@ int parse_args(
 
       cfg->max_path_len = max_path_length;
     } else if (ceph_argparse_witharg(args, i, &file_mode, "--file-mode", (char *)NULL)) {
-      mode_t mode = strtol(file_mode.c_str(), NULL, 8);
+      mode_t mode;
+      try {
+        mode = std::stol(file_mode, nullptr, 8);
+      } catch (std::logic_error&) {
+        *err_msg << "ceph-dokan: invalid file access mode: " << file_mode;
+        return -EINVAL;
+      }
+
       if (!std::regex_match(file_mode, std::regex("^[0-7]{3}$"))
           || mode < 01 || mode > 0777) {
-        *err_msg << "ceph-dokan: invalid file access mode";
+        *err_msg << "ceph-dokan: invalid file access mode: " << file_mode;
         return -EINVAL;
       }
       cfg->file_mode = mode;
     } else if (ceph_argparse_witharg(args, i, &dir_mode, "--dir-mode", (char *)NULL)) {
-      mode_t mode = strtol(dir_mode.c_str(), NULL, 8);
+      mode_t mode;
+      try {
+        mode = std::stol(dir_mode, nullptr, 8);
+      } catch (std::logic_error&) {
+        *err_msg << "ceph-dokan: invalid directory access mode: " << dir_mode;
+        return -EINVAL;
+      }
       if (!std::regex_match(dir_mode, std::regex("^[0-7]{3}$"))
           || mode < 01 || mode > 0777) {
-        *err_msg << "ceph-dokan: invalid directory access mode";
+        *err_msg << "ceph-dokan: invalid directory access mode: " << dir_mode;
         return -EINVAL;
       }
       cfg->dir_mode = mode;
@@ -172,6 +201,10 @@ int parse_args(
         *err_msg << "ceph-dokan: Invalid argument for operation-timeout";
         return -EINVAL;
       }
+    } else if (ceph_argparse_flag(args, i, "--case-insensitive", (char *)NULL)) {
+      cfg->case_sensitive = false;
+    } else if (ceph_argparse_flag(args, i, "--force-lowercase", (char *)NULL)) {
+      cfg->convert_to_uppercase = false;
     } else {
       ++i;
     }

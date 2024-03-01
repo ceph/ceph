@@ -94,7 +94,7 @@ class TestCopyTree:
             self._copy_tree([src1], dst, uid=0, gid=0)
             assert len(_chown.mock_calls) >= 2
             for c in _chown.mock_calls:
-                assert c.args[1:] == (0, 0)
+                assert c == mock.call(mock.ANY, 0, 0)
         assert (dst / "foo.txt").exists()
 
 
@@ -187,7 +187,7 @@ class TestCopyFiles:
             self._copy_files([file1], dst, uid=0, gid=0)
             assert len(_chown.mock_calls) >= 1
             for c in _chown.mock_calls:
-                assert c.args[1:] == (0, 0)
+                assert c == mock.call(mock.ANY, 0, 0)
         assert (dst / "f1.txt").exists()
 
 
@@ -270,7 +270,7 @@ class TestMoveFiles:
             self._move_files([file1], dst, uid=0, gid=0)
             assert len(_chown.mock_calls) >= 1
             for c in _chown.mock_calls:
-                assert c.args[1:] == (0, 0)
+                assert c == mock.call(mock.ANY, 0, 0)
         assert dst.is_file()
         assert not file1.exists()
 
@@ -288,9 +288,9 @@ def test_recursive_chown(tmp_path):
         _chown.return_value = None
         _cephadm.recursive_chown(str(d1), uid=500, gid=500)
     assert len(_chown.mock_calls) == 3
-    assert _chown.mock_calls[0].args == (str(d1), 500, 500)
-    assert _chown.mock_calls[1].args == (str(d2), 500, 500)
-    assert _chown.mock_calls[2].args == (str(f1), 500, 500)
+    assert _chown.mock_calls[0] == mock.call(str(d1), 500, 500)
+    assert _chown.mock_calls[1] == mock.call(str(d2), 500, 500)
+    assert _chown.mock_calls[2] == mock.call(str(f1), 500, 500)
 
 
 class TestFindExecutable:
@@ -411,11 +411,12 @@ def _mk_fake_call(enabled, active):
 )
 def test_check_unit(enabled_out, active_out, expected):
     with with_cephadm_ctx([]) as ctx:
-        _cephadm.call.side_effect = _mk_fake_call(
-            enabled=enabled_out,
-            active=active_out,
-        )
-        enabled, state, installed = _cephadm.check_unit(ctx, "foobar")
+        with mock.patch('cephadmlib.systemd.call') as _call:
+            _call.side_effect = _mk_fake_call(
+                enabled=enabled_out,
+                active=active_out,
+            )
+            enabled, state, installed = _cephadm.check_unit(ctx, "foobar")
     assert (enabled, state, installed) == expected
 
 
@@ -489,11 +490,12 @@ def test_check_time_sync(call_fn, enabler, expected):
     is enabled. It is also the only consumer of check_units.
     """
     with with_cephadm_ctx([]) as ctx:
-        _cephadm.call.side_effect = call_fn
-        result = _cephadm.check_time_sync(ctx, enabler=enabler)
-        assert result == expected
-        if enabler is not None:
-            enabler.check_expected()
+        with mock.patch('cephadmlib.systemd.call') as _call:
+            _call.side_effect = call_fn
+            result = _cephadm.check_time_sync(ctx, enabler=enabler)
+            assert result == expected
+            if enabler is not None:
+                enabler.check_expected()
 
 
 @pytest.mark.parametrize(
@@ -542,11 +544,13 @@ VERSION_CODENAME=hpec nimda
     ],
 )
 def test_get_distro(monkeypatch, content, expected):
+    from cephadmlib.packagers import get_distro
+
     def _fake_open(*args, **kwargs):
         return io.StringIO(content)
 
     monkeypatch.setattr("builtins.open", _fake_open)
-    assert _cephadm.get_distro() == expected
+    assert get_distro() == expected
 
 
 class FakeContext:
@@ -663,3 +667,242 @@ def test_call(caplog, monkeypatch, pyline, expected, call_kwargs, log_check):
         assert result == expected
     if callable(log_check):
         log_check(caplog)
+
+
+class TestWriteNew:
+    def test_success(self, tmp_path):
+        "Test the simple basic feature of writing a file."
+        dest = tmp_path / "foo.txt"
+        with _cephadm.write_new(dest) as fh:
+            fh.write("something\n")
+            fh.write("something else\n")
+
+        with open(dest, "r") as fh:
+            assert fh.read() == "something\nsomething else\n"
+
+    def test_write_ower_mode(self, tmp_path):
+        "Test that the owner and perms options function."
+        dest = tmp_path / "foo.txt"
+
+        # if this is test run as non-root, we can't really change ownership
+        uid = os.getuid()
+        gid = os.getgid()
+
+        with _cephadm.write_new(dest, owner=(uid, gid), perms=0o600) as fh:
+            fh.write("xomething\n")
+            fh.write("xomething else\n")
+
+        with open(dest, "r") as fh:
+            assert fh.read() == "xomething\nxomething else\n"
+            sr = os.fstat(fh.fileno())
+            assert sr.st_uid == uid
+            assert sr.st_gid == gid
+            assert (sr.st_mode & 0o777) == 0o600
+
+    def test_encoding(self, tmp_path):
+        "Test that the encoding option functions."
+        dest = tmp_path / "foo.txt"
+        msg = "\u2603\u26C5\n"
+        with _cephadm.write_new(dest, encoding='utf-8') as fh:
+            fh.write(msg)
+        with open(dest, "rb") as fh:
+            b1 = fh.read()
+            assert b1.decode('utf-8') == msg
+
+        dest = tmp_path / "foo2.txt"
+        with _cephadm.write_new(dest, encoding='utf-16le') as fh:
+            fh.write(msg)
+        with open(dest, "rb") as fh:
+            b2 = fh.read()
+            assert b2.decode('utf-16le') == msg
+
+        # the binary data should differ due to the different encodings
+        assert b1 != b2
+
+    def test_cleanup(self, tmp_path):
+        "Test that an exception during write leaves no file behind."
+        dest = tmp_path / "foo.txt"
+        with pytest.raises(ValueError):
+            with _cephadm.write_new(dest) as fh:
+                fh.write("hello\n")
+                raise ValueError("foo")
+                fh.write("world\n")
+        assert not dest.exists()
+        assert not dest.with_name(dest.name+".new").exists()
+        assert list(dest.parent.iterdir()) == []
+
+
+class CompareContext1:
+    cfg_data = {
+        "name": "mane",
+        "fsid": "foobar",
+        "image": "fake.io/noway/nohow:gndn",
+        "meta": {
+            "fruit": "banana",
+            "vegetable": "carrot",
+        },
+        "params": {
+            "osd_fsid": "robble",
+            "tcp_ports": [404, 9999],
+        },
+        "config_blobs": {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        },
+    }
+
+    def check(self, ctx):
+        assert ctx.name == 'mane'
+        assert ctx.fsid == 'foobar'
+        assert ctx.image == 'fake.io/noway/nohow:gndn'
+        assert ctx.meta_properties == {"fruit": "banana", "vegetable": "carrot"}
+        assert ctx.config_blobs == {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        }
+        assert ctx.osd_fsid == "robble"
+        assert ctx.tcp_ports == [404, 9999]
+
+
+class CompareContext2:
+    cfg_data = {
+        "name": "cc2",
+        "fsid": "foobar",
+        "meta": {
+            "fruit": "banana",
+            "vegetable": "carrot",
+        },
+        "params": {},
+        "config_blobs": {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        },
+    }
+
+    def check(self, ctx):
+        assert ctx.name == 'cc2'
+        assert ctx.fsid == 'foobar'
+        assert ctx.image == 'quay.ceph.io/ceph-ci/ceph:main'
+        assert ctx.meta_properties == {"fruit": "banana", "vegetable": "carrot"}
+        assert ctx.config_blobs == {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        }
+        assert ctx.osd_fsid is None
+        assert ctx.tcp_ports is None
+
+
+@pytest.mark.parametrize(
+    "cc",
+    [
+        CompareContext1(),
+        CompareContext2(),
+    ],
+)
+def test_apply_deploy_config_to_ctx(cc, monkeypatch):
+    import logging
+
+    monkeypatch.setattr("cephadm.logger", logging.getLogger())
+    ctx = FakeContext()
+    _cephadm.apply_deploy_config_to_ctx(cc.cfg_data, ctx)
+    cc.check(ctx)
+
+
+def test_daemon_sub_identity_from_sidecar_service():
+    from cephadmlib.daemon_identity import DaemonSubIdentity
+
+    dsi = DaemonSubIdentity(
+        '244c9842-866b-11ee-80ad-3497f6318048', 'iscsi', 'rab.oof', 'tcmu'
+    )
+    service_name = dsi.sidecar_service_name
+    assert (
+        service_name
+        == 'ceph-244c9842-866b-11ee-80ad-3497f6318048-sidecar@iscsi.rab.oof:tcmu.service'
+    )
+    d2, category = DaemonSubIdentity.from_service_name(service_name)
+    assert category == 'sidecar'
+    assert d2.fsid == '244c9842-866b-11ee-80ad-3497f6318048'
+    assert d2.daemon_type == 'iscsi'
+    assert d2.daemon_id == 'rab.oof'
+    assert d2.subcomponent == 'tcmu'
+
+
+def test_daemon_sub_identity_from_init_service():
+    from cephadmlib.daemon_identity import DaemonIdentity, DaemonSubIdentity
+
+    di = DaemonIdentity(
+        '244c9842-866b-11ee-80ad-3497f6318048', 'putrats', 'wow',
+    )
+    service_name = di.init_service_name
+    assert (
+        service_name
+        == 'ceph-244c9842-866b-11ee-80ad-3497f6318048-init@putrats.wow.service'
+    )
+    d2, category = DaemonSubIdentity.from_service_name(service_name)
+    assert category == 'init'
+    assert d2.fsid == '244c9842-866b-11ee-80ad-3497f6318048'
+    assert d2.daemon_type == 'putrats'
+    assert d2.daemon_id == 'wow'
+    assert d2.subcomponent == 'init'
+
+
+def test_daemon_sub_identity_from_service_invalid():
+    from cephadmlib.daemon_identity import DaemonSubIdentity
+
+    service_name = 'ceph-244c9842-866b-11ee-80ad-3497f6318048-morbo@iscsi.rab.oof.tcmu.service'
+    with pytest.raises(ValueError):
+        DaemonSubIdentity.from_service_name(service_name)
+
+    service_name = 'ceph-244c9842-866b-11ee-80ad-3497f6318048@iscsi.rab.oof.service'
+    with pytest.raises(ValueError):
+        DaemonSubIdentity.from_service_name(service_name)
+
+    service_name = 'ceph-244c9842-866b-11ee-80ad-3497f6318048-sidecar@foo.bar.baz:acolon:toomany.service'
+    with pytest.raises(ValueError):
+        DaemonSubIdentity.from_service_name(service_name)
+
+    service_name = 'ceph-244c9842-866b-11ee-80ad-3497f6318048-init@foo.bar.baz:woops.service'
+    with pytest.raises(ValueError):
+        DaemonSubIdentity.from_service_name(service_name)
+
+    service_name = 'random-task@elsewise.service'
+    with pytest.raises(ValueError):
+        DaemonSubIdentity.from_service_name(service_name)
+
+
+def test_daemon_id_systemd_names():
+    from cephadmlib.daemon_identity import DaemonIdentity
+
+    di = DaemonIdentity(
+        '244c9842-866b-11ee-80ad-3497f6318048', 'test', 'foo.bar'
+    )
+    assert (
+        di.unit_name
+        == 'ceph-244c9842-866b-11ee-80ad-3497f6318048@test.foo.bar'
+    )
+    assert (
+        di.service_name
+        == 'ceph-244c9842-866b-11ee-80ad-3497f6318048@test.foo.bar.service'
+    )
+    assert (
+        di.init_service_name
+        == 'ceph-244c9842-866b-11ee-80ad-3497f6318048-init@test.foo.bar.service'
+    )
+
+
+def test_daemon_sub_id_systemd_names():
+    from cephadmlib.daemon_identity import DaemonSubIdentity
+
+    dsi = DaemonSubIdentity(
+        '244c9842-866b-11ee-80ad-3497f6318048', 'test', 'foo.bar', 'quux',
+    )
+    assert (
+        dsi.sidecar_service_name
+        == 'ceph-244c9842-866b-11ee-80ad-3497f6318048-sidecar@test.foo.bar:quux.service'
+    )
+    with pytest.raises(ValueError):
+        dsi.service_name

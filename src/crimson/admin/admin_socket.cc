@@ -20,6 +20,7 @@
 #include "messages/MCommandReply.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Socket.h"
+#include "crimson/net/Connection.h"
 
 using namespace crimson::common;
 using namespace std::literals;
@@ -236,6 +237,14 @@ seastar::future<> AdminSocket::start(const std::string& path)
   try {
     server_sock = seastar::engine().listen(sock_path);
   } catch (const std::system_error& e) {
+    if (e.code() == std::errc::address_in_use) {
+      logger().debug("{}: Admin Socket socket path={} already exists, retrying",
+                     __func__, path);
+      return seastar::remove_file(path).then([this, path] {
+        server_sock.reset();
+        return start(path);
+      });
+    }
     logger().error("{}: unable to listen({}): {}", __func__, path, e.what());
     server_sock.reset();
     return seastar::make_ready_future<>();

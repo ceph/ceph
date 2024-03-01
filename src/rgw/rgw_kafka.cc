@@ -23,7 +23,7 @@
 // (2) check performance of emptying queue to local list, and go over the list and publish
 // (3) use std::shared_mutex (c++17) or equivalent for the connections lock
 
-// cmparisson operator between topic pointer and name
+// comparison operator between topic pointer and name
 bool operator==(const rd_kafka_topic_t* rkt, const std::string& name) {
     return name == std::string_view(rd_kafka_topic_name(rkt)); 
 }
@@ -31,7 +31,6 @@ bool operator==(const rd_kafka_topic_t* rkt, const std::string& name) {
 namespace rgw::kafka {
 
 // status codes for publishing
-// TODO: use the actual error code (when conn exists) instead of STATUS_CONNECTION_CLOSED when replying to client
 static const int STATUS_CONNECTION_CLOSED =      -0x1002;
 static const int STATUS_QUEUE_FULL =             -0x1003;
 static const int STATUS_MAX_INFLIGHT =           -0x1004;
@@ -39,6 +38,7 @@ static const int STATUS_MANAGER_STOPPED =        -0x1005;
 static const int STATUS_CONNECTION_IDLE =        -0x1006;
 // status code for connection opening
 static const int STATUS_CONF_ALLOC_FAILED      = -0x2001;
+static const int STATUS_CONF_REPLCACE          = -0x2002;
 
 static const int STATUS_OK =                     0x0;
 
@@ -65,12 +65,11 @@ struct connection_t {
   std::vector<rd_kafka_topic_t*> topics;
   uint64_t delivery_tag = 1;
   int status = STATUS_OK;
-  mutable std::atomic<int> ref_count = 0;
   CephContext* const cct;
   CallbackList callbacks;
   const std::string broker;
   const bool use_ssl;
-  const bool verify_ssl; // TODO currently iognored, not supported in librdkafka v0.11.6
+  const bool verify_ssl; // TODO currently ignored, not supported in librdkafka v0.11.6
   const boost::optional<std::string> ca_location;
   const std::string user;
   const std::string password;
@@ -101,10 +100,13 @@ struct connection_t {
     // fire all remaining callbacks (if not fired by rd_kafka_flush)
     std::for_each(callbacks.begin(), callbacks.end(), [this](auto& cb_tag) {
         cb_tag.cb(status);
-        ldout(cct, 20) << "Kafka destroy: invoking callback with tag=" << cb_tag.tag << dendl;
+        ldout(cct, 20) << "Kafka destroy: invoking callback with tag="
+                       << cb_tag.tag << " for: " << broker
+                       << " with status: " << status << dendl;
       });
     callbacks.clear();
     delivery_tag = 1;
+    ldout(cct, 20) << "Kafka destroy: complete for: " << broker << dendl;
   }
 
   bool is_ok() const {
@@ -121,28 +123,7 @@ struct connection_t {
   ~connection_t() {
     destroy(status);
   }
-
-  friend void intrusive_ptr_add_ref(const connection_t* p);
-  friend void intrusive_ptr_release(const connection_t* p);
 };
-
-std::string to_string(const connection_ptr_t& conn) {
-    std::string str;
-    str += "\nBroker: " + conn->broker; 
-    str += conn->use_ssl ? "\nUse SSL" : ""; 
-    str += conn->ca_location ? "\nCA Location: " + *(conn->ca_location) : "";
-    str += conn->mechanism ? "\nSASL Mechanism: " + *(conn->mechanism) : "";
-    return str;
-}
-// these are required interfaces so that connection_t could be used inside boost::intrusive_ptr
-void intrusive_ptr_add_ref(const connection_t* p) {
-  ++p->ref_count;
-}
-void intrusive_ptr_release(const connection_t* p) {
-  if (--p->ref_count == 0) {
-    delete p;
-  }
-}
 
 // convert int status to string - including RGW specific values
 std::string status_to_string(int s) {
@@ -159,6 +140,8 @@ std::string status_to_string(int s) {
       return "RGW_KAFKA_STATUS_MANAGER_STOPPED";
     case STATUS_CONF_ALLOC_FAILED:
       return "RGW_KAFKA_STATUS_CONF_ALLOC_FAILED";
+    case STATUS_CONF_REPLCACE:
+      return "RGW_KAFKA_STATUS_CONF_REPLCACE";
     case STATUS_CONNECTION_IDLE:
       return "RGW_KAFKA_STATUS_CONNECTION_IDLE";
   }
@@ -213,11 +196,10 @@ void poll_err_callback(rd_kafka_t *rk, int err, const char *reason, void *opaque
   ldout(conn->cct, 10) << "Kafka run: poll error(" << err << "): " << reason << dendl;
 }
 
-// utility function to create a connection, when the connection object already exists
-connection_ptr_t& create_connection(connection_ptr_t& conn) {
-  // pointer must be valid and not marked for deletion
-  ceph_assert(conn);
-  
+using connection_t_ptr = std::unique_ptr<connection_t>;
+
+// utility function to create a producer, when the connection object already exists
+bool new_producer(connection_t* conn) {
   // reset all status codes
   conn->status = STATUS_OK; 
   char errstr[512] = {0};
@@ -225,10 +207,10 @@ connection_ptr_t& create_connection(connection_ptr_t& conn) {
   conn->temp_conf = rd_kafka_conf_new();
   if (!conn->temp_conf) {
     conn->status = STATUS_CONF_ALLOC_FAILED;
-    return conn;
+    return false;
   }
 
-  // get list of brokers based on the bootsrap broker
+  // get list of brokers based on the bootstrap broker
   if (rd_kafka_conf_set(conn->temp_conf, "bootstrap.servers", conn->broker.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
   if (conn->use_ssl) {
@@ -282,18 +264,22 @@ connection_ptr_t& create_connection(connection_ptr_t& conn) {
   rd_kafka_conf_set_dr_msg_cb(conn->temp_conf, message_callback);
 
   // set the global opaque pointer to be the connection itself
-  rd_kafka_conf_set_opaque(conn->temp_conf, conn.get());
+  rd_kafka_conf_set_opaque(conn->temp_conf, conn);
 
   // redirect kafka logs to RGW
   rd_kafka_conf_set_log_cb(conn->temp_conf, log_callback);
   // define poll callback to allow reconnect
   rd_kafka_conf_set_error_cb(conn->temp_conf, poll_err_callback);
   // create the producer
+  if (conn->producer) {
+    ldout(conn->cct, 5) << "Kafka connect: producer already exists. detroying the existing before creating a new one" << dendl;
+    conn->destroy(STATUS_CONF_REPLCACE);
+  }
   conn->producer = rd_kafka_new(RD_KAFKA_PRODUCER, conn->temp_conf, errstr, sizeof(errstr));
   if (!conn->producer) {
     conn->status = rd_kafka_last_error();
     ldout(conn->cct, 1) << "Kafka connect: failed to create producer: " << errstr << dendl;
-    return conn;
+    return false;
   }
   ldout(conn->cct, 20) << "Kafka connect: successfully created new producer" << dendl;
   {
@@ -311,41 +297,28 @@ connection_ptr_t& create_connection(connection_ptr_t& conn) {
 
   // conf ownership passed to producer
   conn->temp_conf = nullptr;
-  return conn;
+  return true;
 
 conf_error:
   conn->status = rd_kafka_last_error();
   ldout(conn->cct, 1) << "Kafka connect: configuration failed: " << errstr << dendl;
-  return conn;
+  return false;
 }
 
-// utility function to create a new connection
-connection_ptr_t create_new_connection(const std::string& broker, CephContext* cct,
-        bool use_ssl,
-        bool verify_ssl,
-        boost::optional<const std::string&> ca_location, 
-        const std::string& user, 
-        const std::string& password,
-        boost::optional<const std::string&> mechanism) { 
-  // create connection state
-  connection_ptr_t conn(new connection_t(cct, broker, use_ssl, verify_ssl, ca_location, user, password, mechanism));
-  return create_connection(conn);
-}
-
-/// struct used for holding messages in the message queue
+// struct used for holding messages in the message queue
 struct message_wrapper_t {
-  connection_ptr_t conn; 
+  std::string conn_name; 
   std::string topic;
   std::string message;
-  reply_callback_t cb;
+  const reply_callback_t cb;
   
-  message_wrapper_t(connection_ptr_t& _conn,
+  message_wrapper_t(const std::string& _conn_name,
       const std::string& _topic,
       const std::string& _message,
-      reply_callback_t _cb) : conn(_conn), topic(_topic), message(_message), cb(_cb) {}
+      reply_callback_t _cb) : conn_name(_conn_name), topic(_topic), message(_message), cb(_cb) {}
 };
 
-typedef std::unordered_map<std::string, connection_ptr_t> ConnectionList;
+typedef std::unordered_map<std::string, connection_t_ptr> ConnectionList;
 typedef boost::lockfree::queue<message_wrapper_t*, boost::lockfree::fixed_sized<true>> MessageQueue;
 
 class Manager {
@@ -353,7 +326,6 @@ public:
   const size_t max_connections;
   const size_t max_inflight;
   const size_t max_queue;
-  const size_t max_idle_time;
 private:
   std::atomic<size_t> connection_count;
   bool stopped;
@@ -368,15 +340,23 @@ private:
 
   // TODO use rd_kafka_produce_batch for better performance
   void publish_internal(message_wrapper_t* message) {
-    const std::unique_ptr<message_wrapper_t> msg_owner(message);
-    auto& conn = message->conn;
+    const std::unique_ptr<message_wrapper_t> msg_deleter(message);
+    const auto conn_it = connections.find(message->conn_name);
+    if (conn_it == connections.end()) {
+      ldout(cct, 1) << "Kafka publish: connection was deleted while message was in the queue. error: " << STATUS_CONNECTION_CLOSED << dendl;
+      if (message->cb) {
+        message->cb(STATUS_CONNECTION_CLOSED);
+      }
+      return;
+    }
+    auto& conn = conn_it->second;
 
     conn->timestamp = ceph_clock_now(); 
 
     if (!conn->is_ok()) {
       // connection had an issue while message was in the queue
       // TODO add error stats
-      ldout(conn->cct, 1) << "Kafka publish: connection had an issue while message was in the queue. error: " << status_to_string(conn->status) << dendl;
+      ldout(conn->cct, 1) << "Kafka publish: producer was closed while message was in the queue. error: " << status_to_string(conn->status) << dendl;
       if (message->cb) {
         message->cb(conn->status);
       }
@@ -438,7 +418,9 @@ private:
     if (tag) {
       auto const q_len = conn->callbacks.size();
       if (q_len < max_inflight) {
-        ldout(conn->cct, 20) << "Kafka publish (with callback, tag=" << *tag << "): OK. Queue has: " << q_len << " callbacks" << dendl;
+        ldout(conn->cct, 20)
+            << "Kafka publish (with callback, tag=" << *tag
+            << "): OK. Queue has: " << q_len + 1 << " callbacks" << dendl;
         conn->callbacks.emplace_back(*tag, message->cb);
       } else {
         // immediately invoke callback with error - this is not a connection error
@@ -449,6 +431,7 @@ private:
     } else {
         ldout(conn->cct, 20) << "Kafka publish (no callback): OK" << dendl;
     }
+    // coverity[leaked_storage:SUPPRESS]
   }
 
   // the managers thread:
@@ -473,15 +456,18 @@ private:
         conn_it = connections.begin();
         end_it = connections.end();
       }
+
+      const auto read_timeout = cct->_conf->rgw_kafka_sleep_timeout;
       // loop over all connections to read acks
       for (;conn_it != end_it;) {
         
         auto& conn = conn_it->second;
 
-        // Checking the connection idlesness
-        if(conn->timestamp.sec() + max_idle_time < ceph_clock_now()) {
+        // Checking the connection idleness
+        if(conn->timestamp.sec() + conn->cct->_conf->rgw_kafka_connection_idle < ceph_clock_now()) {
           ldout(conn->cct, 20) << "kafka run: deleting a connection due to idle behaviour: " << ceph_clock_now() << dendl;
-          conn->destroy(STATUS_CONNECTION_IDLE);
+          std::lock_guard lock(connections_lock);
+          conn->status = STATUS_CONNECTION_IDLE;
           conn_it = connections.erase(conn_it);
           --connection_count; \
           continue;
@@ -492,26 +478,25 @@ private:
           ldout(conn->cct, 10) << "Kafka run: connection status is: " << status_to_string(conn->status) << dendl;
           const auto& broker = conn_it->first;
           ldout(conn->cct, 20) << "Kafka run: retry connection" << dendl;
-          if (create_connection(conn)->is_ok() == false) {
+          if (new_producer(conn.get()) == false) {
             ldout(conn->cct, 10) << "Kafka run: connection (" << broker << ") retry failed" << dendl;
             // TODO: add error counter for failed retries
             // TODO: add exponential backoff for retries
           } else {
-            ldout(conn->cct, 10) << "Kafka run: connection (" << broker << ") retry successfull" << dendl;
+            ldout(conn->cct, 10) << "Kafka run: connection (" << broker << ") retry successful" << dendl;
           }
           ++conn_it;
           continue;
         }
 
-        reply_count += rd_kafka_poll(conn->producer, read_timeout_ms);
+        reply_count += rd_kafka_poll(conn->producer, read_timeout);
 
         // just increment the iterator
         ++conn_it;
       }
-      // if no messages were received or published
-      // across all connection, sleep for 100ms
+      // sleep if no messages were received or published across all connection
       if (send_count == 0 && reply_count == 0) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        std::this_thread::sleep_for(std::chrono::milliseconds(read_timeout*3));
       }
     }
   }
@@ -525,15 +510,12 @@ public:
   Manager(size_t _max_connections,
       size_t _max_inflight,
       size_t _max_queue, 
-      int _read_timeout_ms,
       CephContext* _cct) : 
     max_connections(_max_connections),
     max_inflight(_max_inflight),
     max_queue(_max_queue),
-    max_idle_time(30),
     connection_count(0),
     stopped(false),
-    read_timeout_ms(_read_timeout_ms),
     connections(_max_connections),
     messages(max_queue),
     queued(0),
@@ -560,87 +542,86 @@ public:
   }
 
   // connect to a broker, or reuse an existing connection if already connected
-  connection_ptr_t connect(const std::string& url, 
+  bool connect(std::string& broker,
+          const std::string& url, 
           bool use_ssl,
           bool verify_ssl,
           boost::optional<const std::string&> ca_location,
           boost::optional<const std::string&> mechanism) {
     if (stopped) {
-      // TODO: increment counter
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
-      return nullptr;
+      return false;
     }
 
-    std::string broker;
-	std::string user;
-	std::string password;
+    std::string user;
+    std::string password;
     if (!parse_url_authority(url, broker, user, password)) {
       // TODO: increment counter
       ldout(cct, 1) << "Kafka connect: URL parsing failed" << dendl;
-      return nullptr;
+      return false;
     }
 
     // this should be validated by the regex in parse_url()
     ceph_assert(user.empty() == password.empty());
 
-	if (!user.empty() && !use_ssl && !g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
+    if (!user.empty() && !use_ssl && !g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
       ldout(cct, 1) << "Kafka connect: user/password are only allowed over secure connection" << dendl;
-      return nullptr;
-	}
+      return false;
+    }
 
     std::lock_guard lock(connections_lock);
     const auto it = connections.find(broker);
-    // note that ssl vs. non-ssl connection to the same host are two separate conenctions
+    // note that ssl vs. non-ssl connection to the same host are two separate connections
     if (it != connections.end()) {
       // connection found - return even if non-ok
       ldout(cct, 20) << "Kafka connect: connection found" << dendl;
-      return it->second;
+      return it->second.get();
     }
 
     // connection not found, creating a new one
     if (connection_count >= max_connections) {
       // TODO: increment counter
       ldout(cct, 1) << "Kafka connect: max connections exceeded" << dendl;
-      return nullptr;
+      return false;
     }
-    const auto conn = create_new_connection(broker, cct, use_ssl, verify_ssl, ca_location, user, password, mechanism);
-    // create_new_connection must always return a connection object
+    // create_connection must always return a connection object
     // even if error occurred during creation. 
     // in such a case the creation will be retried in the main thread
-    ceph_assert(conn);
     ++connection_count;
     ldout(cct, 10) << "Kafka connect: new connection is created. Total connections: " << connection_count << dendl;
-    return connections.emplace(broker, conn).first->second;
+    auto conn = connections.emplace(broker, std::make_unique<connection_t>(cct, broker, use_ssl, verify_ssl, ca_location, user, password, mechanism)).first->second.get();
+    if (!new_producer(conn)) {
+      ldout(cct, 10) << "Kafka connect: new connection is created. But producer creation failed. will retry" << dendl;
+    }
+    return true;
   }
 
   // TODO publish with confirm is needed in "none" case as well, cb should be invoked publish is ok (no ack)
-  int publish(connection_ptr_t& conn, 
+  int publish(const std::string& conn_name, 
     const std::string& topic,
     const std::string& message) {
     if (stopped) {
       return STATUS_MANAGER_STOPPED;
     }
-    if (!conn || !conn->is_ok()) {
-      return STATUS_CONNECTION_CLOSED;
-    }
-    if (messages.push(new message_wrapper_t(conn, topic, message, nullptr))) {
+    auto message_wrapper = std::make_unique<message_wrapper_t>(conn_name, topic, message, nullptr);
+    if (messages.push(message_wrapper.get())) {
+      std::ignore = message_wrapper.release();
       ++queued;
       return STATUS_OK;
     }
     return STATUS_QUEUE_FULL;
   }
   
-  int publish_with_confirm(connection_ptr_t& conn, 
+  int publish_with_confirm(const std::string& conn_name, 
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb) {
     if (stopped) {
       return STATUS_MANAGER_STOPPED;
     }
-    if (!conn || !conn->is_ok()) {
-      return STATUS_CONNECTION_CLOSED;
-    }
-    if (messages.push(new message_wrapper_t(conn, topic, message, cb))) {
+    auto message_wrapper = std::make_unique<message_wrapper_t>(conn_name, topic, message, cb);
+    if (messages.push(message_wrapper.get())) {
+      std::ignore = message_wrapper.release();
       ++queued;
       return STATUS_OK;
     }
@@ -689,14 +670,13 @@ static Manager* s_manager = nullptr;
 static const size_t MAX_CONNECTIONS_DEFAULT = 256;
 static const size_t MAX_INFLIGHT_DEFAULT = 8192; 
 static const size_t MAX_QUEUE_DEFAULT = 8192;
-static const int READ_TIMEOUT_MS_DEFAULT = 500;
 
 bool init(CephContext* cct) {
   if (s_manager) {
     return false;
   }
   // TODO: take conf from CephContext
-  s_manager = new Manager(MAX_CONNECTIONS_DEFAULT, MAX_INFLIGHT_DEFAULT, MAX_QUEUE_DEFAULT, READ_TIMEOUT_MS_DEFAULT, cct);
+  s_manager = new Manager(MAX_CONNECTIONS_DEFAULT, MAX_INFLIGHT_DEFAULT, MAX_QUEUE_DEFAULT, cct);
   return true;
 }
 
@@ -705,26 +685,26 @@ void shutdown() {
   s_manager = nullptr;
 }
 
-connection_ptr_t connect(const std::string& url, bool use_ssl, bool verify_ssl,
+bool connect(std::string& broker, const std::string& url, bool use_ssl, bool verify_ssl,
         boost::optional<const std::string&> ca_location,
         boost::optional<const std::string&> mechanism) {
-  if (!s_manager) return nullptr;
-  return s_manager->connect(url, use_ssl, verify_ssl, ca_location, mechanism);
+  if (!s_manager) return false;
+  return s_manager->connect(broker, url, use_ssl, verify_ssl, ca_location, mechanism);
 }
 
-int publish(connection_ptr_t& conn, 
+int publish(const std::string& conn_name,
     const std::string& topic,
     const std::string& message) {
   if (!s_manager) return STATUS_MANAGER_STOPPED;
-  return s_manager->publish(conn, topic, message);
+  return s_manager->publish(conn_name, topic, message);
 }
 
-int publish_with_confirm(connection_ptr_t& conn, 
+int publish_with_confirm(const std::string& conn_name,
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb) {
   if (!s_manager) return STATUS_MANAGER_STOPPED;
-  return s_manager->publish_with_confirm(conn, topic, message, cb);
+  return s_manager->publish_with_confirm(conn_name, topic, message, cb);
 }
 
 size_t get_connection_count() {

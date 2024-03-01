@@ -5,6 +5,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { RgwZonegroup } from '../rgw-multisite';
 
 import { RgwMultisiteZonegroupDeletionFormComponent } from './rgw-multisite-zonegroup-deletion-form.component';
 
@@ -21,6 +22,7 @@ describe('RgwMultisiteZonegroupDeletionFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwMultisiteZonegroupDeletionFormComponent);
     component = fixture.componentInstance;
+    component.zonegroup = new RgwZonegroup();
     fixture.detectChanges();
   });
 

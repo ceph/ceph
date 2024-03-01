@@ -22,10 +22,10 @@ int RGWPeriod::init(const DoutPrefixProvider *dpp,
     return 0;
 
   if (id.empty()) {
-    RGWRealm realm(realm_id, realm_name);
+    RGWRealm realm(realm_id);
     int ret = realm.init(dpp, cct, sysobj_svc, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 4) << "RGWPeriod::init failed to init realm " << realm_name << " id " << realm_id << " : " <<
+      ldpp_dout(dpp, 4) << "RGWPeriod::init failed to init realm  id " << realm_id << " : " <<
 	cpp_strerror(-ret) << dendl;
       return ret;
     }
@@ -36,7 +36,7 @@ int RGWPeriod::init(const DoutPrefixProvider *dpp,
   if (!epoch) {
     int ret = use_latest_epoch(dpp, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "failed to use_latest_epoch period id " << id << " realm " << realm_name  << " id " << realm_id
+      ldpp_dout(dpp, 0) << "failed to use_latest_epoch period id " << id << " realm id " << realm_id
 	   << " : " << cpp_strerror(-ret) << dendl;
       return ret;
     }
@@ -46,14 +46,12 @@ int RGWPeriod::init(const DoutPrefixProvider *dpp,
 }
 
 int RGWPeriod::init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc,
-		    const string& period_realm_id, optional_yield y,
-		    const string& period_realm_name, bool setup_obj)
+		    const string& period_realm_id, optional_yield y, bool setup_obj)
 {
   cct = _cct;
   sysobj_svc = _sysobj_svc;
 
   realm_id = period_realm_id;
-  realm_name = period_realm_name;
 
   if (!setup_obj)
     return 0;
@@ -244,7 +242,6 @@ void RGWPeriod::dump(Formatter *f) const
   encode_json("master_zone", master_zone, f);
   encode_json("period_config", period_config, f);
   encode_json("realm_id", realm_id, f);
-  encode_json("realm_name", realm_name, f);
   encode_json("realm_epoch", realm_epoch, f);
 }
 
@@ -259,7 +256,6 @@ void RGWPeriod::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("master_zone", master_zone, obj);
   JSONDecoder::decode_json("period_config", period_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
-  JSONDecoder::decode_json("realm_name", realm_name, obj);
   JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
 }
 

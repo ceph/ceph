@@ -83,6 +83,33 @@ steps below:
 
      ceph orch apply grafana
 
+Enabling security for the monitoring stack
+----------------------------------------------
+
+By default, in a cephadm managed cluster, the monitoring components are set up and configured without incorporating any security measures.
+While this setup might suffice for certain deployments, other users with stricter security needs may find it necessary to protect their
+monitoring stack against unauthorized access to metrics and data. In such cases, cephadm relies on a specific configuration parameter,
+`mgr/cephadm/secure_monitoring_stack`, which toggles the security settings for all monitoring components. To activate security
+measures, users must set this variable to true, as following:
+
+   .. prompt:: bash #
+
+     ceph config set mgr mgr/cephadm/secure_monitoring_stack true
+
+This configuration change will trigger a sequence of reconfigurations across all monitoring daemons, typically requiring
+few minutes until all components are fully operational. The updated secure configuration includes the following modifications:
+
+#. Prometheus: basic authentication is requiered to access the web portal and TLS is enabled for secure communication.
+#. Alertmanager: basic authentication is requiered to access the web portal and TLS is enabled for secure communication.
+#. Node Exporter: TLS is enabled for secure communication.
+#. Grafana: TLS is enabled and authentication is requiered to access the datasource information.
+
+In this secure setup, users will need to setup authentication (username/password) for both Prometheus and Alertmanager. By default user/password are
+set to admin/admin. The user can change these value through the commands `orch prometheus set-credentials` and `orch alertmanager set-credentials`
+respectively. These commands offer the flexibility to input the username/password either as parameters or via a JSON file, which enhances security. Additionally,
+Cephadm provides commands such as `orch prometheus get-credentials` and `orch alertmanager get-credentials` to retrieve the currently configured credentials such
+as default values.
+
 .. _cephadm-monitoring-centralized-logs:
 
 Centralized Logging in Ceph
@@ -140,6 +167,15 @@ configuration first.  The following configuration options are available.
 - ``container_image_grafana``
 - ``container_image_alertmanager``
 - ``container_image_node_exporter``
+- ``container_image_loki``
+- ``container_image_promtail``
+- ``container_image_haproxy``
+- ``container_image_keepalived``
+- ``container_image_snmp_gateway``
+- ``container_image_elasticsearch``
+- ``container_image_jaeger_agent``
+- ``container_image_jaeger_collector``
+- ``container_image_jaeger_query``
 
 Custom images can be set with the ``ceph config`` command
 
@@ -200,12 +236,12 @@ configuration files for monitoring services.
 Internally, cephadm already uses `Jinja2
 <https://jinja.palletsprojects.com/en/2.11.x/>`_ templates to generate the
 configuration files for all monitoring components. Starting from version 17.2.3,
-cephadm uses Prometheus http service discovery support `http_sd_config
-<https://prometheus.io/docs/prometheus/2.28/configuration/configuration/#http_sd_config>`
-in order to get the currently configured targets from Ceph. Internally, `ceph-mgr`
-provides a service discovery endpoint at `<https://<mgr-ip>:8765/sd/` (port is
-configurable through the variable `service_discovery_port`) which is used by
-Prometheus to get the needed targets.
+cephadm supports Prometheus http service discovery, and uses this endpoint for the
+definition and management of the embedded Prometheus service. The endpoint listens on
+``https://<mgr-ip>:8765/sd/`` (the port is
+configurable through the variable ``service_discovery_port``) and returns scrape target
+information in `http_sd_config format
+<https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config/>`_
 
 Customers with external monitoring stack can use `ceph-mgr` service discovery endpoint
 to get scraping configuration. Root certificate of the server can be obtained by the
@@ -312,11 +348,20 @@ cluster.
   By default, ceph-mgr presents prometheus metrics on port 9283 on each host
   running a ceph-mgr daemon.  Configure prometheus to scrape these.
 
-To make this integration easier, Ceph provides by means of `ceph-mgr` a service
-discovery endpoint at `<https://<mgr-ip>:8765/sd/` which can be used by an external
-Prometheus to retrieve targets information. Information reported by this EP used
-the format specified by `http_sd_config
-<https://prometheus.io/docs/prometheus/2.28/configuration/configuration/#http_sd_config>`
+To make this integration easier, cephadm provides a service discovery endpoint at
+``https://<mgr-ip>:8765/sd/``. This endpoint can be used by an external
+Prometheus server to retrieve target information for a specific service. Information returned
+by this endpoint uses the format specified by the Prometheus `http_sd_config option
+<https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config/>`_
+
+Here's an example prometheus job definition that uses the cephadm service discovery endpoint
+
+  .. code-block:: bash
+
+     - job_name: 'ceph-exporter'  
+       http_sd_configs:  
+       - url: http://<mgr-ip>:8765/sd/prometheus/sd-config?service=ceph-exporter
+
 
 * To enable the dashboard's prometheus-based alerting, see :ref:`dashboard-alerting`.
 
@@ -457,6 +502,28 @@ Then apply this specification:
 
 Grafana will now create an admin user called ``admin`` with the
 given password.
+
+Turning off anonymous access
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, cephadm allows anonymous users (users who have not provided any
+login information) limited, viewer only access to the grafana dashboard. In
+order to set up grafana to only allow viewing from logged in users, you can
+set ``anonymous_access: False`` in your grafana spec.
+
+.. code-block:: yaml
+
+  service_type: grafana
+  placement:
+    hosts:
+    - host1
+  spec:
+    anonymous_access: False
+    initial_admin_password: "mypassword"
+
+Since deploying grafana with anonymous access set to false without an initial
+admin password set would make the dashboard inaccessible, cephadm requires
+setting the ``initial_admin_password`` when ``anonymous_access`` is set to false.
 
 
 Setting up Alertmanager

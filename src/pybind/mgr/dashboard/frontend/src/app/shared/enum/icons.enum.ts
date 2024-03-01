@@ -20,6 +20,7 @@ export enum Icons {
   stop = 'fa fa-stop', // Disable
   analyse = 'fa fa-stethoscope', // Scrub
   deepCheck = 'fa fa-cog', // Deep Scrub, Setting, Configuration
+  cogs = 'fa fa-cogs', // Multiple Settings, Configurations
   reweight = 'fa fa-balance-scale', // Reweight
   up = 'fa fa-arrow-up', // Up
   left = 'fa fa-arrow-left', // Mark out
@@ -74,7 +75,15 @@ export enum Icons {
   exit = 'fa fa-sign-out', // Exit
   restart = 'fa fa-history', // Restart
   deploy = 'fa fa-cube', // Deploy, Redeploy
-  cubes = 'fa fa-cubes',
+  cubes = 'fa fa-cubes', // Object storage
+  sitemap = 'fa fa-sitemap', // Cluster, network, connections
+  database = 'fa fa-database', // Database, Block storage
+  bars = 'fa fa-bars', // Stack, bars
+  navicon = 'fa fa-navicon', // Navigation
+  areaChart = 'fa fa-area-chart', // Area Chart, dashboard
+  eye = 'fa fa-eye', // Observability
+  calendar = 'fa fa-calendar',
+  externalUrl = 'fa fa-external-link', // links to external page
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger

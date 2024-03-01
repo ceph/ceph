@@ -125,18 +125,22 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
           t,
           [this](
             paddr_t paddr,
+	    paddr_t backref_key,
             extent_len_t len,
             extent_types_t type,
             laddr_t laddr) {
           if (is_backref_node(type)) {
             assert(laddr == L_ADDR_NULL);
-            backref_manager->cache_new_backref_extent(paddr, type);
+	    assert(backref_key != P_ADDR_NULL);
+            backref_manager->cache_new_backref_extent(paddr, backref_key, type);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
           } else if (laddr == L_ADDR_NULL) {
+	    assert(backref_key == P_ADDR_NULL);
             cache->update_tree_extents_num(type, -1);
             epm->mark_space_free(paddr, len);
           } else {
+	    assert(backref_key == P_ADDR_NULL);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
           }
@@ -174,6 +178,7 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
   });
 }
 
+#ifdef UNIT_TESTS_BUILT
 TransactionManager::ref_ret TransactionManager::inc_ref(
   Transaction &t,
   LogicalCachedExtentRef &ref)
@@ -205,14 +210,15 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
     return result.refcount;
   });
 }
+#endif
 
-TransactionManager::ref_ret TransactionManager::dec_ref(
+TransactionManager::ref_ret TransactionManager::remove(
   Transaction &t,
   LogicalCachedExtentRef &ref)
 {
-  LOG_PREFIX(TransactionManager::dec_ref);
+  LOG_PREFIX(TransactionManager::remove);
   TRACET("{}", t, *ref);
-  return lba_manager->decref_extent(t, ref->get_laddr()
+  return lba_manager->decref_extent(t, ref->get_laddr(), true
   ).si_then([this, FNAME, &t, ref](auto result) {
     DEBUGT("extent refcount is decremented to {} -- {}",
            t, result.refcount, *ref);
@@ -223,43 +229,43 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   });
 }
 
-TransactionManager::ref_ret TransactionManager::dec_ref(
+TransactionManager::ref_ret TransactionManager::_dec_ref(
   Transaction &t,
-  laddr_t offset)
+  laddr_t offset,
+  bool cascade_remove)
 {
-  LOG_PREFIX(TransactionManager::dec_ref);
+  LOG_PREFIX(TransactionManager::_dec_ref);
   TRACET("{}", t, offset);
-  return lba_manager->decref_extent(t, offset
+  return lba_manager->decref_extent(t, offset, cascade_remove
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
     DEBUGT("extent refcount is decremented to {} -- {}~{}, {}",
            t, result.refcount, offset, result.length, result.addr);
-    if (result.refcount == 0 && !result.addr.is_zero()) {
-      return cache->retire_extent_addr(
-	t, result.addr, result.length
-      ).si_then([] {
-	return ref_ret(
-	  interruptible::ready_future_marker{},
-	  0);
-      });
-    } else {
-      return ref_ret(
-	interruptible::ready_future_marker{},
-	result.refcount);
+    auto fut = ref_iertr::now();
+    if (result.refcount == 0) {
+      if (result.addr.is_paddr() &&
+          !result.addr.get_paddr().is_zero()) {
+        fut = cache->retire_extent_addr(
+          t, result.addr.get_paddr(), result.length);
+      }
     }
+
+    return fut.si_then([result=std::move(result)] {
+      return result.refcount;
+    });
   });
 }
 
-TransactionManager::refs_ret TransactionManager::dec_ref(
+TransactionManager::refs_ret TransactionManager::remove(
   Transaction &t,
   std::vector<laddr_t> offsets)
 {
-  LOG_PREFIX(TransactionManager::dec_ref);
+  LOG_PREFIX(TransactionManager::remove);
   DEBUG("{} offsets", offsets.size());
   return seastar::do_with(std::move(offsets), std::vector<unsigned>(),
       [this, &t] (auto &&offsets, auto &refcnt) {
       return trans_intr::do_for_each(offsets.begin(), offsets.end(),
         [this, &t, &refcnt] (auto &laddr) {
-        return this->dec_ref(t, laddr).si_then([&refcnt] (auto ref) {
+        return this->remove(t, laddr).si_then([&refcnt] (auto ref) {
           refcnt.push_back(ref);
           return ref_iertr::now();
         });
@@ -373,30 +379,6 @@ TransactionManager::do_submit_transaction(
 	  backref_to_clear.push_back(e);
       }
 
-      // ...but add_pin from parent->leaf
-      std::vector<CachedExtentRef> lba_to_link;
-      std::vector<CachedExtentRef> backref_to_link;
-      lba_to_link.reserve(tref.get_fresh_block_stats().num +
-			  tref.get_existing_block_stats().valid_num);
-      backref_to_link.reserve(tref.get_fresh_block_stats().num);
-      tref.for_each_fresh_block([&](auto &e) {
-	if (e->is_valid()) {
-	  if (is_lba_node(e->get_type()) || e->is_logical())
-	    lba_to_link.push_back(e);
-	  else if (is_backref_node(e->get_type()))
-	    backref_to_link.push_back(e);
-	}
-      });
-
-      for (auto &e: tref.get_existing_block_list()) {
-	if (e->is_valid()) {
-	  lba_to_link.push_back(e);
-	}
-      }
-
-      lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
-      backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
-
       journal->get_trimmer().update_journal_tails(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
@@ -457,32 +439,99 @@ TransactionManager::rewrite_logical_extent(
 
   auto lextent = extent->cast<LogicalCachedExtent>();
   cache->retire_extent(t, extent);
-  auto nlextent = cache->alloc_new_extent_by_type(
-    t,
-    lextent->get_type(),
-    lextent->get_length(),
-    lextent->get_user_hint(),
-    // get target rewrite generation
-    lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
-  lextent->get_bptr().copy_out(
-    0,
-    lextent->get_length(),
-    nlextent->get_bptr().c_str());
-  nlextent->set_laddr(lextent->get_laddr());
-  nlextent->set_pin(lextent->get_pin().duplicate());
-  nlextent->set_modify_time(lextent->get_modify_time());
+  if (get_extent_category(lextent->get_type()) == data_category_t::METADATA) {
+    auto nlextent = cache->alloc_new_extent_by_type(
+      t,
+      lextent->get_type(),
+      lextent->get_length(),
+      lextent->get_user_hint(),
+      // get target rewrite generation
+      lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
+    lextent->get_bptr().copy_out(
+      0,
+      lextent->get_length(),
+      nlextent->get_bptr().c_str());
+    nlextent->set_laddr(lextent->get_laddr());
+    nlextent->set_modify_time(lextent->get_modify_time());
 
-  DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
+    DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
 
-  /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
-   * extents since we're going to do it again once we either do the ool write
-   * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
-   * avoid this complication. */
-  return lba_manager->update_mapping(
-    t,
-    lextent->get_laddr(),
-    lextent->get_paddr(),
-    nlextent->get_paddr());
+    /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
+     * extents since we're going to do it again once we either do the ool write
+     * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
+     * avoid this complication. */
+    return lba_manager->update_mapping(
+      t,
+      lextent->get_laddr(),
+      lextent->get_length(),
+      lextent->get_paddr(),
+      nlextent->get_length(),
+      nlextent->get_paddr(),
+      nlextent.get());
+  } else {
+    assert(get_extent_category(lextent->get_type()) == data_category_t::DATA);
+    auto extents = cache->alloc_new_data_extents_by_type(
+      t,
+      lextent->get_type(),
+      lextent->get_length(),
+      lextent->get_user_hint(),
+      // get target rewrite generation
+      lextent->get_rewrite_generation());
+    return seastar::do_with(
+      std::move(extents),
+      0,
+      lextent->get_length(),
+      [this, lextent, &t](auto &extents, auto &off, auto &left) {
+      return trans_intr::do_for_each(
+        extents,
+        [lextent, this, &t, &off, &left](auto &nextent) {
+        LOG_PREFIX(TransactionManager::rewrite_logical_extent);
+        bool first_extent = (off == 0);
+        ceph_assert(left >= nextent->get_length());
+        auto nlextent = nextent->template cast<LogicalCachedExtent>();
+        lextent->get_bptr().copy_out(
+          0,
+          nlextent->get_length(),
+          nlextent->get_bptr().c_str());
+        nlextent->set_laddr(lextent->get_laddr() + off);
+        nlextent->set_modify_time(lextent->get_modify_time());
+        DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
+
+        /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
+         * extents since we're going to do it again once we either do the ool write
+         * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
+         * avoid this complication. */
+        auto fut = base_iertr::now();
+        if (first_extent) {
+          fut = lba_manager->update_mapping(
+            t,
+            lextent->get_laddr() + off,
+            lextent->get_length(),
+            lextent->get_paddr(),
+            nlextent->get_length(),
+            nlextent->get_paddr(),
+            nlextent.get());
+        } else {
+          fut = lba_manager->alloc_extent(
+            t,
+            lextent->get_laddr() + off,
+            nlextent->get_length(),
+            nlextent->get_paddr(),
+            *nlextent
+          ).si_then([lextent, nlextent, off](auto mapping) {
+            ceph_assert(mapping->get_key() == lextent->get_laddr() + off);
+            ceph_assert(mapping->get_val() == nlextent->get_paddr());
+            return seastar::now();
+          });
+        }
+        return fut.si_then([&off, &left, nlextent] {
+          off += nlextent->get_length();
+          left -= nlextent->get_length();
+          return seastar::now();
+        });
+      });
+    });
+  }
 }
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
@@ -505,6 +554,12 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
 
   assert(extent->is_valid() && !extent->is_initial_pending());
   if (extent->is_dirty()) {
+    if (epm->can_inplace_rewrite(t, extent)) {
+      DEBUGT("delta overwriting extent -- {}", t, *extent);
+      t.add_inplace_rewrite_extent(extent);
+      extent->set_inplace_rewrite_generation();
+      return rewrite_extent_iertr::now();
+    }
     extent->set_target_rewrite_generation(INIT_GENERATION);
   } else {
     extent->set_target_rewrite_generation(target_generation);
@@ -576,7 +631,7 @@ TransactionManager::get_extents_if_live(
           return trans_intr::parallel_for_each(
             pin_list,
             [=, this, &list, &t](
-              LBAPinRef &pin) -> Cache::get_extent_iertr::future<>
+              LBAMappingRef &pin) -> Cache::get_extent_iertr::future<>
           {
             auto pin_paddr = pin->get_val();
             auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
@@ -588,7 +643,7 @@ TransactionManager::get_extents_if_live(
             // Only extent split can happen during the lookup
             ceph_assert(pin_seg_paddr >= paddr &&
                         pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
-            return pin_to_extent_by_type(t, std::move(pin), type
+            return read_pin_by_type(t, std::move(pin), type
             ).si_then([&list](auto ret) {
               list.emplace_back(std::move(ret));
               return seastar::now();
@@ -686,7 +741,7 @@ TransactionManagerRef make_transaction_manager(
 		->get_journal_size() - primary_device->get_block_size();
     // see CircularBoundedJournal::get_records_start()
     roll_start = static_cast<random_block_device::RBMDevice*>(primary_device)
-		 ->get_journal_start() + primary_device->get_block_size();
+		 ->get_shard_journal_start() + primary_device->get_block_size();
     ceph_assert_always(roll_size <= DEVICE_OFF_MAX);
     ceph_assert_always((std::size_t)roll_size + roll_start <=
                        primary_device->get_available_size());

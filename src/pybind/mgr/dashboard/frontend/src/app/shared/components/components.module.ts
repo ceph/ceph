@@ -13,7 +13,7 @@ import {
   NgbTooltipModule
 } from '@ng-bootstrap/ng-bootstrap';
 import { ClickOutsideModule } from 'ng-click-outside';
-import { ChartsModule } from 'ng2-charts';
+import { NgChartsModule } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -49,6 +49,10 @@ import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { TelemetryNotificationComponent } from './telemetry-notification/telemetry-notification.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
 import { WizardComponent } from './wizard/wizard.component';
+import { CardComponent } from './card/card.component';
+import { CardRowComponent } from './card-row/card-row.component';
+import { CodeBlockComponent } from './code-block/code-block.component';
+import { VerticalNavigationComponent } from './vertical-navigation/vertical-navigation.component';
 
 @NgModule({
   imports: [
@@ -59,7 +63,7 @@ import { WizardComponent } from './wizard/wizard.component';
     NgbPopoverModule,
     NgbProgressbarModule,
     NgbTooltipModule,
-    ChartsModule,
+    NgChartsModule,
     ReactiveFormsModule,
     PipesModule,
     DirectivesModule,
@@ -101,7 +105,11 @@ import { WizardComponent } from './wizard/wizard.component';
     WizardComponent,
     CustomLoginBannerComponent,
     CdLabelComponent,
-    ColorClassFromTextPipe
+    ColorClassFromTextPipe,
+    CardComponent,
+    CardRowComponent,
+    CodeBlockComponent,
+    VerticalNavigationComponent
   ],
   providers: [],
   exports: [
@@ -131,7 +139,11 @@ import { WizardComponent } from './wizard/wizard.component';
     MotdComponent,
     WizardComponent,
     CustomLoginBannerComponent,
-    CdLabelComponent
+    CdLabelComponent,
+    CardComponent,
+    CardRowComponent,
+    CodeBlockComponent,
+    VerticalNavigationComponent
   ]
 })
 export class ComponentsModule {}

@@ -20,6 +20,7 @@
 
 #pragma once
 
+#include <optional>
 #include "rgw_zone_types.h"
 #include "rgw_bucket_types.h"
 #include "rgw_obj_types.h"
@@ -54,6 +55,14 @@ public:
       raw_obj = rhs.raw_obj;
     } else {
       obj = rhs.obj;
+    }
+  }
+
+  std::optional<rgw_obj> get_head_obj() const {
+    if (is_raw) {
+      return std::nullopt;
+    } else {
+      return obj;
     }
   }
 
@@ -154,6 +163,7 @@ struct RGWObjManifestRule {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWObjManifestRule*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
@@ -180,6 +190,7 @@ struct RGWObjTier {
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const;
+    static void generate_test_instances(std::list<RGWObjTier*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjTier)
 
@@ -545,6 +556,14 @@ public:
       return ofs;
     }
 
+    const std::string& get_cur_override_prefix() const {
+      return cur_override_prefix;
+    }
+
+    int get_cur_part_id() const {
+      return cur_part_id;
+    }
+
     /* stripe number */
     int get_cur_stripe() const {
       return cur_stripe;
@@ -576,6 +595,8 @@ public:
   obj_iterator obj_find(const DoutPrefixProvider *dpp, uint64_t ofs) const {
     return obj_iterator{dpp, this, std::min(ofs, obj_size)};
   }
+  // return an iterator to the beginning of the given part number
+  obj_iterator obj_find_part(const DoutPrefixProvider *dpp, int part_num) const;
 
   /*
    * simple object generator. Using a simple single rule manifest.

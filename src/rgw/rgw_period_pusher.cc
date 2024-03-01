@@ -175,7 +175,7 @@ RGWPeriodPusher::RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::Driver
   // always send out the current period on startup
   RGWPeriod period;
   // XXX dang
-  int r = period.init(dpp, cct, static_cast<rgw::sal::RadosStore* >(driver)->svc()->sysobj, realm_id, y, zone->get_realm_name());
+  int r = period.init(dpp, cct, static_cast<rgw::sal::RadosStore* >(driver)->svc()->sysobj, realm_id, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to load period for realm " << realm_id << dendl;
     return;

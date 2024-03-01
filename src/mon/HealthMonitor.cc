@@ -356,7 +356,7 @@ out:
 
   if (r >= 0) {
     // success.. delay reply
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
     return true;
   } else {
@@ -400,7 +400,7 @@ void HealthMonitor::tick()
 
 bool HealthMonitor::check_mutes()
 {
-  bool changed = true;
+  bool changed = false;
   auto now = ceph_clock_now();
   health_check_map_t all;
   gather_all_health_checks(&all);

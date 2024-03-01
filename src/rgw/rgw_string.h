@@ -230,6 +230,6 @@ static constexpr uint32_t MATCH_CASE_INSENSITIVE = 0x01;
 
 /// attempt to match the given input string with the pattern, which may contain
 /// the wildcard characters * and ?
-extern bool match_wildcards(std::string_view pattern,
-                            std::string_view input,
+extern bool match_wildcards(const std::string& pattern,
+                            const std::string& input,
                             uint32_t flags = 0);

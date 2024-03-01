@@ -550,46 +550,56 @@ class TestMonSnapsAndFsPools(CephFSTestCase):
         with self.assertRaises(CommandFailedError):
             self.fs.rados(["mksnap", "snap2"], pool=self.fs.get_metadata_pool_name())
 
+        with self.assertRaises(CommandFailedError):
+            test_pool_name = self.fs.get_data_pool_name()
+            base_cmd = f'osd pool mksnap {test_pool_name} snap3'
+            self.run_ceph_cmd(base_cmd)
+
+        with self.assertRaises(CommandFailedError):
+            test_pool_name = self.fs.get_metadata_pool_name()
+            base_cmd = f'osd pool mksnap {test_pool_name} snap4'
+            self.run_ceph_cmd(base_cmd)
+
     def test_attaching_pools_with_snaps_to_fs_fails(self):
         """
         Test that attempt to attach pool with snapshots to an fs fails
         """
         test_pool_name = 'snap-test-pool'
         base_cmd = f'osd pool create {test_pool_name}'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         self.assertEqual(ret, 0)
 
         self.fs.rados(["mksnap", "snap3"], pool=test_pool_name)
 
         base_cmd = f'fs add_data_pool {self.fs.name} {test_pool_name}'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         self.assertEqual(ret, errno.EOPNOTSUPP)
 
         # cleanup
         self.fs.rados(["rmsnap", "snap3"], pool=test_pool_name)
         base_cmd = f'osd pool delete {test_pool_name}'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
 
     def test_using_pool_with_snap_fails_fs_creation(self):
         """
         Test that using a pool with snaps for fs creation fails
         """
         base_cmd = 'osd pool create test_data_pool'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         self.assertEqual(ret, 0)
         base_cmd = 'osd pool create test_metadata_pool'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         self.assertEqual(ret, 0)
 
         self.fs.rados(["mksnap", "snap4"], pool='test_data_pool')
 
         base_cmd = 'fs new testfs test_metadata_pool test_data_pool'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         self.assertEqual(ret, errno.EOPNOTSUPP)
 
         # cleanup
         self.fs.rados(["rmsnap", "snap4"], pool='test_data_pool')
         base_cmd = 'osd pool delete test_data_pool'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         base_cmd = 'osd pool delete test_metadata_pool'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)

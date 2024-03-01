@@ -114,8 +114,8 @@ void update_meta(lr::ObjectWriteOperation* op, const fifo::objv& objv,
   um.head_part_num = update.head_part_num();
   um.min_push_part_num = update.min_push_part_num();
   um.max_push_part_num = update.max_push_part_num();
-  um.journal_entries_add = std::move(update).journal_entries_add();
-  um.journal_entries_rm = std::move(update).journal_entries_rm();
+  um.journal_entries_add = update.journal_entries_add();
+  um.journal_entries_rm = update.journal_entries_rm();
 
   cb::list in;
   encode(um, in);
@@ -547,7 +547,8 @@ void FIFO::_update_meta(const DoutPrefixProvider *dpp, const fifo::update& updat
   update_meta(&op, info.version, update);
   auto updater = std::make_unique<Updater>(dpp, this, c, update, version, pcanceled,
 					   tid);
-  auto r = ioctx.aio_operate(oid, Updater::call(std::move(updater)), &op);
+  [[maybe_unused]] auto r =
+      ioctx.aio_operate(oid, Updater::call(std::move(updater)), &op);
   assert(r >= 0);
 }
 
@@ -1296,8 +1297,9 @@ void FIFO::read_meta(const DoutPrefixProvider *dpp, std::uint64_t tid, lr::AioCo
   encode(gm, in);
   auto reader = std::make_unique<Reader>(dpp, this, c, tid);
   auto rp = reader.get();
-  auto r = ioctx.aio_exec(oid, Reader::call(std::move(reader)), fifo::op::CLASS,
-			  fifo::op::GET_META, in, &rp->bl);
+  [[maybe_unused]] auto r = ioctx.aio_exec(
+      oid, Reader::call(std::move(reader)), fifo::op::CLASS, fifo::op::GET_META,
+      in, &rp->bl);
   assert(r >= 0);
 }
 

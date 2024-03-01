@@ -22,6 +22,27 @@ void set_event_id(std::string& id, const std::string& hash, const utime_t& ts) {
   }
 }
 
+void rgw_s3_key_filter::dump(Formatter *f) const {
+  if (!prefix_rule.empty()) {
+    f->open_object_section("FilterRule");
+    ::encode_json("Name", "prefix", f);
+    ::encode_json("Value", prefix_rule, f);
+    f->close_section();
+  }
+  if (!suffix_rule.empty()) {
+    f->open_object_section("FilterRule");
+    ::encode_json("Name", "suffix", f);
+    ::encode_json("Value", suffix_rule, f);
+    f->close_section();
+  }
+  if (!regex_rule.empty()) {
+    f->open_object_section("FilterRule");
+    ::encode_json("Name", "regex", f);
+    ::encode_json("Value", regex_rule, f);
+    f->close_section();
+  }
+}
+
 bool rgw_s3_key_filter::decode_xml(XMLObj* obj) {
   XMLObjIter iter = obj->find("FilterRule");
   XMLObj *o;
@@ -75,6 +96,15 @@ bool rgw_s3_key_filter::has_content() const {
     return !(prefix_rule.empty() && suffix_rule.empty() && regex_rule.empty());
 }
 
+void rgw_s3_key_value_filter::dump(Formatter *f) const {
+  for (const auto& key_value : kv) {
+    f->open_object_section("FilterRule");
+    ::encode_json("Name", key_value.first, f);
+    ::encode_json("Value", key_value.second, f);
+    f->close_section();
+  }
+}
+
 bool rgw_s3_key_value_filter::decode_xml(XMLObj* obj) {
   kv.clear();
   XMLObjIter iter = obj->find("FilterRule");
@@ -104,6 +134,12 @@ void rgw_s3_key_value_filter::dump_xml(Formatter *f) const {
 
 bool rgw_s3_key_value_filter::has_content() const {
     return !kv.empty();
+}
+
+void rgw_s3_filter::dump(Formatter *f) const {
+  encode_json("S3Key", key_filter, f);
+  encode_json("S3Metadata", metadata_filter, f);
+  encode_json("S3Tags", tag_filter, f);
 }
 
 bool rgw_s3_filter::decode_xml(XMLObj* obj) {
@@ -301,6 +337,7 @@ void rgw_pubsub_topic::dump(Formatter *f) const
   encode_json("dest", dest, f);
   encode_json("arn", arn, f);
   encode_json("opaqueData", opaque_data, f);
+  encode_json("policy", policy_text, f);
 }
 
 void rgw_pubsub_topic::dump_xml(Formatter *f) const
@@ -310,6 +347,7 @@ void rgw_pubsub_topic::dump_xml(Formatter *f) const
   encode_xml("EndPoint", dest, f);
   encode_xml("TopicArn", arn, f);
   encode_xml("OpaqueData", opaque_data, f);
+  encode_xml("Policy", policy_text, f);
 }
 
 void encode_xml_key_value_entry(const std::string& key, const std::string& value, Formatter *f) {
@@ -329,6 +367,7 @@ void rgw_pubsub_topic::dump_xml_as_attributes(Formatter *f) const
   encode_xml_key_value_entry("EndPoint", dest.to_json_str(), f);
   encode_xml_key_value_entry("TopicArn", arn, f);
   encode_xml_key_value_entry("OpaqueData", opaque_data, f);
+  encode_xml_key_value_entry("Policy", policy_text, f);
   f->close_section(); // Attributes
 }
 
@@ -343,13 +382,15 @@ void encode_json(const char *name, const rgw::notify::EventTypeList& l, Formatte
 
 void rgw_pubsub_topic_filter::dump(Formatter *f) const
 {
-  encode_json("topic", topic, f);
-  encode_json("events", events, f);
+  encode_json("TopicArn", topic.arn, f);
+  encode_json("Id", s3_id, f);
+  encode_json("Events", events, f);
+  encode_json("Filter", s3_filter, f);
 }
 
 void rgw_pubsub_bucket_topics::dump(Formatter *f) const
 {
-  Formatter::ArraySection s(*f, "topics");
+  Formatter::ArraySection s(*f, "notifications");
   for (auto& t : topics) {
     encode_json(t.first.c_str(), t.second, f);
   }
@@ -359,7 +400,10 @@ void rgw_pubsub_topics::dump(Formatter *f) const
 {
   Formatter::ArraySection s(*f, "topics");
   for (auto& t : topics) {
-    encode_json(t.first.c_str(), t.second, f);
+    auto& topic = t.second;
+    if (topic.name == topic.dest.arn_topic) {
+      encode_json(t.first.c_str(), topic, f);
+    }
   }
 }
 
@@ -372,24 +416,36 @@ void rgw_pubsub_topics::dump_xml(Formatter *f) const
 
 void rgw_pubsub_dest::dump(Formatter *f) const
 {
+  using rgw::notify::DEFAULT_GLOBAL_VALUE;
+  using rgw::notify::DEFAULT_CONFIG;
   encode_json("push_endpoint", push_endpoint, f);
   encode_json("push_endpoint_args", push_endpoint_args, f);
   encode_json("push_endpoint_topic", arn_topic, f);
   encode_json("stored_secret", stored_secret, f);
   encode_json("persistent", persistent, f);
+  encode_json("time_to_live", time_to_live!=DEFAULT_GLOBAL_VALUE? std::to_string(time_to_live): DEFAULT_CONFIG, f);
+  encode_json("max_retries", max_retries!=DEFAULT_GLOBAL_VALUE? std::to_string(max_retries): DEFAULT_CONFIG, f);
+  encode_json("retry_sleep_duration", retry_sleep_duration!=DEFAULT_GLOBAL_VALUE? std::to_string(retry_sleep_duration): DEFAULT_CONFIG, f);
 }
 
 void rgw_pubsub_dest::dump_xml(Formatter *f) const
 {
+  using rgw::notify::DEFAULT_GLOBAL_VALUE;
+  using rgw::notify::DEFAULT_CONFIG;
   encode_xml("EndpointAddress", push_endpoint, f);
   encode_xml("EndpointArgs", push_endpoint_args, f);
   encode_xml("EndpointTopic", arn_topic, f);
   encode_xml("HasStoredSecret", stored_secret, f);
   encode_xml("Persistent", persistent, f);
+  encode_xml("TimeToLive", time_to_live!=DEFAULT_GLOBAL_VALUE? std::to_string(time_to_live): DEFAULT_CONFIG, f);
+  encode_xml("MaxRetries", max_retries!=DEFAULT_GLOBAL_VALUE? std::to_string(max_retries): DEFAULT_CONFIG, f);
+  encode_xml("RetrySleepDuration", retry_sleep_duration!=DEFAULT_GLOBAL_VALUE? std::to_string(retry_sleep_duration): DEFAULT_CONFIG, f);
 }
 
 std::string rgw_pubsub_dest::to_json_str() const
 {
+  using rgw::notify::DEFAULT_GLOBAL_VALUE;
+  using rgw::notify::DEFAULT_CONFIG;
   JSONFormatter f;
   f.open_object_section("");
   encode_json("EndpointAddress", push_endpoint, &f);
@@ -397,6 +453,9 @@ std::string rgw_pubsub_dest::to_json_str() const
   encode_json("EndpointTopic", arn_topic, &f);
   encode_json("HasStoredSecret", stored_secret, &f);
   encode_json("Persistent", persistent, &f);
+  encode_json("TimeToLive", time_to_live!=DEFAULT_GLOBAL_VALUE? std::to_string(time_to_live): DEFAULT_CONFIG, &f);
+  encode_json("MaxRetries", max_retries!=DEFAULT_GLOBAL_VALUE? std::to_string(max_retries): DEFAULT_CONFIG, &f);
+  encode_json("RetrySleepDuration", retry_sleep_duration!=DEFAULT_GLOBAL_VALUE? std::to_string(retry_sleep_duration): DEFAULT_CONFIG, &f);
   f.close_section();
   std::stringstream ss;
   f.flush(ss);
@@ -472,6 +531,35 @@ int RGWPubSub::get_topic(const DoutPrefixProvider *dpp, const std::string& name,
   return 0;
 }
 
+// from list of bucket topics, find the one that was auto-generated by a notification
+auto find_unique_topic(const rgw_pubsub_bucket_topics &bucket_topics, const std::string &notification_id) {
+  auto it = std::find_if(bucket_topics.topics.begin(), bucket_topics.topics.end(),
+                         [&](const auto& val) { return notification_id == val.second.s3_id; });
+  return it != bucket_topics.topics.end() ?
+         std::optional<std::reference_wrapper<const rgw_pubsub_topic_filter>>(it->second):
+         std::nullopt;
+}
+
+int RGWPubSub::Bucket::get_notification_by_id(const DoutPrefixProvider *dpp, const std::string& notification_id,
+                                              rgw_pubsub_topic_filter& result, optional_yield y) const {
+  rgw_pubsub_bucket_topics bucket_topics;
+  const int ret = read_topics(dpp, bucket_topics, nullptr, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to read bucket_topics info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  auto iter = find_unique_topic(bucket_topics, notification_id);
+  if (!iter) {
+    ldpp_dout(dpp, 1) << "ERROR: notification was not found" << dendl;
+    return -ENOENT;
+  }
+
+  result = iter->get();
+  return 0;
+}
+
+
 int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, 
     const rgw::notify::EventTypeList& events, optional_yield y) const {
   return create_notification(dpp, topic_name, events, std::nullopt, "", y);
@@ -521,6 +609,12 @@ int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const 
 
 int RGWPubSub::Bucket::remove_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, optional_yield y) const
 {
+  return remove_notification_inner(dpp, topic_name, false, y);
+}
+
+int RGWPubSub::Bucket::remove_notification_inner(const DoutPrefixProvider *dpp, const std::string& notification_id,
+                                  bool is_notification_id, optional_yield y) const
+{
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_bucket_topics bucket_topics;
 
@@ -530,7 +624,18 @@ int RGWPubSub::Bucket::remove_notification(const DoutPrefixProvider *dpp, const 
     return ret;
   }
 
-  if (bucket_topics.topics.erase(topic_name) == 0) {
+
+  std::unique_ptr<std::string> topic_name = std::make_unique<std::string>(notification_id);
+  if(is_notification_id) {
+    auto iter = find_unique_topic(bucket_topics, notification_id);
+    if (!iter) {
+      ldpp_dout(dpp, 1) << "ERROR: notification was not found" << dendl;
+      return -ENOENT;
+    }
+    topic_name = std::make_unique<std::string>(iter->get().topic.name);
+  }
+
+  if (bucket_topics.topics.erase(*topic_name) == 0) {
     ldpp_dout(dpp, 1) << "INFO: no need to remove, topic does not exist" << dendl;
     return 0;
   }
@@ -555,6 +660,11 @@ int RGWPubSub::Bucket::remove_notification(const DoutPrefixProvider *dpp, const 
   return 0;
 }
 
+int RGWPubSub::Bucket::remove_notification_by_id(const DoutPrefixProvider *dpp, const std::string& notif_id, optional_yield y) const
+{
+  return remove_notification_inner(dpp, notif_id, true, y);
+}
+
 int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optional_yield y) const
 {
   // get all topics on a bucket
@@ -565,7 +675,7 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
     return ret ;
   }
 
-  // remove all auto-genrated topics
+  // remove all auto-generated topics
   for (const auto& topic : bucket_topics.topics) {
     const auto& topic_name = topic.first;
     ret = ps.remove_topic(dpp, topic_name, y);
@@ -584,12 +694,13 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
   return 0;
 }
 
-int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const {
-  return create_topic(dpp, name, rgw_pubsub_dest{}, "", "", y);
-}
-
-int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& name, const rgw_pubsub_dest& dest, 
-    const std::string& arn, const std::string& opaque_data, optional_yield y) const {
+int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
+                            const std::string& name,
+                            const rgw_pubsub_dest& dest, const std::string& arn,
+                            const std::string& opaque_data,
+                            const rgw_user& user,
+                            const std::string& policy_text,
+                            optional_yield y) const {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
 
@@ -601,11 +712,12 @@ int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& na
   }
  
   rgw_pubsub_topic& new_topic = topics.topics[name];
-  new_topic.user = rgw_user("", tenant);
+  new_topic.user = user;
   new_topic.name = name;
   new_topic.dest = dest;
   new_topic.arn = arn;
   new_topic.opaque_data = opaque_data;
+  new_topic.policy_text = policy_text;
 
   ret = write_topics(dpp, topics, &objv_tracker, y);
   if (ret < 0) {

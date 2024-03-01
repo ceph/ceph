@@ -72,6 +72,9 @@ using namespace std;
 // Wait for wmi events up to two seconds
 #define WMI_EVENT_TIMEOUT 2
 
+static WnbdHandler* handler = nullptr;
+static ceph::mutex shutdown_lock = ceph::make_mutex("RbdWnbd::ShutdownLock");
+
 bool is_process_running(DWORD pid)
 {
   HANDLE process = OpenProcess(SYNCHRONIZE, FALSE, pid);
@@ -313,8 +316,11 @@ int send_map_request(std::string arguments) {
     return -EINVAL;
   }
   if (reply.status) {
-    derr << "The ceph service failed to map the image. Error: "
-         << reply.status << dendl;
+    derr << "The ceph service failed to map the image. "
+         << "Check the log file or pass '-f' (foreground mode) "
+         << "for additional information. "
+         << "Error: " << cpp_strerror(reply.status)
+         << dendl;
   }
 
   return reply.status;
@@ -325,7 +331,7 @@ int send_map_request(std::string arguments) {
 // which will allow it to communicate the mapping status
 int map_device_using_suprocess(std::string arguments, int timeout_ms)
 {
-  STARTUPINFO si;
+  STARTUPINFOW si;
   PROCESS_INFORMATION pi;
   char ch;
   DWORD err = 0, status = 0;
@@ -401,11 +407,12 @@ int map_device_using_suprocess(std::string arguments, int timeout_ms)
 
   dout(5) << __func__ << ": command line: " << command_line.str() << dendl;
 
-  GetStartupInfo(&si);
+  GetStartupInfoW(&si);
   // Create a detached child
-  if (!CreateProcess(NULL, (char*)command_line.str().c_str(),
-                     NULL, NULL, FALSE, DETACHED_PROCESS,
-                     NULL, NULL, &si, &pi)) {
+  if (!CreateProcessW(
+      NULL, const_cast<wchar_t*>(to_wstring(command_line.str()).c_str()),
+      NULL, NULL, FALSE, DETACHED_PROCESS,
+      NULL, NULL, &si, &pi)) {
     err = GetLastError();
     derr << "CreateProcess failed: " << win32_strerror(err) << dendl;
     exit_code = -ECHILD;
@@ -419,7 +426,7 @@ int map_device_using_suprocess(std::string arguments, int timeout_ms)
     case WAIT_OBJECT_0:
       if (!GetOverlappedResult(pipe_handle, &connect_o, &bytes_read, TRUE)) {
         err = GetLastError();
-        derr << "Couln't establish a connection with the child process. "
+        derr << "Couldn't establish a connection with the child process. "
              << "Error: " << win32_strerror(err) << dendl;
         exit_code = -ECHILD;
         goto clean_process;
@@ -479,6 +486,13 @@ int map_device_using_suprocess(std::string arguments, int timeout_ms)
   clean_process:
     if (!is_process_running(pi.dwProcessId)) {
       GetExitCodeProcess(pi.hProcess, (PDWORD)&exit_code);
+      if (!exit_code) {
+        // Child terminated unexpectedly.
+        exit_code = -ECHILD;
+      } else if (exit_code > 0) {
+        // Make sure to return a negative error code.
+        exit_code = -exit_code;
+      }
       derr << "Daemon failed with: " << cpp_strerror(exit_code) << dendl;
     } else {
       // The process closed the pipe without notifying us or exiting.
@@ -746,8 +760,8 @@ class RBDService : public ServiceBase {
 
     std::thread adapter_monitor_thread;
 
-    ceph::mutex start_lock = ceph::make_mutex("RBDService::StartLocker");
-    ceph::mutex shutdown_lock = ceph::make_mutex("RBDService::ShutdownLocker");
+    ceph::mutex start_hook_lock = ceph::make_mutex("RBDService::StartLocker");
+    ceph::mutex stop_hook_lock = ceph::make_mutex("RBDService::ShutdownLocker");
     bool started = false;
     std::atomic<bool> stop_requsted = false;
 
@@ -973,7 +987,7 @@ exit:
     }
 
     int run_hook() override {
-      std::unique_lock l{start_lock};
+      std::unique_lock l{start_hook_lock};
       if (started) {
         // The run hook is only supposed to be called once per process,
         // however we're staying cautious.
@@ -995,7 +1009,8 @@ exit:
       }
 
       if (adapter_monitoring_enabled) {
-        adapter_monitor_thread = std::thread(&monitor_wnbd_adapter, this);
+        adapter_monitor_thread = std::thread(
+          &RBDService::monitor_wnbd_adapter, this);
       } else {
         dout(0) << "WNBD adapter monitoring disabled." << dendl;
       }
@@ -1005,7 +1020,7 @@ exit:
 
     // Invoked when the service is requested to stop.
     int stop_hook() override {
-      std::unique_lock l{shutdown_lock};
+      std::unique_lock l{stop_hook_lock};
 
       stop_requsted = true;
 
@@ -1086,13 +1101,13 @@ Unmap options:
   --soft-disconnect-timeout   Soft disconnect timeout in seconds. The soft
                               disconnect operation uses PnP to notify the
                               Windows storage stack that the device is going to
-                              be disconnectd. Storage drivers can block this
+                              be disconnected. Storage drivers can block this
                               operation if there are pending operations,
                               unflushed caches or open handles. Default: 15
 
 Service options:
   --hard-disconnect             Skip attempting a soft disconnect
-  --soft-disconnect-timeout     Cummulative soft disconnect timeout in seconds,
+  --soft-disconnect-timeout     Cumulative soft disconnect timeout in seconds,
                                 used when disconnecting existing mappings. A hard
                                 disconnect will be issued when hitting the timeout
   --service-thread-count        The number of workers used when mapping or
@@ -1194,6 +1209,28 @@ boost::intrusive_ptr<CephContext> do_global_init(
   return cct;
 }
 
+// Wait for the mapped disk to become available.
+static int wait_mapped_disk(Config *cfg)
+{
+  DWORD status = WnbdPollDiskNumber(
+    cfg->devpath.c_str(),
+    TRUE, // ExpectMapped
+    TRUE, // TryOpen
+    cfg->image_map_timeout,
+    DISK_STATUS_POLLING_INTERVAL_MS,
+    (PDWORD) &cfg->disk_number);
+  if (status) {
+    derr << "WNBD disk unavailable, error: "
+         << win32_strerror(status) << dendl;
+    return -EINVAL;
+  }
+  dout(0) << "Successfully mapped image: " << cfg->devpath
+          << ". Windows disk path: "
+          << "\\\\.\\PhysicalDrive" + std::to_string(cfg->disk_number)
+          << dendl;
+  return 0;
+}
+
 static int do_map(Config *cfg)
 {
   int r;
@@ -1207,7 +1244,12 @@ static int do_map(Config *cfg)
   int err = 0;
 
   if (g_conf()->daemonize && cfg->parent_pipe.empty()) {
-    return send_map_request(get_cli_args());
+    r = send_map_request(get_cli_args());
+    if (r < 0) {
+      return r;
+    }
+
+    return wait_mapped_disk(cfg);
   }
 
   dout(0) << "Mapping RBD image: " << cfg->devpath << dendl;
@@ -1290,6 +1332,13 @@ static int do_map(Config *cfg)
   r = handler->start();
   if (r) {
     r = r == ERROR_ALREADY_EXISTS ? -EEXIST : -EINVAL;
+    goto close_ret;
+  }
+
+  // TODO: consider substracting the time it took to perform the
+  // above operations from cfg->image_map_timeout in wait_mapped_disk().
+  r = wait_mapped_disk(cfg);
+  if (r < 0) {
     goto close_ret;
   }
 
@@ -1633,10 +1682,6 @@ static int parse_args(std::vector<const char*>& args,
         *err_msg << "rbd-wnbd: " << err.str();
         return -EINVAL;
       }
-      if (cfg->wnbd_log_level < 0) {
-        *err_msg << "rbd-wnbd: Invalid argument for wnbd-log-level";
-        return -EINVAL;
-      }
     } else if (ceph_argparse_witharg(args, i, (int*)&cfg->io_req_workers,
                                      err, "--io-req-workers", (char *)NULL)) {
       if (!err.str().empty()) {
@@ -1860,6 +1905,8 @@ int main(int argc, const char *argv[])
   SetConsoleCtrlHandler(console_handler_routine, true);
   // Avoid the Windows Error Reporting dialog.
   SetErrorMode(GetErrorMode() | SEM_NOGPFAULTERRORBOX);
+  SetConsoleOutputCP(CP_UTF8);
+
   int r = rbd_wnbd(argc, argv);
   if (r < 0) {
     return r;

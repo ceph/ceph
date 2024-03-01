@@ -176,9 +176,9 @@ export class GrafanaComponent implements OnInit, OnChanges {
     if (this.type === 'metrics') {
       this.url = `${this.baseUrl}${this.uid}/${this.grafanaPath}&refresh=2s&var-datasource=${this.datasource}${this.mode}&${this.time}`;
     } else {
-      this.url = `${this.baseUrl.slice(0, -2)}${this.grafanaPath}orgId=1&left=["now-1h","now","${
+      this.url = `${this.baseUrl.slice(0, -2)}${this.grafanaPath}orgId=1&left={"datasource": "${
         this.datasource
-      }",{"refId":"A"}]${this.mode}`;
+      }", "queries": [{"refId": "A"}], "range": {"from": "now-1h", "to": "now"}}${this.mode}`;
     }
     this.grafanaSrc = this.sanitizer.bypassSecurityTrustResourceUrl(this.url);
   }

@@ -39,6 +39,8 @@ public:
    * Fetches mappings for laddr_t in range [offset, offset + len)
    *
    * Future will not resolve until all pins have resolved (set_paddr called)
+   * For indirect lba mappings, get_mappings will always retrieve the original
+   * lba value.
    */
   using get_mappings_iertr = base_iertr;
   using get_mappings_ret = get_mappings_iertr::future<lba_pin_list_t>;
@@ -50,6 +52,8 @@ public:
    * Fetches mappings for a list of laddr_t in range [offset, offset + len)
    *
    * Future will not resolve until all pins have resolved (set_paddr called)
+   * For indirect lba mappings, get_mappings will always retrieve the original
+   * lba value.
    */
   virtual get_mappings_ret get_mappings(
     Transaction &t,
@@ -59,10 +63,12 @@ public:
    * Fetches the mapping for laddr_t
    *
    * Future will not resolve until the pin has resolved (set_paddr called)
+   * For indirect lba mappings, get_mapping will always retrieve the original
+   * lba value.
    */
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  using get_mapping_ret = get_mapping_iertr::future<LBAPinRef>;
+  using get_mapping_ret = get_mapping_iertr::future<LBAMappingRef>;
   virtual get_mapping_ret get_mapping(
     Transaction &t,
     laddr_t offset) = 0;
@@ -72,19 +78,33 @@ public:
    *
    * Offset will be relative to the block offset of the record
    * This mapping will block from transaction submission until set_paddr
-   * is called on the LBAPin.
+   * is called on the LBAMapping.
    */
   using alloc_extent_iertr = base_iertr;
-  using alloc_extent_ret = alloc_extent_iertr::future<LBAPinRef>;
+  using alloc_extent_ret = alloc_extent_iertr::future<LBAMappingRef>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
-    paddr_t addr) = 0;
+    paddr_t addr,
+    LogicalCachedExtent &nextent) = 0;
+
+  virtual alloc_extent_ret clone_mapping(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len,
+    laddr_t intermediate_key,
+    paddr_t actual_addr,
+    laddr_t intermediate_base) = 0;
+
+  virtual alloc_extent_ret reserve_region(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len) = 0;
 
   struct ref_update_result_t {
     unsigned refcount = 0;
-    paddr_t addr;
+    pladdr_t addr;
     extent_len_t length = 0;
   };
   using ref_iertr = base_iertr::extend<
@@ -98,7 +118,8 @@ public:
    */
   virtual ref_ret decref_extent(
     Transaction &t,
-    laddr_t addr) = 0;
+    laddr_t addr,
+    bool cascade_remove) = 0;
 
   /**
    * Increments ref count on extent
@@ -109,17 +130,19 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
-  virtual void complete_transaction(
+  /**
+   * Increments ref count on extent
+   *
+   * @return returns resulting refcount
+   */
+  virtual ref_ret incref_extent(
     Transaction &t,
-    std::vector<CachedExtentRef> &to_clear,	///< extents whose pins are to be cleared,
-						//   as the results of their retirements
-    std::vector<CachedExtentRef> &to_link	///< fresh extents whose pins are to be inserted
-						//   into backref manager's pin set
-  ) = 0;
+    laddr_t addr,
+    int delta) = 0;
 
   /**
    * Should be called after replay on each cached extent.
-   * Implementation must initialize the LBAPin on any
+   * Implementation must initialize the LBAMapping on any
    * LogicalCachedExtent's and may also read in any dependent
    * structures, etc.
    *
@@ -130,6 +153,9 @@ public:
   virtual init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) = 0;
+
+  using check_child_trackers_ret = base_iertr::future<>;
+  virtual check_child_trackers_ret check_child_trackers(Transaction &t) = 0;
 
   /**
    * Calls f for each mapping in [begin, end)
@@ -165,8 +191,11 @@ public:
   virtual update_mapping_ret update_mapping(
     Transaction& t,
     laddr_t laddr,
+    extent_len_t prev_len,
     paddr_t prev_addr,
-    paddr_t paddr) = 0;
+    extent_len_t len,
+    paddr_t paddr,
+    LogicalCachedExtent *nextent) = 0;
 
   /**
    * update_mappings
@@ -197,8 +226,6 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) = 0;
-
-  virtual void add_pin(LBAPin &pin) = 0;
 
   virtual ~LBAManager() {}
 };

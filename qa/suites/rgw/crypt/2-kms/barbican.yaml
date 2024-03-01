@@ -27,7 +27,11 @@ tasks:
 - tox: [ client.0 ]
 - keystone:
     client.0:
-      force-branch: stable/xena
+      force-branch: stable/2023.1
+      services:
+        - name: swift
+          type: object-store
+          description: Swift Service
       projects:
         - name: rgwcrypt
           description: Encryption Tenant
@@ -62,10 +66,6 @@ tasks:
         - name: creator
           user: s3-user
           project: s3
-      services:
-        - name: swift
-          type: object-store
-          description: Swift Service
 - barbican:
     client.0:
       force-branch: stable/xena

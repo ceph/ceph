@@ -152,7 +152,7 @@ class tree_cursor_t final
   eagain_ifuture<> trim_value(context_t, value_size_t);
 
   static Ref<tree_cursor_t> get_invalid() {
-    static Ref<tree_cursor_t> INVALID = new tree_cursor_t();
+    Ref<tree_cursor_t> INVALID = new tree_cursor_t();
     return INVALID;
   }
 

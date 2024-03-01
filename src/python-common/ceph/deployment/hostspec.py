@@ -16,6 +16,15 @@ def assert_valid_host(name: str) -> None:
         raise SpecValidationError(str(e) + f'. Got "{name}"')
 
 
+def assert_valid_oob(oob: Dict[str, str]) -> None:
+    fields = ['username', 'password']
+    try:
+        for field in fields:
+            assert field in oob.keys()
+    except AssertionError as e:
+        raise SpecValidationError(str(e))
+
+
 class SpecValidationError(Exception):
     """
     Defining an exception here is a bit problematic, cause you cannot properly catch it,
@@ -38,6 +47,7 @@ class HostSpec(object):
                  labels: Optional[List[str]] = None,
                  status: Optional[str] = None,
                  location: Optional[Dict[str, str]] = None,
+                 oob: Optional[Dict[str, str]] = None,
                  ):
         self.service_type = 'host'
 
@@ -55,8 +65,13 @@ class HostSpec(object):
 
         self.location = location
 
+        #: oob details, if provided
+        self.oob = oob
+
     def validate(self) -> None:
         assert_valid_host(self.hostname)
+        if self.oob:
+            assert_valid_oob(self.oob)
 
     def to_json(self) -> Dict[str, Any]:
         r: Dict[str, Any] = {
@@ -67,6 +82,8 @@ class HostSpec(object):
         }
         if self.location:
             r['location'] = self.location
+        if self.oob:
+            r['oob'] = self.oob
         return r
 
     @classmethod
@@ -79,6 +96,7 @@ class HostSpec(object):
                 host_spec['labels'])) if 'labels' in host_spec else None,
             host_spec['status'] if 'status' in host_spec else None,
             host_spec.get('location'),
+            host_spec['oob'] if 'oob' in host_spec else None,
         )
         return _cls
 

@@ -1,3 +1,5 @@
+.. _mon-dns-lookup:
+
 ===============================
 Looking up Monitors through DNS
 ===============================

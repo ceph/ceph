@@ -474,20 +474,16 @@ out:
 }
 
 int DB::create_bucket(const DoutPrefixProvider *dpp,
-    const RGWUserInfo& owner, rgw_bucket& bucket,
-    const string& zonegroup_id,
+    const rgw_user& owner, const rgw_bucket& bucket,
+    const std::string& zonegroup_id,
     const rgw_placement_rule& placement_rule,
-    const string& swift_ver_location,
-    const RGWQuotaInfo * pquota_info,
-    map<std::string, bufferlist>& attrs,
-    RGWBucketInfo& info,
-    obj_version *pobjv,
+    const std::map<std::string, bufferlist>& attrs,
+    const std::optional<std::string>& swift_ver_location,
+    const std::optional<RGWQuotaInfo>& quota,
+    std::optional<ceph::real_time> creation_time,
     obj_version *pep_objv,
-    real_time creation_time,
-    rgw_bucket *pmaster_bucket,
-    uint32_t *pmaster_num_shards,
-    optional_yield y,
-    bool exclusive)
+    RGWBucketInfo& info,
+    optional_yield y)
 {
   /*
    * XXX: Simple creation for now.
@@ -506,50 +502,48 @@ int DB::create_bucket(const DoutPrefixProvider *dpp,
   orig_info.bucket.name = bucket.name;
   ret = get_bucket_info(dpp, string("name"), "", orig_info, nullptr, nullptr, nullptr);
 
-  if (!ret && !orig_info.owner.id.empty() && exclusive) {
+  if (!ret && !orig_info.owner.id.empty()) {
     /* already exists. Return the old info */
-
     info = std::move(orig_info);
     return ret;
   }
 
   RGWObjVersionTracker& objv_tracker = info.objv_tracker;
-
   objv_tracker.read_version.clear();
+  objv_tracker.generate_new_write_ver(cct);
 
-  if (pobjv) {
-    objv_tracker.write_version = *pobjv;
-  } else {
-    objv_tracker.generate_new_write_ver(cct);
-  }
   params.op.bucket.bucket_version = objv_tracker.write_version;
   objv_tracker.read_version = params.op.bucket.bucket_version;
 
-  uint64_t bid = next_bucket_id();
-  string s = getDBname() + "." + std::to_string(bid);
-  bucket.marker = bucket.bucket_id = s;
-
   info.bucket = bucket;
-  info.owner = owner.user_id;
+  if (info.bucket.marker.empty()) {
+    uint64_t bid = next_bucket_id();
+    string s = getDBname() + "." + std::to_string(bid);
+    info.bucket.marker = info.bucket.bucket_id = s;
+  }
+
+  info.owner = owner;
   info.zonegroup = zonegroup_id;
   info.placement_rule = placement_rule;
-  info.swift_ver_location = swift_ver_location;
-  info.swift_versioning = (!swift_ver_location.empty());
+  if (swift_ver_location) {
+    info.swift_ver_location = *swift_ver_location;
+  }
+  info.swift_versioning = swift_ver_location.has_value();
 
   info.requester_pays = false;
-  if (real_clock::is_zero(creation_time)) {
-    info.creation_time = ceph::real_clock::now();
+  if (creation_time) {
+    info.creation_time = *creation_time;
   } else {
-    info.creation_time = creation_time;
+    info.creation_time = ceph::real_clock::now();
   }
-  if (pquota_info) {
-    info.quota = *pquota_info;
+  if (quota) {
+    info.quota = *quota;
   }
 
   params.op.bucket.info = info;
   params.op.bucket.bucket_attrs = attrs;
   params.op.bucket.mtime = ceph::real_time();
-  params.op.user.uinfo.user_id.id = owner.user_id.id;
+  params.op.user.uinfo.user_id.id = owner.id;
 
   ret = ProcessOp(dpp, "InsertBucket", &params);
 
@@ -1082,17 +1076,21 @@ int DB::Object::set_attrs(const DoutPrefixProvider *dpp,
   DBOpParams params = {};
   rgw::sal::Attrs *attrs;
   map<string, bufferlist>::iterator iter;
+  RGWObjState* state;
 
-  ret = get_object_impl(dpp, params);
+  store->InitializeParams(dpp, &params);
+  InitializeParamsfromObject(dpp, &params);
+  ret = get_state(dpp, &state, true);
 
-  if (ret) {
-    ldpp_dout(dpp, 0) <<"get_object_impl failed err:(" <<ret<<")" << dendl;
+  if (ret && !state->exists) {
+    ldpp_dout(dpp, 0) <<"get_state failed err:(" <<ret<<")" << dendl;
     goto out;
   }
 
   /* For now lets keep it simple..rmattrs & setattrs ..
    * XXX: Check rgw_rados::set_attrs
    */
+  params.op.obj.state = *state;
   attrs = &params.op.obj.state.attrset;
   if (rmattrs) {
     for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
@@ -1104,7 +1102,10 @@ int DB::Object::set_attrs(const DoutPrefixProvider *dpp,
   }
 
   params.op.query_str = "attrs";
-  params.op.obj.state.mtime = real_clock::now();
+  /* As per https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingMetadata.html, 
+   * the only way for users to modify object metadata is to make a copy of the object and
+   * set the metadata.
+   * Hence do not update mtime for any other attr changes */
 
   ret = store->ProcessOp(dpp, "UpdateObject", &params);
 
@@ -1427,7 +1428,7 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   if (r < 0)
     return r;
 
-  if (!astate->exists) {
+  if (!astate || !astate->exists) {
     return -ENOENT;
   }
 
@@ -1451,17 +1452,15 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   bool reading_from_head = (ofs < head_data_size);
 
   if (reading_from_head) {
-    if (astate) { // && astate->prefetch_data)?
-      if (!ofs && astate->data.length() >= len) {
-        bl = astate->data;
-        return bl.length();
-      }
+    if (!ofs && astate->data.length() >= len) {
+      bl = astate->data;
+      return bl.length();
+    }
 
-      if (ofs < astate->data.length()) {
-        unsigned copy_len = std::min((uint64_t)head_data_size - ofs, len);
-        astate->data.begin(ofs).copy(copy_len, bl);
-        return bl.length();
-      }
+    if (ofs < astate->data.length()) {
+      unsigned copy_len = std::min((uint64_t)head_data_size - ofs, len);
+      astate->data.begin(ofs).copy(copy_len, bl);
+      return bl.length();
     }
   }
 

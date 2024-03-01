@@ -1,5 +1,6 @@
 #include "DaemonMetricCollector.h"
 
+#include <boost/asio/io_context.hpp>
 #include <boost/json/src.hpp>
 #include <chrono>
 #include <filesystem>
@@ -7,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -42,7 +44,7 @@ void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
 void DaemonMetricCollector::main() {
   // time to wait before sending requests again
 
-  boost::asio::io_service io;
+  boost::asio::io_context io;
   boost::asio::steady_timer timer{io, std::chrono::seconds(0)};
   request_loop(timer);
   io.run();
@@ -79,8 +81,6 @@ std::string boost_string_to_std(boost::json::string js) {
 }
 
 std::string quote(std::string value) { return "\"" + value + "\""; }
-
-bool is_hyphen(char ch) { return ch == '-'; }
 
 void DaemonMetricCollector::dump_asok_metrics() {
   BlockTimer timer(__FILE__, __FUNCTION__);
@@ -120,41 +120,50 @@ void DaemonMetricCollector::dump_asok_metrics() {
     json_object counter_dump = boost::json::parse(counter_dump_response).as_object();
     json_object counter_schema = boost::json::parse(counter_schema_response).as_object();
 
-    for (auto &labeled_perf : counter_schema) {
-      std::string labeled_perf_group = {labeled_perf.key().begin(), labeled_perf.key().end()};
-      json_object labeled_perf_group_object = labeled_perf.value().as_object();
-      auto counters = labeled_perf_group_object["counters"].as_object();
-      auto counters_labels = labeled_perf_group_object["labels"].as_object();
-      auto labeled_perf_group_counters = counter_dump[labeled_perf_group].as_object()["counters"].as_object();
-      labels_t labels;
+    for (auto &perf_group_item : counter_schema) {
+      std::string perf_group = {perf_group_item.key().begin(),
+                                perf_group_item.key().end()};
+      json_array perf_group_schema_array = perf_group_item.value().as_array();
+      json_array perf_group_dump_array = counter_dump[perf_group].as_array();
+      for (auto schema_itr = perf_group_schema_array.begin(),
+                dump_itr = perf_group_dump_array.begin();
+           schema_itr != perf_group_schema_array.end() &&
+           dump_itr != perf_group_dump_array.end();
+           ++schema_itr, ++dump_itr) {
+        auto counters = schema_itr->at("counters").as_object();
+        auto counters_labels = schema_itr->at("labels").as_object();
+        auto counters_values = dump_itr->at("counters").as_object();
+        labels_t labels;
 
-      for(auto &label: counters_labels) {
-        std::string label_key = {label.key().begin(), label.key().end()};
-        labels[label_key] = quote(label.value().as_string().c_str());
-      }
-      for (auto &counter : counters) {
-        json_object counter_group = counter.value().as_object();
-        if (counter_group["priority"].as_int64() < prio_limit) {
-          continue;        
+        for (auto &label: counters_labels) {
+          std::string label_key = {label.key().begin(), label.key().end()};
+          labels[label_key] = quote(label.value().as_string().c_str());
         }
-        std::string counter_name_init =  {counter.key().begin(), counter.key().end()};
-        std::string counter_name = "ceph_" + labeled_perf_group + "_" + counter_name_init;
-        std::replace_if(counter_name.begin(), counter_name.end(), is_hyphen, '_');
+        for (auto &counter : counters) {
+          json_object counter_group = counter.value().as_object();
+          if (counter_group["priority"].as_int64() < prio_limit) {
+            continue;
+          }
+          std::string counter_name_init =  {counter.key().begin(), counter.key().end()};
+          std::string counter_name = perf_group + "_" + counter_name_init;
+          promethize(counter_name);
 
-        if (counters_labels.empty()) {
-          auto labels_and_name = get_labels_and_metric_name(daemon_name, counter_name);
-          labels = labels_and_name.first;
-          counter_name = labels_and_name.second;
+          auto extra_labels = get_extra_labels(daemon_name);
+          if (extra_labels.empty()) {
+            dout(1) << "Unable to parse instance_id from daemon_name: " << daemon_name << dendl;
+            continue;
+          }
+          labels.insert(extra_labels.begin(), extra_labels.end());
+
+          // For now this is only required for rgw multi-site metrics
+          auto multisite_labels_and_name = add_fixed_name_metrics(counter_name);
+          if (!multisite_labels_and_name.first.empty()) {
+            labels.insert(multisite_labels_and_name.first.begin(), multisite_labels_and_name.first.end());
+            counter_name = multisite_labels_and_name.second;
+          }
+          auto perf_values = counters_values.at(counter_name_init);
+          dump_asok_metric(counter_group, perf_values, counter_name, labels);
         }
-        // For now this is only required for rgw multi-site metrics
-        auto multisite_labels_and_name = add_fixed_name_metrics(counter_name);
-        if (!multisite_labels_and_name.first.empty()) {
-          labels.insert(multisite_labels_and_name.first.begin(), multisite_labels_and_name.first.end());
-          counter_name = multisite_labels_and_name.second;
-        }
-        labels.insert({"ceph_daemon", quote(daemon_name)});
-        auto perf_values = labeled_perf_group_counters.at(counter_name_init);
-        dump_asok_metric(counter_group, perf_values, counter_name, labels);
       }
     }
     std::string config_show =
@@ -279,12 +288,16 @@ std::string DaemonMetricCollector::asok_request(AdminSocketClient &asok,
   return response;
 }
 
-std::pair<labels_t, std::string>
-DaemonMetricCollector::get_labels_and_metric_name(std::string daemon_name,
-                                                  std::string metric_name) {
-  std::string new_metric_name;
+labels_t DaemonMetricCollector::get_extra_labels(std::string daemon_name) {
   labels_t labels;
-  new_metric_name = metric_name;
+  const std::string ceph_daemon_prefix = "ceph-";
+  const std::string ceph_client_prefix = "client.";
+  if (daemon_name.rfind(ceph_daemon_prefix, 0) == 0) {
+    daemon_name = daemon_name.substr(ceph_daemon_prefix.size());
+  }
+  if (daemon_name.rfind(ceph_client_prefix, 0) == 0) {
+    daemon_name = daemon_name.substr(ceph_client_prefix.size());
+  }
   // In vstart cluster socket files for rgw are stored as radosgw.<instance_id>.asok
   if (daemon_name.find("radosgw") != std::string::npos) {
     std::size_t pos = daemon_name.find_last_of('.');
@@ -292,23 +305,23 @@ DaemonMetricCollector::get_labels_and_metric_name(std::string daemon_name,
     labels["instance_id"] = quote(tmp);
   }
   else if (daemon_name.find("rgw") != std::string::npos) {
-    std::string tmp = daemon_name.substr(16, std::string::npos);
-    std::string::size_type pos = tmp.find('.');
-    labels["instance_id"] = quote("rgw." + tmp.substr(0, pos));
-  }
-  else if (daemon_name.find("rbd-mirror") != std::string::npos) {
-    std::regex re(
-        "^rbd_mirror_image_([^/]+)/(?:(?:([^/]+)/"
-        ")?)(.*)\\.(replay(?:_bytes|_latency)?)$");
-    std::smatch match;
-    if (std::regex_search(daemon_name, match, re) == true) {
-      new_metric_name = "ceph_rbd_mirror_image_" + match.str(4);
-      labels["pool"] = quote(match.str(1));
-      labels["namespace"] = quote(match.str(2));
-      labels["image"] = quote(match.str(3));
+    // fetch intance_id for e.g. "hrgsea" from daemon_name=rgw.foo.ceph-node-00.hrgsea.2.94739968030880
+    std::vector<std::string> elems;
+    std::stringstream ss;
+    ss.str(daemon_name);
+    std::string item;
+    while (std::getline(ss, item, '.')) {
+        elems.push_back(item);
     }
+    if (elems.size() >= 4) {
+      labels["instance_id"] = quote(elems[3]);
+    } else {
+      return labels_t();
+    }
+  } else {
+    labels.insert({"ceph_daemon", quote(daemon_name)});
   }
-  return {labels, new_metric_name};
+  return labels;
 }
 
 // Add fixed name metrics from existing ones that have details in their names
@@ -348,19 +361,11 @@ void DaemonMetricCollector::dump_asok_metric(json_object perf_info,
 
   if (type & PERFCOUNTER_LONGRUNAVG) {
     int64_t count = perf_values.as_object()["avgcount"].as_int64();
-    add_metric(builder, count, name + "_count", description, metric_type,
+    add_metric(builder, count, name + "_count", description + " Count", "counter",
                labels);
     json_value sum_value = perf_values.as_object()["sum"];
-    add_double_or_int_metric(builder, sum_value, name + "_sum", description,
+    add_double_or_int_metric(builder, sum_value, name + "_sum", description + " Total",
                              metric_type, labels);
-  } else if (type & PERFCOUNTER_TIME) {
-    if (perf_values.is_int64()) {
-      double value = perf_values.as_int64() / 1000000000.0f;
-      add_metric(builder, value, name, description, metric_type, labels);
-    } else if (perf_values.is_double()) {
-      double value = perf_values.as_double() / 1000000000.0f;
-      add_metric(builder, value, name, description, metric_type, labels);
-    }
   } else {
     add_double_or_int_metric(builder, perf_values, name, description,
                              metric_type, labels);

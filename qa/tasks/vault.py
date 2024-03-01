@@ -38,7 +38,7 @@ def assign_ports(ctx, config, initial_port):
 @contextlib.contextmanager
 def download(ctx, config):
     """
-    Download Vault Release from Hashicopr website.
+    Download Vault Release from Hashicorp website.
     Remove downloaded file upon exit.
     """
     assert isinstance(config, dict)

@@ -69,6 +69,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "s"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -93,7 +102,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -105,14 +114,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "sum by (instance_id) (\n  rate(ceph_rgw_get_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n    rate(ceph_rgw_get_initial_lat_count{job=~\"$job\"}[$__rate_interval])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "sum by (instance_id) (\n  rate(ceph_rgw_op_get_obj_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n    rate(ceph_rgw_op_get_obj_lat_count{job=~\"$job\"}[$__rate_interval])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GET {{ceph_daemon}}",
                "refId": "A"
             },
             {
-               "expr": "sum by (instance_id) (\n  rate(ceph_rgw_put_initial_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n    rate(ceph_rgw_put_initial_lat_count{job=~\"$job\"}[$__rate_interval])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "sum by (instance_id) (\n  rate(ceph_rgw_op_put_obj_lat_sum{job=~\"$job\"}[$__rate_interval]) /\n    rate(ceph_rgw_op_put_obj_lat_count{job=~\"$job\"}[$__rate_interval])\n) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUT {{ceph_daemon}}",
@@ -128,7 +137,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -162,6 +171,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "bytes"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -186,7 +204,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -198,14 +216,14 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "rate(ceph_rgw_get_b{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "rate(ceph_rgw_op_get_obj_bytes{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "GETs {{ceph_daemon}}",
                "refId": "A"
             },
             {
-               "expr": "rate(ceph_rgw_put_b{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon)\n  ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
+               "expr": "rate(ceph_rgw_op_put_obj_bytes{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon)\n  ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "PUTs {{ceph_daemon}}",
@@ -221,7 +239,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -261,6 +279,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "short"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -285,7 +312,7 @@
          "lines": true,
          "linewidth": 1,
          "links": [ ],
-         "nullPointMode": "null",
+         "nullPointMode": "null as zero",
          "percentage": false,
          "pointradius": 5,
          "points": false,
@@ -334,7 +361,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",

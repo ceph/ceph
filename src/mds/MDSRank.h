@@ -43,6 +43,7 @@
 #include "Server.h"
 #include "MetricsHandler.h"
 #include "osdc/Journaler.h"
+#include "MDSMetaRequest.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
@@ -253,6 +254,10 @@ class MDSRank {
       progress_thread.signal();
     }
 
+    uint64_t get_global_id() const {
+      return monc->get_global_id();
+    }
+
     // Daemon lifetime functions: these guys break the abstraction
     // and call up into the parent MDSDaemon instance.  It's kind
     // of unavoidable: if we want any depth into our calls 
@@ -271,6 +276,13 @@ class MDSRank {
     int heartbeat_reset_grace(int count=1) {
       return count * _heartbeat_reset_grace;
     }
+
+    /**
+     * Abort the MDS and flush any clog messages.
+     *
+     * Callers must already hold mds_lock.
+     */
+    void abort(std::string_view msg);
 
     /**
      * Report state DAMAGED to the mon, and then pass on to respawn().  Call
@@ -299,7 +311,7 @@ class MDSRank {
 
     void send_message_mds(const ref_t<Message>& m, mds_rank_t mds);
     void send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr);
-    void forward_message_mds(const cref_t<MClientRequest>& req, mds_rank_t mds);
+    void forward_message_mds(const MDRequestRef& mdr, mds_rank_t mds);
     void send_message_client_counted(const ref_t<Message>& m, client_t client);
     void send_message_client_counted(const ref_t<Message>& m, Session* session);
     void send_message_client_counted(const ref_t<Message>& m, const ConnectionRef& connection);
@@ -415,6 +427,8 @@ class MDSRank {
 
     PerfCounters *logger = nullptr, *mlogger = nullptr;
     OpTracker op_tracker;
+
+    std::map<ceph_tid_t, std::unique_ptr<MDSMetaRequest>> internal_client_requests;
 
     // The last different state I held before current
     MDSMap::DaemonState last_state = MDSMap::STATE_BOOT;

@@ -15,13 +15,18 @@ $black: #000 !default;
 $blue: #007bff !default;
 $indigo: #6610f2 !default;
 $purple: #6f42c1 !default;
+$purple-dim: #6f42c180 !default;
 $pink: #a94442 !default;
 $red: #dc3545 !default;
+$red-dim: #dc354580 !default;
 $orange: #fd7e14 !default;
+$orange-dim: #fd7e1480 !default;
 $yellow: #d48200 !default;
 $green: #008a00 !default;
+$green-dim: #008a0080 !default;
 $teal: #20c997 !default;
 $cyan: #17a2b8 !default;
+$cyan-dim: #17a2b880 !default;
 $barley-white: #fcecba !default;
 
 $primary: #25828e !default;
@@ -75,17 +80,22 @@ $health-color-warning-800: #9d6d10 !default;
 
 // Chart colors.
 $chart-color-red: $red !default;
-$chart-color-blue: #06c !default;
-$chart-color-orange: #ef9234 !default;
 $chart-color-yellow: #f6d173 !default;
+$chart-color-translucent-red: $red-dim !default;
+$chart-color-blue: $blue !default;
+$chart-color-orange: $orange !default;
+$chart-color-translucent-orange: $orange-dim !default;
+$chart-color-translucent-green: $green-dim !default;
+$chart-color-translucent-cyan: $cyan-dim !default;
+$chart-color-yellow: $yellow !default;
 $chart-color-green: $green !default;
 $chart-color-gray: #ededed !default;
 $chart-color-cyan: $primary-500 !default;
 $chart-color-light-gray: #f0f0f0 !default;
 $chart-color-slight-dark-gray: #d7d7d7 !default;
 $chart-color-dark-gray: #afafaf !default;
-$chart-color-cyan: #73c5c5 !default;
-$chart-color-purple: #3c3d99 !default;
+$chart-color-purple: $purple !default;
+$chart-color-translucent-purple: $purple-dim !default;
 $chart-color-white: #fff !default;
 $chart-color-center-text: #151515 !default;
 $chart-color-center-text-description: #72767b !default;
@@ -93,6 +103,10 @@ $chart-color-tooltip-background: $black !default;
 $chart-danger: #c9190b !default;
 $chart-color-strong-blue: #0078c8 !default;
 $chart-color-translucent-blue: #0096dc80 !default;
+$chart-color-border: #00000020 !default;
+$chart-color-translucent-yellow: #ef923472 !default;
+
+$code-block-bg: #f7f7f9 !default;
 
 // Typography
 

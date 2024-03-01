@@ -65,17 +65,16 @@ class RGWOp_Period_Get : public RGWOp_Period_Base {
 
 void RGWOp_Period_Get::execute(optional_yield y)
 {
-  string realm_id, realm_name, period_id;
+  string realm_id, period_id;
   epoch_t epoch = 0;
   RESTArgs::get_string(s, "realm_id", realm_id, &realm_id);
-  RESTArgs::get_string(s, "realm_name", realm_name, &realm_name);
   RESTArgs::get_string(s, "period_id", period_id, &period_id);
   RESTArgs::get_uint32(s, "epoch", 0, &epoch);
 
   period.set_id(period_id);
   period.set_epoch(epoch);
 
-  op_ret = period.init(this, driver->ctx(), static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, realm_id, y, realm_name);
+  op_ret = period.init(this, driver->ctx(), static_cast<rgw::sal::RadosStore*>(driver)->svc()->sysobj, realm_id, y);
   if (op_ret < 0)
     ldpp_dout(this, 5) << "failed to read period" << dendl;
 }

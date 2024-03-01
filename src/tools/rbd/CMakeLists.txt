@@ -52,8 +52,12 @@ set(rbd_srcs
   action/Status.cc
   action/TrashPurgeSchedule.cc
   action/Trash.cc
+  action/Ubbd.cc
   action/Watch.cc
   action/Wnbd.cc)
+if(WIN32)
+  list(APPEND rbd_srcs ../../common/win32/code_page.rc)
+endif()
 
 add_executable(rbd ${rbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
@@ -73,8 +77,19 @@ if(CURSES_FOUND)
   target_link_libraries(rbd ${CURSES_LIBRARIES})
 endif()
 if(WITH_KRBD)
-  target_link_libraries(rbd 
+  target_link_libraries(rbd
     krbd)
+endif()
+if(WITH_RBD_UBBD)
+  target_link_directories(rbd
+    PRIVATE ${CMAKE_BINARY_DIR}/src/ubbd/lib/)
+  target_include_directories(rbd
+    PRIVATE ${CMAKE_BINARY_DIR}/src/ubbd/include)
+  target_include_directories(rbd
+    PRIVATE ${CMAKE_BINARY_DIR}/src/ubbd/include/ubbd-headers/)
+  target_link_libraries(rbd
+    ubbd)
+  add_dependencies(rbd ubbd_ext)
 endif()
 
 install(TARGETS rbd DESTINATION bin)

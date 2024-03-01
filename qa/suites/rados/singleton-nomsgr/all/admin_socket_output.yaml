@@ -15,6 +15,7 @@ overrides:
       - \(OSD_FULL\)
       - \(MDS_READ_ONLY\)
       - \(POOL_FULL\)
+      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - install:
 - ceph:

@@ -1,3 +1,5 @@
+.. _dev_deploying_a_development_cluster:
+
 =================================
  Deploying a development cluster
 =================================

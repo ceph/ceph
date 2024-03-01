@@ -202,8 +202,12 @@ provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
 used=`rbd -p ${POOL} --format xml du ${IMAGE} |
   $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
 [ "${used}" -lt "${provisioned}" ]
+unmap_device ${DEV} ${PID}
 
 # resize test
+# also test that try-netlink option is accepted for compatibility
+DEV=`_sudo rbd device -t nbd -o try-netlink map ${POOL}/${IMAGE}`
+get_pid ${POOL}
 devname=$(basename ${DEV})
 blocks=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks}"
@@ -216,9 +220,9 @@ rbd resize ${POOL}/${IMAGE} --allow-shrink --size ${SIZE}M
 blocks2=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks2}"
 test ${blocks2} -eq ${blocks}
+unmap_device ${DEV} ${PID}
 
 # read-only option test
-unmap_device ${DEV} ${PID}
 DEV=`_sudo rbd --device-type nbd map --read-only ${POOL}/${IMAGE}`
 PID=$(rbd device --device-type nbd list | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
     '$2 == pool && $3 == img && $5 == dev {print $1}')
@@ -388,7 +392,7 @@ cat ${LOG_FILE}
 expect_false grep 'quiesce failed' ${LOG_FILE}
 
 # test detach/attach
-OUT=`_sudo rbd device --device-type nbd --options try-netlink,show-cookie map ${POOL}/${IMAGE}`
+OUT=`_sudo rbd device --device-type nbd --show-cookie map ${POOL}/${IMAGE}`
 read DEV COOKIE <<< "${OUT}"
 get_pid ${POOL}
 _sudo mount ${DEV} ${TEMPDIR}/mnt
@@ -416,7 +420,7 @@ _sudo umount ${TEMPDIR}/mnt
 unmap_device ${DEV} ${PID}
 # if kernel supports cookies
 if [ -n "${COOKIE}" ]; then
-    OUT=`_sudo rbd device --device-type nbd --show-cookie --cookie "abc de" --options try-netlink map ${POOL}/${IMAGE}`
+    OUT=`_sudo rbd device --device-type nbd --show-cookie --cookie "abc de" map ${POOL}/${IMAGE}`
     read DEV ANOTHER_COOKIE <<< "${OUT}"
     get_pid ${POOL}
     test "${ANOTHER_COOKIE}" = "abc de"
@@ -426,7 +430,7 @@ DEV=
 
 # test detach/attach with --snap-id
 SNAPID=`rbd snap ls ${POOL}/${IMAGE} | awk '$2 == "snap" {print $1}'`
-OUT=`_sudo rbd device --device-type nbd --options try-netlink,show-cookie map --snap-id ${SNAPID} ${POOL}/${IMAGE}`
+OUT=`_sudo rbd device --device-type nbd --show-cookie map --snap-id ${SNAPID} ${POOL}/${IMAGE}`
 read DEV COOKIE <<< "${OUT}"
 get_pid ${POOL}
 _sudo rbd device detach ${POOL}/${IMAGE} --snap-id ${SNAPID} --device-type nbd
@@ -471,6 +475,16 @@ unmap_device ${DEV} ${PID}
 DEV=
 rbd feature disable ${POOL}/${IMAGE} journaling
 rbd config image rm ${POOL}/${IMAGE} rbd_discard_granularity_bytes
+
+# test that disabling a feature so that the op is proxied to rbd-nbd
+# (arranged here by blkdiscard before "rbd feature disable") doesn't hang
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
+get_pid ${POOL}
+rbd feature enable ${POOL}/${IMAGE} journaling
+_sudo blkdiscard --offset 0 --length 4096 ${DEV}
+rbd feature disable ${POOL}/${IMAGE} journaling
+unmap_device ${DEV} ${PID}
+DEV=
 
 # test that rbd_op_threads setting takes effect
 EXPECTED=`ceph-conf --show-config-value librados_thread_count`

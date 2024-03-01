@@ -11,6 +11,8 @@
 #include "crimson/common/utility.h"
 #include "include/ceph_assert.h"
 
+class transaction_manager_test_t;
+
 namespace crimson::interruptible {
 
 template <typename, typename>
@@ -200,6 +202,23 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
     }
   };
 
+  class assert_failure {
+    const char* const msg = nullptr;
+  public:
+    template <std::size_t N>
+    assert_failure(const char (&msg)[N])
+      : msg(msg) {
+    }
+    assert_failure() = default;
+
+    void operator()(const unthrowable_wrapper&) {
+      if (msg) {
+        ceph_abort(msg);
+      } else {
+        ceph_abort();
+      }
+    }
+  };
 
 private:
   // can be used only to initialize the `instance` member
@@ -511,6 +530,7 @@ private:
 
   protected:
     using base_t::get_exception;
+    friend class ::transaction_manager_test_t;
   public:
     using errorator_type = ::crimson::errorator<AllowedErrors...>;
     using promise_type = seastar::promise<ValueT>;
@@ -599,7 +619,9 @@ private:
       static_assert((... && std::is_invocable_v<ErrorVisitorT,
                                                 AllowedErrors>),
                     "provided Error Visitor is not exhaustive");
-
+      static_assert(std::is_void_v<ValueT> ? std::is_invocable_v<ValueFuncT>
+		                           : std::is_invocable_v<ValueFuncT, ValueT>,
+                    "Value Func is not invocable with future's value");
       using value_func_result_t =
         typename std::conditional_t<std::is_void_v<ValueT>,
 				    std::invoke_result<ValueFuncT>,
@@ -688,6 +710,9 @@ private:
     }
     auto unsafe_get0() {
       return seastar::future<ValueT>::get0();
+    }
+    void unsafe_wait() {
+      seastar::future<ValueT>::wait();
     }
 
     template <class FuncT>

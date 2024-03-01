@@ -22,11 +22,9 @@ add_subdirectory(librados_test_stub)
 if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
-if(WITH_RBD AND NOT WIN32)
-  # librbd tests require libcls*, which in turn require libos and libosd, which
-  # haven't been ported to Windows yet.
+if(WITH_RBD)
   add_subdirectory(librbd)
-endif(WITH_RBD AND NOT WIN32)
+endif()
 if (WITH_CEPHFS)
   add_subdirectory(mds)
 endif()
@@ -73,6 +71,7 @@ if(NOT WIN32)
   add_subdirectory(osd)
   add_subdirectory(osdc)
   add_subdirectory(immutable_object_cache)
+  add_subdirectory(exporter)
 endif(NOT WIN32)
 
 if(WITH_RADOSGW)
@@ -467,6 +466,10 @@ add_executable(ceph_test_snap_mapper
   $<TARGET_OBJECTS:unit-main>
   )
 target_link_libraries(ceph_test_snap_mapper osd global ${BLKID_LIBRARIES} ${UNITTEST_LIBS})
+
+install(TARGETS
+  ceph_test_snap_mapper
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif(NOT WIN32)
 
 add_executable(ceph_test_stress_watch
@@ -834,6 +837,13 @@ add_executable(unittest_perf_counters
   )
 add_ceph_unittest(unittest_perf_counters)
 target_link_libraries(unittest_perf_counters global)
+
+# unittest_perf_counters_cache
+add_executable(unittest_perf_counters_cache
+  test_perf_counters_cache.cc
+  )
+add_ceph_unittest(unittest_perf_counters_cache)
+target_link_libraries(unittest_perf_counters_cache global)
 
 # unittest_ceph_crypto
 add_executable(unittest_ceph_crypto

@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 
-import copy
 import os
 import time
 from collections import Counter
@@ -8,11 +7,12 @@ from typing import Dict, List, Optional
 
 import cherrypy
 from mgr_util import merge_dicts
-from orchestrator import HostSpec
 
 from .. import mgr
 from ..exceptions import DashboardException
+from ..plugins.ttl_cache import ttl_cache, ttl_cache_invalidator
 from ..security import Scope
+from ..services._paginate import ListPaginator
 from ..services.ceph_service import CephService
 from ..services.exception import handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
@@ -117,51 +117,6 @@ def host_task(name, metadata, wait_for=10.0):
     return Task("host/{}".format(name), metadata, wait_for)
 
 
-def merge_hosts_by_hostname(ceph_hosts, orch_hosts):
-    # type: (List[dict], List[HostSpec]) -> List[dict]
-    """
-    Merge Ceph hosts with orchestrator hosts by hostnames.
-
-    :param ceph_hosts: hosts returned from mgr
-    :type ceph_hosts: list of dict
-    :param orch_hosts: hosts returned from ochestrator
-    :type orch_hosts: list of HostSpec
-    :return list of dict
-    """
-    hosts = copy.deepcopy(ceph_hosts)
-    orch_hosts_map = {host.hostname: host.to_json() for host in orch_hosts}
-
-    # Sort labels.
-    for hostname in orch_hosts_map:
-        orch_hosts_map[hostname]['labels'].sort()
-
-    # Hosts in both Ceph and Orchestrator.
-    for host in hosts:
-        hostname = host['hostname']
-        if hostname in orch_hosts_map:
-            host.update(orch_hosts_map[hostname])
-            host['sources']['orchestrator'] = True
-            orch_hosts_map.pop(hostname)
-
-    # Hosts only in Orchestrator.
-    orch_hosts_only = [
-        merge_dicts(
-            {
-                'ceph_version': '',
-                'services': [],
-                'sources': {
-                    'ceph': False,
-                    'orchestrator': True
-                }
-            }, orch_hosts_map[hostname]) for hostname in orch_hosts_map
-    ]
-    hosts.extend(orch_hosts_only)
-    for host in hosts:
-        host['service_instances'] = populate_service_instances(
-            host['hostname'], host['services'])
-    return hosts
-
-
 def populate_service_instances(hostname, services):
     orch = OrchClient.instance()
     if orch.available():
@@ -173,6 +128,7 @@ def populate_service_instances(hostname, services):
     return [{'type': k, 'count': v} for k, v in Counter(services).items()]
 
 
+@ttl_cache(60, label='get_hosts')
 def get_hosts(sources=None):
     """
     Get hosts from various sources.
@@ -183,6 +139,22 @@ def get_hosts(sources=None):
         _sources = sources.split(',')
         from_ceph = 'ceph' in _sources
         from_orchestrator = 'orchestrator' in _sources
+
+    if from_orchestrator:
+        orch = OrchClient.instance()
+        if orch.available():
+            hosts = [
+                merge_dicts(
+                    {
+                        'ceph_version': '',
+                        'services': [],
+                        'sources': {
+                            'ceph': False,
+                            'orchestrator': True
+                        }
+                    }, host.to_json()) for host in orch.hosts.list()
+            ]
+            return hosts
 
     ceph_hosts = []
     if from_ceph:
@@ -198,12 +170,6 @@ def get_hosts(sources=None):
                     'status': ''
                 }) for server in mgr.list_servers()
         ]
-    if from_orchestrator:
-        orch = OrchClient.instance()
-        if orch.available():
-            return merge_hosts_by_hostname(ceph_hosts, orch.hosts.list())
-    for host in ceph_hosts:
-        host['service_instances'] = populate_service_instances(host['hostname'], host['services'])
     return ceph_hosts
 
 
@@ -260,7 +226,7 @@ def get_inventories(hosts: Optional[List[str]] = None,
     :param hosts: Hostnames to query.
     :param refresh: Ask the Orchestrator to refresh the inventories. Note the this is an
                     asynchronous operation, the updated version of inventories need to
-                    be re-qeuried later.
+                    be re-queried later.
     :return: Returns list of inventory.
     :rtype: list
     """
@@ -303,14 +269,30 @@ class Host(RESTController):
                      'facts': (bool, 'Host Facts')
                  },
                  responses={200: LIST_HOST_SCHEMA})
-    @RESTController.MethodMap(version=APIVersion(1, 2))
-    def list(self, sources=None, facts=False):
+    @RESTController.MethodMap(version=APIVersion(1, 3))
+    def list(self, sources=None, facts=False, offset: int = 0,
+             limit: int = 5, search: str = '', sort: str = ''):
         hosts = get_hosts(sources)
+        params = ['hostname']
+        paginator = ListPaginator(int(offset), int(limit), sort, search, hosts,
+                                  searchable_params=params, sortable_params=params,
+                                  default_sort='+hostname')
+        # pylint: disable=unnecessary-comprehension
+        hosts = [host for host in paginator.list()]
         orch = OrchClient.instance()
+        cherrypy.response.headers['X-Total-Count'] = paginator.get_count()
+        for host in hosts:
+            if 'services' not in host:
+                host['services'] = []
+            host['service_instances'] = populate_service_instances(
+                host['hostname'], host['services'])
         if str_to_bool(facts):
             if orch.available():
                 if not orch.get_missing_features(['get_facts']):
-                    hosts_facts = orch.hosts.get_facts()
+                    hosts_facts = []
+                    for host in hosts:
+                        facts = orch.hosts.get_facts(host['hostname'])[0]
+                        hosts_facts.append(facts)
                     return merge_list_of_dicts_by_key(hosts, hosts_facts, 'hostname')
 
                 raise DashboardException(
@@ -430,13 +412,18 @@ class Host(RESTController):
         return [d.to_dict() for d in daemons]
 
     @handle_orchestrator_error('host')
+    @RESTController.MethodMap(version=APIVersion(1, 2))
     def get(self, hostname: str) -> Dict:
         """
         Get the specified host.
         :raises: cherrypy.HTTPError: If host not found.
         """
-        return get_host(hostname)
+        host = get_host(hostname)
+        host['service_instances'] = populate_service_instances(
+            host['hostname'], host['services'])
+        return host
 
+    @ttl_cache_invalidator('get_hosts')
     @raise_if_no_orchestrator([OrchFeature.HOST_LABEL_ADD,
                                OrchFeature.HOST_LABEL_REMOVE,
                                OrchFeature.HOST_MAINTENANCE_ENTER,

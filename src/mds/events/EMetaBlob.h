@@ -340,26 +340,27 @@ private:
   std::vector<std::pair<metareqid_t,uint64_t> > client_reqs;
   std::vector<std::pair<metareqid_t,uint64_t> > client_flushes;
 
+  std::set<CInode*> touched;
+
  public:
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::const_iterator& bl);
   void get_inodes(std::set<inodeno_t> &inodes) const;
+  const auto& get_touched_inodes(void) const {
+    return touched;
+  }
   void get_paths(std::vector<std::string> &paths) const;
   void get_dentries(std::map<dirfrag_t, std::set<std::string> > &dentries) const;
   entity_name_t get_client_name() const {return client_name;}
 
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<EMetaBlob*>& ls);
-  // soft stateadd
-  uint64_t last_subtree_map;
-  uint64_t event_seq;
 
   // for replay, in certain cases
   //LogSegment *_segment;
 
   EMetaBlob() : opened_ino(0), renamed_dirino(0),
-                inotablev(0), sessionmapv(0), allocated_ino(0),
-                last_subtree_map(0), event_seq(0)
+                inotablev(0), sessionmapv(0), allocated_ino(0)
                 {}
   EMetaBlob(const EMetaBlob&) = delete;
   ~EMetaBlob() { }
@@ -480,7 +481,8 @@ private:
                    state, in->get_old_inodes());
 
     // make note of where this inode was last journaled
-    in->last_journaled = event_seq;
+
+    touched.insert(in);
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
   }
 
@@ -512,7 +514,7 @@ private:
   }
 
   void add_root(bool dirty, CInode *in) {
-    in->last_journaled = event_seq;
+    touched.insert(in);
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
     const auto& pi = in->get_projected_inode();
@@ -601,7 +603,7 @@ private:
   }
 
   void update_segment(LogSegment *ls);
-  void replay(MDSRank *mds, LogSegment *ls, MDPeerUpdate *su=NULL);
+  void replay(MDSRank *mds, LogSegment *ls, int type, MDPeerUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)

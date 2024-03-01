@@ -2,7 +2,7 @@ from enum import Enum
 from functools import wraps
 from inspect import isclass
 from typing import Any, Callable, Dict, Generator, Iterable, Iterator, List, \
-    NamedTuple, Optional, Union, get_type_hints
+    NamedTuple, Optional, Tuple, Union, get_type_hints
 
 from ._api_router import APIRouter
 from ._docs import APIDoc, EndpointDoc
@@ -12,6 +12,11 @@ from ._ui_router import UIRouter
 
 class SecretStr(str):
     pass
+
+
+class MethodType(Enum):
+    POST = 'post'
+    PUT = 'put'
 
 
 def isnamedtuple(o):
@@ -66,6 +71,13 @@ class TableAction(NamedTuple):
     icon: str
     routerLink: str = ''  # redirect to...
     click: str = ''
+    disable: bool = False  # disable without selection
+
+
+class SelectionType(Enum):
+    NONE = ''
+    SINGLE = 'single'
+    MULTI = 'multiClick'
 
 
 class TableComponent(SerializableClass):
@@ -73,22 +85,31 @@ class TableComponent(SerializableClass):
         self.columns: List[TableColumn] = []
         self.columnMode: str = 'flex'
         self.toolHeader: bool = True
+        self.selectionType: str = SelectionType.SINGLE.value
+
+    def set_selection_type(self, type_: SelectionType):
+        self.selectionType = type_.value
 
 
 class Icon(Enum):
-    add = 'fa fa-plus'
-    destroy = 'fa fa-times'
+    ADD = 'fa fa-plus'
+    DESTROY = 'fa fa-times'
+    IMPORT = 'fa fa-upload'
+    EXPORT = 'fa fa-download'
+    EDIT = 'fa fa-pencil'
 
 
 class Validator(Enum):
     JSON = 'json'
     RGW_ROLE_NAME = 'rgwRoleName'
     RGW_ROLE_PATH = 'rgwRolePath'
+    FILE = 'file'
+    RGW_ROLE_SESSION_DURATION = 'rgwRoleSessionDuration'
 
 
 class FormField(NamedTuple):
     """
-    The key of a FromField is then used to send the data related to that key into the
+    The key of a FormField is then used to send the data related to that key into the
     POST and PUT endpoints. It is imperative for the developer to map keys of fields and containers
     to the input of the POST and PUT endpoints.
     """
@@ -97,6 +118,7 @@ class FormField(NamedTuple):
     field_type: Any = str
     default_value: Optional[Any] = None
     optional: bool = False
+    readonly: bool = False
     help: str = ''
     validators: List[Validator] = []
 
@@ -110,6 +132,8 @@ class FormField(NamedTuple):
             _type = 'boolean'
         elif self.field_type == 'textarea':
             _type = 'textarea'
+        elif self.field_type == "file":
+            _type = 'file'
         else:
             raise NotImplementedError(f'Unimplemented type {self.field_type}')
         return _type
@@ -117,11 +141,12 @@ class FormField(NamedTuple):
 
 class Container:
     def __init__(self, name: str, key: str, fields: List[Union[FormField, "Container"]],
-                 optional: bool = False, min_items=1):
+                 optional: bool = False, readonly: bool = False, min_items=1):
         self.name = name
         self.key = key
         self.fields = fields
         self.optional = optional
+        self.readonly = readonly
         self.min_items = min_items
 
     def layout_type(self):
@@ -131,7 +156,7 @@ class Container:
         raise NotImplementedError
 
     def to_dict(self, key=''):
-        # intialize the schema of this container
+        # initialize the schema of this container
         ui_schemas = []
         control_schema = {
             'type': self._property_type(),
@@ -199,6 +224,11 @@ class Container:
                 properties[field.key]['type'] = _type
                 properties[field.key]['title'] = field.name
                 field_ui_schema['key'] = field_key
+                field_ui_schema['readonly'] = field.readonly
+                if field.readonly:
+                    field_ui_schema['templateOptions'] = {
+                        'disabled': True
+                    }
                 field_ui_schema['help'] = f'{field.help}'
                 field_ui_schema['validators'] = [i.value for i in field.validators]
                 items.append(field_ui_schema)
@@ -256,15 +286,21 @@ class FormTaskInfo:
 
 
 class Form:
-    def __init__(self, path, root_container,
-                 task_info: FormTaskInfo = FormTaskInfo("Unknown task", [])):
+    def __init__(self, path, root_container, method_type='',
+                 task_info: FormTaskInfo = FormTaskInfo("Unknown task", []),
+                 model_callback=None):
         self.path = path
         self.root_container: Container = root_container
+        self.method_type = method_type
         self.task_info = task_info
+        self.model_callback = model_callback
 
     def to_dict(self):
         res = self.root_container.to_dict()
+        res['method_type'] = self.method_type
         res['task_info'] = self.task_info.to_dict()
+        res['path'] = self.path
+        res['ask'] = self.path
         return res
 
 
@@ -276,6 +312,7 @@ class CRUDMeta(SerializableClass):
         self.forms = []
         self.columnKey = ''
         self.detail_columns = []
+        self.resource = ''
 
 
 class CRUDCollectionMethod(NamedTuple):
@@ -295,13 +332,17 @@ class CRUDEndpoint:
     CRUDClassMetadata: Optional[RESTController] = None
 
     def __init__(self, router: APIRouter, doc: APIDoc,
-                 set_column: Optional[Dict[str, Dict[str, str]]] = None,
+                 set_column: Optional[Dict[str, Dict[str, Union[str, bool]]]] = None,
                  actions: Optional[List[TableAction]] = None,
                  permissions: Optional[List[str]] = None, forms: Optional[List[Form]] = None,
                  column_key: Optional[str] = None,
+                 resource: Optional[str] = None,
                  meta: CRUDMeta = CRUDMeta(), get_all: Optional[CRUDCollectionMethod] = None,
                  create: Optional[CRUDCollectionMethod] = None,
                  delete: Optional[CRUDCollectionMethod] = None,
+                 selection_type: SelectionType = SelectionType.SINGLE,
+                 extra_endpoints: Optional[List[Tuple[str, CRUDCollectionMethod]]] = None,
+                 edit: Optional[CRUDCollectionMethod] = None,
                  detail_columns: Optional[List[str]] = None):
         self.router = router
         self.doc = doc
@@ -312,9 +353,13 @@ class CRUDEndpoint:
         self.get_all = get_all
         self.create = create
         self.delete = delete
+        self.edit = edit
         self.permissions = permissions if permissions is not None else []
         self.column_key = column_key if column_key is not None else ''
         self.detail_columns = detail_columns if detail_columns is not None else []
+        self.extra_endpoints = extra_endpoints if extra_endpoints is not None else []
+        self.selection_type = selection_type
+        self.resource = resource
 
     def __call__(self, cls: Any):
         self.create_crud_class(cls)
@@ -326,41 +371,62 @@ class CRUDEndpoint:
     def create_crud_class(self, cls):
         outer_self: CRUDEndpoint = self
 
-        @self.router
-        @self.doc
-        class CRUDClass(RESTController):
+        funcs = {}
+        if self.get_all:
+            @self.get_all.doc
+            @wraps(self.get_all.func)
+            def _list(self, *args, **kwargs):
+                items = []
+                for item in outer_self.get_all.func(self, *args, **kwargs):  # type: ignore
+                    items.append(serialize(cls(**item)))
+                return items
+            funcs['list'] = _list
 
-            if self.get_all:
-                @self.get_all.doc
-                @wraps(self.get_all.func)
-                def list(self, *args, **kwargs):
-                    items = []
-                    for item in outer_self.get_all.func(self, *args, **kwargs):  # type: ignore
-                        items.append(serialize(cls(**item)))
-                    return items
+        if self.create:
+            @self.create.doc
+            @wraps(self.create.func)
+            def _create(self, *args, **kwargs):
+                return outer_self.create.func(self, *args, **kwargs)  # type: ignore
+            funcs['create'] = _create
 
-            if self.create:
-                @self.create.doc
-                @wraps(self.create.func)
-                def create(self, *args, **kwargs):
-                    return outer_self.create.func(self, *args, **kwargs)  # type: ignore
+        if self.delete:
+            @self.delete.doc
+            @wraps(self.delete.func)
+            def delete(self, *args, **kwargs):
+                return outer_self.delete.func(self, *args, **kwargs)  # type: ignore
+            funcs['delete'] = delete
 
-            if self.delete:
-                @self.delete.doc
-                @wraps(self.delete.func)
-                def delete(self, *args, **kwargs):
-                    return outer_self.delete.func(self, *args, **kwargs)  # type: ignore
+        if self.edit:
+            @self.edit.doc
+            @wraps(self.edit.func)
+            def singleton_set(self, *args, **kwargs):
+                return outer_self.edit.func(self, *args, **kwargs)  # type: ignore
+            funcs['singleton_set'] = singleton_set
 
-        cls.CRUDClass = CRUDClass
+        for extra_endpoint in self.extra_endpoints:
+            funcs[extra_endpoint[0]] = extra_endpoint[1].doc(extra_endpoint[1].func)
+
+        class_name = self.router.path.replace('/', '')
+        crud_class = type(f'{class_name}_CRUDClass',
+                          (RESTController,),
+                          {
+                              **funcs,
+                              'outer_self': self,
+                          })
+        self.router(self.doc(crud_class))
+        cls.CRUDClass = crud_class
 
     def create_meta_class(self, cls):
-        def _list(self):
+        def _list(self, model_key: str = ''):
             self.update_columns()
             self.generate_actions()
-            self.generate_forms()
+            self.generate_forms(model_key)
             self.set_permissions()
             self.set_column_key()
+            self.set_table_resource()
             self.get_detail_columns()
+            selection_type = self.__class__.outer_self.selection_type
+            self.__class__.outer_self.meta.table.set_selection_type(selection_type)
             return serialize(self.__class__.outer_self.meta)
 
         def get_detail_columns(self):
@@ -390,19 +456,30 @@ class CRUDEndpoint:
             for action in self.__class__.outer_self.actions:
                 self.__class__.outer_self.meta.actions.append(action._asdict())
 
-        def generate_forms(self):
+        def generate_forms(self, model_key):
             self.__class__.outer_self.meta.forms.clear()
 
             for form in self.__class__.outer_self.forms:
-                self.__class__.outer_self.meta.forms.append(form.to_dict())
+                form_as_dict = form.to_dict()
+                model = {}
+                if form.model_callback and model_key:
+                    model = form.model_callback(model_key)
+                    form_as_dict['model'] = model
+                self.__class__.outer_self.meta.forms.append(form_as_dict)
 
         def set_permissions(self):
+            self.__class__.outer_self.meta.permissions.clear()
+
             if self.__class__.outer_self.permissions:
                 self.outer_self.meta.permissions.extend(self.__class__.outer_self.permissions)
 
         def set_column_key(self):
             if self.__class__.outer_self.column_key:
                 self.outer_self.meta.columnKey = self.__class__.outer_self.column_key
+
+        def set_table_resource(self):
+            if self.__class__.outer_self.resource:
+                self.outer_self.meta.resource = self.__class__.outer_self.resource
 
         class_name = self.router.path.replace('/', '')
         meta_class = type(f'{class_name}_CRUDClassMetadata',
@@ -414,6 +491,7 @@ class CRUDEndpoint:
                               'generate_forms': generate_forms,
                               'set_permissions': set_permissions,
                               'set_column_key': set_column_key,
+                              'set_table_resource': set_table_resource,
                               'get_detail_columns': get_detail_columns,
                               'outer_self': self,
                           })

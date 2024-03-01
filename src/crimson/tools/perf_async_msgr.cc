@@ -94,7 +94,9 @@ int main(int argc, char** argv)
     ("bs", po::value<unsigned>()->default_value(0),
      "server block size")
     ("crc-enabled", po::value<bool>()->default_value(false),
-     "enable CRC checks");
+     "enable CRC checks")
+    ("threads", po::value<unsigned>()->default_value(3),
+     "async messenger worker threads");
   po::variables_map vm;
   std::vector<std::string> unrecognized_options;
   try {
@@ -120,6 +122,7 @@ int main(int argc, char** argv)
   ceph_assert_always(target_addr.is_msgr2());
   auto bs = vm["bs"].as<unsigned>();
   auto crc_enabled = vm["crc-enabled"].as<bool>();
+  auto worker_threads = vm["threads"].as<unsigned>();
 
   std::vector<const char*> args(argv, argv + argc);
   auto cct = global_init(nullptr, args,
@@ -135,6 +138,14 @@ int main(int argc, char** argv)
     cct->_conf.set_val("ms_crc_header", "false");
     cct->_conf.set_val("ms_crc_data", "false");
   }
+
+  cct->_conf.set_val("ms_async_op_threads", fmt::format("{}", worker_threads));
+
+  std::cout << "server[" << addr
+            << "](bs=" << bs
+            << ", crc_enabled=" << crc_enabled
+            << ", worker_threads=" << worker_threads
+            << std::endl;
 
   run(cct.get(), target_addr, bs);
 }

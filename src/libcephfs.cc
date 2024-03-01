@@ -17,6 +17,7 @@
 #include <string.h>
 #include <string>
 
+#include "include/Context.h"
 #include "auth/Crypto.h"
 #include "client/Client.h"
 #include "client/Inode.h"
@@ -231,7 +232,6 @@ public:
       delete messenger;
       messenger = nullptr;
     }
-    icp.reset();
     if (monclient) {
       delete monclient;
       monclient = nullptr;
@@ -240,6 +240,7 @@ public:
       delete client;
       client = nullptr;
     }
+    icp.reset();
   }
 
   bool is_initialized() const
@@ -2016,6 +2017,33 @@ extern "C" int64_t ceph_ll_writev(class ceph_mount_info *cmount,
 				  int iovcnt, int64_t off)
 {
   return (cmount->get_client()->ll_writev(fh, iov, iovcnt, off));
+}
+
+class LL_Onfinish : public Context {
+public:
+  LL_Onfinish(struct ceph_ll_io_info *io_info)
+    : io_info(io_info) {}
+  bufferlist bl;
+private:
+  struct ceph_ll_io_info *io_info;
+  void finish(int r) override {
+    if (!io_info->write && r > 0) {
+      copy_bufferlist_to_iovec(io_info->iov, io_info->iovcnt, &bl, r);
+    }
+    io_info->result = r;
+    io_info->callback(io_info);
+  }
+};
+
+extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmount,
+						    struct ceph_ll_io_info *io_info)
+{
+  LL_Onfinish *onfinish = new LL_Onfinish(io_info);
+
+  return (cmount->get_client()->ll_preadv_pwritev(
+			io_info->fh, io_info->iov, io_info->iovcnt,
+			io_info->off, io_info->write, onfinish, &onfinish->bl,
+			io_info->fsync, io_info->syncdataonly));
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)

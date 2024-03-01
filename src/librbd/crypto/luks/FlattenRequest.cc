@@ -97,7 +97,7 @@ void FlattenRequest<I>::write_header() {
   auto req = io::ImageDispatchSpec::create_write(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
           {{0, m_bl.length()}}, io::ImageArea::CRYPTO_HEADER,
-          std::move(m_bl), m_image_ctx->get_data_io_context(), 0, trace);
+          std::move(m_bl), 0, trace);
   req->send();
 }
 

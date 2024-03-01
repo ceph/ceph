@@ -114,7 +114,13 @@ class LastEpochClean {
 public:
   void report(unsigned pg_num, const pg_t& pg, epoch_t last_epoch_clean);
   void remove_pool(uint64_t pool);
-  epoch_t get_lower_bound(const OSDMap& latest) const;
+  /**
+   * get_lower_bound_by_pool
+   *
+   * Returns epoch e such that e <= pg.last_epoch_clean for all pgs in cluster.
+   * May return 0 if any pool does not have comprehensive values for all pgs.
+  */
+  epoch_t get_lower_bound_by_pool(const OSDMap& latest) const;
 
   void dump(Formatter *f) const;
 };
@@ -217,13 +223,11 @@ public:
   std::map<int, failure_info_t> failure_info;
   std::map<int,utime_t>    down_pending_out;  // osd down -> out
   bool priority_convert = false;
-  std::map<int64_t,std::set<snapid_t>> pending_pseudo_purged_snaps;
   std::shared_ptr<PriorityCache::PriCache> rocksdb_binned_kv_cache = nullptr;
   std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
   ceph::mutex balancer_lock = ceph::make_mutex("OSDMonitor::balancer_lock");
 
   std::map<int,double> osd_weight;
-  std::set<int32_t> filestore_osds;
 
   using osdmap_key_t = std::pair<version_t, uint64_t>;
   using osdmap_cache_t = SimpleLRU<osdmap_key_t,
@@ -634,8 +638,6 @@ private:
 public:
   void count_metadata(const std::string& field, std::map<std::string,int> *out);
   void get_versions(std::map<std::string, std::list<std::string>> &versions);
-  void get_filestore_osd_list();
-  void check_for_filestore_osds(health_check_map_t *checks);
 protected:
   int get_osd_objectstore_type(int osd, std::string *type);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
@@ -643,8 +645,18 @@ protected:
 
   // when we last received PG stats from each osd and the osd's osd_beacon_report_interval
   std::map<int, std::pair<utime_t, int>> last_osd_report;
-  // TODO: use last_osd_report to store the osd report epochs, once we don't
-  //       need to upgrade from pre-luminous releases.
+  /**
+    * osd_epochs
+    *
+    * Records the MOSDBeacon::version (the osd epoch at which the OSD sent the
+    * beacon) of the most recent beacon recevied from each currently up OSD.
+    * Used in OSDMonitor::get_min_last_epoch_clean().
+    * Down osds are trimmed upon commit of each map
+    *  (OSDMonitor::update_from_paxos).
+    *
+    * TODO: use last_osd_report to store the osd report epochs, once we don't
+    * need to upgrade from pre-luminous releases.
+    */
   std::map<int,epoch_t> osd_epochs;
   LastEpochClean last_epoch_clean;
   bool preprocess_beacon(MonOpRequestRef op);
@@ -702,8 +714,8 @@ public:
   void do_osd_create(const int32_t id, const uuid_d& uuid,
 		     const std::string& device_class,
 		     int32_t* new_id);
-  int prepare_command_osd_purge(int32_t id, std::stringstream& ss);
-  int prepare_command_osd_destroy(int32_t id, std::stringstream& ss);
+  int prepare_command_osd_purge(MonOpRequestRef op, int32_t id, std::stringstream& ss);
+  int prepare_command_osd_destroy(MonOpRequestRef op, int32_t id, std::stringstream& ss);
   int _prepare_command_osd_crush_remove(
       CrushWrapper &newcrush,
       int32_t id,

@@ -2,10 +2,10 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "svc_zone.h"
-#include "svc_rados.h"
 #include "svc_sys_obj.h"
 #include "svc_sync_modules.h"
 
+#include "rgw_tools.h"
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_bucket_sync.h"
@@ -23,12 +23,12 @@ RGWSI_Zone::RGWSI_Zone(CephContext *cct) : RGWServiceInstance(cct)
 }
 
 void RGWSI_Zone::init(RGWSI_SysObj *_sysobj_svc,
-                      RGWSI_RADOS * _rados_svc,
+                      librados::Rados* rados_,
                       RGWSI_SyncModules * _sync_modules_svc,
 		      RGWSI_Bucket_Sync *_bucket_sync_svc)
 {
   sysobj_svc = _sysobj_svc;
-  rados_svc = _rados_svc;
+  rados = rados_;
   sync_modules_svc = _sync_modules_svc;
   bucket_sync_svc = _bucket_sync_svc;
 
@@ -62,6 +62,21 @@ std::shared_ptr<RGWBucketSyncPolicyHandler> RGWSI_Zone::get_sync_policy_handler(
 bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const
 {
   return target_zone.syncs_from(source_zone.name) &&
+         sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
+}
+
+bool RGWSI_Zone::zone_syncs_from(const RGWZone& source_zone) const
+{
+  auto target_zone = get_zone();
+  bool found = false;
+
+  for (auto s : data_sync_source_zones) {
+    if (s->id == source_zone.id) {
+      found = true;
+      break;
+    }
+  }
+  return found && target_zone.syncs_from(source_zone.name) &&
          sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
 }
 
@@ -119,11 +134,6 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 
   assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
 
-  ret = rados_svc->start(y, dpp);
-  if (ret < 0) {
-    return ret;
-  }
-
   ret = realm->init(dpp, cct, sysobj_svc, y);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
@@ -131,8 +141,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   }
 
   ldpp_dout(dpp, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
-  ret = current_period->init(dpp, cct, sysobj_svc, realm->get_id(), y,
-                             realm->get_name());
+  ret = current_period->init(dpp, cct, sysobj_svc, realm->get_id(), y);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -720,7 +729,7 @@ bool RGWSI_Zone::need_to_sync() const
 
 bool RGWSI_Zone::need_to_log_data() const
 {
-  return zone_public_config->log_data;
+  return (zone_public_config->log_data && sync_module_exports_data());
 }
 
 bool RGWSI_Zone::is_meta_master() const
@@ -856,14 +865,7 @@ int RGWSI_Zone::select_new_bucket_location(const DoutPrefixProvider *dpp, const 
 int RGWSI_Zone::select_bucket_location_by_rule(const DoutPrefixProvider *dpp, const rgw_placement_rule& location_rule, RGWZonePlacementInfo *rule_info, optional_yield y)
 {
   if (location_rule.name.empty()) {
-    /* we can only reach here if we're trying to set a bucket location from a bucket
-     * created on a different zone, using a legacy / default pool configuration
-     */
-    if (rule_info) {
-      return select_legacy_bucket_placement(dpp, rule_info, y);
-    }
-
-    return 0;
+    return -EINVAL;
   }
 
   /*
@@ -900,164 +902,12 @@ int RGWSI_Zone::select_bucket_placement(const DoutPrefixProvider *dpp, const RGW
                                         rgw_placement_rule *pselected_rule, RGWZonePlacementInfo *rule_info,
 					optional_yield y)
 {
-  if (!zone_params->placement_pools.empty()) {
-    return select_new_bucket_location(dpp, user_info, zonegroup_id, placement_rule,
-                                      pselected_rule, rule_info, y);
+  if (zone_params->placement_pools.empty()) {
+    return -EINVAL; // legacy placement no longer supported
   }
 
-  if (pselected_rule) {
-    pselected_rule->clear();
-  }
-
-  if (rule_info) {
-    return select_legacy_bucket_placement(dpp, rule_info, y);
-  }
-
-  return 0;
-}
-
-int RGWSI_Zone::select_legacy_bucket_placement(const DoutPrefixProvider *dpp, RGWZonePlacementInfo *rule_info,
-					       optional_yield y)
-{
-  bufferlist map_bl;
-  map<string, bufferlist> m;
-  string pool_name;
-  bool write_map = false;
-
-  rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-
-  auto sysobj = sysobj_svc->get_obj(obj);
-  int ret = sysobj.rop().read(dpp, &map_bl, y);
-  if (ret < 0) {
-    goto read_omap;
-  }
-
-  try {
-    auto iter = map_bl.cbegin();
-    decode(m, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: couldn't decode avail_pools" << dendl;
-  }
-
-read_omap:
-  if (m.empty()) {
-    ret = sysobj.omap().get_all(dpp, &m, y);
-
-    write_map = true;
-  }
-
-  if (ret < 0 || m.empty()) {
-    vector<rgw_pool> pools;
-    string s = string("default.") + default_storage_pool_suffix;
-    pools.push_back(rgw_pool(s));
-    vector<int> retcodes;
-    bufferlist bl;
-    ret = rados_svc->pool().create(dpp, pools, &retcodes);
-    if (ret < 0)
-      return ret;
-    ret = sysobj.omap().set(dpp, s, bl, y);
-    if (ret < 0)
-      return ret;
-    m[s] = bl;
-  }
-
-  if (write_map) {
-    bufferlist new_bl;
-    encode(m, new_bl);
-    ret = sysobj.wop().write(dpp, new_bl, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: could not save avail pools map info ret=" << ret << dendl;
-    }
-  }
-
-  auto miter = m.begin();
-  if (m.size() > 1) {
-    // choose a pool at random
-    auto r = ceph::util::generate_random_number<size_t>(0, m.size() - 1);
-    std::advance(miter, r);
-  }
-  pool_name = miter->first;
-
-  rgw_pool pool = pool_name;
-
-  rule_info->storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
-  rule_info->data_extra_pool = pool_name;
-  rule_info->index_pool = pool_name;
-  rule_info->index_type = rgw::BucketIndexType::Normal;
-
-  return 0;
-}
-
-int RGWSI_Zone::update_placement_map(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  bufferlist header;
-  map<string, bufferlist> m;
-  rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-
-  auto sysobj = sysobj_svc->get_obj(obj);
-  int ret = sysobj.omap().get_all(dpp, &m, y);
-  if (ret < 0)
-    return ret;
-
-  bufferlist new_bl;
-  encode(m, new_bl);
-  ret = sysobj.wop().write(dpp, new_bl, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "WARNING: could not save avail pools map info ret=" << ret << dendl;
-  }
-
-  return ret;
-}
-
-int RGWSI_Zone::add_bucket_placement(const DoutPrefixProvider *dpp, const rgw_pool& new_pool, optional_yield y)
-{
-  int ret = rados_svc->pool(new_pool).lookup();
-  if (ret < 0) { // DNE, or something
-    return ret;
-  }
-
-  rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-  auto sysobj = sysobj_svc->get_obj(obj);
-
-  bufferlist empty_bl;
-  ret = sysobj.omap().set(dpp, new_pool.to_str(), empty_bl, y);
-
-  // don't care about return value
-  update_placement_map(dpp, y);
-
-  return ret;
-}
-
-int RGWSI_Zone::remove_bucket_placement(const DoutPrefixProvider *dpp, const rgw_pool& old_pool, optional_yield y)
-{
-  rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-  auto sysobj = sysobj_svc->get_obj(obj);
-  int ret = sysobj.omap().del(dpp, old_pool.to_str(), y);
-
-  // don't care about return value
-  update_placement_map(dpp, y);
-
-  return ret;
-}
-
-int RGWSI_Zone::list_placement_set(const DoutPrefixProvider *dpp, set<rgw_pool>& names, optional_yield y)
-{
-  bufferlist header;
-  map<string, bufferlist> m;
-
-  rgw_raw_obj obj(zone_params->domain_root, avail_pools);
-  auto sysobj = sysobj_svc->get_obj(obj);
-  int ret = sysobj.omap().get_all(dpp, &m, y);
-  if (ret < 0)
-    return ret;
-
-  names.clear();
-  map<string, bufferlist>::iterator miter;
-  for (miter = m.begin(); miter != m.end(); ++miter) {
-    names.insert(rgw_pool(miter->first));
-  }
-
-  return names.size();
+  return select_new_bucket_location(dpp, user_info, zonegroup_id, placement_rule,
+                                    pselected_rule, rule_info, y);
 }
 
 bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)

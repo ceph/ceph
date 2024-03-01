@@ -52,6 +52,7 @@ CompatSet MDSMap::get_compat_set_all() {
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_NOANCHOR);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_SNAPREALM_V2);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_MINORLOGSEGMENTS);
 
   return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
 }
@@ -69,6 +70,7 @@ CompatSet MDSMap::get_compat_set_default() {
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_NOANCHOR);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_SNAPREALM_V2);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_MINORLOGSEGMENTS);
 
   return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
 }
@@ -236,6 +238,8 @@ void MDSMap::dump_flags_state(Formatter *f) const
     f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS), allows_multimds_snaps());
     f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY), allows_standby_replay());
     f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION), test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION));
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS), test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS));
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_BALANCE_AUTOMATE), test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE));
     f->close_section();
 }
 
@@ -378,6 +382,10 @@ void MDSMap::print_flags(std::ostream& out) const {
     out << " " << flag_display.at(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY);
   if (test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION))
     out << " " << flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION);
+  if (test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS))
+    out << " " << flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
+  if (test_flag(CEPH_MDSMAP_BALANCE_AUTOMATE))
+    out << " " << flag_display.at(CEPH_MDSMAP_BALANCE_AUTOMATE);
 }
 
 void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
@@ -765,7 +773,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(data_pools, bl);
   encode(cas_pool, bl);
 
-  __u16 ev = 17;
+  __u16 ev = 18;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -792,8 +800,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     encode(min_compat_client, bl);
   }
   encode(required_client_features, bl);
-  encode(max_xattr_size, bl);
   encode(bal_rank_mask, bl);
+  encode(max_xattr_size, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -818,7 +826,6 @@ void MDSMap::decode(bufferlist::const_iterator& p)
 {
   std::map<mds_rank_t,int32_t> inc;  // Legacy field, parse and drop
 
-  cached_up_features = 0;
   DECODE_START_LEGACY_COMPAT_LEN_16(5, 4, 4, p);
   decode(epoch, p);
   decode(flags, p);
@@ -845,7 +852,8 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     decode(cas_pool, p);
   }
 
-  // kclient ignores everything from here
+  // kclient skips most of what's below
+  // see fs/ceph/mdsmap.c for current decoding
   __u16 ev = 1;
   if (struct_v >= 2)
     decode(ev, p);
@@ -942,8 +950,11 @@ void MDSMap::decode(bufferlist::const_iterator& p)
   }
 
   if (ev >= 17) {
-    decode(max_xattr_size, p);
     decode(bal_rank_mask, p);
+  }
+
+  if (ev >= 18) {
+    decode(max_xattr_size, p);
   }
 
   /* All MDS since at least v14.0.0 understand INLINE */
@@ -1099,24 +1110,20 @@ void MDSMap::get_up_mds_set(std::set<mds_rank_t>& s) const {
     s.insert(p->first);
 }
 
-uint64_t MDSMap::get_up_features() {
-  if (!cached_up_features) {
-    bool first = true;
-    for (std::map<mds_rank_t, mds_gid_t>::const_iterator p = up.begin();
-         p != up.end();
-         ++p) {
-      std::map<mds_gid_t, mds_info_t>::const_iterator q =
-        mds_info.find(p->second);
-      ceph_assert(q != mds_info.end());
-      if (first) {
-        cached_up_features = q->second.mds_features;
-        first = false;
-      } else {
-        cached_up_features &= q->second.mds_features;
-      }
+uint64_t MDSMap::get_up_features() const {
+  uint64_t features = 0;
+  bool first = true;
+  for ([[maybe_unused]] auto& [rank, gid] : up) {
+    auto it = mds_info.find(gid);
+    ceph_assert(it != mds_info.end());
+    if (first) {
+      features = it->second.mds_features;
+      first = false;
+    } else {
+      features &= it->second.mds_features;
     }
   }
-  return cached_up_features;
+  return features;
 }
 
 void MDSMap::get_recovery_mds_set(std::set<mds_rank_t>& s) const {

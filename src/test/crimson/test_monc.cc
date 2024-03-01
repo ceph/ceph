@@ -5,6 +5,7 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
+#include "test/crimson/ctest_utils.h"
 
 using Config = crimson::common::ConfigProxy;
 using MonClient = crimson::mon::Client;
@@ -41,7 +42,7 @@ static seastar::future<> test_monc()
   }).then([] {
     return crimson::common::sharded_perf_coll().start();
   }).then([]() mutable {
-    auto msgr = crimson::net::Messenger::create(entity_name_t::OSD(0), "monc", 0);
+    auto msgr = crimson::net::Messenger::create(entity_name_t::OSD(0), "monc", 0, true);
     return seastar::do_with(MonClient{*msgr, dummy_handler},
                             [msgr](auto& monc) mutable {
       return msgr->start({&monc}).then([&monc] {
@@ -63,7 +64,7 @@ static seastar::future<> test_monc()
 
 int main(int argc, char** argv)
 {
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   return app.run(argc, argv, [&] {
     return test_monc().then([] {
       std::cout << "All tests succeeded" << std::endl;

@@ -10,4 +10,6 @@ export interface JsonFormUISchema {
   controlSchema: FormlyFieldConfig[];
   uiSchema: any;
   taskInfo: CrudTaskInfo;
+  methodType: string;
+  model: any;
 }

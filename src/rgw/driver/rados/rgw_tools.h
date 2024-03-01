@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
+#include <string_view>
 
 #include "include/types.h"
 #include "include/ceph_hash.h"
@@ -21,12 +23,12 @@ class optional_yield;
 
 struct obj_version;
 
-
 int rgw_init_ioctx(const DoutPrefixProvider *dpp,
                    librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx,
-		   bool create = false,
-		   bool mostly_omap = false);
+                   bool create = false,
+                   bool mostly_omap = false,
+                   bool bulk = false);
 
 #define RGW_NO_SHARD -1
 
@@ -65,7 +67,7 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                        bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker,
                        real_time set_mtime, optional_yield y,
-                       std::map<std::string, bufferlist> *pattrs = nullptr);
+                       const std::map<std::string, bufferlist> *pattrs = nullptr);
 int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool,
                        const std::string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime,
@@ -103,163 +105,65 @@ int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, cons
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y);
 
+struct rgw_rados_ref {
+  librados::IoCtx ioctx;
+  rgw_raw_obj obj;
+
+
+  int operate(const DoutPrefixProvider* dpp, librados::ObjectReadOperation* op,
+	      bufferlist* pbl, optional_yield y, int flags = 0) {
+    return rgw_rados_operate(dpp, ioctx, obj.oid, op, pbl, y, flags);
+  }
+
+  int operate(const DoutPrefixProvider* dpp, librados::ObjectWriteOperation* op,
+	      optional_yield y, int flags = 0) {
+    return rgw_rados_operate(dpp, ioctx, obj.oid, op, y, flags);
+  }
+
+  int aio_operate(librados::AioCompletion* c,
+		  librados::ObjectWriteOperation* op) {
+    return ioctx.aio_operate(obj.oid, c, op);
+  }
+
+  int aio_operate(librados::AioCompletion* c, librados::ObjectReadOperation* op,
+		  bufferlist *pbl) {
+    return ioctx.aio_operate(obj.oid, c, op, pbl);
+  }
+
+  int watch(uint64_t* handle, librados::WatchCtx2* ctx) {
+    return ioctx.watch2(obj.oid, handle, ctx);
+  }
+
+  int aio_watch(librados::AioCompletion* c, uint64_t* handle,
+		librados::WatchCtx2 *ctx) {
+    return ioctx.aio_watch(obj.oid, c, handle, ctx);
+  }
+
+  int unwatch(uint64_t handle) {
+    return ioctx.unwatch2(handle);
+  }
+
+  int notify(const DoutPrefixProvider* dpp, bufferlist& bl, uint64_t timeout_ms,
+	     bufferlist* pbl, optional_yield y) {
+    return rgw_rados_notify(dpp, ioctx, obj.oid, bl, timeout_ms, pbl, y);
+  }
+
+  void notify_ack(uint64_t notify_id, uint64_t cookie, bufferlist& bl) {
+    ioctx.notify_ack(obj.oid, notify_id, cookie, bl);
+  }
+};
+
+inline std::ostream& operator <<(std::ostream& m, const rgw_rados_ref& ref) {
+  return m << ref.obj;
+}
+
+int rgw_get_rados_ref(const DoutPrefixProvider* dpp, librados::Rados* rados,
+		      rgw_raw_obj obj, rgw_rados_ref* ref);
+
+
+
 int rgw_tools_init(const DoutPrefixProvider *dpp, CephContext *cct);
 void rgw_tools_cleanup();
-
-template<class H, size_t S>
-class RGWEtag
-{
-  H hash;
-
-public:
-  RGWEtag() {
-    if constexpr (std::is_same_v<H, MD5>) {
-      // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-      hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-    }
-  }
-
-  void update(const char *buf, size_t len) {
-    hash.Update((const unsigned char *)buf, len);
-  }
-
-  void update(bufferlist& bl) {
-    if (bl.length() > 0) {
-      update(bl.c_str(), bl.length());
-    }
-  }
-
-  void update(const std::string& s) {
-    if (!s.empty()) {
-      update(s.c_str(), s.size());
-    }
-  }
-  void finish(std::string *etag) {
-    char etag_buf[S];
-    char etag_buf_str[S * 2 + 16];
-
-    hash.Final((unsigned char *)etag_buf);
-    buf_to_hex((const unsigned char *)etag_buf, S,
-	       etag_buf_str);
-
-    *etag = etag_buf_str;
-  }
-};
-
-using RGWMD5Etag = RGWEtag<MD5, CEPH_CRYPTO_MD5_DIGESTSIZE>;
-
-class RGWDataAccess
-{
-  rgw::sal::Driver* driver;
-
-public:
-  RGWDataAccess(rgw::sal::Driver* _driver);
-
-  class Object;
-  class Bucket;
-
-  using BucketRef = std::shared_ptr<Bucket>;
-  using ObjectRef = std::shared_ptr<Object>;
-
-  class Bucket : public std::enable_shared_from_this<Bucket> {
-    friend class RGWDataAccess;
-    friend class Object;
-
-    RGWDataAccess *sd{nullptr};
-    RGWBucketInfo bucket_info;
-    std::string tenant;
-    std::string name;
-    std::string bucket_id;
-    ceph::real_time mtime;
-    std::map<std::string, bufferlist> attrs;
-
-    RGWAccessControlPolicy policy;
-    int finish_init();
-    
-    Bucket(RGWDataAccess *_sd,
-	   const std::string& _tenant,
-	   const std::string& _name,
-	   const std::string& _bucket_id) : sd(_sd),
-                                       tenant(_tenant),
-                                       name(_name),
-				       bucket_id(_bucket_id) {}
-    Bucket(RGWDataAccess *_sd) : sd(_sd) {}
-    int init(const DoutPrefixProvider *dpp, optional_yield y);
-    int init(const RGWBucketInfo& _bucket_info, const std::map<std::string, bufferlist>& _attrs);
-  public:
-    int get_object(const rgw_obj_key& key,
-		   ObjectRef *obj);
-
-  };
-
-
-  class Object {
-    RGWDataAccess *sd{nullptr};
-    BucketRef bucket;
-    rgw_obj_key key;
-
-    ceph::real_time mtime;
-    std::string etag;
-    uint64_t olh_epoch{0};
-    ceph::real_time delete_at;
-    std::optional<std::string> user_data;
-
-    std::optional<bufferlist> aclbl;
-
-    Object(RGWDataAccess *_sd,
-           BucketRef&& _bucket,
-           const rgw_obj_key& _key) : sd(_sd),
-                                      bucket(_bucket),
-                                      key(_key) {}
-  public:
-    int put(bufferlist& data, std::map<std::string, bufferlist>& attrs, const DoutPrefixProvider *dpp, optional_yield y); /* might modify attrs */
-
-    void set_mtime(const ceph::real_time& _mtime) {
-      mtime = _mtime;
-    }
-
-    void set_etag(const std::string& _etag) {
-      etag = _etag;
-    }
-
-    void set_olh_epoch(uint64_t epoch) {
-      olh_epoch = epoch;
-    }
-
-    void set_delete_at(ceph::real_time _delete_at) {
-      delete_at = _delete_at;
-    }
-
-    void set_user_data(const std::string& _user_data) {
-      user_data = _user_data;
-    }
-
-    void set_policy(const RGWAccessControlPolicy& policy);
-
-    friend class Bucket;
-  };
-
-  int get_bucket(const DoutPrefixProvider *dpp, 
-                 const std::string& tenant,
-		 const std::string name,
-		 const std::string bucket_id,
-		 BucketRef *bucket,
-		 optional_yield y) {
-    bucket->reset(new Bucket(this, tenant, name, bucket_id));
-    return (*bucket)->init(dpp, y);
-  }
-
-  int get_bucket(const RGWBucketInfo& bucket_info,
-		 const std::map<std::string, bufferlist>& attrs,
-		 BucketRef *bucket) {
-    bucket->reset(new Bucket(this));
-    return (*bucket)->init(bucket_info, attrs);
-  }
-  friend class Bucket;
-  friend class Object;
-};
-
-using RGWDataAccessRef = std::shared_ptr<RGWDataAccess>;
 
 /// Complete an AioCompletion. To return error values or otherwise
 /// satisfy the caller. Useful for making complicated asynchronous
@@ -273,3 +177,14 @@ void rgw_complete_aio_completion(librados::AioCompletion* c, int r);
 // (Currently providing nullptr will wipe all attributes.)
 
 std::map<std::string, ceph::buffer::list>* no_change_attrs();
+
+bool rgw_check_secure_mon_conn(const DoutPrefixProvider *dpp);
+int rgw_clog_warn(librados::Rados* h, const std::string& msg);
+
+int rgw_list_pool(const DoutPrefixProvider *dpp,
+		  librados::IoCtx& ioctx,
+		  uint32_t max,
+		  const rgw::AccessListFilter& filter,
+		  std::string& marker,
+		  std::vector<std::string> *oids,
+		  bool *is_truncated);

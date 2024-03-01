@@ -1,8 +1,13 @@
 import { ValidatorFn } from '@angular/forms';
 import { FormlyFieldConfig } from '@ngx-formly/core';
 import { forEach } from 'lodash';
+import { formlyAsyncFileValidator } from './validators/file-validator';
 import { formlyAsyncJsonValidator } from './validators/json-validator';
-import { formlyRgwRoleNameValidator, formlyRgwRolePath } from './validators/rgw-role-validator';
+import {
+  formlyFormNumberValidator,
+  formlyRgwRoleNameValidator,
+  formlyRgwRolePath
+} from './validators/rgw-role-validator';
 
 export function getFieldState(field: FormlyFieldConfig, uiSchema: any[] = undefined) {
   const formState: any[] = uiSchema || field.options?.formState;
@@ -27,6 +32,14 @@ export function setupValidators(field: FormlyFieldConfig, uiSchema: any[]) {
       }
       case 'rgwRolePath': {
         validators.push(formlyRgwRolePath);
+        break;
+      }
+      case 'file': {
+        validators.push(formlyAsyncFileValidator);
+        break;
+      }
+      case 'rgwRoleSessionDuration': {
+        validators.push(formlyFormNumberValidator);
         break;
       }
     }

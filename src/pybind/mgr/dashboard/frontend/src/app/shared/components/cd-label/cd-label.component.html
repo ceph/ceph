@@ -1,6 +1,7 @@
 <span *ngIf="!key; else key_value"
       class="badge badge-{{value}}"
-      ngClass="{{value | colorClassFromText}}">
+      ngClass="{{value | colorClassFromText}}"
+      [ngbTooltip]="tooltipText">
   {{ value }}
 </span>
 

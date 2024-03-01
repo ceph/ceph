@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*-
 // vim: ts=8 sw=8 smarttab
 /*
- *	Copyright (C) 1991, NeXT Computer, Inc.  All Rights Reserverd.
+ *	Copyright (C) 1991, NeXT Computer, Inc.  All Rights Reserved.
  *
  *	File:	fsx.cc
  *	Author:	Avadis Tevanian, Jr.
@@ -46,11 +46,15 @@
 #include <math.h>
 #include <fcntl.h>
 #include <random>
+#include <regex>
 
 #include "include/compat.h"
 #include "include/intarith.h"
 #if defined(WITH_KRBD)
 #include "include/krbd.h"
+#endif
+#ifdef _WIN32
+#include "include/win32/winioctl_compat.h"
 #endif
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
@@ -103,7 +107,7 @@ int			logcount = 0;	/* total ops */
  * When mapped read/writes are disabled, they are simply converted to normal
  * reads and writes. When fallocate/fpunch calls are disabled, they are
  * converted to OP_SKIPPED. Hence OP_SKIPPED needs to have a number higher than
- * the operation selction matrix, as does the OP_CLOSEOPEN which is an
+ * the operation selection matrix, as does the OP_CLOSEOPEN which is an
  * operation modifier rather than an operation in itself.
  *
  * Because of the "lite" version, we also need to have different "maximum
@@ -138,6 +142,13 @@ int			logcount = 0;	/* total ops */
 #undef PAGE_MASK
 #define PAGE_MASK       (PAGE_SIZE - 1)
 
+// On Windows, we need to open the files using O_BINARY, otherwise certain
+// characters will get translated (e.g. LF to CRLF), which can corrupt our
+// payload.
+#ifndef O_BINARY
+#define O_BINARY 0
+#endif
+
 
 char	*original_buf;			/* a pointer to the original data */
 char	*good_buf;			/* a pointer to the correct data */
@@ -159,7 +170,7 @@ unsigned long	debugstart = 0;		/* -D flag */
 int	flush_enabled = 0;		/* -f flag */
 int	deep_copy = 0;                  /* -g flag */
 int	holebdy = 1;			/* -h flag */
-bool    journal_replay = false;         /* -j flah */
+bool    journal_replay = false;         /* -j flag */
 int	keep_on_success = 0;		/* -k flag */
 int	do_fsync = 0;			/* -y flag */
 unsigned long	maxfilelen = 256 * 1024;	/* -l flag */
@@ -197,6 +208,8 @@ int mmap_mask;
 FILE *	fsxlogf = NULL;
 int badoff = -1;
 int closeopen = 0;
+
+bool wnbd_disk = false;
 
 void
 vwarnc(int code, const char *fmt, va_list ap) {
@@ -1014,9 +1027,8 @@ krbd_close(struct rbd_ctx *ctx)
 }
 #endif // WITH_KRBD
 
-#if defined(__linux__)
 ssize_t
-krbd_read(struct rbd_ctx *ctx, uint64_t off, size_t len, char *buf)
+generic_pread(struct rbd_ctx *ctx, uint64_t off, size_t len, char *buf)
 {
 	ssize_t n;
 
@@ -1031,7 +1043,7 @@ krbd_read(struct rbd_ctx *ctx, uint64_t off, size_t len, char *buf)
 }
 
 ssize_t
-krbd_write(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf)
+generic_pwrite(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf)
 {
 	ssize_t n;
 
@@ -1045,6 +1057,7 @@ krbd_write(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf)
 	return n;
 }
 
+#if defined(__linux__)
 int
 __krbd_flush(struct rbd_ctx *ctx, bool invalidate)
 {
@@ -1149,6 +1162,8 @@ int
 krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 {
 	int ret;
+	int count = 0;
+	uint64_t effective_size;
 
 	ceph_assert(size % truncbdy == 0);
 
@@ -1170,7 +1185,29 @@ krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 	if (ret < 0)
 		return ret;
 
-	return __librbd_resize(ctx, size);
+	ret = __librbd_resize(ctx, size);
+	if (ret < 0)
+		return ret;
+
+	for (;;) {
+		ret = krbd_get_size(ctx, &effective_size);
+		if (ret < 0)
+			return ret;
+
+		if (effective_size == size)
+			break;
+
+		if (count++ >= 15) {
+			prt("BLKGETSIZE64 size error: expected 0x%llx, actual 0x%llx\n",
+			    (unsigned long long)size,
+			    (unsigned long long)effective_size);
+			return -EINVAL;
+		}
+
+		usleep(count * 250 * 1000);
+	}
+
+	return 0;
 }
 
 int
@@ -1205,8 +1242,8 @@ krbd_flatten(struct rbd_ctx *ctx)
 const struct rbd_operations krbd_operations = {
 	krbd_open,
 	krbd_close,
-	krbd_read,
-	krbd_write,
+	generic_pread,
+	generic_pwrite,
 	krbd_flush,
 	krbd_discard,
 	krbd_get_size,
@@ -1331,8 +1368,8 @@ nbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 const struct rbd_operations nbd_operations = {
 	nbd_open,
 	nbd_close,
-	krbd_read,
-	krbd_write,
+	generic_pread,
+	generic_pwrite,
 	krbd_flush,
 	krbd_discard,
 	krbd_get_size,
@@ -1342,6 +1379,256 @@ const struct rbd_operations nbd_operations = {
 	NULL,
 };
 #endif // __linux__
+
+#ifdef _WIN32
+int
+wnbd_set_writable(struct rbd_ctx *ctx)
+{
+	DWORD bytesReturned = 0;
+
+	SET_DISK_ATTRIBUTES attributes = {0};
+	attributes.Version = sizeof(attributes);
+	attributes.Attributes = 0; // clear read-only flag
+	attributes.AttributesMask = DISK_ATTRIBUTE_READ_ONLY;
+
+	BOOL succeeded = DeviceIoControl(
+		(HANDLE) _get_osfhandle(ctx->krbd_fd),
+		IOCTL_DISK_SET_DISK_ATTRIBUTES,
+		(LPVOID) &attributes,
+		(DWORD) sizeof(attributes),
+		NULL,
+		0,
+		&bytesReturned,
+		NULL);
+	if (!succeeded) {
+		DWORD err = GetLastError();
+		prt("couldn't clear disk read-only flag, error: %d\n", err);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+int
+wnbd_open(const char *name, struct rbd_ctx *ctx)
+{
+	int r;
+	int fd;
+
+	SubProcess process(
+		"rbd-wnbd",
+		SubProcess::KEEP, SubProcess::PIPE, SubProcess::KEEP);
+	process.add_cmd_arg("map");
+	std::string img;
+	img.append(pool);
+	img.append("/");
+	img.append(name);
+	process.add_cmd_arg(img.c_str());
+
+	r = __librbd_open(name, ctx);
+	if (r < 0)
+		return r;
+
+	r = process.spawn();
+	if (r < 0) {
+		prt("failed to run rbd-wnbd map, error: %s\n", process.err().c_str());
+		return r;
+	}
+	r = process.join();
+	if (r) {
+		prt("rbd-wnbd map failed, error: %s\n", process.err().c_str());
+		return -EINVAL;
+	}
+
+	// Retrieve the device number
+	SubProcess process2(
+		"rbd-wnbd",
+		SubProcess::KEEP, SubProcess::PIPE, SubProcess::KEEP);
+	process2.add_cmd_arg("show");
+	process2.add_cmd_arg(img.c_str());
+
+	r = process2.spawn();
+	if (r < 0) {
+		prt("failed to run rbd-wnbd show, error: %s\n", process2.err().c_str());
+		return r;
+	}
+
+	// This should be more than enough for the "rbd-wnbd show" output
+	char map_info[4096];
+	r = safe_read(process2.get_stdout(), map_info, sizeof(map_info));
+	if (r < 0) {
+		prt("unable to retrieve rbd-wnbd map info, error: %d\n", r);
+		return r;
+	}
+
+	r = process2.join();
+	if (r) {
+		prt("rbd-wnbd show failed, error: %s\n", process2.err().c_str());
+		return -EINVAL;
+	}
+
+	std::string dev_path;
+	std::regex dev_num_re("\"disk_number\": ([0-9]+)");
+	std::smatch cm;
+	std::string map_info_str(map_info);
+	if (std::regex_search(map_info_str, cm, dev_num_re)) {
+		dev_path = std::string("\\\\.\\PhysicalDrive") + cm.str(1);
+	} else {
+		prt("unable to retrieve rbd-wnbd device number, device info: %s\n",
+		    map_info);
+		return -EINVAL;
+	}
+
+	// TODO: consider applying o_direct (e.g. using CreateFile).
+	fd = open(dev_path.c_str(), O_RDWR | O_BINARY);
+	if (fd < 0) {
+		r = -errno;
+		prt("open(%s) failed\n", dev_path.c_str());
+		return r;
+	}
+
+	ctx->krbd_name = strdup(img.c_str());
+	ctx->krbd_fd = fd;
+
+	return wnbd_set_writable(ctx);
+}
+
+int
+wnbd_close(struct rbd_ctx *ctx)
+{
+	int r;
+
+	ceph_assert(ctx->krbd_name && ctx->krbd_fd >= 0);
+
+	if (close(ctx->krbd_fd) < 0) {
+		r = -errno;
+		prt("close(%s) failed\n", ctx->krbd_name);
+		return r;
+	}
+
+	SubProcess process("rbd-wnbd");
+	process.add_cmd_arg("unmap");
+	process.add_cmd_arg(ctx->krbd_name);
+
+	r = process.spawn();
+	if (r < 0) {
+		prt("failed to run rbd-wnbd unmap, error: %s\n", process.err().c_str());
+		return r;
+	}
+	r = process.join();
+	if (r) {
+		prt("rbd-wnbd unmap failed, error: %s", process.err().c_str());
+		return -EINVAL;
+	}
+
+	free((void *)ctx->krbd_name);
+
+	ctx->krbd_name = NULL;
+	ctx->krbd_fd = -1;
+
+	return __librbd_close(ctx);
+}
+
+int
+wnbd_flush(struct rbd_ctx *ctx)
+{
+	return _commit(ctx->krbd_fd);
+}
+
+int
+wnbd_discard(struct rbd_ctx *ctx, uint64_t off, uint64_t len)
+{
+	// TODO: use one of the following:
+	// * IOCTL_SCSI_PASS_THROUGH
+	// * IOCTL_SCSI_PASS_THROUGH_DIRECT
+	// * FSCTL_FILE_LEVEL_TRIM
+	// * sg3_utils
+	return -ENOTSUP;
+}
+
+int
+wnbd_get_size(struct rbd_ctx *ctx, uint64_t *size)
+{
+	DWORD bytesReturned = 0;
+
+	GET_LENGTH_INFORMATION length = {0};
+
+	BOOL succeeded = DeviceIoControl(
+		(HANDLE) _get_osfhandle(ctx->krbd_fd),
+		IOCTL_DISK_GET_LENGTH_INFO,
+		NULL,
+		0,
+		(LPVOID) &length,
+		(DWORD) sizeof(length),
+		&bytesReturned,
+		NULL);
+	if (!succeeded) {
+		DWORD err = GetLastError();
+		prt("unable to retrieve wnbd disk size, error: %d\n", err);
+		return -EINVAL;
+	}
+
+	*size = length.Length.QuadPart;
+	return 0;
+}
+
+int
+wnbd_resize(struct rbd_ctx *ctx, uint64_t size)
+{
+	int ret;
+
+	ceph_assert(size % truncbdy == 0);
+
+	ret = wnbd_flush(ctx);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return __librbd_resize(ctx, size);
+}
+
+int
+wnbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
+	   const char *dst_imagename, int *order, int stripe_unit,
+	   int stripe_count)
+{
+	int ret;
+
+	ret = wnbd_flush(ctx);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return __librbd_clone(ctx, src_snapname, dst_imagename, order,
+			      stripe_unit, stripe_count);
+}
+
+int
+wnbd_flatten(struct rbd_ctx *ctx)
+{
+	int ret;
+
+	ret = wnbd_flush(ctx);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return __librbd_flatten(ctx);
+}
+
+const struct rbd_operations wnbd_operations = {
+	wnbd_open,
+	wnbd_close,
+	generic_pread,
+	generic_pwrite,
+	wnbd_flush,
+	wnbd_discard,
+	wnbd_get_size,
+	wnbd_resize,
+	wnbd_clone,
+	wnbd_flatten,
+	NULL,
+};
+#endif // _WIN32
 
 #if defined(__FreeBSD__)
 int
@@ -1448,36 +1735,6 @@ ggate_close(struct rbd_ctx *ctx)
 	ctx->krbd_fd = -1;
 
 	return __librbd_close(ctx);
-}
-
-ssize_t
-ggate_read(struct rbd_ctx *ctx, uint64_t off, size_t len, char *buf)
-{
-	ssize_t n;
-
-	n = pread(ctx->krbd_fd, buf, len, off);
-	if (n < 0) {
-		n = -errno;
-		prt("pread(%llu, %zu) failed\n", off, len);
-		return n;
-	}
-
-	return n;
-}
-
-ssize_t
-ggate_write(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf)
-{
-	ssize_t n;
-
-	n = pwrite(ctx->krbd_fd, buf, len, off);
-	if (n < 0) {
-		n = -errno;
-		prt("pwrite(%llu, %zu) failed\n", off, len);
-		return n;
-	}
-
-	return n;
 }
 
 int
@@ -1592,8 +1849,8 @@ ggate_flatten(struct rbd_ctx *ctx)
 const struct rbd_operations ggate_operations = {
 	ggate_open,
 	ggate_close,
-	ggate_read,
-	ggate_write,
+	generic_pread,
+	generic_pwrite,
 	ggate_flush,
 	ggate_discard,
 	ggate_get_size,
@@ -2038,7 +2295,7 @@ doread(unsigned offset, unsigned size)
 	int ret;
 
 	offset -= offset % readbdy;
-	if (o_direct)
+	if (o_direct || wnbd_disk)
 		size -= size % readbdy;
 	if (size == 0) {
 		if (!quiet && testcalls > simulatedopcount && !o_direct)
@@ -2085,7 +2342,7 @@ doread(unsigned offset, unsigned size)
 void
 check_eofpage(char *s, unsigned offset, char *p, int size)
 {
-	unsigned long last_page, should_be_zero;
+	uintptr_t last_page, should_be_zero;
 
 	if (offset + size <= (file_size & ~page_mask))
 		return;
@@ -2095,7 +2352,7 @@ check_eofpage(char *s, unsigned offset, char *p, int size)
 	 * beyond the true end of the file mapping
 	 * (as required by mmap def in 1996 posix 1003.1)
 	 */
-	last_page = ((unsigned long)p + (offset & page_mask) + size) & ~page_mask;
+	last_page = ((uintptr_t)p + (offset & page_mask) + size) & ~page_mask;
 
 	for (should_be_zero = last_page + (file_size & page_mask);
 	     should_be_zero < last_page + page_size;
@@ -2128,7 +2385,7 @@ dowrite(unsigned offset, unsigned size)
 	off_t newsize;
 
 	offset -= offset % writebdy;
-	if (o_direct)
+	if (o_direct || wnbd_disk)
 		size -= size % writebdy;
 	if (size == 0) {
 		if (!quiet && testcalls > simulatedopcount && !o_direct)
@@ -2540,7 +2797,7 @@ do_clone()
 	}
 
 	clone_filename(filename, sizeof(filename), num_clones);
-	if ((fd = open(filename, O_WRONLY|O_CREAT|O_TRUNC, 0666)) < 0) {
+	if ((fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666)) < 0) {
 		simple_err("do_clone: open", -errno);
 		exit(162);
 	}
@@ -2609,7 +2866,7 @@ check_clone(int clonenum, bool replay_image)
 	}
 
 	clone_filename(filename, sizeof(filename), clonenum + 1);
-	if ((fd = open(filename, O_RDONLY)) < 0) {
+	if ((fd = open(filename, O_RDONLY | O_BINARY)) < 0) {
 		simple_err("check_clone: open", -errno);
 		exit(168);
 	}
@@ -2658,8 +2915,8 @@ check_clone(int clonenum, bool replay_image)
 	        unlink(filename);
         }
 
-	free(good_buf);
-	free(temp_buf);
+	aligned_free(good_buf);
+	aligned_free(temp_buf);
 }
 
 void
@@ -2941,6 +3198,9 @@ usage(void)
 #if defined(__linux__)
 "	-M: enable rbd-nbd mode (use -t and -h too)\n"
 #endif
+#if defined(_WIN32)
+"	-M: enable rbd-wnbd mode (use -L, -r and -w too)\n"
+#endif
 "	-L: fsxLite - no file creations & no file size changes\n\
 	-N numops: total # operations to do (default infinity)\n\
 	-O: use oplen (see -o flag) for every op (default random)\n\
@@ -3219,6 +3479,13 @@ main(int argc, char **argv)
 			ops = &nbd_operations;
 			break;
 #endif
+#if defined(_WIN32)
+		case 'M':
+			prt("rbd-wnbd mode enabled\n");
+			ops = &wnbd_operations;
+			wnbd_disk = true;
+			break;
+#endif
 		case 'L':
 			lite = 1;
 			break;
@@ -3322,7 +3589,7 @@ main(int argc, char **argv)
 		strcat(dirpath, ".");
 	strncat(goodfile, iname, 256);
 	strcat (goodfile, ".fsxgood");
-	fsxgoodfd = open(goodfile, O_RDWR|O_CREAT|O_TRUNC, 0666);
+	fsxgoodfd = open(goodfile, O_RDWR | O_CREAT | O_TRUNC | O_BINARY, 0666);
 	if (fsxgoodfd < 0) {
 		prterr(goodfile);
 		exit(92);
@@ -3440,8 +3707,8 @@ main(int argc, char **argv)
 	rados_shutdown(cluster);
 
 	free(original_buf);
-	free(good_buf);
-	free(temp_buf);
+	aligned_free(good_buf);
+	aligned_free(temp_buf);
 
 	exit(0);
 	return 0;

@@ -29,6 +29,7 @@ from mgr_util import ServerConfigException, build_url, \
 from . import mgr
 from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
+from .services import nvmeof_cli  # noqa # pylint: disable=unused-import
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
 from .services.rgw_client import configure_rgw_credentials
@@ -261,7 +262,7 @@ class CherryPyConfig(object):
                 resp_head['Access-Control-Allow-Origin'] = req_header_origin_url
             ac_method = req_head.get('Access-Control-Request-Method', None)
 
-            allowed_methods = ['GET', 'POST']
+            allowed_methods = ['GET', 'POST', 'PUT']
             allowed_headers = [
                 'Content-Type',
                 'Authorization',

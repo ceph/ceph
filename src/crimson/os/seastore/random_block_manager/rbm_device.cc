@@ -18,28 +18,46 @@ namespace crimson::os::seastore::random_block_device {
 #include "crimson/os/seastore/logging.h"
 SET_SUBSYS(seastore_device);
 
-RBMDevice::mkfs_ret RBMDevice::do_mkfs(device_config_t config) {
-  LOG_PREFIX(RBMDevice::mkfs);
+RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
+  int shard_num, size_t journal_size) {
+  LOG_PREFIX(RBMDevice::do_primary_mkfs);
   return stat_device(
   ).handle_error(
     mkfs_ertr::pass_further{},
     crimson::ct_error::assert_all{
-    "Invalid error stat_device in RBMDevice::mkfs"}
-  ).safe_then([this, FNAME, config=std::move(config)](auto st) {
+    "Invalid error stat_device in RBMDevice::do_primary_mkfs"}
+  ).safe_then(
+    [this, FNAME, config=std::move(config), shard_num, journal_size](auto st) {
     super.block_size = st.block_size;
     super.size = st.size;
     super.feature |= RBM_BITMAP_BLOCK_CRC;
     super.config = std::move(config);
-    assert(super.journal_size);
-    assert(super.size >= super.journal_size);
+    super.journal_size = journal_size;
+    ceph_assert_always(super.journal_size > 0);
+    ceph_assert_always(super.size >= super.journal_size);
+    ceph_assert_always(shard_num > 0);
+
+    std::vector<rbm_shard_info_t> shard_infos(shard_num);
+    for (int i = 0; i < shard_num; i++) {
+      uint64_t aligned_size = 
+	(super.size / shard_num) -
+	((super.size / shard_num) % super.block_size);
+      shard_infos[i].size = aligned_size;
+      shard_infos[i].start_offset = i * aligned_size;
+      assert(shard_infos[i].size > super.journal_size);
+    }
+    super.shard_infos = shard_infos;
+    super.shard_num = shard_num;
+    shard_info = shard_infos[seastar::this_shard_id()];
     DEBUG("super {} ", super);
+
     // write super block
     return open(get_device_path(),
       seastar::open_flags::rw | seastar::open_flags::dsync
     ).handle_error(
       mkfs_ertr::pass_further{},
       crimson::ct_error::assert_all{
-      "Invalid error open in RBMDevice::mkfs"}
+      "Invalid error open in RBMDevice::do_primary_mkfs"}
     ).safe_then([this] {
       return write_rbm_header(
       ).safe_then([this] {
@@ -47,7 +65,7 @@ RBMDevice::mkfs_ret RBMDevice::do_mkfs(device_config_t config) {
       }).handle_error(
 	mkfs_ertr::pass_further{},
 	crimson::ct_error::assert_all{
-	"Invalid error write_rbm_header in RBMDevice::mkfs"
+	"Invalid error write_rbm_header in RBMDevice::do_primary_mkfs"
       });
     });
   });
@@ -129,7 +147,7 @@ read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
   });
 }
 
-RBMDevice::mount_ret RBMDevice::do_mount()
+RBMDevice::mount_ret RBMDevice::do_shard_mount()
 {
   return open(get_device_path(),
     seastar::open_flags::rw | seastar::open_flags::dsync
@@ -138,25 +156,30 @@ RBMDevice::mount_ret RBMDevice::do_mount()
     ).handle_error(
       mount_ertr::pass_further{},
       crimson::ct_error::assert_all{
-      "Invalid error stat_device in RBMDevice::mount"}
+      "Invalid error stat_device in RBMDevice::do_shard_mount"}
     ).safe_then([this](auto st) {
+      assert(st.block_size > 0);
       super.block_size = st.block_size;
       return read_rbm_header(RBM_START_ADDRESS
-      ).safe_then([](auto s) {
+      ).safe_then([this](auto s) {
+	LOG_PREFIX(RBMDevice::do_shard_mount);
+	shard_info = s.shard_infos[seastar::this_shard_id()];
+	INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);
+	s.validate();
 	return seastar::now();
       });
     });
   }).handle_error(
     mount_ertr::pass_further{},
     crimson::ct_error::assert_all{
-    "Invalid error mount in NVMeBlockDevice::mount"}
+    "Invalid error mount in RBMDevice::do_shard_mount"}
   );
 }
 
 EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size) {
   return EphemeralRBMDeviceRef(
     new EphemeralRBMDevice(journal_size + data_size + 
-	random_block_device::RBMDevice::get_journal_start(),
+	random_block_device::RBMDevice::get_shard_reserved_size(),
 	EphemeralRBMDevice::TEST_BLOCK_SIZE));
 }
 
@@ -234,6 +257,14 @@ write_ertr::future<> EphemeralRBMDevice::writev(
 
   bl.begin().copy(bl.length(), buf + offset);
   return write_ertr::now();
+}
+
+EphemeralRBMDevice::mount_ret EphemeralRBMDevice::mount() {
+  return do_shard_mount();
+}
+
+EphemeralRBMDevice::mkfs_ret EphemeralRBMDevice::mkfs(device_config_t config) {
+  return do_primary_mkfs(config, 1, DEFAULT_TEST_CBJOURNAL_SIZE);
 }
 
 }

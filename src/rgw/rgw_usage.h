@@ -24,7 +24,7 @@ public:
 
   static int trim(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 		  rgw::sal::User* user , rgw::sal::Bucket* bucket,
-		  uint64_t start_epoch, uint64_t end_epoch);
+		  uint64_t start_epoch, uint64_t end_epoch, optional_yield y);
 
-  static int clear(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver);
+  static int clear(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y);
 };

@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <boost/type_index.hpp>
 #include <fmt/ranges.h>
-#include "common/hobject_fmt.h"
+#include "common/hobject.h"
 #include "crimson/osd/backfill_state.h"
 #include "osd/osd_types_fmt.h"
 

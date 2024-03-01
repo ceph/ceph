@@ -20,6 +20,7 @@
 #include "msg/msg_types.h"
 #include "include/encoding.h"
 #include "include/utime.h"
+#include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "common/ceph_releases.h"
 #include "common/version.h"
@@ -74,7 +75,8 @@ public:
       decode(see_also, p);
       DECODE_FINISH(p);
     }
-    void dump(ceph::Formatter *f) const {
+    void dump(ceph::Formatter *f) const
+    {
       f->dump_string("name", name);
       f->dump_string("type", Option::type_to_str(
 		       static_cast<Option::type_t>(type)));
@@ -101,6 +103,23 @@ public:
 	f->dump_string("option", i);
       }
       f->close_section();
+    }
+    static void generate_test_instances(std::list<ModuleOption*>& ls)
+    {
+      ls.push_back(new ModuleOption);
+      ls.push_back(new ModuleOption);
+      ls.back()->name = "name";
+      ls.back()->type = Option::TYPE_STR;
+      ls.back()->level = Option::LEVEL_ADVANCED;
+      ls.back()->flags = Option::FLAG_RUNTIME;
+      ls.back()->default_value = "default_value";
+      ls.back()->min = "min";
+      ls.back()->max = "max";
+      ls.back()->enum_allowed.insert("enum_allowed");
+      ls.back()->desc = "desc";
+      ls.back()->long_desc = "long_desc";
+      ls.back()->tags.insert("tag");
+      ls.back()->see_also.insert("see_also");
     }
   };
 
@@ -139,7 +158,8 @@ public:
       return (name == rhs.name) && (can_run == rhs.can_run);
     }
 
-    void dump(ceph::Formatter *f) const {
+    void dump(ceph::Formatter *f) const 
+    {
       f->open_object_section("module");
       f->dump_string("name", name);
       f->dump_bool("can_run", can_run);
@@ -150,6 +170,16 @@ public:
       }
       f->close_section();
       f->close_section();
+    }
+
+    static void generate_test_instances(std::list<ModuleInfo*>& ls)
+    {
+      ls.push_back(new ModuleInfo);
+      ls.push_back(new ModuleInfo);
+      ls.back()->name = "name";
+      ls.back()->can_run = true;
+      ls.back()->error_string = "error_string";
+      ls.back()->module_options["module_option"] = ModuleOption();
     }
   };
 
@@ -209,6 +239,19 @@ public:
       }
       DECODE_FINISH(p);
     }
+    void dump(ceph::Formatter *f) const
+    {
+      f->dump_unsigned("gid", gid);
+      f->dump_string("name", name);
+      encode_json("available_modules", available_modules, f);
+      f->dump_unsigned("mgr_features", mgr_features);
+    }
+    static void generate_test_instances(std::list<StandbyInfo*>& ls)
+    {
+      ls.push_back(new StandbyInfo(1, "a", {}, 0));
+      ls.push_back(new StandbyInfo(2, "b", {}, 0));
+      ls.push_back(new StandbyInfo(3, "c", {}, 0));
+    }
 
     bool have_module(const std::string &module_name) const
     {
@@ -224,6 +267,10 @@ public:
 
   epoch_t epoch = 0;
   epoch_t last_failure_osd_epoch = 0;
+
+
+  static const uint64_t FLAG_DOWN = (1<<0);
+  uint64_t flags = 0;
 
   /// global_id of the ceph-mgr instance selected as a leader
   uint64_t active_gid = 0;
@@ -401,7 +448,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(12, 6, bl);
+    ENCODE_START(13, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -425,13 +472,14 @@ public:
     // backwards compatible messsage for older monitors.
     encode(clients_addrs, bl, features);
     encode(clients_names, bl, features);
+    encode(flags, bl);
     ENCODE_FINISH(bl);
     return;
   }
 
   void decode(ceph::buffer::list::const_iterator& p)
   {
-    DECODE_START(12, p);
+    DECODE_START(13, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -498,11 +546,16 @@ public:
 	}
       }
     }
+    if (struct_v >= 13) {
+      decode(flags, p);
+    }
     DECODE_FINISH(p);
   }
 
-  void dump(ceph::Formatter *f) const {
+  void dump(ceph::Formatter *f) const
+  {
     f->dump_int("epoch", epoch);
+    f->dump_int("flags", flags);
     f->dump_int("active_gid", get_active_gid());
     f->dump_string("active_name", get_active_name());
     f->dump_object("active_addrs", active_addrs);
@@ -561,7 +614,8 @@ public:
     f->close_section(); // active_clients
   }
 
-  static void generate_test_instances(std::list<MgrMap*> &l) {
+  static void generate_test_instances(std::list<MgrMap*> &l)
+  {
     l.push_back(new MgrMap);
   }
 

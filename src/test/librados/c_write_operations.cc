@@ -258,16 +258,30 @@ TEST(LibRadosCWriteOps, CmpExt) {
   ASSERT_EQ(sizeof(hi), static_cast<std::size_t>(rados_read(ioctx, "test", hi, sizeof(hi), 0)));
   ASSERT_EQ(0, memcmp("five", hi, sizeof(hi)));
 
-  // compare and bail before write due to mismatch
-  val = 0;
+  // Check offset return error value
   op = rados_create_write_op();
   ASSERT_TRUE(op);
   rados_write_op_cmpext(op, "four", 4, 0, &val);
   rados_write_op_write(op, "six ", 4, 0);
-  ASSERT_EQ(-MAX_ERRNO - 1, rados_write_op_operate(op, ioctx, "test", NULL, 0));
 
+  ASSERT_EQ(-MAX_ERRNO - 1, rados_write_op_operate(op, ioctx, "test", NULL,
+                                                     LIBRADOS_OPERATION_RETURNVEC));
   ASSERT_EQ(-MAX_ERRNO - 1, val);
-
+  
+  // compare and bail before write due to mismatch
+  // do it 1000 times to make sure we are hitting
+  // some socket injection
+  for (auto i = 0; i < 1000; ++i) {
+    val = 0;
+    op = rados_create_write_op();
+    ASSERT_TRUE(op);
+    rados_write_op_cmpext(op, "four", 4, 0, &val);
+    rados_write_op_write(op, "six ", 4, 0);
+    std::string const s = "test_" + std::to_string(i);
+    ASSERT_EQ(-MAX_ERRNO , rados_write_op_operate(op, ioctx, s.c_str(), NULL,
+                                                     LIBRADOS_OPERATION_RETURNVEC));
+    ASSERT_EQ(-MAX_ERRNO , val);
+  }
   // cleanup
   op = rados_create_write_op();
   ASSERT_TRUE(op);

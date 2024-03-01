@@ -8,7 +8,11 @@
 
 #include "include/utime.h"
 
+#include "common/ceph_json.h"
+#include "common/Formatter.h"
+
 class JSONObj;
+class JSONDecoder;
 
 
 struct cls_log_entry {
@@ -40,6 +44,34 @@ struct cls_log_entry {
       decode(id, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(ceph::Formatter* f) const {
+    encode_json("section", section, f);
+    encode_json("name", name, f);
+    encode_json("timestamp", timestamp, f);
+    encode_json("data", data, f);
+    encode_json("id", id, f);
+  }
+
+  void decode_json(JSONObj* obj) {
+    JSONDecoder::decode_json("section", section, obj);
+    JSONDecoder::decode_json("name", name, obj);
+    JSONDecoder::decode_json("timestamp", timestamp, obj);
+    JSONDecoder::decode_json("data", data, obj);
+    JSONDecoder::decode_json("id", id, obj);
+  }
+
+  static void generate_test_instances(std::list<cls_log_entry *>& l) {
+    l.push_back(new cls_log_entry{});
+    l.push_back(new cls_log_entry);
+    l.back()->id = "test_id";
+    l.back()->section = "test_section";
+    l.back()->name = "test_name";
+    l.back()->timestamp = utime_t();
+    ceph::buffer::list bl;
+    ceph::encode(std::string("Test"), bl, 0);
+    l.back()->data = bl;
+  }
 };
 WRITE_CLASS_ENCODER(cls_log_entry)
 
@@ -59,6 +91,16 @@ struct cls_log_header {
     decode(max_marker, bl);
     decode(max_time, bl);
     DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter* f) const {
+    f->dump_string("max_marker", max_marker);
+    f->dump_stream("max_time") << max_time;
+  }
+  static void generate_test_instances(std::list<cls_log_header*>& o) {
+    o.push_back(new cls_log_header);
+    o.push_back(new cls_log_header);
+    o.back()->max_marker = "test_marker";
+    o.back()->max_time = utime_t();
   }
 };
 inline bool operator ==(const cls_log_header& lhs, const cls_log_header& rhs) {

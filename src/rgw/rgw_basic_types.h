@@ -31,7 +31,8 @@
 #include "rgw_user_types.h"
 #include "rgw_bucket_types.h"
 #include "rgw_obj_types.h"
-#include "rgw_obj_manifest.h"
+
+#include "driver/rados/rgw_obj_manifest.h" // FIXME: subclass dependency
 
 #include "common/Formatter.h"
 
@@ -65,13 +66,22 @@ struct rgw_zone_id {
   rgw_zone_id(std::string&& _id) : id(std::move(_id)) {}
 
   void encode(ceph::buffer::list& bl) const {
-    /* backward compatiblity, not using ENCODE_{START,END} macros */
+    /* backward compatibility, not using ENCODE_{START,END} macros */
     ceph::encode(id, bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    /* backward compatiblity, not using DECODE_{START,END} macros */
+    /* backward compatibility, not using DECODE_{START,END} macros */
     ceph::decode(id, bl);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_string("id", id);
+  }
+
+  static void generate_test_instances(std::list<rgw_zone_id*>& o) {
+    o.push_back(new rgw_zone_id);
+    o.push_back(new rgw_zone_id("id"));
   }
 
   void clear() {

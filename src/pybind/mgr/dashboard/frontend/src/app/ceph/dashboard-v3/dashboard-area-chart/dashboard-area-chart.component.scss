@@ -1,9 +1,12 @@
-.center-text {
-  margin-top: 1.2vw;
-  position: relative;
-}
+@use './src/styles/vendor/variables' as vv;
 
 .chart {
-  height: 8vh;
-  margin-top: 15px;
+  height: 9vh;
+}
+
+.box {
+  background-color: vv.$chart-color-strong-blue;
+  border: 2px double vv.$chart-color-light-gray;
+  height: 13px;
+  width: 13px;
 }

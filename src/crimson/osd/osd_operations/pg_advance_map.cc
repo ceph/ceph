@@ -21,10 +21,13 @@ namespace {
 namespace crimson::osd {
 
 PGAdvanceMap::PGAdvanceMap(
-  ShardServices &shard_services, Ref<PG> pg, epoch_t to,
+  Ref<PG> pg, ShardServices &shard_services, epoch_t to,
   PeeringCtx &&rctx, bool do_init)
-  : shard_services(shard_services), pg(pg), to(to),
-    rctx(std::move(rctx)), do_init(do_init) {}
+  : pg(pg), shard_services(shard_services), to(to),
+    rctx(std::move(rctx)), do_init(do_init)
+{
+  logger().debug("{}: created", *this);
+}
 
 PGAdvanceMap::~PGAdvanceMap() {}
 
@@ -52,6 +55,11 @@ void PGAdvanceMap::dump_detail(Formatter *f) const
   f->close_section();
 }
 
+PGPeeringPipeline &PGAdvanceMap::peering_pp(PG &pg)
+{
+  return pg.peering_request_pg_pipeline;
+}
+
 seastar::future<> PGAdvanceMap::start()
 {
   using cached_map_t = OSDMapService::cached_map_t;
@@ -60,8 +68,17 @@ seastar::future<> PGAdvanceMap::start()
 
   IRef ref = this;
   return enter_stage<>(
-    pg->peering_request_pg_pipeline.process
+    peering_pp(*pg).process
   ).then([this] {
+    /*
+     * PGAdvanceMap is scheduled at pg creation and when
+     * broadcasting new osdmaps to pgs. We are not able to serialize
+     * between the two different PGAdvanceMap callers since a new pg
+     * will get advanced to the latest osdmap at it's creation.
+     * As a result, we may need to adjust the PGAdvance operation
+     * 'from' epoch.
+     * See: https://tracker.ceph.com/issues/61744
+     */
     from = pg->get_osdmap_epoch();
     auto fut = seastar::now();
     if (do_init) {
@@ -71,10 +88,13 @@ seastar::future<> PGAdvanceMap::start()
       });
     }
     return fut.then([this] {
+      ceph_assert(std::cmp_less_equal(*from, to));
       return seastar::do_for_each(
 	boost::make_counting_iterator(*from + 1),
 	boost::make_counting_iterator(to + 1),
 	[this](epoch_t next_epoch) {
+	  logger().debug("{}: start: getting map {}",
+	                 *this, next_epoch);
 	  return shard_services.get_map(next_epoch).then(
 	    [this] (cached_map_t&& next_map) {
 	      logger().debug("{}: advancing map to {}",
@@ -102,8 +122,12 @@ seastar::future<> PGAdvanceMap::start()
 	  return shard_services.send_pg_temp();
 	});
     });
-  }).then([this, ref=std::move(ref)] {
+  }).then([this] {
     logger().debug("{}: complete", *this);
+    return handle.complete();
+  }).finally([this, ref=std::move(ref)] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
   });
 }
 

@@ -159,30 +159,13 @@ class S3tests_java(Task):
             stdout=BytesIO()
         )
 
-        endpoint = self.ctx.rgw.role_endpoints[client]
-        if endpoint.cert:
-            path = 'lib/security/cacerts'
-            self.ctx.cluster.only(client).run(
-                args=['sudo',
-                      'keytool',
-                      '-import', '-alias', '{alias}'.format(
-                          alias=endpoint.hostname),
-                      '-keystore',
-                      run.Raw(
-                          '$(readlink -e $(dirname $(readlink -e $(which keytool)))/../{path})'.format(path=path)),
-                      '-file', endpoint.cert.certificate,
-                      '-storepass', 'changeit',
-                      ],
-                stdout=BytesIO()
-            )
-
     def create_users(self):
         """
         Create a main and an alternative s3 user.
         Configuration is read from a skelethon config file
         s3tests.teuth.config.yaml in the java-s3tests repository
         and missing information is added from the task.
-        Existing values are NOT overriden unless they are empty!
+        Existing values are NOT overridden unless they are empty!
         """
         log.info("S3 Tests Java: Creating S3 users...")
         testdir = teuthology.get_testdir(self.ctx)

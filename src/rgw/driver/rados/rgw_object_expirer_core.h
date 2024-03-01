@@ -30,19 +30,16 @@
 
 #include "rgw_sal_rados.h"
 
-class RGWSI_RADOS;
 class RGWSI_Zone;
 class RGWBucketInfo;
 class cls_timeindex_entry;
 
 class RGWObjExpStore {
   CephContext *cct;
-  RGWSI_RADOS *rados_svc;
   rgw::sal::RadosStore* driver;
 public:
-  RGWObjExpStore(CephContext *_cct, RGWSI_RADOS *_rados_svc, rgw::sal::RadosStore* _driver) : cct(_cct),
-                                                                                      rados_svc(_rados_svc),
-                                                                                      driver(_driver) {}
+  RGWObjExpStore(CephContext *_cct, rgw::sal::RadosStore* _driver) : cct(_cct),
+								     driver(_driver) {}
 
   int objexp_hint_add(const DoutPrefixProvider *dpp, 
                       const ceph::real_time& delete_at,
@@ -66,7 +63,7 @@ public:
                        const ceph::real_time& start_time,
                        const ceph::real_time& end_time,
                        const std::string& from_marker,
-                       const std::string& to_marker);
+                       const std::string& to_marker, optional_yield y);
 };
 
 class RGWObjectExpirer {
@@ -101,7 +98,7 @@ protected:
 public:
   explicit RGWObjectExpirer(rgw::sal::Driver* _driver)
     : driver(_driver),
-      exp_store(_driver->ctx(), static_cast<rgw::sal::RadosStore*>(driver)->svc()->rados, static_cast<rgw::sal::RadosStore*>(driver)),
+      exp_store(_driver->ctx(), static_cast<rgw::sal::RadosStore*>(driver)),
       worker(NULL) {
   }
   ~RGWObjectExpirer() {
@@ -129,16 +126,16 @@ public:
                   const utime_t& from,
                   const utime_t& to,
                   const std::string& from_marker,
-                  const std::string& to_marker);
+                  const std::string& to_marker, optional_yield y);
 
   bool process_single_shard(const DoutPrefixProvider *dpp, 
                             const std::string& shard,
                             const utime_t& last_run,
-                            const utime_t& round_start);
+                            const utime_t& round_start, optional_yield y);
 
   bool inspect_all_shards(const DoutPrefixProvider *dpp, 
                           const utime_t& last_run,
-                          const utime_t& round_start);
+                          const utime_t& round_start, optional_yield y);
 
   bool going_down();
   void start_processor();

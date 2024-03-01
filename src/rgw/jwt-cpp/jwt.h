@@ -74,7 +74,7 @@ namespace jwt {
 	namespace helper {
 		inline
 		std::string extract_pubkey_from_cert(const std::string& certstr, const std::string& pw = "") {
-			// TODO: Cannot find the exact version this change happended
+			// TODO: Cannot find the exact version this change happened
 #if OPENSSL_VERSION_NUMBER <= 0x1000114fL
 			std::unique_ptr<BIO, decltype(&BIO_free_all)> certbio(BIO_new_mem_buf(const_cast<char*>(certstr.data()), certstr.size()), BIO_free_all);
 #else
@@ -203,7 +203,7 @@ namespace jwt {
 				return alg_name;
 			}
 		private:
-			/// HMAC secrect
+			/// HMAC secret
 			const std::string secret;
 			/// HMAC hash generator
 			const EVP_MD*(*md)();
@@ -821,7 +821,7 @@ namespace jwt {
 		/**
 		 * Get type of contained object
 		 * \return Type
-		 * \throws std::logic_error An internal error occured
+		 * \throws std::logic_error An internal error occurred
 		 */
 		type get_type() const {
 			if (val.is<picojson::null>()) return type::null;
@@ -1045,7 +1045,7 @@ namespace jwt {
 		std::unordered_map<std::string, claim> header_claims;
 	public:
 		/**
-		 * Check if algortihm is present ("alg")
+		 * Check if algorithm is present ("alg")
 		 * \return true if present, false otherwise
 		 */
 		bool has_algorithm() const noexcept { return has_header_claim("alg"); }
@@ -1119,7 +1119,7 @@ namespace jwt {
 	 */
 	class decoded_jwt : public header, public payload {
 	protected:
-		/// Unmodifed token, as passed to constructor
+		/// Unmodified token, as passed to constructor
 		const std::string token;
 		/// Header part decoded from base64
 		std::string header;

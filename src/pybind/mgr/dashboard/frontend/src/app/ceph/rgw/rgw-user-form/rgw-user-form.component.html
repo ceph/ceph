@@ -159,6 +159,7 @@
               <label class="custom-control-label"
                      for="suspended"
                      i18n>Suspended</label>
+              <cd-helper i18n>Suspending the user disables the user and subuser.</cd-helper>
             </div>
           </div>
         </div>
@@ -502,6 +503,9 @@
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('user_quota_max_size', frm, 'quotaMaxSize')"
                     i18n>The value is not valid.</span>
+              <span *ngIf="userForm.showError('user_quota_max_size', formDir, 'pattern')"
+                    class="invalid-feedback"
+                    i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
             </div>
           </div>
 
@@ -596,6 +600,9 @@
               <span class="invalid-feedback"
                     *ngIf="userForm.showError('bucket_quota_max_size', frm, 'quotaMaxSize')"
                     i18n>The value is not valid.</span>
+              <span *ngIf="userForm.showError('bucket_quota_max_size', formDir, 'pattern')"
+                    class="invalid-feedback"
+                    i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
             </div>
           </div>
 

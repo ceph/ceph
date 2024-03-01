@@ -88,7 +88,7 @@ public:
                           bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl);
   virtual int aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
                           AioCompletionImpl *c, SnapContext *snap_context,
-                          int flags);
+                          const ceph::real_time *pmtime, int flags);
   virtual int aio_operate_read(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, int flags,
                                bufferlist *pbl, uint64_t snap_id,

@@ -67,8 +67,12 @@ inline param_vec_t make_param_list(const std::map<std::string, std::string> *pp)
 
 class RGWRESTConn
 {
+  /* the endpoint is not able to connect if the timestamp is not real_clock::zero */
+  using endpoint_status_map = std::unordered_map<std::string, std::atomic<ceph::real_time>>;
+
   CephContext *cct;
   std::vector<std::string> endpoints;
+  endpoint_status_map endpoints_status;
   RGWAccessKey key;
   std::string self_zone_group;
   std::string remote_id;
@@ -99,6 +103,7 @@ public:
 
   int get_url(std::string& endpoint);
   std::string get_url();
+  void set_url_unconnectable(const std::string& endpoint);
   const std::string& get_self_zonegroup() {
     return self_zone_group;
   }
@@ -125,10 +130,10 @@ public:
   virtual void populate_params(param_vec_t& params, const rgw_user *uid, const std::string& zonegroup);
 
   /* sync request */
-  int forward(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
+  int forward(const DoutPrefixProvider *dpp, const rgw_user& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
 
   /* sync request */
-  int forward_iam_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
+  int forward_iam_request(const DoutPrefixProvider *dpp, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
 
 
   /* async requests */
@@ -154,6 +159,7 @@ public:
     bool get_op{false};
     bool rgwx_stat{false};
     bool sync_manifest{false};
+    bool sync_cloudtiered{false};
 
     bool skip_decrypt{true};
     RGWHTTPStreamRWRequest::ReceiveCB *cb{nullptr};
@@ -161,6 +167,7 @@ public:
     bool range_is_set{false};
     uint64_t range_start{0};
     uint64_t range_end{0};
+    rgw_zone_set_entry *dst_zone_trace{nullptr};
   };
 
   int get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
@@ -169,7 +176,8 @@ public:
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
-              bool skip_decrypt, bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
+              bool skip_decrypt, rgw_zone_set_entry *dst_zone_trace, bool sync_cloudtiered,
+              bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
   int complete_request(RGWRESTStreamRWRequest *req,
                        std::string *etag,
                        ceph::real_time *mtime,
@@ -341,6 +349,9 @@ public:
   int wait(bufferlist *pbl, optional_yield y) {
     int ret = req.wait(y);
     if (ret < 0) {
+      if (ret == -EIO) {
+        conn->set_url_unconnectable(req.get_url_orig());
+      }
       return ret;
     }
 
@@ -393,6 +404,9 @@ int RGWRESTReadResource::wait(T *dest, optional_yield y)
 {
   int ret = req.wait(y);
   if (ret < 0) {
+    if (ret == -EIO) {
+      conn->set_url_unconnectable(req.get_url_orig());
+    }
     return ret;
   }
 
@@ -464,6 +478,10 @@ public:
     int ret = req.wait(y);
     *pbl = bl;
 
+    if (ret == -EIO) {
+      conn->set_url_unconnectable(req.get_url_orig());
+    }
+
     if (ret < 0 && err_result ) {
       ret = parse_decode_json(*err_result, bl);
     }
@@ -479,6 +497,10 @@ template <class T, class E>
 int RGWRESTSendResource::wait(T *dest, optional_yield y, E *err_result)
 {
   int ret = req.wait(y);
+  if (ret == -EIO) {
+    conn->set_url_unconnectable(req.get_url_orig());
+  }
+
   if (ret >= 0) {
     ret = req.get_status();
   }

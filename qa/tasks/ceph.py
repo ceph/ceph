@@ -28,6 +28,7 @@ from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology import exceptions
 from teuthology.orchestra import run
+from teuthology.util.scanner import ValgrindScanner
 from tasks import ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
 from tasks.daemonwatchdog import DaemonWatchdog
@@ -262,6 +263,7 @@ def ceph_log(ctx, config):
             run.wait(
                 ctx.cluster.run(
                     args=[
+                        'time',
                         'sudo',
                         'find',
                         '/var/log/ceph',
@@ -271,10 +273,15 @@ def ceph_log(ctx, config):
                         run.Raw('|'),
                         'sudo',
                         'xargs',
+                        '--max-args=1',
+                        '--max-procs=0',
+                        '--verbose',
                         '-0',
                         '--no-run-if-empty',
                         '--',
                         'gzip',
+                        '-5',
+                        '--verbose',
                         '--',
                     ],
                     wait=False,
@@ -321,38 +328,15 @@ def valgrind_post(ctx, config):
     try:
         yield
     finally:
-        lookup_procs = list()
-        log.info('Checking for errors in any valgrind logs...')
-        for remote in ctx.cluster.remotes.keys():
-            # look at valgrind logs for each node
-            proc = remote.run(
-                args="sudo zgrep '<kind>' /var/log/ceph/valgrind/* "
-                     # include a second file so that we always get
-                     # a filename prefix on the output
-                     "/dev/null | sort | uniq",
-                wait=False,
-                check_status=False,
-                stdout=StringIO(),
-            )
-            lookup_procs.append((proc, remote))
-
         valgrind_exception = None
-        for (proc, remote) in lookup_procs:
-            proc.wait()
-            out = proc.stdout.getvalue()
-            for line in out.split('\n'):
-                if line == '':
-                    continue
-                try:
-                    (file, kind) = line.split(':')
-                except Exception:
-                    log.error('failed to split line %s', line)
-                    raise
-                log.debug('file %s kind %s', file, kind)
-                if (file.find('mds') >= 0) and kind.find('Lost') > 0:
-                    continue
-                log.error('saw valgrind issue %s in %s', kind, file)
-                valgrind_exception = Exception('saw valgrind issues')
+        valgrind_yaml = os.path.join(ctx.archive, 'valgrind.yaml')
+        for remote in ctx.cluster.remotes.keys():
+            scanner = ValgrindScanner(remote)
+            errors = scanner.scan_all_files('/var/log/ceph/valgrind/*')
+            scanner.write_summary(valgrind_yaml)
+            if errors and not valgrind_exception:
+                log.debug('valgrind exception message: %s', errors[0])
+                valgrind_exception = Exception(errors[0])
 
         if config.get('expect_valgrind_errors'):
             if not valgrind_exception:
@@ -1319,7 +1303,7 @@ def osd_scrub_pgs(ctx, config):
                     # request was missed.  do not do it every time because
                     # the scrub may be in progress or not reported yet and
                     # we will starve progress.
-                    manager.raw_cluster_cmd('pg', 'deep-scrub', pgid)
+                    manager.raw_cluster_cmd('tell', pgid, 'deep-scrub')
             if gap_cnt > retries:
                 raise RuntimeError('Exiting scrub checking -- not all pgs scrubbed.')
         if loop:
@@ -1495,9 +1479,8 @@ def healthy(ctx, config):
 
     if ctx.cluster.only(teuthology.is_type('mds', cluster_name)).remotes:
         # Some MDSs exist, wait for them to be healthy
-        ceph_fs = Filesystem(ctx) # TODO: make Filesystem cluster-aware
-        ceph_fs.wait_for_daemons(timeout=300)
-
+        for fs in Filesystem.get_all_fs(ctx):
+            fs.wait_for_daemons(timeout=300)
 
 def wait_for_mon_quorum(ctx, config):
     """

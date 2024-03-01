@@ -12,6 +12,7 @@ import socket
 import time
 import logging
 import sys
+from ipaddress import ip_address
 from threading import Lock, Condition, Event
 from typing import no_type_check, NewType
 import urllib
@@ -167,7 +168,7 @@ class CephfsConnectionPool(object):
             logger.debug("CephFS mounting...")
             self.fs.mount(filesystem_name=self.fs_name.encode('utf-8'))
             logger.debug("Connection to cephfs '{0}' complete".format(self.fs_name))
-            self.mgr._ceph_register_client(self.fs.get_addrs())
+            self.mgr._ceph_register_client(None, self.fs.get_addrs(), False)
 
         def disconnect(self) -> None:
             try:
@@ -176,7 +177,7 @@ class CephfsConnectionPool(object):
                 logger.info("disconnecting from cephfs '{0}'".format(self.fs_name))
                 addrs = self.fs.get_addrs()
                 self.fs.shutdown()
-                self.mgr._ceph_unregister_client(addrs)
+                self.mgr._ceph_unregister_client(None, addrs)
                 self.fs = None
             except Exception as e:
                 logger.debug("disconnect: ({0})".format(e))
@@ -413,7 +414,9 @@ def test_port_allocation(addr: str, port: int) -> None:
     If no exception is raised, the port can be assumed available
     """
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        ip_version = ip_address(addr).version
+        addr_family = socket.AF_INET if ip_version == 4 else socket.AF_INET6
+        sock = socket.socket(addr_family, socket.SOCK_STREAM)
         sock.bind((addr, port))
         sock.close()
     except socket.error as e:

@@ -18,7 +18,6 @@
 #include <optional>
 
 #include "rgw_putobj.h"
-#include "services/svc_rados.h"
 #include "services/svc_tier_rados.h"
 #include "rgw_sal.h"
 #include "rgw_obj_manifest.h"
@@ -69,8 +68,8 @@ class RadosWriter : public rgw::sal::DataProcessor {
   RGWRados *const store;
   const RGWBucketInfo& bucket_info;
   RGWObjectCtx& obj_ctx;
-  const rgw_obj head_obj;
-  RGWSI_RADOS::Obj stripe_obj; // current stripe object
+  rgw_obj head_obj;
+  rgw_rados_ref stripe_obj; // current stripe object
   RawObjSet written; // set of written objects for deletion
   const DoutPrefixProvider *dpp;
   optional_yield y;
@@ -88,6 +87,9 @@ class RadosWriter : public rgw::sal::DataProcessor {
 
   // add alloc hint to osd
   void add_write_hint(librados::ObjectWriteOperation& op);
+
+  // change the head object
+  void set_head_obj(const rgw_obj& head);
 
   // change the current stripe object
   int set_stripe_obj(const rgw_raw_obj& obj);
@@ -195,7 +197,8 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
                rgw_zone_set *zones_trace, bool *canceled,
-               optional_yield y) override;
+               const req_context& rctx,
+               uint32_t flags) override;
 
 };
 
@@ -242,7 +245,8 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
                rgw_zone_set *zones_trace, bool *canceled,
-               optional_yield y) override;
+               const req_context& rctx,
+               uint32_t flags) override;
 
 };
 
@@ -278,7 +282,8 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                  std::map<std::string, bufferlist>& attrs, ceph::real_time delete_at,
                  const char *if_match, const char *if_nomatch, const std::string *user_data,
                  rgw_zone_set *zones_trace, bool *canceled,
-                 optional_yield y) override;
+                 const req_context& rctx,
+                 uint32_t flags) override;
   };
 
 } // namespace putobj

@@ -1,0 +1,31 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - client.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+  - client.1
+overrides:
+  cephadm:
+    use-ca-signed-key: True
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+        HOSTNAMES=$(ceph orch host ls --format json | jq -r '.[] | .hostname')
+        for host in $HOSTNAMES; do
+          # do a check-host on each host to make sure it's reachable
+          ceph cephadm check-host ${host} 2> ${host}-ok.txt
+          HOST_OK=$(cat ${host}-ok.txt)
+          if ! grep -q "Host looks OK" <<< "$HOST_OK"; then
+            printf "Failed host check:\n\n$HOST_OK"
+            exit 1
+          fi
+        done

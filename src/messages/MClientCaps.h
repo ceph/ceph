@@ -57,7 +57,7 @@ private:
   uint32_t caller_gid = 0;
 
   /* advisory CLIENT_CAPS_* flags to send to mds */
-  unsigned flags = 0;
+  uint32_t flags = 0;
 
   std::vector<uint8_t> fscrypt_auth;
   std::vector<uint8_t> fscrypt_file;

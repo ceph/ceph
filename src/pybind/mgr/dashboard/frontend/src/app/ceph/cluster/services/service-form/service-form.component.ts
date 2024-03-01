@@ -3,24 +3,37 @@ import { Component, Input, OnInit, ViewChild } from '@angular/core';
 import { AbstractControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
+import { NgbActiveModal, NgbModalRef, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { merge, Observable, Subject } from 'rxjs';
+import { forkJoin, merge, Observable, Subject, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
+import { CreateRgwServiceEntitiesComponent } from '~/app/ceph/rgw/create-rgw-service-entities/create-rgw-service-entities.component';
+import { RgwRealm, RgwZonegroup, RgwZone } from '~/app/ceph/rgw/models/rgw-multisite';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { PoolService } from '~/app/shared/api/pool.service';
+import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
+import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
+import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
+import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
-import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import {
+  ActionLabelsI18n,
+  TimerServiceInterval,
+  URLVerbs
+} from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { TimerService } from '~/app/shared/services/timer.service';
 
 @Component({
   selector: 'cd-service-form',
@@ -28,7 +41,8 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
   styleUrls: ['./service-form.component.scss']
 })
 export class ServiceFormComponent extends CdForm implements OnInit {
-  readonly RGW_SVC_ID_PATTERN = /^([^.]+)(\.([^.]+)\.([^.]+))?$/;
+  public sub = new Subscription();
+
   readonly MDS_SVC_ID_PATTERN = /^[a-zA-Z_.-][a-zA-Z0-9_.-]*$/;
   readonly SNMP_DESTINATION_PATTERN = /^[^\:]+:[0-9]/;
   readonly SNMP_ENGINE_ID_PATTERN = /^[0-9A-Fa-f]{10,64}/g;
@@ -57,6 +71,20 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   services: Array<CephServiceSpec> = [];
   pageURL: string;
   serviceList: CephServiceSpec[];
+  multisiteInfo: object[] = [];
+  defaultRealmId = '';
+  defaultZonegroupId = '';
+  defaultZoneId = '';
+  realmList: RgwRealm[] = [];
+  zonegroupList: RgwZonegroup[] = [];
+  zoneList: RgwZone[] = [];
+  bsModalRef: NgbModalRef;
+  defaultZonegroup: RgwZonegroup;
+  showRealmCreationForm = false;
+  defaultsInfo: { defaultRealmName: string; defaultZonegroupName: string; defaultZoneName: string };
+  realmNames: string[];
+  zonegroupNames: string[];
+  zoneNames: string[];
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -66,8 +94,15 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     private poolService: PoolService,
     private router: Router,
     private taskWrapperService: TaskWrapperService,
+    public timerService: TimerService,
+    public timerServiceVariable: TimerServiceInterval,
+    public rgwRealmService: RgwRealmService,
+    public rgwZonegroupService: RgwZonegroupService,
+    public rgwZoneService: RgwZoneService,
+    public rgwMultisiteService: RgwMultisiteService,
     private route: ActivatedRoute,
-    public activeModal: NgbActiveModal
+    public activeModal: NgbActiveModal,
+    public modalService: ModalService
   ) {
     super();
     this.resource = $localize`service`;
@@ -115,15 +150,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             {
               service_type: 'rgw'
             },
-            [
-              Validators.required,
-              CdValidators.custom('rgwPattern', (value: string) => {
-                if (_.isEmpty(value)) {
-                  return false;
-                }
-                return !this.RGW_SVC_ID_PATTERN.test(value);
-              })
-            ]
+            [Validators.required]
           ),
           CdValidators.custom('uniqueName', (service_id: string) => {
             return this.serviceIds && this.serviceIds.includes(service_id);
@@ -154,6 +181,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       ],
       // RGW
       rgw_frontend_port: [null, [CdValidators.number(false)]],
+      realm_name: [null],
+      zonegroup_name: [null],
+      zone_name: [null],
       // iSCSI
       trusted_ip_list: [null],
       api_port: [null, [CdValidators.number(false)]],
@@ -370,7 +400,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
       this.serviceTypes = _.difference(resp, this.hiddenServices).sort();
     });
-    this.hostService.list('false').subscribe((resp: object[]) => {
+    const hostContext = new CdTableFetchDataContext(() => undefined);
+    this.hostService.list(hostContext.toParams(), 'false').subscribe((resp: object[]) => {
       const options: SelectOption[] = [];
       _.forEach(resp, (host: object) => {
         if (_.get(host, 'sources.orchestrator', false)) {
@@ -425,6 +456,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               this.serviceForm
                 .get('rgw_frontend_port')
                 .setValue(response[0].spec?.rgw_frontend_port);
+              this.getServiceIds(
+                'rgw',
+                response[0].spec?.rgw_realm,
+                response[0].spec?.rgw_zonegroup,
+                response[0].spec?.rgw_zone
+              );
               this.serviceForm.get('ssl').setValue(response[0].spec?.ssl);
               if (response[0].spec?.ssl) {
                 this.serviceForm
@@ -493,10 +530,131 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     }
   }
 
-  getServiceIds(selectedServiceType: string) {
+  getDefaultsEntities(
+    defaultRealmId: string,
+    defaultZonegroupId: string,
+    defaultZoneId: string
+  ): { defaultRealmName: string; defaultZonegroupName: string; defaultZoneName: string } {
+    const defaultRealm = this.realmList.find((x: { id: string }) => x.id === defaultRealmId);
+    const defaultZonegroup = this.zonegroupList.find(
+      (x: { id: string }) => x.id === defaultZonegroupId
+    );
+    const defaultZone = this.zoneList.find((x: { id: string }) => x.id === defaultZoneId);
+    const defaultRealmName = defaultRealm !== undefined ? defaultRealm.name : null;
+    const defaultZonegroupName = defaultZonegroup !== undefined ? defaultZonegroup.name : 'default';
+    const defaultZoneName = defaultZone !== undefined ? defaultZone.name : 'default';
+    if (defaultZonegroupName === 'default' && !this.zonegroupNames.includes(defaultZonegroupName)) {
+      const defaultZonegroup = new RgwZonegroup();
+      defaultZonegroup.name = 'default';
+      this.zonegroupList.push(defaultZonegroup);
+    }
+    if (defaultZoneName === 'default' && !this.zoneNames.includes(defaultZoneName)) {
+      const defaultZone = new RgwZone();
+      defaultZone.name = 'default';
+      this.zoneList.push(defaultZone);
+    }
+    return {
+      defaultRealmName: defaultRealmName,
+      defaultZonegroupName: defaultZonegroupName,
+      defaultZoneName: defaultZoneName
+    };
+  }
+
+  getServiceIds(
+    selectedServiceType: string,
+    realm_name?: string,
+    zonegroup_name?: string,
+    zone_name?: string
+  ) {
     this.serviceIds = this.serviceList
       ?.filter((service) => service['service_type'] === selectedServiceType)
       .map((service) => service['service_id']);
+
+    if (selectedServiceType === 'rgw') {
+      const observables = [
+        this.rgwRealmService.getAllRealmsInfo(),
+        this.rgwZonegroupService.getAllZonegroupsInfo(),
+        this.rgwZoneService.getAllZonesInfo()
+      ];
+      this.sub = forkJoin(observables).subscribe(
+        (multisiteInfo: [object, object, object]) => {
+          this.multisiteInfo = multisiteInfo;
+          this.realmList =
+            this.multisiteInfo[0] !== undefined && this.multisiteInfo[0].hasOwnProperty('realms')
+              ? this.multisiteInfo[0]['realms']
+              : [];
+          this.zonegroupList =
+            this.multisiteInfo[1] !== undefined &&
+            this.multisiteInfo[1].hasOwnProperty('zonegroups')
+              ? this.multisiteInfo[1]['zonegroups']
+              : [];
+          this.zoneList =
+            this.multisiteInfo[2] !== undefined && this.multisiteInfo[2].hasOwnProperty('zones')
+              ? this.multisiteInfo[2]['zones']
+              : [];
+          this.realmNames = this.realmList.map((realm) => {
+            return realm['name'];
+          });
+          this.zonegroupNames = this.zonegroupList.map((zonegroup) => {
+            return zonegroup['name'];
+          });
+          this.zoneNames = this.zoneList.map((zone) => {
+            return zone['name'];
+          });
+          this.defaultRealmId = multisiteInfo[0]['default_realm'];
+          this.defaultZonegroupId = multisiteInfo[1]['default_zonegroup'];
+          this.defaultZoneId = multisiteInfo[2]['default_zone'];
+          this.defaultsInfo = this.getDefaultsEntities(
+            this.defaultRealmId,
+            this.defaultZonegroupId,
+            this.defaultZoneId
+          );
+          if (!this.editing) {
+            this.serviceForm.get('realm_name').setValue(this.defaultsInfo['defaultRealmName']);
+            this.serviceForm
+              .get('zonegroup_name')
+              .setValue(this.defaultsInfo['defaultZonegroupName']);
+            this.serviceForm.get('zone_name').setValue(this.defaultsInfo['defaultZoneName']);
+          } else {
+            if (realm_name && !this.realmNames.includes(realm_name)) {
+              const realm = new RgwRealm();
+              realm.name = realm_name;
+              this.realmList.push(realm);
+            }
+            if (zonegroup_name && !this.zonegroupNames.includes(zonegroup_name)) {
+              const zonegroup = new RgwZonegroup();
+              zonegroup.name = zonegroup_name;
+              this.zonegroupList.push(zonegroup);
+            }
+            if (zone_name && !this.zoneNames.includes(zone_name)) {
+              const zone = new RgwZone();
+              zone.name = zone_name;
+              this.zoneList.push(zone);
+            }
+            if (zonegroup_name === undefined && zone_name === undefined) {
+              zonegroup_name = 'default';
+              zone_name = 'default';
+            }
+            this.serviceForm.get('realm_name').setValue(realm_name);
+            this.serviceForm.get('zonegroup_name').setValue(zonegroup_name);
+            this.serviceForm.get('zone_name').setValue(zone_name);
+          }
+          if (this.realmList.length === 0) {
+            this.showRealmCreationForm = true;
+          } else {
+            this.showRealmCreationForm = false;
+          }
+        },
+        (_error) => {
+          const defaultZone = new RgwZone();
+          defaultZone.name = 'default';
+          const defaultZonegroup = new RgwZonegroup();
+          defaultZonegroup.name = 'default';
+          this.zoneList.push(defaultZone);
+          this.zonegroupList.push(defaultZonegroup);
+        }
+      );
+    }
   }
 
   disableForEditing(serviceType: string) {
@@ -559,12 +717,11 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     };
     let svcId: string;
     if (serviceType === 'rgw') {
-      const svcIdMatch = values['service_id'].match(this.RGW_SVC_ID_PATTERN);
-      svcId = svcIdMatch[1];
-      if (svcIdMatch[3]) {
-        serviceSpec['rgw_realm'] = svcIdMatch[3];
-        serviceSpec['rgw_zone'] = svcIdMatch[4];
-      }
+      serviceSpec['rgw_realm'] = values['realm_name'] ? values['realm_name'] : null;
+      serviceSpec['rgw_zonegroup'] =
+        values['zonegroup_name'] !== 'default' ? values['zonegroup_name'] : null;
+      serviceSpec['rgw_zone'] = values['zone_name'] !== 'default' ? values['zone_name'] : null;
+      svcId = values['service_id'];
     } else {
       svcId = values['service_id'];
     }
@@ -704,5 +861,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     if (privacyProtocol === null) {
       this.serviceForm.get('snmp_v3_priv_password').clearValidators();
     }
+  }
+
+  createMultisiteSetup() {
+    this.bsModalRef = this.modalService.show(CreateRgwServiceEntitiesComponent, {
+      size: 'lg'
+    });
+    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
+      this.getServiceIds('rgw');
+    });
   }
 }

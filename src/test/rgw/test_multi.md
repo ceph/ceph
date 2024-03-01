@@ -14,7 +14,7 @@ Since we use the same entry point file for all tests, running specific tests is 
 ```
 $ nosetests test_multi.py:<specific_test_name>
 ```
-To run miltiple tests based on wildcard string, use the following format:
+To run multiple tests based on wildcard string, use the following format:
 ```
 $ nosetests test_multi.py -m "<wildcard string>"
 ```

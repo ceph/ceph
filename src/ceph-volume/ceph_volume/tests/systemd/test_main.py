@@ -28,7 +28,7 @@ class Capture(object):
 
 class TestMain(object):
 
-    def setup(self):
+    def setup_method(self):
         conf.log_path = '/tmp/'
 
     def test_no_arguments_parsing_error(self):

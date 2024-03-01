@@ -388,7 +388,7 @@ JournalTrimmerImpl::config_t::get_test(
     max_journal_bytes = 4 * roll_size;
   } else {
     assert(type == journal_type_t::RANDOM_BLOCK);
-    target_dirty_bytes = roll_size / 4;
+    target_dirty_bytes = roll_size / 36;
     target_alloc_bytes = roll_size / 4;
     max_journal_bytes = roll_size / 2;
   }
@@ -986,7 +986,7 @@ segment_id_t SegmentCleaner::allocate_segment(
   ERROR("out of space with {} {} {} {}",
         type, segment_seq_printer_t{seq}, category,
         rewrite_gen_printer_t{generation});
-  ceph_abort();
+  ceph_abort("seastore device size setting is too small");
   return NULL_SEG_ID;
 }
 
@@ -1424,23 +1424,27 @@ bool SegmentCleaner::check_usage()
       t,
       [&tracker](
         paddr_t paddr,
+	paddr_t backref_key,
         extent_len_t len,
         extent_types_t type,
         laddr_t laddr)
     {
       if (paddr.get_addr_type() == paddr_types_t::SEGMENT) {
         if (is_backref_node(type)) {
-          assert(laddr == L_ADDR_NULL);
+	  assert(laddr == L_ADDR_NULL);
+	  assert(backref_key != P_ADDR_NULL);
           tracker->allocate(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
             len);
         } else if (laddr == L_ADDR_NULL) {
+	  assert(backref_key == P_ADDR_NULL);
           tracker->release(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
             len);
         } else {
+	  assert(backref_key == P_ADDR_NULL);
           tracker->allocate(
             paddr.as_seg_paddr().get_segment_id(),
             paddr.as_seg_paddr().get_segment_off(),
@@ -1458,6 +1462,7 @@ void SegmentCleaner::mark_space_used(
 {
   LOG_PREFIX(SegmentCleaner::mark_space_used);
   assert(background_callback->get_state() >= state_t::SCAN_SPACE);
+  assert(len);
   // TODO: drop
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
     return;
@@ -1488,6 +1493,7 @@ void SegmentCleaner::mark_space_free(
 {
   LOG_PREFIX(SegmentCleaner::mark_space_free);
   assert(background_callback->get_state() >= state_t::SCAN_SPACE);
+  assert(len);
   // TODO: drop
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
     return;
@@ -1724,6 +1730,7 @@ bool RBMCleaner::check_usage()
       t,
       [&tracker, &rbms](
         paddr_t paddr,
+	paddr_t backref_key,
         extent_len_t len,
         extent_types_t type,
         laddr_t laddr)
@@ -1732,14 +1739,17 @@ bool RBMCleaner::check_usage()
 	if (rbm->get_device_id() == paddr.get_device_id()) {
 	  if (is_backref_node(type)) {
 	    assert(laddr == L_ADDR_NULL);
+	    assert(backref_key != P_ADDR_NULL);
 	    tracker.allocate(
 	      paddr,
 	      len);
 	  } else if (laddr == L_ADDR_NULL) {
+	    assert(backref_key == P_ADDR_NULL);
 	    tracker.release(
 	      paddr,
 	      len);
 	  } else {
+	    assert(backref_key == P_ADDR_NULL);
 	    tracker.allocate(
 	      paddr,
 	      len);

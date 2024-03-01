@@ -1,6 +1,7 @@
 import logging
 import os
 import asyncio
+import concurrent
 from tempfile import NamedTemporaryFile
 from threading import Thread
 from contextlib import contextmanager
@@ -52,8 +53,19 @@ class EventLoopThread(Thread):
         super().__init__(target=self._loop.run_forever)
         self.start()
 
-    def get_result(self, coro: Awaitable[T]) -> T:
-        return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
+    def get_result(self, coro: Awaitable[T], timeout: Optional[int] = None) -> T:
+        # useful to note: This "run_coroutine_threadsafe" returns a
+        # concurrent.futures.Future, rather than an asyncio.Future. They are
+        # fairly similar but have a few differences, notably in our case
+        # that the result function of a concurrent.futures.Future accepts
+        # a timeout argument
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        try:
+            return future.result(timeout)
+        except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+            # try to cancel the task before raising the exception further up
+            future.cancel()
+            raise
 
 
 class SSHManager:
@@ -112,7 +124,7 @@ class SSHManager:
         except OSError as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there or you are missing NOPASSWD in sudoers. {str(e)}"
+            msg = f"Can't communicate with remote host `{addr}`, possibly because the host is not reachable or python3 is not installed on the host. {str(e)}"
             logger.exception(msg)
             raise HostConnectionError(msg, host, addr)
         except asyncssh.Error as e:
@@ -135,35 +147,49 @@ class SSHManager:
                           host: str,
                           addr: Optional[str] = None,
                           ) -> "SSHClientConnection":
-        return self.mgr.wait_async(self._remote_connection(host, addr))
+        with self.mgr.async_timeout_handler(host, f'ssh {host} (addr {addr})'):
+            return self.mgr.wait_async(self._remote_connection(host, addr))
 
     async def _execute_command(self,
                                host: str,
-                               cmd: List[str],
+                               cmd_components: List[str],
                                stdin: Optional[str] = None,
                                addr: Optional[str] = None,
                                log_command: Optional[bool] = True,
                                ) -> Tuple[str, str, int]:
+
         conn = await self._remote_connection(host, addr)
         sudo_prefix = "sudo " if self.mgr.ssh_user != 'root' else ""
-        cmd = sudo_prefix + " ".join(quote(x) for x in cmd)
+        cmd = sudo_prefix + " ".join(quote(x) for x in cmd_components)
+        try:
+            address = addr or self.mgr.inventory.get_addr(host)
+        except Exception:
+            address = host
         if log_command:
             logger.debug(f'Running command: {cmd}')
         try:
-            r = await conn.run(f'{sudo_prefix}true', check=True, timeout=5)
+            r = await conn.run(f'{sudo_prefix}true', check=True, timeout=5)  # host quick check
             r = await conn.run(cmd, input=stdin)
-        # handle these Exceptions otherwise you might get a weird error like TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
-        except (asyncssh.ChannelOpenError, asyncssh.ProcessError, Exception) as e:
+        # handle these Exceptions otherwise you might get a weird error like
+        # TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
+        except asyncssh.ChannelOpenError as e:
             # SSH connection closed or broken, will create new connection next call
             logger.debug(f'Connection to {host} failed. {str(e)}')
             await self._reset_con(host)
             self.mgr.offline_hosts.add(host)
-            if not addr:
-                try:
-                    addr = self.mgr.inventory.get_addr(host)
-                except Exception:
-                    addr = host
-            raise HostConnectionError(f'Unable to reach remote host {host}. {str(e)}', host, addr)
+            raise HostConnectionError(f'Unable to reach remote host {host}. {str(e)}', host, address)
+        except asyncssh.ProcessError as e:
+            msg = f"Cannot execute the command '{cmd}' on the {host}. {str(e.stderr)}."
+            logger.debug(msg)
+            await self._reset_con(host)
+            self.mgr.offline_hosts.add(host)
+            raise HostConnectionError(msg, host, address)
+        except Exception as e:
+            msg = f"Generic error while executing command '{cmd}' on the host {host}. {str(e)}."
+            logger.debug(msg)
+            await self._reset_con(host)
+            self.mgr.offline_hosts.add(host)
+            raise HostConnectionError(msg, host, address)
 
         def _rstrip(v: Union[bytes, str, None]) -> str:
             if not v:
@@ -188,7 +214,8 @@ class SSHManager:
                         addr: Optional[str] = None,
                         log_command: Optional[bool] = True
                         ) -> Tuple[str, str, int]:
-        return self.mgr.wait_async(self._execute_command(host, cmd, stdin, addr, log_command))
+        with self.mgr.async_timeout_handler(host, " ".join(cmd)):
+            return self.mgr.wait_async(self._execute_command(host, cmd, stdin, addr, log_command))
 
     async def _check_execute_command(self,
                                      host: str,
@@ -211,7 +238,8 @@ class SSHManager:
                               addr: Optional[str] = None,
                               log_command: Optional[bool] = True,
                               ) -> str:
-        return self.mgr.wait_async(self._check_execute_command(host, cmd, stdin, addr, log_command))
+        with self.mgr.async_timeout_handler(host, " ".join(cmd)):
+            return self.mgr.wait_async(self._check_execute_command(host, cmd, stdin, addr, log_command))
 
     async def _write_remote_file(self,
                                  host: str,
@@ -259,8 +287,9 @@ class SSHManager:
                           gid: Optional[int] = None,
                           addr: Optional[str] = None,
                           ) -> None:
-        self.mgr.wait_async(self._write_remote_file(
-            host, path, content, mode, uid, gid, addr))
+        with self.mgr.async_timeout_handler(host, f'writing file {path}'):
+            self.mgr.wait_async(self._write_remote_file(
+                host, path, content, mode, uid, gid, addr))
 
     async def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)
@@ -270,7 +299,8 @@ class SSHManager:
             del self.cons[host]
 
     def reset_con(self, host: str) -> None:
-        self.mgr.wait_async(self._reset_con(host))
+        with self.mgr.async_timeout_handler(cmd=f'resetting ssh connection to {host}'):
+            self.mgr.wait_async(self._reset_con(host))
 
     def _reset_cons(self) -> None:
         for host, conn in self.cons.items():
@@ -302,18 +332,28 @@ class SSHManager:
         # identity
         ssh_key = self.mgr.get_store("ssh_identity_key")
         ssh_pub = self.mgr.get_store("ssh_identity_pub")
+        ssh_cert = self.mgr.get_store("ssh_identity_cert")
         self.mgr.ssh_pub = ssh_pub
         self.mgr.ssh_key = ssh_key
-        if ssh_key and ssh_pub:
+        self.mgr.ssh_cert = ssh_cert
+        if ssh_key:
             self.mgr.tkey = NamedTemporaryFile(prefix='cephadm-identity-')
             self.mgr.tkey.write(ssh_key.encode('utf-8'))
             os.fchmod(self.mgr.tkey.fileno(), 0o600)
             self.mgr.tkey.flush()  # make visible to other processes
-            tpub = open(self.mgr.tkey.name + '.pub', 'w')
-            os.fchmod(tpub.fileno(), 0o600)
-            tpub.write(ssh_pub)
-            tpub.flush()  # make visible to other processes
-            temp_files += [self.mgr.tkey, tpub]
+            temp_files += [self.mgr.tkey]
+            if ssh_pub:
+                tpub = open(self.mgr.tkey.name + '.pub', 'w')
+                os.fchmod(tpub.fileno(), 0o600)
+                tpub.write(ssh_pub)
+                tpub.flush()  # make visible to other processes
+                temp_files += [tpub]
+            if ssh_cert:
+                tcert = open(self.mgr.tkey.name + '-cert.pub', 'w')
+                os.fchmod(tcert.fileno(), 0o600)
+                tcert.write(ssh_cert)
+                tcert.flush()  # make visible to other processes
+                temp_files += [tcert]
             ssh_options += ['-i', self.mgr.tkey.name]
 
         self.mgr._temp_files = temp_files

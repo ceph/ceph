@@ -24,36 +24,54 @@ Varieties of Multi-site Configuration
 
 .. versionadded:: Jewel
 
-Beginning with the Kraken release, Ceph supports several multi-site
-configurations for the Ceph Object Gateway:
+Since the Kraken release, Ceph has supported several multi-site configurations
+for the Ceph Object Gateway:
 
-- **Multi-zone:** A more advanced topology, the "multi-zone" configuration, is
-  possible. A multi-zone configuration consists of one zonegroup and
-  multiple zones, with each zone consisting of one or more `ceph-radosgw`
-  instances. **Each zone is backed by its own Ceph Storage Cluster.**
+- **Multi-zone:** The "multi-zone" configuration has a complex topology. A
+  multi-zone configuration consists of one zonegroup and multiple zones. Each
+  zone consists of one or more `ceph-radosgw` instances. **Each zone is backed
+  by its own Ceph Storage Cluster.**
   
   The presence of multiple zones in a given zonegroup provides disaster
   recovery for that zonegroup in the event that one of the zones experiences a
-  significant failure. Beginning with the Kraken release, each zone is active
-  and can receive write operations. A multi-zone configuration that contains
-  multiple active zones enhances disaster recovery and can also be used as a
-  foundation for content delivery networks. 
+  significant failure. Each zone is active and can receive write operations. A
+  multi-zone configuration that contains multiple active zones enhances
+  disaster recovery and can be used as a foundation for content-delivery
+  networks. 
 
 - **Multi-zonegroups:** Ceph Object Gateway supports multiple zonegroups (which
   were formerly called "regions"). Each zonegroup contains one or more zones.
-  If two zones are in the same zonegroup, and if that zonegroup is in the same
-  realm as a second zonegroup, then the objects stored in the two zones share
-  a global object namespace. This global object namespace ensures unique
-  object IDs across zonegroups and zones.
+  If two zones are in the same zonegroup and that zonegroup is in the same
+  realm as a second zonegroup, then the objects stored in the two zones share a
+  global object namespace. This global object namespace ensures unique object
+  IDs across zonegroups and zones.
 
-- **Multiple Realms:** Beginning with the Kraken release, the Ceph Object
-  Gateway supports "realms", which are containers for zonegroups. Realms make
-  it possible to set policies that apply to multiple zonegroups. Realms have a
+  Each bucket is owned by the zonegroup where it was created (except where
+  overridden by the :ref:`LocationConstraint<s3_bucket_placement>` on
+  bucket creation), and its object data will replicate only to other zones in
+  that zonegroup. Any request for data in that bucket that is sent to other
+  zonegroups will redirect to the zonegroup where the bucket resides.
+
+  It can be useful to create multiple zonegroups when you want to share a
+  namespace of users and buckets across many zones and isolate the object data
+  to a subset of those zones. Maybe you have several connected sites that share
+  storage but require only a single backup for purposes of disaster recovery.
+  In such a case, you could create several zonegroups with only two zones each
+  to avoid replicating all objects to all zones.
+
+  In other cases, you might isolate data in separate realms, with each realm
+  having a single zonegroup. Zonegroups provide flexibility by making it
+  possible to control the isolation of data and metadata separately.
+
+- **Multiple Realms:** Since the Kraken release, the Ceph Object Gateway
+  supports "realms", which are containers for zonegroups. Realms make it
+  possible to set policies that apply to multiple zonegroups. Realms have a
   globally unique namespace and can contain either a single zonegroup or
   multiple zonegroups. If you choose to make use of multiple realms, you can
   define multiple namespaces and multiple configurations (this means that each
   realm can have a configuration that is distinct from the configuration of
   other realms).
+
 
 Diagram - Replication of Object Data Between Zones
 --------------------------------------------------
@@ -445,8 +463,8 @@ For example:
 
 .. important:: The following steps assume a multi-site configuration that uses
    newly installed systems that have not yet begun storing data. **DO NOT
-   DELETE the ``default`` zone or its pools** if you are already using it to
-   store data, or the data will be irretrievably lost.
+   DELETE the** ``default`` **zone or its pools** if you are already using it
+   to store data, or the data will be irretrievably lost.
 
 Delete the default zone if needed:
 
@@ -508,6 +526,17 @@ running the following commands on the object gateway host:
 
    systemctl start ceph-radosgw@rgw.`hostname -s`
    systemctl enable ceph-radosgw@rgw.`hostname -s`
+
+If the ``cephadm`` command was used to deploy the cluster, you will not be able
+to use ``systemctl`` to start the gateway because no services will exist on
+which ``systemctl`` could operate. This is due to the containerized nature of
+the ``cephadm``-deployed Ceph cluster. If you have used the ``cephadm`` command
+and you have a containerized cluster, you must run a command of the following
+form to start the gateway:
+
+.. prompt:: bash #
+
+   ceph orch apply rgw <name> --realm=<realm> --zone=<zone> --placement --port
 
 Checking Synchronization Status
 -------------------------------
@@ -751,7 +780,13 @@ to a multi-site system, follow these steps:
       radosgw-admin zonegroup rename --rgw-zonegroup default --zonegroup-new-name=<name>
       radosgw-admin zone rename --rgw-zone default --zone-new-name us-east-1 --rgw-zonegroup=<name>
 
-3. Configure the master zonegroup. Replace ``<name>`` with the realm name or
+3. Rename the default zonegroup's ``api_name``. Replace ``<name>`` with the zonegroup name:
+
+   .. prompt:: bash #
+
+      radosgw-admin zonegroup modify --api-name=<name> --rgw-zonegroup=<name>
+
+4. Configure the master zonegroup. Replace ``<name>`` with the realm name or
    zonegroup name. Replace ``<fqdn>`` with the fully qualified domain name(s)
    in the zonegroup:
 
@@ -759,7 +794,7 @@ to a multi-site system, follow these steps:
 
       radosgw-admin zonegroup modify --rgw-realm=<name> --rgw-zonegroup=<name> --endpoints http://<fqdn>:80 --master --default
 
-4. Configure the master zone. Replace ``<name>`` with the realm name, zone
+5. Configure the master zone. Replace ``<name>`` with the realm name, zone
    name, or zonegroup name. Replace ``<fqdn>`` with the fully qualified domain
    name(s) in the zonegroup:
 
@@ -770,7 +805,7 @@ to a multi-site system, follow these steps:
                                 --access-key=<access-key> --secret=<secret-key> \
                                 --master --default
 
-5. Create a system user. Replace ``<user-id>`` with the username.  Replace
+6. Create a system user. Replace ``<user-id>`` with the username.  Replace
    ``<display-name>`` with a display name. The display name is allowed to
    contain spaces:
 
@@ -781,13 +816,13 @@ to a multi-site system, follow these steps:
       --access-key=<access-key> \ 
       --secret=<secret-key> --system
 
-6. Commit the updated configuration:
+7. Commit the updated configuration:
 
    .. prompt:: bash #
 
       radosgw-admin period update --commit
 
-7. Restart the Ceph Object Gateway:
+8. Restart the Ceph Object Gateway:
 
    .. prompt:: bash #
 
@@ -1130,7 +1165,7 @@ To view the configuration of a zonegroup, run this command:
 
 .. prompt:: bash #
    
-   dosgw-admin zonegroup get [--rgw-zonegroup=<zonegroup>]
+   radosgw-admin zonegroup get [--rgw-zonegroup=<zonegroup>]
 
 The zonegroup configuration looks like this:
 
@@ -1344,7 +1379,7 @@ Zones
 -----
 
 A zone defines a logical group that consists of one or more Ceph Object Gateway
-instances. Ceph Object Gateway supports zones.
+instances. All RGWs in a given zone serve S3 objects that are backed by RADOS objects that are stored in the same set of pools in the same cluster. Ceph Object Gateway supports zones.
 
 The procedure for configuring zones differs from typical configuration
 procedures, because not all of the settings end up in a Ceph configuration
@@ -1569,27 +1604,53 @@ Zone Features
 
 Some multisite features require support from all zones before they can be enabled. Each zone lists its ``supported_features``, and each zonegroup lists its ``enabled_features``. Before a feature can be enabled in the zonegroup, it must be supported by all of its zones.
 
-On creation of new zones and zonegroups, all known features are supported/enabled. After upgrading an existing multisite configuration, however, new features must be enabled manually.
+On creation of new zones and zonegroups, all known features are supported and some features (see table below) are enabled by default. After upgrading an existing multisite configuration, however, new features must be enabled manually.
 
 Supported Features
 ------------------
 
-+---------------------------+---------+
-| Feature                   | Release |
-+===========================+=========+
-| :ref:`feature_resharding` | Quincy  |
-+---------------------------+---------+
++-----------------------------------+---------+----------+
+| Feature                           | Release | Default  |
++===================================+=========+==========+
+| :ref:`feature_resharding`         | Reef    | Enabled  |
++-----------------------------------+---------+----------+
+| :ref:`feature_compress_encrypted` | Reef    | Disabled |
++-----------------------------------+---------+----------+
 
 .. _feature_resharding:
 
 resharding
 ~~~~~~~~~~
 
-Allows buckets to be resharded in a multisite configuration without interrupting the replication of their objects. When ``rgw_dynamic_resharding`` is enabled, it runs on each zone independently, and zones may choose different shard counts for the same bucket. When buckets are resharded manually with ``radosgw-admin bucket reshard``, only that zone's bucket is modified. A zone feature should only be marked as supported after all of its radosgws and osds have upgraded.
+This feature allows buckets to be resharded in a multisite configuration
+without interrupting the replication of their objects. When
+``rgw_dynamic_resharding`` is enabled, it runs on each zone independently, and
+zones may choose different shard counts for the same bucket. When buckets are
+resharded manually with ``radosgw-admin bucket reshard``, only that zone's
+bucket is modified. A zone feature should only be marked as supported after all
+of its RGWs and OSDs have upgraded.
 
+.. note:: Dynamic resharding is not supported in multisite deployments prior to
+   the Reef release.
+
+
+.. _feature_compress_encrypted:
+
+compress-encrypted
+~~~~~~~~~~~~~~~~~~
+
+This feature enables support for combining `Server-Side Encryption`_ and
+`Compression`_ on the same object. Object data gets compressed before encryption.
+Prior to Reef, multisite would not replicate such objects correctly, so all zones
+must upgrade to Reef or later before enabling.
+
+.. warning:: The compression ratio may leak information about the encrypted data,
+   and allow attackers to distinguish whether two same-sized objects might contain
+   the same data. Due to these security considerations, this feature is disabled
+   by default.
 
 Commands
------------------
+--------
 
 Add support for a zone feature
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1635,3 +1696,5 @@ On any cluster in the realm:
 
 .. _`Pools`: ../pools
 .. _`Sync Policy Config`: ../multisite-sync-policy
+.. _`Server-Side Encryption`: ../encryption
+.. _`Compression`: ../compression

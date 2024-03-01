@@ -37,6 +37,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { CdUserConfig } from '~/app/shared/models/cd-user-config';
 import { TimerService } from '~/app/shared/services/timer.service';
 
+const TABLE_LIST_LIMIT = 10;
 @Component({
   selector: 'cd-table',
   templateUrl: './table.component.html',
@@ -72,6 +73,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   rowDetailsTpl: TemplateRef<any>;
   @ViewChild('rowSelectionTpl', { static: true })
   rowSelectionTpl: TemplateRef<any>;
+  @ViewChild('pathTpl', { static: true })
+  pathTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
   @Input()
@@ -102,7 +105,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   footer? = true;
   // Page size to show. Set to 0 to show unlimited number of rows.
   @Input()
-  limit? = 10;
+  limit? = TABLE_LIST_LIMIT;
   @Input()
   maxLimit? = 9999;
   // Has the row details?
@@ -341,7 +344,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       this._loadUserConfig();
       this._initUserConfigAutoSave();
     }
-    if (!this.userConfig.limit) {
+    if (this.limit !== TABLE_LIST_LIMIT || !this.userConfig.limit) {
       this.userConfig.limit = this.limit;
     }
     if (!(this.userConfig.offset >= 0)) {
@@ -608,6 +611,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.cellTemplates.map = this.mapTpl;
     this.cellTemplates.truncate = this.truncateTpl;
     this.cellTemplates.timeAgo = this.timeAgoTpl;
+    this.cellTemplates.path = this.pathTpl;
   }
 
   useCustomClass(value: any): string {
@@ -879,18 +883,18 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
             return false;
           }
 
-          if (_.isArray(cellValue)) {
-            cellValue = cellValue.join(' ');
-          } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
-            cellValue = cellValue.toString();
-          }
-
           if (_.isObjectLike(cellValue)) {
             if (this.searchableObjects) {
               cellValue = JSON.stringify(cellValue);
             } else {
               return false;
             }
+          }
+
+          if (_.isArray(cellValue)) {
+            cellValue = cellValue.join(' ');
+          } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
+            cellValue = cellValue.toString();
           }
 
           return cellValue.toLowerCase().indexOf(searchTerm) !== -1;

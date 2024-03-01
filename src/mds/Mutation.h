@@ -221,7 +221,7 @@ public:
   }
 
   virtual void dump(ceph::Formatter *f) const {}
-  void _dump_op_descriptor_unlocked(std::ostream& stream) const override;
+  void _dump_op_descriptor(std::ostream& stream) const override;
 
   metareqid_t reqid;
   __u32 attempt = 0;      // which attempt for this request
@@ -387,6 +387,12 @@ struct MDRequestImpl : public MutationImpl {
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
   bool is_queued_for_replay() const;
+  bool get_queued_next_replay_op() const {
+    return queued_next_replay_op;
+  }
+  void set_queued_next_replay_op() {
+    queued_next_replay_op = true;
+  }
   int compare_paths();
 
   bool can_batch();
@@ -396,7 +402,9 @@ struct MDRequestImpl : public MutationImpl {
   std::unique_ptr<BatchOp> release_batch_op();
 
   void print(std::ostream &out) const override;
-  void dump(ceph::Formatter *f) const override;
+  void dump_with_mds_lock(ceph::Formatter* f) const {
+    return _dump(f, true);
+  }
 
   ceph::cref_t<MClientRequest> release_client_request();
   void reset_peer_request(const ceph::cref_t<MMDSPeerRequest>& req=nullptr);
@@ -453,10 +461,12 @@ struct MDRequestImpl : public MutationImpl {
   bool waited_for_osdmap = false;
 
 protected:
-  void _dump(ceph::Formatter *f) const override;
-  void _dump_op_descriptor_unlocked(std::ostream& stream) const override;
-private:
-  mutable ceph::spinlock msg_lock;
+  void _dump(ceph::Formatter *f) const override {
+    _dump(f, false);
+  }
+  void _dump(ceph::Formatter *f, bool has_mds_lock) const;
+  void _dump_op_descriptor(std::ostream& stream) const override;
+  bool queued_next_replay_op = false;
 };
 
 struct MDPeerUpdate {

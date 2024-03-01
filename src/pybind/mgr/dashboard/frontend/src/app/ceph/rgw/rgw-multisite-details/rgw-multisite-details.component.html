@@ -1,15 +1,53 @@
 <div class="row">
   <div class="col-sm-12 col-lg-12">
     <div>
-      <cd-table-actions class="btn-group mb-4"
+      <cd-alert-panel   *ngIf="!rgwModuleStatus"
+                        type="info"
+                        spacingClass="mb-3"
+                        class="d-flex align-items-center"
+                        i18n>In order to access the import/export feature, the rgw module must be enabled
+
+        <button class="btn btn-light mx-2"
+                type="button"
+                (click)="enableRgwModule()">Enable</button>
+      </cd-alert-panel>
+      <cd-alert-panel   *ngIf="restartGatewayMessage"
+                        type="warning"
+                        spacingClass="mb-3"
+                        i18n>Please restart all Ceph Object Gateway instances in all zones to ensure consistent multisite configuration updates.
+        <a class="text-decoration-underline"
+           routerLink="/services">
+           Cluster->Services</a>
+      </cd-alert-panel>
+      <cd-table-actions class="btn-group mb-4 me-2"
                         [permission]="permission"
                         [selection]="selection"
                         [tableActions]="createTableActions">
       </cd-table-actions>
+      <span *ngIf="showMigrateAction">
+        <cd-table-actions class="btn-group mb-4 me-2 secondary"
+                          [permission]="permission"
+                          [btnColor]="'light'"
+                          [selection]="selection"
+                          [tableActions]="migrateTableAction">
+        </cd-table-actions>
+      </span>
+      <cd-table-actions class="btn-group mb-4 me-2"
+                        [permission]="permission"
+                        [btnColor]="'light'"
+                        [selection]="selection"
+                        [tableActions]="importAction">
+      </cd-table-actions>
+      <cd-table-actions class="btn-group mb-4 me-2"
+                        [permission]="permission"
+                        [btnColor]="'light'"
+                        [selection]="selection"
+                        [tableActions]="exportAction">
+      </cd-table-actions>
     </div>
     <div class="card">
       <div class="card-header"
-           i18n>Multi-site Topology viewer</div>
+           i18n>Topology Viewer</div>
       <div class="card-body">
         <div class="row">
           <div class="col-sm-6 col-lg-6 tree-container">
@@ -23,12 +61,14 @@
                            let-node>
                 <span *ngIf="node.data.name"
                       class="me-3">
+                  <span *ngIf="(node.data.show_warning)">
+                    <i  class="text-danger"
+                        i18n-title
+                        [title]="node.data.warning_message"
+                        [ngClass]="icons.danger"></i>
+                  </span>
                   <i [ngClass]="node.data.icon"></i>
                     {{ node.data.name }}
-                </span>
-                <span *ngIf="node.data.type"
-                      class="badge badge-info me-3">
-                    {{ node.data.type }}
                 </span>
                 <span class="badge badge-success me-2"
                       *ngIf="node.data.is_default">
@@ -38,24 +78,31 @@
                       *ngIf="node.data.is_master">
                   master
                 </span>
+                <span class="badge badge-warning me-2"
+                      *ngIf="node.data.secondary_zone">
+                  secondary-zone
+                </span>
                 <div class="btn-group align-inline-btns"
                      *ngIf="node.isFocused"
-                     [title]="title"
                      role="group">
-                  <button type="button"
-                          class="btn btn-light dropdown-toggle-split ms-1"
-                          (click)="openModal(node, true)"
-                          [disabled]="getDisable()"
-                          ngbDropdownToggle>
-                    <i [ngClass]="[icons.edit]"></i>
-                  </button>
-                  <button type="button"
-                          title="Delete"
-                          class="btn btn-light ms-1"
-                          i18n-title
-                          (click)="delete(node)">
-                    <i [ngClass]="[icons.destroy]"></i>
-                  </button>
+                  <div [title]="editTitle"
+                       i18n-title>
+                    <button type="button"
+                            class="btn btn-light dropdown-toggle-split ms-1"
+                            (click)="openModal(node, true)"
+                            [disabled]="getDisable() || node.data.secondary_zone">
+                      <i [ngClass]="[icons.edit]"></i>
+                    </button>
+                  </div>
+                  <div [title]="deleteTitle"
+                       i18n-title>
+                    <button type="button"
+                            class="btn btn-light ms-1"
+                            [disabled]="isDeleteDisabled(node) || node.data.secondary_zone"
+                            (click)="delete(node)">
+                      <i [ngClass]="[icons.destroy]"></i>
+                    </button>
+                  </div>
                 </div>
               </ng-template>
             </tree-root>
@@ -63,7 +110,11 @@
           <div class="col-sm-6 col-lg-6 metadata"
                *ngIf="metadata">
             <legend>{{ metadataTitle }}</legend>
-            <cd-table-key-value [data]="metadata"></cd-table-key-value>
+            <div>
+              <cd-table-key-value cdTableDetail
+                                  [data]="metadata">
+              </cd-table-key-value>
+            </div>
           </div>
         </div>
       </div>

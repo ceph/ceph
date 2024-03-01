@@ -1,0 +1,65 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">Export Multi-site Realm Token</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="exportTokenForm"
+          #frm="ngForm"
+          [formGroup]="exportTokenForm">
+    <span *ngIf="loading"
+          class="d-flex justify-content-center">
+    <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i></span>
+    <div class="modal-body"
+         *ngIf="!loading">
+      <cd-alert-panel *ngIf="!tokenValid"
+                      type="warning"
+                      class="mx-3"
+                      i18n>
+      <div *ngFor="let realminfo of realms">
+        <b>{{realminfo.realm}}</b> -
+        {{realminfo.token}}
+      </div>
+      </cd-alert-panel>
+      <div *ngFor="let realminfo of realms">
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="realmName"
+                 i18n>Realm Name
+          </label>
+          <div class="cd-col-form-input">
+            <input id="realmName"
+                   name="realmName"
+                   type="text"
+                   value="{{ realminfo.realm }}"
+                   readonly>
+          </div>
+        </div>
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="token"
+                 i18n>Token
+          </label>
+          <div class="cd-col-form-input">
+            <input id="realmToken"
+                   name="realmToken"
+                   type="text"
+                   value="{{ realminfo.token }}"
+                   class="me-2 mb-4"
+                   readonly>
+            <cd-copy-2-clipboard-button
+                      source="{{ realminfo.token }}"
+                      [byId]="false">
+            </cd-copy-2-clipboard-button>
+          </div>
+          <hr *ngIf="realms.length > 1">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <cd-back-button class="m-2 float-end"
+                      aria-label="Close"
+                      (backAction)="activeModal.close()"></cd-back-button>
+    </div>
+    </form>
+  </ng-container>
+</cd-modal>

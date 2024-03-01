@@ -8,9 +8,7 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
-import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { HealthService } from '~/app/shared/api/health.service';
-import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { AlertmanagerAlert } from '~/app/shared/models/prometheus-alerts';
@@ -20,11 +18,11 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { PgCategoryService } from '../../shared/pg-category.service';
-import { CardRowComponent } from '../card-row/card-row.component';
-import { CardComponent } from '../card/card.component';
 import { DashboardPieComponent } from '../dashboard-pie/dashboard-pie.component';
 import { PgSummaryPipe } from '../pg-summary.pipe';
 import { DashboardV3Component } from './dashboard-v3.component';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 
 export class SummaryServiceMock {
   summaryDataSource = new BehaviorSubject({
@@ -42,8 +40,8 @@ export class SummaryServiceMock {
 describe('Dashbord Component', () => {
   let component: DashboardV3Component;
   let fixture: ComponentFixture<DashboardV3Component>;
-  let configurationService: ConfigurationService;
-  let orchestratorService: MgrModuleService;
+  let healthService: HealthService;
+  let orchestratorService: OrchestratorService;
   let getHealthSpy: jasmine.Spy;
   let getAlertsSpy: jasmine.Spy;
   let fakeFeatureTogglesService: jasmine.Spy;
@@ -133,32 +131,13 @@ describe('Dashbord Component', () => {
     }
   ];
 
-  const configValueData: any = {
-    value: [
-      {
-        section: 'mgr',
-        value: 'e90a0d58-658e-4148-8f61-e896c86f0696'
-      }
-    ]
-  };
+  const configValueData: any = 'e90a0d58-658e-4148-8f61-e896c86f0696';
 
-  const orchData: any = {
-    log_level: '',
-    log_to_cluster: false,
-    log_to_cluster_level: 'info',
-    log_to_file: false,
-    orchestrator: 'cephadm'
-  };
+  const orchName: any = 'Cephadm';
 
   configureTestBed({
     imports: [RouterTestingModule, HttpClientTestingModule, ToastrModule.forRoot(), SharedModule],
-    declarations: [
-      DashboardV3Component,
-      CardComponent,
-      DashboardPieComponent,
-      CardRowComponent,
-      PgSummaryPipe
-    ],
+    declarations: [DashboardV3Component, DashboardPieComponent, PgSummaryPipe],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
       { provide: SummaryService, useClass: SummaryServiceMock },
@@ -186,13 +165,15 @@ describe('Dashbord Component', () => {
     );
     fixture = TestBed.createComponent(DashboardV3Component);
     component = fixture.componentInstance;
-    configurationService = TestBed.inject(ConfigurationService);
-    orchestratorService = TestBed.inject(MgrModuleService);
+    healthService = TestBed.inject(HealthService);
+    orchestratorService = TestBed.inject(OrchestratorService);
     getHealthSpy = spyOn(TestBed.inject(HealthService), 'getMinimalHealth');
     getHealthSpy.and.returnValue(of(healthPayload));
     spyOn(TestBed.inject(PrometheusService), 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
     getAlertsSpy = spyOn(TestBed.inject(PrometheusService), 'getAlerts');
     getAlertsSpy.and.returnValue(of(alertsPayload));
+    component.prometheusAlertService.alerts = alertsPayload;
+    component.isAlertmanagerConfigured = true;
   });
 
   it('should create', () => {
@@ -206,8 +187,8 @@ describe('Dashbord Component', () => {
   });
 
   it('should get corresponding data into detailsCardData', () => {
-    spyOn(configurationService, 'get').and.returnValue(of(configValueData));
-    spyOn(orchestratorService, 'getConfig').and.returnValue(of(orchData));
+    spyOn(healthService, 'getClusterFsid').and.returnValue(of(configValueData));
+    spyOn(orchestratorService, 'getName').and.returnValue(of(orchName));
     component.ngOnInit();
     expect(component.detailsCardData.fsid).toBe('e90a0d58-658e-4148-8f61-e896c86f0696');
     expect(component.detailsCardData.orchestrator).toBe('Cephadm');
@@ -225,7 +206,7 @@ describe('Dashbord Component', () => {
 
     getHealthSpy.and.returnValue(of(payload));
     fixture.detectChanges();
-    const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[title="Status"] i'));
+    const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[cardTitle="Status"] i'));
     expect(clusterStatusCard.nativeElement.title).toEqual(`${payload.health.status}`);
 
     // HEALTH_ERR
@@ -262,7 +243,7 @@ describe('Dashbord Component', () => {
 
   it('should show the critical alerts window and its content', () => {
     const payload = _.cloneDeep(alertsPayload[0]);
-    component.toggleAlertsWindow('danger');
+    component.toggleAlertsWindow(AlertClass[0]);
     fixture.detectChanges();
 
     const cardTitle = fixture.debugElement.query(By.css('.tc_alerts h6.card-title'));
@@ -273,7 +254,7 @@ describe('Dashbord Component', () => {
 
   it('should show the warning alerts window and its content', () => {
     const payload = _.cloneDeep(alertsPayload[2]);
-    component.toggleAlertsWindow('warning');
+    component.toggleAlertsWindow(AlertClass.warning);
     fixture.detectChanges();
 
     const cardTitle = fixture.debugElement.query(By.css('.tc_alerts h6.card-title'));
@@ -283,8 +264,7 @@ describe('Dashbord Component', () => {
   });
 
   it('should only show the pills when the alerts are not empty', () => {
-    spyOn(TestBed.inject(PrometheusAlertService), 'activeCriticalAlerts').and.returnValue(0);
-    spyOn(TestBed.inject(PrometheusAlertService), 'activeWarningAlerts').and.returnValue(0);
+    spyOn(TestBed.inject(PrometheusAlertService), 'alerts').and.returnValue(0);
     fixture.detectChanges();
 
     const warningAlerts = fixture.debugElement.query(By.css('button[id=warningAlerts]'));
@@ -293,6 +273,29 @@ describe('Dashbord Component', () => {
 
     expect(warningAlerts).toBe(null);
     expect(dangerAlerts).toBe(null);
+  });
+
+  it('should render "Status" card text that is not clickable', () => {
+    fixture.detectChanges();
+
+    const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[cardTitle="Status"]'));
+    const clickableContent = clusterStatusCard.query(By.css('.lead.text-primary'));
+    expect(clickableContent).toBeNull();
+  });
+
+  it('should render "Status" card text that is clickable (popover)', () => {
+    const payload = _.cloneDeep(healthPayload);
+    payload.health['status'] = 'HEALTH_WARN';
+    payload.health['checks'] = [
+      { severity: 'HEALTH_WARN', type: 'WRN', summary: { message: 'fake warning' } }
+    ];
+
+    getHealthSpy.and.returnValue(of(payload));
+    fixture.detectChanges();
+
+    const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[cardTitle="Status"]'));
+    const clickableContent = clusterStatusCard.query(By.css('.lead.text-primary'));
+    expect(clickableContent).not.toBeNull();
   });
 
   describe('features disabled', () => {

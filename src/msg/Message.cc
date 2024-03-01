@@ -314,6 +314,10 @@ Message *decode_message(CephContext *cct,
                         ceph::bufferlist& data,
                         Message::ConnectionRef conn)
 {
+#ifdef WITH_SEASTAR
+  // In crimson, conn is independently maintained outside Message.
+  ceph_assert(conn == nullptr);
+#endif
   // verify crc
   if (crcflags & MSG_CRC_HEADER) {
     __u32 front_crc = front.crc32c(0);
@@ -322,7 +326,10 @@ Message *decode_message(CephContext *cct,
     if (front_crc != footer.front_crc) {
       if (cct) {
 	ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc
-		      << " from " << conn->get_peer_addr() << dendl;
+#ifndef WITH_SEASTAR
+	              << " from " << conn->get_peer_addr()
+#endif
+	              << dendl;
 	ldout(cct, 20) << " ";
 	front.hexdump(*_dout);
 	*_dout << dendl;
@@ -332,7 +339,10 @@ Message *decode_message(CephContext *cct,
     if (middle_crc != footer.middle_crc) {
       if (cct) {
 	ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc
-		      << " from " << conn->get_peer_addr() << dendl;
+#ifndef WITH_SEASTAR
+	              << " from " << conn->get_peer_addr()
+#endif
+	              << dendl;
 	ldout(cct, 20) << " ";
 	middle.hexdump(*_dout);
 	*_dout << dendl;
@@ -346,7 +356,10 @@ Message *decode_message(CephContext *cct,
       if (data_crc != footer.data_crc) {
 	if (cct) {
 	  ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc
-			<< " from " << conn->get_peer_addr() << dendl;
+#ifndef WITH_SEASTAR
+	                << " from " << conn->get_peer_addr()
+#endif
+	                << dendl;
 	  ldout(cct, 20) << " ";
 	  data.hexdump(*_dout);
 	  *_dout << dendl;
@@ -818,9 +831,6 @@ Message *decode_message(CephContext *cct,
     break;
 
 
-  case MSG_MDS_DENTRYUNLINK_ACK:
-    m = make_message<MDentryUnlinkAck>();
-    break;
   case MSG_MDS_DENTRYUNLINK:
     m = make_message<MDentryUnlink>();
     break;

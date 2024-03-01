@@ -129,13 +129,8 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  map<string,string> defaults = {
-    // We want to enable leveldb's log, while allowing users to override this
-    // option, therefore we will pass it as a default argument to global_init().
-    { "leveldb_log", "" }
-  };
   auto cct = global_init(
-    &defaults,
+    nullptr,
     args, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();
@@ -544,7 +539,7 @@ flushjournal_out:
 
   public_msg_type = public_msg_type.empty() ? msg_type : public_msg_type;
   cluster_msg_type = cluster_msg_type.empty() ? msg_type : cluster_msg_type;
-  uint64_t nonce = Messenger::get_pid_nonce();
+  uint64_t nonce = Messenger::get_random_nonce();
   Messenger *ms_public = Messenger::create(g_ceph_context, public_msg_type,
 					   entity_name_t::OSD(whoami), "client", nonce);
   Messenger *ms_cluster = Messenger::create(g_ceph_context, cluster_msg_type,

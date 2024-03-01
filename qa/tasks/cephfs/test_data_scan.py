@@ -44,6 +44,15 @@ class Workload(object):
                 ValidationError(e, traceback.format_exc(3))
             )
 
+    def assert_not_equal(self, a, b):
+        try:
+            if a == b:
+                raise AssertionError("{0} == {1}".format(a, b))
+        except AssertionError as e:
+            self._errors.append(
+                ValidationError(e, traceback.format_exc(3))
+            )
+
     def assert_true(self, a):
         try:
             if not a:
@@ -81,6 +90,26 @@ class Workload(object):
         """
         self._filesystem.mds_asok(["flush", "journal"])
 
+    def scrub(self):
+        """
+        Called as a final step post recovery before verification. Right now, this
+        doesn't bother if errors are found in scrub - just that the MDS doesn't
+        crash and burn during scrub.
+        """
+        out_json = self._filesystem.run_scrub(["start", "/", "repair,recursive"])
+        self.assert_not_equal(out_json, None)
+        self.assert_equal(out_json["return_code"], 0)
+        self.assert_equal(self._filesystem.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
+    def mangle(self):
+        """
+        Gives an opportunity to fiddle with metadata objects before bringing back
+        the MDSs online. This is used in testing the lost+found case (when recovering
+        a file without a backtrace) to verify if lost+found directory object can be
+        removed via RADOS operation and the file system can be continued to be used
+        as expected.
+        """
+        pass
 
 class SimpleWorkload(Workload):
     """
@@ -165,8 +194,29 @@ class BacktracelessFile(Workload):
         # We might not have got the name or path, but we should still get the size
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
 
+        # remove the entry from lost+found directory
+        self._mount.run_shell(["sudo", "rm", "-f", f'lost+found/{ino_name}'], omit_sudo=False)
+        self.assert_equal(self._mount.ls("lost+found", sudo=True), [])
+
         return self._errors
 
+class BacktracelessFileRemoveLostAndFoundDirectory(Workload):
+    def write(self):
+        self._mount.run_shell(["mkdir", "subdir"])
+        self._mount.write_n_mb("subdir/sixmegs", 6)
+        self._initial_state = self._mount.stat("subdir/sixmegs")
+
+    def flush(self):
+        # Never flush metadata, so backtrace won't be written
+        pass
+
+    def mangle(self):
+        self._filesystem.rados(["-p", self._filesystem.get_metadata_pool_name(), "rm", "4.00000000"])
+        self._filesystem.rados(["-p", self._filesystem.get_metadata_pool_name(), "rmomapkey", "1.00000000", "lost+found_head"])
+
+    def validate(self):
+        # The dir should be gone since we manually removed it
+        self.assert_not_equal(self._mount.ls(sudo=True), ["lost+found"])
 
 class StripedStashedLayout(Workload):
     def __init__(self, fs, m, pool=None):
@@ -404,13 +454,19 @@ class TestDataScan(CephFSTestCase):
         self.fs.data_scan(["scan_inodes"], worker_count=workers)
         self.fs.data_scan(["scan_links"])
 
+        workload.mangle()
+
         # Mark the MDS repaired
-        self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
+        self.run_ceph_cmd('mds', 'repaired', '0')
 
         # Start the MDS
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
         log.info(str(self.mds_cluster.status()))
+
+        # run scrub as it is recommended post recovery for most
+        # (if not all) recovery mechanisms.
+        workload.scrub()
 
         # Mount a client
         self.mount_a.mount_wait()
@@ -438,6 +494,9 @@ class TestDataScan(CephFSTestCase):
     def test_rebuild_backtraceless(self):
         self._rebuild_metadata(BacktracelessFile(self.fs, self.mount_a))
 
+    def test_rebuild_backtraceless_with_lf_dir_removed(self):
+        self._rebuild_metadata(BacktracelessFileRemoveLostAndFoundDirectory(self.fs, self.mount_a))
+
     def test_rebuild_moved_dir(self):
         self._rebuild_metadata(MovedDir(self.fs, self.mount_a))
 
@@ -464,10 +523,11 @@ class TestDataScan(CephFSTestCase):
 
         file_count = 100
         file_names = ["%s" % n for n in range(0, file_count)]
+        split_size = 100 * file_count
 
         # Make sure and disable dirfrag auto merging and splitting
-        self.fs.set_ceph_conf('mds', 'mds bal merge size', 0)
-        self.fs.set_ceph_conf('mds', 'mds bal split size', 100 * file_count)
+        self.config_set('mds', 'mds_bal_merge_size', 0)
+        self.config_set('mds', 'mds_bal_split_size', split_size)
 
         # Create a directory of `file_count` files, each named after its
         # decimal number and containing the string of its decimal number
@@ -576,7 +636,7 @@ class TestDataScan(CephFSTestCase):
             file_path = "mydir/myfile_{0}".format(i)
             ino = self.mount_a.path_to_ino(file_path)
             obj = "{0:x}.{1:08x}".format(ino, 0)
-            pgid = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+            pgid = json.loads(self.get_ceph_cmd_stdout(
                 "osd", "map", self.fs.get_data_pool_name(), obj,
                 "--format=json-pretty"
             ))['pgid']
@@ -645,6 +705,11 @@ class TestDataScan(CephFSTestCase):
         file1_nlink = self.mount_a.path_to_nlink("testdir1/file1")
         self.assertEqual(file1_nlink, 2)
 
+        out_json = self.fs.run_scrub(["start", "/testdir1", "repair,recursive"])
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
     def test_rebuild_inotable(self):
         """
         The scan_links command repair inotables
@@ -690,6 +755,14 @@ class TestDataScan(CephFSTestCase):
         self.assertGreaterEqual(
             mds1_inotable['1']['data']['inotable']['free'][0]['start'], file_ino)
 
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+        out_json = self.fs.run_scrub(["start", "/dir1", "repair,recursive"])
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
     def test_rebuild_snaptable(self):
         """
         The scan_links command repair snaptable
@@ -724,6 +797,11 @@ class TestDataScan(CephFSTestCase):
             new_snaptable['snapserver']['last_snap'], old_snaptable['snapserver']['last_snap'])
         self.assertEqual(
             new_snaptable['snapserver']['snaps'], old_snaptable['snapserver']['snaps'])
+
+        out_json = self.fs.run_scrub(["start", "/dir1", "repair,recursive"])
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
     def _prepare_extra_data_pool(self, set_root_layout=True):
         extra_data_pool_name = self.fs.get_data_pool_name() + '_extra'

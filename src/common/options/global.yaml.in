@@ -1961,19 +1961,19 @@ options:
   see_also:
   - mon_debug_dump_transactions
   with_legacy: true
-- name: mon_debug_no_require_quincy
+- name: mon_debug_no_require_reef
   type: bool
   level: dev
-  desc: do not set quincy feature for new mon clusters
+  desc: do not set reef feature for new mon clusters
   default: false
   services:
   - mon
   flags:
   - cluster_create
-- name: mon_debug_no_require_reef
+- name: mon_debug_no_require_squid
   type: bool
   level: dev
-  desc: do not set reef feature for new mon clusters
+  desc: do not set squid feature for new mon clusters
   default: false
   services:
   - mon
@@ -2058,7 +2058,6 @@ options:
   services:
   - mon
   enum_values:
-  - leveldb
   - rocksdb
   flags:
   - create
@@ -2235,6 +2234,14 @@ options:
   level: advanced
   default: 3
   with_legacy: true
+- name: mon_client_target_rank
+  type: int
+  level: advanced
+  default: -1
+  min: -1
+  flags:
+  - runtime
+  fmt_desc: automatically target mon rank for client communication
 # try new mon every N seconds until we connect
 - name: mon_client_hunt_interval
   type: float
@@ -2539,6 +2546,18 @@ options:
   level: advanced
   desc: default erasure code profile for new erasure-coded pools
   default: plugin=jerasure technique=reed_sol_van k=2 m=2
+  services:
+  - mon
+  flags:
+  - runtime
+- name: osd_pool_default_read_ratio
+  type: uint
+  level: advanced
+  desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
+  long_desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
+    applicable to replicated pools only. This value is used to improve read balancing
+    when OSDs have different weights.
+  default: 70
   services:
   - mon
   flags:
@@ -2896,11 +2915,19 @@ options:
   default: 5_min
   with_legacy: true
 # report pg stats for any given pg at least this often
-- name: osd_pg_stat_report_interval_max
+- name: osd_pg_stat_report_interval_max_seconds
   type: int
   level: advanced
+  desc: How often (in seconds) should PGs stats be collected.
+  with_legacy: false
+  default: 5
+- name: osd_pg_stat_report_interval_max_epochs
+  type: int
+  level: advanced
+  desc: The maximum number of epochs allowed to pass before PG stats
+        are collected.
   default: 500
-  with_legacy: true
+  with_legacy: false
 # Max number of snap intervals to report to mgr in pg_stat_t
 - name: osd_max_snap_prune_intervals_per_epoch
   type: uint
@@ -3221,6 +3248,12 @@ options:
   level: dev
   default: false
   with_legacy: true
+- name: osd_skip_check_past_interval_bounds
+  type: bool
+  level: dev
+  desc: See https://tracker.ceph.com/issues/64002
+  default: false
+  with_legacy: true
 - name: osd_debug_pretend_recovery_active
   type: bool
   level: dev
@@ -3360,56 +3393,6 @@ options:
   type: int
   level: advanced
   default: 2
-  with_legacy: true
-- name: leveldb_log_to_ceph_log
-  type: bool
-  level: advanced
-  default: true
-  with_legacy: true
-- name: leveldb_write_buffer_size
-  type: size
-  level: advanced
-  default: 8_M
-  with_legacy: true
-- name: leveldb_cache_size
-  type: size
-  level: advanced
-  default: 128_M
-  with_legacy: true
-- name: leveldb_block_size
-  type: size
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_bloom_size
-  type: int
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_max_open_files
-  type: int
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_compression
-  type: bool
-  level: advanced
-  default: true
-  with_legacy: true
-- name: leveldb_paranoid
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
-- name: leveldb_log
-  type: str
-  level: advanced
-  default: /dev/null
-  with_legacy: true
-- name: leveldb_compact_on_mount
-  type: bool
-  level: advanced
-  default: false
   with_legacy: true
 - name: rocksdb_log_to_ceph_log
   type: bool
@@ -3644,6 +3627,12 @@ options:
   level: advanced
   desc: Cost for scrub operations in work queue
   default: 50_M
+  with_legacy: true
+- name: osd_scrub_event_cost
+  type: size
+  level: advanced
+  desc: Cost for each scrub operation, used when osd_op_queue=mclock_scheduler
+  default: 4_K
   with_legacy: true
 # set requested scrub priority higher than scrub priority to make the
 # requested scrubs jump the queue of scheduled scrubs
@@ -4423,6 +4412,21 @@ options:
   flags:
   - create
   with_legacy: true
+- name: bluestore_debug_enforce_min_alloc_size
+  type: uint
+  level: dev
+  desc: Enforces specific min_alloc size usages
+  long_desc: This overrides actual min_alloc_size value persisted on mkfs
+    (and originally obtained from bluestore_min_alloc_size) and permits to
+    use arbitrary value for this value. Intended primarily for dev/debug
+    purposes and should be used with care and deep understanding of potential
+    consequences, e.g. data corruption.
+  default: 0
+  see_also:
+  - bluestore_min_alloc_size
+  flags:
+  - startup
+  with_legacy: true
 - name: bluestore_use_optimal_io_size_for_min_alloc_size 
   type: bool
   level: advanced
@@ -4912,6 +4916,17 @@ options:
   flags:
   - create
   with_legacy: true
+- name: bluestore_elastic_shared_blobs
+  type: bool
+  level: advanced
+  desc: Let bluestore to reuse existing shared blobs if possible
+  long_desc: Overwrites on snapped objects cause shared blob count to grow.
+    It has a very negative performance effect. When enabled shared blob count
+    is significantly reduced.
+  default: true
+  flags:
+  - create
+  with_legacy: false
 - name: bluestore_allocator
   type: str
   level: advanced
@@ -4923,7 +4938,6 @@ options:
   - stupid
   - avl
   - hybrid
-  - zoned
   with_legacy: true
 - name: bluestore_freelist_blocks_per_key
   type: size
@@ -4958,7 +4972,7 @@ options:
   type: str
   level: advanced
   desc: Full set of rocksdb settings to override
-  default: compression=kNoCompression,max_write_buffer_number=128,min_write_buffer_number_to_merge=16,compaction_style=kCompactionStyleLevel,write_buffer_size=8388608,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0,ttl=21600
+  default: compression=kLZ4Compression,max_write_buffer_number=64,min_write_buffer_number_to_merge=6,compaction_style=kCompactionStyleLevel,write_buffer_size=16777216,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0
   with_legacy: true
 - name: bluestore_rocksdb_options_annex
   type: str
@@ -5004,7 +5018,7 @@ options:
     The optimal value depends on multiple factors, and modification is invadvisable.
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
-  default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P
+  default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L=min_write_buffer_number_to_merge=32 P=min_write_buffer_number_to_merge=32
 - name: bluestore_qfsck_on_mount
   type: bool
   level: dev
@@ -5276,11 +5290,6 @@ options:
   type: float
   level: dev
   default: 0
-  with_legacy: true
-- name: bluestore_debug_inject_bug21040
-  type: bool
-  level: dev
-  default: false
   with_legacy: true
 - name: bluestore_debug_inject_csum_err_probability
   type: float
@@ -6357,7 +6366,6 @@ options:
   - aio
   - spdk
   - pmem
-  - hm_smr
 - name: bluestore_cleaner_sleep_interval
   type: float
   level: advanced
@@ -6388,3 +6396,9 @@ options:
   default: 0
   services:
   - mgr
+- name: objectstore_debug_throw_on_failed_txc
+  type: bool
+  level: dev
+  desc: Enables exception throwing instead of process abort on transaction submission error.
+  default: false
+  with_legacy: false

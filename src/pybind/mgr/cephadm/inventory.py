@@ -12,12 +12,12 @@ from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Se
 
 import orchestrator
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, TunedProfileSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, TunedProfileSpec, IngressSpec
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 
-from .utils import resolve_ip
+from .utils import resolve_ip, SpecialHostLabels
 from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
 
 if TYPE_CHECKING:
@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 AGENT_CACHE_PREFIX = 'agent.'
+NODE_PROXY_CACHE_PREFIX = 'node_proxy'
 
 
 class HostCacheStatus(enum.Enum):
@@ -212,6 +213,7 @@ class SpecStore():
         self.spec_created = {}  # type: Dict[str, datetime.datetime]
         self.spec_deleted = {}  # type: Dict[str, datetime.datetime]
         self.spec_preview = {}  # type: Dict[str, ServiceSpec]
+        self._needs_configuration: Dict[str, bool] = {}
 
     @property
     def all_specs(self) -> Mapping[str, ServiceSpec]:
@@ -263,6 +265,9 @@ class SpecStore():
                     deleted = str_to_datetime(cast(str, j['deleted']))
                     self.spec_deleted[service_name] = deleted
 
+                if 'needs_configuration' in j:
+                    self._needs_configuration[service_name] = cast(bool, j['needs_configuration'])
+
                 if 'rank_map' in j and isinstance(j['rank_map'], dict):
                     self._rank_maps[service_name] = {}
                     for rank_str, m in j['rank_map'].items():
@@ -299,6 +304,7 @@ class SpecStore():
             self.spec_preview[name] = spec
             return None
         self._specs[name] = spec
+        self._needs_configuration[name] = True
 
         if update_create:
             self.spec_created[name] = datetime_now()
@@ -313,12 +319,15 @@ class SpecStore():
     def _save(self, name: str) -> None:
         data: Dict[str, Any] = {
             'spec': self._specs[name].to_json(),
-            'created': datetime_to_str(self.spec_created[name]),
         }
+        if name in self.spec_created:
+            data['created'] = datetime_to_str(self.spec_created[name])
         if name in self._rank_maps:
             data['rank_map'] = self._rank_maps[name]
         if name in self.spec_deleted:
             data['deleted'] = datetime_to_str(self.spec_deleted[name])
+        if name in self._needs_configuration:
+            data['needs_configuration'] = self._needs_configuration[name]
 
         self.mgr.set_store(
             SPEC_STORE_PREFIX + name,
@@ -350,6 +359,8 @@ class SpecStore():
             del self.spec_created[service_name]
             if service_name in self.spec_deleted:
                 del self.spec_deleted[service_name]
+            if service_name in self._needs_configuration:
+                del self._needs_configuration[service_name]
             self.mgr.set_store(SPEC_STORE_PREFIX + service_name, None)
         return found
 
@@ -364,6 +375,23 @@ class SpecStore():
         self._specs[service_name].unmanaged = value
         self.save(self._specs[service_name])
         return f'Set unmanaged to {str(value)} for service {service_name}'
+
+    def needs_configuration(self, name: str) -> bool:
+        return self._needs_configuration.get(name, False)
+
+    def mark_needs_configuration(self, name: str) -> None:
+        if name in self._specs:
+            self._needs_configuration[name] = True
+            self._save(name)
+        else:
+            self.mgr.log.warning(f'Attempted to mark unknown service "{name}" as needing configuration')
+
+    def mark_configured(self, name: str) -> None:
+        if name in self._specs:
+            self._needs_configuration[name] = False
+            self._save(name)
+        else:
+            self.mgr.log.warning(f'Attempted to mark unknown service "{name}" as having been configured')
 
 
 class ClientKeyringSpec(object):
@@ -553,6 +581,7 @@ class HostCache():
         # type: (CephadmOrchestrator) -> None
         self.mgr: CephadmOrchestrator = mgr
         self.daemons = {}   # type: Dict[str, Dict[str, orchestrator.DaemonDescription]]
+        self._tmp_daemons = {}  # type: Dict[str, Dict[str, orchestrator.DaemonDescription]]
         self.last_daemon_update = {}   # type: Dict[str, datetime.datetime]
         self.devices = {}              # type: Dict[str, List[inventory.Device]]
         self.facts = {}                # type: Dict[str, Dict[str, Any]]
@@ -666,7 +695,17 @@ class HostCache():
     def update_host_daemons(self, host, dm):
         # type: (str, Dict[str, orchestrator.DaemonDescription]) -> None
         self.daemons[host] = dm
+        self._tmp_daemons.pop(host, {})
         self.last_daemon_update[host] = datetime_now()
+
+    def append_tmp_daemon(self, host: str, dd: orchestrator.DaemonDescription) -> None:
+        # for storing empty daemon descriptions representing daemons we have
+        # just deployed but not yet had the chance to pick up in a daemon refresh
+        # _tmp_daemons is cleared for a host upon receiving a real update of the
+        # host's dameons
+        if host not in self._tmp_daemons:
+            self._tmp_daemons[host] = {}
+        self._tmp_daemons[host][dd.name()] = dd
 
     def update_host_facts(self, host, facts):
         # type: (str, Dict[str, Dict[str, Any]]) -> None
@@ -965,29 +1004,60 @@ class HostCache():
             h for h in self.mgr.inventory.all_specs()
             if (
                 self.host_had_daemon_refresh(h.hostname)
-                and '_no_schedule' not in h.labels
+                and SpecialHostLabels.DRAIN_DAEMONS not in h.labels
+            )
+        ]
+
+    def get_conf_keyring_available_hosts(self) -> List[HostSpec]:
+        """
+        Returns all hosts without the drain conf and keyrings
+        label (SpecialHostLabels.DRAIN_CONF_KEYRING) that have
+        had a refresh. That is equivalent to all hosts we
+        consider eligible for deployment of conf and keyring files
+
+        Any host without that label is considered fair game for
+        a client keyring spec to match. However, we want to still
+        wait for refresh here so that we know what keyrings we've
+        already deployed here
+        """
+        return [
+            h for h in self.mgr.inventory.all_specs()
+            if (
+                self.host_had_daemon_refresh(h.hostname)
+                and SpecialHostLabels.DRAIN_CONF_KEYRING not in h.labels
             )
         ]
 
     def get_non_draining_hosts(self) -> List[HostSpec]:
         """
-        Returns all hosts that do not have _no_schedule label.
+        Returns all hosts that do not have drain daemon label
+        (SpecialHostLabels.DRAIN_DAEMONS).
 
         Useful for the agent who needs this specific list rather than the
         schedulable_hosts since the agent needs to be deployed on hosts with
         no daemon refresh
         """
         return [
-            h for h in self.mgr.inventory.all_specs() if '_no_schedule' not in h.labels
+            h for h in self.mgr.inventory.all_specs() if SpecialHostLabels.DRAIN_DAEMONS not in h.labels
         ]
 
     def get_draining_hosts(self) -> List[HostSpec]:
         """
-        Returns all hosts that have _no_schedule label and therefore should have
-        no daemons placed on them, but are potentially still reachable
+        Returns all hosts that have the drain daemons label (SpecialHostLabels.DRAIN_DAEMONS)
+        and therefore should have no daemons placed on them, but are potentially still reachable
         """
         return [
-            h for h in self.mgr.inventory.all_specs() if '_no_schedule' in h.labels
+            h for h in self.mgr.inventory.all_specs() if SpecialHostLabels.DRAIN_DAEMONS in h.labels
+        ]
+
+    def get_conf_keyring_draining_hosts(self) -> List[HostSpec]:
+        """
+        Returns all hosts that have drain conf and keyrings label (SpecialHostLabels.DRAIN_CONF_KEYRING)
+        and therefore should have no config files or client keyring placed on them, but are
+        potentially still reachable
+        """
+        return [
+            h for h in self.mgr.inventory.all_specs() if SpecialHostLabels.DRAIN_CONF_KEYRING in h.labels
         ]
 
     def get_unreachable_hosts(self) -> List[HostSpec]:
@@ -1007,11 +1077,27 @@ class HostCache():
             )
         ]
 
+    def is_host_unreachable(self, hostname: str) -> bool:
+        # take hostname and return if it matches the hostname of an unreachable host
+        return hostname in [h.hostname for h in self.get_unreachable_hosts()]
+
+    def is_host_schedulable(self, hostname: str) -> bool:
+        # take hostname and return if it matches the hostname of a schedulable host
+        return hostname in [h.hostname for h in self.get_schedulable_hosts()]
+
+    def is_host_draining(self, hostname: str) -> bool:
+        # take hostname and return if it matches the hostname of a draining host
+        return hostname in [h.hostname for h in self.get_draining_hosts()]
+
     def get_facts(self, host: str) -> Dict[str, Any]:
         return self.facts.get(host, {})
 
     def _get_daemons(self) -> Iterator[orchestrator.DaemonDescription]:
         for dm in self.daemons.copy().values():
+            yield from dm.values()
+
+    def _get_tmp_daemons(self) -> Iterator[orchestrator.DaemonDescription]:
+        for dm in self._tmp_daemons.copy().values():
             yield from dm.values()
 
     def get_daemons(self):
@@ -1066,6 +1152,21 @@ class HostCache():
         assert not service_name.startswith('haproxy.')
 
         return list(dd for dd in self._get_daemons() if dd.service_name() == service_name)
+
+    def get_related_service_daemons(self, service_spec: ServiceSpec) -> Optional[List[orchestrator.DaemonDescription]]:
+        if service_spec.service_type == 'ingress':
+            dds = list(dd for dd in self._get_daemons() if dd.service_name() == cast(IngressSpec, service_spec).backend_service)
+            dds += list(dd for dd in self._get_tmp_daemons() if dd.service_name() == cast(IngressSpec, service_spec).backend_service)
+            logger.debug(f'Found related daemons {dds} for service {service_spec.service_name()}')
+            return dds
+        else:
+            for ingress_spec in [cast(IngressSpec, s) for s in self.mgr.spec_store.active_specs.values() if s.service_type == 'ingress']:
+                if ingress_spec.backend_service == service_spec.service_name():
+                    dds = list(dd for dd in self._get_daemons() if dd.service_name() == ingress_spec.service_name())
+                    dds += list(dd for dd in self._get_tmp_daemons() if dd.service_name() == ingress_spec.service_name())
+                    logger.debug(f'Found related daemons {dds} for service {service_spec.service_name()}')
+                    return dds
+        return None
 
     def get_daemons_by_type(self, service_type: str, host: str = '') -> List[orchestrator.DaemonDescription]:
         assert service_type not in ['keepalived', 'haproxy']
@@ -1237,8 +1338,7 @@ class HostCache():
         return True
 
     def all_host_metadata_up_to_date(self) -> bool:
-        unreachables = [h.hostname for h in self.get_unreachable_hosts()]
-        if [h for h in self.get_hosts() if (not self.host_metadata_up_to_date(h) and h not in unreachables)]:
+        if [h for h in self.get_hosts() if (not self.host_metadata_up_to_date(h) and not self.is_host_unreachable(h))]:
             # this function is primarily for telling if it's safe to try and apply a service
             # spec. Since offline/maintenance hosts aren't considered in that process anyway
             # we don't want to return False if the host without up-to-date metadata is in one
@@ -1304,6 +1404,188 @@ class HostCache():
         assert not daemon.startswith('ha-rgw.')
 
         return self.scheduled_daemon_actions.get(host, {}).get(daemon)
+
+
+class NodeProxyCache:
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+        self.mgr = mgr
+        self.data: Dict[str, Any] = {}
+        self.oob: Dict[str, Any] = {}
+        self.keyrings: Dict[str, str] = {}
+
+    def load(self) -> None:
+        _oob = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/oob', '{}')
+        self.oob = json.loads(_oob)
+
+        _keyrings = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/keyrings', '{}')
+        self.keyrings = json.loads(_keyrings)
+
+        for k, v in self.mgr.get_store_prefix(f'{NODE_PROXY_CACHE_PREFIX}/data').items():
+            host = k.split('/')[-1:][0]
+
+            if host not in self.mgr.inventory.keys():
+                # remove entry for host that no longer exists
+                self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/data/{host}", None)
+                try:
+                    self.oob.pop(host)
+                    self.data.pop(host)
+                    self.keyrings.pop(host)
+                except KeyError:
+                    pass
+                continue
+
+            self.data[host] = json.loads(v)
+
+    def save(self,
+             host: str = '',
+             data: Dict[str, Any] = {}) -> None:
+        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/data/{host}", json.dumps(data))
+
+    def update_oob(self, host: str, host_oob_info: Dict[str, str]) -> None:
+        self.oob[host] = host_oob_info
+        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/oob", json.dumps(self.oob))
+
+    def update_keyring(self, host: str, key: str) -> None:
+        self.keyrings[host] = key
+        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/keyrings", json.dumps(self.keyrings))
+
+    def fullreport(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves the full report for the specified hostname.
+
+        If a hostname is provided in the keyword arguments, it retrieves the full report
+        data for that specific host. If no hostname is provided, it fetches the full
+        report data for all hosts available.
+
+        :param kw: Keyword arguments including 'hostname'.
+        :type kw: dict
+
+        :return: The full report data for the specified hostname(s).
+        :rtype: dict
+        """
+        hostname = kw.get('hostname')
+        hosts = [hostname] if hostname else self.data.keys()
+        return {host: self.data[host] for host in hosts}
+
+    def summary(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Summarizes the health status of components for specified hosts or all hosts.
+
+        Generates a summary of the health status of components for given hosts. If
+        no hostname is provided, it generates the health status summary for all hosts.
+        It inspects the status of each component and categorizes it as 'ok' or 'error'
+        based on the health status of its members.
+
+        :param kw: Keyword arguments including 'hostname'.
+        :type kw: dict
+
+        :return: A dictionary containing the health status summary for each specified
+                host or all hosts and their components.
+        :rtype: Dict[str, Dict[str, str]]
+        """
+        hostname = kw.get('hostname')
+        hosts = [hostname] if hostname else self.data.keys()
+        mapper: Dict[bool, str] = {
+            True: 'error',
+            False: 'ok'
+        }
+
+        _result: Dict[str, Any] = {}
+
+        for host in hosts:
+            _result[host] = {}
+            _result[host]['status'] = {}
+            data = self.data[host]
+            for component, details in data['status'].items():
+                res = any([member['status']['health'].lower() != 'ok' for member in data['status'][component].values()])
+                _result[host]['status'][component] = mapper[res]
+            _result[host]['sn'] = data['sn']
+            _result[host]['host'] = data['host']
+            _result[host]['firmwares'] = data['firmwares']
+        return _result
+
+    def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves specific endpoint information for a specific hostname or all hosts.
+
+        Retrieves information from the specified 'endpoint' for all available hosts.
+        If 'hostname' is provided, retrieves the specified 'endpoint' information for that host.
+
+        :param endpoint: The endpoint for which information is retrieved.
+        :type endpoint: str
+        :param kw: Keyword arguments, including 'hostname' if specified.
+        :type kw: dict
+
+        :return: Endpoint information for the specified host(s).
+        :rtype: Union[Dict[str, Any], Any]
+        """
+        hostname = kw.get('hostname')
+        _result = {}
+        hosts = [hostname] if hostname else self.data.keys()
+
+        for host in hosts:
+            try:
+                _result[host] = self.data[host]['status'][endpoint]
+            except KeyError:
+                raise KeyError(f'Invalid host {host} or component {endpoint}.')
+        return _result
+
+    def firmwares(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves firmware information for a specific hostname or all hosts.
+
+        If a 'hostname' is provided in the keyword arguments, retrieves firmware
+        information for that specific host. Otherwise, retrieves firmware
+        information for all available hosts.
+
+        :param kw: Keyword arguments, including 'hostname' if specified.
+        :type kw: dict
+
+        :return: A dictionary containing firmware information for each host.
+        :rtype: Dict[str, Any]
+        """
+        hostname = kw.get('hostname')
+        hosts = [hostname] if hostname else self.data.keys()
+
+        return {host: self.data[host]['firmwares'] for host in hosts}
+
+    def get_critical_from_host(self, hostname: str) -> Dict[str, Any]:
+        results: Dict[str, Any] = {}
+        for component, data_component in self.data[hostname]['status'].items():
+            if component not in results.keys():
+                results[component] = {}
+            for member, data_member in data_component.items():
+                if component == 'power':
+                    data_member['status']['health'] = 'critical'
+                    data_member['status']['state'] = 'unplugged'
+                if component == 'memory':
+                    data_member['status']['health'] = 'critical'
+                    data_member['status']['state'] = 'errors detected'
+                if data_member['status']['health'].lower() != 'ok':
+                    results[component][member] = data_member
+        return results
+
+    def criticals(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves critical information for a specific hostname or all hosts.
+
+        If a 'hostname' is provided in the keyword arguments, retrieves critical
+        information for that specific host. Otherwise, retrieves critical
+        information for all available hosts.
+
+        :param kw: Keyword arguments, including 'hostname' if specified.
+        :type kw: dict
+
+        :return: A dictionary containing critical information for each host.
+        :rtype: List[Dict[str, Any]]
+        """
+        hostname = kw.get('hostname')
+        results: Dict[str, Any] = {}
+
+        hosts = [hostname] if hostname else self.data.keys()
+        for host in hosts:
+            results[host] = self.get_critical_from_host(host)
+        return results
 
 
 class AgentCache():
@@ -1408,6 +1690,8 @@ class EventStore():
 
         for e in self.events[event.kind_subject()]:
             if e.message == event.message:
+                # if subject and message match, just update the timestamp
+                e.created = event.created
                 return
 
         self.events[event.kind_subject()].append(event)

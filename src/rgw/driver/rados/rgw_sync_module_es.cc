@@ -501,15 +501,12 @@ struct es_obj_metadata {
 
         const RGWAccessControlList& acl = policy.get_acl();
 
-        permissions.insert(policy.get_owner().get_id().to_str());
-        for (auto acliter : acl.get_grant_map()) {
+        permissions.insert(policy.get_owner().id.to_str());
+        for (const auto& acliter : acl.get_grant_map()) {
           const ACLGrant& grant = acliter.second;
-          if (grant.get_type().get_type() == ACL_TYPE_CANON_USER &&
-              ((uint32_t)grant.get_permission().get_permissions() & RGW_PERM_READ) != 0) {
-            rgw_user user;
-            if (grant.get_id(user)) {
-              permissions.insert(user.to_str());
-            }
+          const auto* user = grant.get_user();
+          if (user && (grant.get_permission().get_permissions() & RGW_PERM_READ) != 0) {
+            permissions.insert(user->id.to_str());
           }
         }
       } else if (attr_name == RGW_ATTR_TAGS) {
@@ -608,7 +605,7 @@ struct es_obj_metadata {
       f->open_array_section("custom-date");
       for (auto i : custom_date) {
         /*
-         * try to exlicitly parse date field, otherwise elasticsearch could reject the whole doc,
+         * try to explicitly parse date field, otherwise elasticsearch could reject the whole doc,
          * which will end up with failed sync
          */
         real_time t;
@@ -886,7 +883,7 @@ public:
     return new RGWElasticGetESInfoCBCR(sc, conf);
   }
 
-  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
+  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, const rgw_zone_set_entry& source_trace_entry, rgw_zone_set *zones_trace) override {
     ldpp_dout(dpp, 10) << conf->id << ": sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     if (!conf->should_handle_operation(sync_pipe.dest_bucket_info)) {
       ldpp_dout(dpp, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;

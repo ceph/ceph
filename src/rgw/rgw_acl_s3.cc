@@ -7,6 +7,7 @@
 #include <map>
 
 #include "include/types.h"
+#include "common/split.h"
 
 #include "rgw_acl_s3.h"
 #include "rgw_user.h"
@@ -24,8 +25,17 @@ using namespace std;
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
 static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
 
-void ACLPermission_S3::to_xml(ostream& out)
+class ACLPermission_S3 : public XMLObj
 {
+public:
+  uint32_t flags = 0;
+
+  bool xml_end(const char *el) override;
+};
+
+void to_xml(ACLPermission perm, std::ostream& out)
+{
+  const uint32_t flags = perm.get_permissions();
   if ((flags & RGW_PERM_FULL_CONTROL) == RGW_PERM_FULL_CONTROL) {
    out << "<Permission>FULL_CONTROL</Permission>";
   } else {
@@ -40,8 +50,7 @@ void ACLPermission_S3::to_xml(ostream& out)
   }
 }
 
-bool ACLPermission_S3::
-xml_end(const char *el)
+bool ACLPermission_S3::xml_end(const char *el)
 {
   const char *s = data.c_str();
   if (strcasecmp(s, "READ") == 0) {
@@ -66,7 +75,7 @@ xml_end(const char *el)
 
 class ACLGranteeType_S3 {
 public:
-  static const char *to_string(ACLGranteeType& type) {
+  static const char *to_string(ACLGranteeType type) {
     switch (type.get_type()) {
     case ACL_TYPE_CANON_USER:
       return "CanonicalUser";
@@ -93,6 +102,15 @@ public:
     else
       type.set(ACL_TYPE_UNKNOWN);
   }
+};
+
+class ACLGrantee_S3 : public XMLObj
+{
+public:
+  ACLGrantee_S3() {}
+  virtual ~ACLGrantee_S3() override {}
+
+  bool xml_start(const char *el, const char **attr);
 };
 
 class ACLID_S3 : public XMLObj
@@ -124,6 +142,15 @@ public:
  ~ACLDisplayName_S3() override {}
 };
 
+class ACLOwner_S3 : public XMLObj
+{
+public:
+  std::string id;
+  std::string display_name;
+
+  bool xml_end(const char *el) override;
+};
+
 bool ACLOwner_S3::xml_end(const char *el) {
   ACLID_S3 *acl_id = static_cast<ACLID_S3 *>(find_first("ID"));
   ACLID_S3 *acl_name = static_cast<ACLID_S3 *>(find_first("DisplayName"));
@@ -142,23 +169,37 @@ bool ACLOwner_S3::xml_end(const char *el) {
   return true;
 }
 
-void  ACLOwner_S3::to_xml(ostream& out) {
+void to_xml(const ACLOwner& o, std::ostream& out)
+{
   string s;
-  id.to_str(s);
+  o.id.to_str(s);
   if (s.empty())
     return;
   out << "<Owner>" << "<ID>" << s << "</ID>";
-  if (!display_name.empty())
-    out << "<DisplayName>" << display_name << "</DisplayName>";
+  if (!o.display_name.empty())
+    out << "<DisplayName>" << o.display_name << "</DisplayName>";
   out << "</Owner>";
 }
+
+class ACLGrant_S3 : public XMLObj
+{
+public:
+  ACLGranteeType type;
+  std::string id;
+  std::string name;
+  std::string uri;
+  std::string email;
+  ACLPermission_S3* permission = nullptr;
+
+  bool xml_end(const char *el) override;
+  bool xml_start(const char *el, const char **attr);
+};
 
 bool ACLGrant_S3::xml_end(const char *el) {
   ACLGrantee_S3 *acl_grantee;
   ACLID_S3 *acl_id;
   ACLURI_S3 *acl_uri;
   ACLEmail_S3 *acl_email;
-  ACLPermission_S3 *acl_permission;
   ACLDisplayName_S3 *acl_name;
   string uri;
 
@@ -168,17 +209,12 @@ bool ACLGrant_S3::xml_end(const char *el) {
   string type_str;
   if (!acl_grantee->get_attr("xsi:type", type_str))
     return false;
+
   ACLGranteeType_S3::set(type_str.c_str(), type);
-  
-  acl_permission = static_cast<ACLPermission_S3 *>(find_first("Permission"));
-  if (!acl_permission)
+
+  permission = static_cast<ACLPermission_S3*>(find_first("Permission"));
+  if (!permission)
     return false;
-
-  permission = *acl_permission;
-
-  id.clear();
-  name.clear();
-  email.clear();
 
   switch (type.get_type()) {
   case ACL_TYPE_CANON_USER:
@@ -195,7 +231,6 @@ bool ACLGrant_S3::xml_end(const char *el) {
     if (!acl_uri)
       return false;
     uri = acl_uri->get_data();
-    group = uri_to_group(uri);
     break;
   case ACL_TYPE_EMAIL_USER:
     acl_email = static_cast<ACLEmail_S3 *>(acl_grantee->find_first("EmailAddress"));
@@ -210,72 +245,51 @@ bool ACLGrant_S3::xml_end(const char *el) {
   return true;
 }
 
-void ACLGrant_S3::to_xml(CephContext *cct, ostream& out) {
-  ACLPermission_S3& perm = static_cast<ACLPermission_S3 &>(permission);
+void to_xml(const ACLGrant& grant, ostream& out)
+{
+  const ACLPermission perm = grant.get_permission();
 
   /* only show s3 compatible permissions */
   if (!(perm.get_permissions() & RGW_PERM_ALL_S3))
     return;
 
-  string uri;
+  const std::string type = ACLGranteeType_S3::to_string(grant.get_type());
 
   out << "<Grant>" <<
-         "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << ACLGranteeType_S3::to_string(type) << "\">";
-  switch (type.get_type()) {
-  case ACL_TYPE_CANON_USER:
-    out << "<ID>" << id << "</ID>";
-    if (name.size()) {
-      out << "<DisplayName>" << name << "</DisplayName>";
+         "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << type << "\">";
+
+  if (const auto* user = grant.get_user(); user) {
+    out << "<ID>" << user->id << "</ID>";
+    if (user->name.size()) {
+      out << "<DisplayName>" << user->name << "</DisplayName>";
     }
-    break;
-  case ACL_TYPE_EMAIL_USER:
-    out << "<EmailAddress>" << email << "</EmailAddress>";
-    break;
-  case ACL_TYPE_GROUP:
-    if (!group_to_uri(group, uri)) {
-      ldout(cct, 0) << "ERROR: group_to_uri failed with group=" << (int)group << dendl;
-      break;
-    }
+  } else if (const auto* email = grant.get_email(); email) {
+    out << "<EmailAddress>" << email->address << "</EmailAddress>";
+  } else if (const auto* group = grant.get_group(); group) {
+    std::string uri;
+    rgw::s3::acl_group_to_uri(group->type, uri);
     out << "<URI>" << uri << "</URI>";
-    break;
-  default:
-    break;
   }
   out << "</Grantee>";
-  perm.to_xml(out);
+  to_xml(perm, out);
   out << "</Grant>";
 }
 
-bool ACLGrant_S3::group_to_uri(ACLGroupTypeEnum group, string& uri)
+class RGWAccessControlList_S3 : public XMLObj
 {
-  switch (group) {
-  case ACL_GROUP_ALL_USERS:
-    uri = rgw_uri_all_users;
-    return true;
-  case ACL_GROUP_AUTHENTICATED_USERS:
-    uri = rgw_uri_auth_users;
-    return true;
-  default:
-    return false;
-  }
-}
+public:
+  bool xml_end(const char *el) override;
+};
 
 bool RGWAccessControlList_S3::xml_end(const char *el) {
-  XMLObjIter iter = find("Grant");
-  ACLGrant_S3 *grant = static_cast<ACLGrant_S3 *>(iter.get_next());
-  while (grant) {
-    add_grant(grant);
-    grant = static_cast<ACLGrant_S3 *>(iter.get_next());
-  }
   return true;
 }
 
-void  RGWAccessControlList_S3::to_xml(ostream& out) {
-  multimap<string, ACLGrant>::iterator iter;
+void to_xml(const RGWAccessControlList& acl, std::ostream& out)
+{
   out << "<AccessControlList>";
-  for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
-    ACLGrant_S3& grant = static_cast<ACLGrant_S3 &>(iter->second);
-    grant.to_xml(cct, out);
+  for (const auto& p : acl.get_grant_map()) {
+    to_xml(p.second, out);
   }
   out << "</AccessControlList>";
 }
@@ -285,16 +299,11 @@ struct s3_acl_header {
   const char *http_header;
 };
 
-static const char *get_acl_header(const RGWEnv *env,
-        const struct s3_acl_header *perm)
-{
-  const char *header = perm->http_header;
-
-  return env->get(header, NULL);
-}
-
-static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, string& grantee_str,
-        const struct s3_acl_header *perm, ACLGrant& grant)
+static int parse_grantee_str(const DoutPrefixProvider* dpp,
+                             rgw::sal::Driver* driver,
+                             const std::string& grantee_str,
+                             const s3_acl_header* perm,
+                             ACLGrant& grant)
 {
   string id_type, id_val_quoted;
   int rgw_perm = perm->rgw_perm;
@@ -321,7 +330,7 @@ static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Driver* dr
 
     grant.set_canon(user->get_id(), user->get_display_name(), rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "uri") == 0) {
-    ACLGroupTypeEnum gid = grant.uri_to_group(id_val);
+    ACLGroupTypeEnum gid = rgw::s3::acl_uri_to_group(id_val);
     if (gid == ACL_GROUP_NONE)
       return -EINVAL;
 
@@ -333,71 +342,70 @@ static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Driver* dr
   return 0;
 }
 
-static int parse_acl_header(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
-			    const RGWEnv *env, const struct s3_acl_header *perm,
-			    std::list<ACLGrant>& _grants)
+static int parse_acl_header(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+                            const RGWEnv& env, const s3_acl_header* perm,
+                            RGWAccessControlList& acl)
 {
-  std::list<string> grantees;
-  std::string hacl_str;
-
-  const char *hacl = get_acl_header(env, perm);
-  if (hacl == NULL)
+  const char* hacl = env.get(perm->http_header, nullptr);
+  if (hacl == nullptr) {
     return 0;
+  }
 
-  hacl_str = hacl;
-  get_str_list(hacl_str, ",", grantees);
-
-  for (list<string>::iterator it = grantees.begin(); it != grantees.end(); ++it) {
+  for (std::string_view grantee : ceph::split(hacl, ",")) {
     ACLGrant grant;
-    int ret = parse_grantee_str(dpp, driver, *it, perm, grant);
+    int ret = parse_grantee_str(dpp, driver, std::string{grantee}, perm, grant);
     if (ret < 0)
       return ret;
 
-    _grants.push_back(grant);
+    acl.add_grant(grant);
   }
 
   return 0;
 }
 
-int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl)
+static int create_canned(const ACLOwner& owner, const ACLOwner& bucket_owner,
+                         const string& canned_acl, RGWAccessControlList& acl)
 {
-  acl_user_map.clear();
-  grant_map.clear();
-
-  ACLGrant owner_grant;
-
-  rgw_user bid = bucket_owner.get_id();
-  string bname = bucket_owner.get_display_name();
+  const rgw_user& bid = bucket_owner.id;
+  const std::string& bname = bucket_owner.display_name;
 
   /* owner gets full control */
-  owner_grant.set_canon(owner.get_id(), owner.get_display_name(), RGW_PERM_FULL_CONTROL);
-  add_grant(&owner_grant);
+  {
+    ACLGrant grant;
+    grant.set_canon(owner.id, owner.display_name, RGW_PERM_FULL_CONTROL);
+    acl.add_grant(grant);
+  }
 
   if (canned_acl.size() == 0 || canned_acl.compare("private") == 0) {
     return 0;
   }
 
-  ACLGrant bucket_owner_grant;
-  ACLGrant group_grant;
-  if (canned_acl.compare("public-read") == 0) {
-    group_grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
-    add_grant(&group_grant);
-  } else if (canned_acl.compare("public-read-write") == 0) {
-    group_grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
-    add_grant(&group_grant);
-    group_grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_WRITE);
-    add_grant(&group_grant);
-  } else if (canned_acl.compare("authenticated-read") == 0) {
-    group_grant.set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_READ);
-    add_grant(&group_grant);
-  } else if (canned_acl.compare("bucket-owner-read") == 0) {
-    bucket_owner_grant.set_canon(bid, bname, RGW_PERM_READ);
-    if (bid.compare(owner.get_id()) != 0)
-      add_grant(&bucket_owner_grant);
-  } else if (canned_acl.compare("bucket-owner-full-control") == 0) {
-    bucket_owner_grant.set_canon(bid, bname, RGW_PERM_FULL_CONTROL);
-    if (bid.compare(owner.get_id()) != 0)
-      add_grant(&bucket_owner_grant);
+  if (canned_acl == "public-read") {
+    ACLGrant grant;
+    grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
+    acl.add_grant(grant);
+  } else if (canned_acl == "public-read-write") {
+    ACLGrant grant;
+    grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
+    acl.add_grant(grant);
+    grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_WRITE);
+    acl.add_grant(grant);
+  } else if (canned_acl == "authenticated-read") {
+    ACLGrant grant;
+    grant.set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_READ);
+    acl.add_grant(grant);
+  } else if (canned_acl == "bucket-owner-read") {
+    if (bid != owner.id) {
+      ACLGrant grant;
+      grant.set_canon(bid, bname, RGW_PERM_READ);
+      acl.add_grant(grant);
+    }
+  } else if (canned_acl == "bucket-owner-full-control") {
+    if (bid != owner.id) {
+      ACLGrant grant;
+      grant.set_canon(bid, bname, RGW_PERM_FULL_CONTROL);
+      acl.add_grant(grant);
+    }
   } else {
     return -EINVAL;
   }
@@ -405,21 +413,11 @@ int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_own
   return 0;
 }
 
-int RGWAccessControlList_S3::create_from_grants(std::list<ACLGrant>& grants)
+class RGWAccessControlPolicy_S3 : public XMLObj
 {
-  if (grants.empty())
-    return -EINVAL;
-
-  acl_user_map.clear();
-  grant_map.clear();
-
-  for (std::list<ACLGrant>::iterator it = grants.begin(); it != grants.end(); ++it) {
-    ACLGrant g = *it;
-    add_grant(&g);
-  }
-
-  return 0;
-}
+public:
+  bool xml_end(const char *el) override;
+};
 
 bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
   RGWAccessControlList_S3 *s3acl =
@@ -427,21 +425,17 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
   if (!s3acl)
     return false;
 
-  acl = *s3acl;
-
-  ACLOwner *owner_p = static_cast<ACLOwner_S3 *>(find_first("Owner"));
+  ACLOwner_S3 *owner_p = static_cast<ACLOwner_S3 *>(find_first("Owner"));
   if (!owner_p)
     return false;
-  owner = *owner_p;
   return true;
 }
 
-void  RGWAccessControlPolicy_S3::to_xml(ostream& out) {
+void to_xml(const RGWAccessControlPolicy& p, std::ostream& out)
+{
   out << "<AccessControlPolicy xmlns=\"" << XMLNS_AWS_S3 << "\">";
-  ACLOwner_S3& _owner = static_cast<ACLOwner_S3 &>(owner);
-  RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-  _owner.to_xml(out);
-  _acl.to_xml(out);
+  to_xml(p.get_owner(), out);
+  to_xml(p.get_acl(), out);
   out << "</AccessControlPolicy>";
 }
 
@@ -454,164 +448,77 @@ static const s3_acl_header acl_header_perms[] = {
   {0, NULL}
 };
 
-int RGWAccessControlPolicy_S3::create_from_headers(const DoutPrefixProvider *dpp,
-						   rgw::sal::Driver* driver,
-						   const RGWEnv *env, ACLOwner& _owner)
+static int resolve_grant(const DoutPrefixProvider* dpp, optional_yield y,
+                         rgw::sal::Driver* driver, ACLGrant_S3& xml_grant,
+                         ACLGrant& grant, std::string& err_msg)
 {
-  std::list<ACLGrant> grants;
-  int r = 0;
+  const uint32_t perm = xml_grant.permission->flags;
 
-  for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
-    r = parse_acl_header(dpp, driver, env, p, grants);
-    if (r < 0) {
-      return r;
+  std::unique_ptr<rgw::sal::User> user;
+  switch (xml_grant.type.get_type()) {
+  case ACL_TYPE_EMAIL_USER:
+    if (xml_grant.email.empty()) {
+      return -EINVAL;
     }
-  }
-
-  RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-  r = _acl.create_from_grants(grants);
-
-  owner = _owner;
-
-  return r;
-}
-
-/*
-  can only be called on object that was parsed
- */
-int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
-				       rgw::sal::Driver* driver, ACLOwner *owner,
-				       RGWAccessControlPolicy& dest, std::string &err_msg)
-{
-  if (!owner)
-    return -EINVAL;
-
-  ACLOwner *requested_owner = static_cast<ACLOwner_S3 *>(find_first("Owner"));
-  if (requested_owner) {
-    rgw_user& requested_id = requested_owner->get_id();
-    if (!requested_id.empty() && requested_id.compare(owner->get_id()) != 0)
-      return -EPERM;
-  }
-
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(owner->get_id());
-  if (user->load_user(dpp, null_yield) < 0) {
-    ldpp_dout(dpp, 10) << "owner info does not exist" << dendl;
-    err_msg = "Invalid id";
-    return -EINVAL;
-  }
-  ACLOwner& dest_owner = dest.get_owner();
-  dest_owner.set_id(owner->get_id());
-  dest_owner.set_name(user->get_display_name());
-
-  ldpp_dout(dpp, 20) << "owner id=" << owner->get_id() << dendl;
-  ldpp_dout(dpp, 20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
-
-  RGWAccessControlList& dst_acl = dest.get_acl();
-
-  multimap<string, ACLGrant>& grant_map = acl.get_grant_map();
-  multimap<string, ACLGrant>::iterator iter;
-  for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
-    ACLGrant& src_grant = iter->second;
-    ACLGranteeType& type = src_grant.get_type();
-    ACLGrant new_grant;
-    bool grant_ok = false;
-    rgw_user uid;
-    RGWUserInfo grant_user;
-    switch (type.get_type()) {
-    case ACL_TYPE_EMAIL_USER:
-      {
-        string email;
-        rgw_user u;
-        if (!src_grant.get_id(u)) {
-          ldpp_dout(dpp, 0) << "ERROR: src_grant.get_id() failed" << dendl;
-          return -EINVAL;
-        }
-        email = u.id;
-        ldpp_dout(dpp, 10) << "grant user email=" << email << dendl;
-	if (driver->get_user_by_email(dpp, email, null_yield, &user) < 0) {
-          ldpp_dout(dpp, 10) << "grant user email not found or other error" << dendl;
-          err_msg = "The e-mail address you provided does not match any account on record.";
-          return -ERR_UNRESOLVABLE_EMAIL;
-        }
-	grant_user = user->get_info();
-        uid = grant_user.user_id;
-      }
-    case ACL_TYPE_CANON_USER:
-      {
-        if (type.get_type() == ACL_TYPE_CANON_USER) {
-          if (!src_grant.get_id(uid)) {
-            ldpp_dout(dpp, 0) << "ERROR: src_grant.get_id() failed" << dendl;
-            err_msg = "Invalid id";
-            return -EINVAL;
-          }
-        }
-    
-        if (grant_user.user_id.empty()) {
-	  user = driver->get_user(uid);
-	  if (user->load_user(dpp, null_yield) < 0) {
-	    ldpp_dout(dpp, 10) << "grant user does not exist:" << uid << dendl;
-	    err_msg = "Invalid id";
-	    return -EINVAL;
-	  } else {
-	    grant_user = user->get_info();
-	  }
-        }
-	ACLPermission& perm = src_grant.get_permission();
-	new_grant.set_canon(uid, grant_user.display_name, perm.get_permissions());
-	grant_ok = true;
-	rgw_user new_id;
-	new_grant.get_id(new_id);
-	ldpp_dout(dpp, 10) << "new grant: " << new_id << ":" << grant_user.display_name << dendl;
-      }
-      break;
-    case ACL_TYPE_GROUP:
-      {
-        string uri;
-        if (ACLGrant_S3::group_to_uri(src_grant.get_group(), uri)) {
-          new_grant = src_grant;
-          grant_ok = true;
-          ldpp_dout(dpp, 10) << "new grant: " << uri << dendl;
-        } else {
-          ldpp_dout(dpp, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
-          err_msg = "Invalid group uri";
-          return -EINVAL;
-        }
-      }
-    default:
-      break;
+    if (driver->get_user_by_email(dpp, xml_grant.email, y, &user) < 0) {
+      ldpp_dout(dpp, 10) << "grant user email not found or other error" << dendl;
+      err_msg = "The e-mail address you provided does not match any account on record.";
+      return -ERR_UNRESOLVABLE_EMAIL;
     }
-    if (grant_ok) {
-      dst_acl.add_grant(&new_grant);
+    grant.set_canon(user->get_id(), user->get_display_name(), perm);
+    return 0;
+
+  case ACL_TYPE_CANON_USER:
+    user = driver->get_user(rgw_user{xml_grant.id});
+    if (user->load_user(dpp, y) < 0) {
+      ldpp_dout(dpp, 10) << "grant user does not exist: " << xml_grant.id << dendl;
+      err_msg = "Invalid CanonicalUser id";
+      return -EINVAL;
     }
-  }
+    grant.set_canon(user->get_id(), user->get_display_name(), perm);
+    return 0;
 
-  return 0; 
-}
+  case ACL_TYPE_GROUP:
+    if (const auto group = rgw::s3::acl_uri_to_group(xml_grant.uri);
+        group != ACL_GROUP_NONE) {
+      grant.set_group(group, perm);
+      return 0;
+    } else {
+      ldpp_dout(dpp, 10) << "bad grant group: " << xml_grant.uri << dendl;
+      err_msg = "Invalid group uri";
+      return -EINVAL;
+    }
 
-bool RGWAccessControlPolicy_S3::compare_group_name(string& id, ACLGroupTypeEnum group)
-{
-  switch (group) {
-  case ACL_GROUP_ALL_USERS:
-    return (id.compare(RGW_USER_ANON_ID) == 0);
-  case ACL_GROUP_AUTHENTICATED_USERS:
-    return (id.compare(rgw_uri_auth_users) == 0);
+  case ACL_TYPE_REFERER:
+  case ACL_TYPE_UNKNOWN:
   default:
-    return id.empty();
+    err_msg = "Invalid Grantee type";
+    return -EINVAL;
   }
-
-  // shouldn't get here
-  return false;
 }
+
+/**
+ * Interfaces with the webserver's XML handling code
+ * to parse it in a way that makes sense for the rgw.
+ */
+class RGWACLXMLParser_S3 : public RGWXMLParser
+{
+  CephContext *cct;
+
+  XMLObj *alloc_obj(const char *el) override;
+public:
+  explicit RGWACLXMLParser_S3(CephContext *_cct) : cct(_cct) {}
+};
 
 XMLObj *RGWACLXMLParser_S3::alloc_obj(const char *el)
 {
   XMLObj * obj = NULL;
   if (strcmp(el, "AccessControlPolicy") == 0) {
-    obj = new RGWAccessControlPolicy_S3(cct);
+    obj = new RGWAccessControlPolicy_S3();
   } else if (strcmp(el, "Owner") == 0) {
     obj = new ACLOwner_S3();
   } else if (strcmp(el, "AccessControlList") == 0) {
-    obj = new RGWAccessControlList_S3(cct);
+    obj = new RGWAccessControlList_S3();
   } else if (strcmp(el, "ID") == 0) {
     obj = new ACLID_S3();
   } else if (strcmp(el, "DisplayName") == 0) {
@@ -631,13 +538,134 @@ XMLObj *RGWACLXMLParser_S3::alloc_obj(const char *el)
   return obj;
 }
 
-ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
+namespace rgw::s3 {
+
+ACLGroupTypeEnum acl_uri_to_group(std::string_view uri)
 {
-  if (uri.compare(rgw_uri_all_users) == 0)
+  if (uri == rgw_uri_all_users)
     return ACL_GROUP_ALL_USERS;
-  else if (uri.compare(rgw_uri_auth_users) == 0)
+  else if (uri == rgw_uri_auth_users)
     return ACL_GROUP_AUTHENTICATED_USERS;
 
   return ACL_GROUP_NONE;
 }
 
+bool acl_group_to_uri(ACLGroupTypeEnum group, std::string& uri)
+{
+  switch (group) {
+  case ACL_GROUP_ALL_USERS:
+    uri = rgw_uri_all_users;
+    return true;
+  case ACL_GROUP_AUTHENTICATED_USERS:
+    uri = rgw_uri_auth_users;
+    return true;
+  default:
+    return false;
+  }
+}
+
+int parse_policy(const DoutPrefixProvider* dpp, optional_yield y,
+                 rgw::sal::Driver* driver, std::string_view document,
+                 RGWAccessControlPolicy& policy, std::string& err_msg)
+{
+  RGWACLXMLParser_S3 parser(dpp->get_cct());
+  if (!parser.init()) {
+    return -EINVAL;
+  }
+  if (!parser.parse(document.data(), document.size(), 1)) {
+    return -EINVAL;
+  }
+
+  const auto xml_root = static_cast<RGWAccessControlPolicy_S3*>(
+      parser.find_first("AccessControlPolicy"));
+  if (!xml_root) {
+    err_msg = "Missing element AccessControlPolicy";
+    return -EINVAL;
+  }
+
+  const auto xml_owner = static_cast<ACLOwner_S3*>(
+      xml_root->find_first("Owner"));
+  if (!xml_owner) {
+    err_msg = "Missing element Owner";
+    return -EINVAL;
+  }
+
+  // owner must exist
+  std::unique_ptr<rgw::sal::User> user =
+      driver->get_user(rgw_user{xml_owner->id});
+  if (user->load_user(dpp, y) < 0) {
+    ldpp_dout(dpp, 10) << "acl owner does not exist" << dendl;
+    err_msg = "Invalid Owner ID";
+    return -EINVAL;
+  }
+
+  ACLOwner& owner = policy.get_owner();
+  owner.id = xml_owner->id;
+  if (!xml_owner->display_name.empty()) {
+    owner.display_name = xml_owner->display_name;
+  } else {
+    owner.display_name = user->get_display_name();
+  }
+
+  const auto xml_acl = static_cast<ACLOwner_S3*>(
+      xml_root->find_first("AccessControlList"));
+  if (!xml_acl) {
+    err_msg = "Missing element AccessControlList";
+    return -EINVAL;
+  }
+
+  // iterate parsed grants
+  XMLObjIter iter = xml_acl->find("Grant");
+  ACLGrant_S3* xml_grant = static_cast<ACLGrant_S3*>(iter.get_next());
+  while (xml_grant) {
+    ACLGrant grant;
+    int r = resolve_grant(dpp, y, driver, *xml_grant, grant, err_msg);
+    if (r < 0) {
+      return r;
+    }
+    policy.get_acl().add_grant(grant);
+    xml_grant = static_cast<ACLGrant_S3*>(iter.get_next());
+  }
+
+  return 0;
+}
+
+void write_policy_xml(const RGWAccessControlPolicy& policy,
+                      std::ostream& out)
+{
+  to_xml(policy, out);
+}
+
+int create_canned_acl(const ACLOwner& owner,
+                      const ACLOwner& bucket_owner,
+                      const std::string& canned_acl,
+                      RGWAccessControlPolicy& policy)
+{
+  if (owner.id == rgw_user("anonymous")) {
+    policy.set_owner(bucket_owner);
+  } else {
+    policy.set_owner(owner);
+  }
+  return create_canned(owner, bucket_owner, canned_acl, policy.get_acl());
+}
+
+int create_policy_from_headers(const DoutPrefixProvider* dpp,
+                               rgw::sal::Driver* driver,
+                               const ACLOwner& owner,
+                               const RGWEnv& env,
+                               RGWAccessControlPolicy& policy)
+{
+  policy.set_owner(owner);
+  auto& acl = policy.get_acl();
+
+  for (const s3_acl_header* p = acl_header_perms; p->rgw_perm; p++) {
+    int r = parse_acl_header(dpp, driver, env, p, acl);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+} // namespace rgw::s3

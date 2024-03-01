@@ -32,7 +32,7 @@ extern "C" {
 #include "features.h"
 
 #define LIBRBD_VER_MAJOR 1
-#define LIBRBD_VER_MINOR 18
+#define LIBRBD_VER_MINOR 19
 #define LIBRBD_VER_EXTRA 0
 
 #define LIBRBD_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
@@ -905,7 +905,7 @@ CEPH_RBD_API int rbd_snap_rename(rbd_image_t image, const char *snapname,
  */
 CEPH_RBD_API int rbd_snap_protect(rbd_image_t image, const char *snap_name);
 /**
- * Allow a snaphshot to be deleted.
+ * Allow a snapshot to be deleted.
  *
  * @param snap_name which snapshot to unprotect
  * @returns 0 on success, negative error code on failure

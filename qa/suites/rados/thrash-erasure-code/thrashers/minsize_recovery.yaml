@@ -3,6 +3,7 @@ overrides:
     log-ignorelist:
     - but it is still running
     - objects unfound and apparently lost
+    - \(POOL_APP_NOT_ENABLED\)
     create_rbd_pool: False
     pre-mgr-commands:
       - sudo ceph config set mgr mgr_pool false --force
@@ -12,7 +13,10 @@ overrides:
         osd scrub min interval: 60
         osd scrub max interval: 120
         osd max backfills: 2
+  rados:
+    wait_for_all_active_clean_pgs: true
+
 tasks:
 - thrashosds:
     timeout: 1200
-    chance_test_min_size: 3 
+    chance_test_min_size: 3

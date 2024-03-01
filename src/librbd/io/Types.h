@@ -66,7 +66,6 @@ enum ImageDispatchLayer {
   IMAGE_DISPATCH_LAYER_JOURNAL,
   IMAGE_DISPATCH_LAYER_WRITE_BLOCK,
   IMAGE_DISPATCH_LAYER_WRITEBACK_CACHE,
-  IMAGE_DISPATCH_LAYER_CRYPTO,
   IMAGE_DISPATCH_LAYER_CORE,
   IMAGE_DISPATCH_LAYER_LAST
 };
@@ -180,8 +179,9 @@ struct SparseExtent {
 std::ostream& operator<<(std::ostream& os, const SparseExtent& state);
 
 struct SparseExtentSplitMerge {
-  SparseExtent split(uint64_t offset, uint64_t length, SparseExtent &se) const {
-    return SparseExtent(se.state, se.length);
+  SparseExtent split(uint64_t offset, uint64_t length,
+                     const SparseExtent& se) const {
+    return SparseExtent(se.state, length);
   }
 
   bool can_merge(const SparseExtent& left, const SparseExtent& right) const {
@@ -232,10 +232,10 @@ struct SparseBufferlistExtent : public SparseExtent {
 
 struct SparseBufferlistExtentSplitMerge {
   SparseBufferlistExtent split(uint64_t offset, uint64_t length,
-                               SparseBufferlistExtent& sbe) const {
+                               const SparseBufferlistExtent& sbe) const {
     ceph::bufferlist bl;
     if (sbe.state == SPARSE_EXTENT_STATE_DATA) {
-      bl.substr_of(bl, offset, length);
+      bl.substr_of(sbe.bl, offset, length);
     }
     return SparseBufferlistExtent(sbe.state, length, std::move(bl));
   }
@@ -247,14 +247,13 @@ struct SparseBufferlistExtentSplitMerge {
 
   SparseBufferlistExtent merge(SparseBufferlistExtent&& left,
                                SparseBufferlistExtent&& right) const {
+    ceph::bufferlist bl;
     if (left.state == SPARSE_EXTENT_STATE_DATA) {
-      ceph::bufferlist bl{std::move(left.bl)};
-      bl.claim_append(std::move(right.bl));
-      return SparseBufferlistExtent(SPARSE_EXTENT_STATE_DATA,
-                                    bl.length(), std::move(bl));
-    } else {
-      return SparseBufferlistExtent(left.state, left.length + right.length, {});
+      bl.claim_append(left.bl);
+      bl.claim_append(right.bl);
     }
+    return SparseBufferlistExtent(left.state, left.length + right.length,
+                                  std::move(bl));
   }
 
   uint64_t length(const SparseBufferlistExtent& sbe) const {

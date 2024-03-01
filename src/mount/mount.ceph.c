@@ -912,7 +912,8 @@ static int do_mount(const char *dev, const char *node,
 			fprintf(stderr, "mount error: ceph filesystem not supported by the system\n");
 			break;
 		case EHOSTUNREACH:
-			fprintf(stderr, "mount error: no mds server is up or the cluster is laggy\n");
+			fprintf(stderr, "mount error: no mds (Metadata Server) is up. "
+			"The cluster might be laggy, or you may not be authorized\n");
 			break;
 		default:
 			fprintf(stderr, "mount error %d = %s\n", errno, strerror(errno));

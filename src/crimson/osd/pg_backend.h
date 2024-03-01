@@ -40,7 +40,7 @@ protected:
   using CollectionRef = crimson::os::CollectionRef;
   using ec_profile_t = std::map<std::string, std::string>;
   // low-level read errorator
-  using ll_read_errorator = crimson::os::FuturizedStore::read_errorator;
+  using ll_read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
   using ll_read_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -70,6 +70,7 @@ public:
   static std::unique_ptr<PGBackend> create(pg_t pgid,
 					   const pg_shard_t pg_shard,
 					   const pg_pool_t& pool,
+					   crimson::osd::PG &pg,
 					   crimson::os::CollectionRef coll,
 					   crimson::osd::ShardServices& shard_services,
 					   const ec_profile_t& ec_profile,
@@ -149,8 +150,10 @@ public:
   remove_iertr::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn,
+    osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats,
-    bool whiteout);
+    bool whiteout,
+    int num_bytes);
   interruptible_future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
@@ -197,12 +200,14 @@ public:
       rollback_ertr>;
   rollback_iertr::future<> rollback(
     ObjectState& os,
+    const SnapSet &ss,
     const OSDOp& osd_op,
     ceph::os::Transaction& txn,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats,
     crimson::osd::ObjectContextRef head,
-    crimson::osd::ObjectContextLoader& obc_loader);
+    crimson::osd::ObjectContextLoader& obc_loader,
+    const SnapContext &snapc);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -238,7 +243,7 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     object_stat_sum_t& delta_stats);
-  using get_attr_errorator = crimson::os::FuturizedStore::get_attr_errorator;
+  using get_attr_errorator = crimson::os::FuturizedStore::Shard::get_attr_errorator;
   using get_attr_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -322,7 +327,7 @@ public:
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
   using omap_cmp_ertr =
-    crimson::os::FuturizedStore::read_errorator::extend<
+    crimson::os::FuturizedStore::Shard::read_errorator::extend<
       crimson::ct_error::ecanceled,
       crimson::ct_error::invarg>;
   using omap_cmp_iertr =
@@ -389,7 +394,7 @@ protected:
   CollectionRef coll;
   crimson::osd::ShardServices &shard_services;
   DoutPrefixProvider &dpp; ///< provides log prefix context
-  crimson::os::FuturizedStore* store;
+  crimson::os::FuturizedStore::Shard* store;
   virtual seastar::future<> request_committed(
     const osd_reqid_t& reqid,
     const eversion_t& at_version) = 0;
@@ -430,6 +435,7 @@ private:
     ceph::os::Transaction& txn,
     object_stat_sum_t& delta_stats);
   void update_size_and_usage(object_stat_sum_t& delta_stats,
+    interval_set<uint64_t>& modified,
     object_info_t& oi, uint64_t offset,
     uint64_t length, bool write_full = false);
   void truncate_update_size_and_usage(
@@ -445,4 +451,22 @@ private:
 		      std::vector<pg_log_entry_t>&& log_entries) = 0;
   friend class ReplicatedRecoveryBackend;
   friend class ::crimson::osd::PG;
+
+protected:
+  boost::container::flat_set<hobject_t> temp_contents;
+
+  template <class... Args>
+  void add_temp_obj(Args&&... args) {
+    temp_contents.insert(std::forward<Args>(args)...);
+  }
+  void clear_temp_obj(const hobject_t &oid) {
+    temp_contents.erase(oid);
+  }
+  template <class T>
+  void clear_temp_objs(const T &cont) {
+    for (const auto& oid : cont) {
+      clear_temp_obj(oid);
+    }
+  }
+  friend class RecoveryBackend;
 };

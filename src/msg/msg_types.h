@@ -18,7 +18,7 @@
 #include <sstream>
 
 #include <netinet/in.h>
-#include <fmt/format.h>
+#include "common/fmt_common.h"
 #if FMT_VERSION >= 90000
 #include <fmt/ostream.h>
 #endif
@@ -97,6 +97,15 @@ public:
     denc(v._num, p);
   }
   void dump(ceph::Formatter *f) const;
+
+  template <typename FormatContext>
+  auto fmt_print_ctx(FormatContext& ctx) const {
+    if (is_new() || _num < 0) {
+      return fmt::format_to(ctx.out(), "{}.?", type_str());
+    } else {
+      return fmt::format_to(ctx.out(), "{}.{}",type_str(), _num);
+    }
+  }
 
   static void generate_test_instances(std::list<entity_name_t*>& o);
 };
@@ -545,15 +554,13 @@ struct entity_addr_t {
   }
 
   void dump(ceph::Formatter *f) const;
+  std::string fmt_print() const; ///< used by the default fmt formatter
 
   static void generate_test_instances(std::list<entity_addr_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addr_t)
 
 std::ostream& operator<<(std::ostream& out, const entity_addr_t &addr);
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<entity_addr_t> : fmt::ostream_formatter {};
-#endif
 
 inline bool operator==(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) == 0; }
 inline bool operator!=(const entity_addr_t& a, const entity_addr_t& b) { return memcmp(&a, &b, sizeof(a)) != 0; }

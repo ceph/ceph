@@ -7,8 +7,8 @@ set -ex
 # snapshot rm of the same snapshot fails with 'MetadataMgrException: -2 (section 'GLOBAL' does not exist)'
 # traceback.
 
-# The osd is of the size 1GB. The subvolume is created and 800MB file is written.
-# Then full-ratios are set below 500MB such that the osd is treated as full.
+# The osd is of the size 2GiB. The subvolume is created and 1.6GB file is written.
+# Then full-ratios are set below 1GiB such that the osd is treated as full.
 # The subvolume snapshot is taken which succeeds as no extra space is required
 # for snapshot. Now, the removal of the snapshot fails with ENOSPACE as it
 # fails to remove the snapshot metadata set. The snapshot removal fails
@@ -31,8 +31,8 @@ echo "Before write"
 df $CEPH_MNT
 ceph osd df
 
-# Write 800MB file and set full ratio to around 200MB
-ignore_failure sudo dd if=/dev/urandom of=$CEPH_MNT$subvol_path/800MB_file-1 status=progress bs=1M count=800 conv=fdatasync
+# Write 1.6GB file and set full ratio to around 400MB
+ignore_failure sudo dd if=/dev/urandom of=$CEPH_MNT$subvol_path/1.6GB_file-1 status=progress bs=1M count=1600 conv=fdatasync
 
 ceph osd set-full-ratio 0.2
 ceph osd set-nearfull-ratio 0.16

@@ -4,31 +4,33 @@
 #pragma once
 
 
+#include "rgw_tools.h"
 #include "rgw_service.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj_types.h"
 
 
 
 struct RGWSI_SysObj_Core_GetObjState : public RGWSI_SysObj_Obj_GetObjState {
-  RGWSI_RADOS::Obj rados_obj;
+  rgw_rados_ref rados_obj;
   bool has_rados_obj{false};
   uint64_t last_ver{0};
 
   RGWSI_SysObj_Core_GetObjState() {}
 
   int get_rados_obj(const DoutPrefixProvider *dpp,
-                    RGWSI_RADOS *rados_svc,
+                    librados::Rados* rados_svc,
                     RGWSI_Zone *zone_svc,
                     const rgw_raw_obj& obj,
-                    RGWSI_RADOS::Obj **pobj);
+                    rgw_rados_ref** pobj);
 };
 
 struct RGWSI_SysObj_Core_PoolListImplInfo : public RGWSI_SysObj_Pool_ListInfo {
-  RGWSI_RADOS::Pool pool;
-  RGWSI_RADOS::Pool::List op;
-  RGWAccessListFilterPrefix filter;
+  librados::IoCtx pool;
+  rgw::AccessListFilter filter;
+  std::string marker;
 
-  RGWSI_SysObj_Core_PoolListImplInfo(const std::string& prefix) : op(pool.op()), filter(prefix) {}
+  RGWSI_SysObj_Core_PoolListImplInfo(const std::string& prefix,
+                                     const std::string& marker)
+    : filter(rgw::AccessListFilterPrefix(prefix)), marker(marker) {}
 };

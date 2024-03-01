@@ -7,6 +7,7 @@ set(crimson_seastore_srcs
   transaction_manager.cc
   transaction.cc
   cache.cc
+  root_block.cc
   lba_manager.cc
   async_cleaner.cc
   backref_manager.cc
@@ -17,6 +18,8 @@ set(crimson_seastore_srcs
   omap_manager.cc
   omap_manager/btree/btree_omap_manager.cc
   omap_manager/btree/omap_btree_node_impl.cc
+  btree/btree_range_pin.cc
+  btree/fixed_kv_node.cc
   onode.cc
   onode_manager/staged-fltree/node.cc
   onode_manager/staged-fltree/node_extent_manager.cc
@@ -43,9 +46,12 @@ set(crimson_seastore_srcs
   random_block_manager/avlallocator.cc
   journal/segmented_journal.cc
   journal/segment_allocator.cc
+  journal/record_submitter.cc
+  journal/circular_journal_space.cc
   journal.cc
   device.cc
   segment_manager_group.cc
+  record_scanner.cc
   journal/circular_bounded_journal.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc
@@ -56,7 +62,7 @@ CMAKE_DEPENDENT_OPTION(WITH_ZNS "enable Linux ZNS support" OFF
 if(WITH_ZNS)
   find_package(LinuxZNS REQUIRED)
   list(APPEND crimson_seastore_srcs
-    segment_manager/zns.cc)
+    segment_manager/zbd.cc)
 endif()
 
 add_library(crimson-seastore STATIC

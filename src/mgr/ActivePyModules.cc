@@ -555,42 +555,6 @@ void ActivePyModules::start_one(PyModuleRef py_module)
   }));
 }
 
-void ActivePyModules::shutdown()
-{
-  std::lock_guard locker(lock);
-
-  // Stop per active module finisher thread
-  for (auto& [name, module] : modules) {
-      dout(4) << "Stopping active module " << name << " finisher thread" << dendl;
-      module->finisher.wait_for_empty();
-      module->finisher.stop();
-  }
-
-  // Signal modules to drop out of serve() and/or tear down resources
-  for (auto& [name, module] : modules) {
-    lock.unlock();
-    dout(10) << "calling module " << name << " shutdown()" << dendl;
-    module->shutdown();
-    dout(10) << "module " << name << " shutdown() returned" << dendl;
-    lock.lock();
-  }
-
-  // For modules implementing serve(), finish the threads where we
-  // were running that.
-  for (auto& [name, module] : modules) {
-    lock.unlock();
-    dout(10) << "joining module " << name << dendl;
-    module->thread.join();
-    dout(10) << "joined module " << name << dendl;
-    lock.lock();
-  }
-
-  cmd_finisher.wait_for_empty();
-  cmd_finisher.stop();
-
-  modules.clear();
-}
-
 void ActivePyModules::notify_all(const std::string &notify_type,
                      const std::string &notify_id)
 {
@@ -866,42 +830,11 @@ void ActivePyModules::_refresh_config_map()
     string who;
     config_map.parse_key(key, &name, &who);
 
-    const Option *opt = g_conf().find_option(name);
-    if (!opt) {
-      config_map.stray_options.push_back(
-	std::unique_ptr<Option>(
-	  new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
-      opt = config_map.stray_options.back().get();
-    }
-
-    string err;
-    int r = opt->pre_validate(&value, &err);
-    if (r < 0) {
-      dout(10) << __func__ << " pre-validate failed on '" << name << "' = '"
-	       << value << "' for " << name << dendl;
-    }
-
-    MaskedOption mopt(opt);
-    mopt.raw_value = value;
-    string section_name;
-    if (who.size() &&
-	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
-      derr << __func__ << " invalid mask for key " << key << dendl;
-    } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
-      dout(10) << __func__ << " NO_MON_UPDATE option '"
-	       << name << "' = '" << value << "' for " << name
-	       << dendl;
-    } else {
-      Section *section = &config_map.global;;
-      if (section_name.size() && section_name != "global") {
-	if (section_name.find('.') != std::string::npos) {
-	  section = &config_map.by_id[section_name];
-	} else {
-	  section = &config_map.by_type[section_name];
-	}
-      }
-      section->options.insert(make_pair(name, std::move(mopt)));
-    }
+    config_map.add_option(
+      g_ceph_context, name, who, value,
+      [&](const std::string& name) {
+	return  g_conf().find_option(name);
+      });
   }
 }
 
@@ -1198,13 +1131,11 @@ PyObject *ActivePyModules::get_foreign_config(
 		 << " class " << device_class << dendl;
       }
 
-      std::map<std::string,pair<std::string,const MaskedOption*>> src;
       config = config_map.generate_entity_map(
 	entity,
 	crush_location,
 	osdmap.crush.get(),
-	device_class,
-	&src);
+	device_class);
     });
 
   // get a single value
@@ -1511,13 +1442,13 @@ void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
   cl->do_log(prio, message);
 }
 
-void ActivePyModules::register_client(std::string_view name, std::string addrs)
+void ActivePyModules::register_client(std::string_view name, std::string addrs, bool replace)
 {
   entity_addrvec_t addrv;
   addrv.parse(addrs.data());
 
-  dout(7) << "registering msgr client handle " << addrv << dendl;
-  py_module_registry.register_client(name, std::move(addrv));
+  dout(7) << "registering msgr client handle " << addrv << " (replace=" << replace << ")" << dendl;
+  py_module_registry.register_client(name, std::move(addrv), replace);
 }
 
 void ActivePyModules::unregister_client(std::string_view name, std::string addrs)

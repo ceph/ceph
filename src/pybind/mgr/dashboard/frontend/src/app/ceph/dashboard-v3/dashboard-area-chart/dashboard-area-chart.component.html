@@ -1,21 +1,30 @@
-<div class="row">
-  <div class="col-3 center-text">
+<div class="row mt-2">
+  <div class="col-3 d-flex flex-column align-self-center">
     <br>
-    <b class="chartTitle"
+    <b class="chartTitle pb-2"
        i18n>{{ chartTitle }}</b>
-    <br>
-    <span [ngbTooltip]="label"
-          i18n>{{currentData}} {{ currentDataUnits }}</span>
-    <br>
-    <span [ngbTooltip]="label2"
-          i18n>{{currentData2}} {{ currentDataUnits2 }}</span>
+    <div *ngFor="let data of currentChartData.dataset"
+         i18n>
+      <div *ngIf="data.data.length !== 0"
+           class="d-inline-flex align-items-center gap-1">
+        <div class="box"
+             [style.background-color]="data.pointBackgroundColor">
+        </div>
+        <div *ngIf="!chartTitle.includes(data.label)">{{ data.label }}:</div>
+          {{ data?.currentData || 'N/A' }} {{ data?.currentDataUnits }}
+        <div *ngIf="maxValue && data.currentData">
+          used of {{ maxConvertedValue }} {{ maxConvertedValueUnits }}
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="col-9">
-    <div class="chart">
+
+  <div class="col-9 d-flex flex-column">
+    <div class="chart mt-3">
       <canvas baseChart
               [datasets]="chartData.dataset"
               [options]="options"
-              [chartType]="'line'"
+              [type]="'line'"
               [plugins]="chartAreaBorderPlugin">
       </canvas>
     </div>

@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Observable } from 'rxjs';
@@ -11,6 +11,7 @@ import { CrudFormAdapterService } from './crud-form-adapter.service';
 })
 export class DataGatewayService {
   cache: { [keys: string]: Observable<any> } = {};
+  selected: any;
 
   constructor(private http: HttpClient, private crudFormAdapater: CrudFormAdapterService) {}
 
@@ -27,10 +28,10 @@ export class DataGatewayService {
     return this.cache[cacheable];
   }
 
-  create(dataPath: string, data: any): Observable<any> {
+  submit(dataPath: string, data: any, methodType: string): Observable<any> {
     const { url, version } = this.getUrlAndVersion(dataPath);
 
-    return this.http.post<any>(url, data, {
+    return this.http[methodType]<any>(url, data, {
       headers: { Accept: `application/vnd.ceph.api.v${version}+json` }
     });
   }
@@ -44,24 +45,39 @@ export class DataGatewayService {
     });
   }
 
-  form(dataPath: string): Observable<JsonFormUISchema> {
-    const cacheable = this.getCacheable(dataPath, 'get');
+  form(dataPath: string, formPath: string, modelKey: string = ''): Observable<JsonFormUISchema> {
+    const cacheable = this.getCacheable(dataPath, 'get', modelKey);
+    const params = { model_key: modelKey };
     if (this.cache[cacheable] === undefined) {
       const { url, version } = this.getUrlAndVersion(dataPath);
 
       this.cache[cacheable] = this.http.get<any>(url, {
-        headers: { Accept: `application/vnd.ceph.api.v${version}+json` }
+        headers: { Accept: `application/vnd.ceph.api.v${version}+json` },
+        params: params
       });
     }
     return this.cache[cacheable].pipe(
       map((response) => {
-        return this.crudFormAdapater.processJsonSchemaForm(response);
+        return this.crudFormAdapater.processJsonSchemaForm(response, formPath);
       })
     );
   }
 
-  getCacheable(dataPath: string, method: string) {
-    return dataPath + method;
+  model(dataPath: string, params: HttpParams): Observable<any> {
+    const cacheable = this.getCacheable(dataPath, 'get');
+    if (this.cache[cacheable] === undefined) {
+      const { url, version } = this.getUrlAndVersion(dataPath);
+
+      this.cache[cacheable] = this.http.get<any>(`${url}/model`, {
+        headers: { Accept: `application/vnd.ceph.api.v${version}+json` },
+        params: params
+      });
+    }
+    return this.cache[cacheable];
+  }
+
+  getCacheable(dataPath: string, method: string, key: string = '') {
+    return dataPath + method + key;
   }
 
   getUrlAndVersion(dataPath: string) {

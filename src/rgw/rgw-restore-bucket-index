@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# version 2023-03-21
+# version 2023-10-30
 
 # rgw-restore-bucket-index is an EXPERIMENTAL tool to use in case
 # bucket index entries for objects in the bucket are somehow lost. It
@@ -27,38 +27,70 @@ export TOP_PID=$$
 # relies on this ordering
 export LC_ALL=C
 
+# temporary files
 export bkt_entry=/tmp/rgwrbi-bkt-entry.$$
 export bkt_inst=/tmp/rgwrbi-bkt-inst.$$
-export bkt_inst_new=/tmp/rgwrbi-bkt-inst-new.$$
+export marker_ls=/tmp/rgwrbi-marker-ls.$$
 export obj_list=/tmp/rgwrbi-object-list.$$
+export obj_list_ver=/tmp/rgwrbi-object-list-ver.$$
+export obj_reindex_script=/tmp/rgwrbi-object-list-script.$$
 export zone_info=/tmp/rgwrbi-zone-info.$$
+export olh_info_enc=/tmp/rgwrbi-olh-info-enc.$$
+export olh_info_json=/tmp/rgwrbi-olh-info-json.$$
+export debug_log=/tmp/rgwrbi-debug-log.$$
+
 export clean_temps=1
+
+# make explicit tabs easier to see in code
+export TAB="	"
+
+
+clean() {
+  if [ "$clean_temps" == 1 ] ;then
+    rm -f $bkt_entry $bkt_inst $marker_ls $obj_list $obj_list_ver \
+       $obj_reindex_script $zone_info $olh_info_enc $olh_info_json
+  fi
+}
 
 # number of seconds for a bucket index pending op to be completed via
 # dir_suggest mechanism
-pending_op_secs=120
+export pending_op_secs=120
 
 #
-if which radosgw-admin > /dev/null ;then
-  :
-else
-  echo 'Error: must have command `radosgw-admin` installed and on $PATH for operation.'
-  exit 1
+# sanity checks
+#
+
+export exit_code=0
+
+tool_list="radosgw-admin ceph-dencoder jq"
+for t in $tool_list ;do
+    if which $t > /dev/null ;then
+	:
+    else
+	echo "ERROR: must have tool \`$t\` installed and on \$PATH for operation."
+	exit_code=1
+    fi
+done
+if [ "$exit_code" -ne 0 ] ;then
+    exit $exit_code
 fi
 
-# make sure jq is available
-if which jq > /dev/null ;then
-  :
-else
-  echo 'Error: must have command `jq` installed and on $PATH for json parsing.'
-  exit 1
+dencode_list="RGWOLHInfo"
+for t in $dencode_list ;do
+    if ceph-dencoder list_types | grep -q $t ;then
+	:
+    else
+	echo "ERROR: ceph-dencoder lacking module to decode ${t}."
+	exit_code=1
+    fi
+done
+if [ "$exit_code" -ne 0 ] ;then
+    exit $exit_code
 fi
 
-clean() {
-  if [ -n "$clean_temps" ] ;then
-    rm -f $bkt_entry $bkt_inst $bkt_inst_new $obj_list $zone_info
-  fi
-}
+#
+# helper functions
+#
 
 super_exit() {
    kill -s TERM $TOP_PID
@@ -67,21 +99,20 @@ super_exit() {
 usage() {
   >&2 cat << EOF
 
-Usage: $0 [--proceed] <bucket-name> [data-pool-name]
-  NOTE: This tool is currently considered EXPERIMENTAL.
-  NOTE: If a data-pool-name is not supplied then it will be inferred from bucket and zone information.
-  NOTE: If --proceed is provided then user will not be prompted to proceed. Use with caution.
+Usage: $0 -b <bucket-name> [-l <rados-ls-file>] [-p <pool>] [-y]
+
+where:
+  -b <bucket-name>     Required - name of the bucket to operate on
+  -l <rados-ls-file>   Optional - file containing the output of 'rados ls -p <pool>'
+  -r <realm-name>      Optional - specify the realm if not applying to the default realm"
+  -g <zonegroup-name>  Optional - specify the zonegroup if not applying to the default zonegroup"
+  -z <zone-name>       Optional - specify the zone if not applying to the default zone"
+  -p <pool>            Optional - data pool; if not provided will be inferred from bucket and zone information
+  -y                   Optional - proceed with restoring without confirming with the user
+                       USE WITH CAUTION.
+  -d                   Optional - run with debugging output
 EOF
   super_exit
-}
-
-# strips the starting and ending double quotes from a string, so:
-#   "dog"   -> dog
-#   "dog    -> "dog
-#   d"o"g   -> d"o"g
-#   "do"g"  -> do"g
-strip_quotes() {
-  echo "$1" | sed 's/^"\(.*\)"$/\1/'
 }
 
 # Determines the name of the data pool. Expects the optional
@@ -90,29 +121,23 @@ strip_quotes() {
 # in the bucket instance data, and finally the "placement_rule" in the
 # bucket instance data.
 get_pool() {
-  # command-line
-  if [ -n "$1" ] ;then
-    echo "$1"
-    exit 0
-  fi
-
   # explicit_placement
-  expl_pool=$(strip_quotes $(jq '.data.bucket_info.bucket.explicit_placement.data_pool' $bkt_inst))
+  expl_pool=$(jq -r '.data.bucket_info.bucket.explicit_placement.data_pool' $bkt_inst)
   if [ -n "$expl_pool" ] ;then
     echo "$expl_pool"
     exit 0
   fi
 
   # placement_rule
-  plmt_rule=$(strip_quotes $(jq '.data.bucket_info.placement_rule' $bkt_inst))
+  plmt_rule=$(jq -r '.data.bucket_info.placement_rule' $bkt_inst)
   plmt_pool=$(echo "$plmt_rule" | awk -F / '{print $1}')
   plmt_class=$(echo "$plmt_rule" | awk -F / '{print $2}')
   if [ -z "$plmt_class" ] ;then
     plmt_class=STANDARD
   fi
 
-  radosgw-admin zone get >$zone_info 2>/dev/null
-  pool=$(strip_quotes $(jq ".placement_pools [] | select(.key | contains(\"${plmt_pool}\")) .val .storage_classes.${plmt_class}.data_pool" $zone_info))
+  radosgw-admin zone get $multisite_spec >$zone_info 2>/dev/null
+  pool=$(jq -r ".placement_pools [] | select(.key | contains(\"${plmt_pool}\")) .val .storage_classes.${plmt_class}.data_pool" $zone_info)
 
   if [ -z "$pool" ] ;then
       echo ERROR: unable to determine pool.
@@ -121,26 +146,134 @@ get_pool() {
   echo "$pool"
 }
 
-if [ $1 == "--proceed" ] ;then
-    echo "NOTICE: This tool is currently considered EXPERIMENTAL."
-    proceed=1
-    shift
+export bucket=""
+pool=""
+multisite_spec=""
+lsoutput=""
+debug=0
+
+while getopts "b:l:p:r:g:z:yd" o; do
+    case "${o}" in
+	b)
+	    bucket="${OPTARG}"
+	    ;;
+	l)
+	    if [ -e "${OPTARG}" ]; then
+		lsoutput="${OPTARG}"
+	    else
+		echo 
+		echo "ERROR: Provided 'rados ls' output file name does not exist. ${OPTARG}"
+		exit 1
+	    fi
+	    ;;
+	p)
+	    pool="${OPTARG}"
+	    ;;
+	r)
+	    multisite_spec="$multisite_spec --rgw-realm=${OPTARG}"
+	    ;;
+	g)
+	    multisite_spec="$multisite_spec --rgw-zonegroup=${OPTARG}"
+	    ;;
+	z)
+	    multisite_spec="$multisite_spec --rgw-zone=${OPTARG}"
+	    ;;
+	y)
+	    echo "NOTICE: This tool is currently considered EXPERIMENTAL."
+	    proceed=1
+	    ;;
+	d)
+	    echo Debugging On
+	    debug=1
+	    clean_temps=0
+	    ;;
+	*)
+	    echo
+	    usage
+	    exit 1 # useage should exit also
+	    ;;
+    esac
+done
+shift $((OPTIND-1))
+
+if [ "$debug" == 1 ] ;then
+    export debugging_rgwadmin=" --debug-rgw=20 --debug-ms=20 "
+else
+    export debugging_rgwadmin=" 2>/dev/null "
 fi
 
-# expect 1 or 2 arguments
-if [ $# -eq 0 -o $# -gt 2 ] ;then
-   usage
-fi
+# special code path for versioned buckets
+handle_versioned() {
+    while read o ;do
 
-bucket=$1
+	# determine object and locator for OLH
+	olh_line=$(awk "/_$o(\t.*)?$/"' && !/__:/' $marker_ls)
+	olh_obj=$(echo "$olh_line" | sed 's/\t.*//') # obj everything before tab
+	olh_loc=$(echo "$olh_line" | sed 's/^.*\t\(.*\)/\1/') # locator everything after tab
+
+	# process OLH object; determine final instance or delete-marker
+	rados -p $pool getxattr $olh_obj user.rgw.olh.info --object-locator "$olh_loc" >$olh_info_enc
+	ceph-dencoder import $olh_info_enc type RGWOLHInfo decode dump_json >$olh_info_json
+	last_instance=$(jq -r ".target.key.instance" $olh_info_json)
+	if [ -z "$last_instance" ] ;then
+	    # filters out entry without an instance
+	    filter_out_last_instance="${marker}_[^_]"
+	else
+	    # filters out entry with an instance
+	    filter_out_last_instance="$last_instance"
+	fi
+
+	if [ "$debug" == 1 ] ;then
+	    echo "working on versioned $o"
+	    echo "last instance is $last_instance"
+	    echo "filter_out_last_instance is $filter_out_last_instance"
+	fi >>$debug_log
+
+	# we currently don't need the delete marker, but we can have access to it
+	# delete_marker=$(jq -r ".removed" $olh_info_json) # true or false
+
+	IFS='\t' grep -E "(__:.*[^_])?_$o(\t.*)?$" $marker_ls | # versioned head objects
+	    while read obj loc ;do
+		if [ "$debug" == 1 ] ;then
+		    echo "obj=$obj ; loc=$loc" >>$debug_log
+		fi
+		rados -p $pool stat2 $obj --object-locator "$loc"
+	    done | # output of stat2, which includes mtime
+	    sort -k 3 | # stat2 but sorted by mtime earlier to later
+	    grep -v -e "$filter_out_last_instance" | # remove the final instance in case it's not last
+
+	    # sed 1) removes pool and marker, 2) removes indicator of
+	    # version id, 3) removes obj name including escaped
+	    # leading underscores, 4) inserts object name and tab at
+	    # front of line, and 5) removes trailing tab. Note: after
+	    # 3) the line will be empty or contain a version id, so 5)
+	    # is for when that line is empty and 4 inserts a tab
+	    sed -E \
+		-e "s/.*${marker}//" \
+		-e 's/^__://' \
+		-e "s/_+${o}.*//" \
+		-e "s/^/${o}\t/"
+	echo "${o}${TAB}$last_instance" # now add the final instance; could be delete marker
+    done <$obj_list 2>/dev/null | sed 's/\t$//' >$obj_list_ver
+} # handle_versioned
+
+if [ -z "$bucket" ]; then
+  echo
+  echo "ERROR: Bucket option ( -b ) is required."
+  usage
+fi
 
 # read bucket entry metadata
-radosgw-admin metadata get bucket:$bucket >$bkt_entry 2>/dev/null
-marker=$(strip_quotes $(jq ".data.bucket.marker" $bkt_entry))
-bucket_id=$(strip_quotes $(jq ".data.bucket.bucket_id" $bkt_entry))
+eval "radosgw-admin metadata get bucket:$bucket $debugging_rgwadmin $multisite_spec >$bkt_entry"
+export marker=$(jq -r ".data.bucket.marker" $bkt_entry)
+export bucket_id=$(jq -r ".data.bucket.bucket_id" $bkt_entry)
 if [ -z "$marker" -o -z "$bucket_id" ] ;then
-    echo "ERROR: unable to read entry-point metadata for bucket \"$bucket\"."
+    echo "ERROR: Unable to read entry-point metadata for bucket \"$bucket\"."
+    echo "       Please make sure that <bucket-name> is correct and, if not using"
+    echo "       the defaults, that <realm-name>, <zonegroup-name>, and/or"
+    echo "       <zone-name> are correctly specified."
     clean
+    usage
     exit 1
 fi
 
@@ -148,38 +281,53 @@ echo marker is $marker
 echo bucket_id is $bucket_id
 
 # read bucket instance metadata
-radosgw-admin metadata get bucket.instance:${bucket}:$bucket_id >$bkt_inst 2>/dev/null
-
-# handle versioned buckets
-bkt_flags=$(jq ".data.bucket_info.flags" $bkt_inst)
-if [ -z "$bkt_flags" ] ;then
-    echo "ERROR: unable to read instance metadata for bucket \"$bucket\"."
-    exit 1
-fi
-
-# mask bit indicating it's a versioned bucket
-is_versioned=$(( $bkt_flags & 2))
-if [ "$is_versioned" -ne 0 ] ;then
-    echo "Error: this bucket appears to be versioned, and this tool cannot work with versioned buckets."
-    clean
-    exit 1
-fi
+eval "radosgw-admin metadata get bucket.instance:${bucket}:$bucket_id $multisite_spec $debugging_rgwadmin >$bkt_inst"
 
 # examine number of bucket index shards
 num_shards=$(jq ".data.bucket_info.num_shards" $bkt_inst)
 echo number of bucket index shards is $num_shards
 
 # determine data pool
-pool=$(get_pool $2)
+if [ -z "$pool" ]; then
+  pool=$(get_pool)
+fi
 echo data pool is $pool
 
+# handle versioned buckets
+export bkt_flags=$(jq ".data.bucket_info.flags" $bkt_inst)
+if [ -z "$bkt_flags" ] ;then
+    echo "ERROR: unable to read instance metadata for bucket \"$bucket\"."
+    clean
+    exit 1
+fi
+
 # search the data pool for all of the head objects that begin with the
-# marker that are not in namespaces (indicated by an extra underscore)
-# and then strip away all but the rgw object name
-( rados -p $pool ls | grep "^${marker}_[^_]" | sed "s/^${marker}_\(.*\)/\1/" >$obj_list ) 2>/dev/null
+# marker that are not in namespaces (indicated by an extra underscore
+# and colon) and then strip away all but the rgw object name,
+# including optional locator that follows a tab. Initial underscores
+# are quoted with an underscore, so swap the first double with a
+# single.
+if [ -z "$lsoutput" ]; then
+  ( rados -p $pool ls | grep "^${marker}_" >$marker_ls ) 2>/dev/null
+else
+  ( grep "^${marker}_" "${lsoutput}" >$marker_ls ) 2>/dev/null
+fi
+
+( sed -E 's/\t.*//' $marker_ls | grep -v -E "^${marker}__[^_]+_" | sed -E "s/^${marker}_(.*)/\1/" | sed 's/^__/_/' >$obj_list ) 2>/dev/null
+
+# mask bit indicating it's a versioned bucket
+export is_versioned=$(( $bkt_flags & 2))
+export is_suspended=$(( $bkt_flags & 4))
+if [ "$is_versioned" -ne 0 ] ;then
+    echo "INFO: this bucket appears to be versioned."
+    handle_versioned
+else
+    # no additional versioned handling, so just hard link
+    ln $obj_list $obj_list_ver
+fi
 
 # handle the case where the resulting object list file is empty
-if [ -s $obj_list ] ;then
+if [ -s $obj_list_ver ] ;then
     :
 else
     echo "NOTICE: No head objects for bucket \"$bucket\" were found in pool \"$pool\", so nothing was recovered."
@@ -190,7 +338,7 @@ fi
 if [ -z "$proceed" ] ;then
     # warn user and get permission to proceed
     echo "NOTICE: This tool is currently considered EXPERIMENTAL."
-    echo "The list of objects that we will attempt to restore can be found in \"$obj_list\"."
+    echo "The list of objects that we will attempt to restore can be found in \"$obj_list_ver\"."
     echo "Please review the object names in that file (either below or in another window/terminal) before proceeding."
     while true ; do
 	read -p "Type \"proceed!\" to proceed, \"view\" to view object list, or \"q\" to quit: " action
@@ -200,7 +348,7 @@ if [ -z "$proceed" ] ;then
 	    exit 0
 	elif [ "$action" == "view" ] ;then
 	    echo "Viewing..."
-	    less $obj_list
+	    less $obj_list_ver
 	elif [ "$action" == "proceed!" ] ;then
 	    echo "Proceeding..."
 	    break
@@ -210,41 +358,7 @@ if [ -z "$proceed" ] ;then
     done
 fi
 
-# execute object rewrite on all of the head objects
-radosgw-admin object reindex --bucket=$bucket --objects-file=$obj_list 2>/dev/null
-reindex_done=$(date +%s)
-
-# note: large is 2^30
-export large=1073741824
-
-listcmd="radosgw-admin bucket list --bucket=$bucket --allow-unordered --max-entries=$large"
-
-if [ -n "$proceed" ] ;then
-    sleep $pending_op_secs
-    $listcmd >/dev/null 2>/dev/null
-else
-    echo "NOTICE: Bucket stats are currently incorrect. They can be restored with the following command after 2 minutes:"
-    echo "    $listcmd"
-
-    while true ; do
-	read -p "Would you like to take the time to recalculate bucket stats now? [yes/no] " action
-	if [ "$action" == "no" ] ;then
-	    break
-	elif [ "$action" == "yes" ] ;then
-	    # make sure at least $pending_op_secs since reindex completed
-	    now=$(date +%s)
-	    sleep_time=$(expr $pending_op_secs - $now + $reindex_done)
-	    if [ "$sleep_time" -gt 0 ] ;then
-		sleep $sleep_time
-	    fi
-
-	    $listcmd >/dev/null 2>/dev/null
-	    break
-	else
-	    echo "Error: response \"$action\" is not understood."
-	fi
-    done
-fi
+eval "radosgw-admin object reindex --bucket=$bucket --objects-file=$obj_list_ver $multisite_spec --yes-i-really-mean-it $debugging_rgwadmin"
 
 clean
 echo Done

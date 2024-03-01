@@ -117,11 +117,9 @@ int AddEvent(lua_State* L)  {
 }
 
 struct ResponseMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "Response";} 
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto err = reinterpret_cast<const rgw_err*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto err = reinterpret_cast<const rgw_err*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -134,13 +132,14 @@ struct ResponseMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Message") == 0) {
       pushstring(L, err->message);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
   
   static int NewIndexClosure(lua_State* L) {
-    auto err = reinterpret_cast<rgw_err*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    auto err = reinterpret_cast<rgw_err*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -153,18 +152,16 @@ struct ResponseMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Message") == 0) {
       err->message.assign(luaL_checkstring(L, 3));
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return NO_RETURNVAL;
   }
 };
 
 struct QuotaMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "Quota";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto info = reinterpret_cast<RGWQuotaInfo*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto info = reinterpret_cast<RGWQuotaInfo*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -177,18 +174,16 @@ struct QuotaMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Rounded") == 0) {
       lua_pushboolean(L, !info->check_on_raw);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 };
 
 struct PlacementRuleMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "PlacementRule";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto rule = reinterpret_cast<rgw_placement_rule*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto rule = reinterpret_cast<rgw_placement_rule*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -197,18 +192,16 @@ struct PlacementRuleMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "StorageClass") == 0) {
       pushstring(L, rule->storage_class);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 };
 
 struct UserMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "User";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto user = reinterpret_cast<const rgw_user*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto user = reinterpret_cast<const rgw_user*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -217,18 +210,16 @@ struct UserMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Id") == 0) {
       pushstring(L, user->id);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 };
 
 struct TraceMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "Trace";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -241,51 +232,48 @@ struct TraceMetaTable : public EmptyMetaTable {
         lua_pushlightuserdata(L, s);
         lua_pushcclosure(L, AddEvent, ONE_UPVAL);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 
   static int NewIndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "Enable") == 0) {
       s->trace_enabled = lua_toboolean(L, 3);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return NO_RETURNVAL;
   }
 };
 
 struct OwnerMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "Owner";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto owner = reinterpret_cast<ACLOwner*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto owner = reinterpret_cast<ACLOwner*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "DisplayName") == 0) {
-      pushstring(L, owner->get_display_name());
+      pushstring(L, owner->display_name);
     } else if (strcasecmp(index, "User") == 0) {
-      create_metatable<UserMetaTable>(L, false, &(owner->get_id()));
+      create_metatable<UserMetaTable>(L, name, index, false, &owner->id);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 };
 
 struct BucketMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "Bucket";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     const auto bucket = s->bucket.get();
 
     const char* index = luaL_checkstring(L, 2);
@@ -304,10 +292,6 @@ struct BucketMetaTable : public EmptyMetaTable {
       pushstring(L, bucket->get_marker());
     } else if (strcasecmp(index, "Id") == 0) {
       pushstring(L, bucket->get_bucket_id());
-    } else if (strcasecmp(index, "Count") == 0) {
-      lua_pushinteger(L, bucket->get_count());
-    } else if (strcasecmp(index, "Size") == 0) {
-      lua_pushinteger(L, bucket->get_size());
     } else if (strcasecmp(index, "ZoneGroupId") == 0) {
       pushstring(L, bucket->get_info().zonegroup);
     } else if (strcasecmp(index, "CreationTime") == 0) {
@@ -315,19 +299,21 @@ struct BucketMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "MTime") == 0) {
       pushtime(L, bucket->get_modification_time());
     } else if (strcasecmp(index, "Quota") == 0) {
-      create_metatable<QuotaMetaTable>(L, false, &(bucket->get_info().quota));
+      create_metatable<QuotaMetaTable>(L, name, index, false, &(bucket->get_info().quota));
     } else if (strcasecmp(index, "PlacementRule") == 0) {
-      create_metatable<PlacementRuleMetaTable>(L, false, &(bucket->get_info().placement_rule));
+      create_metatable<PlacementRuleMetaTable>(L, name, index, false, &(bucket->get_info().placement_rule));
     } else if (strcasecmp(index, "User") == 0) {
-      create_metatable<UserMetaTable>(L, false, &(bucket->get_info().owner));
+      create_metatable<UserMetaTable>(L, name, index, false, 
+          const_cast<rgw_user*>(&bucket->get_owner()));
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
   
   static int NewIndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     const auto bucket = s->bucket.get();
 
     const char* index = luaL_checkstring(L, 2);
@@ -338,18 +324,16 @@ struct BucketMetaTable : public EmptyMetaTable {
         return NO_RETURNVAL;
       }
     }
-    return error_unknown_field(L, index, TableName());
+    return error_unknown_field(L, index, name);
   }
 };
 
 struct ObjectMetaTable : public EmptyMetaTable {
-  static const std::string TableName() {return "Object";}
-  static std::string Name() {return TableName() + "Meta";}
-  
   using Type = rgw::sal::Object;
 
   static int IndexClosure(lua_State* L) {
-    const auto obj = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto obj = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -364,38 +348,44 @@ struct ObjectMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "MTime") == 0) {
       pushtime(L, obj->get_mtime());
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 };
 
 struct GrantMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "Grant";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto grant = reinterpret_cast<ACLGrant*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto grant = reinterpret_cast<ACLGrant*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "Type") == 0) {
       lua_pushinteger(L, grant->get_type().get_type());
     } else if (strcasecmp(index, "User") == 0) {
-      const auto id_ptr = grant->get_id();
-      if (id_ptr) {
-        create_metatable<UserMetaTable>(L, false, const_cast<rgw_user*>(id_ptr));
+      if (const auto user = grant->get_user(); user) {
+        create_metatable<UserMetaTable>(L, name, index, false, 
+            const_cast<rgw_user*>(&user->id));
       } else {
         lua_pushnil(L);
       }
     } else if (strcasecmp(index, "Permission") == 0) {
       lua_pushinteger(L, grant->get_permission().get_permissions());
     } else if (strcasecmp(index, "GroupType") == 0) {
-      lua_pushinteger(L, grant->get_group());
+      if (const auto group = grant->get_group(); group) {
+        lua_pushinteger(L, group->type);
+      } else {
+        lua_pushnil(L);
+      }
     } else if (strcasecmp(index, "Referer") == 0) {
-      pushstring(L, grant->get_referer());
+      if (const auto referer = grant->get_referer(); referer) {
+        pushstring(L, referer->url_spec);
+      } else {
+        lua_pushnil(L);
+      }
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
@@ -405,8 +395,11 @@ struct GrantsMetaTable : public EmptyMetaTable {
   static std::string TableName() {return "Grants";}
   static std::string Name() {return TableName() + "Meta";}
 
+  using Type = ACLGrantMap;
+
   static int IndexClosure(lua_State* L) {
-    const auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto map = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -414,64 +407,17 @@ struct GrantsMetaTable : public EmptyMetaTable {
     if (it == map->end()) {
       lua_pushnil(L);
     } else {
-      create_metatable<GrantMetaTable>(L, false, &(it->second));
+      create_metatable<GrantMetaTable>(L, name, index, false, &(it->second));
     }
     return ONE_RETURNVAL;
   }
   
   static int PairsClosure(lua_State* L) {
-    auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    ceph_assert(map);
-    lua_pushlightuserdata(L, map);
-    lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
-    lua_pushnil(L);                                 // indicate this is the first call
-    // return stateless_iter, nil
-
-    return TWO_RETURNVALS;
+    return Pairs<Type, next<Type, GrantMetaTable>>(L);
   }
   
-  static int stateless_iter(lua_State* L) {
-    // based on: http://lua-users.org/wiki/GeneralizedPairsAndIpairs
-    auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    ACLGrantMap::iterator next_it;
-    if (lua_isnil(L, -1)) {
-      next_it = map->begin();
-    } else {
-      const char* index = luaL_checkstring(L, 2);
-      const auto it = map->find(std::string(index));
-      ceph_assert(it != map->end());
-      next_it = std::next(it);
-    }
-
-    if (next_it == map->end()) {
-      // index of the last element was provided
-      lua_pushnil(L);
-      lua_pushnil(L);
-      return TWO_RETURNVALS;
-      // return nil, nil
-    }
-
-    while (next_it->first.empty()) {
-      // this is a multimap and the next element does not have a unique key
-      ++next_it;
-      if (next_it == map->end()) {
-        // index of the last element was provided
-        lua_pushnil(L);
-        lua_pushnil(L);
-        return TWO_RETURNVALS;
-        // return nil, nil
-      }
-    }
-
-    pushstring(L, next_it->first);
-    create_metatable<GrantMetaTable>(L, false, &(next_it->second));
-    // return key, value
-    
-    return TWO_RETURNVALS;
-  }
-
   static int LenClosure(lua_State* L) {
-    const auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto map = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     lua_pushinteger(L, map->size());
 
@@ -480,31 +426,27 @@ struct GrantsMetaTable : public EmptyMetaTable {
 };
 
 struct ACLMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "ACL";}
-  static std::string Name() {return TableName() + "Meta";}
-
   using Type = RGWAccessControlPolicy;
 
   static int IndexClosure(lua_State* L) {
-    const auto acl = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto acl = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
-    const char* index = luaL_checkstring(L, 2);
+    const auto index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "Owner") == 0) {
-      create_metatable<OwnerMetaTable>(L, false, &(acl->get_owner()));
+      create_metatable<OwnerMetaTable>(L, name, index, false, 
+          &(acl->get_owner()));
     } else if (strcasecmp(index, "Grants") == 0) {
-      create_metatable<GrantsMetaTable>(L, false, &(acl->get_acl().get_grant_map()));
+      create_metatable<GrantsMetaTable>(L, name, index, false, &(acl->get_acl().get_grant_map()));
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 };
 
 struct StatementsMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "Statements";}
-  static std::string Name() {return TableName() + "Meta";}
-
   using Type = std::vector<rgw::IAM::Statement>;
 
   static std::string statement_to_string(const rgw::IAM::Statement& statement) {
@@ -514,7 +456,9 @@ struct StatementsMetaTable : public EmptyMetaTable {
   }
 
   static int IndexClosure(lua_State* L) {
-    const auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    std::ignore = table_name_upvalue(L);
+    const auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    ceph_assert(statements);
 
     const auto index = luaL_checkinteger(L, 2);
 
@@ -528,18 +472,12 @@ struct StatementsMetaTable : public EmptyMetaTable {
   }
   
   static int PairsClosure(lua_State* L) {
-    auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    ceph_assert(statements);
-    lua_pushlightuserdata(L, statements);
-    lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
-    lua_pushnil(L);                                 // indicate this is the first call
-    // return stateless_iter, nil
-
-    return TWO_RETURNVALS;
+    return Pairs<Type, stateless_iter>(L);
   }
   
   static int stateless_iter(lua_State* L) {
-    auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    std::ignore = table_name_upvalue(L);
+    auto statements = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     size_t next_it;
     if (lua_isnil(L, -1)) {
       next_it = 0;
@@ -572,13 +510,11 @@ struct StatementsMetaTable : public EmptyMetaTable {
 };
 
 struct PolicyMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "Policy";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto policy = reinterpret_cast<rgw::IAM::Policy*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto policy = reinterpret_cast<rgw::IAM::Policy*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
-    const char* index = luaL_checkstring(L, 2);
+    const auto index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "Text") == 0) {
       pushstring(L, policy->text);
@@ -590,46 +526,39 @@ struct PolicyMetaTable : public EmptyMetaTable {
         pushstring(L, policy->id.get());
       }
     } else if (strcasecmp(index, "Statements") == 0) {
-      create_metatable<StatementsMetaTable>(L, false, &(policy->statements));
+      create_metatable<StatementsMetaTable>(L, name, index, false, &(policy->statements));
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 };
 
 struct PoliciesMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "Policies";}
-  static std::string Name() {return TableName() + "Meta";}
-  
   using Type = std::vector<rgw::IAM::Policy>;
 
   static int IndexClosure(lua_State* L) {
-    const auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const auto index = luaL_checkinteger(L, 2);
 
     if (index >= (int)policies->size() || index < 0) {
       lua_pushnil(L);
     } else {
-      create_metatable<PolicyMetaTable>(L, false, &((*policies)[index]));
+      create_metatable<PolicyMetaTable>(L, name, std::to_string(index), 
+          false, &((*policies)[index]));
     }
     return ONE_RETURNVAL;
   }
   
   static int PairsClosure(lua_State* L) {
-    auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    ceph_assert(policies);
-    lua_pushlightuserdata(L, policies);
-    lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
-    lua_pushnil(L);                                 // indicate this is the first call
-    // return stateless_iter, nil
-
-    return TWO_RETURNVALS;
+    return Pairs<Type, stateless_iter>(L);
   }
   
   static int stateless_iter(lua_State* L) {
-    auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    auto policies = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     size_t next_it;
     if (lua_isnil(L, -1)) {
       next_it = 0;
@@ -646,7 +575,8 @@ struct PoliciesMetaTable : public EmptyMetaTable {
       // return nil, nil
     } else {
       lua_pushinteger(L, next_it);
-      create_metatable<PolicyMetaTable>(L, false, &((*policies)[next_it]));
+      create_metatable<PolicyMetaTable>(L, name, std::to_string(next_it), 
+          false, &((*policies)[next_it]));
       // return key, value
     }
 
@@ -663,22 +593,21 @@ struct PoliciesMetaTable : public EmptyMetaTable {
 };
 
 struct HTTPMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "HTTP";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto info = reinterpret_cast<req_info*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto info = reinterpret_cast<req_info*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
-    const char* index = luaL_checkstring(L, 2);
+    const auto index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "Parameters") == 0) {
-      create_metatable<StringMapMetaTable<>>(L, false, &(info->args.get_params()));
+      create_metatable<StringMapMetaTable<>>(L, name, index, false, &(info->args.get_params()));
     } else if (strcasecmp(index, "Resources") == 0) {
       // TODO: add non-const api to get resources
-      create_metatable<StringMapMetaTable<>>(L, false, 
+      create_metatable<StringMapMetaTable<>>(L, name, index, false,
           const_cast<std::map<std::string, std::string>*>(&(info->args.get_sub_resources())));
     } else if (strcasecmp(index, "Metadata") == 0) {
-      create_metatable<StringMapMetaTable<meta_map_t, StringMapWriteableNewIndex<meta_map_t>>>(L, false, &(info->x_meta_map));
+      create_metatable<StringMapMetaTable<meta_map_t, StringMapWriteableNewIndex<meta_map_t>>>(L, name, index, 
+          false, &(info->x_meta_map));
     } else if (strcasecmp(index, "Host") == 0) {
       pushstring(L, info->host);
     } else if (strcasecmp(index, "Method") == 0) {
@@ -692,75 +621,69 @@ struct HTTPMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "StorageClass") == 0) {
       pushstring(L, info->storage_class);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 
   static int NewIndexClosure(lua_State* L) {
-    auto info = reinterpret_cast<req_info*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    auto info = reinterpret_cast<req_info*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
-    const char* index = luaL_checkstring(L, 2);
+    const auto index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "StorageClass") == 0) {
       info->storage_class = luaL_checkstring(L, 3);
    } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
    }
     return NO_RETURNVAL;
   }
 };
 
 struct CopyFromMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "CopyFrom";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
-    const char* index = luaL_checkstring(L, 2);
+    const auto index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "Tenant") == 0) {
       pushstring(L, s->src_tenant_name);
     } else if (strcasecmp(index, "Bucket") == 0) {
       pushstring(L, s->src_bucket_name);
     } else if (strcasecmp(index, "Object") == 0) {
-      create_metatable<ObjectMetaTable>(L, false, s->src_object);
+      create_metatable<ObjectMetaTable>(L, name, index, false, s->src_object);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 };
 
 struct ZoneGroupMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "ZoneGroup";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
-    const char* index = luaL_checkstring(L, 2);
+    const auto index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "Name") == 0) {
       pushstring(L, s->zonegroup_name);
     } else if (strcasecmp(index, "Endpoint") == 0) {
       pushstring(L, s->zonegroup_endpoint);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 };
 
 struct RequestMetaTable : public EmptyMetaTable {
-  static std::string TableName() {return "Request";}
-  static std::string Name() {return TableName() + "Meta";}
-
-  // __index closure that expect req_state to be captured
   static int IndexClosure(lua_State* L) {
-    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    const auto op_name = reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    const auto name = table_name_upvalue(L);
+    const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    const auto op_name = reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(THIRD_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -771,9 +694,9 @@ struct RequestMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "ContentLength") == 0) {
       lua_pushinteger(L, s->content_length);
     } else if (strcasecmp(index, "GenericAttributes") == 0) {
-      create_metatable<StringMapMetaTable<>>(L, false, &(s->generic_attrs));
+      create_metatable<StringMapMetaTable<>>(L, name, index, false, &(s->generic_attrs));
     } else if (strcasecmp(index, "Response") == 0) {
-      create_metatable<ResponseMetaTable>(L, false, &(s->err));
+      create_metatable<ResponseMetaTable>(L, name, index, false, &(s->err));
     } else if (strcasecmp(index, "SwiftAccountName") == 0) {
       if (s->dialect == "swift") {
         pushstring(L, s->account_name);
@@ -781,40 +704,40 @@ struct RequestMetaTable : public EmptyMetaTable {
         lua_pushnil(L);
       }
     } else if (strcasecmp(index, "Bucket") == 0) {
-      create_metatable<BucketMetaTable>(L, false, s);
+      create_metatable<BucketMetaTable>(L, name, index, false, s);
     } else if (strcasecmp(index, "Object") == 0) {
-      create_metatable<ObjectMetaTable>(L, false, s->object);
+      create_metatable<ObjectMetaTable>(L, name, index, false, s->object);
     } else if (strcasecmp(index, "CopyFrom") == 0) {
       if (s->op_type == RGW_OP_COPY_OBJ) {
-        create_metatable<CopyFromMetaTable>(L, false, s);
+        create_metatable<CopyFromMetaTable>(L, name, index, false, s);
       } else {
         lua_pushnil(L);
       }
     } else if (strcasecmp(index, "ObjectOwner") == 0) {
-      create_metatable<OwnerMetaTable>(L, false, &(s->owner));
+      create_metatable<OwnerMetaTable>(L, name, index, false, &(s->owner));
     } else if (strcasecmp(index, "ZoneGroup") == 0) {
-      create_metatable<ZoneGroupMetaTable>(L, false, s);
+      create_metatable<ZoneGroupMetaTable>(L, name, index, false, s);
     } else if (strcasecmp(index, "UserACL") == 0) {
-      create_metatable<ACLMetaTable>(L, false, s->user_acl);
+      create_metatable<ACLMetaTable>(L, name, index, false, &s->user_acl);
     } else if (strcasecmp(index, "BucketACL") == 0) {
-      create_metatable<ACLMetaTable>(L, false, s->bucket_acl);
+      create_metatable<ACLMetaTable>(L, name, index, false, &s->bucket_acl);
     } else if (strcasecmp(index, "ObjectACL") == 0) {
-      create_metatable<ACLMetaTable>(L, false, s->object_acl);
+      create_metatable<ACLMetaTable>(L, name, index, false, &s->object_acl);
     } else if (strcasecmp(index, "Environment") == 0) {
-        create_metatable<StringMapMetaTable<rgw::IAM::Environment>>(L, false, &(s->env));
+        create_metatable<StringMapMetaTable<rgw::IAM::Environment>>(L, name, index, false, &(s->env));
     } else if (strcasecmp(index, "Policy") == 0) {
       // TODO: create a wrapper to std::optional
       if (!s->iam_policy) {
         lua_pushnil(L);
       } else {
-        create_metatable<PolicyMetaTable>(L, false, s->iam_policy.get_ptr());
+        create_metatable<PolicyMetaTable>(L, name, index, false, s->iam_policy.get_ptr());
       }
     } else if (strcasecmp(index, "UserPolicies") == 0) {
-        create_metatable<PoliciesMetaTable>(L, false, &(s->iam_user_policies));
+        create_metatable<PoliciesMetaTable>(L, name, index, false, &(s->iam_user_policies));
     } else if (strcasecmp(index, "RGWId") == 0) {
       pushstring(L, s->host_id);
     } else if (strcasecmp(index, "HTTP") == 0) {
-        create_metatable<HTTPMetaTable>(L, false, &(s->info));
+        create_metatable<HTTPMetaTable>(L, name, index, false, &(s->info));
     } else if (strcasecmp(index, "Time") == 0) {
       pushtime(L, s->time);
     } else if (strcasecmp(index, "Dialect") == 0) {
@@ -824,26 +747,28 @@ struct RequestMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "TransactionId") == 0) {
       pushstring(L, s->trans_id);
     } else if (strcasecmp(index, "Tags") == 0) {
-      create_metatable<StringMapMetaTable<RGWObjTags::tag_map_t>>(L, false, &(s->tagset.get_tags()));
+      create_metatable<StringMapMetaTable<RGWObjTags::tag_map_t>>(L, name, index, false, &(s->tagset.get_tags()));
     } else if (strcasecmp(index, "User") == 0) {
       if (!s->user) {
         lua_pushnil(L);
       } else {
-        create_metatable<UserMetaTable>(L, false, const_cast<rgw_user*>(&(s->user->get_id())));
+        create_metatable<UserMetaTable>(L, name, index, false,
+            const_cast<rgw_user*>(&(s->user->get_id())));
       }
     } else if (strcasecmp(index, "Trace") == 0) {
-        create_metatable<TraceMetaTable>(L, false, s);
+        create_metatable<TraceMetaTable>(L, name, index, false, s);
     } else {
-      return error_unknown_field(L, index, TableName());
+      return error_unknown_field(L, index, name);
     }
     return ONE_RETURNVAL;
   }
 };
 
 void create_top_metatable(lua_State* L, req_state* s, const char* op_name) {
-  create_metatable<RequestMetaTable>(L, true, s, const_cast<char*>(op_name));
-  lua_getglobal(L, RequestMetaTable::TableName().c_str());
-  ceph_assert(lua_istable(L, -1));
+  static const char* request_table_name = "Request";
+  create_metatable<RequestMetaTable>(L, "", request_table_name, true, s, const_cast<char*>(op_name));
+  const auto type = lua_getglobal(L, request_table_name);
+  ceph_assert(type == LUA_TTABLE);
 }
 
 int execute(
@@ -854,37 +779,36 @@ int execute(
     RGWOp* op,
     const std::string& script)
 {
-  auto L = luaL_newstate();
-  const char* op_name = op ? op->name() : "Unknown";
-  lua_state_guard lguard(L);
-
-  open_standard_libs(L);
-  set_package_path(L, s->penv.lua.luarocks_path);
-
-  create_debug_action(L, s->cct);  
-  
-  create_metatable<RequestMetaTable>(L, true, s, const_cast<char*>(op_name));
-
-  lua_getglobal(L, RequestMetaTable::TableName().c_str());
-  ceph_assert(lua_istable(L, -1));
-
-  // add the ops log action
-  pushstring(L, RequestLogAction);
-  lua_pushlightuserdata(L, rest);
-  lua_pushlightuserdata(L, olog);
-  lua_pushlightuserdata(L, s);
-  lua_pushlightuserdata(L, op);
-  lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
-  lua_rawset(L, -3);
-  
-  if (s->penv.lua.background) {
-    s->penv.lua.background->create_background_metatable(L);
-    lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
-    ceph_assert(lua_istable(L, -1));
+  lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state, s);
+  auto L = lguard.get();
+  if (!L) {
+    ldpp_dout(s, 1) << "Failed to create state for Lua request context" << dendl;
+    return -ENOMEM;
   }
+  const char* op_name = op ? op->name() : "Unknown";
 
   int rc = 0;
   try {
+    open_standard_libs(L);
+    set_package_path(L, s->penv.lua.manager->luarocks_path());
+
+    create_debug_action(L, s->cct);  
+  
+    create_top_metatable(L, s, const_cast<char*>(op_name));  
+
+    // add the ops log action
+    pushstring(L, RequestLogAction);
+    lua_pushlightuserdata(L, rest);
+    lua_pushlightuserdata(L, olog);
+    lua_pushlightuserdata(L, s);
+    lua_pushlightuserdata(L, op);
+    lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
+    lua_rawset(L, -3);
+  
+    if (s->penv.lua.background) {
+      s->penv.lua.background->create_background_metatable(L);
+    }
+
     // execute the lua script
     if (luaL_dostring(L, script.c_str()) != LUA_OK) {
       const std::string err(lua_tostring(L, -1));

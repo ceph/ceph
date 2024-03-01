@@ -271,7 +271,7 @@ class UserTest(DashboardTestCase):
                          'Password must not contain sequential characters.')
         self._reset_login_to_admin('test1')
 
-    def test_change_password_contains_repetetive_characters(self):
+    def test_change_password_contains_repetitive_characters(self):
         self.create_user('test1', 'mypassword10#', ['read-only'], force_password=False)
         self.login('test1', 'mypassword10#')
         self._post('/api/user/test1/change_password', {

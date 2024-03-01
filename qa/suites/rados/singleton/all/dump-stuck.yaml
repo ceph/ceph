@@ -18,4 +18,5 @@ tasks:
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(PG_
+      - \(POOL_APP_NOT_ENABLED\)
 - dump_stuck:

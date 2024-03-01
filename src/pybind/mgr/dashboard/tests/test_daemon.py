@@ -39,3 +39,8 @@ class DaemonTest(ControllerTestCase):
                 'component': None
             })
             self.assertStatus(400)
+
+    def test_daemon_list(self):
+        with patch_orch(True):
+            self._get(f'{self.URL_DAEMON}')
+            self.assertStatus(200)

@@ -79,7 +79,6 @@ public:
   bool ms_handle_refused(Connection *con) override;
 
   int init();
-  void shutdown();
   void respawn();
   int main(std::vector<const char *> args);
   void tick();

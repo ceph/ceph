@@ -222,13 +222,13 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
   hostnames_set.erase(""); // filter out empty hostnames
   ldout(cct, 20) << "RGW hostnames: " << hostnames_set << dendl;
   /* TODO: We should have a sanity check that no hostname matches the end of
-   * any other hostname, otherwise we will get ambigious results from
+   * any other hostname, otherwise we will get ambiguous results from
    * rgw_find_host_in_domains.
    * Eg: 
    * Hostnames: [A, B.A]
    * Inputs: [Z.A, X.B.A]
    * Z.A clearly splits to subdomain=Z, domain=Z
-   * X.B.A ambigously splits to both {X, B.A} and {X.B, A}
+   * X.B.A ambiguously splits to both {X, B.A} and {X.B, A}
    */
 
   zone_group.get_s3website_hostnames(names);
@@ -288,7 +288,9 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
 static void dump_status(req_state *s, int status,
 			const char *status_name)
 {
-  s->formatter->set_status(status, status_name);
+  if (s->formatter) {
+    s->formatter->set_status(status, status_name);
+  }
   try {
     RESTFUL_IO(s)->send_status(status, status_name);
   } catch (rgw::io::Exception& e) {
@@ -594,8 +596,8 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
 
   /* do not send content type if content length is zero
      and the content type was not set by the user */
-  if (force_content_type ||
-      (!content_type &&  s->formatter->get_len()  != 0) || s->is_err()){
+  if (force_content_type || s->is_err() ||
+      (!content_type && s->formatter && s->formatter->get_len() != 0)) {
     ctype = to_mime_type(s->format);
     if (s->prot_flags & RGW_REST_SWIFT)
       ctype.append("; charset=utf-8");
@@ -604,7 +606,8 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
   if (!force_no_error && s->is_err()) {
     dump_start(s);
     dump(s);
-    dump_content_length(s, s->formatter->get_len());
+    s->formatter->output_footer();
+    dump_content_length(s, s->formatter ? s->formatter->get_len() : 0);
   } else {
     if (proposed_content_length == CHUNKED_TRANSFER_ENCODING) {
       dump_chunked_encoding(s);
@@ -632,7 +635,9 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
   }
 
   ACCOUNTING_IO(s)->set_account(true);
-  rgw_flush_formatter_and_reset(s, s->formatter);
+  if (s->formatter) {
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
 }
 
 static void build_redirect_url(req_state *s, const string& redirect_base, string *redirect_url)
@@ -641,7 +646,7 @@ static void build_redirect_url(req_state *s, const string& redirect_base, string
   
   dest_uri = redirect_base;
   /*
-   * reqest_uri is always start with slash, so we need to remove
+   * request_uri is always start with slash, so we need to remove
    * the unnecessary slash at the end of dest_uri.
    */
   if (dest_uri[dest_uri.size() - 1] == '/') {
@@ -761,11 +766,11 @@ int dump_body(req_state* const s,
               const char* const buf,
               const size_t len)
 {
-  bool healthchk = false;
+  bool healthcheck = false;
   // we dont want to limit health checks
   if(s->op_type == RGW_OP_GET_HEALTH_CHECK)
-    healthchk = true;
-  if(len > 0 && !healthchk) {
+    healthcheck = true;
+  if(len > 0 && !healthcheck) {
     const char *method = s->info.method;
     s->ratelimit_data->decrease_bytes(method, s->ratelimit_user_name, len, &s->user_ratelimit);
     if(!rgw::sal::Bucket::empty(s->bucket.get()))
@@ -798,11 +803,11 @@ int recv_body(req_state* const s,
   } catch (rgw::io::Exception& e) {
     return -e.code().value();
   }
-  bool healthchk = false;
+  bool healthcheck = false;
   // we dont want to limit health checks
   if(s->op_type ==  RGW_OP_GET_HEALTH_CHECK)
-    healthchk = true;
-  if(len > 0 && !healthchk) {
+    healthcheck = true;
+  if(len > 0 && !healthcheck) {
     const char *method = s->info.method;
     s->ratelimit_data->decrease_bytes(method, s->ratelimit_user_name, len, &s->user_ratelimit);
     if(!rgw::sal::Bucket::empty(s->bucket.get()))
@@ -1075,7 +1080,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   }
 
   return len;
-}
+} /* RGWPutObj_ObjStore::get_data(bufferlist& bl) */
 
 
 /*
@@ -1723,17 +1728,15 @@ int RGWHandler_REST::allocate_formatter(req_state *s,
     } else {
       const char *accept = s->info.env->get("HTTP_ACCEPT");
       if (accept) {
-        char format_buf[64];
-        unsigned int i = 0;
-        for (; i < sizeof(format_buf) - 1 && accept[i] && accept[i] != ';'; ++i) {
-          format_buf[i] = accept[i];
-        }
-        format_buf[i] = 0;
-        if ((strcmp(format_buf, "text/xml") == 0) || (strcmp(format_buf, "application/xml") == 0)) {
+        // trim at first ;
+        std::string_view format = accept;
+        format = format.substr(0, format.find(';'));
+
+        if (format == "text/xml" || format == "application/xml") {
           type = RGWFormat::XML;
-        } else if (strcmp(format_buf, "application/json") == 0) {
+        } else if (format == "application/json") {
           type = RGWFormat::JSON;
-        } else if (strcmp(format_buf, "text/html") == 0) {
+        } else if (format == "text/html") {
           type = RGWFormat::HTML;
         }
       }
@@ -2007,23 +2010,6 @@ RGWRESTMgr::~RGWRESTMgr()
   delete default_mgr;
 }
 
-int64_t parse_content_length(const char *content_length)
-{
-  int64_t len = -1;
-
-  if (*content_length == '\0') {
-    len = 0;
-  } else {
-    string err;
-    len = strict_strtoll(content_length, 10, &err);
-    if (!err.empty()) {
-      len = -1;
-    }
-  }
-
-  return len;
-}
-
 int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
 {
   req_info& info = s->info;
@@ -2280,8 +2266,6 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
   }
   s->op = op_from_method(info.method);
 
-  info.init_meta_info(s, &s->has_bad_meta);
-
   return 0;
 }
 
@@ -2323,6 +2307,8 @@ RGWHandler_REST* RGWREST::get_handler(
     m->put_handler(handler);
     return nullptr;
   }
+
+  s->info.init_meta_info(s, &s->has_bad_meta, s->prot_flags);
 
   return handler;
 } /* get stream handler */

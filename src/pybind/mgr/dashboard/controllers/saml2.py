@@ -69,7 +69,10 @@ class Saml2(BaseController, ControllerAuthMixin):
 
             token = JwtManager.gen_token(username)
             JwtManager.set_user(JwtManager.decode_token(token))
-            token = token.decode('utf-8')
+
+            # For backward-compatibility: PyJWT versions < 2.0.0 return bytes.
+            token = token.decode('utf-8') if isinstance(token, bytes) else token
+
             self._set_token_cookie(url_prefix, token)
             raise cherrypy.HTTPRedirect("{}/#/login?access_token={}".format(url_prefix, token))
 

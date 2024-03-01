@@ -20,9 +20,9 @@
 #include "svc_meta_be.h"
 
 #include "rgw_service.h"
+#include "rgw_sal_fwd.h"
 
 class RGWUserBuckets;
-class RGWGetUserStats_CB;
 
 class RGWSI_User : public RGWServiceInstance
 {
@@ -122,6 +122,7 @@ public:
                          optional_yield y) = 0;  /* last time a stats update was done */
 
   virtual int read_stats_async(const DoutPrefixProvider *dpp,
-			       const rgw_user& user, RGWGetUserStats_CB *cb) = 0;
+			       const rgw_user& user,
+			       boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb) = 0;
 };
 

@@ -68,12 +68,14 @@ class PG_SendMessageOnConn: public Context {
 class PG_RecoveryQueueAsync : public Context {
   PGBackend::Listener *pg;
   unique_ptr<GenContext<ThreadPool::TPHandle&>> c;
+  uint64_t cost;
   public:
   PG_RecoveryQueueAsync(
     PGBackend::Listener *pg,
-    GenContext<ThreadPool::TPHandle&> *c) : pg(pg), c(c) {}
+    GenContext<ThreadPool::TPHandle&> *c,
+    uint64_t cost) : pg(pg), c(c), cost(cost) {}
   void finish(int) override {
-    pg->schedule_recovery_work(c.release());
+    pg->schedule_recovery_work(c.release(), cost);
   }
 };
 }
@@ -273,7 +275,7 @@ int ReplicatedBackend::objects_read_sync(
 
 int ReplicatedBackend::objects_readv_sync(
   const hobject_t &hoid,
-  map<uint64_t, uint64_t>&& m,
+  map<uint64_t, uint64_t>& m,
   uint32_t op_flags,
   bufferlist *bl)
 {
@@ -817,8 +819,11 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
   ReplicatedBackend *bc;
   list<ReplicatedBackend::pull_complete_info> to_continue;
   int priority;
-  C_ReplicatedBackend_OnPullComplete(ReplicatedBackend *bc, int priority)
-    : bc(bc), priority(priority) {}
+  C_ReplicatedBackend_OnPullComplete(
+    ReplicatedBackend *bc,
+    int priority,
+    list<ReplicatedBackend::pull_complete_info> &&to_continue)
+    : bc(bc), to_continue(std::move(to_continue)), priority(priority) {}
 
   void finish(ThreadPool::TPHandle &handle) override {
     ReplicatedBackend::RPGHandle *h = bc->_open_recovery_op();
@@ -840,6 +845,15 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
       handle.reset_tp_timeout();
     }
     bc->run_recovery_op(h, priority);
+  }
+
+  /// Estimate total data reads required to perform pushes
+  uint64_t estimate_push_costs() const {
+    uint64_t cost = 0;
+    for (const auto &i: to_continue) {
+      cost += i.stat.num_bytes_recovered;
+    }
+    return cost;
   }
 };
 
@@ -870,12 +884,13 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     C_ReplicatedBackend_OnPullComplete *c =
       new C_ReplicatedBackend_OnPullComplete(
 	this,
-	m->get_priority());
-    c->to_continue.swap(to_continue);
+	m->get_priority(),
+	std::move(to_continue));
     t.register_on_complete(
       new PG_RecoveryQueueAsync(
 	get_parent(),
-	get_parent()->bless_unlocked_gencontext(c)));
+	get_parent()->bless_unlocked_gencontext(c),
+        std::max<uint64_t>(1, c->estimate_push_costs())));
   }
   replies.erase(replies.end() - 1);
 

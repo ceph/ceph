@@ -269,6 +269,9 @@ def remove_group(fs, vol_spec, groupname):
     except cephfs.Error as e:
         if e.args[0] == errno.ENOENT:
             raise VolumeException(-errno.ENOENT, "subvolume group '{0}' does not exist".format(groupname))
+        elif e.args[0] == errno.ENOTEMPTY:
+            raise VolumeException(-errno.ENOTEMPTY, f"subvolume group {groupname} contains subvolume(s) "
+                                  "or retained snapshots of deleted subvolume(s)")
         raise VolumeException(-e.args[0], e.args[1])
 
 

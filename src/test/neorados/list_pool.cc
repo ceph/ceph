@@ -84,8 +84,8 @@ bs::error_code noisy_list(R::RADOS& r, int64_t p)
   std::cout << "begin = " << b.to_str() << std::endl;
   std::cout << "end = " << e.to_str() << std::endl;
   try {
-    auto [v, next] = r.enumerate_objects(p, b, e, 1000, {}, ca::use_blocked,
-					 R::all_nspaces);
+    auto [v, next] = r.enumerate_objects({p, R::all_nspaces}, b, e, 1000, {},
+					 ca::use_blocked);
 
     std::cout << "Got " << v.size() << " entries." << std::endl;
     std::cout << "next cursor = " << next.to_str() << std::endl;

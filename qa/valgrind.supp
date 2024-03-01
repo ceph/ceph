@@ -184,6 +184,21 @@
    fun:*GetStackTrace*
 }
 {
+   tcmalloc: param points to uninit bytes under call_init (centos9) or call_init.part.0 (jammy)
+   Memcheck:Param
+   write(buf)
+   fun:syscall
+   obj:*libunwind*
+   ...
+   obj:*libunwind*
+   fun:_ULx86_64_step
+   obj:*tcmalloc*
+   obj:*tcmalloc*
+   obj:*tcmalloc*
+   obj:*tcmalloc*
+   fun:call_init*
+}
+{
 	tcmalloc: string
 	Memcheck:Leak
 	...
@@ -196,20 +211,6 @@
 	Memcheck:Leak
 	...
 	fun:*set_flush_on_exit*
-	...
-}
-{
-	libleveldb: ignore all static leveldb leaks
-	Memcheck:Leak
-	...
-	fun:*leveldb*
-	...
-}
-{
-	libleveldb: ignore all dynamic libleveldb leaks
-	Memcheck:Leak
-	...
-	obj:*libleveldb.so*
 	...
 }
 {
@@ -662,29 +663,26 @@
 }
 
 # "Conditional jump or move depends on uninitialised value(s)" in OpenSSL
-# while using aes-128-gcm with AES-NI enabled. Not observed while running
-# with `OPENSSL_ia32cap="~0x200000200000000"`.
+# https://github.com/openssl/openssl/issues/19719
 {
-   uninitialised gcm.Xi in aes-128-gcm with AES-NI for msgr, part 1
+  uninitialized value in gcm_cipher_internal
+  Memcheck:Cond
+  ...
+  fun:gcm_cipher_internal
+  ...
+  fun:ossl_gcm_stream_final
+  fun:EVP_DecryptFinal_ex
+  ...
+}
+{
+   tracker #62141 : valgrind: UninitCondition under __run_exit_handlers
    Memcheck:Cond
-   ...
-   fun:EVP_DecryptFinal_ex
-   fun:_ZN4ceph6crypto6onwire25AES128GCM_OnWireRxHandler34authenticated_decrypt_update_finalEONS_6buffer7v*4listEj
-   fun:_ZN10ProtocolV231handle_read_frame_epilogue_mainEOSt10unique_ptrIN4ceph6buffer7v*8ptr_nodeENS4_8disposerEEi
-   fun:_ZN10ProtocolV216run_continuationER2CtIS_E
-   ...
-   fun:_ZN15AsyncConnection7processEv
-   fun:_ZN11EventCenter14process_eventsEjPNSt6chrono8durationImSt5ratioILl1ELl1000000000EEEE
-   ...
+   fun:free
+   fun:free_res
+   fun:__libc_freeres
+   fun:_vgnU_freeres
+   fun:__run_exit_handlers
+   fun:exit
+   fun:(below main)
 }
 
-{
-   uninitialised gcm.Xi in aes-128-gcm with AES-NI for msgr, part 2
-   Memcheck:Cond
-   fun:_ZN4ceph6crypto6onwire25AES128GCM_OnWireRxHandler34authenticated_decrypt_update_finalEONS_6buffer7v*4listEj
-   fun:_ZN10ProtocolV231handle_read_frame_epilogue_mainEOSt10unique_ptrIN4ceph6buffer7v*8ptr_nodeENS4_8disposerEEi
-   fun:_ZN10ProtocolV216run_continuationER2CtIS_E
-   ...
-   fun:_ZN11EventCenter14process_eventsEjPNSt6chrono8durationImSt5ratioILl1ELl1000000000EEEE
-   ...
-}

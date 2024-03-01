@@ -81,7 +81,10 @@ backend backend
     mode        tcp
     balance     source
     hash-type   consistent
+{% if default_server_opts %}
+    default-server {{ default_server_opts|join(" ") }}
+{% endif %}
     {% for server in servers %}
-    server {{ server.name }} {{ server.ip }}:{{ server.port }}
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check
     {% endfor %}
 {% endif %}

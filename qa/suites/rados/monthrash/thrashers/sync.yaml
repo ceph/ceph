@@ -3,6 +3,7 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       mon:
         paxos min: 10

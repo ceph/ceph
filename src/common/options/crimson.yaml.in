@@ -6,7 +6,7 @@ options:
   type: uint
   level: advanced
   desc: Number of obcs to cache
-  default: 10
+  default: 512
 - name: crimson_osd_scheduler_concurrency
   type: uint
   level: advanced
@@ -19,17 +19,18 @@ options:
   default: 6
   flags:
   - startup
-- name: crimson_seastar_smp
-  type: uint
+- name: crimson_seastar_cpu_cores
+  type: str
   level: advanced
-  desc: Number of seastar reactor threads to use for the osd
-  default: 1
+  desc: CPU cores on which seastar reactor threads will run in cpuset(7) format, smp::count is deduced from this option
   flags:
   - startup
 - name: crimson_alien_thread_cpu_cores
   type: str
   level: advanced
   desc: CPU cores on which alienstore threads will run in cpuset(7) format
+  flags:
+  - startup
 - name: seastore_segment_size
   type: size
   desc: Segment size to use for SegmentManager
@@ -117,3 +118,8 @@ options:
   level: advanced
   desc: Begin fast eviction when the used ratio of the main tier reaches this value.
   default: 0.7
+- name: seastore_data_delta_based_overwrite
+  type: size
+  level: dev
+  desc: overwrite the existing data block based on delta if the original size is smaller than the value, otherwise do overwrite based on remapping, set to 0 to enforce the remap-based overwrite.
+  default: 0

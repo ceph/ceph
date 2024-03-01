@@ -33,19 +33,26 @@ Summarized build process
 4. Packages are pushed to chacra.ceph.com.
 5. Packages are pulled from chacra.ceph.com to the Signer VM.
 6. Packages are signed.
-7. Packages are pushed to download.ceph.com.
-8. Release containers are built and pushed to quay.io.
+7. Packages are pushed to a prerelease area on download.ceph.com.
+8. Prerelease containers are built and pushed to quay.ceph.io.
+9. Final test and validation are done on prerelease packages and containers.
+10. Prerelease packages and containers are promoted to official releases on
+    download.ceph.com and quay.io.
 
 Hotfix Release Process Deviation
 --------------------------------
 
 A hotfix release has a couple differences.
 
-1. Check out the most recent tag. For example, if we're releasing a hotfix on top of 17.2.3, ``git checkout -f -B quincy-release origin/v17.2.3``
-2. ``git cherry-pick -x`` the necessary hotfix commits
-3. ``git push -f origin quincy-release``
-4. Notify the "Build Lead" to start the build.
-5. The "Build Lead" should set ``RELEASE_TYPE=HOTFIX`` instead of ``STABLE``.
+1. Check out the most recent tag. For example, if we're releasing a hotfix on top of 17.2.3, ``git checkout -f -B quincy-release tags/v17.2.3``.
+2. ``git cherry-pick -x`` the necessary hotfix commits (Note: only "cherry-pick" must be used).
+3. ``git push -f origin quincy-release``.
+4. Verify the commits in the ``$release-release`` branch:
+
+   1. To check against the previous point release (if we are making 17.2.4, this would be 17.2.3), run ``git log --pretty=oneline --no-merges tags/v17.2.3..origin/quincy-release``. Verify that the commits produced are exactly what we want in the next point release.
+   2. To check against the RC in the "ceph-ci" repo (``ceph-ci`` in this example), run ``git log --pretty=oneline --no-merges origin/quincy-release...ceph-ci/quincy-release``. There should be no output produced if the ``$release-release`` branch in the ceph repo is identical to the RC in ``ceph-ci``. Note the use of git `triple dot notation <https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection>`_, which shows any commit discrepencies between both references.
+5. Notify the "Build Lead" to start the build.
+6. The "Build Lead" should set ``RELEASE_TYPE=HOTFIX`` instead of ``STABLE``.
 
 Security Release Process Deviation
 ----------------------------------
@@ -95,17 +102,19 @@ We'll use a stable/regular 15.2.17 release of Octopus as an example throughout t
     RELEASE_TYPE=STABLE
     ARCHS=x86_64 arm64
 
+NOTE: if for some reason the build has to be restarted (for example if one distro failed) then the ``TAG`` option has to be unchecked.
+
 4. Use https://docs.ceph.com/en/latest/start/os-recommendations/?highlight=debian#platforms to determine the ``DISTROS`` parameter.  For example,
 
-    +-------------------+-------------------------------------------+
-    | Release           | Distro Codemap                            |
-    +===================+===========================================+
-    | octopus (15.X.X)  | ``focal bionic centos7 centos8 buster``   |
-    +-------------------+-------------------------------------------+
-    | pacific (16.X.X)  | ``focal bionic centos8 buster bullseye``  |
-    +-------------------+-------------------------------------------+
-    | quincy (17.X.X)   | ``focal centos8 centos9 bullseye``        |
-    +-------------------+-------------------------------------------+
+    +-------------------+--------------------------------------------------+
+    | Release           | Distro Codemap                                   |
+    +===================+==================================================+
+    | pacific (16.X.X)  | ``focal bionic centos8 buster bullseye``         |
+    +-------------------+--------------------------------------------------+
+    | quincy (17.X.X)   | ``focal centos8 centos9 bullseye``               |
+    +-------------------+--------------------------------------------------+
+    | reef (18.X.X)     | ``jammy focal centos8 centos9 windows bookworm`` |
+    +-------------------+--------------------------------------------------+
 
 5. Click ``Build``.
 
@@ -118,7 +127,7 @@ Packages take hours to build. Use those hours to create the Release Notes and An
 2. ceph.io Release Notes (e.g., `v15.2.17's ceph.io.git (www.ceph.io) PR <https://github.com/ceph/ceph.io/pull/427>`_)
 3. E-mail announcement
 
-See `the Ceph Tracker wiki page that explains how to write the release notes <https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_write_the_release_notes>`_. 
+See `the Ceph Tracker wiki page that explains how to write the release notes <https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_write_the_release_notes>`_.
 
 4. Signing and Publishing the Build
 ===================================
@@ -131,9 +140,9 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
       ssh ubuntu@signer.front.sepia.ceph.com
       sync-pull ceph [pacific|quincy|etc] <sha1>
- 
+
    Example::
-    
+
       $ sync-pull ceph octopus 8a82819d84cf884bd39c17e3236e0632ac146dc4
       sync for: ceph octopus
       ********************************************
@@ -149,7 +158,7 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
       db/contents.cache.db
               507.90K 100%    1.95MB/s    0:00:00 (xfr#2, to-chk=462/467)
       db/packages.db
-      
+
       etc...
 
 #. Sign the DEBs:
@@ -172,7 +181,7 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
       --> signing: /opt/repos/ceph/octopus-15.2.17/debian/jessie/dists/focal/Release
       --> Running command: gpg --batch --yes --armor --detach-sig --output Release.gpg Release
       --> Running command: gpg --batch --yes --clearsign --output InRelease Release
-      
+
       etc...
 
 #. Sign the RPMs:
@@ -182,7 +191,7 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
       sign-rpms octopus
 
    Example::
-   
+
       $ sign-rpms octopus
       Checking packages in: /opt/repos/ceph/octopus-15.2.17/centos/7
       signing:  /opt/repos/ceph/octopus-15.2.17/centos/7/SRPMS/ceph-release-1-1.el7.src.rpm
@@ -190,7 +199,7 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
       signing:  /opt/repos/ceph/octopus-15.2.17/centos/7/SRPMS/ceph-15.2.17-0.el7.src.rpm
       /opt/repos/ceph/octopus-15.2.17/centos/7/SRPMS/ceph-15.2.17-0.el7.src.rpm:
       signing:  /opt/repos/ceph/octopus-15.2.17/centos/7/noarch/ceph-mgr-modules-core-15.2.17-0.el7.noarch.rpm
-   
+
       etc...
 
 5. Publish the packages to download.ceph.com:
@@ -199,13 +208,27 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
       sync-push octopus
 
+This leaves the packages in a password-protected prerelease area
+at https://download.ceph.com/prerelease.  Verify them from there.  
+When done and ready for release, mv the directories to the parent
+directory (that is, "mv <whatever you're promoting> ..".  
+
+
 5. Build Containers
 ===================
 
-Start the following two jobs:
+Prerelease containers (x86_64 only) are built by 
+https://2.jenkins.ceph.com/job/ceph-container-prerelease-build; run it 
+with appropriate parameters.  Test container images will appear on
+quay.ceph.io in the ceph/prerelease repo, built from the prerelease area
+on download.ceph.com.  When satisfied with them, and after you have promoted
+the prerelease packages to released status as above, start the following two jobs:
 
 #. https://2.jenkins.ceph.com/job/ceph-container-build-ceph-base-push-imgs/
 #. https://2.jenkins.ceph.com/job/ceph-container-build-ceph-base-push-imgs-arm64/
+
+which will rebuild and publish both architectures using the released packages
+on download.ceph.com (into a multiarchitecture container image).
 
 6. Announce the Release
 =======================
@@ -215,7 +238,7 @@ Version Commit PR
 
 The `ceph-tag Jenkins job <https://jenkins.ceph.com/job/ceph-tag>`_ creates a Pull Request in ceph.git that targets the release branch.
 
-If this was a regular release (not a hotfix release or a security release), the only commit in that Pull Request should be the version commit.  For example, see `v15.2.17's version commit PR <https://github.com/ceph/ceph/pull/47520>`_. 
+If this was a regular release (not a hotfix release or a security release), the only commit in that Pull Request should be the version commit.  For example, see `v15.2.17's version commit PR <https://github.com/ceph/ceph/pull/47520>`_.
 
 Request a review and then merge the Pull Request.
 

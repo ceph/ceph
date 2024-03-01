@@ -10,6 +10,7 @@
 
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
+#include "common/Finisher.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/utime_fmt.h"
@@ -19,8 +20,9 @@
 #include "osd/PG.h"
 #include "osd/osd_types.h"
 #include "osd/osd_types_fmt.h"
-#include "osd/scrubber/osd_scrub_sched.h"
 #include "osd/scrubber_common.h"
+#include "osd/scrubber/pg_scrubber.h"
+#include "osd/scrubber/osd_scrub_sched.h"
 
 int main(int argc, char** argv)
 {
@@ -42,8 +44,13 @@ int main(int argc, char** argv)
 }
 
 using schedule_result_t = Scrub::schedule_result_t;
-using ScrubJobRef = ScrubQueue::ScrubJobRef;
-using qu_state_t = ScrubQueue::qu_state_t;
+using ScrubJobRef = Scrub::ScrubJobRef;
+using qu_state_t = Scrub::qu_state_t;
+using scrub_schedule_t = Scrub::scrub_schedule_t;
+using ScrubQContainer = Scrub::ScrubQContainer;
+using sched_params_t = Scrub::sched_params_t;
+
+
 
 /// enabling access into ScrubQueue internals
 class ScrubSchedTestWrapper : public ScrubQueue {
@@ -55,12 +62,12 @@ class ScrubSchedTestWrapper : public ScrubQueue {
   void rm_unregistered_jobs()
   {
     ScrubQueue::rm_unregistered_jobs(to_scrub);
-    ScrubQueue::rm_unregistered_jobs(penalized);
   }
 
   ScrubQContainer collect_ripe_jobs()
   {
-    return ScrubQueue::collect_ripe_jobs(to_scrub, time_now());
+    return ScrubQueue::collect_ripe_jobs(
+	to_scrub, Scrub::OSDRestrictions{}, time_now());
   }
 
   /**
@@ -82,6 +89,46 @@ class ScrubSchedTestWrapper : public ScrubQueue {
     return m_time_for_testing.value_or(ceph_clock_now());
   }
 
+  /**
+  * a temporary implementation of PgScrubber::determine_scrub_time(). That
+  * function is to be removed in the near future, and modifying the
+  * test to use the actual PgScrubber::determine_scrub_time() would create
+  * an unneeded coupling between objects that are due for separation.
+  */
+  sched_params_t determine_scrub_time(
+      const requested_scrub_t& request_flags,
+      const pg_info_t& pg_info,
+      const pool_opts_t& pool_conf)
+  {
+    sched_params_t res;
+
+    if (request_flags.must_scrub || request_flags.need_auto) {
+
+      // Set the smallest time that isn't utime_t()
+      res.proposed_time = PgScrubber::scrub_must_stamp();
+      res.is_must = Scrub::must_scrub_t::mandatory;
+      // we do not need the interval data in this case
+
+    } else if (pg_info.stats.stats_invalid && conf()->osd_scrub_invalid_stats) {
+      res.proposed_time = time_now();
+      res.is_must = Scrub::must_scrub_t::mandatory;
+
+    } else {
+      res.proposed_time = pg_info.history.last_scrub_stamp;
+      res.min_interval =
+	  pool_conf.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
+      res.max_interval =
+	  pool_conf.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
+    }
+
+    std::cout << fmt::format(
+	"suggested: {:s} hist: {:s} v:{}/{} must:{} pool-min:{} {}\n",
+	res.proposed_time, pg_info.history.last_scrub_stamp,
+	(bool)pg_info.stats.stats_invalid, conf()->osd_scrub_invalid_stats,
+	(res.is_must == Scrub::must_scrub_t::mandatory ? "y" : "n"),
+	res.min_interval, request_flags);
+    return res;
+  }
   ~ScrubSchedTestWrapper() override = default;
 };
 
@@ -96,25 +143,28 @@ class FakeOsd : public Scrub::ScrubSchedListener {
 
   int get_nodeid() const final { return m_osd_num; }
 
-  schedule_result_t initiate_a_scrub(spg_t pgid,
-				     bool allow_requested_repair_only) final
-  {
-    std::ignore = allow_requested_repair_only;
-    auto res = m_next_response.find(pgid);
-    if (res == m_next_response.end()) {
-      return schedule_result_t::no_such_pg;
-    }
-    return m_next_response[pgid];
-  }
-
   void set_initiation_response(spg_t pgid, schedule_result_t result)
   {
     m_next_response[pgid] = result;
   }
 
+  std::optional<PGLockWrapper> get_locked_pg(spg_t pgid)
+  {
+    std::ignore = pgid;
+    return std::nullopt;
+  }
+
+  AsyncReserver<spg_t, Finisher>& get_scrub_reserver() final
+  {
+    return m_scrub_reserver;
+  }
+
  private:
   int m_osd_num;
   std::map<spg_t, schedule_result_t> m_next_response;
+  Finisher reserver_finisher{g_ceph_context};
+  AsyncReserver<spg_t, Finisher> m_scrub_reserver{
+      g_ceph_context, &reserver_finisher, 1};
 };
 
 
@@ -128,7 +178,7 @@ struct sjob_config_t {
   std::optional<double> pool_conf_max;
   bool is_must;
   bool is_need_auto;
-  ScrubQueue::scrub_schedule_t initial_schedule;
+  scrub_schedule_t initial_schedule;
 };
 
 
@@ -141,7 +191,7 @@ struct sjob_dynamic_data_t {
   pg_info_t mocked_pg_info;
   pool_opts_t mocked_pool_opts;
   requested_scrub_t request_flags;
-  ScrubQueue::ScrubJobRef job;
+  ScrubJobRef job;
 };
 
 class TestScrubSched : public ::testing::Test {
@@ -197,7 +247,7 @@ class TestScrubSched : public ::testing::Test {
     dyn_data.request_flags.need_auto = sjob_data.is_need_auto;
 
     // create the scrub job
-    dyn_data.job = ceph::make_ref<ScrubQueue::ScrubJob>(g_ceph_context,
+    dyn_data.job = ceph::make_ref<Scrub::ScrubJob>(g_ceph_context,
 							sjob_data.spg,
 							m_osd_num);
     m_scrub_jobs.push_back(dyn_data);
@@ -252,7 +302,7 @@ class TestScrubSched : public ::testing::Test {
   }
 
   void debug_print_jobs(std::string hdr,
-			const ScrubQueue::ScrubQContainer& jobs)
+			const ScrubQContainer& jobs)
   {
     std::cout << fmt::format("{}: time now {}", hdr, m_sched->time_now())
 	      << std::endl;
@@ -287,7 +337,7 @@ std::vector<sjob_config_t> sjob_configs = {
     std::nullopt,		    // max scrub delay in pool config
     false,			    // must-scrub
     false,			    // need-auto
-    ScrubQueue::scrub_schedule_t{}  // initial schedule
+    scrub_schedule_t{}  // initial schedule
   },
 
   {spg_t{pg_t{4, 1}},
@@ -297,7 +347,7 @@ std::vector<sjob_config_t> sjob_configs = {
    std::nullopt,
    true,
    false,
-   ScrubQueue::scrub_schedule_t{}},
+   scrub_schedule_t{}},
 
   {spg_t{pg_t{7, 1}},
    true,
@@ -306,7 +356,7 @@ std::vector<sjob_config_t> sjob_configs = {
    std::nullopt,
    false,
    false,
-   ScrubQueue::scrub_schedule_t{}},
+   scrub_schedule_t{}},
 
   {spg_t{pg_t{5, 1}},
    true,
@@ -315,7 +365,7 @@ std::vector<sjob_config_t> sjob_configs = {
    std::nullopt,
    false,
    false,
-   ScrubQueue::scrub_schedule_t{}}};
+   scrub_schedule_t{}}};
 
 }  // anonymous namespace
 

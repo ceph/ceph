@@ -169,6 +169,8 @@ bufferlist RGWPutObj_Torrent::bencode_torrent(std::string_view filename) const
 
   // Only encode create_date and sha1 info. Other fields will be added during
   // GetObjectTorrent by rgw_read_torrent_file()
+  // issue tracked here: https://tracker.ceph.com/issues/61160
+  // coverity[store_truncates_time_t:SUPPRESS]
   bencode(CREATION_DATE, std::time(nullptr), bl);
 
   bencode_key(INFO_PIECES, bl);

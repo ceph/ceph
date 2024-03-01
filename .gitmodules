@@ -59,6 +59,9 @@
 [submodule "s3select"]
 	path = src/s3select
 	url = https://github.com/ceph/s3select.git
+[submodule "src/cpp_redis"]
+	path = src/cpp_redis
+	url = https://github.com/ceph/cpp_redis.git
 [submodule "src/libkmip"]
 	path = src/libkmip
 	url = https://github.com/ceph/libkmip
@@ -72,3 +75,9 @@
 [submodule "src/jaegertracing/opentelemetry-cpp"]
 	path = src/jaegertracing/opentelemetry-cpp
 	url = https://github.com/open-telemetry/opentelemetry-cpp.git
+[submodule "src/qatlib"]
+	path = src/qatlib
+	url = https://github.com/intel/qatlib.git
+[submodule "src/qatzip"]
+	path = src/qatzip
+	url = https://github.com/intel/qatzip.git

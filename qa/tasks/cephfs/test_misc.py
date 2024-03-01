@@ -96,16 +96,15 @@ class TestMisc(CephFSTestCase):
 
         self.fs.fail()
 
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'rm', self.fs.name,
-                                            '--yes-i-really-mean-it')
+        self.run_ceph_cmd('fs', 'rm', self.fs.name, '--yes-i-really-mean-it')
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
-                                            self.fs.metadata_pool_name,
-                                            self.fs.metadata_pool_name,
-                                            '--yes-i-really-really-mean-it')
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                            self.fs.metadata_pool_name,
-                                            '--pg_num_min', str(self.fs.pg_num_min))
+        self.run_ceph_cmd('osd', 'pool', 'delete',
+                          self.fs.metadata_pool_name,
+                          self.fs.metadata_pool_name,
+                           '--yes-i-really-really-mean-it')
+        self.run_ceph_cmd('osd', 'pool', 'create',
+                          self.fs.metadata_pool_name,
+                          '--pg_num_min', str(self.fs.pg_num_min))
 
         # insert a garbage object
         self.fs.radosm(["put", "foo", "-"], stdin=StringIO("bar"))
@@ -119,34 +118,34 @@ class TestMisc(CephFSTestCase):
         self.wait_until_true(lambda: get_pool_df(self.fs, self.fs.metadata_pool_name), timeout=30)
 
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
-                                                self.fs.metadata_pool_name,
-                                                data_pool_name)
+            self.run_ceph_cmd('fs', 'new', self.fs.name,
+                              self.fs.metadata_pool_name,
+                              data_pool_name)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
             raise AssertionError("Expected EINVAL")
 
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
-                                            self.fs.metadata_pool_name,
-                                            data_pool_name, "--force")
+        self.run_ceph_cmd('fs', 'new', self.fs.name,
+                          self.fs.metadata_pool_name,
+                          data_pool_name, "--force")
 
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'fail', self.fs.name)
+        self.run_ceph_cmd('fs', 'fail', self.fs.name)
 
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'rm', self.fs.name,
-                                            '--yes-i-really-mean-it')
+        self.run_ceph_cmd('fs', 'rm', self.fs.name,
+                          '--yes-i-really-mean-it')
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
-                                            self.fs.metadata_pool_name,
-                                            self.fs.metadata_pool_name,
-                                            '--yes-i-really-really-mean-it')
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                            self.fs.metadata_pool_name,
-                                            '--pg_num_min', str(self.fs.pg_num_min))
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
-                                            self.fs.metadata_pool_name,
-                                            data_pool_name,
-                                            '--allow_dangerous_metadata_overlay')
+        self.run_ceph_cmd('osd', 'pool', 'delete',
+                          self.fs.metadata_pool_name,
+                          self.fs.metadata_pool_name,
+                          '--yes-i-really-really-mean-it')
+        self.run_ceph_cmd('osd', 'pool', 'create',
+                          self.fs.metadata_pool_name,
+                          '--pg_num_min', str(self.fs.pg_num_min))
+        self.run_ceph_cmd('fs', 'new', self.fs.name,
+                          self.fs.metadata_pool_name,
+                          data_pool_name,
+                          '--allow_dangerous_metadata_overlay')
 
     def test_cap_revoke_nonresponder(self):
         """
@@ -199,9 +198,8 @@ class TestMisc(CephFSTestCase):
         pool_name = self.fs.get_data_pool_name()
         raw_df = self.fs.get_pool_df(pool_name)
         raw_avail = float(raw_df["max_avail"])
-        out = self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'get',
-                                                  pool_name, 'size',
-                                                  '-f', 'json-pretty')
+        out = self.get_ceph_cmd_stdout('osd', 'pool', 'get', pool_name,
+                                       'size', '-f', 'json-pretty')
         _ = json.loads(out)
 
         proc = self.mount_a.run_shell(['df', '.'])
@@ -253,9 +251,8 @@ class TestMisc(CephFSTestCase):
         self.fs.set_allow_new_snaps(False)
         self.fs.set_allow_standby_replay(True)
 
-        lsflags = json.loads(self.fs.mon_manager.raw_cluster_cmd('fs', 'lsflags',
-                                                                 self.fs.name,
-                                                                 "--format=json-pretty"))
+        lsflags = json.loads(self.get_ceph_cmd_stdout(
+            'fs', 'lsflags', self.fs.name, "--format=json-pretty"))
         self.assertEqual(lsflags["joinable"], False)
         self.assertEqual(lsflags["allow_snaps"], False)
         self.assertEqual(lsflags["allow_multimds_snaps"], True)
@@ -279,30 +276,30 @@ class TestMisc(CephFSTestCase):
                 self.mount_a.run_shell(["mkdir", os.path.join(dir_path, f"{i}_{j}")])
             start = time.time()
             if file_sync:
-                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript])
+                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript], timeout=4)
             else:
-                self.mount_a.run_shell(["sync"])
+                self.mount_a.run_shell(["sync"], timeout=4)
+            # the real duration should be less than the rough one
             duration = time.time() - start
-            log.info(f"sync mkdir i = {i}, duration = {duration}")
-            self.assertLess(duration, 4)
+            log.info(f"sync mkdir i = {i}, rough duration = {duration}")
 
             for j in range(5):
                 self.mount_a.run_shell(["rm", "-rf", os.path.join(dir_path, f"{i}_{j}")])
             start = time.time()
             if file_sync:
-                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript])
+                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript], timeout=4)
             else:
-                self.mount_a.run_shell(["sync"])
+                self.mount_a.run_shell(["sync"], timeout=4)
+            # the real duration should be less than the rough one
             duration = time.time() - start
-            log.info(f"sync rmdir i = {i}, duration = {duration}")
-            self.assertLess(duration, 4)
+            log.info(f"sync rmdir i = {i}, rough duration = {duration}")
 
         self.mount_a.run_shell(["rm", "-rf", dir_path])
 
     def test_filesystem_sync_stuck_for_around_5s(self):
         """
-        To check whether the fsync will be stuck to wait for the mdlog to be
-        flushed for at most 5 seconds.
+        To check whether the filesystem sync will be stuck to wait for the
+        mdlog to be flushed for at most 5 seconds.
         """
 
         dir_path = "filesystem_sync_do_not_wait_mdlog_testdir"
@@ -310,8 +307,8 @@ class TestMisc(CephFSTestCase):
 
     def test_file_sync_stuck_for_around_5s(self):
         """
-        To check whether the filesystem sync will be stuck to wait for the
-        mdlog to be flushed for at most 5 seconds.
+        To check whether the fsync will be stuck to wait for the mdlog to
+        be flushed for at most 5 seconds.
         """
 
         dir_path = "file_sync_do_not_wait_mdlog_testdir"
@@ -425,7 +422,7 @@ class TestMisc(CephFSTestCase):
         self.fs.mds_asok(['config', 'set', 'debug_mds', '1/10'])
         self.fs.mds_asok(['config', 'set', 'mds_extraordinary_events_dump_interval', '1'])
         try:
-            mons = json.loads(self.fs.mon_manager.raw_cluster_cmd('mon', 'dump', '-f', 'json'))['mons']
+            mons = json.loads(self.get_ceph_cmd_stdout('mon', 'dump', '-f', 'json'))['mons']
         except:
             self.assertTrue(False, "Error fetching monitors")
 
@@ -468,7 +465,7 @@ class TestMisc(CephFSTestCase):
         self.fs.mds_asok(['config', 'set', 'mds_heartbeat_grace', '1'])
         self.fs.mds_asok(['config', 'set', 'mds_extraordinary_events_dump_interval', '1'])
         try:
-            mons = json.loads(self.fs.mon_manager.raw_cluster_cmd('mon', 'dump', '-f', 'json'))['mons']
+            mons = json.loads(self.get_ceph_cmd_stdout('mon', 'dump', '-f', 'json'))['mons']
         except:
             self.assertTrue(False, "Error fetching monitors")
 
@@ -504,6 +501,29 @@ class TestMisc(CephFSTestCase):
                 return
         self.assertTrue(False, "Failed to dump in-memory logs during missed internal heartbeat")
 
+    def _session_client_ls(self, cmd):
+        mount_a_client_id = self.mount_a.get_global_id()
+        info = self.fs.rank_asok(cmd)
+        mount_a_mountpoint = self.mount_a.mountpoint
+        mount_b_mountpoint = self.mount_b.mountpoint
+        self.assertIsNotNone(info)
+        for i in range(0, len(info)):
+            self.assertIn(info[i]["client_metadata"]["mount_point"], 
+                             [mount_a_mountpoint, mount_b_mountpoint])        
+        info = self.fs.rank_asok(cmd + [f"id={mount_a_client_id}"])
+        self.assertEqual(len(info), 1)
+        self.assertEqual(info[0]["id"], mount_a_client_id)
+        self.assertEqual(info[0]["client_metadata"]["mount_point"], mount_a_mountpoint)
+        info = self.fs.rank_asok(cmd + ['--cap_dump'])
+        for i in range(0, len(info)):
+            self.assertIn("caps", info[i])
+
+    def test_session_ls(self):
+        self._session_client_ls(['session', 'ls'])
+
+    def test_client_ls(self):
+        self._session_client_ls(['client', 'ls'])
+        
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
@@ -593,3 +613,46 @@ class TestCacheDrop(CephFSTestCase):
         # particular operation causing this is journal flush which causes the
         # MDS to wait wait for cap revoke.
         self.mount_a.resume_netns()
+
+class TestSkipReplayInoTable(CephFSTestCase):
+    MDSS_REQUIRED = 1
+    CLIENTS_REQUIRED = 1
+
+    def test_alloc_cinode_assert(self):
+        """
+        Test alloc CInode assert.
+
+        See: https://tracker.ceph.com/issues/52280
+        """
+
+        # Create a directory and the mds will journal this and then crash
+        self.mount_a.run_shell(["rm", "-rf", "test_alloc_ino"])
+        self.mount_a.run_shell(["mkdir", "test_alloc_ino"])
+
+        status = self.fs.status()
+        rank0 = self.fs.get_rank(rank=0, status=status)
+
+        self.fs.mds_asok(['config', 'set', 'mds_kill_skip_replaying_inotable', "true"])
+        # This will make the MDS crash, since we only have one MDS in the
+        # cluster and without the "wait=False" it will stuck here forever.
+        self.mount_a.run_shell(["mkdir", "test_alloc_ino/dir1"], wait=False)
+
+        # sleep 10 seconds to make sure the journal logs are flushed and
+        # the mds crashes
+        time.sleep(10)
+
+        # Now set the mds config to skip replaying the inotable
+        self.fs.set_ceph_conf('mds', 'mds_inject_skip_replaying_inotable', True)
+        self.fs.set_ceph_conf('mds', 'mds_wipe_sessions', True)
+
+        self.fs.mds_restart()
+        # sleep 5 seconds to make sure the mds tell command won't stuck
+        time.sleep(5)
+        self.fs.wait_for_daemons()
+
+        self.delete_mds_coredump(rank0['name']);
+
+        self.mount_a.run_shell(["mkdir", "test_alloc_ino/dir2"])
+
+        ls_out = set(self.mount_a.ls("test_alloc_ino/"))
+        self.assertEqual(ls_out, set({"dir1", "dir2"}))

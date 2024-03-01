@@ -13,6 +13,7 @@ from collections import namedtuple
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
+from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from rbd import RBD
 
 from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable
@@ -327,6 +328,7 @@ class Metric(object):
 
     def str_expfmt(self) -> str:
 
+        # Must be kept in sync with promethize() in src/exporter/util.cc
         def promethize(path: str) -> str:
             ''' replace illegal metric name characters '''
             result = re.sub(r'[./\s]|::', '_', path).replace('+', '_plus')
@@ -547,7 +549,7 @@ class MetricCollectionThread(threading.Thread):
         self.event.set()
 
 
-class Module(MgrModule):
+class Module(MgrModule, OrchestratorClientMixin):
     MODULE_OPTIONS = [
         Option(
             'server_addr',
@@ -635,9 +637,9 @@ class Module(MgrModule):
                 'read_bytes': {'type': self.PERFCOUNTER_COUNTER,
                                'desc': 'RBD image bytes read'},
                 'write_latency': {'type': self.PERFCOUNTER_LONGRUNAVG,
-                                  'desc': 'RBD image writes latency (msec)'},
+                                  'desc': 'RBD image writes latency (nsec)'},
                 'read_latency': {'type': self.PERFCOUNTER_LONGRUNAVG,
-                                 'desc': 'RBD image reads latency (msec)'},
+                                 'desc': 'RBD image reads latency (nsec)'},
             },
         }  # type: Dict[str, Any]
         global _global_instance
@@ -760,6 +762,20 @@ class Module(MgrModule):
             HEALTHCHECK_DETAIL
         )
 
+        metrics['pool_objects_repaired'] = Metric(
+            'counter',
+            'pool_objects_repaired',
+            'Number of objects repaired in a pool',
+            ('pool_id',)
+        )
+
+        metrics['daemon_health_metrics'] = Metric(
+            'gauge',
+            'daemon_health_metrics',
+            'Health metrics for Ceph daemons',
+            ('type', 'ceph_daemon',)
+        )
+
         for flag in OSD_FLAGS:
             path = 'osd_flag_{}'.format(flag)
             metrics[path] = Metric(
@@ -845,6 +861,14 @@ class Module(MgrModule):
             )
 
         return metrics
+
+    def orch_is_available(self) -> bool:
+        try:
+            return self.available()[0]
+        except (RuntimeError, OrchestratorError, ImportError):
+            # import error could happend during startup in case
+            # orchestrator has not been loaded yet by the mgr
+            return False
 
     def get_server_addr(self) -> str:
         """
@@ -1266,9 +1290,24 @@ class Module(MgrModule):
             )
 
         # Populate other servers metadata
+        # If orchestrator is available and ceph-exporter is running modify rgw instance id
+        # to match the one from exporter
+        modify_instance_id = self.orch_is_available() and self.get_module_option('exclude_perf_counters')
+        if modify_instance_id:
+            daemons = raise_if_exception(self.list_daemons(daemon_type='rgw'))
+            for daemon in daemons:
+                if daemon.daemon_id and '.' in daemon.daemon_id:
+                    instance_id = daemon.daemon_id.split(".")[2]
+                else:
+                    instance_id = daemon.daemon_id if daemon.daemon_id else ""
+                self.metrics['rgw_metadata'].set(1,
+                                                 (f"{daemon.daemon_type}.{daemon.daemon_id}",
+                                                  str(daemon.hostname),
+                                                  str(daemon.version),
+                                                  instance_id))
         for key, value in servers.items():
             service_id, service_type = key
-            if service_type == 'rgw':
+            if service_type == 'rgw' and not modify_instance_id:
                 hostname, version, name = value
                 self.metrics['rgw_metadata'].set(
                     1,
@@ -1600,29 +1639,15 @@ class Module(MgrModule):
     def get_pool_repaired_objects(self) -> None:
         dump = self.get('pg_dump')
         for stats in dump['pool_stats']:
-            path = f'pool_objects_repaired{stats["poolid"]}'
-            self.metrics[path] = Metric(
-                'counter',
-                'pool_objects_repaired',
-                'Number of objects repaired in a pool Count',
-                ('poolid',)
-            )
-
+            path = 'pool_objects_repaired'
             self.metrics[path].set(stats['stat_sum']['num_objects_repaired'],
                                    labelvalues=(stats['poolid'],))
 
     def get_all_daemon_health_metrics(self) -> None:
         daemon_metrics = self.get_daemon_health_metrics()
-        self.log.debug('metrics jeje %s' % (daemon_metrics))
         for daemon_name, health_metrics in daemon_metrics.items():
             for health_metric in health_metrics:
-                path = f'daemon_health_metrics{daemon_name}{health_metric["type"]}'
-                self.metrics[path] = Metric(
-                    'counter',
-                    'daemon_health_metrics',
-                    'Health metrics for Ceph daemons',
-                    ('type', 'ceph_daemon',)
-                )
+                path = 'daemon_health_metrics'
                 self.metrics[path].set(health_metric['value'], labelvalues=(
                     health_metric['type'], daemon_name,))
 
@@ -1630,7 +1655,7 @@ class Module(MgrModule):
         """
         Get the perf counters for all daemons
         """
-        for daemon, counters in self.get_all_perf_counters().items():
+        for daemon, counters in self.get_unlabeled_perf_counters().items():
             for path, counter_info in counters.items():
                 # Skip histograms, they are represented by long running avgs
                 stattype = self._stattype_to_str(counter_info['type'])

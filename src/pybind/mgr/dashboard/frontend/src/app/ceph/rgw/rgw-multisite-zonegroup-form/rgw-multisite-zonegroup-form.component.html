@@ -1,6 +1,6 @@
 <cd-modal [modalRef]="activeModal">
   <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+                class="modal-title">{{ action | titlecase }} Zone Group</ng-container>
 
   <ng-container class="modal-content">
     <form name="multisiteZonegroupForm"
@@ -30,11 +30,11 @@
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="zonegroupName"
-               i18n>Zonegroup Name</label>
+               i18n>Zone Group Name</label>
         <div class="cd-col-form-input">
           <input class="form-control"
                  type="text"
-                 placeholder="Zonegroup name..."
+                 placeholder="Zone group name..."
                  id="zonegroupName"
                  name="zonegroupName"
                  formControlName="zonegroupName">
@@ -43,36 +43,44 @@
                 i18n>This field is required.</span>
           <span class="invalid-feedback"
                 *ngIf="multisiteZonegroupForm.showError('zonegroupName', formDir, 'uniqueName')"
-                i18n>The chosen zonegroup name is already in use.</span>
+                i18n>The chosen zone group name is already in use.</span>
         <div class="custom-control custom-checkbox">
           <input class="form-check-input"
                  id="default_zonegroup"
                  name="default_zonegroup"
                  formControlName="default_zonegroup"
+                 [attr.disabled]="action === 'edit' ? true : null"
                  type="checkbox">
           <label class="form-check-label"
                  for="default_zonegroup"
                  i18n>Default</label>
-          <span *ngIf="disableDefault">
-          <cd-helper i18n>Zonegroup doesn't belong to the default realm.</cd-helper>
-          </span><br>
+          <span *ngIf="disableDefault && action === 'create'">
+            <cd-helper i18n>Zone group doesn't belong to the default realm.</cd-helper>
+          </span>
+          <cd-helper *ngIf="action === 'edit' && !info.data.is_default">
+            <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
+          </cd-helper>
+          <cd-helper *ngIf="action === 'edit' && info.data.is_default">
+            <span i18n>You cannot unset the default flag.</span>
+          </cd-helper><br>
           <input class="form-check-input"
                  id="master_zonegroup"
                  name="master_zonegroup"
                  formControlName="master_zonegroup"
+                 [attr.disabled]="action === 'edit' ? true : null"
                  type="checkbox">
           <label class="form-check-label"
                  for="master_zonegroup"
                  i18n>Master</label>
-          <span *ngIf="!isMaster">
-          <cd-helper i18n>RGW multi-site configuration must have a master zonegroup. Setting
-            the first zonegroup created as master, to avoid any errors on udating the period.
-            Can be modified later by editing a zonegroup.
+          <span *ngIf="disableMaster && action === 'create'">
+            <cd-helper i18n>Multiple master zone groups can't be configured. If you want to create a new zone group and make it the master zone group, you must delete the default zone group.</cd-helper>
+          </span>
+          <cd-helper *ngIf="action === 'edit' && !info.data.is_master">
+            <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
           </cd-helper>
-          </span>
-          <span *ngIf="disableMaster">
-            <cd-helper i18n>Multiple master zonegroups can't be configured. If you want to create a new zonegroup and make it the master zonegroup, you must delete the default zonegroup.</cd-helper>
-          </span>
+          <cd-helper *ngIf="action === 'edit' && info.data.is_master">
+            <span i18n>You cannot unset the master flag.</span>
+          </cd-helper>
         </div>
         </div>
       </div>
@@ -190,7 +198,7 @@
     <div class="modal-footer">
       <cd-form-button-panel (submitActionEvent)="submit()"
                             [form]="multisiteZonegroupForm"
-                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+                            [submitText]="(action | titlecase) + ' ' + 'Zone Group'"></cd-form-button-panel>
     </div>
     </form>
   </ng-container>

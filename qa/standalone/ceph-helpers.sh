@@ -654,6 +654,7 @@ function run_osd() {
     ceph_args+=" --osd-max-object-name-len=460"
     ceph_args+=" --osd-max-object-namespace-len=64"
     ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
+    ceph_args+=" --osd-mclock-profile=high_recovery_ops"
     ceph_args+=" "
     ceph_args+="$@"
     mkdir -p $osd_data
@@ -864,6 +865,7 @@ function activate_osd() {
     ceph_args+=" --osd-max-object-name-len=460"
     ceph_args+=" --osd-max-object-namespace-len=64"
     ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
+    ceph_args+=" --osd-mclock-profile=high_recovery_ops"
     ceph_args+=" "
     ceph_args+="$@"
     mkdir -p $osd_data
@@ -1746,6 +1748,29 @@ function test_wait_for_peered() {
 #######################################################################
 
 ##
+# Wait until the cluster's health condition disappeared.
+# $TIMEOUT default
+#
+# @param string to grep for in health detail
+# @return 0 if the cluster health doesn't matches request,
+# 1 otherwise if after $TIMEOUT seconds health condition remains.
+#
+function wait_for_health_gone() {
+    local grepstr=$1
+    local -a delays=($(get_timeout_delays $TIMEOUT .1))
+    local -i loop=0
+
+    while ceph health detail | grep "$grepstr" ; do
+	if (( $loop >= ${#delays[*]} )) ; then
+            ceph health detail
+            return 1
+        fi
+        sleep ${delays[$loop]}
+        loop+=1
+    done
+}
+
+##
 # Wait until the cluster has health condition passed as arg
 # again for $TIMEOUT seconds.
 #
@@ -1840,6 +1865,9 @@ function test_repair() {
 # **get_last_scrub_stamp** function reports a timestamp different from
 # the one stored before starting the scrub.
 #
+# The scrub is initiated using the "operator initiated" method, and
+# the scrub triggered is not subject to no-scrub flags etc.
+#
 # @param pgid the id of the PG
 # @return 0 on success, 1 on error
 #
@@ -1867,6 +1895,48 @@ function test_pg_scrub() {
     create_rbd_pool || return 1
     wait_for_clean || return 1
     pg_scrub 1.0 || return 1
+    kill_daemons $dir KILL osd || return 1
+    ! TIMEOUT=1 pg_scrub 1.0 || return 1
+    teardown $dir || return 1
+}
+
+#######################################################################
+
+##
+# Trigger a "scheduled" scrub on **pgid** (by mnaually modifying the relevant
+# last-scrub stamp) and wait until it completes. The pg_scrub
+# function will fail if scrubbing does not complete within $TIMEOUT
+# seconds. The pg_scrub is complete whenever the
+# **get_last_scrub_stamp** function reports a timestamp different from
+# the one stored before starting the scrub.
+#
+# @param pgid the id of the PG
+# @return 0 on success, 1 on error
+#
+function pg_schedule_scrub() {
+    local pgid=$1
+    local last_scrub=$(get_last_scrub_stamp $pgid)
+    ceph pg scrub $pgid
+    wait_for_scrub $pgid "$last_scrub"
+}
+
+function pg_schedule_deep_scrub() {
+    local pgid=$1
+    local last_scrub=$(get_last_scrub_stamp $pgid last_deep_scrub_stamp)
+    ceph pg deep-scrub $pgid
+    wait_for_scrub $pgid "$last_scrub" last_deep_scrub_stamp
+}
+
+function test_pg_schedule_scrub() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+    pg_schedule_scrub 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
     ! TIMEOUT=1 pg_scrub 1.0 || return 1
     teardown $dir || return 1

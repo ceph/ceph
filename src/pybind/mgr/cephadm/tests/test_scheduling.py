@@ -6,7 +6,13 @@ from typing import NamedTuple, List, Dict, Optional
 import pytest
 
 from ceph.deployment.hostspec import HostSpec
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, IngressSpec
+from ceph.deployment.service_spec import (
+    ServiceSpec,
+    PlacementSpec,
+    IngressSpec,
+    PatternType,
+    HostPattern,
+)
 from ceph.deployment.hostspec import SpecValidationError
 
 from cephadm.module import HostAssignment
@@ -288,7 +294,7 @@ def test_explicit_scheduler(host_key, hosts,
 # * where e=[], *=any
 #
 #       + list of known hosts available for scheduling (host_key)
-#       |   + hosts used for explict placement (explicit_key)
+#       |   + hosts used for explicit placement (explicit_key)
 #       |   |   + count
 #       |   |   | + existing daemons
 #       |   |   | |     + section (host, label, pattern)
@@ -614,7 +620,7 @@ class NodeAssignmentTest(NamedTuple):
              'rgw:host1(*:81)', 'rgw:host2(*:81)', 'rgw:host3(*:81)'],
             []
         ),
-        # label + count_per_host + ports (+ xisting)
+        # label + count_per_host + ports (+ existing)
         NodeAssignmentTest(
             'rgw',
             PlacementSpec(count=6, label='foo'),
@@ -1577,12 +1583,40 @@ class RescheduleFromOfflineTest(NamedTuple):
                                  [[]],
                                  [[]],
                              ),
+                             RescheduleFromOfflineTest(
+                                 'ingress',
+                                 PlacementSpec(count=1),
+                                 'host1 host2'.split(),
+                                 [],
+                                 ['host2'],
+                                 [
+                                     DaemonDescription('haproxy', 'b', 'host2'),
+                                     DaemonDescription('keepalived', 'b', 'host2'),
+                                 ],
+                                 [['host1']],
+                                 [[]],
+                             ),
                          ])
 def test_remove_from_offline(service_type, placement, hosts, maintenance_hosts, offline_hosts, daemons, expected_add, expected_remove):
 
-    spec = ServiceSpec(service_type=service_type,
-                       service_id='test',
-                       placement=placement)
+    if service_type == 'ingress':
+        spec = \
+            IngressSpec(
+                service_type='ingress',
+                service_id='nfs-ha.foo',
+                frontend_port=443,
+                monitor_port=8888,
+                virtual_ip='10.0.0.20/8',
+                backend_service='nfs-ha.foo',
+                placement=placement,
+            )
+    else:
+        spec = \
+            ServiceSpec(
+                service_type=service_type,
+                service_id='test',
+                placement=placement,
+            )
 
     host_specs = [HostSpec(h) for h in hosts]
     for h in host_specs:
@@ -1669,3 +1703,42 @@ def test_drain_from_explict_placement(service_type, placement, hosts, maintenanc
     ).place()
     assert sorted([h.hostname for h in to_add]) in expected_add
     assert sorted([h.name() for h in to_remove]) in expected_remove
+
+
+class RegexHostPatternTest(NamedTuple):
+    service_type: str
+    placement: PlacementSpec
+    hosts: List[str]
+    expected_add: List[List[str]]
+
+
+@pytest.mark.parametrize("service_type,placement,hosts,expected_add",
+                         [
+                             RegexHostPatternTest(
+                                 'crash',
+                                 PlacementSpec(host_pattern=HostPattern(pattern='host1|host3', pattern_type=PatternType.regex)),
+                                 'host1 host2 host3 host4'.split(),
+                                 ['host1', 'host3'],
+                             ),
+                             RegexHostPatternTest(
+                                 'crash',
+                                 PlacementSpec(host_pattern=HostPattern(pattern='host[2-4]', pattern_type=PatternType.regex)),
+                                 'host1 host2 host3 host4'.split(),
+                                 ['host2', 'host3', 'host4'],
+                             ),
+                         ])
+def test_placement_regex_host_pattern(service_type, placement, hosts, expected_add):
+    spec = ServiceSpec(service_type=service_type,
+                       service_id='test',
+                       placement=placement)
+
+    host_specs = [HostSpec(h) for h in hosts]
+
+    hosts, to_add, to_remove = HostAssignment(
+        spec=spec,
+        hosts=host_specs,
+        unreachable_hosts=[],
+        draining_hosts=[],
+        daemons=[],
+    ).place()
+    assert sorted([h.hostname for h in to_add]) == expected_add

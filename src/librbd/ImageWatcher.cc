@@ -149,7 +149,7 @@ template <typename I>
 void ImageWatcher<I>::notify_async_complete(const AsyncRequestId &request,
                                             int r) {
   ldout(m_image_ctx.cct, 20) << this << " remote async request finished: "
-			     << request << " = " << r << dendl;
+			     << request << "=" << r << dendl;
 
   send_notify(new AsyncCompletePayload(request, r),
     new LambdaContext(boost::bind(&ImageWatcher<I>::handle_async_complete,
@@ -576,8 +576,7 @@ void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
     return;
   }
 
-  std::shared_lock watch_locker{this->m_watch_lock};
-  if (this->is_registered(this->m_watch_lock)) {
+  if (is_registered()) {
     ldout(m_image_ctx.cct, 15) << this << " requesting exclusive lock" << dendl;
 
     auto ctx = new LambdaContext([this](int r) {

@@ -12,9 +12,10 @@ These are exciting times in the Ceph community! Get involved!
 | **Blog**             | Check the Ceph Blog_ periodically to keep track | http://ceph.com/community/blog/               |
 |                      | of Ceph progress and important announcements.   |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
-| **Planet Ceph**      | Check the blog aggregation on Planet Ceph for   | https://ceph.com/category/planet/             |
+| **Planet Ceph**      | Check the blog aggregation on Planet Ceph for   | https://old.ceph.com/category/planet/         |
 |                      | interesting stories, information and            |                                               |
-|                      | experiences from the community.                 |                                               |
+|                      | experiences from the community. **NOTE: NO      |                                               |
+|                      | longer updated as of 2023.**                    |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Wiki**             | Check the Ceph Wiki is a source for more        | http://wiki.ceph.com/                         |
 |                      | community and development related topics. You   |                                               |
@@ -30,6 +31,10 @@ These are exciting times in the Ceph community! Get involved!
 |                      | cluster operators and users, there is also      |     ``#ceph-dashboard``,                      |
 |                      | ``#ceph-devel``, ``#ceph-dashboard`` and        |     ``#cephfs``                               |
 |                      | ``#cephfs`` dedicated for Ceph developers.      |                                               |
++----------------------+-------------------------------------------------+-----------------------------------------------+
+| **Slack**            | Since 2023, the Upstream Ceph community has     |                                               |
+|                      | maintained a community in Slack. Ask your Ceph- | https://ceph-storage.slack.com/               |
+|                      | related questions in Ceph's Slack channels.     |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **User List**        | Ask and answer user-related questions by        |                                               |
 |                      | subscribing to the email list at                | - `User Subscribe`_                           |

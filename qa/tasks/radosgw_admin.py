@@ -7,8 +7,9 @@ Rgw admin testing against a running instance
 #   grep '^ *# TESTCASE' | sed 's/^ *# TESTCASE //'
 #
 # to run this standalone:
-#	python qa/tasks/radosgw_admin.py [--user=uid] --host=host --port=port
-#
+#   1. uncomment vstart_runner lines to run locally against a vstart cluster
+#   2. run:
+#        $ python qa/tasks/radosgw_admin.py [--user=uid] --host=host --port=port
 
 import json
 import logging
@@ -27,7 +28,7 @@ import httplib2
 
 #import pdb
 
-import tasks.vstart_runner
+#import tasks.vstart_runner
 from tasks.rgw import RGWEndpoint
 from tasks.util.rgw import rgwadmin as tasks_util_rgw_rgwadmin
 from tasks.util.rgw import get_user_summary, get_user_successful_ops
@@ -58,7 +59,8 @@ def usage_acc_findsum2(summaries, user, add=True):
         return None
     e = {'user': user, 'categories': [],
         'total': {'bytes_received': 0,
-            'bytes_sent': 0, 'ops': 0, 'successful_ops': 0 }}
+            'bytes_sent': 0, 'ops': 0, 'successful_ops': 0,
+            'bytes_processed': 0, 'bytes_returned': 0}}
     summaries.append(e)
     return e
 def usage_acc_update2(x, out, b_in, err):
@@ -70,6 +72,17 @@ def usage_acc_update2(x, out, b_in, err):
 def usage_acc_validate_fields(r, x, x2, what):
     q=[]
     for field in ['bytes_sent', 'bytes_received', 'ops', 'successful_ops']:
+        try:
+            if x2[field] < x[field]:
+                q.append("field %s: %d < %d" % (field, x2[field], x[field]))
+        except Exception as ex:
+            r.append( "missing/bad field " + field + " in " + what + " " + str(ex))
+            return
+    if len(q) > 0:
+        r.append("incomplete counts in " + what + ": " + ", ".join(q))
+def usage_acc_validate_s3select_fields(r, x, x2, what):
+    q=[]
+    for field in ['bytes_processed', 'bytes_returned']:
         try:
             if x2[field] < x[field]:
                 q.append("field %s: %d < %d" % (field, x2[field], x[field]))
@@ -91,7 +104,9 @@ class usage_acc:
                 return b
         if not add:
                 return None
-        b = {'bucket': bucket, 'categories': []}
+        b = {'bucket': bucket, 'categories': [], 's3select': {
+            'bytes_processed': 0, 'bytes_returned': 0,
+        }}
         e['buckets'].append(b)
         return b
     def c2x(self, c, cat, add=True):
@@ -145,60 +160,69 @@ class usage_acc:
                 try:
                     b2 = self.e2b(e2, b['bucket'], False)
                     if b2 != None:
-                            c2 = b2['categories']
+                        c2 = b2['categories']
                 except Exception as ex:
                     r.append("malformed entry looking for bucket "
-			+ b['bucket'] + " in user " + e['user'] + " " + str(ex))
+                        + b['bucket'] + " in user " + e['user'] + " " + str(ex))
                     break
                 if b2 == None:
                     r.append("can't find bucket " + b['bucket']
-			+ " in user " + e['user'])
+                        + " in user " + e['user'])
                     continue
                 for x in c:
                     try:
                         x2 = self.c2x(c2, x['category'], False)
                     except Exception as ex:
                         r.append("malformed entry looking for "
-			    + x['category'] + " in bucket " + b['bucket']
-			    + " user " + e['user'] + " " + str(ex))
+                            + x['category'] + " in bucket " + b['bucket']
+                            + " user " + e['user'] + " " + str(ex))
                         break
                     usage_acc_validate_fields(r, x, x2, "entry: category "
-			+ x['category'] + " bucket " + b['bucket']
-			+ " in user " + e['user'])
+                        + x['category'] + " bucket " + b['bucket']
+                        + " in user " + e['user'])
+
+                if 's3select' not in b2:
+                    r.append("missing s3select in bucket "
+                        + b['bucket'] + " in user " + e['user'])
+                    continue
+                usage_acc_validate_s3select_fields(r,
+                    b['s3select'], b2['s3select'],
+                    "entry: s3select in bucket " + b['bucket'] + " in user " + e['user'])
         for s in self.results['summary']:
             c = s['categories']
             try:
                 s2 = usage_acc_findsum2(results['summary'], s['user'], False)
             except Exception as ex:
-                r.append("malformed summary looking for user " + e['user']
-		    + " " + str(ex))
+                r.append("malformed summary looking for user " + s['user']
+                    + " " + str(ex))
                 break
-                if s2 == None:
-                    r.append("missing summary for user " + e['user'] + " " + str(ex))
-                    continue
+            if s2 == None:
+                r.append("missing summary for user " + s['user'])
+                continue
             try:
                 c2 = s2['categories']
             except Exception as ex:
                 r.append("malformed summary missing categories for user "
-		    + e['user'] + " " + str(ex))
+                    + s['user'] + " " + str(ex))
                 break
             for x in c:
                 try:
                     x2 = self.c2x(c2, x['category'], False)
                 except Exception as ex:
                     r.append("malformed summary looking for "
-			+ x['category'] + " user " + e['user'] + " " + str(ex))
+                        + x['category'] + " user " + s['user'] + " " + str(ex))
                     break
                 usage_acc_validate_fields(r, x, x2, "summary: category "
-		    + x['category'] + " in user " + e['user'])
+                    + x['category'] + " in user " + s['user'])
             x = s['total']
             try:
                 x2 = s2['total']
             except Exception as ex:
                 r.append("malformed summary looking for totals for user "
-                         + e['user'] + " " + str(ex))
+                    + s['user'] + " " + str(ex))
                 break
-            usage_acc_validate_fields(r, x, x2, "summary: totals for user" + e['user'])
+            usage_acc_validate_fields(r, x, x2, "summary: totals for user" + s['user'])
+            usage_acc_validate_s3select_fields(r, x, x2, "summary: s3select totals for user" + s['user'])
         return r
 
 def ignore_this_entry(cat, bucket, user, out, b_in, err):
@@ -1107,7 +1131,7 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['zonegroup', 'get'], check_status=True)
 
 from teuthology.config import config
-from teuthology.orchestra import cluster
+from teuthology.orchestra import cluster, remote
 
 import argparse;
 
@@ -1124,7 +1148,9 @@ def main():
     else:
         port = 80
 
-    client0 = tasks.vstart_runner.LocalRemote()
+    client0 = remote.Remote(host)
+    #client0 = tasks.vstart_runner.LocalRemote()
+
     ctx = config
     ctx.cluster=cluster.Cluster(remotes=[(client0,
         [ 'ceph.client.rgw.%s' % (port),  ]),])

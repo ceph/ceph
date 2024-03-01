@@ -29,8 +29,6 @@
 
 #include "global/global_context.h"
 
-#include "rbd_wnbd.h"
-
 WnbdHandler::~WnbdHandler()
 {
   if (started && wnbd_disk) {
@@ -411,7 +409,8 @@ int WnbdHandler::start()
     wnbd_props.Flags.FlushSupported = 1;
   }
 
-  err = WnbdCreate(&wnbd_props, &RbdWnbdInterface, this, &wnbd_disk);
+  err = WnbdCreate(&wnbd_props, (const PWNBD_INTERFACE) &RbdWnbdInterface,
+                   this, &wnbd_disk);
   if (err)
     goto exit;
 

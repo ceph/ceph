@@ -91,7 +91,7 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
   meta_log.init_list_entries(shard_id, {}, {}, marker, &handle);
 
   op_ret = meta_log.list_entries(this, handle, max_entries, entries,
-                                   &last_marker, &truncated);
+				 &last_marker, &truncated, y);
 
   meta_log.complete_list_entries(handle);
 }
@@ -166,7 +166,7 @@ void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
   }
   RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
 
-  op_ret = meta_log.get_info(this, shard_id, &info);
+  op_ret = meta_log.get_info(this, shard_id, &info, y);
 }
 
 void RGWOp_MDLog_ShardInfo::send_response() {
@@ -232,7 +232,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
   }
   RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
 
-  op_ret = meta_log.trim(this, shard_id, {}, {}, {}, marker);
+  op_ret = meta_log.trim(this, shard_id, {}, {}, {}, marker, y);
 }
 
 void RGWOp_MDLog_Lock::execute(optional_yield y) {
@@ -414,7 +414,7 @@ void RGWOp_BILog_List::execute(optional_yield y) {
     b.name = bn;
     b.bucket_id = bucket_instance;
   }
-  op_ret = driver->get_bucket(s, nullptr, b, &bucket, y);
+  op_ret = driver->load_bucket(s, b, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
     return;
@@ -541,7 +541,7 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
     b.name = bn;
     b.bucket_id = bucket_instance;
   }
-  op_ret = driver->get_bucket(s, nullptr, b, &bucket, y);
+  op_ret = driver->load_bucket(s, b, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
     return;
@@ -635,7 +635,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
     b.name = bn;
     b.bucket_id = bucket_instance;
   }
-  op_ret = driver->get_bucket(s, nullptr, b, &bucket, y);
+  op_ret = driver->load_bucket(s, b, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 5) << "could not get bucket info for bucket=" << bucket_name << dendl;
     return;
@@ -985,7 +985,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
 
   // read the bucket instance info for num_shards
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  op_ret = driver->get_bucket(s, nullptr, b, &bucket, y);
+  op_ret = driver->load_bucket(s, b, &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 4) << "failed to read bucket info: " << cpp_strerror(op_ret) << dendl;
     return;
@@ -1069,7 +1069,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
     if (*pipe.dest.bucket != pinfo->bucket) {
       opt_dest_info.emplace();
       std::unique_ptr<rgw::sal::Bucket> dest_bucket;
-      op_ret = driver->get_bucket(s, nullptr, *pipe.dest.bucket, &dest_bucket, y);
+      op_ret = driver->load_bucket(s, *pipe.dest.bucket, &dest_bucket, y);
       if (op_ret < 0) {
         ldpp_dout(this, 4) << "failed to read target bucket info (bucket=: " << cpp_strerror(op_ret) << dendl;
         return;

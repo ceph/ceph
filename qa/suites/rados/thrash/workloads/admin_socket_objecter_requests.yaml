@@ -3,6 +3,8 @@ overrides:
     conf:
       client.0:
         admin socket: /var/run/ceph/ceph-$name.asok
+    log-ignorelist:
+    - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - radosbench:
     clients: [client.0]

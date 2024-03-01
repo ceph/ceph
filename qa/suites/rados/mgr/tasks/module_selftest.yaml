@@ -21,6 +21,7 @@ tasks:
         - Failed to open Telegraf
         - evicting unresponsive client
         - 1 mgr modules have recently crashed \(RECENT_MGR_MODULE_CRASH\)
+        - \(POOL_APP_NOT_ENABLED\)
   - cephfs_test_runner:
       modules:
         - tasks.mgr.test_module_selftest

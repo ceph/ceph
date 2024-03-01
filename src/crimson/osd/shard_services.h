@@ -22,6 +22,7 @@
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/state.h"
 #include "common/AsyncReserver.h"
+#include "crimson/net/Connection.h"
 
 namespace crimson::net {
   class Messenger;
@@ -45,9 +46,6 @@ class BufferedRecoveryMessages;
 
 namespace crimson::osd {
 
-// seastar::sharded puts start_single on core 0
-constexpr core_id_t PRIMARY_CORE = 0;
-
 class PGShardManager;
 
 /**
@@ -58,6 +56,7 @@ class PGShardManager;
 class PerShardState {
   friend class ShardServices;
   friend class PGShardManager;
+  friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
 
@@ -65,11 +64,22 @@ class PerShardState {
 #define assert_core() ceph_assert(seastar::this_shard_id() == core);
 
   const int whoami;
-  crimson::os::FuturizedStore &store;
+  crimson::os::FuturizedStore::Shard &store;
   crimson::common::CephContext cct;
+
+  OSDState &osd_state;
+  OSD_OSDMapGate osdmap_gate;
+
+  PerShardPipeline client_request_pipeline;
+  PerShardPipeline peering_request_pipeline;
+  PerShardPipeline replicated_request_pipeline;
 
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
+
+  const epoch_t& get_osdmap_tlb() {
+    return per_shard_superblock.cluster_osdmap_trim_lower_bound;
+  }
 
   // Op Management
   OSDOperationRegistry registry;
@@ -109,7 +119,7 @@ class PerShardState {
   PGMap pg_map;
 
   seastar::future<> stop_pgs();
-  std::map<pg_t, pg_stat_t> get_pg_stats() const;
+  std::map<pg_t, pg_stat_t> get_pg_stats();
   seastar::future<> broadcast_map_to_pgs(
     ShardServices &shard_services,
     epoch_t epoch);
@@ -132,11 +142,35 @@ class PerShardState {
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
     crimson::get_logger(ceph_subsys_osd).info(
       "PerShardState::{}, {}", __func__, *op);
-    auto fut = op->start().finally([op /* by copy */] {
-      // ensure the op's lifetime is appropriate. It is not enough to
-      // guarantee it's alive at the scheduling stages (i.e. `then()`
-      // calling) but also during the actual execution (i.e. when passed
-      // lambdas are actually run).
+    auto fut = seastar::yield().then([op] {
+      return op->start().finally([op /* by copy */] {
+	// ensure the op's lifetime is appropriate. It is not enough to
+	// guarantee it's alive at the scheduling stages (i.e. `then()`
+	// calling) but also during the actual execution (i.e. when passed
+	// lambdas are actually run).
+      });
+    });
+    return std::make_pair(std::move(op), std::move(fut));
+  }
+
+  template <typename InterruptorT, typename T, typename... Args>
+  auto start_operation_may_interrupt(Args&&... args) {
+    assert_core();
+    if (__builtin_expect(stopping, false)) {
+      throw crimson::common::system_shutdown_exception();
+    }
+    auto op = registry.create_operation<T>(std::forward<Args>(args)...);
+    crimson::get_logger(ceph_subsys_osd).info(
+      "PerShardState::{}, {}", __func__, *op);
+    auto fut = InterruptorT::make_interruptible(
+      seastar::yield()
+    ).then_interruptible([op] {
+      return op->start().finally([op /* by copy */] {
+	// ensure the op's lifetime is appropriate. It is not enough to
+	// guarantee it's alive at the scheduling stages (i.e. `then()`
+	// calling) but also during the actual execution (i.e. when passed
+	// lambdas are actually run).
+      });
     });
     return std::make_pair(std::move(op), std::move(fut));
   }
@@ -151,6 +185,8 @@ class PerShardState {
   HeartbeatStampsRef get_hb_stamps(int peer);
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
+  seastar::future<> update_shard_superblock(OSDSuperblock superblock);
+
   // Time state
   const ceph::mono_time startup_time;
   ceph::signedspan get_mnow() const {
@@ -158,13 +194,16 @@ class PerShardState {
     return ceph::mono_clock::now() - startup_time;
   }
 
+  OSDSuperblock per_shard_superblock;
+
 public:
   PerShardState(
     int whoami,
     ceph::mono_time startup_time,
     PerfCounters *perf,
     PerfCounters *recoverystate_perf,
-    crimson::os::FuturizedStore &store);
+    crimson::os::FuturizedStore &store,
+    OSDState& osd_state);
 };
 
 /**
@@ -176,8 +215,10 @@ public:
 class OSDSingletonState : public md_config_obs_t {
   friend class ShardServices;
   friend class PGShardManager;
+  friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
+  using read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
 
 public:
   OSDSingletonState(
@@ -194,17 +235,15 @@ private:
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
 
-  OSDState osd_state;
-
   SharedLRU<epoch_t, OSDMap> osdmaps;
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
+  SimpleLRU<epoch_t, bufferlist, false> inc_map_bl_cache;
 
   cached_map_t osdmap;
   cached_map_t &get_osdmap() { return osdmap; }
   void update_map(cached_map_t new_osdmap) {
     osdmap = std::move(new_osdmap);
   }
-  OSD_OSDMapGate osdmap_gate;
 
   crimson::net::Messenger &cluster_msgr;
   crimson::net::Messenger &public_msgr;
@@ -227,13 +266,19 @@ private:
   }
 
   OSDSuperblock superblock;
-  void set_superblock(OSDSuperblock _superblock) {
+  void set_singleton_superblock(OSDSuperblock _superblock) {
     superblock = std::move(_superblock);
   }
+
+  seastar::future<MURef<MOSDMap>> build_incremental_map_msg(
+    epoch_t first,
+    epoch_t last);
 
   seastar::future<> send_incremental_map(
     crimson::net::Connection &conn,
     epoch_t first);
+
+  seastar::future<> send_incremental_map_to_osd(int osd, epoch_t first);
 
   auto get_pool_info(int64_t poolid) {
     return get_meta_coll().load_final_pool_info(poolid);
@@ -253,9 +298,6 @@ private:
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
   seastar::future<> send_pg_temp();
-
-  // TODO: add config to control mapping
-  PGShardMapping pg_to_shard_mapping{0, seastar::smp::count};
 
   std::set<pg_t> pg_created;
   seastar::future<> send_pg_created(pg_t pgid);
@@ -282,12 +324,16 @@ private:
   seastar::future<local_cached_map_t> get_local_map(epoch_t e);
   seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
   seastar::future<bufferlist> load_map_bl(epoch_t e);
-  seastar::future<std::map<epoch_t, bufferlist>>
+  read_errorator::future<ceph::bufferlist> load_inc_map_bl(epoch_t e);
+  seastar::future<OSDMapService::bls_map_t>
   load_map_bls(epoch_t first, epoch_t last);
   void store_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
+  void store_inc_map_bl(ceph::os::Transaction& t,
+                    epoch_t e, bufferlist&& bl);
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
+  void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
 };
 
 /**
@@ -295,11 +341,13 @@ private:
  */
 class ShardServices : public OSDMapService {
   friend class PGShardManager;
+  friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
 
   PerShardState local_state;
   seastar::sharded<OSDSingletonState> &osd_singleton_state;
+  PGShardMapping& pg_to_shard_mapping;
 
   template <typename F, typename... Args>
   auto with_singleton(F &&f, Args&&... args) {
@@ -342,22 +390,21 @@ public:
   template <typename... PSSArgs>
   ShardServices(
     seastar::sharded<OSDSingletonState> &osd_singleton_state,
+    PGShardMapping& pg_to_shard_mapping,
     PSSArgs&&... args)
     : local_state(std::forward<PSSArgs>(args)...),
-      osd_singleton_state(osd_singleton_state) {}
+      osd_singleton_state(osd_singleton_state),
+      pg_to_shard_mapping(pg_to_shard_mapping) {}
 
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
-  crimson::os::FuturizedStore &get_store() {
+  crimson::os::FuturizedStore::Shard &get_store() {
     return local_state.store;
   }
 
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
-    return with_singleton(
-      [pgid](auto &osstate) {
-      osstate.pg_to_shard_mapping.remove_pg(pgid);
-    });
+    return pg_to_shard_mapping.remove_pg_mapping(pgid);
   }
 
   crimson::common::CephContext *get_cct() {
@@ -367,6 +414,12 @@ public:
   template <typename T, typename... Args>
   auto start_operation(Args&&... args) {
     return local_state.start_operation<T>(std::forward<Args>(args)...);
+  }
+
+  template <typename InterruptorT, typename T, typename... Args>
+  auto start_operation_may_interrupt(Args&&... args) {
+    return local_state.start_operation_may_interrupt<
+      InterruptorT, T>(std::forward<Args>(args)...);
   }
 
   auto &get_registry() { return local_state.registry; }
@@ -395,7 +448,6 @@ public:
   get_or_create_pg_ret get_or_create_pg(
     PGMap::PGCreationBlockingEvent::TriggerI&&,
     spg_t pgid,
-    epoch_t epoch,
     std::unique_ptr<PGCreateInfo> info);
 
   using wait_for_pg_ertr = PGMap::wait_for_pg_ertr;
@@ -421,6 +473,18 @@ public:
   seastar::future<> dispatch_context(
     PeeringCtx &&ctx) {
     return dispatch_context({}, std::move(ctx));
+  }
+
+  PerShardPipeline &get_client_request_pipeline() {
+    return local_state.client_request_pipeline;
+  }
+
+  PerShardPipeline &get_peering_request_pipeline() {
+    return local_state.peering_request_pipeline;
+  }
+
+  PerShardPipeline &get_replicated_request_pipeline() {
+    return local_state.replicated_request_pipeline;
   }
 
   /// Return per-core tid
@@ -450,7 +514,9 @@ public:
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
   FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
 
+  FORWARD_TO_OSD_SINGLETON(build_incremental_map_msg)
   FORWARD_TO_OSD_SINGLETON(send_incremental_map)
+  FORWARD_TO_OSD_SINGLETON(send_incremental_map_to_osd)
 
   FORWARD_TO_OSD_SINGLETON(osdmap_subscribe)
   FORWARD_TO_OSD_SINGLETON(queue_want_pg_temp)
@@ -461,6 +527,8 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_pg_temp)
   FORWARD_TO_LOCAL_CONST(get_mnow)
   FORWARD_TO_LOCAL(get_hb_stamps)
+  FORWARD_TO_LOCAL(update_shard_superblock)
+  FORWARD_TO_LOCAL(get_osdmap_tlb)
 
   FORWARD(pg_created, pg_created, local_state.pg_map)
 

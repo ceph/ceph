@@ -53,9 +53,12 @@ class DriveSelection(object):
         # type: () -> List[Device]
         return self._journal
 
-    def _limit_reached(self, device_filter, len_devices,
-                       disk_path):
-        # type: (DeviceSelection, int, str) -> bool
+    def _limit_reached(
+        self,
+        device_filter: DeviceSelection,
+        devices: List[Device],
+        disk_path: str
+    ) -> bool:
         """ Check for the <limit> property and apply logic
 
         If a limit is set in 'device_attrs' we have to stop adding
@@ -63,15 +66,22 @@ class DriveSelection(object):
 
         If limit is set (>0) and len(devices) >= limit
 
-        :param int len_devices: Length of the already populated device set/list
+        :param List[Device] devices: Already populated device set/list
         :param str disk_path: The disk identifier (for logging purposes)
         :return: True/False if the device should be added to the list of devices
         :rtype: bool
         """
         limit = device_filter.limit or 0
+        # If device A is being used for an OSD already, it can still
+        # match the filter (this is necessary as we still want the
+        # device in the resulting ceph-volume lvm batch command).
+        # If that is the case, we don't want to count the device
+        # towards the limit as it will already be counted through the
+        # existing daemons
+        non_ceph_devices = [d for d in devices if not d.ceph_device]
 
-        if limit > 0 and (len_devices + self.existing_daemons >= limit):
-            logger.info("Refuse to add {} due to limit policy of <{}>".format(
+        if limit > 0 and (len(non_ceph_devices) + self.existing_daemons >= limit):
+            logger.debug("Refuse to add {} due to limit policy of <{}>".format(
                 disk_path, limit))
             return True
         return False
@@ -131,9 +141,10 @@ class DriveSelection(object):
             if not disk.available and disk.ceph_device and disk.lvs:
                 other_osdspec_affinity = ''
                 for lv in disk.lvs:
-                    if lv['osdspec_affinity'] != self.spec.service_id:
-                        other_osdspec_affinity = lv['osdspec_affinity']
-                        break
+                    if 'osdspec_affinity' in lv.keys():
+                        if lv['osdspec_affinity'] != str(self.spec.service_id):
+                            other_osdspec_affinity = lv['osdspec_affinity']
+                            break
                 if other_osdspec_affinity:
                     logger.debug("{} is already used in spec {}, "
                                  "skipping it.".format(disk.path, other_osdspec_affinity))
@@ -146,7 +157,7 @@ class DriveSelection(object):
                 continue
 
             # break on this condition.
-            if self._limit_reached(device_filter, len(devices), disk.path):
+            if self._limit_reached(device_filter, devices, disk.path):
                 logger.debug("Ignoring disk {}. Limit reached".format(
                     disk.path))
                 break

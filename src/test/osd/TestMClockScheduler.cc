@@ -31,6 +31,7 @@ public:
   uint32_t num_shards;
   int shard_id;
   bool is_rotational;
+  unsigned cutoff_priority;
   MonClient *monc;
   mClockScheduler q;
 
@@ -43,8 +44,10 @@ public:
     num_shards(1),
     shard_id(0),
     is_rotational(false),
+    cutoff_priority(12),
     monc(nullptr),
-    q(g_ceph_context, whoami, num_shards, shard_id, is_rotational, monc),
+    q(g_ceph_context, whoami, num_shards, shard_id, is_rotational,
+      cutoff_priority, monc),
     client1(1001),
     client2(9999),
     client3(100000001)
@@ -60,11 +63,11 @@ public:
     MockDmclockItem()
       : MockDmclockItem(op_scheduler_class::background_best_effort) {}
 
-    op_type_t get_op_type() const final {
-      return op_type_t::client_op; // not used
-    }
-
     ostream &print(ostream &rhs) const final { return rhs; }
+
+    std::string print() const final {
+      return std::string();
+    }
 
     std::optional<OpRequestRef> maybe_get_op() const final {
       return std::nullopt;

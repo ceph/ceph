@@ -604,6 +604,14 @@ class MonitorDBStore
     return combine_strings(prefix, os.str());
   }
 
+  int clear_key(const std::string& prefix, const std::string& key) {
+    ceph_assert(!prefix.empty());
+    ceph_assert(!key.empty());
+    KeyValueDB::Transaction dbt = db->get_transaction();
+    dbt->rmkey(prefix, key);
+    return db->submit_transaction_sync(dbt);
+  }
+
   void clear(std::set<std::string>& prefixes) {
     KeyValueDB::Transaction dbt = db->get_transaction();
 
@@ -664,8 +672,8 @@ class MonitorDBStore
     std::string kv_type;
     int r = read_meta("kv_backend", &kv_type);
     if (r < 0 || kv_type.empty()) {
-      // assume old monitors that did not mark the type were leveldb.
-      kv_type = "leveldb";
+      // assume old monitors that did not mark the type were RocksDB.
+      kv_type = "rocksdb";
       r = write_meta("kv_backend", kv_type);
       if (r < 0)
 	return r;
@@ -710,6 +718,7 @@ class MonitorDBStore
 
   void close() {
     // there should be no work queued!
+    ceph_assert(io_work.is_empty());
     io_work.stop();
     is_open = false;
     db.reset(NULL);

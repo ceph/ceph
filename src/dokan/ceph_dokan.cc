@@ -77,9 +77,26 @@ typedef struct {
 static_assert(sizeof(fd_context) <= 8,
               "fd_context exceeds DOKAN_FILE_INFO.Context size.");
 
-string get_path(LPCWSTR path_w) {
+string get_path(LPCWSTR path_w, bool normalize_case=true) {
   string path = to_string(path_w);
   replace(path.begin(), path.end(), '\\', '/');
+
+  if (normalize_case && !g_cfg->case_sensitive) {
+    if (g_cfg->convert_to_uppercase) {
+      std::transform(
+        path.begin(), path.end(), path.begin(),
+        [](unsigned char c){
+          return std::toupper(c);
+        });
+    } else {
+      std::transform(
+        path.begin(), path.end(), path.begin(),
+        [](unsigned char c){
+          return std::tolower(c);
+        });
+    }
+  }
+
   return path;
 }
 
@@ -543,6 +560,11 @@ static NTSTATUS WinCephFindFiles(
     return cephfs_errno_to_ntstatus_map(ret);
   }
 
+  // TODO: retrieve the original case (e.g. using xattr) if configured
+  // to do so.
+  // TODO: provide aliases when case insensitive mounts cause collisions.
+  // For example, when having test.txt and Test.txt, the latter becomes
+  // TEST~1.txt
   WIN32_FIND_DATAW findData;
   int count = 0;
   while (1) {
@@ -794,14 +816,18 @@ static NTSTATUS WinCephGetVolumeInformation(
 {
   g_cfg->win_vol_name.copy(VolumeNameBuffer, VolumeNameSize);
   *VolumeSerialNumber = g_cfg->win_vol_serial;
-
   *MaximumComponentLength = g_cfg->max_path_len;
 
-  *FileSystemFlags = FILE_CASE_SENSITIVE_SEARCH |
-            FILE_CASE_PRESERVED_NAMES |
-            FILE_SUPPORTS_REMOTE_STORAGE |
-            FILE_UNICODE_ON_DISK |
-            FILE_PERSISTENT_ACLS;
+  *FileSystemFlags =
+    FILE_SUPPORTS_REMOTE_STORAGE |
+    FILE_UNICODE_ON_DISK |
+    FILE_PERSISTENT_ACLS;
+
+  if (g_cfg->case_sensitive) {
+    *FileSystemFlags |=
+      FILE_CASE_SENSITIVE_SEARCH |
+      FILE_CASE_PRESERVED_NAMES;
+  }
 
   wcscpy(FileSystemNameBuffer, L"Ceph");
   return 0;
@@ -1043,6 +1069,8 @@ boost::intrusive_ptr<CephContext> do_global_init(
 
 int main(int argc, const char** argv)
 {
+  SetConsoleOutputCP(CP_UTF8);
+
   if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)ConsoleHandler, TRUE)) {
     cerr << "Couldn't initialize console event handler." << std::endl;
     return -EINVAL;

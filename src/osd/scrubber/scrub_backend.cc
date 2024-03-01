@@ -376,7 +376,7 @@ void ScrubBackend::repair_object(const hobject_t& soid,
   try {
     bufferlist bv;
     if (po.attrs.count(OI_ATTR)) {
-      bv.push_back(po.attrs.find(OI_ATTR)->second);
+      bv = po.attrs.find(OI_ATTR)->second;
     }
     auto bliter = bv.cbegin();
     decode(oi, bliter);
@@ -634,9 +634,8 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
                        &shard_info_wrapper::set_snapset_missing,
                        "candidate had a missing snapset key"sv,
                        errstream)) {
-      bufferlist ss_bl;
+      const bufferlist& ss_bl = k->second;
       SnapSet snapset;
-      ss_bl.push_back(k->second);
       try {
         auto bliter = ss_bl.cbegin();
         decode(snapset, bliter);
@@ -671,9 +670,8 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
                        &shard_info_wrapper::set_hinfo_missing,
                        "candidate had a missing hinfo key"sv,
                        errstream)) {
-      bufferlist hk_bl;
+      const bufferlist& hk_bl = k->second;
       ECUtil::HashInfo hi;
-      hk_bl.push_back(k->second);
       try {
         auto bliter = hk_bl.cbegin();
         decode(hi, bliter);
@@ -704,10 +702,8 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
       return shard_as_auth_t{errstream.str()};
     }
 
-    bufferlist bl;
-    bl.push_back(k->second);
     try {
-      auto bliter = bl.cbegin();
+      auto bliter = k->second.cbegin();
       decode(oi, bliter);
     } catch (...) {
       // invalid object info, probably corrupt
@@ -1171,23 +1167,23 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
   if (auth.digest_present && candidate.digest_present &&
       auth.digest != candidate.digest) {
-    format_to(std::back_inserter(out),
-              "data_digest {:#x} != data_digest {:#x} from shard {}",
-              candidate.digest,
-              auth.digest,
-              auth_shard);
+    fmt::format_to(std::back_inserter(out),
+                   "data_digest {:#x} != data_digest {:#x} from shard {}",
+                   candidate.digest,
+                   auth.digest,
+                   auth_shard);
     error = true;
     obj_result.set_data_digest_mismatch();
   }
 
   if (auth.omap_digest_present && candidate.omap_digest_present &&
       auth.omap_digest != candidate.omap_digest) {
-    format_to(std::back_inserter(out),
-              "{}omap_digest {:#x} != omap_digest {:#x} from shard {}",
-              sep(error),
-              candidate.omap_digest,
-              auth.omap_digest,
-              auth_shard);
+    fmt::format_to(std::back_inserter(out),
+                   "{}omap_digest {:#x} != omap_digest {:#x} from shard {}",
+                   sep(error),
+                   candidate.omap_digest,
+                   auth.omap_digest,
+                   auth_shard);
     obj_result.set_omap_digest_mismatch();
   }
 
@@ -1195,24 +1191,24 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   if (m_is_replicated) {
     if (auth_oi.is_data_digest() && candidate.digest_present &&
         auth_oi.data_digest != candidate.digest) {
-      format_to(std::back_inserter(out),
-                "{}data_digest {:#x} != data_digest {:#x} from auth oi {}",
-                sep(error),
-                candidate.digest,
-                auth_oi.data_digest,
-                auth_oi);
+      fmt::format_to(std::back_inserter(out),
+                     "{}data_digest {:#x} != data_digest {:#x} from auth oi {}",
+                     sep(error),
+                     candidate.digest,
+                     auth_oi.data_digest,
+                     auth_oi);
       shard_result.set_data_digest_mismatch_info();
     }
 
     // for replicated:
     if (auth_oi.is_omap_digest() && candidate.omap_digest_present &&
         auth_oi.omap_digest != candidate.omap_digest) {
-      format_to(std::back_inserter(out),
-                "{}omap_digest {:#x} != omap_digest {:#x} from auth oi {}",
-                sep(error),
-                candidate.omap_digest,
-                auth_oi.omap_digest,
-                auth_oi);
+      fmt::format_to(std::back_inserter(out),
+                     "{}omap_digest {:#x} != omap_digest {:#x} from auth oi {}",
+                     sep(error),
+                     candidate.omap_digest,
+                     auth_oi.omap_digest,
+                     auth_oi);
       shard_result.set_omap_digest_mismatch_info();
     }
   }
@@ -1232,16 +1228,16 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
     auto can_attr = candidate.attrs.find(OI_ATTR);
     ceph_assert(can_attr != candidate.attrs.end());
-    bufferlist can_bl;
-    can_bl.push_back(can_attr->second);
+    const bufferlist& can_bl = can_attr->second;
 
     auto auth_attr = auth.attrs.find(OI_ATTR);
     ceph_assert(auth_attr != auth.attrs.end());
-    bufferlist auth_bl;
-    auth_bl.push_back(auth_attr->second);
+    const bufferlist& auth_bl = auth_attr->second;
 
     if (!can_bl.contents_equal(auth_bl)) {
-      format_to(std::back_inserter(out), "{}object info inconsistent ", sep(error));
+      fmt::format_to(std::back_inserter(out),
+		     "{}object info inconsistent ",
+		     sep(error));
       obj_result.set_object_info_inconsistency();
     }
   }
@@ -1252,16 +1248,16 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
       auto can_attr = candidate.attrs.find(SS_ATTR);
       ceph_assert(can_attr != candidate.attrs.end());
-      bufferlist can_bl;
-      can_bl.push_back(can_attr->second);
+      const bufferlist& can_bl = can_attr->second;
 
       auto auth_attr = auth.attrs.find(SS_ATTR);
       ceph_assert(auth_attr != auth.attrs.end());
-      bufferlist auth_bl;
-      auth_bl.push_back(auth_attr->second);
+      const bufferlist& auth_bl = auth_attr->second;
 
       if (!can_bl.contents_equal(auth_bl)) {
-        format_to(std::back_inserter(out), "{}snapset inconsistent ", sep(error));
+        fmt::format_to(std::back_inserter(out),
+		       "{}snapset inconsistent ",
+		       sep(error));
         obj_result.set_snapset_inconsistency();
       }
     }
@@ -1275,16 +1271,16 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
       auto can_hi = candidate.attrs.find(ECUtil::get_hinfo_key());
       ceph_assert(can_hi != candidate.attrs.end());
-      bufferlist can_bl;
-      can_bl.push_back(can_hi->second);
+      const bufferlist& can_bl = can_hi->second;
 
       auto auth_hi = auth.attrs.find(ECUtil::get_hinfo_key());
       ceph_assert(auth_hi != auth.attrs.end());
-      bufferlist auth_bl;
-      auth_bl.push_back(auth_hi->second);
+      const bufferlist& auth_bl = auth_hi->second;
 
       if (!can_bl.contents_equal(auth_bl)) {
-        format_to(std::back_inserter(out), "{}hinfo inconsistent ", sep(error));
+        fmt::format_to(std::back_inserter(out),
+		       "{}hinfo inconsistent ",
+		       sep(error));
         obj_result.set_hinfo_inconsistency();
       }
     }
@@ -1296,22 +1292,22 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
   uint64_t oi_size = logical_to_ondisk_size(auth_oi.size);
   if (oi_size != candidate.size) {
-    format_to(std::back_inserter(out),
-              "{}size {} != size {} from auth oi {}",
-              sep(error),
-              candidate.size,
-              oi_size,
-              auth_oi);
+    fmt::format_to(std::back_inserter(out),
+                   "{}size {} != size {} from auth oi {}",
+                   sep(error),
+                   candidate.size,
+                   oi_size,
+                   auth_oi);
     shard_result.set_size_mismatch_info();
   }
 
   if (auth.size != candidate.size) {
-    format_to(std::back_inserter(out),
-              "{}size {} != size {} from shard {}",
-              sep(error),
-              candidate.size,
-              auth.size,
-              auth_shard);
+    fmt::format_to(std::back_inserter(out),
+                   "{}size {} != size {} from shard {}",
+                   sep(error),
+                   candidate.size,
+                   auth.size,
+                   auth_shard);
     obj_result.set_size_mismatch();
   }
 
@@ -1320,11 +1316,11 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   if (candidate.size > m_conf->osd_max_object_size &&
       !obj_result.has_size_too_large()) {
 
-    format_to(std::back_inserter(out),
-              "{}size {} > {} is too large",
-              sep(error),
-              candidate.size,
-              m_conf->osd_max_object_size);
+    fmt::format_to(std::back_inserter(out),
+                   "{}size {} > {} is too large",
+                   sep(error),
+                   candidate.size,
+                   m_conf->osd_max_object_size);
     obj_result.set_size_too_large();
   }
 
@@ -1340,10 +1336,16 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
     auto cand = candidate.attrs.find(k);
     if (cand == candidate.attrs.end()) {
-      format_to(std::back_inserter(out), "{}attr name mismatch '{}'", sep(error), k);
+      fmt::format_to(std::back_inserter(out),
+		     "{}attr name mismatch '{}'",
+		     sep(error),
+		     k);
       obj_result.set_attr_name_mismatch();
-    } else if (cand->second.cmp(v)) {
-      format_to(std::back_inserter(out), "{}attr value mismatch '{}'", sep(error), k);
+    } else if (!cand->second.contents_equal(v)) {
+      fmt::format_to(std::back_inserter(out),
+		     "{}attr value mismatch '{}'",
+		     sep(error),
+		     k);
       obj_result.set_attr_value_mismatch();
     }
   }
@@ -1356,7 +1358,10 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
 
     auto in_auth = auth.attrs.find(k);
     if (in_auth == auth.attrs.end()) {
-      format_to(std::back_inserter(out), "{}attr name mismatch '{}'", sep(error), k);
+      fmt::format_to(std::back_inserter(out),
+		     "{}attr name mismatch '{}'",
+		     sep(error),
+		     k);
       obj_result.set_attr_name_mismatch();
     }
   }
@@ -1448,10 +1453,8 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
       this_chunk->m_error_counts.shallow_errors++;
       soid_error.set_info_missing();
     } else {
-      bufferlist bv;
-      bv.push_back(p->second.attrs[OI_ATTR]);
       try {
-        oi = object_info_t(bv);
+        oi = object_info_t(std::as_const(p->second.attrs[OI_ATTR]));
       } catch (ceph::buffer::error& e) {
         oi = std::nullopt;
         clog.error() << m_mode_desc << " " << m_pg_id << " " << soid
@@ -1577,13 +1580,11 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
         snapset = std::nullopt;
         head_error.set_snapset_missing();
       } else {
-        bufferlist bl;
-        bl.push_back(p->second.attrs[SS_ATTR]);
-        auto blp = bl.cbegin();
+        auto blp = p->second.attrs[SS_ATTR].cbegin();
         try {
           snapset = SnapSet();  // Initialize optional<> before decoding into it
           decode(*snapset, blp);
-          head_error.ss_bl.push_back(p->second.attrs[SS_ATTR]);
+          head_error.ss_bl.append(p->second.attrs[SS_ATTR]);
         } catch (ceph::buffer::error& e) {
           snapset = std::nullopt;
           clog.error() << m_mode_desc << " " << m_pg_id << " " << soid
@@ -1774,13 +1775,11 @@ std::vector<snap_mapper_fix_t> ScrubBackend::scan_snaps(
 
     if (hoid.is_head()) {
       // parse the SnapSet
-      bufferlist bl;
       if (o.attrs.find(SS_ATTR) == o.attrs.end()) {
 	// no snaps for this head
 	continue;
       }
-      bl.push_back(o.attrs[SS_ATTR]);
-      auto p = bl.cbegin();
+      auto p = o.attrs[SS_ATTR].cbegin();
       try {
 	decode(snapset, p);
       } catch (...) {

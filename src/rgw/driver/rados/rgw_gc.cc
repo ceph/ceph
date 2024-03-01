@@ -28,7 +28,7 @@ using namespace librados;
 static string gc_oid_prefix = "gc";
 static string gc_index_lock_name = "gc_process";
 
-void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
+void RGWGC::initialize(CephContext *_cct, RGWRados *_store, optional_yield y) {
   cct = _cct;
   store = _store;
 
@@ -51,7 +51,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
     op.create(false);
     const uint64_t queue_size = cct->_conf->rgw_gc_max_queue_size, num_deferred_entries = cct->_conf->rgw_gc_max_deferred;
     gc_log_init2(op, queue_size, num_deferred_entries);
-    store->gc_operate(this, obj_names[i], &op);
+    store->gc_operate(this, obj_names[i], &op, y);
   }
 }
 
@@ -65,48 +65,50 @@ int RGWGC::tag_index(const string& tag)
   return rgw_shards_mod(XXH64(tag.c_str(), tag.size(), seed), max_objs);
 }
 
-std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag)
+std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const cls_rgw_obj_chain& chain, const std::string& tag, optional_yield y)
 {
   ldpp_dout(this, 20) << "RGWGC::send_split_chain - tag is: " << tag << dendl;
 
   if (cct->_conf->rgw_max_chunk_size) {
     cls_rgw_obj_chain broken_chain;
+    cls_rgw_gc_set_entry_op op;
+    op.info.tag = tag;
+    size_t base_encoded_size = op.estimate_encoded_size();
+    size_t total_encoded_size = base_encoded_size;
+
     ldpp_dout(this, 20) << "RGWGC::send_split_chain - rgw_max_chunk_size is: " << cct->_conf->rgw_max_chunk_size << dendl;
 
     for (auto it = chain.objs.begin(); it != chain.objs.end(); it++) {
       ldpp_dout(this, 20) << "RGWGC::send_split_chain - adding obj with name: " << it->key << dendl;
       broken_chain.objs.emplace_back(*it);
-      cls_rgw_gc_obj_info info;
-      info.tag = tag;
-      info.chain = broken_chain;
-      cls_rgw_gc_set_entry_op op;
-      op.info = info;
-      size_t total_encoded_size = op.estimate_encoded_size();
+      total_encoded_size += it->estimate_encoded_size();
+
       ldpp_dout(this, 20) << "RGWGC::send_split_chain - total_encoded_size is: " << total_encoded_size << dendl;
 
       if (total_encoded_size > cct->_conf->rgw_max_chunk_size) { //dont add to chain, and send to gc
         broken_chain.objs.pop_back();
         --it;
         ldpp_dout(this, 20) << "RGWGC::send_split_chain - more than, dont add to broken chain and send chain" << dendl;
-        auto ret = send_chain(broken_chain, tag);
+        auto ret = send_chain(broken_chain, tag, y);
         if (ret < 0) {
           broken_chain.objs.insert(broken_chain.objs.end(), it, chain.objs.end()); // add all the remainder objs to the list to be deleted inline
           ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
           return {ret, {broken_chain}};
         }
         broken_chain.objs.clear();
+        total_encoded_size = base_encoded_size;
       }
     }
     if (!broken_chain.objs.empty()) { //when the chain is smaller than or equal to rgw_max_chunk_size
       ldpp_dout(this, 20) << "RGWGC::send_split_chain - sending leftover objects" << dendl;
-      auto ret = send_chain(broken_chain, tag);
+      auto ret = send_chain(broken_chain, tag, y);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
         return {ret, {broken_chain}};
       }
     }
   } else {
-    auto ret = send_chain(chain, tag);
+    auto ret = send_chain(chain, tag, y);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWGC::send_split_chain - send chain returned error: " << ret << dendl;
       return {ret, {std::move(chain)}};
@@ -115,7 +117,7 @@ std::tuple<int, std::optional<cls_rgw_obj_chain>> RGWGC::send_split_chain(const 
   return {0, {}};
 }
 
-int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag)
+int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag, optional_yield y)
 {
   ObjectWriteOperation op;
   cls_rgw_gc_obj_info info;
@@ -127,13 +129,13 @@ int RGWGC::send_chain(const cls_rgw_obj_chain& chain, const string& tag)
 
   ldpp_dout(this, 20) << "RGWGC::send_chain - on object name: " << obj_names[i] << "tag is: " << tag << dendl;
 
-  auto ret = store->gc_operate(this, obj_names[i], &op);
+  auto ret = store->gc_operate(this, obj_names[i], &op, y);
   if (ret != -ECANCELED && ret != -EPERM) {
     return ret;
   }
   ObjectWriteOperation set_entry_op;
   cls_rgw_gc_set_entry(set_entry_op, cct->_conf->rgw_gc_obj_min_wait, info);
-  return store->gc_operate(this, obj_names[i], &set_entry_op);
+  return store->gc_operate(this, obj_names[i], &set_entry_op, y);
 }
 
 struct defer_chain_state {
@@ -170,9 +172,9 @@ void RGWGC::on_defer_canceled(const cls_rgw_gc_obj_info& info)
   cls_rgw_gc_queue_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
   cls_rgw_gc_remove(op, {tag});
 
-  auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-  store->gc_aio_operate(obj_names[i], c, &op);
-  c->release();
+  aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+
+  store->gc_aio_operate(obj_names[i], c.get(), &op);
 }
 
 int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
@@ -191,9 +193,9 @@ int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
     // enqueue succeeds
     cls_rgw_gc_remove(op, {tag});
 
-    auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-    int ret = store->gc_aio_operate(obj_names[i], c, &op);
-    c->release();
+    aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+
+    int ret = store->gc_aio_operate(obj_names[i], c.get(), &op);
     return ret;
   }
 
@@ -214,32 +216,32 @@ int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
 
   int ret = store->gc_aio_operate(obj_names[i], state->completion, &op);
   if (ret == 0) {
+    // coverity[leaked_storage:SUPPRESS]
     state.release(); // release ownership until async_defer_callback()
   }
   return ret;
 }
 
-int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc)
+int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc, optional_yield y)
 {
   ObjectWriteOperation op;
   cls_rgw_gc_remove(op, tags);
 
-  auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-  int ret = store->gc_aio_operate(obj_names[index], c, &op);
-  if (ret < 0) {
-    c->release();
-  } else {
-    *pc = c;
+  aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+  int ret = store->gc_aio_operate(obj_names[index], c.get(), &op);
+  if (ret >= 0) {
+    *pc = c.get();
+    c.release();
   }
   return ret;
 }
 
-int RGWGC::remove(int index, int num_entries)
+int RGWGC::remove(int index, int num_entries, optional_yield y)
 {
   ObjectWriteOperation op;
   cls_rgw_gc_queue_remove_entries(op, num_entries);
 
-  return store->gc_operate(this, obj_names[index], &op);
+  return store->gc_operate(this, obj_names[index], &op, y);
 }
 
 int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)
@@ -390,12 +392,13 @@ public:
       }
     }
 
-    auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-    int ret = ioctx->aio_operate(oid, c, op);
+    aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+    int ret = ioctx->aio_operate(oid, c.get(), op);
     if (ret < 0) {
       return ret;
     }
-    ios.push_back(IO{IO::TailIO, c, oid, index, tag});
+    ios.push_back(IO{IO::TailIO, c.get(), oid, index, tag});
+    c.release();
 
     return 0;
   }
@@ -503,7 +506,7 @@ public:
 	}
       );
 
-    int ret = gc->remove(index, rt, &index_io.c);
+    int ret = gc->remove(index, rt, &index_io.c, null_yield);
     if (ret < 0) {
       /* we already cleared list of tags, this prevents us from
        * ballooning in case of a persistent problem
@@ -529,8 +532,8 @@ public:
     }
   }
 
-  int remove_queue_entries(int index, int num_entries) {
-    int ret = gc->remove(index, num_entries);
+  int remove_queue_entries(int index, int num_entries, optional_yield y) {
+    int ret = gc->remove(index, num_entries, null_yield);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to remove queue entries on index=" <<
 	    index << " ret=" << ret << dendl;
@@ -545,7 +548,7 @@ public:
 }; // class RGWGCIOManger
 
 int RGWGC::process(int index, int max_secs, bool expired_only,
-                   RGWGCIOManager& io_manager)
+                   RGWGCIOManager& io_manager, optional_yield y)
 {
   ldpp_dout(this, 20) << "RGWGC::process entered with GC index_shard=" <<
     index << ", max_secs=" << max_secs << ", expired_only=" <<
@@ -576,7 +579,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 
   string marker;
   string next_marker;
-  bool truncated;
+  bool truncated = false;
   IoCtx *ctx = new IoCtx;
   do {
     int max = 100;
@@ -703,7 +706,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
       }
       //Remove the entries from the queue
       ldpp_dout(this, 5) << "RGWGC::process removing entries, marker: " << marker << dendl;
-      ret = io_manager.remove_queue_entries(index, entries.size());
+      ret = io_manager.remove_queue_entries(index, entries.size(), null_yield);
       if (ret < 0) {
         ldpp_dout(this, 0) <<
           "WARNING: failed to remove queue entries" << dendl;
@@ -722,7 +725,7 @@ done:
   return 0;
 }
 
-int RGWGC::process(bool expired_only)
+int RGWGC::process(bool expired_only, optional_yield y)
 {
   int max_secs = cct->_conf->rgw_gc_processor_max_time;
 
@@ -732,7 +735,7 @@ int RGWGC::process(bool expired_only)
 
   for (int i = 0; i < max_objs; i++) {
     int index = (i + start) % max_objs;
-    int ret = process(index, max_secs, expired_only, io_manager);
+    int ret = process(index, max_secs, expired_only, io_manager, y);
     if (ret < 0)
       return ret;
   }
@@ -779,7 +782,7 @@ void *RGWGC::GCWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     ldpp_dout(dpp, 2) << "garbage collection: start" << dendl;
-    int r = gc->process(true);
+    int r = gc->process(true, null_yield);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: garbage collection process() returned error r=" << r << dendl;
     }

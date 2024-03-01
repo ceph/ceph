@@ -38,6 +38,7 @@
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
 #include "include/ceph_features.h"
+#include "mds/cephfs_features.h"
 #include "messages/MMDSOp.h"
 
 #include <sys/types.h>
@@ -59,6 +60,17 @@ struct SnapPayload {
     decode(metadata, iter);
     DECODE_FINISH(iter);
   }
+  void dump(ceph::Formatter *f) const {
+    for (const auto &i : metadata) {
+      f->dump_string(i.first.c_str(), i.second);
+    }
+  }
+  static void generate_test_instances(std::list<SnapPayload *> &o) {
+    o.push_back(new SnapPayload);
+    o.push_back(new SnapPayload);
+    o.back()->metadata["key1"] = "val1";
+    o.back()->metadata["key2"] = "val2";
+  }
 };
 
 WRITE_CLASS_ENCODER(SnapPayload)
@@ -73,7 +85,7 @@ private:
 public:
   mutable struct ceph_mds_request_head head; /* XXX HACK! */
   utime_t stamp;
-  bool peer_old_version = false;
+  feature_bitset_t mds_features;
 
   struct Release {
     mutable ceph_mds_request_release item;
@@ -94,6 +106,26 @@ public:
       decode(item, bl);
       ceph::decode_nohead(item.dname_len, dname, bl);
     }
+
+    void dump(ceph::Formatter *f) const {
+      f->dump_string("dname", dname);
+      f->dump_unsigned("ino", item.ino);
+      f->dump_unsigned("cap_id", item.cap_id);
+      f->dump_unsigned("caps", item.caps);
+      f->dump_unsigned("wanted", item.wanted);
+      f->dump_unsigned("seq", item.seq);
+      f->dump_unsigned("issue_seq", item.issue_seq);
+      f->dump_unsigned("mseq", item.mseq);
+      f->dump_unsigned("dname_seq", item.dname_seq);
+      f->dump_unsigned("dname_len", item.dname_len);
+    }
+
+    static void generate_test_instances(std::list<Release*>& ls) {
+      ls.push_back(new Release);
+      ls.push_back(new Release);
+      ls.back()->item.dname_len = 4;
+      ls.back()->dname = "test";
+    }
   };
   mutable std::vector<Release> releases; /* XXX HACK! */
 
@@ -113,12 +145,16 @@ protected:
   MClientRequest()
     : MMDSOp(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
+    head.owner_uid = -1;
+    head.owner_gid = -1;
   }
-  MClientRequest(int op, bool over=true)
+  MClientRequest(int op, feature_bitset_t features = 0)
     : MMDSOp(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
-    peer_old_version = over;
+    mds_features = features;
+    head.owner_uid = -1;
+    head.owner_gid = -1;
   }
   ~MClientRequest() final {}
 
@@ -201,6 +237,8 @@ public:
   int get_op() const { return head.op; }
   unsigned get_caller_uid() const { return head.caller_uid; }
   unsigned get_caller_gid() const { return head.caller_gid; }
+  unsigned get_owner_uid() const { return head.owner_uid; }
+  unsigned get_owner_gid() const { return head.owner_gid; }
   const std::vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
 
   const std::string& get_path() const { return path.get_path(); }
@@ -226,6 +264,12 @@ public:
       decode(old_mds_head, p);
       copy_from_legacy_head(&head, &old_mds_head);
       head.version = 0;
+
+      head.ext_num_retry = head.num_retry;
+      head.ext_num_fwd = head.num_fwd;
+
+      head.owner_uid = head.caller_uid;
+      head.owner_gid = head.caller_gid;
 
       /* Can't set the btime from legacy struct */
       if (head.op == CEPH_MDS_OP_SETATTR) {
@@ -262,14 +306,16 @@ public:
      * client will just copy the 'head' memory and isn't
      * that smart to skip them.
      */
-    if (peer_old_version) {
+    if (!mds_features.test(CEPHFS_FEATURE_32BITS_RETRY_FWD)) {
       head.version = 1;
+    } else if (!mds_features.test(CEPHFS_FEATURE_HAS_OWNER_UIDGID)) {
+      head.version = 2;
     } else {
       head.version = CEPH_MDS_REQUEST_HEAD_VERSION;
     }
 
     if (features & CEPH_FEATURE_FS_BTIME) {
-      encode(head, payload, peer_old_version);
+      encode(head, payload);
     } else {
       struct ceph_mds_request_head_legacy old_mds_head;
 
@@ -292,6 +338,10 @@ public:
     out << "client_request(" << get_orig_source()
 	<< ":" << get_tid()
 	<< " " << ceph_mds_op_name(get_op());
+    if (IS_CEPH_MDS_OP_NEWINODE(head.op)) {
+      out << " owner_uid=" << head.owner_uid
+	  << ", owner_gid=" << head.owner_gid;
+    }
     if (head.op == CEPH_MDS_OP_GETATTR)
       out << " " << ccap_string(head.args.getattr.mask);
     if (head.op == CEPH_MDS_OP_SETATTR) {

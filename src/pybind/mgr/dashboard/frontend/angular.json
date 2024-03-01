@@ -99,9 +99,6 @@
               "node_modules/ngx-toastr/toastr.css",
               "src/styles.scss"
             ],
-            "scripts": [
-              "node_modules/chart.js/dist/Chart.bundle.js"
-            ],
             "stylePreprocessorOptions": {
               "includePaths": [
                 "src"
@@ -274,7 +271,6 @@
       "cli": {}
     }
   },
-  "defaultProject": "ceph-dashboard",
   "schematics": {
     "@schematics/angular:component": {
       "prefix": "cd",
@@ -286,6 +282,8 @@
   },
   "cli": {
     "analytics": false,
-    "defaultCollection": "@angular-eslint/schematics"
+    "schematicCollections": [
+      "@angular-eslint/schematics"
+    ]
   }
 }

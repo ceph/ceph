@@ -74,6 +74,7 @@ promPool          OBJECT IDENTIFIER ::= { prometheus 9 }
 promRados         OBJECT IDENTIFIER ::= { prometheus 10 }
 promCephadm       OBJECT IDENTIFIER ::= { prometheus 11 }
 promPrometheus    OBJECT IDENTIFIER ::= { prometheus 12 }
+promNVMeGateway   OBJECT IDENTIFIER ::= { prometheus 14 }
 
 promGenericNotification NOTIFICATION-TYPE
     STATUS      current
@@ -245,6 +246,26 @@ promRadosUnfound NOTIFICATION-TYPE
     DESCRIPTION "A RADOS object can not be found, even though all OSDs are online."
 ::= { promRados 1 }
 
+promRadosRBDMirrorImagesVeryHigh NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Number of RBD image replications are very high."
+::= { promRados 2 }
+
+promRadosRBDMirrorUnsyncImages NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "Local RBD images are not in sync with the remote counter parts"
+::= { promRados 3 }
+
+promRadosRBDMirrorUnsyncImagesHigh NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "There is a high percentage of un-sync RBD images."
+::= { promRados 4 }
+
+promRadosRBDMirrorHighBandwidth NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "A high bandwidth usage is detected during RBD image transfers."
+::= { promRados 5 }
+
 promCephadmDaemonDown NOTIFICATION-TYPE
     STATUS      current
     DESCRIPTION "Cephadm has determined that a daemon is down."
@@ -259,6 +280,11 @@ promPrometheusJobMissing NOTIFICATION-TYPE
     STATUS      current
     DESCRIPTION "The prometheus scrape job is not defined."
 ::= { promPrometheus 1 }
+
+promNVMeGatewayNicDown NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "A NIC used for NVMe gateway client traffic is down."
+::= { promNVMeGateway 1 }
 -- ---------------------------------------------------------- --
 -- IEEE 802.1D MIB - Conformance Information
 -- ---------------------------------------------------------- --
@@ -310,9 +336,14 @@ cephNotificationGroup NOTIFICATION-GROUP
         promPoolFull,
         promPoolFilling,
         promRadosUnfound,
+        promRadosRBDMirrorImagesVeryHigh,
+        promRadosRBDMirrorUnsyncImages,
+        promRadosRBDMirrorUnsyncImagesHigh,
+        promRadosRBDMirrorHighBandwidth,
         promCephadmDaemonDown,
         promCephadmUpgradeFailure,
-        promPrometheusJobMissing
+        promPrometheusJobMissing,
+        promNVMeGatewayNicDown
     }
     STATUS current
     DESCRIPTION

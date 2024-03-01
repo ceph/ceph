@@ -122,7 +122,7 @@ bool ManagedLock<I>::is_lock_owner(ceph::mutex &lock) const {
     break;
   }
 
-  ldout(m_cct, 20) << "=" << lock_owner << dendl;
+  ldout(m_cct, 20) << lock_owner << dendl;
   return lock_owner;
 }
 
@@ -207,7 +207,8 @@ void ManagedLock<I>::reacquire_lock(Context *on_reacquired) {
   {
     std::lock_guard locker{m_lock};
 
-    if (m_state == STATE_WAITING_FOR_REGISTER) {
+    if (m_state == STATE_WAITING_FOR_REGISTER ||
+        m_state == STATE_WAITING_FOR_LOCK) {
       // restart the acquire lock process now that watch is valid
       ldout(m_cct, 10) << "woke up waiting (re)acquire" << dendl;
       Action active_action = get_active_action();
@@ -217,8 +218,7 @@ void ManagedLock<I>::reacquire_lock(Context *on_reacquired) {
     } else if (!is_state_shutdown() &&
                (m_state == STATE_LOCKED ||
                 m_state == STATE_ACQUIRING ||
-                m_state == STATE_POST_ACQUIRING ||
-                m_state == STATE_WAITING_FOR_LOCK)) {
+                m_state == STATE_POST_ACQUIRING)) {
       // interlock the lock operation with other state ops
       ldout(m_cct, 10) << dendl;
       execute_action(ACTION_REACQUIRE_LOCK, on_reacquired);

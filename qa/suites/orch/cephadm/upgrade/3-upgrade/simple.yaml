@@ -8,6 +8,8 @@ tasks:
       - radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=z --master --default
       - radosgw-admin period update --rgw-realm=r --commit
       - ceph orch apply rgw foo --realm r --zone z --placement=2 --port=8000
+      # simple rgw spec (will have no "spec" field) to make sure that works with rgw spec migration
+      - ceph orch apply rgw smpl
       # setup iscsi
       - ceph osd pool create foo
       - rbd pool init foo

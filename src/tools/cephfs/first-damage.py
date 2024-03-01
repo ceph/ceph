@@ -78,15 +78,15 @@ def traverse(MEMO, ioctx):
         with rados.ReadOpCtx() as rctx:
             nkey = None
             while True:
-                it = ioctx.get_omap_vals(rctx, nkey, None, 100)[0]
+                it = ioctx.get_omap_vals(rctx, nkey, None, 100, omap_key_type=bytes)[0]
                 ioctx.operate_read_op(rctx, o.key)
                 nkey = None
                 for (dnk, val) in it:
-                    log.debug('\t%s: val size %d', dnk, len(val))
+                    log.debug(f'\t{dnk}: val size {len(val)}')
                     (first,) = struct.unpack('<I', val[:4])
                     if first > NEXT_SNAP:
                         log.warning(f"found {o.key}:{dnk} first (0x{first:x}) > NEXT_SNAP (0x{NEXT_SNAP:x})")
-                        if REPAIR_NOSNAP and dnk.endswith("_head") and first == CEPH_NOSNAP:
+                        if REPAIR_NOSNAP and dnk.endswith(b"_head") and first == CEPH_NOSNAP:
                             log.warning(f"repairing first==CEPH_NOSNAP damage, setting to NEXT_SNAP (0x{NEXT_SNAP:x})")
                             first = NEXT_SNAP
                             nval = bytearray(val)

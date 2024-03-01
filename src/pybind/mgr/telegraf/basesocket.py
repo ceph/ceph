@@ -38,9 +38,6 @@ class BaseSocket(object):
     def send(self, data: str, flags: int = 0) -> int:
         return self.sock.send(data.encode('utf-8') + b'\n', flags)
 
-    def __del__(self) -> None:
-        self.sock.close()
-
     def __enter__(self) -> 'BaseSocket':
         self.connect()
         return self

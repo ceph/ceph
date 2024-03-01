@@ -15,86 +15,6 @@ from .listing import direct_report
 logger = logging.getLogger(__name__)
 
 
-def activate_filestore(osd_lvs, no_systemd=False):
-    # find the osd
-    for osd_lv in osd_lvs:
-        if osd_lv.tags.get('ceph.type') == 'data':
-            data_lv = osd_lv
-            break
-    else:
-        raise RuntimeError('Unable to find a data LV for filestore activation')
-
-    is_encrypted = data_lv.tags.get('ceph.encrypted', '0') == '1'
-    is_vdo = data_lv.tags.get('ceph.vdo', '0')
-
-    osd_id = data_lv.tags['ceph.osd_id']
-    configuration.load_ceph_conf_path(data_lv.tags['ceph.cluster_name'])
-    configuration.load()
-    # it may have a volume with a journal
-    for osd_lv in osd_lvs:
-        if osd_lv.tags.get('ceph.type') == 'journal':
-            osd_journal_lv = osd_lv
-            break
-    else:
-        osd_journal_lv = None
-
-    # TODO: add sensible error reporting if this is ever the case
-    # blow up with a KeyError if this doesn't exist
-    osd_fsid = data_lv.tags['ceph.osd_fsid']
-    if not osd_journal_lv:
-        # must be a disk partition, by querying blkid by the uuid we are ensuring that the
-        # device path is always correct
-        journal_uuid = data_lv.tags['ceph.journal_uuid']
-        osd_journal = disk.get_device_from_partuuid(journal_uuid)
-    else:
-        journal_uuid = osd_journal_lv.lv_uuid
-        osd_journal = data_lv.tags['ceph.journal_device']
-
-    if not osd_journal:
-        raise RuntimeError('unable to detect an lv or device journal for OSD %s' % osd_id)
-
-    # this is done here, so that previous checks that ensure path availability
-    # and correctness can still be enforced, and report if any issues are found
-    if is_encrypted:
-        lockbox_secret = data_lv.tags['ceph.cephx_lockbox_secret']
-        # this keyring writing is idempotent
-        encryption_utils.write_lockbox_keyring(osd_id, osd_fsid, lockbox_secret)
-        dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
-        encryption_utils.luks_open(dmcrypt_secret, data_lv.lv_path, data_lv.lv_uuid)
-        encryption_utils.luks_open(dmcrypt_secret, osd_journal, journal_uuid)
-
-        osd_journal = '/dev/mapper/%s' % journal_uuid
-        source = '/dev/mapper/%s' % data_lv.lv_uuid
-    else:
-        source = data_lv.lv_path
-
-    # mount the osd
-    destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
-    if not system.device_is_mounted(source, destination=destination):
-        prepare_utils.mount_osd(source, osd_id, is_vdo=is_vdo)
-
-    # ensure that the OSD destination is always chowned properly
-    system.chown(destination)
-
-    # always re-do the symlink regardless if it exists, so that the journal
-    # device path that may have changed can be mapped correctly every time
-    destination = '/var/lib/ceph/osd/%s-%s/journal' % (conf.cluster, osd_id)
-    process.run(['ln', '-snf', osd_journal, destination])
-
-    # make sure that the journal has proper permissions
-    system.chown(osd_journal)
-
-    if no_systemd is False:
-        # enable the ceph-volume unit for this OSD
-        systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
-
-        # enable the OSD
-        systemctl.enable_osd(osd_id)
-
-        # start the OSD
-        systemctl.start_osd(osd_id)
-    terminal.success("ceph-volume lvm activate successful for osd ID: %s" % osd_id)
-
 
 def get_osd_device_path(osd_lvs, device_type, dmcrypt_secret=None):
     """
@@ -149,6 +69,8 @@ def activate_bluestore(osd_lvs, no_systemd=False, no_tmpfs=False):
         raise RuntimeError('could not find a bluestore OSD to activate')
 
     is_encrypted = osd_block_lv.tags.get('ceph.encrypted', '0') == '1'
+    if is_encrypted and conf.dmcrypt_no_workqueue is None:
+        encryption_utils.set_dmcrypt_no_workqueue()
     dmcrypt_secret = None
     osd_id = osd_block_lv.tags['ceph.osd_id']
     conf.cluster = osd_block_lv.tags['ceph.cluster_name']
@@ -279,30 +201,16 @@ class Activate(object):
 
         # This argument is only available when passed in directly or via
         # systemd, not when ``create`` is being used
+        # placeholder when a new objectstore support will be added
         if getattr(args, 'auto_detect_objectstore', False):
             logger.info('auto detecting objectstore')
-            # may get multiple lvs, so can't do get_the_lvs() calls here
-            for lv in lvs:
-                has_journal = lv.tags.get('ceph.journal_uuid')
-                if has_journal:
-                    logger.info('found a journal associated with the OSD, '
-                                'assuming filestore')
-                    return activate_filestore(lvs, args.no_systemd)
-
-            logger.info('unable to find a journal associated with the OSD, '
-                        'assuming bluestore')
-
             return activate_bluestore(lvs, args.no_systemd)
 
-        # explicit filestore/bluestore flags take precedence
+        # explicit 'objectstore' flags take precedence
         if getattr(args, 'bluestore', False):
             activate_bluestore(lvs, args.no_systemd, getattr(args, 'no_tmpfs', False))
-        elif getattr(args, 'filestore', False):
-            activate_filestore(lvs, args.no_systemd)
         elif any('ceph.block_device' in lv.tags for lv in lvs):
             activate_bluestore(lvs, args.no_systemd, getattr(args, 'no_tmpfs', False))
-        elif any('ceph.data_device' in lv.tags for lv in lvs):
-            activate_filestore(lvs, args.no_systemd)
 
     def main(self):
         sub_command_help = dedent("""
@@ -347,11 +255,6 @@ class Activate(object):
             '--bluestore',
             action='store_true',
             help='force bluestore objectstore activation',
-        )
-        parser.add_argument(
-            '--filestore',
-            action='store_true',
-            help='force filestore objectstore activation',
         )
         parser.add_argument(
             '--all',

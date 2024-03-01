@@ -53,10 +53,6 @@ Options
 
    Run in foreground, log to usual location
 
-.. option:: --rgw-socket-path=path
-
-   Specify a unix domain socket path.
-
 .. option:: --rgw-region=region
 
    The region where radosgw runs
@@ -80,30 +76,24 @@ and ``mod_proxy_fcgi`` have to be present in the server. Unlike ``mod_fastcgi``,
 or process management may be available in the FastCGI application framework
 in use.
 
-``Apache`` can be configured in a way that enables ``mod_proxy_fcgi`` to be used
-with localhost tcp or through unix domain socket. ``mod_proxy_fcgi`` that doesn't
-support unix domain socket such as the ones in Apache 2.2 and earlier versions of
-Apache 2.4, needs to be configured for use with localhost tcp. Later versions of
-Apache like Apache 2.4.9 or later support unix domain socket and as such they
-allow for the configuration with unix domain socket instead of localhost tcp.
+``Apache`` must be configured in a way that enables ``mod_proxy_fcgi`` to be
+used with localhost tcp.
 
 The following steps show the configuration in Ceph's configuration file i.e,
 ``/etc/ceph/ceph.conf`` and the gateway configuration file i.e,
 ``/etc/httpd/conf.d/rgw.conf`` (RPM-based distros) or
 ``/etc/apache2/conf-available/rgw.conf`` (Debian-based distros) with localhost
-tcp and through unix domain socket:
+tcp:
 
 #. For distros with Apache 2.2 and early versions of Apache 2.4 that use
-   localhost TCP and do not support Unix Domain Socket, append the following
-   contents to ``/etc/ceph/ceph.conf``::
+   localhost TCP, append the following contents to ``/etc/ceph/ceph.conf``::
 
 	[client.radosgw.gateway]
 	host = {hostname}
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
-	rgw socket path = ""
-	log file = /var/log/ceph/client.radosgw.gateway.log
-	rgw frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
-	rgw print continue = false
+	log_file = /var/log/ceph/client.radosgw.gateway.log
+	rgw_frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
+	rgw_print_continue = false
 
 #. Add the following content in the gateway configuration file:
 
@@ -149,16 +139,6 @@ tcp and through unix domain socket:
 
 		</VirtualHost>
 
-#. For distros with Apache 2.4.9 or later that support Unix Domain Socket,
-   append the following configuration to ``/etc/ceph/ceph.conf``::
-
-	[client.radosgw.gateway]
-	host = {hostname}
-	keyring = /etc/ceph/ceph.client.radosgw.keyring
-	rgw socket path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
-	log file = /var/log/ceph/client.radosgw.gateway.log
-	rgw print continue = false
-
 #. Add the following content in the gateway configuration file:
 
    For CentOS/RHEL add in ``/etc/httpd/conf.d/rgw.conf``::
@@ -181,10 +161,6 @@ tcp and through unix domain socket:
 		ProxyPass / unix:///var/run/ceph/ceph.radosgw.gateway.fastcgi.sock|fcgi://localhost:9000/
 
 		</VirtualHost>
-
-   Please note, ``Apache 2.4.7`` does not have Unix Domain Socket support in
-   it and as such it has to be configured with localhost tcp. The Unix Domain
-   Socket support is available in ``Apache 2.4.9`` and later versions.
 
 #. Generate a key for radosgw to use for authentication with the cluster. ::
 
@@ -223,11 +199,11 @@ which case it is accounted under the operating user.
 Following is an example configuration::
 
         [client.radosgw.gateway]
-            rgw enable usage log = true
-            rgw usage log tick interval = 30
-            rgw usage log flush threshold = 1024
-            rgw usage max shards = 32
-            rgw usage max user shards = 1
+            rgw_enable_usage_log = true
+            rgw_usage_log_tick_interval = 30
+            rgw_usage_log_flush_threshold = 1024
+            rgw_usage_max_shards = 32
+            rgw_usage_max_user_shards = 1
 
 
 The total number of shards determines how many total objects hold the

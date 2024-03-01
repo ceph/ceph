@@ -23,7 +23,7 @@ struct rgw_obj_key;
 namespace rgw::notify {
 
 // initialize the notification manager
-// notification manager is dequeing the 2-phase-commit queues
+// notification manager is dequeuing the 2-phase-commit queues
 // and send the notifications to the endpoints
 bool init(CephContext* cct, rgw::sal::RadosStore* store, const DoutPrefixProvider *dpp);
 
@@ -37,6 +37,9 @@ int add_persistent_topic(const std::string& topic_name, optional_yield y);
 // remove persistent delivery queue for a topic (endpoint)
 // this operation also remove the topic name from the common (to all RGWs) list of all topics
 int remove_persistent_topic(const std::string& topic_name, optional_yield y);
+
+// same as the above, expect you need to provide the IoCtx, the above uses rgw::notify::Manager::rados_ioctx
+int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_name, optional_yield y);
 
 // struct holding reservation information
 // populated in the publish_reserve call
@@ -95,8 +98,18 @@ struct reservation_t {
   ~reservation_t();
 };
 
+
+
+struct rgw_topic_stats {
+  std::size_t queue_reservations; // number of reservations
+  uint64_t queue_size;            // in bytes
+  uint32_t queue_entries;         // number of entries
+
+  void dump(Formatter *f) const;
+};
+
 // create a reservation on the 2-phase-commit queue
-  int publish_reserve(const DoutPrefixProvider *dpp,
+int publish_reserve(const DoutPrefixProvider *dpp,
 		      EventType event_type,
 		      reservation_t& reservation,
 		      const RGWObjTags* req_tags);
@@ -113,6 +126,9 @@ int publish_commit(rgw::sal::Object* obj,
 
 // cancel the reservation
 int publish_abort(reservation_t& reservation);
+
+int get_persistent_queue_stats_by_topic_name(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
+                                             const std::string &topic_name, rgw_topic_stats &stats, optional_yield y);
 
 }
 

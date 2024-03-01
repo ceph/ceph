@@ -23,6 +23,7 @@ from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport strdup, memset
+cimport libcpp
 
 try:
     from collections.abc import Iterable
@@ -480,7 +481,7 @@ cdef class Completion(object):
 
     def get_return_value(self):
         """
-        Get the return value of an asychronous operation
+        Get the return value of an asynchronous operation
 
         The return value is set when the operation is complete.
 
@@ -1397,8 +1398,10 @@ class RBD(object):
             char *_client_name = client_name
         try:
             _uuid = <char *>realloc_chk(_uuid, _uuid_max_length)
-            ret = rbd_mirror_peer_site_add(_ioctx, _uuid, _uuid_max_length,
-                                           _direction, _site_name, _client_name)
+            with nogil:
+                ret = rbd_mirror_peer_site_add(_ioctx, _uuid, _uuid_max_length,
+                                               _direction, _site_name,
+                                               _client_name)
             if ret != 0:
                 raise make_ex(ret, 'error adding mirror peer')
             return decode_cstr(_uuid)
@@ -1933,12 +1936,12 @@ class RBD(object):
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             const char *_name = name
-            bint _exists = False
+            libcpp.bool _exists = False
         with nogil:
             ret = rbd_namespace_exists(_ioctx, _name, &_exists)
         if ret != 0:
             raise make_ex(ret, 'error verifying namespace')
-        return bool(_exists != 0)
+        return _exists
 
     def namespace_list(self, ioctx):
         """
@@ -2127,7 +2130,7 @@ class RBD(object):
         :param name: the name of the image
         :type name: str
         :param snapshot: which snapshot to read from
-        :type snaphshot: str
+        :type snapshot: str
         :param read_only: whether to open the image in read-only mode
         :type read_only: bool
         :param image_id: the id of the image
@@ -2809,7 +2812,7 @@ cdef class Image(object):
         :param name: the name of the image
         :type name: str
         :param snapshot: which snapshot to read from
-        :type snaphshot: str
+        :type snapshot: str
         :param read_only: whether to open the image in read-only mode
         :type read_only: bool
         :param image_id: the id of the image
@@ -3132,7 +3135,11 @@ cdef class Image(object):
 
         :returns: int - the pool id
         """
-        return rbd_get_data_pool_id(self.image)
+        with nogil:
+            ret = rbd_get_data_pool_id(self.image)
+        if ret < 0:
+            raise make_ex(ret, 'error getting data pool id for image %s' % self.name)
+        return ret
 
     @requires_not_closed
     def get_parent_image_spec(self):
@@ -3673,12 +3680,12 @@ cdef class Image(object):
         name = cstr(name, 'name')
         cdef:
             char *_name = name
-            bint _exists = False
+            libcpp.bool _exists = False
         with nogil:
             ret = rbd_snap_exists(self.image, _name, &_exists)
         if ret != 0:
             raise make_ex(ret, 'error getting snapshot exists for %s' % self.name)
-        return bool(_exists != 0)
+        return _exists
 
     @requires_not_closed
     def get_snap_limit(self):
@@ -4505,13 +4512,18 @@ written." % (self.name, ret, length))
         def oncomplete_(completion_v):
             cdef:
                 Completion _completion_v = completion_v
-                rbd_mirror_image_info_t *c_info = <rbd_mirror_image_info_t *>_completion_v.buf
-            info = {
-                'global_id' : decode_cstr(c_info[0].global_id),
-                'state'     : int(c_info[0].state),
-                'primary'   : c_info[0].primary,
-            }
-            rbd_mirror_image_get_info_cleanup(c_info)
+                rbd_mirror_image_info_t *c_info
+            return_value = _completion_v.get_return_value()
+            if return_value == 0:
+                c_info = <rbd_mirror_image_info_t *>_completion_v.buf
+                info = {
+                    'global_id' : decode_cstr(c_info[0].global_id),
+                    'state'     : int(c_info[0].state),
+                    'primary'   : c_info[0].primary,
+                }
+                rbd_mirror_image_get_info_cleanup(c_info)
+            else:
+                info = None
             return oncomplete(_completion_v, info)
 
         completion = self.__get_completion(oncomplete_)

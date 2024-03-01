@@ -20,7 +20,16 @@
 using namespace std;
 
 void usage(const string &name) {
-  cerr << "Usage: " << name << " <log_to_replay> <raw_duplicates|duplicates|free_dump|try_alloc count want alloc_unit|replay_alloc alloc_list_file|export_binary out_file>" << std::endl;
+  cerr << "Usage: " << name << " <log_to_replay|free-dump> "
+       << " raw_duplicates|"
+          "duplicates|"
+          "free_dump|"
+          "assess_free <alloc_unit>|"
+          "try_alloc <count> <want> <alloc_unit>|"
+          "replay_alloc <alloc_list_file|"
+          "export_binary <out_file>|"
+          "free_histogram [<alloc_unit>] [<num_buckets>]"
+       << std::endl;
 }
 
 void usage_replay_alloc(const string &name) {
@@ -382,7 +391,7 @@ int replay_free_dump_and_apply(char* fname,
                        std::string_view alloc_name) {
     alloc.reset(
       Allocator::create(
-        g_ceph_context, alloc_type, capacity, alloc_unit, 0, 0, alloc_name));
+        g_ceph_context, alloc_type, capacity, alloc_unit, alloc_name));
   };
   auto add_fn = [&](uint64_t offset,
                    uint64_t len) {
@@ -527,7 +536,7 @@ int check_duplicates(char* fname)
 
 int main(int argc, char **argv)
 {
-  vector<const char*> args;
+  auto args = argv_to_vec(argc, argv);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
@@ -548,11 +557,47 @@ int main(int argc, char **argv)
                   << std::endl;
         std::cout << "Fragmentation score:" << a->get_fragmentation_score()
                   << std::endl;
-        std::cout << "Free:" << std::hex << a->get_free() << std::dec
+        std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
                   << std::endl;
         {
         // stub to implement various testing stuff on properly initialized allocator
         // e.g. one can dump allocator back via dump_alloc(a, aname);
+        }
+        return 0;
+      });
+  } else if (strcmp(argv[2], "assess_free") == 0) {
+    if (argc < 4) {
+      std::cerr << "Error: insufficient arguments for \"assess_free_extents\" operation."
+                << std::endl;
+      usage(argv[0]);
+      return 1;
+    }
+    auto alloc_unit = strtoul(argv[3], nullptr, 10);
+    return replay_free_dump_and_apply(argv[1],
+      [&](Allocator* a, const string& aname) {
+        ceph_assert(a);
+        std::cout << "Fragmentation:" << a->get_fragmentation()
+                  << std::endl;
+        std::cout << "Fragmentation score:" << a->get_fragmentation_score()
+                  << std::endl;
+        std::cout << "Free:" << std::hex << a->get_free() << std::dec
+                  << std::endl;
+        {
+          uint64_t available = 0;
+          uint64_t available2 = 0;
+          a->foreach([&](uint64_t offs, uint64_t len) {
+            auto a = p2align(len, alloc_unit);
+            available += a;
+            auto a0 = p2roundup(offs, alloc_unit);
+            a = p2align(offs + len, alloc_unit);
+            if (a > a0) {
+              available2 += a - a0;
+            }
+          });
+          std::cout << "Available: 0x" << std::hex << available
+                    << " Available(strict align): 0x" << available2
+                    << " alloc_unit: 0x" << alloc_unit << std::dec
+                    << std::endl;
         }
         return 0;
       });
@@ -574,18 +619,25 @@ int main(int argc, char **argv)
                   << std::endl;
         std::cout << "Fragmentation score:" << a->get_fragmentation_score()
                   << std::endl;
-        std::cout << "Free:" << std::hex << a->get_free() << std::dec
+        std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
                   << std::endl;
         {
           PExtentVector extents;
           for(size_t i = 0; i < count; i++) {
-              extents.clear();
-              auto r = a->allocate(want, alloc_unit, 0, &extents);
-              if (r < 0) {
-                  std::cerr << "Error: allocation failure at step:" << i + 1
-                            << ", ret = " << r << std::endl;
+            extents.clear();
+            auto r = a->allocate(want, alloc_unit, 0, &extents);
+            if (r < 0) {
+              std::cerr << "Error: allocation failure at step:" << i + 1
+                        << ", ret = " << r << std::endl;
               return -1;
             }
+            std::cout << ">allocated: " << r << std::endl;
+
+            std::cout << "Extents:" << std::hex;
+            for (auto& e : extents) {
+              std::cout << e.offset << "~" << e.length << " ";
+            }
+            std::cout << std::dec << std::endl;
 	  }
         }
         std::cout << "Successfully allocated: " << count << " * " << want
@@ -606,7 +658,7 @@ int main(int argc, char **argv)
                   << std::endl;
         std::cout << "Fragmentation score:" << a->get_fragmentation_score()
                   << std::endl;
-        std::cout << "Free:" << std::hex << a->get_free() << std::dec
+        std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
                   << std::endl;
         {
           /* replay a set of allocation requests */
@@ -655,7 +707,7 @@ int main(int argc, char **argv)
                           << std::endl;
                 std::cerr << "Fragmentation score:" << a->get_fragmentation_score()
                           << std::endl;
-                std::cerr << "Free:" << std::hex << a->get_free() << std::dec
+                std::cerr << "Free: 0x" << std::hex << a->get_free() << std::dec
                           << std::endl;
                 /* return 0 if the allocator ran out of space */
                 if (r == -ENOSPC) {
@@ -668,7 +720,8 @@ int main(int argc, char **argv)
               std::cout << "Duration (ns): " << (ceph::mono_clock::now() - t0).count()
                         << " want/unit/max/hint (hex): " << std::hex
                         << want << "/" << unit << "/" << max << "/" << hint
-                        << std::dec << std::endl;
+                        << std::dec << " res fragments " << extents.size()
+                        << std::endl;
 
               /* Do not release. */
               //alloc->release(extents);
@@ -681,10 +734,47 @@ int main(int argc, char **argv)
                     << std::endl;
           std::cout << "Fragmentation score:" << a->get_fragmentation_score()
                     << std::endl;
-          std::cout << "Free:" << std::hex << a->get_free() << std::dec
+          std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
                     << std::endl;
         }
         return 0;
+    });
+  } else if (strcmp(argv[2], "free_histogram") == 0) {
+    uint64_t alloc_unit = 4096;
+    auto num_buckets = 8;
+    if (argc >= 4) {
+      alloc_unit = strtoul(argv[3], nullptr, 10);
+    }
+    if (argc >= 5) {
+      num_buckets = strtoul(argv[4], nullptr, 10);
+    }
+    return replay_free_dump_and_apply(argv[1],
+      [&](Allocator *a, const string &aname) {
+        ceph_assert(a);
+        std::cout << "Fragmentation:" << a->get_fragmentation()
+                  << std::endl;
+        std::cout << "Fragmentation score:" << a->get_fragmentation_score()
+                  << std::endl;
+        std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
+                  << std::endl;
+        std::cout << "Allocation unit:" << alloc_unit
+                  << std::endl;
+
+        Allocator::FreeStateHistogram hist;
+        hist.resize(num_buckets);
+        a->build_free_state_histogram(alloc_unit, hist);
+
+        uint64_t s = 0;
+        for(int i = 0; i < num_buckets; i++) {
+          uint64_t e = hist[i].get_max(i, num_buckets);
+	  std::cout << "(" << s << ".." << e << "]"
+                    << " -> " << hist[i].total
+                    << " chunks, " << hist[i].aligned << " aligned with "
+                    << hist[i].alloc_units << " alloc_units."
+		    << std::endl;
+          s = e;
+        }
+	return 0;
     });
   } else if (strcmp(argv[2], "export_binary") == 0) {
     return export_as_binary(argv[1], argv[3]);

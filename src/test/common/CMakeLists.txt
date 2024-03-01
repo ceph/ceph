@@ -75,17 +75,6 @@ add_executable(unittest_prioritized_queue
 target_link_libraries(unittest_prioritized_queue ceph-common)
 add_ceph_unittest(unittest_prioritized_queue)
 
-if(NOT WIN32)
-# unittest_mclock_priority_queue
-add_executable(unittest_mclock_priority_queue
-  test_mclock_priority_queue.cc
-  )
-add_ceph_unittest(unittest_mclock_priority_queue)
-target_link_libraries(unittest_mclock_priority_queue
-  ceph-common
-  dmclock::dmclock)
-endif(NOT WIN32)
-
 # unittest_str_map
 add_executable(unittest_str_map
   test_str_map.cc
@@ -294,6 +283,13 @@ add_executable(unittest_perf_histogram
 add_ceph_unittest(unittest_perf_histogram)
 target_link_libraries(unittest_perf_histogram ceph-common)
 
+# unittest_memory
+add_executable(unittest_memory
+  test_memory.cc
+  )
+add_ceph_unittest(unittest_memory)
+target_link_libraries(unittest_memory ceph-common)
+
 # unittest_perf_cache_key
 add_executable(unittest_perf_counters_key test_perf_counters_key.cc)
 add_ceph_unittest(unittest_perf_counters_key)
@@ -316,12 +312,16 @@ target_link_libraries(unittest_dns_resolve global)
 add_ceph_unittest(unittest_dns_resolve)
 endif()
 
+# We're getting an ICE when trying to compile this test using mingw-gcc and
+# recent Boost versions. Note that mingw-llvm works fine.
+if (NOT WIN32 OR (NOT(CMAKE_CXX_COMPILER_ID STREQUAL GNU)))
 add_executable(unittest_back_trace
   test_back_trace.cc)
 set_source_files_properties(test_back_trace.cc PROPERTIES
   COMPILE_FLAGS -fno-inline)
 add_ceph_unittest(unittest_back_trace)
 target_link_libraries(unittest_back_trace ceph-common)
+endif()
 
 add_executable(unittest_hostname
     test_hostname.cc)
@@ -368,6 +368,7 @@ add_ceph_unittest(unittest_cdc)
 
 add_executable(unittest_ceph_timer test_ceph_timer.cc)
 add_ceph_unittest(unittest_ceph_timer)
+target_link_libraries(unittest_ceph_timer global ceph-common)
 
 add_executable(unittest_option test_option.cc)
 target_link_libraries(unittest_option ceph-common GTest::Main)
@@ -384,6 +385,10 @@ target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
 
 add_executable(unittest_allocate_unique test_allocate_unique.cc)
 add_ceph_unittest(unittest_allocate_unique)
+
+add_executable(unittest_versioned_variant test_versioned_variant.cc)
+add_ceph_unittest(unittest_versioned_variant)
+target_link_libraries(unittest_versioned_variant common)
 
 if(WITH_SYSTEMD)
   add_executable(unittest_journald_logger test_journald_logger.cc)
