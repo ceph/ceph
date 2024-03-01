@@ -22,25 +22,18 @@ export class BucketsPageHelper extends PageHelper {
     return this.selectOption('owner', owner);
   }
 
-  private selectPlacementTarget(placementTarget: string) {
-    return this.selectOption('placement-target', placementTarget);
-  }
-
   private selectLockMode(lockMode: string) {
     return this.selectOption('lock_mode', lockMode);
   }
 
   @PageHelper.restrictTo(pages.create.url)
-  create(name: string, owner: string, placementTarget: string, isLocking = false) {
+  create(name: string, owner: string, isLocking = false) {
     // Enter in bucket name
     cy.get('#bid').type(name);
 
     // Select bucket owner
     this.selectOwner(owner);
     cy.get('#owner').should('have.class', 'ng-valid');
-
-    // Select bucket placement target:
-    this.selectPlacementTarget(placementTarget);
 
     if (isLocking) {
       cy.get('#lock_enabled').click({ force: true });
@@ -71,6 +64,7 @@ export class BucketsPageHelper extends PageHelper {
 
     // Placement target is not allowed to be edited and should be hidden
     cy.get('input[name=placement-target]').should('not.exist');
+
     this.selectOwner(new_owner);
 
     // If object locking is enabled versioning shouldn't be visible
