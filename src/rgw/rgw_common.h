@@ -1762,13 +1762,6 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 					const RGWAccessControlPolicy& object_acl,
 					const int perm);
 
-/** Check if the req_state's user has the necessary permissions
- * to do the requested action */
-rgw::IAM::Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
-			  const std::vector<rgw::IAM::Policy>& user_policies,
-                          const rgw::IAM::Environment& env,
-                          const uint64_t op,
-                          const rgw::ARN& arn);
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             req_state * const s,
                             const RGWAccessControlPolicy& user_acl,
