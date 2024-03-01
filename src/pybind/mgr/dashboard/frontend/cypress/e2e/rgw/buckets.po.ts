@@ -41,7 +41,6 @@ export class BucketsPageHelper extends PageHelper {
 
     // Select bucket placement target:
     this.selectPlacementTarget(placementTarget);
-    cy.get('#placement-target').should('have.class', 'ng-valid');
 
     if (isLocking) {
       cy.get('#lock_enabled').click({ force: true });
@@ -70,7 +69,8 @@ export class BucketsPageHelper extends PageHelper {
   edit(name: string, new_owner: string, isLocking = false) {
     this.navigateEdit(name);
 
-    cy.get('input[name=placement-target]').should('have.value', 'default-placement');
+    // Placement target is not allowed to be edited and should be hidden
+    cy.get('input[name=placement-target]').should('not.exist');
     this.selectOwner(new_owner);
 
     // If object locking is enabled versioning shouldn't be visible
@@ -170,15 +170,6 @@ export class BucketsPageHelper extends PageHelper {
 
     // Check that error message was printed under owner drop down field
     cy.get('#owner + .invalid-feedback').should('have.text', 'This field is required.');
-
-    // Check invalid placement target input
-    this.selectOwner(BucketsPageHelper.USERS[1]);
-    // The drop down error message will not appear unless a valid option is previously selected.
-    this.selectPlacementTarget('default-placement');
-    this.selectPlacementTarget('-- Select a placement target --');
-    cy.get('@nameInputField').click(); // Trigger validation
-    cy.get('#placement-target').should('have.class', 'ng-invalid');
-    cy.get('#placement-target + .invalid-feedback').should('have.text', 'This field is required.');
 
     // Clicks the Create Bucket button but the page doesn't move.
     // Done by testing for the breadcrumb
