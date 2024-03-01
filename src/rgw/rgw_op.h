@@ -1843,9 +1843,6 @@ protected:
   std::unique_ptr<rgw::sal::Notification> res;
   std::unique_ptr<rgw::sal::Object> meta_obj;
   off_t ofs = 0;
-  //object lock
-  bool bypass_perm = true;
-  bool bypass_governance_mode = false;
 
 public:
   RGWCompleteMultipart() {}
