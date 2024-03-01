@@ -1792,14 +1792,17 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
 bool verify_bucket_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
-  const rgw_bucket& bucket,
+  const rgw::ARN& arn,
   const RGWAccessControlPolicy& user_acl,
   const RGWAccessControlPolicy& bucket_acl,
   const boost::optional<rgw::IAM::Policy>& bucket_policy,
   const std::vector<rgw::IAM::Policy>& identity_policies,
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
-bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op);
+bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state* s,
+                              const rgw::ARN& arn, uint64_t op);
+bool verify_bucket_permission(const DoutPrefixProvider* dpp,
+                              req_state* s, uint64_t op);
 bool verify_bucket_permission_no_policy(
   const DoutPrefixProvider* dpp,
   req_state * const s,
