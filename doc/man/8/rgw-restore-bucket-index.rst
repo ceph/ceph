@@ -79,6 +79,13 @@ Command-Line Arguments
    multiple buckets, it could be more efficient to re-use the same
    listing.
 
+.. option:: -t <temporary-directory>
+
+   Optional, specify a directory in which to store temporary files.
+   The size of the temporary files is highly dependent on the number
+   of bucket entries involved, so the partition on which the temporary
+   directory exists should be of suitable size.
+
 .. option:: -y
 
    Optional, proceed without further prompting. Without this option
