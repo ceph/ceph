@@ -274,6 +274,7 @@ public:
 
   int get_params(optional_yield y) override;
   int get_data(ceph::bufferlist& bl, bool& again) override;
+  int error_handler(int err_no, std::string *error_content, optional_yield y) override;
   void send_response() override;
 
   static bool is_formpost_req(req_state* const s);

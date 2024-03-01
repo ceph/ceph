@@ -2407,6 +2407,16 @@ int RGWFormPost::get_data(ceph::bufferlist& bl, bool& again)
   return bl.length();
 }
 
+// override error_handler() to map error messages from abort_early(), which
+// doesn't end up calling our send_response()
+int RGWFormPost::error_handler(int err_no, std::string *error_content, optional_yield y)
+{
+  if (!err_msg.empty()) {
+    *error_content = err_msg;
+  }
+  return err_no;
+}
+
 void RGWFormPost::send_response()
 {
   std::string redirect = get_part_str(ctrl_parts, "redirect");

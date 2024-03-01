@@ -1129,8 +1129,6 @@ Effect eval_or_pass(const DoutPrefixProvider* dpp,
     return policy->eval(env, id, op, resource, princ_type);
 }
 
-}
-
 Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
 			  const vector<Policy>& policies,
                           const rgw::IAM::Environment& env,
@@ -1228,6 +1226,8 @@ Effect evaluate_iam_policies(
   ldpp_dout(dpp, 10) << __func__ << ": implicit deny from identity-based policy" << dendl;
   return Effect::Pass;
 }
+
+} // anonymous namespace
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             perm_state_base * const s,
