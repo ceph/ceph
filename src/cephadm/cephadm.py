@@ -4857,7 +4857,9 @@ def _get_parser():
     )
 
     parser_pull = subparsers.add_parser(
-        'pull', help='pull the default container image')
+        'pull',
+        help='pull a ceph container image (will pull the default image if --image not provided)',
+        usage='cephadm pull (for default image) | cephadm --image <image-name> pull (for custom ceph image)')
     parser_pull.set_defaults(func=command_pull)
     parser_pull.add_argument(
         '--insecure',
