@@ -1506,9 +1506,10 @@ namespace rgw::sal {
     RGWUserInfo uinfo;
     User *u;
     int ret = 0;
+    rgw::sal::Attrs attrs;
     RGWObjVersionTracker objv_tracker;
 
-    ret = getDB()->get_user(dpp, string("access_key"), key, uinfo, nullptr,
+    ret = getDB()->get_user(dpp, string("access_key"), key, uinfo, &attrs,
         &objv_tracker);
 
     if (ret < 0)
@@ -1519,6 +1520,7 @@ namespace rgw::sal {
     if (!u)
       return -ENOMEM;
 
+    u->get_attrs() = std::move(attrs);
     u->get_version_tracker() = objv_tracker;
     user->reset(u);
 
@@ -1530,9 +1532,10 @@ namespace rgw::sal {
     RGWUserInfo uinfo;
     User *u;
     int ret = 0;
+    rgw::sal::Attrs attrs;
     RGWObjVersionTracker objv_tracker;
 
-    ret = getDB()->get_user(dpp, string("email"), email, uinfo, nullptr,
+    ret = getDB()->get_user(dpp, string("email"), email, uinfo, &attrs,
         &objv_tracker);
 
     if (ret < 0)
@@ -1543,6 +1546,7 @@ namespace rgw::sal {
     if (!u)
       return -ENOMEM;
 
+    u->get_attrs() = std::move(attrs);
     u->get_version_tracker() = objv_tracker;
     user->reset(u);
 
