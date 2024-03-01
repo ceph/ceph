@@ -1811,6 +1811,9 @@ protected:
   RGWAccessControlPolicy policy;
   ceph::real_time mtime;
   jspan_ptr multipart_trace;
+  //object lock
+  std::optional<RGWObjectRetention> obj_retention = std::nullopt;
+  std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
 
 public:
   RGWInitMultipart() {}
