@@ -245,7 +245,7 @@ public:
         continue;
       /* check if swift mapping exists */
       RGWUserInfo inf;
-      int r = svc.user->get_user_info_by_swift(ctx, id, &inf, nullptr, nullptr, y, dpp);
+      int r = svc.user->get_user_info_by_swift(ctx, id, &inf, nullptr, nullptr, nullptr, y, dpp);
       if (r >= 0 && inf.user_id != info.user_id &&
           (!old_info || inf.user_id != old_info->user_id)) {
         ldpp_dout(dpp, 0) << "WARNING: can't store user info, swift id (" << id
@@ -261,7 +261,7 @@ public:
       if (s3_key_active(old_info, id)) // old key already active
         continue;
       RGWUserInfo inf;
-      int r = svc.user->get_user_info_by_access_key(ctx, id, &inf, nullptr, nullptr, y, dpp);
+      int r = svc.user->get_user_info_by_access_key(ctx, id, &inf, nullptr, nullptr, nullptr, y, dpp);
       if (r >= 0 && inf.user_id != info.user_id &&
           (!old_info || inf.user_id != old_info->user_id)) {
         ldpp_dout(dpp, 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
@@ -672,6 +672,7 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context* ctx,
                                                const rgw_pool& pool,
                                                RGWUserInfo *info,
                                                RGWObjVersionTracker* objv_tracker,
+                                               std::map<std::string, bufferlist>* pattrs,
                                                real_time* pmtime, optional_yield y,
                                                const DoutPrefixProvider* dpp)
 {
@@ -681,6 +682,8 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context* ctx,
     *info = e->info;
     if (objv_tracker)
       *objv_tracker = e->objv_tracker;
+    if (pattrs)
+      *pattrs = e->attrs;
     if (pmtime)
       *pmtime = e->mtime;
     return 0;
@@ -701,7 +704,7 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context* ctx,
 
   rgw_cache_entry_info cache_info;
   ret = read_user_info(ctx, rgw_user{uid.id}, &e.info, &e.objv_tracker,
-                       nullptr, &cache_info, nullptr, y, dpp);
+                       nullptr, &cache_info, &e.attrs, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -713,6 +716,9 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context* ctx,
     *objv_tracker = e.objv_tracker;
   if (pmtime)
     *pmtime = e.mtime;
+  ldpp_dout(dpp, 20) << "get_user_info_from_index found " << e.attrs.size() << " xattrs" << dendl;
+  if (pattrs)
+    *pattrs = std::move(e.attrs);
 
   return 0;
 }
@@ -724,13 +730,14 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context* ctx,
 int RGWSI_User_RADOS::get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
                                        const string& email, RGWUserInfo *info,
                                        RGWObjVersionTracker *objv_tracker,
+                                       std::map<std::string, bufferlist>* pattrs,
                                        real_time *pmtime, optional_yield y,
                                        const DoutPrefixProvider *dpp)
 {
   std::string oid = email;
   boost::to_lower(oid);
   return get_user_info_from_index(ctx, oid, svc.zone->get_zone_params().user_email_pool,
-                                  info, objv_tracker, pmtime, y, dpp);
+                                  info, objv_tracker, pattrs, pmtime, y, dpp);
 }
 
 /**
@@ -741,13 +748,14 @@ int RGWSI_User_RADOS::get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
                                        const string& swift_name,
                                        RGWUserInfo *info,        /* out */
                                        RGWObjVersionTracker * const objv_tracker,
+                                       std::map<std::string, bufferlist>* pattrs,
                                        real_time * const pmtime, optional_yield y,
                                        const DoutPrefixProvider *dpp)
 {
   return get_user_info_from_index(ctx,
                                   swift_name,
                                   svc.zone->get_zone_params().user_swift_pool,
-                                  info, objv_tracker, pmtime, y, dpp);
+                                  info, objv_tracker, pattrs, pmtime, y, dpp);
 }
 
 /**
@@ -758,13 +766,14 @@ int RGWSI_User_RADOS::get_user_info_by_access_key(RGWSI_MetaBackend::Context *ct
                                             const std::string& access_key,
                                             RGWUserInfo *info,
                                             RGWObjVersionTracker* objv_tracker,
+                                            std::map<std::string, bufferlist>* pattrs,
                                             real_time *pmtime, optional_yield y,
                                             const DoutPrefixProvider *dpp)
 {
   return get_user_info_from_index(ctx,
                                   access_key,
                                   svc.zone->get_zone_params().user_keys_pool,
-                                  info, objv_tracker, pmtime, y, dpp);
+                                  info, objv_tracker, pattrs, pmtime, y, dpp);
 }
 
 int RGWSI_User_RADOS::read_email_index(const DoutPrefixProvider* dpp,

@@ -1033,8 +1033,12 @@ int RadosStore::get_user_by_access_key(const DoutPrefixProvider* dpp, const std:
   RGWUserInfo uinfo;
   User* u;
   RGWObjVersionTracker objv_tracker;
+  Attrs attrs;
 
-  int r = ctl()->user->get_info_by_access_key(dpp, key, &uinfo, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker));
+  int r = ctl()->user->get_info_by_access_key(
+      dpp, key, &uinfo, y,
+      RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker)
+                             .set_attrs(&attrs));
   if (r < 0)
     return r;
 
@@ -1043,6 +1047,7 @@ int RadosStore::get_user_by_access_key(const DoutPrefixProvider* dpp, const std:
     return -ENOMEM;
 
   u->get_version_tracker() = objv_tracker;
+  u->get_attrs() = std::move(attrs);
 
   user->reset(u);
   return 0;
@@ -1053,8 +1058,12 @@ int RadosStore::get_user_by_email(const DoutPrefixProvider* dpp, const std::stri
   RGWUserInfo uinfo;
   User* u;
   RGWObjVersionTracker objv_tracker;
+  Attrs attrs;
 
-  int r = ctl()->user->get_info_by_email(dpp, email, &uinfo, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker));
+  int r = ctl()->user->get_info_by_email(
+      dpp, email, &uinfo, y,
+      RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker)
+                             .set_attrs(&attrs));
   if (r < 0)
     return r;
 
@@ -1063,6 +1072,7 @@ int RadosStore::get_user_by_email(const DoutPrefixProvider* dpp, const std::stri
     return -ENOMEM;
 
   u->get_version_tracker() = objv_tracker;
+  u->get_attrs() = std::move(attrs);
 
   user->reset(u);
   return 0;
@@ -1073,8 +1083,12 @@ int RadosStore::get_user_by_swift(const DoutPrefixProvider* dpp, const std::stri
   RGWUserInfo uinfo;
   User* u;
   RGWObjVersionTracker objv_tracker;
+  Attrs attrs;
 
-  int r = ctl()->user->get_info_by_swift(dpp, user_str, &uinfo, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker));
+  int r = ctl()->user->get_info_by_swift(
+      dpp, user_str, &uinfo, y,
+      RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker)
+                             .set_attrs(&attrs));
   if (r < 0)
     return r;
 
@@ -1083,6 +1097,7 @@ int RadosStore::get_user_by_swift(const DoutPrefixProvider* dpp, const std::stri
     return -ENOMEM;
 
   u->get_version_tracker() = objv_tracker;
+  u->get_attrs() = std::move(attrs);
 
   user->reset(u);
   return 0;
