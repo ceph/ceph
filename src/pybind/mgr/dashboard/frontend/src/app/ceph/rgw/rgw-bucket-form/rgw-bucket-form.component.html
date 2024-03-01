@@ -94,34 +94,6 @@
           </div>
         </div>
 
-        <!-- Placement target -->
-        <div class="form-group row"
-             *ngIf="!editing">
-          <label class="cd-col-form-label"
-                 for="placement-target"
-                 i18n>Placement target</label>
-          <div class="cd-col-form-input">
-            <select id="placement-target"
-                    name="placement-target"
-                    formControlName="placement-target"
-                    class="form-select">
-              <option i18n
-                      *ngIf="placementTargets === null"
-                      [ngValue]="null">Loading...</option>
-              <option i18n
-                      *ngIf="placementTargets !== null"
-                      [ngValue]="null">-- Select a placement target --</option>
-              <option *ngFor="let placementTarget of placementTargets"
-                      [value]="placementTarget.name">{{ placementTarget.description }}</option>
-            </select>
-            <cd-help-text>
-              <span i18n>
-                When creating a bucket, a placement target can be provided as part of the LocationConstraint to override the default placement targets from the user and zonegroup.
-              </span>
-            </cd-help-text>
-          </div>
-        </div>
-
         <!-- Versioning -->
         <fieldset *ngIf="editing">
           <legend class="cd-header"
@@ -547,6 +519,36 @@
             </div>
           </div>
         </fieldset>
+
+        <!--Advanced-->
+        <cd-form-advanced-fieldset *ngIf="!editing">
+          <!-- Placement target -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="placement-target"
+                   i18n>Placement target</label>
+            <div class="cd-col-form-input">
+              <select id="placement-target"
+                      name="placement-target"
+                      formControlName="placement-target"
+                      class="form-select">
+                <option i18n
+                        *ngIf="placementTargets === null"
+                        [ngValue]="null">Loading...</option>
+                <option i18n
+                        *ngIf="placementTargets !== null"
+                        [ngValue]="null">-- Select a placement target --</option>
+                <option *ngFor="let placementTarget of placementTargets"
+                        [value]="placementTarget.name">{{ placementTarget.description }}</option>
+              </select>
+              <cd-help-text>
+                <span i18n>
+                  When creating a bucket, a placement target can be provided as part of the LocationConstraint to override the default placement targets from the user and zonegroup.
+                </span>
+              </cd-help-text>
+            </div>
+          </div>
+        </cd-form-advanced-fieldset>
       </div>
 
       <div class="card-footer">
