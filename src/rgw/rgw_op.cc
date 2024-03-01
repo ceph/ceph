@@ -1407,16 +1407,20 @@ int RGWOp::do_aws4_auth_completion()
 {
   ldpp_dout(this, 5) << "NOTICE: call to do_aws4_auth_completion"  << dendl;
   if (s->auth.completer) {
-    if (!s->auth.completer->complete()) {
-      return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
-    } else {
-      ldpp_dout(this, 10) << "v4 auth ok -- do_aws4_auth_completion" << dendl;
-    }
-
     /* TODO(rzarzynski): yes, we're really called twice on PUTs. Only first
      * call passes, so we disable second one. This is old behaviour, sorry!
      * Plan for tomorrow: seek and destroy. */
-    s->auth.completer = nullptr;
+    auto completer = std::move(s->auth.completer);
+
+    try {
+      if (!completer->complete()) {
+        return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
+      }
+    } catch (const rgw::io::Exception& e) {
+      return -e.code().value();
+    }
+
+    ldpp_dout(this, 10) << "v4 auth ok -- do_aws4_auth_completion" << dendl;
   }
 
   return 0;
