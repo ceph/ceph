@@ -98,7 +98,7 @@ struct test_hobject_fmt_t : public hobject_t {
     return snap == 0 && hash == 0 && !max && pool == INT64_MIN;
   }
 
-  constexpr auto operator<=>(const test_hobject_fmt_t& rhs) const noexcept
+  auto operator<=>(const test_hobject_fmt_t& rhs) const noexcept
   {
     auto cmp = is_max() <=> rhs.is_max();
     if (cmp != 0)
@@ -122,7 +122,7 @@ struct test_hobject_fmt_t : public hobject_t {
       return cmp;
     return snap <=> rhs.snap;
   }
-  constexpr bool operator==(const hobject_t& rhs) const noexcept
+  bool operator==(const hobject_t& rhs) const noexcept
   {
     return operator<=>(rhs) == 0;
   }
@@ -201,7 +201,7 @@ namespace fmt {
 template <>
 struct formatter<test_hobject_fmt_t> {
 
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
   auto format(const test_hobject_fmt_t& ho, FormatContext& ctx)
