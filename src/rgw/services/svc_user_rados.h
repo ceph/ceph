@@ -47,6 +47,7 @@ class RGWSI_User_RADOS : public RGWSI_User
   struct user_info_cache_entry {
     RGWUserInfo info;
     RGWObjVersionTracker objv_tracker;
+    std::map<std::string, bufferlist> attrs;
     real_time mtime;
   };
 
@@ -60,6 +61,7 @@ class RGWSI_User_RADOS : public RGWSI_User
                                const rgw_pool& pool,
                                RGWUserInfo *info,
                                RGWObjVersionTracker * const objv_tracker,
+                               std::map<std::string, bufferlist>* pattrs,
                                real_time * const pmtime,
                                optional_yield y,
                                const DoutPrefixProvider *dpp);
@@ -127,6 +129,7 @@ public:
   int get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
                              const std::string& email, RGWUserInfo *info,
                              RGWObjVersionTracker *objv_tracker,
+                             std::map<std::string, bufferlist>* pattrs,
                              real_time *pmtime,
                              optional_yield y,
                              const DoutPrefixProvider *dpp) override;
@@ -134,6 +137,7 @@ public:
                              const std::string& swift_name,
                              RGWUserInfo *info,        /* out */
                              RGWObjVersionTracker * const objv_tracker,
+                             std::map<std::string, bufferlist>* pattrs,
                              real_time * const pmtime,
                              optional_yield y,
                              const DoutPrefixProvider *dpp) override;
@@ -141,6 +145,7 @@ public:
                                   const std::string& access_key,
                                   RGWUserInfo *info,
                                   RGWObjVersionTracker* objv_tracker,
+                                  std::map<std::string, bufferlist>* pattrs,
                                   real_time *pmtime,
                                   optional_yield y,
                                   const DoutPrefixProvider *dpp) override;
