@@ -2,10 +2,14 @@
  Ceph Internals
 ================
 
-.. note:: If you're looking for how to use Ceph as a library from your
-   own software, please see :doc:`/api/index`.
+.. note:: For information on how to use Ceph as a library (from your own
+   software), see :doc:`/api/index`.
 
-You can start a development mode Ceph cluster, after compiling the source, with::
+Starting a Development-mode Ceph Cluster
+----------------------------------------
+
+Compile the source and then run the following commands to start a
+development-mode Ceph cluster::
 
 	cd build
 	OSD=3 MON=3 MGR=3 ../src/vstart.sh -n -x
