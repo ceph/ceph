@@ -169,9 +169,9 @@ class IngressService(CephService):
         if spec.enable_haproxy_protocol:
             server_opts.append("send-proxy-v2")
         logger.debug("enabled default server opts: %r", server_opts)
-        ip = '*' if spec.virtual_ips_list else str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '*'
+        ip = '[..]' if spec.virtual_ips_list else str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '[..]'
         frontend_port = daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port
-        if ip != '*' and frontend_port:
+        if ip != '[..]' and frontend_port:
             daemon_spec.port_ips = {str(frontend_port): ip}
         haproxy_conf = self.mgr.template.render(
             'services/ingress/haproxy.cfg.j2',
