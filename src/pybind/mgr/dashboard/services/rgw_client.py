@@ -806,6 +806,9 @@ class RgwClient(RestClient):
             logger.warning('Error listing roles with code %d: %s', code, err)
             return []
 
+        for role in roles:
+            if 'PermissionPolicies' not in role:
+                role['PermissionPolicies'] = []
         return roles
 
     def create_role(self, role_name: str, role_path: str, role_assume_policy_doc: str) -> None:
