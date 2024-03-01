@@ -1705,7 +1705,7 @@ SeaStore::Shard::_zero(
 
 SeaStore::Shard::omap_set_kvs_ret
 SeaStore::Shard::_omap_set_kvs(
-  OnodeRef &onode,
+  const OnodeRef &onode,
   const omap_root_le_t& omap_root,
   Transaction& t,
   std::map<std::string, ceph::bufferlist>&& kvs)
