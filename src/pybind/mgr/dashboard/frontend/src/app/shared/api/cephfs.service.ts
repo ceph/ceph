@@ -108,4 +108,13 @@ export class CephfsService {
       observe: 'response'
     });
   }
+
+  setAuth(fsName: string, clientId: number, caps: string[], rootSquash: boolean) {
+    return this.http.put(`${this.baseURL}/auth`, {
+      fs_name: fsName,
+      client_id: `client.${clientId}`,
+      caps: caps,
+      root_squash: rootSquash
+    });
+  }
 }

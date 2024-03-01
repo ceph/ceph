@@ -369,6 +369,9 @@ export class TaskMessageService {
     'cephfs/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.volume(metadata)
     ),
+    'cephfs/auth': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.auth(metadata)
+    ),
     'cephfs/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.volume(metadata)
     ),
@@ -473,6 +476,10 @@ export class TaskMessageService {
 
   volume(metadata: any) {
     return $localize`'${metadata.volumeName}'`;
+  }
+
+  auth(metadata: any) {
+    return $localize`client.${metadata.clientId} authorization successfully`;
   }
 
   subvolume(metadata: any) {
