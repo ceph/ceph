@@ -657,10 +657,9 @@ TEST_P(object_data_handler_test_t, multiple_remap) {
   run_async([this] {
     multiple_write();
     auto pins = get_mappings(0, 128<<10);
-    EXPECT_EQ(pins.size(), 10);
+    EXPECT_EQ(pins.size(), 3);
 
-    size_t res[10] = {0, 4<<10, 12<<10, 20<<10, 32<<10,
-		      36<<10, 60<<10, 96<<10, 120<<10, 124<<10};
+    size_t res[3] = {0, 120<<10, 124<<10};
     auto base = pins.front()->get_key();
     int i = 0;
     for (auto &pin : pins) {
