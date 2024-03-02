@@ -195,7 +195,7 @@ boost_version=1.82.0
 download_boost $boost_version a6e1ab9b0860e6a2881dd7b21fe9f737a095e5f33a3a874afc6a345228597ee6 \
                https://download.ceph.com/qa \
                https://archives.boost.io/release/$boost_version/source
-download_liburing 0.7 8e2842cfe947f3a443af301bdd6d034455536c38a455c7a700d0c1ad165a7543 \
+download_liburing 2.5 456f5f882165630f0dc7b75e8fd53bd01a955d5d4720729b4323097e6e9f2a98 \
                   https://github.com/axboe/liburing/archive \
                   https://git.kernel.dk/cgit/liburing/snapshot
 pmdk_version=1.10
