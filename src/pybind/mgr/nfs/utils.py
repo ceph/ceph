@@ -5,6 +5,7 @@ from typing import List, Tuple, TYPE_CHECKING
 
 from object_format import ErrorResponseBase
 import orchestrator
+from orchestrator import NoOrchestrator
 import cephfs
 from mgr_util import CephfsClient, open_filesystem
 
@@ -67,7 +68,11 @@ def available_clusters(mgr: 'Module') -> List[str]:
     return value: ['vstart']
     '''
     # TODO check cephadm cluster list with rados pool conf objects
-    completion = mgr.describe_service(service_type='nfs')
+    try:
+        completion = mgr.describe_service(service_type='nfs')
+    except NoOrchestrator:
+        log.exception("No orchestrator configured")
+        return []
     orchestrator.raise_if_exception(completion)
     assert completion.result is not None
     return [cluster.spec.service_id for cluster in completion.result
