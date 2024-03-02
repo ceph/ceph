@@ -8293,6 +8293,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
   bool rdlock_path = (flags & MDS_TRAVERSE_RDLOCK_PATH);
   bool xlock_dentry = (flags & MDS_TRAVERSE_XLOCK_DENTRY);
   bool rdlock_authlock = (flags & MDS_TRAVERSE_RDLOCK_AUTHLOCK);
+  bool forimport = (flags & MDS_TRAVERSE_IMPORT);
 
   if (forward)
     ceph_assert(mdr);  // forward requires a request
@@ -8403,11 +8404,17 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
         curdir = cur->get_or_open_dirfrag(this, fg);
       } else {
         // discover?
-	dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
-	discover_path(cur, snapid, path.postfixpath(depth), cf.build(),
-		      path_locked);
-	if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
-        return 1;
+        if (forimport && cur->is_quiesced()) {
+          /* block discover for import */
+          dout(5) << __func__ << ": blocking discover due to quiesced parent: " << *cur << dendl;
+          return -CEPHFS_EAGAIN;
+        } else {
+	  dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
+	  discover_path(cur, snapid, path.postfixpath(depth), cf.build(),
+		        path_locked);
+	  if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
+          return 1;
+        }
       }
     }
     ceph_assert(curdir);
@@ -8641,12 +8648,18 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
       }
 
       if (discover) {
-	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
-	discover_path(curdir, snapid, path.postfixpath(depth), cf.build(),
-		      path_locked);
-	if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
-        return 1;
-      } 
+        if (forimport && cur->is_quiesced()) {
+          /* block discover for import */
+          dout(5) << __func__ << ": blocking discover due to quiesced parent: " << *cur << dendl;
+          return -CEPHFS_EAGAIN;
+        } else {
+	  dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
+	  discover_path(curdir, snapid, path.postfixpath(depth), cf.build(),
+		        path_locked);
+	  if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
+          return 1;
+        }
+      }
       if (forward) {
         // forward
         dout(7) << "traverse: not auth for " << path << " in " << *curdir << dendl;

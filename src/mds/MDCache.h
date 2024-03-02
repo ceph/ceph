@@ -133,6 +133,7 @@ static const int MDS_TRAVERSE_XLOCK_DENTRY	= (1 << 8);
 static const int MDS_TRAVERSE_RDLOCK_AUTHLOCK	= (1 << 9);
 static const int MDS_TRAVERSE_CHECK_LOCKCACHE	= (1 << 10);
 static const int MDS_TRAVERSE_WANT_INODE	= (1 << 11);
+static const int MDS_TRAVERSE_IMPORT            = (1 << 12);
 
 
 // flags for predirty_journal_parents()
