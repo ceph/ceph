@@ -164,6 +164,9 @@ struct no_touch_error_marker {};
 // AllowedErrorsV and also avoid the burden of throwing.
 template <class ErrorT, ErrorT ErrorV>
 struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
+
+  using error_type_t = ErrorT;
+
   unthrowable_wrapper(const unthrowable_wrapper&) = delete;
   [[nodiscard]] static const auto& make() {
     static constexpr unthrowable_wrapper instance{};
@@ -206,14 +209,21 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
 
   class assert_failure {
     const char* const msg = nullptr;
+    std::function<void()> pre_assert;
   public:
     template <std::size_t N>
     assert_failure(const char (&msg)[N])
       : msg(msg) {
     }
     assert_failure() = default;
+    template <typename Func>
+    assert_failure(Func&& f)
+      : pre_assert(std::forward<Func>(f)) {}
 
     no_touch_error_marker operator()(const unthrowable_wrapper&) {
+      if (pre_assert) {
+        pre_assert();
+      }
       if (msg) {
         ceph_abort(msg);
       } else {
@@ -258,6 +268,9 @@ std::exception_ptr unthrowable_wrapper<ErrorT, ErrorV>::carrier_instance = \
 
 template <class ErrorT>
 struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
+
+  using error_type_t = ErrorT;
+
   template <class... Args>
   explicit stateful_error_t(Args&&... args)
     : ep(std::make_exception_ptr<ErrorT>(std::forward<Args>(args)...)) {
@@ -283,6 +296,36 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
       ceph_abort_msg("exception type mismatch -- impossible!");
     };
   }
+
+  class assert_failure {
+    const char* const msg = nullptr;
+    std::function<void(const ErrorT&)> pre_assert;
+  public:
+    template <std::size_t N>
+    assert_failure(const char (&msg)[N])
+      : msg(msg) {
+    }
+    assert_failure() = default;
+    template <typename Func>
+    assert_failure(Func&& f)
+      : pre_assert(std::forward<Func>(f)) {}
+
+    no_touch_error_marker operator()(stateful_error_t<ErrorT>&& e) {
+      if (pre_assert) {
+        try {
+          std::rethrow_exception(e.ep);
+        } catch (const ErrorT& err) {
+          pre_assert(err);
+        }
+      }
+      if (msg) {
+        ceph_abort(msg);
+      } else {
+        ceph_abort();
+      }
+      return no_touch_error_marker{};
+    }
+  };
 
 private:
   std::exception_ptr ep;
@@ -926,6 +969,34 @@ public:
     }
   };
 
+  template <typename Func>
+  class assert_all_func_t {
+  public:
+    assert_all_func_t(Func &&f)
+      : f(std::forward<Func>(f)) {}
+
+    template <class ErrorT, EnableIf<ErrorT>...>
+    no_touch_error_marker operator()(ErrorT&& e) {
+      static_assert(contains_once_v<std::decay_t<ErrorT>>,
+                    "discarding disallowed ErrorT");
+      try {
+        std::rethrow_exception(e.ep);
+      } catch(const typename ErrorT::error_type_t& err) {
+        f(err);
+      }
+      ceph_abort();
+      return no_touch_error_marker{};
+    }
+
+  private:
+    Func f;
+  };
+
+  template <typename Func>
+  static auto assert_all_func(Func &&f) {
+    return assert_all_func_t<Func>{std::forward<Func>(f)};
+  }
+
   template <class ErrorFunc>
   static decltype(auto) all_same_way(ErrorFunc&& error_func) {
     return all_same_way_t<ErrorFunc>{std::forward<ErrorFunc>(error_func)};
@@ -1252,15 +1323,21 @@ namespace ct_error {
 
   class assert_all {
     const char* const msg = nullptr;
+    std::function<void()> pre_assert;
   public:
     template <std::size_t N>
     assert_all(const char (&msg)[N])
       : msg(msg) {
     }
     assert_all() = default;
+    assert_all(std::function<void()> &&f)
+      : pre_assert(std::move(f)) {}
 
     template <class ErrorT>
     no_touch_error_marker operator()(ErrorT&&) {
+      if (pre_assert) {
+        pre_assert();
+      }
       if (msg) {
         ceph_abort(msg);
       } else {
