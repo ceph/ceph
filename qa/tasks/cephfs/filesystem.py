@@ -278,7 +278,8 @@ class CephCluster(RunCephCmd):
                 j = json.loads(response_data.replace('inf', 'Infinity'),
                             parse_constant=get_nonnumeric_values)
             except json.decoder.JSONDecodeError:
-                raise RuntimeError(response_data) # assume it is an error message, pass it up
+                log.error(f"could not decode:\n{response_data}")
+                raise
             
             pretty = json.dumps(j, sort_keys=True, indent=2)
             log.debug(f"_json_asok output\n{pretty}")
@@ -1298,38 +1299,44 @@ class Filesystem(MDSCluster):
 
         return version
 
-    def mds_asok(self, command, mds_id=None, timeout=None):
+    def mds_asok(self, *args, mds_id=None, **kwargs):
         if mds_id is None:
-            return self.rank_asok(command, timeout=timeout)
+            return self.rank_asok(*args, **kwargs)
+        if len(args) == 1 and isinstance(args[0], (tuple, list)):
+            args = list(args[0])
 
-        return self.json_asok(command, 'mds', mds_id, timeout=timeout)
+        kwargs.pop('status', None) # not useful
+        return self.json_asok(list(args), 'mds', mds_id, **kwargs)
 
-    def mds_tell(self, command, mds_id=None):
+    def mds_tell(self, *args, mds_id=None, **kwargs):
         if mds_id is None:
-            return self.rank_tell(command)
+            return self.rank_tell(*args, **kwargs)
+        if len(args) == 1 and isinstance(args[0], (tuple, list)):
+            args = list(args[0])
 
-        return json.loads(self.get_ceph_cmd_stdout("tell", f"mds.{mds_id}", *command))
-
-    def rank_asok(self, command, rank=0, status=None, timeout=None):
-        info = self.get_rank(rank=rank, status=status)
-        return self.json_asok(command, 'mds', info['name'], timeout=timeout)
-
-    def rank_tell(self, command, rank=None, status=None, timeout=120):
-        if rank is None:
-            rank = 0
+        kwargs.pop('status', None) # not useful
         try:
-            out = self.get_ceph_cmd_stdout("tell", f"mds.{self.id}:{rank}", *command, timeout=timeout)
+            out = self.get_ceph_cmd_stdout("tell", f"mds.{mds_id}", *args, **kwargs)
             return json.loads(out)
         except json.decoder.JSONDecodeError:
             log.error("could not decode: {}".format(out))
             raise
 
-    def ranks_tell(self, command, status=None):
+    def rank_asok(self, *args, rank=0, status=None, **kwargs):
+        info = self.get_rank(rank=rank, status=status)
+        return self.mds_asok(*args, mds_id=info['name'], **kwargs)
+
+    def rank_tell(self, *args, rank=None, **kwargs):
+        if rank is None:
+            rank = 0
+        return self.mds_tell(*args, mds_id=f"{self.id}:{rank}", **kwargs)
+
+    def ranks_tell(self, *args, status=None):
         if status is None:
             status = self.status()
         out = []
         for r in status.get_ranks(self.id):
-            result = self.rank_tell(command, rank=r['rank'], status=status)
+            result = self.rank_tell(*args, rank=r['rank'], status=status)
             out.append((r['rank'], result))
         return sorted(out)
 
