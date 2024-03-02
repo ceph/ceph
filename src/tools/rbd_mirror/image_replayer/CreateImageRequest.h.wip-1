@@ -76,16 +76,10 @@ private:
    *                    OPEN_REMOTE_PARENT  * * * * * * * | * * *   *
    *                        |                             |       * *
    *                        v                             |         *
-   *                    OPEN_LOCAL_PARENT   * * * * * * * | * * *   *
-   *                        |                             |       * *
-   *                        v                             |         *
    *                    CLONE_IMAGE                       |         *
    *                        |                             |         *
    *                        v                             |         *
    *                    CLOSE_REMOTE_PARENT               |         *
-   *                        |                             |         *
-   *                        v                             |         *
-   *                    CLOSE_LOCAL_PARENT                |         *
    *                        |                             v         *
    *                        \------------------------> <finish> < * *
    * @endverbatim
@@ -113,8 +107,6 @@ private:
   bufferlist m_out_bl;
   std::string m_parent_global_image_id;
   std::string m_parent_pool_name;
-  std::string m_snap_name;
-  cls::rbd::SnapshotNamespace m_snap_namespace;
   int m_ret_val = 0;
 
   void create_image();

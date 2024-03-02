@@ -85,7 +85,7 @@ private:
    *                    CLOSE_REMOTE_PARENT               |         *
    *                        |                             |         *
    *                        v                             |         *
-   *                    CLOSE_LOCAL_PARENT                |         *
+   *                    CLOSE_LOCAL_PARENTi               |         *
    *                        |                             v         *
    *                        \------------------------> <finish> < * *
    * @endverbatim
