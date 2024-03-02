@@ -24,6 +24,7 @@ function(build_rocksdb)
   endif()
 
   list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
+  list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER})
 
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_SNAPPY=${SNAPPY_FOUND})
   if(SNAPPY_FOUND)
