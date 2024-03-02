@@ -27,8 +27,6 @@
 // TODO: make this configurable.
 #define RBD_WNBD_MAX_TRANSFER 2 * 1024 * 1024
 #define SOFT_REMOVE_RETRY_INTERVAL 2
-#define DEFAULT_SOFT_REMOVE_TIMEOUT 15
-#define DEFAULT_IO_WORKER_COUNT 4
 
 // Not defined by mingw.
 #ifndef SCSI_ADSENSE_UNRECOVERED_ERROR
@@ -44,15 +42,14 @@ class WnbdHandler;
 
 class WnbdAdminHook : public AdminSocketHook {
   WnbdHandler *m_handler;
+  AdminSocket *m_admin_socket;
 
 public:
-  explicit WnbdAdminHook(WnbdHandler *handler) :
-        m_handler(handler) {
-    g_ceph_context->get_admin_socket()->register_command(
-      "wnbd stats", this, "get WNBD stats");
-  }
+  explicit WnbdAdminHook(WnbdHandler *handler, AdminSocket* admin_socket);
   ~WnbdAdminHook() override {
-    g_ceph_context->get_admin_socket()->unregister_commands(this);
+    if (m_admin_socket) {
+      m_admin_socket->unregister_commands(this);
+    }
   }
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
@@ -80,7 +77,8 @@ public:
               uint64_t _block_count, uint32_t _block_size,
               bool _readonly, bool _rbd_cache_enabled,
               uint32_t _io_req_workers,
-              uint32_t _io_reply_workers)
+              uint32_t _io_reply_workers,
+              AdminSocket* admin_socket)
     : image(_image)
     , instance_name(_instance_name)
     , block_count(_block_count)
@@ -90,7 +88,7 @@ public:
     , io_req_workers(_io_req_workers)
     , io_reply_workers(_io_reply_workers)
   {
-    admin_hook = new WnbdAdminHook(this);
+    admin_hook = new WnbdAdminHook(this, admin_socket);
     // Instead of relying on librbd's own thread pool, we're going to use a
     // separate one. This allows us to make assumptions on the threads that
     // are going to send the IO replies and thus be able to cache Windows
@@ -142,6 +140,7 @@ private:
     void set_sense(uint8_t sense_key, uint8_t asc);
   };
 
+  friend WnbdAdminHook;
   friend std::ostream &operator<<(std::ostream &os, const IOContext &ctx);
 
   void send_io_response(IOContext *ctx);
