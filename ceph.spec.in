@@ -144,7 +144,9 @@
 %if 0%{with seastar}
 %{!?gts_version: %global gts_version 13}
 %else
+%if 0%{?rhel} == 8
 %{!?gts_version: %global gts_version 11}
+%endif
 %endif
 
 # gcc-toolset-13 seems to trigger a linker bug resulting in a segfault in SafeTimer
@@ -190,7 +192,7 @@
 # do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
 # redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
 %undefine _annotated_build
-%if 0%{?rhel} == 8
+%if 0%{?gts_version} > 0
 %if 0%{gts_version} == 13
 %if 0%{?enable_devtoolset13:1}
 %enable_devtoolset13
@@ -254,7 +256,7 @@ BuildRequires:	gcc-c++ >= 11
 %if 0%{?suse_version} == 1500
 BuildRequires: gcc11-c++
 %endif
-%if 0%{?rhel} == 8
+%if 0%{?gts_version} > 0
 BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++
 %if 0%{?gts_version} >= 12
 BuildRequires:	gcc-toolset-%{gts_version}-runtime
@@ -387,7 +389,7 @@ BuildRequires:  libubsan
 BuildRequires:  libasan
 BuildRequires:  protobuf-devel
 BuildRequires:  protobuf-compiler
-%if 0%{?rhel} == 8
+%if 0%{?gts_version} > 0
 %if 0%{?gts_version} >= 12
 BuildRequires:  gcc-toolset-%{gts_version}-gcc-plugin-annobin
 %else
