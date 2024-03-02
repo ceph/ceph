@@ -1380,11 +1380,8 @@ class CephFSMount(object):
         self.run_python(pyscript)
 
     def teardown(self):
-        for p in self.background_procs:
-            log.info("Terminating background process")
-            self._kill_background(p)
-
-        self.background_procs = []
+        log.info("Terminating background process")
+        self.kill_background()
 
     def _kill_background(self, p):
         if p.stdin:
@@ -1394,13 +1391,16 @@ class CephFSMount(object):
             except (CommandFailedError, ConnectionLostError):
                 pass
 
-    def kill_background(self, p):
+    def kill_background(self, p=None):
         """
         For a process that was returned by one of the _background member functions,
         kill it hard.
         """
-        self._kill_background(p)
-        self.background_procs.remove(p)
+        procs = [p] if p is not None else self.background_procs
+        for p in procs:
+            log.debug(f"terminating {p}")
+            self._kill_background(p)
+            self.background_procs.remove(p)
 
     def send_signal(self, signal):
         signal = signal.lower()
