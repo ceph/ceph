@@ -141,7 +141,11 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
+%if 0%{with seastar}
+%{!?gts_version: %global gts_version 13}
+%else
 %{!?gts_version: %global gts_version 11}
+%endif
 
 # gcc-toolset-13 seems to trigger a linker bug resulting in a segfault in SafeTimer
 # and perhaps elsewhere.  For now, let's just disable it.  See
@@ -186,8 +190,16 @@
 # do not provide gcc-annobin.so anymore, despite that they provide annobin.so. but
 # redhat-rpm-config still passes -fplugin=gcc-annobin to the compiler.
 %undefine _annotated_build
-%if 0%{?rhel} == 8 && 0%{?enable_devtoolset11:1}
+%if 0%{?rhel} == 8
+%if 0%{gts_version} == 13
+%if 0%{?enable_devtoolset13:1}
+%enable_devtoolset13
+%endif
+%else
+%if 0%{?enable_devtoolset11:1}
 %enable_devtoolset11
+%endif
+%endif
 %endif
 
 #################################################################################
@@ -244,7 +256,11 @@ BuildRequires: gcc11-c++
 %endif
 %if 0%{?rhel} == 8
 BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++
+%if 0%{?gts_version} >= 12
+BuildRequires:	gcc-toolset-%{gts_version}-runtime
+%else
 BuildRequires:	gcc-toolset-%{gts_version}-build
+%endif
 BuildRequires:	gcc-toolset-%{gts_version}-libatomic-devel
 %endif
 %if 0%{?fedora} || 0%{?rhel} == 9 || 0%{?openEuler}
@@ -372,8 +388,12 @@ BuildRequires:  libasan
 BuildRequires:  protobuf-devel
 BuildRequires:  protobuf-compiler
 %if 0%{?rhel} == 8
+%if 0%{?gts_version} >= 12
+BuildRequires:  gcc-toolset-%{gts_version}-gcc-plugin-annobin
+%else
 BuildRequires:  gcc-toolset-%{gts_version}-annobin
 BuildRequires:  gcc-toolset-%{gts_version}-annobin-plugin-gcc
+%endif
 BuildRequires:  gcc-toolset-%{gts_version}-libubsan-devel
 BuildRequires:  gcc-toolset-%{gts_version}-libasan-devel
 %endif
