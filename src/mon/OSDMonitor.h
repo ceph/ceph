@@ -405,6 +405,10 @@ private:
   MOSDMap *build_incremental(epoch_t first, epoch_t last, uint64_t features);
   void send_full(MonOpRequestRef op);
   void send_incremental(MonOpRequestRef op, epoch_t first);
+
+  bool remove_pool_snap(std::string_view snapname,
+                        pg_pool_t &pp, int64_t pool);
+
 public:
   /**
    * Make sure the existing (up) OSDs support the given features
