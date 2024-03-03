@@ -10,6 +10,7 @@
  *
  */
 #include "mds/QuiesceDbManager.h"
+#include "mds/QuiesceDbEncoding.h"
 #include "gtest/gtest.h"
 #include "common/Cond.h"
 #include <ranges>
@@ -151,6 +152,13 @@ class QuiesceDbTest: public testing::Test {
             if (epoch == this->epoch) {
               if (this->managers.contains(recipient)) {
                 dout(10) << "listing from " << me << " (leader=" << leader << ") to " << recipient << " for version " << listing.db_version << " with " << listing.sets.size() << " sets" << dendl;
+
+                ceph::bufferlist bl;
+                encode(listing, bl);
+                listing.clear();
+                auto p = bl.cbegin();
+                decode(listing, p);
+
                 this->managers[recipient]->submit_peer_listing({me, std::move(listing)});
                 comms_cond.notify_all();
                 return 0;
@@ -181,6 +189,13 @@ class QuiesceDbTest: public testing::Test {
                     it++;
                   }
                 }
+
+                ceph::bufferlist bl;
+                encode(diff_map, bl);
+                diff_map.clear();
+                auto p = bl.cbegin();
+                decode(diff_map, p);
+
                 this->managers[leader]->submit_peer_ack({me, std::move(diff_map)});
                 comms_cond.notify_all();
                 l.unlock();

@@ -333,7 +333,7 @@ TEST_F(QuiesceAgentTest, QuiesceProtocol) {
   EXPECT_EQ(1, latest_ack.roots.size());
   EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root1").state);
 
-  latest_ack.reset();
+  latest_ack.clear();
 
   // complete the other root with failure
   EXPECT_TRUE(complete_quiesce("root2", -1));
@@ -344,7 +344,7 @@ TEST_F(QuiesceAgentTest, QuiesceProtocol) {
   EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root1").state);
   EXPECT_EQ(QS_FAILED, latest_ack.roots.at("root2").state);
 
-  latest_ack.reset();
+  latest_ack.clear();
 
   // complete the third root with success
   // complete one root with success
@@ -457,7 +457,7 @@ TEST_F(QuiesceAgentTest, DuplicateQuiesceRequest) {
   EXPECT_TRUE(quiesce_requests.contains("root1"));
   EXPECT_TRUE(quiesce_requests.contains("root2"));
 
-  latest_ack.reset();
+  latest_ack.clear();
   // now, bring the roots back
   {
     auto ack = update(3, { 
