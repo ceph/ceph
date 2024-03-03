@@ -18,15 +18,14 @@ Pools provide:
   <../erasure-code>`_, resilience is defined as the number of coding chunks
   (for example, ``m = 2`` in the default **erasure code profile**).
 
-- **Placement Groups**: You can set the number of placement groups (PGs) for
-  the pool. In a typical configuration, the target number of PGs is
-  approximately one hundred PGs per OSD. This provides reasonable balancing
-  without consuming excessive computing resources.  When setting up multiple
-  pools, be careful to set an appropriate number of PGs for each pool and for
-  the cluster as a whole. Each PG belongs to a specific pool: when multiple
-  pools use the same OSDs, make sure that the **sum** of PG replicas per OSD is
-  in the desired PG-per-OSD target range. To calculate an appropriate number of
-  PGs for your pools, use the `pgcalc`_ tool.
+- **Placement Groups**: The :ref:`autoscaler <pg-autoscaler>` sets the number
+  of placement groups (PGs) for the pool. In a typical configuration, the
+  target number of PGs is approximately one-hundred and fifty PGs per OSD. This
+  provides reasonable balancing without consuming excessive computing
+  resources. When setting up multiple pools, set an appropriate number of PGs
+  for each pool and for the cluster as a whole. Each PG belongs to a specific
+  pool: when multiple pools use the same OSDs, make sure that the **sum** of PG
+  replicas per OSD is in the desired PG-per-OSD target range. 
 
 - **CRUSH Rules**: When data is stored in a pool, the placement of the object
   and its replicas (or chunks, in the case of erasure-coded pools) in your
@@ -873,8 +872,6 @@ Managing pools that are flagged with ``--bulk``
 ===============================================
 See :ref:`managing_bulk_flagged_pools`.
 
-
-.. _pgcalc: https://old.ceph.com/pgcalc/
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
 .. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups
