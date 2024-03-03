@@ -421,7 +421,7 @@ void QuiesceDbManager::leader_record_ack(QuiesceInterface::PeerId from, QuiesceM
   if (diff_map.db_version > db_version()) {
     dout(3) << "ignoring unknown version ack by rank " << from << " (" << diff_map.db_version << " > " << db_version() << ")" << dendl;
     dout(5) << "will send the peer a full DB" << dendl;
-    info.diff_map.reset();
+    info.diff_map.clear();
   } else {
     info.diff_map = std::move(diff_map);
     info.last_seen = QuiesceClock::now();
