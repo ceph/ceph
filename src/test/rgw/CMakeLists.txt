@@ -58,6 +58,11 @@ target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE
 install(TARGETS ceph_test_rgw_d4n_filter DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+#unittest_redis_client
+add_executable(unittest_redis_client test_redis_client.cc redis_pull_client.cc redis_push_client.cc)
+add_ceph_unittest(unittest_redis_client)
+target_link_libraries(unittest_redis_client ${rgw_libs} ${UNITTEST_LIBS} ${EXTRALIBS})
+
 #unittest_rgw_bencode
 add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)
