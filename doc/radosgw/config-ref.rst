@@ -244,7 +244,6 @@ HashiCorp Vault Settings
 SSE-S3 Settings
 ===============
 
-.. confval:: rgw_crypt_sse_s3_enforce
 .. confval:: rgw_crypt_sse_s3_backend
 .. confval:: rgw_crypt_sse_s3_vault_secret_engine
 .. confval:: rgw_crypt_sse_s3_key_template

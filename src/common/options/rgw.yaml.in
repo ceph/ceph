@@ -3047,18 +3047,6 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_crypt_sse_s3_enforce
-  type: bool
-  level: advanced
-  desc: Enforce AES256 SSE-S3 encryption by default to all newly uploaded objects
-    if the encryption header is empty.
-  default: false
-  services:
-  - rgw
-  see_also:
-  - rgw_crypt_sse_s3_backend
-  - rgw_crypt_require_ssl
-  with_legacy: true
 - name: rgw_crypt_sse_s3_backend
   type: str
   level: advanced

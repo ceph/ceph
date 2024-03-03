@@ -10,8 +10,12 @@ overrides:
         rgw crypt sse s3 vault auth: token
         rgw crypt sse s3 vault secret engine: transit
         rgw crypt sse s3 vault prefix: /v1/transit/
-        rgw crypt sse s3 enforce: true
   rgw:
+    ealm: myrealm
+    zonegroup: us-east-1
+    zone: us-east-1
+    zone_features:
+      - sse-s3-enforcement
     client.0:
       use-vault-role: client.0
   s3tests:
@@ -19,6 +23,7 @@ overrides:
     with-forced-sse-s3: true
 
 tasks:
+- print: "restarting rgw to take effect of zone features"
 - vault:
     client.0:
       install_url: https://releases.hashicorp.com/vault/1.2.2/vault_1.2.2_linux_amd64.zip

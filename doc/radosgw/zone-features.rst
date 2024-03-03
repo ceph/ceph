@@ -18,6 +18,8 @@ Supported Features
 +-----------------------------------+---------+----------+
 | :ref:`feature_notification_v2`    | Squid   | Enabled  |
 +-----------------------------------+---------+----------+
+| :ref:`feature_sse_s3_enforcement` | Reef    | Disabled |
++-----------------------------------+---------+----------+
 
 .. _feature_resharding:
 
@@ -63,6 +65,15 @@ scale to many topics.
 
 Once this feature is enabled on all zonegroups in the realm, a background process
 will convert existing v1 topics and bucket notifications into their v2 format.
+
+
+.. _feature_sse_s3_enforcement:
+
+sse-s3-enforcement
+~~~~~~~~~~~~~~~~~~
+
+This feature forces `SSE-S3 AES256`_ encryption if the encryption header is empty or
+there is no bucket encryption configured for the requested bucket. 
 
 
 Commands
@@ -115,3 +126,4 @@ On any cluster in the realm:
 
 .. _`Server-Side Encryption`: ../encryption
 .. _`Compression`: ../compression
+.. _`SSE-S3 AES256`: ../encryption/#sse-s3

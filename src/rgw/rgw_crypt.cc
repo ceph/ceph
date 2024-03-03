@@ -12,6 +12,7 @@
 #include <auth/Crypto.h>
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
+#include <rgw/rgw_process_env.h>
 #include "include/ceph_assert.h"
 #include "include/function2.hpp"
 #include "crypto/crypto_accel.h"
@@ -1147,7 +1148,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
     /* AMAZON server side encryption with KMS (key management service) */
     std::string_view req_sse =
         crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION);
-    if (req_sse.empty() && s->cct->_conf->rgw_crypt_sse_s3_enforce) {
+    const RGWZoneGroup& zonegroup = s->penv.site->get_zonegroup();
+    if (req_sse.empty() && zonegroup.supports(rgw::zone_features::sse_s3_enforcement)) {
       req_sse = "AES256";
     }
     if (! req_sse.empty()) {
