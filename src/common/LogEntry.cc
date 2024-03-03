@@ -183,7 +183,6 @@ string clog_type_to_string(clog_type t)
       return "crit";
     default:
       ceph_abort();
-      return 0;
   }
 }
 
