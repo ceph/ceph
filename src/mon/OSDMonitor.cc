@@ -4570,6 +4570,17 @@ void OSDMonitor::send_incremental(epoch_t first,
   }
 }
 
+bool OSDMonitor::remove_pool_snap(std::string_view snapname,
+                                  pg_pool_t &pp, int64_t pool) {
+  snapid_t snapid = pp.snap_exists(snapname);
+  if (snapid) {
+    pp.remove_snap(snapid);
+    pending_inc.new_removed_snaps[pool].insert(snapid);
+    return true;
+  }
+  return false;
+};
+
 int OSDMonitor::get_version(version_t ver, bufferlist& bl)
 {
   return get_version(ver, mon.get_quorum_con_features(), bl);
@@ -13080,11 +13091,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       pp = &pending_inc.new_pools[pool];
       *pp = *p;
     }
-    snapid_t sn = pp->snap_exists(snapname.c_str());
-    if (sn) {
-      pp->remove_snap(sn);
+    if (remove_pool_snap(snapname, *pp, pool)) {
       pp->set_snap_epoch(pending_inc.epoch);
-      pending_inc.new_removed_snaps[pool].insert(sn);
       ss << "removed pool " << poolstr << " snap " << snapname;
     } else {
       ss << "already removed pool " << poolstr << " snap " << snapname;
@@ -14304,10 +14312,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 
   case POOL_OP_DELETE_SNAP:
     {
-      snapid_t s = pp.snap_exists(m->name.c_str());
-      if (s) {
-	pp.remove_snap(s);
-	pending_inc.new_removed_snaps[m->pool].insert(s);
+      if (remove_pool_snap(m->name, pp, m->pool)) {
 	changed = true;
       }
     }
