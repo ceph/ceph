@@ -538,6 +538,7 @@ struct MDLockCache : public MutationImpl {
     return dir_layout;
   }
 
+  void print(std::ostream& out) const;
   void attach_locks();
   void attach_dirfrags(std::vector<CDir*>&& dfv);
   void detach_locks();
