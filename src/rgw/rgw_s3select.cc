@@ -410,7 +410,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
   } else if(m_header_info.compare("USE")==0) {
     csv.use_header_info=true;
   }
-  //m_s3_csv_object.set_external_debug_system(fp_debug_mesg);
+  m_s3_csv_object.set_external_debug_system(fp_debug_mesg);
   m_s3_csv_object.set_result_formatters(fp_s3select_result_format,fp_result_header_format);
   m_s3_csv_object.set_csv_query(&s3select_syntax, csv);
   if (s3select_syntax.get_error_description().empty() == false) {
@@ -865,20 +865,23 @@ int RGWSelectObj_ObjStore_S3::csv_processing(bufferlist& bl, off_t ofs, off_t le
         continue;
       }
 
-      if((ofs + len) > it.length()){
+
+      if(ofs > it.length()){
+      //safety check
 	ldpp_dout(this, 10) << "offset and length may cause invalid read: ofs = " << ofs << " len = " << len << " it.length() = " << it.length() << dendl;
 	ofs = 0;
-	len = it.length();
       }
 
     if(m_is_trino_request){
+      //TODO replace len with it.length() ? ; test Trino flow with compressed objects.
+      //is it possible to send get-by-ranges? in parallel?
       shape_chunk_per_trino_requests(&(it)[0], ofs, len); 
     }
 
     ldpp_dout(this, 10) << "s3select: chunk:  ofs = " << ofs << " len = " << len << " it.length() = " << it.length() << " m_object_size_for_processing = " << m_object_size_for_processing << dendl;
     
     m_aws_response_handler.update_processed_size(it.length());//NOTE : to run analysis to validate len is aligned with m_processed_bytes
-    status = run_s3select_on_csv(m_sql_query.c_str(), &(it)[0] + ofs, len);
+    status = run_s3select_on_csv(m_sql_query.c_str(), &(it)[0] + ofs, it.length());
     if (status<0) {
 	  return -EINVAL;
     }
