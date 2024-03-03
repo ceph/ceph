@@ -631,9 +631,6 @@ pools, each with 512 PGs on 10 OSDs, the OSDs will have to handle ~50,000 PGs
 each. This cluster will require significantly more resources and significantly
 more time for peering.
 
-For determining the optimal number of PGs per OSD, we recommend the `PGCalc`_
-tool.
-
 
 .. _setting the number of placement groups:
 
@@ -925,4 +922,3 @@ about it entirely (if it is too new to have a previous version). To mark the
 
 .. _Create a Pool: ../pools#createpool
 .. _Mapping PGs to OSDs: ../../../architecture#mapping-pgs-to-osds
-.. _pgcalc: https://old.ceph.com/pgcalc/
