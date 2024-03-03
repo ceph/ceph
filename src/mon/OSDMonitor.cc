@@ -12966,7 +12966,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if (remove_pool_snap(snapname, *pp, pool)) {
       pp->set_snap_epoch(pending_inc.epoch);
-      pending_inc.new_removed_snaps[pool].insert(sn);
       ss << "removed pool " << poolstr << " snap " << snapname;
     } else {
       ss << "already removed pool " << poolstr << " snap " << snapname;
