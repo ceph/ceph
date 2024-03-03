@@ -3886,7 +3886,7 @@ class pi_compact_rep : public PastIntervals::interval_rep {
     bool ec_pool,
     std::list<PastIntervals::pg_interval_t> &&intervals) {
     for (auto &&i: intervals)
-      add_interval(ec_pool, i);
+      pi_compact_rep::add_interval(ec_pool, i);
   }
 public:
   pi_compact_rep() = default;
