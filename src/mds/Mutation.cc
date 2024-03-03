@@ -624,3 +624,18 @@ void MDLockCache::detach_dirfrags()
   }
   items_dir.reset();
 }
+
+void MDLockCache::print(std::ostream& out) const {
+  out << "MDLockCache(o=" << ceph_mds_op_name(opcode)
+      << " diri=" << diri->ino();
+  if (client_cap) {
+    out << " c=" << client_cap->get_client();
+  } else {
+    out << " c=(nil)";
+  }
+  out << " r=" << ref;
+  if (invalidating) {
+    out << " invalidating";
+  }
+  out << ")";
+}

@@ -895,6 +895,8 @@ public:
 
 void Locker::put_lock_cache(MDLockCache* lock_cache)
 {
+  dout(20) << __func__ << ": " << *lock_cache << dendl;
+
   ceph_assert(lock_cache->ref > 0);
   if (--lock_cache->ref > 0)
     return;
@@ -928,6 +930,8 @@ int Locker::get_cap_bit_for_lock_cache(int op)
 
 void Locker::invalidate_lock_cache(MDLockCache *lock_cache)
 {
+  dout(15) << __func__ << ": " << *lock_cache << dendl;
+
   ceph_assert(lock_cache->item_cap_lock_cache.is_on_list());
   if (lock_cache->invalidating) {
     ceph_assert(!lock_cache->client_cap);
