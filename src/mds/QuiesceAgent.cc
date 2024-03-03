@@ -182,7 +182,7 @@ void* QuiesceAgent::agent_thread_main() {
         dout(3) << "got error: " << rc << " trying to send " << ack << dendl;
       }
     }
-    ack.reset();
+    ack.clear();
 
     lock.lock();
 

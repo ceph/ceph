@@ -3,12 +3,12 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2004-2006 Sage Weil <sage@newdream.net>
+ * Copyright (C) 2024 IBM, Red Hat
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software 
- * Foundation.  See file COPYING.
+ * Foundation. See file COPYING.
  * 
  */
 
@@ -36,9 +36,7 @@ public:
 
   void encode_payload_from(QuiesceDbPeerAck const& ack)
   {
-    ENCODE_START(QuiesceDbEncoding::version, QuiesceDbEncoding::compat, payload);
-    encode(ack, payload);
-    ENCODE_FINISH(payload);
+    ::encode(ack, payload);
   }
 
   void decode_payload() override {
@@ -48,9 +46,7 @@ public:
   void decode_payload_into(QuiesceDbPeerAck &ack) const
   {
     auto p = payload.cbegin();
-    DECODE_START(QuiesceDbEncoding::version, p);
-    decode(ack, p);
-    DECODE_FINISH(p);
+    ::decode(ack, p);
   }
 
 private:

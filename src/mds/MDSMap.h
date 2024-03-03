@@ -318,8 +318,13 @@ public:
     members = qdb_cluster_members; 
   }
 
-  mds_gid_t get_quiesce_db_cluster_leader() {
+  mds_gid_t get_quiesce_db_cluster_leader() const {
     return qdb_cluster_leader;
+  }
+
+  std::unordered_set<mds_gid_t> const& get_quiesce_db_cluster_members() const
+  {
+    return qdb_cluster_members;
   }
 
   bool update_quiesce_db_cluster(mds_gid_t const& leader, std::same_as<std::unordered_set<mds_gid_t>> auto && members) {

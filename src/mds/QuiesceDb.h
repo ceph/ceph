@@ -464,7 +464,7 @@ struct QuiesceDbRequest {
 
     config(*this);
   }
-  void reset() {
+  void clear() {
     reset([](auto&r){});
   }
 
@@ -644,7 +644,7 @@ struct QuiesceMap {
   };
   using Roots = std::unordered_map<QuiesceRoot, RootInfo>;
   Roots roots;
-  void reset() {
+  void clear() {
     db_version = {0, 0};
     roots.clear();
   }

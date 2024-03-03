@@ -13,6 +13,8 @@
  */
 
 #include <ostream>
+#include <algorithm>
+#include <ranges>
 
 #include "FSMap.h"
 #include "common/debug.h"
@@ -867,6 +869,11 @@ void FSMap::sanity(bool pending) const
       }
       ceph_assert(info.compat.writeable(fs.mds_map.compat));
     }
+
+    auto const& leader = fs.mds_map.get_quiesce_db_cluster_leader();
+    auto const& members = fs.mds_map.get_quiesce_db_cluster_members();
+    ceph_assert(leader == MDS_GID_NONE || members.contains(leader));
+    ceph_assert(std::ranges::all_of(members, [&infos = fs.mds_map.mds_info](auto m){return infos.contains(m);}));
 
     for (const auto &j : fs.mds_map.up) {
       mds_rank_t rank = j.first;
