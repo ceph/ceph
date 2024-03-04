@@ -20,7 +20,7 @@ from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, \
-    EvictionError, IndexException
+    EvictionError
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
