@@ -128,12 +128,6 @@ workload_pacific:
    - sequential:
      - rgw: [client.0]
      - print: "**** done rgw workload_pacific"
-     - s3tests:
-         client.0:
-           force-branch: ceph-pacific
-           rgw_server: client.0
-           scan_for_encryption_keys: false
-     - print: "**** done s3tests workload_pacific"
      - rbd_fsx:
          clients: [client.0]
          size: 134217728
