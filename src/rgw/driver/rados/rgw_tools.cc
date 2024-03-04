@@ -113,7 +113,23 @@ int rgw_get_rados_ref(const DoutPrefixProvider* dpp, librados::Rados* rados,
   ref->ioctx.locator_set_key(ref->obj.loc);
   return 0;
 }
+//ToDo for from rados to redis
+int rgw_get_redis_ref(const DoutPrefixProvider* dpp, librados::Rados* rados,
+        rgw_raw_obj obj, rgw_rados_ref* ref)
+{
+  ref->obj = std::move(obj);
 
+  int r = rgw_init_ioctx(dpp, rados, ref->obj.pool,
+			 ref->ioctx, true, false);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: creating ioctx (pool=" << ref->obj.pool
+        << "); r=" << r << dendl;
+    return r;
+  }
+
+  ref->ioctx.locator_set_key(ref->obj.loc);
+  return 0;
+}
 
 map<string, bufferlist>* no_change_attrs() {
   static map<string, bufferlist> no_change;
@@ -266,6 +282,81 @@ int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, cons
   }
   return ioctx.notify2(oid, bl, timeout_ms, pbl);
 }
+
+// TODO
+int rgw_redis_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectReadOperation *op, bufferlist* pbl,
+                      optional_yield y, int flags, const jspan_context* trace_info)
+{
+  // given a yield_context, call async_operate() to yield the coroutine instead
+  // of blocking
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    auto bl = librados::async_operate(
+      context, ioctx, oid, op, flags, yield[ec]);
+    if (pbl) {
+      *pbl = std::move(bl);
+    }
+    return -ec.value();
+  }
+  // work on asio threads should be asynchronous, so warn when they block
+  if (is_asio_thread) {
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
+#ifdef _BACKTRACE_LOGGING
+    ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
+#endif
+  }
+  return ioctx.operate(oid, op, nullptr, flags);
+}
+
+// TODO
+int rgw_redis_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectWriteOperation *op, optional_yield y,
+		      int flags, const jspan_context* trace_info)
+{
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    librados::async_operate(context, ioctx, oid, op, flags, yield[ec], trace_info);
+    return -ec.value();
+  }
+  if (is_asio_thread) {
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
+#ifdef _BACKTRACE_LOGGING
+    ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
+#endif
+  }
+  return ioctx.operate(oid, op, flags, trace_info);
+}
+
+// TODO
+int rgw_redis_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
+                     bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
+                     optional_yield y)
+{
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    auto reply = librados::async_notify(context, ioctx, oid,
+                                        bl, timeout_ms, yield[ec]);
+    if (pbl) {
+      *pbl = std::move(reply);
+    }
+    return -ec.value();
+  }
+  if (is_asio_thread) {
+    ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
+#ifdef _BACKTRACE_LOGGING
+    ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
+#endif
+  }
+  return ioctx.notify2(oid, bl, timeout_ms, pbl);
+}
+
 
 void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
                         map<string, bufferlist> *attrset)

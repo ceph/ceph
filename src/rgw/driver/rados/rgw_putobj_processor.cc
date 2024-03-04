@@ -112,7 +112,7 @@ static int process_completed(const AioResultList& completed, RawObjSet *written)
   }
   return error.value_or(0);
 }
-
+// TODO
 void RadosWriter::add_write_hint(librados::ObjectWriteOperation& op) {
   const RGWObjStateManifest *sm = obj_ctx.get_state(head_obj);
   const bool compressed = sm->state.compressed;

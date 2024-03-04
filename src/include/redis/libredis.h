@@ -1,0 +1,4156 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2004-2012 Sage Weil <sage@newdream.net>
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation.  See file COPYING.
+ *
+ */
+
+#ifndef CEPH_LIBREDIS_H
+#define CEPH_LIBREDIS_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <netinet/in.h>
+#if defined(__linux__)
+#include <linux/types.h>
+#elif defined(__FreeBSD__)
+#include <sys/types.h>
+#endif
+#include <unistd.h>
+#include <string.h>
+#include "redis_types.h"
+
+#include <sys/time.h>
+
+#ifndef CEPH_OSD_TMAP_SET
+/* These are also defined in redis.h and objclass.h. Keep them in sync! */
+#define CEPH_OSD_TMAP_HDR 'h'
+#define CEPH_OSD_TMAP_SET 's'
+#define CEPH_OSD_TMAP_CREATE 'c'
+#define CEPH_OSD_TMAP_RM  'r'
+#endif
+
+#define LIBREDIS_VER_MAJOR 3
+#define LIBREDIS_VER_MINOR 0
+#define LIBREDIS_VER_EXTRA 0
+
+#define LIBREDIS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
+
+#define LIBREDIS_VERSION_CODE LIBREDIS_VERSION(LIBREDIS_VER_MAJOR, LIBREDIS_VER_MINOR, LIBREDIS_VER_EXTRA)
+
+#define LIBREDIS_SUPPORTS_WATCH 1
+#define LIBREDIS_SUPPORTS_SERVICES 1
+#define LIBREDIS_SUPPORTS_GETADDRS 1
+#define LIBREDIS_SUPPORTS_APP_METADATA 1
+
+/* REDIS lock flags
+ * They are also defined in cls_lock_types.h. Keep them in sync!
+ */
+#define LIBREDIS_LOCK_FLAG_RENEW       (1u<<0)
+#define LIBREDIS_LOCK_FLAG_MAY_RENEW   LIBREDIS_LOCK_FLAG_RENEW
+#define LIBREDIS_LOCK_FLAG_MUST_RENEW  (1u<<1)
+
+/*
+ * Constants for redis_write_op_create().
+ */
+#define LIBREDIS_CREATE_EXCLUSIVE 1
+#define LIBREDIS_CREATE_IDEMPOTENT 0
+
+/*
+ * Flags that can be set on a per-op basis via
+ * redis_read_op_set_flags() and redis_write_op_set_flags().
+ */
+enum {
+  // fail a create operation if the object already exists
+  LIBREDIS_OP_FLAG_EXCL               =  0x1,
+  // allow the transaction to succeed even if the flagged op fails
+  LIBREDIS_OP_FLAG_FAILOK 	      = 0x2,
+  // indicate read/write op random
+  LIBREDIS_OP_FLAG_FADVISE_RANDOM     = 0x4,
+  // indicate read/write op sequential
+  LIBREDIS_OP_FLAG_FADVISE_SEQUENTIAL = 0x8,
+  // indicate read/write data will be accessed in the near future (by someone)
+  LIBREDIS_OP_FLAG_FADVISE_WILLNEED   = 0x10,
+  // indicate read/write data will not accessed in the near future (by anyone)
+  LIBREDIS_OP_FLAG_FADVISE_DONTNEED   = 0x20,
+  // indicate read/write data will not accessed again (by *this* client)
+  LIBREDIS_OP_FLAG_FADVISE_NOCACHE    = 0x40,
+  // optionally support FUA (force unit access) on write requests
+  LIBREDIS_OP_FLAG_FADVISE_FUA        = 0x80,
+};
+
+#define CEPH_REDIS_API
+
+/**
+ * @name xattr comparison operations
+ * Operators for comparing xattrs on objects, and aborting the
+ * redis_read_op or redis_write_op transaction if the comparison
+ * fails.
+ *
+ * @{
+ */
+enum {
+	LIBREDIS_CMPXATTR_OP_EQ  = 1,
+	LIBREDIS_CMPXATTR_OP_NE  = 2,
+	LIBREDIS_CMPXATTR_OP_GT  = 3,
+	LIBREDIS_CMPXATTR_OP_GTE = 4,
+	LIBREDIS_CMPXATTR_OP_LT  = 5,
+	LIBREDIS_CMPXATTR_OP_LTE = 6
+};
+/** @} */
+
+/**
+ * @name Operation Flags
+ * Flags for redis_read_op_operate(), redis_write_op_operate(),
+ * redis_aio_read_op_operate(), and redis_aio_write_op_operate().
+ * See libredis.hpp for details.
+ * @{
+ */
+enum {
+  LIBREDIS_OPERATION_NOFLAG             = 0,
+  LIBREDIS_OPERATION_BALANCE_READS      = 1,
+  LIBREDIS_OPERATION_LOCALIZE_READS     = 2,
+  LIBREDIS_OPERATION_ORDER_READS_WRITES = 4,
+  LIBREDIS_OPERATION_IGNORE_CACHE       = 8,
+  LIBREDIS_OPERATION_SKIPRWLOCKS        = 16,
+  LIBREDIS_OPERATION_IGNORE_OVERLAY     = 32,
+  /* send requests to cluster despite the cluster or pool being marked
+     full; ops will either succeed (e.g., delete) or return EDQUOT or
+     ENOSPC. */
+  LIBREDIS_OPERATION_FULL_TRY           = 64,
+  /*
+   * Mainly for delete op
+   */
+  LIBREDIS_OPERATION_FULL_FORCE		= 128,
+  LIBREDIS_OPERATION_IGNORE_REDIRECT	= 256,
+  LIBREDIS_OPERATION_ORDERSNAP          = 512,
+  /* enable/allow >0 return values and payloads on write/update */
+  LIBREDIS_OPERATION_RETURNVEC          = 1024,
+};
+/** @} */
+
+/**
+ * @name Alloc hint flags
+ * Flags for redis_write_op_alloc_hint2() and redis_set_alloc_hint2()
+ * indicating future IO patterns.
+ * @{
+ */
+enum {
+  LIBREDIS_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE = 1,
+  LIBREDIS_ALLOC_HINT_FLAG_RANDOM_WRITE = 2,
+  LIBREDIS_ALLOC_HINT_FLAG_SEQUENTIAL_READ = 4,
+  LIBREDIS_ALLOC_HINT_FLAG_RANDOM_READ = 8,
+  LIBREDIS_ALLOC_HINT_FLAG_APPEND_ONLY = 16,
+  LIBREDIS_ALLOC_HINT_FLAG_IMMUTABLE = 32,
+  LIBREDIS_ALLOC_HINT_FLAG_SHORTLIVED = 64,
+  LIBREDIS_ALLOC_HINT_FLAG_LONGLIVED = 128,
+  LIBREDIS_ALLOC_HINT_FLAG_COMPRESSIBLE = 256,
+  LIBREDIS_ALLOC_HINT_FLAG_INCOMPRESSIBLE = 512,
+};
+/** @} */
+
+typedef enum {
+	LIBREDIS_CHECKSUM_TYPE_XXHASH32 = 0,
+	LIBREDIS_CHECKSUM_TYPE_XXHASH64 = 1,
+	LIBREDIS_CHECKSUM_TYPE_CRC32C   = 2
+} redis_checksum_type_t;
+
+/*
+ * snap id contants
+ */
+#define LIBREDIS_SNAP_HEAD  UINT64_C(-2)
+#define LIBREDIS_SNAP_DIR   UINT64_C(-1)
+
+/**
+ * @typedef redis_t
+ *
+ * A handle for interacting with a REDIS cluster. It encapsulates all
+ * REDIS client configuration, including username, key for
+ * authentication, logging, and debugging. Talking to different clusters
+ * -- or to the same cluster with different users -- requires
+ * different cluster handles.
+ */
+#ifndef VOIDPTR_REDIS_T
+#define VOIDPTR_REDIS_T
+typedef void *redis_t;
+#endif //VOIDPTR_REDIS_T
+
+/**
+ * @typedef redis_config_t
+ *
+ * A handle for the ceph configuration context for the redis_t cluster
+ * instance.  This can be used to share configuration context/state
+ * (e.g., logging configuration) between libredis instance.
+ *
+ * @warning The config context does not have independent reference
+ * counting.  As such, a redis_config_t handle retrieved from a given
+ * redis_t is only valid as long as that redis_t.
+ */
+typedef void *redis_config_t;
+
+/**
+ * @typedef redis_ioctx_t
+ *
+ * An io context encapsulates a few settings for all I/O operations
+ * done on it:
+ * - pool - set when the io context is created (see redis_ioctx_create())
+ * - snapshot context for writes (see
+ *   redis_ioctx_selfmanaged_snap_set_write_ctx())
+ * - snapshot id to read from (see redis_ioctx_snap_set_read())
+ * - object locator for all single-object operations (see
+ *   redis_ioctx_locator_set_key())
+ * - namespace for all single-object operations (see
+ *   redis_ioctx_set_namespace()).  Set to LIBREDIS_ALL_NSPACES
+ *   before redis_nobjects_list_open() will list all objects in all
+ *   namespaces.
+ *
+ * @warning Changing any of these settings is not thread-safe -
+ * libredis users must synchronize any of these changes on their own,
+ * or use separate io contexts for each thread
+ */
+typedef void *redis_ioctx_t;
+
+/**
+ * @typedef redis_list_ctx_t
+ *
+ * An iterator for listing the objects in a pool.
+ * Used with redis_nobjects_list_open(),
+ * redis_nobjects_list_next(), redis_nobjects_list_next2(), and
+ * redis_nobjects_list_close().
+ */
+typedef void *redis_list_ctx_t;
+
+/**
+ * @typedef redis_object_list_cursor
+ *
+ * The cursor used with redis_enumerate_objects
+ * and accompanying methods.
+ */
+typedef void * redis_object_list_cursor;
+
+/**
+ * @struct redis_object_list_item
+ *
+ * The item populated by redis_object_list in
+ * the results array.
+ */
+typedef struct {
+
+  /// oid length
+  size_t oid_length;
+  /// name of the object
+  char *oid;
+  /// namespace length
+  size_t nspace_length;
+  /// the object namespace
+  char *nspace;
+  /// locator length
+  size_t locator_length;
+  /// object locator
+  char *locator;
+} redis_object_list_item;
+
+/**
+ * @typedef redis_snap_t
+ * The id of a snapshot.
+ */
+typedef uint64_t redis_snap_t;
+
+/**
+ * @typedef redis_xattrs_iter_t
+ * An iterator for listing extended attrbutes on an object.
+ * Used with redis_getxattrs(), redis_getxattrs_next(), and
+ * redis_getxattrs_end().
+ */
+typedef void *redis_xattrs_iter_t;
+
+/**
+ * @typedef redis_omap_iter_t
+ * An iterator for listing omap key/value pairs on an object.
+ * Used with redis_read_op_omap_get_keys(), redis_read_op_omap_get_vals(),
+ * redis_read_op_omap_get_vals_by_keys(), redis_omap_get_next(), and
+ * redis_omap_get_end().
+ */
+typedef void *redis_omap_iter_t;
+
+/**
+ * @struct redis_pool_stat_t
+ * Usage information for a pool.
+ */
+struct redis_pool_stat_t {
+  /// space used in bytes
+  uint64_t num_bytes;
+  /// space used in KB
+  uint64_t num_kb;
+  /// number of objects in the pool
+  uint64_t num_objects;
+  /// number of clones of objects
+  uint64_t num_object_clones;
+  /// num_objects * num_replicas
+  uint64_t num_object_copies;
+  /// number of objects missing on primary
+  uint64_t num_objects_missing_on_primary;
+  /// number of objects found on no OSDs
+  uint64_t num_objects_unfound;
+  /// number of objects replicated fewer times than they should be
+  /// (but found on at least one OSD)
+  uint64_t num_objects_degraded;
+  /// number of objects read
+  uint64_t num_rd;
+  /// objects read in KB
+  uint64_t num_rd_kb;
+  /// number of objects written
+  uint64_t num_wr;
+  /// objects written in KB
+  uint64_t num_wr_kb;
+  /// bytes originally provided by user
+  uint64_t num_user_bytes;
+  /// bytes passed compression
+  uint64_t compressed_bytes_orig;
+  /// bytes resulted after compression
+  uint64_t compressed_bytes;
+  /// bytes allocated at storage
+  uint64_t compressed_bytes_alloc;
+};
+
+/**
+ * @struct redis_cluster_stat_t
+ * Cluster-wide usage information
+ */
+struct redis_cluster_stat_t {
+  /// total device size
+  uint64_t kb;
+  /// total used
+  uint64_t kb_used;
+  /// total available/free
+  uint64_t kb_avail;
+  /// number of objects
+  uint64_t num_objects;
+};
+
+/**
+ * @typedef redis_write_op_t
+ *
+ * An object write operation stores a number of operations which can be
+ * executed atomically. For usage, see:
+ * - Creation and deletion: redis_create_write_op() redis_release_write_op()
+ * - Extended attribute manipulation: redis_write_op_cmpxattr()
+ *   redis_write_op_cmpxattr(), redis_write_op_setxattr(),
+ *   redis_write_op_rmxattr()
+ * - Object map key/value pairs: redis_write_op_omap_set(),
+ *   redis_write_op_omap_rm_keys(), redis_write_op_omap_clear(),
+ *   redis_write_op_omap_cmp()
+ * - Object properties: redis_write_op_assert_exists(),
+ *   redis_write_op_assert_version()
+ * - Creating objects: redis_write_op_create()
+ * - IO on objects: redis_write_op_append(), redis_write_op_write(), redis_write_op_zero
+ *   redis_write_op_write_full(), redis_write_op_writesame(), redis_write_op_remove,
+ *   redis_write_op_truncate(), redis_write_op_zero(), redis_write_op_cmpext()
+ * - Hints: redis_write_op_set_alloc_hint()
+ * - Performing the operation: redis_write_op_operate(), redis_aio_write_op_operate()
+ */
+typedef void *redis_write_op_t;
+
+/**
+ * @typedef redis_read_op_t
+ *
+ * An object read operation stores a number of operations which can be
+ * executed atomically. For usage, see:
+ * - Creation and deletion: redis_create_read_op() redis_release_read_op()
+ * - Extended attribute manipulation: redis_read_op_cmpxattr(),
+ *   redis_read_op_getxattr(), redis_read_op_getxattrs()
+ * - Object map key/value pairs: redis_read_op_omap_get_vals(),
+ *   redis_read_op_omap_get_keys(), redis_read_op_omap_get_vals_by_keys(),
+ *   redis_read_op_omap_cmp()
+ * - Object properties: redis_read_op_stat(), redis_read_op_assert_exists(),
+ *   redis_read_op_assert_version()
+ * - IO on objects: redis_read_op_read(), redis_read_op_checksum(),
+ *   redis_read_op_cmpext()
+ * - Custom operations: redis_read_op_exec(), redis_read_op_exec_user_buf()
+ * - Request properties: redis_read_op_set_flags()
+ * - Performing the operation: redis_read_op_operate(),
+ *   redis_aio_read_op_operate()
+ */
+typedef void *redis_read_op_t;
+
+/**
+ * @typedef redis_completion_t
+ * Represents the state of an asynchronous operation - it contains the
+ * return value once the operation completes, and can be used to block
+ * until the operation is complete or safe.
+ */
+typedef void *redis_completion_t;
+
+/**
+ * @struct blkin_trace_info
+ * blkin trace information for Zipkin tracing
+ */
+struct blkin_trace_info;
+
+/**
+ * Get the version of libredis.
+ *
+ * The version number is major.minor.extra. Note that this is
+ * unrelated to the Ceph version number.
+ *
+ * TODO: define version semantics, i.e.:
+ * - incrementing major is for backwards-incompatible changes
+ * - incrementing minor is for backwards-compatible changes
+ * - incrementing extra is for bug fixes
+ *
+ * @param major where to store the major version number
+ * @param minor where to store the minor version number
+ * @param extra where to store the extra version number
+ */
+CEPH_REDIS_API void redis_version(int *major, int *minor, int *extra);
+
+/**
+ * @name Setup and Teardown
+ * These are the first and last functions to that should be called
+ * when using libredis.
+ *
+ * @{
+ */
+
+/**
+ * Create a handle for communicating with a REDIS cluster.
+ *
+ * Ceph environment variables are read when this is called, so if
+ * $CEPH_ARGS specifies everything you need to connect, no further
+ * configuration is necessary.
+ *
+ * @param cluster where to store the handle
+ * @param id the user to connect as (i.e. admin, not client.admin)
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_create(redis_t *cluster, const char * const id);
+
+/**
+ * Extended version of redis_create.
+ *
+ * Like redis_create, but 
+ * 1) don't assume 'client\.'+id; allow full specification of name
+ * 2) allow specification of cluster name
+ * 3) flags for future expansion
+ */
+CEPH_REDIS_API int redis_create2(redis_t *pcluster,
+                                 const char *const clustername,
+                                 const char * const name, uint64_t flags);
+
+/**
+ * Initialize a cluster handle from an existing configuration.
+ *
+ * Share configuration state with another redis_t instance.
+ *
+ * @param cluster where to store the handle
+ * @param cct the existing configuration to use
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_create_with_context(redis_t *cluster,
+                                             redis_config_t cct);
+
+/**
+ * Ping the monitor with ID mon_id, storing the resulting reply in
+ * buf (if specified) with a maximum size of len.
+ *
+ * The result buffer is allocated on the heap; the caller is
+ * expected to release that memory with redis_buffer_free().  The
+ * buffer and length pointers can be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster         cluster handle
+ * @param mon_id [in]     ID of the monitor to ping
+ * @param outstr [out]    double pointer with the resulting reply
+ * @param outstrlen [out] pointer with the size of the reply in outstr
+ */
+CEPH_REDIS_API int redis_ping_monitor(redis_t cluster, const char *mon_id,
+                                      char **outstr, size_t *outstrlen);
+
+/**
+ * Connect to the cluster.
+ *
+ * @note BUG: Before calling this, calling a function that communicates with the
+ * cluster will crash.
+ *
+ * @pre The cluster handle is configured with at least a monitor
+ * address. If cephx is enabled, a client name and secret must also be
+ * set.
+ *
+ * @post If this succeeds, any function in libredis may be used
+ *
+ * @param cluster The cluster to connect to.
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_connect(redis_t cluster);
+
+/**
+ * Disconnects from the cluster.
+ *
+ * For clean up, this is only necessary after redis_connect() has
+ * succeeded.
+ *
+ * @warning This does not guarantee any asynchronous writes have
+ * completed. To do that, you must call redis_aio_flush() on all open
+ * io contexts.
+ *
+ * @warning We implicitly call redis_watch_flush() on shutdown.  If
+ * there are watches being used, this should be done explicitly before
+ * destroying the relevant IoCtx.  We do it here as a safety measure.
+ *
+ * @post the cluster handle cannot be used again
+ *
+ * @param cluster the cluster to shutdown
+ */
+CEPH_REDIS_API void redis_shutdown(redis_t cluster);
+
+/** @} init */
+
+/**
+ * @name Configuration
+ * These functions read and update Ceph configuration for a cluster
+ * handle. Any configuration changes must be done before connecting to
+ * the cluster.
+ *
+ * Options that libredis users might want to set include:
+ * - mon_host
+ * - auth_supported
+ * - key, keyfile, or keyring when using cephx
+ * - log_file, log_to_stderr, err_to_stderr, and log_to_syslog
+ * - debug_redis, debug_objecter, debug_monc, debug_auth, or debug_ms
+ *
+ * See docs.ceph.com for information about available configuration options`
+ *
+ * @{
+ */
+
+/**
+ * Configure the cluster handle using a Ceph config file
+ *
+ * If path is NULL, the default locations are searched, and the first
+ * found is used. The locations are:
+ * - $CEPH_CONF (environment variable)
+ * - /etc/ceph/ceph.conf
+ * - ~/.ceph/config
+ * - ceph.conf (in the current working directory)
+ *
+ * @pre redis_connect() has not been called on the cluster handle
+ *
+ * @param cluster cluster handle to configure
+ * @param path path to a Ceph configuration file
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_conf_read_file(redis_t cluster, const char *path);
+
+/**
+ * Configure the cluster handle with command line arguments
+ *
+ * argv can contain any common Ceph command line option, including any
+ * configuration parameter prefixed by '--' and replacing spaces with
+ * dashes or underscores. For example, the following options are equivalent:
+ * - --mon-host 10.0.0.1:6789
+ * - --mon_host 10.0.0.1:6789
+ * - -m 10.0.0.1:6789
+ *
+ * @pre redis_connect() has not been called on the cluster handle
+ *
+ * @param cluster cluster handle to configure
+ * @param argc number of arguments in argv
+ * @param argv arguments to parse
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_conf_parse_argv(redis_t cluster, int argc,
+                                         const char **argv);
+
+
+/**
+ * Configure the cluster handle with command line arguments, returning
+ * any remainders.  Same redis_conf_parse_argv, except for extra
+ * remargv argument to hold returns unrecognized arguments.
+ *
+ * @pre redis_connect() has not been called on the cluster handle
+ *
+ * @param cluster cluster handle to configure
+ * @param argc number of arguments in argv
+ * @param argv arguments to parse
+ * @param remargv char* array for returned unrecognized arguments
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_conf_parse_argv_remainder(redis_t cluster, int argc,
+				                   const char **argv,
+                                                   const char **remargv);
+/**
+ * Configure the cluster handle based on an environment variable
+ *
+ * The contents of the environment variable are parsed as if they were
+ * Ceph command line options. If var is NULL, the CEPH_ARGS
+ * environment variable is used.
+ *
+ * @pre redis_connect() has not been called on the cluster handle
+ *
+ * @note BUG: this is not threadsafe - it uses a static buffer
+ *
+ * @param cluster cluster handle to configure
+ * @param var name of the environment variable to read
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_conf_parse_env(redis_t cluster, const char *var);
+
+/**
+ * Set a configuration option
+ *
+ * @pre redis_connect() has not been called on the cluster handle
+ *
+ * @param cluster cluster handle to configure
+ * @param option option to set
+ * @param value value of the option
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT when the option is not a Ceph configuration option
+ */
+CEPH_REDIS_API int redis_conf_set(redis_t cluster, const char *option,
+                                  const char *value);
+
+/**
+ * Get the value of a configuration option
+ *
+ * @param cluster configuration to read
+ * @param option which option to read
+ * @param buf where to write the configuration value
+ * @param len the size of buf in bytes
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENAMETOOLONG if the buffer is too short to contain the
+ * requested value
+ */
+CEPH_REDIS_API int redis_conf_get(redis_t cluster, const char *option,
+                                  char *buf, size_t len);
+
+/** @} config */
+
+/**
+ * Read usage info about the cluster
+ *
+ * This tells you total space, space used, space available, and number
+ * of objects. These are not updated immediately when data is written,
+ * they are eventually consistent.
+ *
+ * @param cluster cluster to query
+ * @param result where to store the results
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_cluster_stat(redis_t cluster,
+                                      struct redis_cluster_stat_t *result);
+
+/**
+ * Get the fsid of the cluster as a hexadecimal string.
+ *
+ * The fsid is a unique id of an entire Ceph cluster.
+ *
+ * @param cluster where to get the fsid
+ * @param buf where to write the fsid
+ * @param len the size of buf in bytes (should be 37)
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if the buffer is too short to contain the
+ * fsid
+ */
+CEPH_REDIS_API int redis_cluster_fsid(redis_t cluster, char *buf, size_t len);
+
+/**
+ * Get/wait for the most recent osdmap
+ * 
+ * @param cluster the cluster to shutdown
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_wait_for_latest_osdmap(redis_t cluster);
+
+/**
+ * @name Pools
+ *
+ * REDIS pools are separate namespaces for objects. Pools may have
+ * different crush rules associated with them, so they could have
+ * differing replication levels or placement strategies. REDIS
+ * permissions are also tied to pools - users can have different read,
+ * write, and execute permissions on a per-pool basis.
+ *
+ * @{
+ */
+
+/**
+ * List pools
+ *
+ * Gets a list of pool names as NULL-terminated strings.  The pool
+ * names will be placed in the supplied buffer one after another.
+ * After the last pool name, there will be two 0 bytes in a row.
+ *
+ * If len is too short to fit all the pool name entries we need, we will fill
+ * as much as we can.
+ *
+ * Buf may be null to determine the buffer size needed to list all pools.
+ *
+ * @param cluster cluster handle
+ * @param buf output buffer
+ * @param len output buffer length
+ * @returns length of the buffer we would need to list all pools
+ */
+CEPH_REDIS_API int redis_pool_list(redis_t cluster, char *buf, size_t len);
+
+/**
+ * List inconsistent placement groups of the given pool
+ *
+ * Gets a list of inconsistent placement groups as NULL-terminated strings.
+ * The placement group names will be placed in the supplied buffer one after
+ * another. After the last name, there will be two 0 types in a row.
+ *
+ * If len is too short to fit all the placement group entries we need, we  will
+ * fill as much as we can.
+ *
+ * @param cluster cluster handle
+ * @param pool pool ID
+ * @param buf output buffer
+ * @param len output buffer length
+ * @returns length of the buffer we would need to list all pools
+ */
+CEPH_REDIS_API int redis_inconsistent_pg_list(redis_t cluster, int64_t pool,
+					      char *buf, size_t len);
+
+/**
+ * Get a configuration handle for a redis cluster handle
+ *
+ * This handle is valid only as long as the cluster handle is valid.
+ *
+ * @param cluster cluster handle
+ * @returns config handle for this cluster
+ */
+CEPH_REDIS_API redis_config_t redis_cct(redis_t cluster);
+
+/**
+ * Get a global id for current instance
+ *
+ * This id is a unique representation of current connection to the cluster
+ *
+ * @param cluster cluster handle
+ * @returns instance global id
+ */
+CEPH_REDIS_API uint64_t redis_get_instance_id(redis_t cluster);
+
+/**
+ * Gets the minimum compatible OSD version
+ *
+ * @param cluster cluster handle
+ * @param require_osd_release [out] minimum compatible OSD version
+ *  based upon the current features
+ * @returns 0 on sucess, negative error code on failure
+ */
+CEPH_REDIS_API int redis_get_min_compatible_osd(redis_t cluster,
+                                                int8_t* require_osd_release);
+
+/**
+ * Gets the minimum compatible client version
+ *
+ * @param cluster cluster handle
+ * @param min_compat_client [out] minimum compatible client version
+ *  based upon the current features
+ * @param require_min_compat_client [out] required minimum client version
+ *  based upon explicit setting
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_get_min_compatible_client(redis_t cluster,
+                                                   int8_t* min_compat_client,
+                                                   int8_t* require_min_compat_client);
+
+/**
+ * Create an io context
+ *
+ * The io context allows you to perform operations within a particular
+ * pool. For more details see redis_ioctx_t.
+ *
+ * @param cluster which cluster the pool is in
+ * @param pool_name name of the pool
+ * @param ioctx where to store the io context
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_create(redis_t cluster, const char *pool_name,
+                                      redis_ioctx_t *ioctx);
+CEPH_REDIS_API int redis_ioctx_create2(redis_t cluster, int64_t pool_id,
+                                       redis_ioctx_t *ioctx);
+
+/**
+ * The opposite of redis_ioctx_create
+ *
+ * This just tells libredis that you no longer need to use the io context.
+ * It may not be freed immediately if there are pending asynchronous
+ * requests on it, but you should not use an io context again after
+ * calling this function on it.
+ *
+ * @warning This does not guarantee any asynchronous
+ * writes have completed. You must call redis_aio_flush()
+ * on the io context before destroying it to do that.
+ *
+ * @warning If this ioctx is used by redis_watch, the caller needs to
+ * be sure that all registered watches are disconnected via
+ * redis_unwatch() and that redis_watch_flush() is called.  This
+ * ensures that a racing watch callback does not make use of a
+ * destroyed ioctx.
+ *
+ * @param io the io context to dispose of
+ */
+CEPH_REDIS_API void redis_ioctx_destroy(redis_ioctx_t io);
+
+/**
+ * Get configuration handle for a pool handle
+ *
+ * @param io pool handle
+ * @returns redis_config_t for this cluster
+ */
+CEPH_REDIS_API redis_config_t redis_ioctx_cct(redis_ioctx_t io);
+
+/**
+ * Get the cluster handle used by this redis_ioctx_t
+ * Note that this is a weak reference, and should not
+ * be destroyed via redis_shutdown().
+ *
+ * @param io the io context
+ * @returns the cluster handle for this io context
+ */
+CEPH_REDIS_API redis_t redis_ioctx_get_cluster(redis_ioctx_t io);
+
+/**
+ * Get pool usage statistics
+ *
+ * Fills in a redis_pool_stat_t after querying the cluster.
+ *
+ * @param io determines which pool to query
+ * @param stats where to store the results
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_pool_stat(redis_ioctx_t io,
+                                         struct redis_pool_stat_t *stats);
+
+/**
+ * Get the id of a pool
+ *
+ * @param cluster which cluster the pool is in
+ * @param pool_name which pool to look up
+ * @returns id of the pool
+ * @returns -ENOENT if the pool is not found
+ */
+CEPH_REDIS_API int64_t redis_pool_lookup(redis_t cluster,
+                                         const char *pool_name);
+
+/**
+ * Get the name of a pool
+ *
+ * @param cluster which cluster the pool is in
+ * @param id the id of the pool
+ * @param buf where to store the pool name
+ * @param maxlen size of buffer where name will be stored
+ * @returns length of string stored, or -ERANGE if buffer too small
+ */
+CEPH_REDIS_API int redis_pool_reverse_lookup(redis_t cluster, int64_t id,
+                                             char *buf, size_t maxlen);
+
+/**
+ * Create a pool with default settings
+ *
+ * The default crush rule is rule 0.
+ *
+ * @param cluster the cluster in which the pool will be created
+ * @param pool_name the name of the new pool
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_pool_create(redis_t cluster, const char *pool_name);
+
+/**
+ * Create a pool owned by a specific auid.
+ *
+ * DEPRECATED: auid support has been removed, and this call will be removed in a future
+ * release.
+ *
+ * @param cluster the cluster in which the pool will be created
+ * @param pool_name the name of the new pool
+ * @param auid the id of the owner of the new pool
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_pool_create_with_auid(redis_t cluster,
+                                               const char *pool_name,
+                                               uint64_t auid)
+  __attribute__((deprecated));
+
+/**
+ * Create a pool with a specific CRUSH rule
+ *
+ * @param cluster the cluster in which the pool will be created
+ * @param pool_name the name of the new pool
+ * @param crush_rule_num which rule to use for placement in the new pool1
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_pool_create_with_crush_rule(redis_t cluster,
+                                                     const char *pool_name,
+				                     uint8_t crush_rule_num);
+
+/**
+ * Create a pool with a specific CRUSH rule and auid
+ *
+ * DEPRECATED: auid support has been removed and this call will be removed
+ * in a future release.
+ *
+ * This is a combination of redis_pool_create_with_crush_rule() and
+ * redis_pool_create_with_auid().
+ *
+ * @param cluster the cluster in which the pool will be created
+ * @param pool_name the name of the new pool
+ * @param crush_rule_num which rule to use for placement in the new pool2
+ * @param auid the id of the owner of the new pool
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_pool_create_with_all(redis_t cluster,
+                                              const char *pool_name,
+                                              uint64_t auid,
+			                      uint8_t crush_rule_num)
+  __attribute__((deprecated));
+
+/**
+ * Returns the pool that is the base tier for this pool.
+ *
+ * The return value is the ID of the pool that should be used to read from/write to.
+ * If tiering is not set up for the pool, returns \c pool.
+ *
+ * @param cluster the cluster the pool is in
+ * @param pool ID of the pool to query
+ * @param base_tier [out] base tier, or \c pool if tiering is not configured
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_pool_get_base_tier(redis_t cluster, int64_t pool,
+                                            int64_t* base_tier);
+
+/**
+ * Delete a pool and all data inside it
+ *
+ * The pool is removed from the cluster immediately,
+ * but the actual data is deleted in the background.
+ *
+ * @param cluster the cluster the pool is in
+ * @param pool_name which pool to delete
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_pool_delete(redis_t cluster, const char *pool_name);
+
+/**
+ * Attempt to change an io context's associated auid "owner"
+ *
+ * DEPRECATED: auid support has been removed and this call has no effect.
+ *
+ * Requires that you have write permission on both the current and new
+ * auid.
+ *
+ * @param io reference to the pool to change.
+ * @param auid the auid you wish the io to have.
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_pool_set_auid(redis_ioctx_t io, uint64_t auid)
+  __attribute__((deprecated));
+
+
+/**
+ * Get the auid of a pool
+ *
+ * DEPRECATED: auid support has been removed and this call always reports
+ * CEPH_AUTH_UID_DEFAULT (-1).
+
+ * @param io pool to query
+ * @param auid where to store the auid
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_pool_get_auid(redis_ioctx_t io, uint64_t *auid)
+  __attribute__((deprecated));
+
+/* deprecated, use redis_ioctx_pool_requires_alignment2 instead */
+CEPH_REDIS_API int redis_ioctx_pool_requires_alignment(redis_ioctx_t io)
+  __attribute__((deprecated));
+
+/**
+ * Test whether the specified pool requires alignment or not.
+ *
+ * @param io pool to query
+ * @param req 1 if alignment is supported, 0 if not.
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_pool_requires_alignment2(redis_ioctx_t io,
+  int *req);
+
+/* deprecated, use redis_ioctx_pool_required_alignment2 instead */
+CEPH_REDIS_API uint64_t redis_ioctx_pool_required_alignment(redis_ioctx_t io)
+  __attribute__((deprecated));
+
+/**
+ * Get the alignment flavor of a pool
+ *
+ * @param io pool to query
+ * @param alignment where to store the alignment flavor
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_pool_required_alignment2(redis_ioctx_t io,
+  uint64_t *alignment);
+
+/**
+ * Get the pool id of the io context
+ *
+ * @param io the io context to query
+ * @returns the id of the pool the io context uses
+ */
+CEPH_REDIS_API int64_t redis_ioctx_get_id(redis_ioctx_t io);
+
+/**
+ * Get the pool name of the io context
+ *
+ * @param io the io context to query
+ * @param buf pointer to buffer where name will be stored
+ * @param maxlen size of buffer where name will be stored
+ * @returns length of string stored, or -ERANGE if buffer too small
+ */
+CEPH_REDIS_API int redis_ioctx_get_pool_name(redis_ioctx_t io, char *buf,
+                                             unsigned maxlen);
+
+/** @} pools */
+
+/**
+ * @name Object Locators
+ *
+ * @{
+ */
+
+/**
+ * Set the key for mapping objects to pgs within an io context.
+ *
+ * The key is used instead of the object name to determine which
+ * placement groups an object is put in. This affects all subsequent
+ * operations of the io context - until a different locator key is
+ * set, all objects in this io context will be placed in the same pg.
+ *
+ * @param io the io context to change
+ * @param key the key to use as the object locator, or NULL to discard
+ * any previously set key
+ */
+CEPH_REDIS_API void redis_ioctx_locator_set_key(redis_ioctx_t io,
+                                                const char *key);
+
+/**
+ * Set the namespace for objects within an io context
+ *
+ * The namespace specification further refines a pool into different
+ * domains.  The mapping of objects to pgs is also based on this
+ * value.
+ *
+ * @param io the io context to change
+ * @param nspace the name to use as the namespace, or NULL use the
+ * default namespace
+ */
+CEPH_REDIS_API void redis_ioctx_set_namespace(redis_ioctx_t io,
+                                              const char *nspace);
+
+/**
+ * Get the namespace for objects within the io context
+ *
+ * @param io the io context to query
+ * @param buf pointer to buffer where name will be stored
+ * @param maxlen size of buffer where name will be stored
+ * @returns length of string stored, or -ERANGE if buffer too small
+ */
+CEPH_REDIS_API int redis_ioctx_get_namespace(redis_ioctx_t io, char *buf,
+                                             unsigned maxlen);
+
+/** @} obj_loc */
+
+/**
+ * @name Listing Objects
+ * @{
+ */
+/**
+ * Start listing objects in a pool
+ *
+ * @param io the pool to list from
+ * @param ctx the handle to store list context in
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_nobjects_list_open(redis_ioctx_t io,
+                                            redis_list_ctx_t *ctx);
+
+/**
+ * Return hash position of iterator, rounded to the current PG
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @returns current hash position, rounded to the current pg
+ */
+CEPH_REDIS_API uint32_t redis_nobjects_list_get_pg_hash_position(redis_list_ctx_t ctx);
+
+/**
+ * Reposition object iterator to a different hash position
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param pos hash position to move to
+ * @returns actual (rounded) position we moved to
+ */
+CEPH_REDIS_API uint32_t redis_nobjects_list_seek(redis_list_ctx_t ctx,
+                                                 uint32_t pos);
+
+/**
+ * Reposition object iterator to a different position
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param cursor position to move to
+ * @returns rounded position we moved to
+ */
+CEPH_REDIS_API uint32_t redis_nobjects_list_seek_cursor(redis_list_ctx_t ctx,
+                                                        redis_object_list_cursor cursor);
+
+/**
+ * Reposition object iterator to a different position
+ *
+ * The returned handle must be released with redis_object_list_cursor_free().
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param cursor where to store cursor
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_nobjects_list_get_cursor(redis_list_ctx_t ctx,
+                                                  redis_object_list_cursor *cursor);
+
+/**
+ * Get the next object name and locator in the pool
+ *
+ * *entry and *key are valid until next call to redis_nobjects_list_*
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param entry where to store the name of the entry
+ * @param key where to store the object locator (set to NULL to ignore)
+ * @param nspace where to store the object namespace (set to NULL to ignore)
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT when there are no more objects to list
+ */
+CEPH_REDIS_API int redis_nobjects_list_next(redis_list_ctx_t ctx,
+                                            const char **entry,
+	                                    const char **key,
+                                            const char **nspace);
+
+/**
+ * Get the next object name, locator and their sizes in the pool
+ *
+ * The sizes allow to list objects with \0 (the NUL character)
+ * in .e.g *entry. Is is unusual see such object names but a bug
+ * in a client has risen the need to handle them as well.
+ * *entry and *key are valid until next call to redis_nobjects_list_*
+ *
+ * @param ctx iterator marking where you are in the listing
+ * @param entry where to store the name of the entry
+ * @param key where to store the object locator (set to NULL to ignore)
+ * @param nspace where to store the object namespace (set to NULL to ignore)
+ * @param entry_size where to store the size of name of the entry
+ * @param key_size where to store the size of object locator (set to NULL to ignore)
+ * @param nspace_size where to store the size of object namespace (set to NULL to ignore)
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT when there are no more objects to list
+ */
+CEPH_REDIS_API int redis_nobjects_list_next2(redis_list_ctx_t ctx,
+                                             const char **entry,
+                                             const char **key,
+                                             const char **nspace,
+                                             size_t *entry_size,
+                                             size_t *key_size,
+                                             size_t *nspace_size);
+
+/**
+ * Close the object listing handle.
+ *
+ * This should be called when the handle is no longer needed.
+ * The handle should not be used after it has been closed.
+ *
+ * @param ctx the handle to close
+ */
+CEPH_REDIS_API void redis_nobjects_list_close(redis_list_ctx_t ctx);
+
+/**
+ * Get cursor handle pointing to the *beginning* of a pool.
+ *
+ * This is an opaque handle pointing to the start of a pool.  It must
+ * be released with redis_object_list_cursor_free().
+ *
+ * @param io ioctx for the pool
+ * @returns handle for the pool, NULL on error (pool does not exist)
+ */
+CEPH_REDIS_API redis_object_list_cursor redis_object_list_begin(
+  redis_ioctx_t io);
+
+/**
+ * Get cursor handle pointing to the *end* of a pool.
+ *
+ * This is an opaque handle pointing to the start of a pool.  It must
+ * be released with redis_object_list_cursor_free().
+ *
+ * @param io ioctx for the pool
+ * @returns handle for the pool, NULL on error (pool does not exist)
+ */
+CEPH_REDIS_API redis_object_list_cursor redis_object_list_end(redis_ioctx_t io);
+
+/**
+ * Check if a cursor has reached the end of a pool
+ *
+ * @param io ioctx
+ * @param cur cursor
+ * @returns 1 if the cursor has reached the end of the pool, 0 otherwise
+ */
+CEPH_REDIS_API int redis_object_list_is_end(redis_ioctx_t io,
+    redis_object_list_cursor cur);
+
+/**
+ * Release a cursor
+ *
+ * Release a cursor.  The handle may not be used after this point.
+ *
+ * @param io ioctx
+ * @param cur cursor
+ */
+CEPH_REDIS_API void redis_object_list_cursor_free(redis_ioctx_t io,
+    redis_object_list_cursor cur);
+
+/**
+ * Compare two cursor positions
+ *
+ * Compare two cursors, and indicate whether the first cursor precedes,
+ * matches, or follows the second.
+ *
+ * @param io ioctx
+ * @param lhs first cursor
+ * @param rhs second cursor
+ * @returns -1, 0, or 1 for lhs < rhs, lhs == rhs, or lhs > rhs
+ */
+CEPH_REDIS_API int redis_object_list_cursor_cmp(redis_ioctx_t io,
+    redis_object_list_cursor lhs, redis_object_list_cursor rhs);
+
+/**
+ * @return the number of items set in the results array
+ */
+CEPH_REDIS_API int redis_object_list(redis_ioctx_t io,
+    const redis_object_list_cursor start,
+    const redis_object_list_cursor finish,
+    const size_t result_size,
+    const char *filter_buf,
+    const size_t filter_buf_len,
+    redis_object_list_item *results,
+    redis_object_list_cursor *next);
+
+CEPH_REDIS_API void redis_object_list_free(
+    const size_t result_size,
+    redis_object_list_item *results);
+
+/**
+ * Obtain cursors delineating a subset of a range.  Use this
+ * when you want to split up the work of iterating over the
+ * global namespace.  Expected use case is when you are iterating
+ * in parallel, with `m` workers, and each worker taking an id `n`.
+ *
+ * @param io ioctx
+ * @param start start of the range to be sliced up (inclusive)
+ * @param finish end of the range to be sliced up (exclusive)
+ * @param n which of the m chunks you would like to get cursors for
+ * @param m how many chunks to divide start-finish into
+ * @param split_start cursor populated with start of the subrange (inclusive)
+ * @param split_finish cursor populated with end of the subrange (exclusive)
+ */
+CEPH_REDIS_API void redis_object_list_slice(redis_ioctx_t io,
+    const redis_object_list_cursor start,
+    const redis_object_list_cursor finish,
+    const size_t n,
+    const size_t m,
+    redis_object_list_cursor *split_start,
+    redis_object_list_cursor *split_finish);
+
+
+/** @} Listing Objects */
+
+/**
+ * @name Snapshots
+ *
+ * REDIS snapshots are based upon sequence numbers that form a
+ * snapshot context. They are pool-specific. The snapshot context
+ * consists of the current snapshot sequence number for a pool, and an
+ * array of sequence numbers at which snapshots were taken, in
+ * descending order. Whenever a snapshot is created or deleted, the
+ * snapshot sequence number for the pool is increased. To add a new
+ * snapshot, the new snapshot sequence number must be increased and
+ * added to the snapshot context.
+ *
+ * There are two ways to manage these snapshot contexts:
+ * -# within the REDIS cluster
+ *    These are called pool snapshots, and store the snapshot context
+ *    in the OSDMap. These represent a snapshot of all the objects in
+ *    a pool.
+ * -# within the REDIS clients
+ *    These are called self-managed snapshots, and push the
+ *    responsibility for keeping track of the snapshot context to the
+ *    clients. For every write, the client must send the snapshot
+ *    context. In libredis, this is accomplished with
+ *    redis_selfmanaged_snap_set_write_ctx(). These are more
+ *    difficult to manage, but are restricted to specific objects
+ *    instead of applying to an entire pool.
+ *
+ * @{
+ */
+
+/**
+ * Create a pool-wide snapshot
+ *
+ * @param io the pool to snapshot
+ * @param snapname the name of the snapshot
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_snap_create(redis_ioctx_t io,
+                                           const char *snapname);
+
+/**
+ * Delete a pool snapshot
+ *
+ * @param io the pool to delete the snapshot from
+ * @param snapname which snapshot to delete
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_snap_remove(redis_ioctx_t io,
+                                           const char *snapname);
+
+/**
+ * Rollback an object to a pool snapshot
+ *
+ * The contents of the object will be the same as
+ * when the snapshot was taken.
+ *
+ * @param io the pool in which the object is stored
+ * @param oid the name of the object to rollback
+ * @param snapname which snapshot to rollback to
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_snap_rollback(redis_ioctx_t io, const char *oid,
+		                             const char *snapname);
+
+/**
+ * @warning Deprecated: Use redis_ioctx_snap_rollback() instead
+ */
+CEPH_REDIS_API int redis_rollback(redis_ioctx_t io, const char *oid,
+				  const char *snapname)
+  __attribute__((deprecated));
+
+/**
+ * Set the snapshot from which reads are performed.
+ *
+ * Subsequent reads will return data as it was at the time of that
+ * snapshot.
+ *
+ * @param io the io context to change
+ * @param snap the id of the snapshot to set, or LIBREDIS_SNAP_HEAD for no
+ * snapshot (i.e. normal operation)
+ */
+CEPH_REDIS_API void redis_ioctx_snap_set_read(redis_ioctx_t io,
+                                              redis_snap_t snap);
+
+/**
+ * Allocate an ID for a self-managed snapshot
+ *
+ * Get a unique ID to put in the snaphot context to create a
+ * snapshot. A clone of an object is not created until a write with
+ * the new snapshot context is completed.
+ *
+ * @param io the pool in which the snapshot will exist
+ * @param snapid where to store the newly allocated snapshot ID
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_selfmanaged_snap_create(redis_ioctx_t io,
+                                                       redis_snap_t *snapid);
+CEPH_REDIS_API void
+redis_aio_ioctx_selfmanaged_snap_create(redis_ioctx_t io,
+                                        redis_snap_t *snapid,
+                                        redis_completion_t completion);
+
+/**
+ * Remove a self-managed snapshot
+ *
+ * This increases the snapshot sequence number, which will cause
+ * snapshots to be removed lazily.
+ *
+ * @param io the pool in which the snapshot will exist
+ * @param snapid where to store the newly allocated snapshot ID
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_selfmanaged_snap_remove(redis_ioctx_t io,
+                                                       redis_snap_t snapid);
+CEPH_REDIS_API void
+redis_aio_ioctx_selfmanaged_snap_remove(redis_ioctx_t io,
+                                        redis_snap_t snapid,
+                                        redis_completion_t completion);
+
+/**
+ * Rollback an object to a self-managed snapshot
+ *
+ * The contents of the object will be the same as
+ * when the snapshot was taken.
+ *
+ * @param io the pool in which the object is stored
+ * @param oid the name of the object to rollback
+ * @param snapid which snapshot to rollback to
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_selfmanaged_snap_rollback(redis_ioctx_t io,
+                                                         const char *oid,
+                                                         redis_snap_t snapid);
+
+/**
+ * Set the snapshot context for use when writing to objects
+ *
+ * This is stored in the io context, and applies to all future writes.
+ *
+ * @param io the io context to change
+ * @param seq the newest snapshot sequence number for the pool
+ * @param snaps array of snapshots in sorted by descending id
+ * @param num_snaps how many snaphosts are in the snaps array
+ * @returns 0 on success, negative error code on failure
+ * @returns -EINVAL if snaps are not in descending order
+ */
+CEPH_REDIS_API int redis_ioctx_selfmanaged_snap_set_write_ctx(redis_ioctx_t io,
+                                                              redis_snap_t seq,
+                                                              redis_snap_t *snaps,
+                                                              int num_snaps);
+
+/**
+ * List all the ids of pool snapshots
+ *
+ * If the output array does not have enough space to fit all the
+ * snapshots, -ERANGE is returned and the caller should retry with a
+ * larger array.
+ *
+ * @param io the pool to read from
+ * @param snaps where to store the results
+ * @param maxlen the number of redis_snap_t that fit in the snaps array
+ * @returns number of snapshots on success, negative error code on failure
+ * @returns -ERANGE is returned if the snaps array is too short
+ */
+CEPH_REDIS_API int redis_ioctx_snap_list(redis_ioctx_t io, redis_snap_t *snaps,
+                                         int maxlen);
+
+/**
+ * Get the id of a pool snapshot
+ *
+ * @param io the pool to read from
+ * @param name the snapshot to find
+ * @param id where to store the result
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_snap_lookup(redis_ioctx_t io, const char *name,
+                                           redis_snap_t *id);
+
+/**
+ * Get the name of a pool snapshot
+ *
+ * @param io the pool to read from
+ * @param id the snapshot to find
+ * @param name where to store the result
+ * @param maxlen the size of the name array
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if the name array is too small
+ */
+CEPH_REDIS_API int redis_ioctx_snap_get_name(redis_ioctx_t io, redis_snap_t id,
+                                             char *name, int maxlen);
+
+/**
+ * Find when a pool snapshot occurred
+ *
+ * @param io the pool the snapshot was taken in
+ * @param id the snapshot to lookup
+ * @param t where to store the result
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_ioctx_snap_get_stamp(redis_ioctx_t io, redis_snap_t id,
+                                              time_t *t);
+
+/** @} Snapshots */
+
+/**
+ * @name Synchronous I/O
+ * Writes are replicated to a number of OSDs based on the
+ * configuration of the pool they are in. These write functions block
+ * until data is in memory on all replicas of the object they're
+ * writing to - they are equivalent to doing the corresponding
+ * asynchronous write, and the calling
+ * redis_ioctx_wait_for_complete().  For greater data safety, use the
+ * asynchronous functions and redis_aio_wait_for_safe().
+ *
+ * @{
+ */
+
+/**
+ * Return the version of the last object read or written to.
+ *
+ * This exposes the internal version number of the last object read or
+ * written via this io context
+ *
+ * @param io the io context to check
+ * @returns last read or written object version
+ */
+CEPH_REDIS_API uint64_t redis_get_last_version(redis_ioctx_t io);
+
+/**
+ * Write *len* bytes from *buf* into the *oid* object, starting at
+ * offset *off*. The value of *len* must be <= UINT_MAX/2.
+ *
+ * @note This will never return a positive value not equal to len.
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param buf data to write
+ * @param len length of the data, in bytes
+ * @param off byte offset in the object to begin writing at
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_write(redis_ioctx_t io, const char *oid,
+                               const char *buf, size_t len, uint64_t off);
+
+/**
+ * Write *len* bytes from *buf* into the *oid* object. The value of
+ * *len* must be <= UINT_MAX/2.
+ *
+ * The object is filled with the provided data. If the object exists,
+ * it is atomically truncated and then written.
+ *
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param buf data to write
+ * @param len length of the data, in bytes
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_write_full(redis_ioctx_t io, const char *oid,
+                                    const char *buf, size_t len);
+
+/**
+ * Write the same *data_len* bytes from *buf* multiple times into the
+ * *oid* object. *write_len* bytes are written in total, which must be
+ * a multiple of *data_len*. The value of *write_len* and *data_len*
+ * must be <= UINT_MAX/2.
+ *
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param buf data to write
+ * @param data_len length of the data, in bytes
+ * @param write_len the total number of bytes to write
+ * @param off byte offset in the object to begin writing at
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_writesame(redis_ioctx_t io, const char *oid,
+                                   const char *buf, size_t data_len,
+                                   size_t write_len, uint64_t off);
+
+/**
+ * Append *len* bytes from *buf* into the *oid* object. The value of
+ * *len* must be <= UINT_MAX/2.
+ *
+ * @param io the context to operate in
+ * @param oid the name of the object
+ * @param buf the data to append
+ * @param len length of buf (in bytes)
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_append(redis_ioctx_t io, const char *oid,
+                                const char *buf, size_t len);
+
+/**
+ * Read data from an object
+ *
+ * The io context determines the snapshot to read from, if any was set
+ * by redis_ioctx_snap_set_read().
+ *
+ * @param io the context in which to perform the read
+ * @param oid the name of the object to read from
+ * @param buf where to store the results
+ * @param len the number of bytes to read
+ * @param off the offset to start reading from in the object
+ * @returns number of bytes read on success, negative error code on
+ * failure
+ */
+CEPH_REDIS_API int redis_read(redis_ioctx_t io, const char *oid, char *buf,
+                              size_t len, uint64_t off);
+
+/**
+ * Compute checksum from object data
+ *
+ * The io context determines the snapshot to checksum, if any was set
+ * by redis_ioctx_snap_set_read(). The length of the init_value and
+ * resulting checksum are dependent upon the checksum type:
+ *
+ *    XXHASH64: le64
+ *    XXHASH32: le32
+ *    CRC32C:	le32
+ *
+ * The checksum result is encoded the following manner:
+ *
+ *    le32 num_checksum_chunks
+ *    {
+ *      leXX checksum for chunk (where XX = appropriate size for the checksum type)
+ *    } * num_checksum_chunks
+ *
+ * @param io the context in which to perform the checksum
+ * @param oid the name of the object to checksum
+ * @param type the checksum algorithm to utilize
+ * @param init_value the init value for the algorithm
+ * @param init_value_len the length of the init value
+ * @param len the number of bytes to checksum
+ * @param off the offset to start checksumming in the object
+ * @param chunk_size optional length-aligned chunk size for checksums
+ * @param pchecksum where to store the checksum result
+ * @param checksum_len the number of bytes available for the result
+ * @return negative error code on failure
+ */
+CEPH_REDIS_API int redis_checksum(redis_ioctx_t io, const char *oid,
+				  redis_checksum_type_t type,
+				  const char *init_value, size_t init_value_len,
+				  size_t len, uint64_t off, size_t chunk_size,
+				  char *pchecksum, size_t checksum_len);
+
+/**
+ * Delete an object
+ *
+ * @note This does not delete any snapshots of the object.
+ *
+ * @param io the pool to delete the object from
+ * @param oid the name of the object to delete
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_remove(redis_ioctx_t io, const char *oid);
+
+/**
+ * Resize an object
+ *
+ * If this enlarges the object, the new area is logically filled with
+ * zeroes. If this shrinks the object, the excess data is removed.
+ *
+ * @param io the context in which to truncate
+ * @param oid the name of the object
+ * @param size the new size of the object in bytes
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_trunc(redis_ioctx_t io, const char *oid,
+                               uint64_t size);
+
+/**
+ * Compare an on-disk object range with a buffer
+ *
+ * @param io the context in which to perform the comparison
+ * @param o name of the object
+ * @param cmp_buf buffer containing bytes to be compared with object contents
+ * @param cmp_len length to compare and size of @c cmp_buf in bytes
+ * @param off object byte offset at which to start the comparison
+ * @returns 0 on success, negative error code on failure,
+ *  (-MAX_ERRNO - mismatch_off) on mismatch
+ */
+CEPH_REDIS_API int redis_cmpext(redis_ioctx_t io, const char *o,
+                                const char *cmp_buf, size_t cmp_len,
+                                uint64_t off);
+
+/**
+ * @name Xattrs
+ * Extended attributes are stored as extended attributes on the files
+ * representing an object on the OSDs. Thus, they have the same
+ * limitations as the underlying filesystem. On ext4, this means that
+ * the total data stored in xattrs cannot exceed 4KB.
+ *
+ * @{
+ */
+
+/**
+ * Get the value of an extended attribute on an object.
+ *
+ * @param io the context in which the attribute is read
+ * @param o name of the object
+ * @param name which extended attribute to read
+ * @param buf where to store the result
+ * @param len size of buf in bytes
+ * @returns length of xattr value on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_getxattr(redis_ioctx_t io, const char *o,
+                                  const char *name, char *buf, size_t len);
+
+/**
+ * Set an extended attribute on an object.
+ *
+ * @param io the context in which xattr is set
+ * @param o name of the object
+ * @param name which extended attribute to set
+ * @param buf what to store in the xattr
+ * @param len the number of bytes in buf
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_setxattr(redis_ioctx_t io, const char *o,
+                                  const char *name, const char *buf,
+                                  size_t len);
+
+/**
+ * Delete an extended attribute from an object.
+ *
+ * @param io the context in which to delete the xattr
+ * @param o the name of the object
+ * @param name which xattr to delete
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_rmxattr(redis_ioctx_t io, const char *o,
+                                 const char *name);
+
+/**
+ * Start iterating over xattrs on an object.
+ *
+ * @post iter is a valid iterator
+ *
+ * @param io the context in which to list xattrs
+ * @param oid name of the object
+ * @param iter where to store the iterator
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_getxattrs(redis_ioctx_t io, const char *oid,
+                                   redis_xattrs_iter_t *iter);
+
+/**
+ * Get the next xattr on the object
+ *
+ * @pre iter is a valid iterator
+ *
+ * @post name is the NULL-terminated name of the next xattr, and val
+ * contains the value of the xattr, which is of length len. If the end
+ * of the list has been reached, name and val are NULL, and len is 0.
+ *
+ * @param iter iterator to advance
+ * @param name where to store the name of the next xattr
+ * @param val where to store the value of the next xattr
+ * @param len the number of bytes in val
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_getxattrs_next(redis_xattrs_iter_t iter,
+                                        const char **name, const char **val,
+                                        size_t *len);
+
+/**
+ * Close the xattr iterator.
+ *
+ * iter should not be used after this is called.
+ *
+ * @param iter the iterator to close
+ */
+CEPH_REDIS_API void redis_getxattrs_end(redis_xattrs_iter_t iter);
+
+/** @} Xattrs */
+
+/**
+ * Get the next omap key/value pair on the object
+ *
+ * @pre iter is a valid iterator
+ *
+ * @post key and val are the next key/value pair. key is
+ * null-terminated, and val has length len. If the end of the list has
+ * been reached, key and val are NULL, and len is 0. key and val will
+ * not be accessible after redis_omap_get_end() is called on iter, so
+ * if they are needed after that they should be copied.
+ *
+ * @param iter iterator to advance
+ * @param key where to store the key of the next omap entry
+ * @param val where to store the value of the next omap entry
+ * @param len where to store the number of bytes in val
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_omap_get_next(redis_omap_iter_t iter,
+                                       char **key,
+                                       char **val,
+                                       size_t *len);
+
+/**
+ * Get the next omap key/value pair on the object. Note that it's
+ * perfectly safe to mix calls to redis_omap_get_next and
+ * redis_omap_get_next2.
+ *
+ * @pre iter is a valid iterator
+ *
+ * @post key and val are the next key/value pair. key has length
+ * keylen and val has length vallen. If the end of the list has
+ * been reached, key and val are NULL, and keylen and vallen is 0.
+ * key and val will not be accessible after redis_omap_get_end()
+ * is called on iter, so if they are needed after that they
+ * should be copied.
+ *
+ * @param iter iterator to advance
+ * @param key where to store the key of the next omap entry
+ * @param val where to store the value of the next omap entry
+ * @param key_len where to store the number of bytes in key
+ * @param val_len where to store the number of bytes in val
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_omap_get_next2(redis_omap_iter_t iter,
+                                       char **key,
+                                       char **val,
+                                       size_t *key_len,
+                                       size_t *val_len);
+
+/**
+ * Return number of elements in the iterator
+ *
+ * @param iter the iterator of which to return the size
+ */
+CEPH_REDIS_API unsigned int redis_omap_iter_size(redis_omap_iter_t iter);
+
+/**
+ * Close the omap iterator.
+ *
+ * iter should not be used after this is called.
+ *
+ * @param iter the iterator to close
+ */
+CEPH_REDIS_API void redis_omap_get_end(redis_omap_iter_t iter);
+
+/**
+ * Get object size and most recent update time from the OSD.
+ *
+ * @param io ioctx
+ * @param o object name
+ * @param psize where to store object size
+ * @param pmtime where to store modification time
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_stat(redis_ioctx_t io, const char *o, uint64_t *psize,
+                              time_t *pmtime);
+
+CEPH_REDIS_API int redis_stat2(redis_ioctx_t io, const char *o, uint64_t *psize,
+                              struct timespec *pmtime);
+
+/**
+ * Execute an OSD class method on an object
+ *
+ * The OSD has a plugin mechanism for performing complicated
+ * operations on an object atomically. These plugins are called
+ * classes. This function allows libredis users to call the custom
+ * methods. The input and output formats are defined by the class.
+ * Classes in ceph.git can be found in src/cls subdirectories
+ *
+ * @param io the context in which to call the method
+ * @param oid the object to call the method on
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param buf where to store output
+ * @param out_len length of buf in bytes
+ * @returns the length of the output, or
+ * -ERANGE if out_buf does not have enough space to store it (For methods that return data). For
+ * methods that don't return data, the return value is
+ * method-specific.
+ */
+CEPH_REDIS_API int redis_exec(redis_ioctx_t io, const char *oid,
+                              const char *cls, const char *method,
+	                      const char *in_buf, size_t in_len, char *buf,
+                              size_t out_len);
+
+
+/** @} Synchronous I/O */
+
+/**
+ * @name Asynchronous I/O
+ * Read and write to objects without blocking.
+ *
+ * @{
+ */
+
+/**
+ * @typedef redis_callback_t
+ * Callbacks for asynchrous operations take two parameters:
+ * - cb the completion that has finished
+ * - arg application defined data made available to the callback function
+ */
+typedef void (*redis_callback_t)(redis_completion_t cb, void *arg);
+
+/**
+ * Constructs a completion to use with asynchronous operations
+ *
+ * The complete and safe callbacks correspond to operations being
+ * acked and committed, respectively. The callbacks are called in
+ * order of receipt, so the safe callback may be triggered before the
+ * complete callback, and vice versa. This is affected by journalling
+ * on the OSDs.
+ *
+ * TODO: more complete documentation of this elsewhere (in the REDIS docs?)
+ *
+ * @note Read operations only get a complete callback.
+ * @note BUG: this should check for ENOMEM instead of throwing an exception
+ *
+ * @param cb_arg application-defined data passed to the callback functions
+ * @param cb_complete the function to be called when the operation is
+ * in memory on all replicas
+ * @param cb_safe the function to be called when the operation is on
+ * stable storage on all replicas
+ * @param pc where to store the completion
+ * @returns 0
+ */
+CEPH_REDIS_API int redis_aio_create_completion(void *cb_arg,
+                                               redis_callback_t cb_complete,
+                                               redis_callback_t cb_safe,
+				               redis_completion_t *pc);
+
+/**
+ * Constructs a completion to use with asynchronous operations
+ *
+ * The complete callback corresponds to operation being acked.
+ *
+ * @note BUG: this should check for ENOMEM instead of throwing an exception
+ *
+ * @param cb_arg application-defined data passed to the callback functions
+ * @param cb_complete the function to be called when the operation is committed
+ * on all replicas
+ * @param pc where to store the completion
+ * @returns 0
+ */
+CEPH_REDIS_API int redis_aio_create_completion2(void *cb_arg,
+						redis_callback_t cb_complete,
+						redis_completion_t *pc);
+
+/**
+ * Block until an operation completes
+ *
+ * This means it is in memory on all replicas.
+ *
+ * @note BUG: this should be void
+ *
+ * @param c operation to wait for
+ * @returns 0
+ */
+CEPH_REDIS_API int redis_aio_wait_for_complete(redis_completion_t c);
+
+/**
+ * Block until an operation is safe
+ *
+ * This means it is on stable storage on all replicas.
+ *
+ * @note BUG: this should be void
+ *
+ * @param c operation to wait for
+ * @returns 0
+ */
+CEPH_REDIS_API int redis_aio_wait_for_safe(redis_completion_t c)
+  __attribute__((deprecated));
+
+/**
+ * Has an asynchronous operation completed?
+ *
+ * @warning This does not imply that the complete callback has
+ * finished
+ *
+ * @param c async operation to inspect
+ * @returns whether c is complete
+ */
+CEPH_REDIS_API int redis_aio_is_complete(redis_completion_t c);
+
+/**
+ * Is an asynchronous operation safe?
+ *
+ * @warning This does not imply that the safe callback has
+ * finished
+ *
+ * @param c async operation to inspect
+ * @returns whether c is safe
+ */
+CEPH_REDIS_API int redis_aio_is_safe(redis_completion_t c);
+
+/**
+ * Block until an operation completes and callback completes
+ *
+ * This means it is in memory on all replicas and can be read.
+ *
+ * @note BUG: this should be void
+ *
+ * @param c operation to wait for
+ * @returns 0
+ */
+CEPH_REDIS_API int redis_aio_wait_for_complete_and_cb(redis_completion_t c);
+
+/**
+ * Block until an operation is safe and callback has completed
+ *
+ * This means it is on stable storage on all replicas.
+ *
+ * @note BUG: this should be void
+ *
+ * @param c operation to wait for
+ * @returns 0
+ */
+CEPH_REDIS_API int redis_aio_wait_for_safe_and_cb(redis_completion_t c)
+  __attribute__((deprecated));
+
+/**
+ * Has an asynchronous operation and callback completed
+ *
+ * @param c async operation to inspect
+ * @returns whether c is complete
+ */
+CEPH_REDIS_API int redis_aio_is_complete_and_cb(redis_completion_t c);
+
+/**
+ * Is an asynchronous operation safe and has the callback completed
+ *
+ * @param c async operation to inspect
+ * @returns whether c is safe
+ */
+CEPH_REDIS_API int redis_aio_is_safe_and_cb(redis_completion_t c);
+
+/**
+ * Get the return value of an asychronous operation
+ *
+ * The return value is set when the operation is complete or safe,
+ * whichever comes first.
+ *
+ * @pre The operation is safe or complete
+ *
+ * @note BUG: complete callback may never be called when the safe
+ * message is received before the complete message
+ *
+ * @param c async operation to inspect
+ * @returns return value of the operation
+ */
+CEPH_REDIS_API int redis_aio_get_return_value(redis_completion_t c);
+
+/**
+ * Get the internal object version of the target of an asychronous operation
+ *
+ * The return value is set when the operation is complete or safe,
+ * whichever comes first.
+ *
+ * @pre The operation is safe or complete
+ *
+ * @note BUG: complete callback may never be called when the safe
+ * message is received before the complete message
+ *
+ * @param c async operation to inspect
+ * @returns version number of the asychronous operation's target
+ */
+CEPH_REDIS_API uint64_t redis_aio_get_version(redis_completion_t c);
+
+/**
+ * Release a completion
+ *
+ * Call this when you no longer need the completion. It may not be
+ * freed immediately if the operation is not acked and committed.
+ *
+ * @param c completion to release
+ */
+CEPH_REDIS_API void redis_aio_release(redis_completion_t c);
+
+/**
+ * Write data to an object asynchronously
+ *
+ * Queues the write and returns. The return value of the completion
+ * will be 0 on success, negative error code on failure.
+ *
+ * @param io the context in which the write will occur
+ * @param oid name of the object
+ * @param completion what to do when the write is safe and complete
+ * @param buf data to write
+ * @param len length of the data, in bytes
+ * @param off byte offset in the object to begin writing at
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBREDIS_SNAP_HEAD
+ */
+CEPH_REDIS_API int redis_aio_write(redis_ioctx_t io, const char *oid,
+		                   redis_completion_t completion,
+		                   const char *buf, size_t len, uint64_t off);
+
+/**
+ * Asynchronously append data to an object
+ *
+ * Queues the append and returns.
+ *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
+ *
+ * @param io the context to operate in
+ * @param oid the name of the object
+ * @param completion what to do when the append is safe and complete
+ * @param buf the data to append
+ * @param len length of buf (in bytes)
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBREDIS_SNAP_HEAD
+ */
+CEPH_REDIS_API int redis_aio_append(redis_ioctx_t io, const char *oid,
+		                    redis_completion_t completion,
+		                    const char *buf, size_t len);
+
+/**
+ * Asynchronously write an entire object
+ *
+ * The object is filled with the provided data. If the object exists,
+ * it is atomically truncated and then written.
+ * Queues the write_full and returns.
+ *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
+ *
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param completion what to do when the write_full is safe and complete
+ * @param buf data to write
+ * @param len length of the data, in bytes
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBREDIS_SNAP_HEAD
+ */
+CEPH_REDIS_API int redis_aio_write_full(redis_ioctx_t io, const char *oid,
+			                redis_completion_t completion,
+			                const char *buf, size_t len);
+
+/**
+ * Asynchronously write the same buffer multiple times
+ *
+ * Queues the writesame and returns.
+ *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
+ *
+ * @param io the io context in which the write will occur
+ * @param oid name of the object
+ * @param completion what to do when the writesame is safe and complete
+ * @param buf data to write
+ * @param data_len length of the data, in bytes
+ * @param write_len the total number of bytes to write
+ * @param off byte offset in the object to begin writing at
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBREDIS_SNAP_HEAD
+ */
+CEPH_REDIS_API int redis_aio_writesame(redis_ioctx_t io, const char *oid,
+			               redis_completion_t completion,
+			               const char *buf, size_t data_len,
+				       size_t write_len, uint64_t off);
+
+/**
+ * Asynchronously remove an object
+ *
+ * Queues the remove and returns.
+ *
+ * The return value of the completion will be 0 on success, negative
+ * error code on failure.
+ *
+ * @param io the context to operate in
+ * @param oid the name of the object
+ * @param completion what to do when the remove is safe and complete
+ * @returns 0 on success, -EROFS if the io context specifies a snap_seq
+ * other than LIBREDIS_SNAP_HEAD
+ */
+CEPH_REDIS_API int redis_aio_remove(redis_ioctx_t io, const char *oid,
+		                    redis_completion_t completion);
+
+/**
+ * Asynchronously read data from an object
+ *
+ * The io context determines the snapshot to read from, if any was set
+ * by redis_ioctx_snap_set_read().
+ *
+ * The return value of the completion will be number of bytes read on
+ * success, negative error code on failure.
+ *
+ * @note only the 'complete' callback of the completion will be called.
+ *
+ * @param io the context in which to perform the read
+ * @param oid the name of the object to read from
+ * @param completion what to do when the read is complete
+ * @param buf where to store the results
+ * @param len the number of bytes to read
+ * @param off the offset to start reading from in the object
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_read(redis_ioctx_t io, const char *oid,
+		                  redis_completion_t completion,
+		                  char *buf, size_t len, uint64_t off);
+
+/**
+ * Block until all pending writes in an io context are safe
+ *
+ * This is not equivalent to calling redis_aio_wait_for_safe() on all
+ * write completions, since this waits for the associated callbacks to
+ * complete as well.
+ *
+ * @note BUG: always returns 0, should be void or accept a timeout
+ *
+ * @param io the context to flush
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_flush(redis_ioctx_t io);
+
+
+/**
+ * Schedule a callback for when all currently pending
+ * aio writes are safe. This is a non-blocking version of
+ * redis_aio_flush().
+ *
+ * @param io the context to flush
+ * @param completion what to do when the writes are safe
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_flush_async(redis_ioctx_t io,
+                                         redis_completion_t completion);
+
+
+/**
+ * Asynchronously get object stats (size/mtime)
+ *
+ * @param io ioctx
+ * @param o object name
+ * @param completion what to do when the stat is complete
+ * @param psize where to store object size
+ * @param pmtime where to store modification time
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_stat(redis_ioctx_t io, const char *o,
+		                  redis_completion_t completion,
+		                  uint64_t *psize, time_t *pmtime);
+
+CEPH_REDIS_API int redis_aio_stat2(redis_ioctx_t io, const char *o,
+		                  redis_completion_t completion,
+		                  uint64_t *psize, struct timespec *pmtime);
+
+/**
+ * Asynchronously compare an on-disk object range with a buffer
+ *
+ * @param io the context in which to perform the comparison
+ * @param o the name of the object to compare with
+ * @param completion what to do when the comparison is complete
+ * @param cmp_buf buffer containing bytes to be compared with object contents
+ * @param cmp_len length to compare and size of @c cmp_buf in bytes
+ * @param off object byte offset at which to start the comparison
+ * @returns 0 on success, negative error code on failure,
+ *  (-MAX_ERRNO - mismatch_off) on mismatch
+ */
+CEPH_REDIS_API int redis_aio_cmpext(redis_ioctx_t io, const char *o,
+                                    redis_completion_t completion,
+                                    const char *cmp_buf,
+                                    size_t cmp_len,
+                                    uint64_t off);
+
+/**
+ * Cancel async operation
+ *
+ * @param io ioctx
+ * @param completion completion handle
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_cancel(redis_ioctx_t io,
+                                    redis_completion_t completion);
+
+/**
+ * Asynchronously execute an OSD class method on an object
+ *
+ * The OSD has a plugin mechanism for performing complicated
+ * operations on an object atomically. These plugins are called
+ * classes. This function allows libredis users to call the custom
+ * methods. The input and output formats are defined by the class.
+ * Classes in ceph.git can be found in src/cls subdirectories
+ *
+ * @param io the context in which to call the method
+ * @param o name of the object
+ * @param completion what to do when the exec completes
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param buf where to store output
+ * @param out_len length of buf in bytes
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_exec(redis_ioctx_t io, const char *o,
+				  redis_completion_t completion,
+				  const char *cls, const char *method,
+				  const char *in_buf, size_t in_len,
+				  char *buf, size_t out_len);
+
+/** @} Asynchronous I/O */
+
+/**
+ * @name Asynchronous Xattrs
+ * Extended attributes are stored as extended attributes on the files
+ * representing an object on the OSDs. Thus, they have the same
+ * limitations as the underlying filesystem. On ext4, this means that
+ * the total data stored in xattrs cannot exceed 4KB.
+ *
+ * @{
+ */
+
+/**
+ * Asynchronously get the value of an extended attribute on an object.
+ *
+ * @param io the context in which the attribute is read
+ * @param o name of the object
+ * @param completion what to do when the getxattr completes
+ * @param name which extended attribute to read
+ * @param buf where to store the result
+ * @param len size of buf in bytes
+ * @returns length of xattr value on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_getxattr(redis_ioctx_t io, const char *o,
+				      redis_completion_t completion,
+				      const char *name, char *buf, size_t len);
+
+/**
+ * Asynchronously set an extended attribute on an object.
+ *
+ * @param io the context in which xattr is set
+ * @param o name of the object
+ * @param completion what to do when the setxattr completes
+ * @param name which extended attribute to set
+ * @param buf what to store in the xattr
+ * @param len the number of bytes in buf
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_setxattr(redis_ioctx_t io, const char *o,
+				      redis_completion_t completion,
+				      const char *name, const char *buf,
+				      size_t len);
+
+/**
+ * Asynchronously delete an extended attribute from an object.
+ *
+ * @param io the context in which to delete the xattr
+ * @param o the name of the object
+ * @param completion what to do when the rmxattr completes
+ * @param name which xattr to delete
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_rmxattr(redis_ioctx_t io, const char *o,
+				     redis_completion_t completion,
+				     const char *name);
+
+/**
+ * Asynchronously start iterating over xattrs on an object.
+ *
+ * @post iter is a valid iterator
+ *
+ * @param io the context in which to list xattrs
+ * @param oid name of the object
+ * @param completion what to do when the getxattrs completes
+ * @param iter where to store the iterator
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_getxattrs(redis_ioctx_t io, const char *oid,
+				       redis_completion_t completion,
+				       redis_xattrs_iter_t *iter);
+
+/** @} Asynchronous Xattrs */
+
+/**
+ * @name Watch/Notify
+ *
+ * Watch/notify is a protocol to help communicate among clients. It
+ * can be used to sychronize client state. All that's needed is a
+ * well-known object name (for example, rbd uses the header object of
+ * an image).
+ *
+ * Watchers register an interest in an object, and receive all
+ * notifies on that object. A notify attempts to communicate with all
+ * clients watching an object, and blocks on the notifier until each
+ * client responds or a timeout is reached.
+ *
+ * See redis_watch() and redis_notify() for more details.
+ *
+ * @{
+ */
+
+/**
+ * @typedef redis_watchcb_t
+ *
+ * Callback activated when a notify is received on a watched
+ * object.
+ *
+ * @param opcode undefined
+ * @param ver version of the watched object
+ * @param arg application-specific data
+ *
+ * @note BUG: opcode is an internal detail that shouldn't be exposed
+ * @note BUG: ver is unused
+ */
+typedef void (*redis_watchcb_t)(uint8_t opcode, uint64_t ver, void *arg);
+
+/**
+ * @typedef redis_watchcb2_t
+ *
+ * Callback activated when a notify is received on a watched
+ * object.
+ *
+ * @param arg opaque user-defined value provided to redis_watch2()
+ * @param notify_id an id for this notify event
+ * @param handle the watcher handle we are notifying
+ * @param notifier_id the unique client id for the notifier
+ * @param data payload from the notifier
+ * @param data_len length of payload buffer
+ */
+typedef void (*redis_watchcb2_t)(void *arg,
+				 uint64_t notify_id,
+				 uint64_t handle,
+				 uint64_t notifier_id,
+				 void *data,
+				 size_t data_len);
+
+/**
+ * @typedef redis_watcherrcb_t
+ *
+ * Callback activated when we encounter an error with the watch session.
+ * This can happen when the location of the objects moves within the
+ * cluster and we fail to register our watch with the new object location,
+ * or when our connection with the object OSD is otherwise interrupted and
+ * we may have missed notify events.
+ *
+ * @param pre opaque user-defined value provided to redis_watch2()
+ * @param cookie the internal id assigned to the watch session
+ * @param err error code
+ */
+  typedef void (*redis_watcherrcb_t)(void *pre, uint64_t cookie, int err);
+
+/**
+ * Register an interest in an object
+ *
+ * A watch operation registers the client as being interested in
+ * notifications on an object. OSDs keep track of watches on
+ * persistent storage, so they are preserved across cluster changes by
+ * the normal recovery process. If the client loses its connection to
+ * the primary OSD for a watched object, the watch will be removed
+ * after 30 seconds. Watches are automatically reestablished when a new
+ * connection is made, or a placement group switches OSDs.
+ *
+ * @note BUG: libredis should provide a way for watchers to notice connection resets
+ * @note BUG: the ver parameter does not work, and -ERANGE will never be returned
+ *            (See URL tracker.ceph.com/issues/2592)
+ *
+ * @param io the pool the object is in
+ * @param o the object to watch
+ * @param ver expected version of the object
+ * @param cookie where to store the internal id assigned to this watch
+ * @param watchcb what to do when a notify is received on this object
+ * @param arg application defined data to pass when watchcb is called
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if the version of the object is greater than ver
+ */
+CEPH_REDIS_API int redis_watch(redis_ioctx_t io, const char *o, uint64_t ver,
+			       uint64_t *cookie,
+			       redis_watchcb_t watchcb, void *arg)
+  __attribute__((deprecated));
+
+
+/**
+ * Register an interest in an object
+ *
+ * A watch operation registers the client as being interested in
+ * notifications on an object. OSDs keep track of watches on
+ * persistent storage, so they are preserved across cluster changes by
+ * the normal recovery process. If the client loses its connection to the
+ * primary OSD for a watched object, the watch will be removed after
+ * a timeout configured with osd_client_watch_timeout.
+ * Watches are automatically reestablished when a new
+ * connection is made, or a placement group switches OSDs.
+ *
+ * @param io the pool the object is in
+ * @param o the object to watch
+ * @param cookie where to store the internal id assigned to this watch
+ * @param watchcb what to do when a notify is received on this object
+ * @param watcherrcb what to do when the watch session encounters an error
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_watch2(redis_ioctx_t io, const char *o, uint64_t *cookie,
+				redis_watchcb2_t watchcb,
+				redis_watcherrcb_t watcherrcb,
+				void *arg);
+
+/**
+ * Register an interest in an object
+ *
+ * A watch operation registers the client as being interested in
+ * notifications on an object. OSDs keep track of watches on
+ * persistent storage, so they are preserved across cluster changes by
+ * the normal recovery process. Watches are automatically reestablished when a new
+ * connection is made, or a placement group switches OSDs.
+ *
+ * @param io the pool the object is in
+ * @param o the object to watch
+ * @param cookie where to store the internal id assigned to this watch
+ * @param watchcb what to do when a notify is received on this object
+ * @param watcherrcb what to do when the watch session encounters an error
+ * @param timeout how many seconds the connection will keep after disconnection
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_watch3(redis_ioctx_t io, const char *o, uint64_t *cookie,
+        redis_watchcb2_t watchcb,
+        redis_watcherrcb_t watcherrcb,
+        uint32_t timeout,
+        void *arg);
+
+/**
+ * Asynchronous register an interest in an object
+ *
+ * A watch operation registers the client as being interested in
+ * notifications on an object. OSDs keep track of watches on
+ * persistent storage, so they are preserved across cluster changes by
+ * the normal recovery process. If the client loses its connection to
+ * the primary OSD for a watched object, the watch will be removed
+ * after 30 seconds. Watches are automatically reestablished when a new
+ * connection is made, or a placement group switches OSDs.
+ *
+ * @param io the pool the object is in
+ * @param o the object to watch
+ * @param completion what to do when operation has been attempted
+ * @param handle where to store the internal id assigned to this watch
+ * @param watchcb what to do when a notify is received on this object
+ * @param watcherrcb what to do when the watch session encounters an error
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_watch(redis_ioctx_t io, const char *o,
+				   redis_completion_t completion, uint64_t *handle,
+				   redis_watchcb2_t watchcb,
+				   redis_watcherrcb_t watcherrcb,
+				   void *arg);
+
+/**
+ * Asynchronous register an interest in an object
+ *
+ * A watch operation registers the client as being interested in
+ * notifications on an object. OSDs keep track of watches on
+ * persistent storage, so they are preserved across cluster changes by
+ * the normal recovery process. If the client loses its connection to
+ * the primary OSD for a watched object, the watch will be removed
+ * after the number of seconds that configured in timeout parameter.
+ * Watches are automatically reestablished when a new
+ * connection is made, or a placement group switches OSDs.
+ *
+ * @param io the pool the object is in
+ * @param o the object to watch
+ * @param completion what to do when operation has been attempted
+ * @param handle where to store the internal id assigned to this watch
+ * @param watchcb what to do when a notify is received on this object
+ * @param watcherrcb what to do when the watch session encounters an error
+ * @param timeout how many seconds the connection will keep after disconnection
+ * @param arg opaque value to pass to the callback
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_watch2(redis_ioctx_t io, const char *o,
+           redis_completion_t completion, uint64_t *handle,
+           redis_watchcb2_t watchcb,
+           redis_watcherrcb_t watcherrcb,
+           uint32_t timeout,
+           void *arg);
+
+/**
+ * Check on the status of a watch
+ *
+ * Return the number of milliseconds since the watch was last confirmed.
+ * Or, if there has been an error, return that.
+ *
+ * If there is an error, the watch is no longer valid, and should be
+ * destroyed with redis_unwatch2().  The the user is still interested
+ * in the object, a new watch should be created with redis_watch2().
+ *
+ * @param io the pool the object is in
+ * @param cookie the watch handle
+ * @returns ms since last confirmed on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_watch_check(redis_ioctx_t io, uint64_t cookie);
+
+/**
+ * Unregister an interest in an object
+ *
+ * Once this completes, no more notifies will be sent to us for this
+ * watch. This should be called to clean up unneeded watchers.
+ *
+ * @param io the pool the object is in
+ * @param o the name of the watched object (ignored)
+ * @param cookie which watch to unregister
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_unwatch(redis_ioctx_t io, const char *o, uint64_t cookie)
+  __attribute__((deprecated));
+
+/**
+ * Unregister an interest in an object
+ *
+ * Once this completes, no more notifies will be sent to us for this
+ * watch. This should be called to clean up unneeded watchers.
+ *
+ * @param io the pool the object is in
+ * @param cookie which watch to unregister
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_unwatch2(redis_ioctx_t io, uint64_t cookie);
+
+/**
+ * Asynchronous unregister an interest in an object
+ *
+ * Once this completes, no more notifies will be sent to us for this
+ * watch. This should be called to clean up unneeded watchers.
+ *
+ * @param io the pool the object is in
+ * @param completion what to do when operation has been attempted
+ * @param cookie which watch to unregister
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_unwatch(redis_ioctx_t io, uint64_t cookie,
+                                     redis_completion_t completion);
+
+/**
+ * Sychronously notify watchers of an object
+ *
+ * This blocks until all watchers of the object have received and
+ * reacted to the notify, or a timeout is reached.
+ *
+ * @note BUG: the timeout is not changeable via the C API
+ * @note BUG: the bufferlist is inaccessible in a redis_watchcb_t
+ *
+ * @param io the pool the object is in
+ * @param o the name of the object
+ * @param ver obsolete - just pass zero
+ * @param buf data to send to watchers
+ * @param buf_len length of buf in bytes
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_notify(redis_ioctx_t io, const char *o, uint64_t ver,
+				const char *buf, int buf_len)
+  __attribute__((deprecated));
+
+/**
+ * Sychronously notify watchers of an object
+ *
+ * This blocks until all watchers of the object have received and
+ * reacted to the notify, or a timeout is reached.
+ *
+ * The reply buffer is optional.  If specified, the client will get
+ * back an encoded buffer that includes the ids of the clients that
+ * acknowledged the notify as well as their notify ack payloads (if
+ * any).  Clients that timed out are not included.  Even clients that
+ * do not include a notify ack payload are included in the list but
+ * have a 0-length payload associated with them.  The format:
+ *
+ *    le32 num_acks
+ *    {
+ *      le64 gid     global id for the client (for client.1234 that's 1234)
+ *      le64 cookie  cookie for the client
+ *      le32 buflen  length of reply message buffer
+ *      u8 * buflen  payload
+ *    } * num_acks
+ *    le32 num_timeouts
+ *    {
+ *      le64 gid     global id for the client
+ *      le64 cookie  cookie for the client
+ *    } * num_timeouts
+ *
+ * Note: There may be multiple instances of the same gid if there are
+ * multiple watchers registered via the same client.
+ *
+ * Note: The buffer must be released with redis_buffer_free() when the
+ * user is done with it.
+ *
+ * Note: Since the result buffer includes clients that time out, it
+ * will be set even when redis_notify() returns an error code (like
+ * -ETIMEDOUT).
+ *
+ * @param io the pool the object is in
+ * @param completion what to do when operation has been attempted
+ * @param o the name of the object
+ * @param buf data to send to watchers
+ * @param buf_len length of buf in bytes
+ * @param timeout_ms notify timeout (in ms)
+ * @param reply_buffer pointer to reply buffer pointer (free with redis_buffer_free)
+ * @param reply_buffer_len pointer to size of reply buffer
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_notify(redis_ioctx_t io, const char *o,
+				    redis_completion_t completion,
+				    const char *buf, int buf_len,
+				    uint64_t timeout_ms, char **reply_buffer,
+				    size_t *reply_buffer_len);
+CEPH_REDIS_API int redis_notify2(redis_ioctx_t io, const char *o,
+				 const char *buf, int buf_len,
+				 uint64_t timeout_ms,
+				 char **reply_buffer, size_t *reply_buffer_len);
+
+/**
+ * Decode a notify response
+ *
+ * Decode a notify response (from redis_aio_notify() call) into acks and
+ * timeout arrays.
+ *
+ * @param reply_buffer buffer from redis_aio_notify() call
+ * @param reply_buffer_len reply_buffer length
+ * @param acks pointer to struct notify_ack_t pointer
+ * @param nr_acks pointer to ack count
+ * @param timeouts pointer to notify_timeout_t pointer
+ * @param nr_timeouts pointer to timeout count
+ * @returns 0 on success
+ */
+CEPH_REDIS_API int redis_decode_notify_response(char *reply_buffer, size_t reply_buffer_len,
+                                                struct notify_ack_t **acks, size_t *nr_acks,
+                                                struct notify_timeout_t **timeouts, size_t *nr_timeouts);
+
+/**
+ * Free notify allocated buffer
+ *
+ * Release memory allocated by redis_decode_notify_response() call
+ *
+ * @param acks notify_ack_t struct (from redis_decode_notify_response())
+ * @param nr_acks ack count
+ * @param timeouts notify_timeout_t struct (from redis_decode_notify_response())
+ */
+CEPH_REDIS_API void redis_free_notify_response(struct notify_ack_t *acks, size_t nr_acks,
+                                               struct notify_timeout_t *timeouts);
+
+/**
+ * Acknolwedge receipt of a notify
+ *
+ * @param io the pool the object is in
+ * @param o the name of the object
+ * @param notify_id the notify_id we got on the watchcb2_t callback
+ * @param cookie the watcher handle
+ * @param buf payload to return to notifier (optional)
+ * @param buf_len payload length
+ * @returns 0 on success
+ */
+CEPH_REDIS_API int redis_notify_ack(redis_ioctx_t io, const char *o,
+				    uint64_t notify_id, uint64_t cookie,
+				    const char *buf, int buf_len);
+
+/**
+ * Flush watch/notify callbacks
+ *
+ * This call will block until all pending watch/notify callbacks have
+ * been executed and the queue is empty.  It should usually be called
+ * after shutting down any watches before shutting down the ioctx or
+ * libredis to ensure that any callbacks do not misuse the ioctx (for
+ * example by calling redis_notify_ack after the ioctx has been
+ * destroyed).
+ *
+ * @param cluster the cluster handle
+ */
+CEPH_REDIS_API int redis_watch_flush(redis_t cluster);
+/**
+ * Flush watch/notify callbacks
+ *
+ * This call will be nonblock, and the completion will be called
+ * until all pending watch/notify callbacks have been executed and
+ * the queue is empty.  It should usually be called after shutting
+ * down any watches before shutting down the ioctx or
+ * libredis to ensure that any callbacks do not misuse the ioctx (for
+ * example by calling redis_notify_ack after the ioctx has been
+ * destroyed).
+ *
+ * @param cluster the cluster handle
+ * @param completion what to do when operation has been attempted
+ */
+CEPH_REDIS_API int redis_aio_watch_flush(redis_t cluster, redis_completion_t completion);
+
+/** @} Watch/Notify */
+
+/**
+ * Pin an object in the cache tier
+ *
+ * When an object is pinned in the cache tier, it stays in the cache
+ * tier, and won't be flushed out.
+ *
+ * @param io the pool the object is in
+ * @param o the object id
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_cache_pin(redis_ioctx_t io, const char *o);
+
+/**
+ * Unpin an object in the cache tier
+ *
+ * After an object is unpinned in the cache tier, it can be flushed out
+ *
+ * @param io the pool the object is in
+ * @param o the object id
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_cache_unpin(redis_ioctx_t io, const char *o);
+
+/**
+ * @name Hints
+ *
+ * @{
+ */
+
+/**
+ * Set allocation hint for an object
+ *
+ * This is an advisory operation, it will always succeed (as if it was
+ * submitted with a LIBREDIS_OP_FLAG_FAILOK flag set) and is not
+ * guaranteed to do anything on the backend.
+ *
+ * @param io the pool the object is in
+ * @param o the name of the object
+ * @param expected_object_size expected size of the object, in bytes
+ * @param expected_write_size expected size of writes to the object, in bytes
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_set_alloc_hint(redis_ioctx_t io, const char *o,
+                                        uint64_t expected_object_size,
+                                        uint64_t expected_write_size);
+
+/**
+ * Set allocation hint for an object
+ *
+ * This is an advisory operation, it will always succeed (as if it was
+ * submitted with a LIBREDIS_OP_FLAG_FAILOK flag set) and is not
+ * guaranteed to do anything on the backend.
+ *
+ * @param io the pool the object is in
+ * @param o the name of the object
+ * @param expected_object_size expected size of the object, in bytes
+ * @param expected_write_size expected size of writes to the object, in bytes
+ * @param flags hints about future IO patterns
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_set_alloc_hint2(redis_ioctx_t io, const char *o,
+					 uint64_t expected_object_size,
+					 uint64_t expected_write_size,
+					 uint32_t flags);
+
+/** @} Hints */
+
+/**
+ * @name Object Operations
+ *
+ * A single redis operation can do multiple operations on one object
+ * atomically. The whole operation will succeed or fail, and no partial
+ * results will be visible.
+ *
+ * Operations may be either reads, which can return data, or writes,
+ * which cannot. The effects of writes are applied and visible all at
+ * once, so an operation that sets an xattr and then checks its value
+ * will not see the updated value.
+ *
+ * @{
+ */
+
+/**
+ * Create a new redis_write_op_t write operation. This will store all actions
+ * to be performed atomically. You must call redis_release_write_op when you are
+ * finished with it.
+ *
+ * @note the ownership of a write operartion is passed to the function
+ *       performing the operation, so the same instance of @c redis_write_op_t
+ *       cannot be used again after being performed.
+ *
+ * @returns non-NULL on success, NULL on memory allocation error.
+ */
+CEPH_REDIS_API redis_write_op_t redis_create_write_op(void);
+
+/**
+ * Free a redis_write_op_t, must be called when you're done with it.
+ * @param write_op operation to deallocate, created with redis_create_write_op
+ */
+CEPH_REDIS_API void redis_release_write_op(redis_write_op_t write_op);
+
+/**
+ * Set flags for the last operation added to this write_op.
+ * At least one op must have been added to the write_op.
+ * @param write_op operation to add this action to
+ * @param flags see libredis.h constants beginning with LIBREDIS_OP_FLAG
+ */
+CEPH_REDIS_API void redis_write_op_set_flags(redis_write_op_t write_op,
+                                             int flags);
+
+/**
+ * Ensure that the object exists before writing
+ * @param write_op operation to add this action to
+ */
+CEPH_REDIS_API void redis_write_op_assert_exists(redis_write_op_t write_op);
+
+/**
+ * Ensure that the object exists and that its internal version
+ * number is equal to "ver" before writing. "ver" should be a
+ * version number previously obtained with redis_get_last_version().
+ * - If the object's version is greater than the asserted version
+ *   then redis_write_op_operate will return -ERANGE instead of
+ *   executing the op.
+ * - If the object's version is less than the asserted version
+ *   then redis_write_op_operate will return -EOVERFLOW instead
+ *   of executing the op.
+ * @param write_op operation to add this action to
+ * @param ver object version number
+ */
+CEPH_REDIS_API void redis_write_op_assert_version(redis_write_op_t write_op, uint64_t ver);
+
+/**
+ * Ensure that given object range (extent) satisfies comparison.
+ *
+ * @param write_op operation to add this action to
+ * @param cmp_buf buffer containing bytes to be compared with object contents
+ * @param cmp_len length to compare and size of @c cmp_buf in bytes
+ * @param off object byte offset at which to start the comparison
+ * @param prval returned result of comparison, 0 on success, negative error code
+ *  on failure, (-MAX_ERRNO - mismatch_off) on mismatch
+ */
+CEPH_REDIS_API void redis_write_op_cmpext(redis_write_op_t write_op,
+                                          const char *cmp_buf,
+                                          size_t cmp_len,
+                                          uint64_t off,
+                                          int *prval);
+
+/**
+ * Ensure that given xattr satisfies comparison.
+ * If the comparison is not satisfied, the return code of the
+ * operation will be -ECANCELED
+ * @param write_op operation to add this action to
+ * @param name name of the xattr to look up
+ * @param comparison_operator currently undocumented, look for
+ * LIBREDIS_CMPXATTR_OP_EQ in libredis.h
+ * @param value buffer to compare actual xattr value to
+ * @param value_len length of buffer to compare actual xattr value to
+ */
+CEPH_REDIS_API void redis_write_op_cmpxattr(redis_write_op_t write_op,
+                                            const char *name,
+                                            uint8_t comparison_operator,
+                                            const char *value,
+                                            size_t value_len);
+
+/**
+ * Ensure that the an omap value satisfies a comparison,
+ * with the supplied value on the right hand side (i.e.
+ * for OP_LT, the comparison is actual_value < value.
+ *
+ * @param write_op operation to add this action to
+ * @param key which omap value to compare
+ * @param comparison_operator one of LIBREDIS_CMPXATTR_OP_EQ,
+   LIBREDIS_CMPXATTR_OP_LT, or LIBREDIS_CMPXATTR_OP_GT
+ * @param val value to compare with
+ * @param val_len length of value in bytes
+ * @param prval where to store the return value from this action
+ */
+CEPH_REDIS_API void redis_write_op_omap_cmp(redis_write_op_t write_op,
+                                            const char *key,
+                                            uint8_t comparison_operator,
+                                            const char *val,
+                                            size_t val_len,
+                                            int *prval);
+
+/**
+ * Ensure that the an omap value satisfies a comparison,
+ * with the supplied value on the right hand side (i.e.
+ * for OP_LT, the comparison is actual_value < value.
+ *
+ * @param write_op operation to add this action to
+ * @param key which omap value to compare
+ * @param comparison_operator one of LIBREDIS_CMPXATTR_OP_EQ,
+   LIBREDIS_CMPXATTR_OP_LT, or LIBREDIS_CMPXATTR_OP_GT
+ * @param val value to compare with
+ * @param key_len length of key in bytes
+ * @param val_len length of value in bytes
+ * @param prval where to store the return value from this action
+ */
+CEPH_REDIS_API void redis_write_op_omap_cmp2(redis_write_op_t write_op,
+                                            const char *key,
+                                            uint8_t comparison_operator,
+                                            const char *val,
+                                            size_t key_len,
+                                            size_t val_len,
+                                            int *prval);
+
+/**
+ * Set an xattr
+ * @param write_op operation to add this action to
+ * @param name name of the xattr
+ * @param value buffer to set xattr to
+ * @param value_len length of buffer to set xattr to
+ */
+CEPH_REDIS_API void redis_write_op_setxattr(redis_write_op_t write_op,
+                                            const char *name,
+                                            const char *value,
+                                            size_t value_len);
+
+/**
+ * Remove an xattr
+ * @param write_op operation to add this action to
+ * @param name name of the xattr to remove
+ */
+CEPH_REDIS_API void redis_write_op_rmxattr(redis_write_op_t write_op,
+                                           const char *name);
+
+/**
+ * Create the object
+ * @param write_op operation to add this action to
+ * @param exclusive set to either LIBREDIS_CREATE_EXCLUSIVE or
+   LIBREDIS_CREATE_IDEMPOTENT
+ * will error if the object already exists.
+ * @param category category string (DEPRECATED, HAS NO EFFECT)
+ */
+CEPH_REDIS_API void redis_write_op_create(redis_write_op_t write_op,
+                                          int exclusive,
+                                          const char* category);
+
+/**
+ * Write to offset
+ * @param write_op operation to add this action to
+ * @param offset offset to write to
+ * @param buffer bytes to write
+ * @param len length of buffer
+ */
+CEPH_REDIS_API void redis_write_op_write(redis_write_op_t write_op,
+                                         const char *buffer,
+                                         size_t len,
+                                         uint64_t offset);
+
+/**
+ * Write whole object, atomically replacing it.
+ * @param write_op operation to add this action to
+ * @param buffer bytes to write
+ * @param len length of buffer
+ */
+CEPH_REDIS_API void redis_write_op_write_full(redis_write_op_t write_op,
+                                              const char *buffer,
+                                              size_t len);
+
+/**
+ * Write the same buffer multiple times
+ * @param write_op operation to add this action to
+ * @param buffer bytes to write
+ * @param data_len length of buffer
+ * @param write_len total number of bytes to write, as a multiple of @c data_len
+ * @param offset offset to write to
+ */
+CEPH_REDIS_API void redis_write_op_writesame(redis_write_op_t write_op,
+                                             const char *buffer,
+                                             size_t data_len,
+                                             size_t write_len,
+                                             uint64_t offset);
+
+/**
+ * Append to end of object.
+ * @param write_op operation to add this action to
+ * @param buffer bytes to write
+ * @param len length of buffer
+ */
+CEPH_REDIS_API void redis_write_op_append(redis_write_op_t write_op,
+                                          const char *buffer,
+                                          size_t len);
+/**
+ * Remove object
+ * @param write_op operation to add this action to
+ */
+CEPH_REDIS_API void redis_write_op_remove(redis_write_op_t write_op);
+
+/**
+ * Truncate an object
+ * @param write_op operation to add this action to
+ * @param offset Offset to truncate to
+ */
+CEPH_REDIS_API void redis_write_op_truncate(redis_write_op_t write_op,
+                                            uint64_t offset);
+
+/**
+ * Zero part of an object
+ * @param write_op operation to add this action to
+ * @param offset Offset to zero
+ * @param len length to zero
+ */
+CEPH_REDIS_API void redis_write_op_zero(redis_write_op_t write_op,
+			                uint64_t offset,
+			                uint64_t len);
+
+/**
+ * Execute an OSD class method on an object
+ * See redis_exec() for general description.
+ *
+ * @param write_op operation to add this action to
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param prval where to store the return value from the method
+ */
+CEPH_REDIS_API void redis_write_op_exec(redis_write_op_t write_op,
+			                const char *cls,
+			                const char *method,
+			                const char *in_buf,
+			                size_t in_len,
+			                int *prval);
+
+/**
+ * Set key/value pairs on an object
+ *
+ * @param write_op operation to add this action to
+ * @param keys array of null-terminated char arrays representing keys to set
+ * @param vals array of pointers to values to set
+ * @param lens array of lengths corresponding to each value
+ * @param num number of key/value pairs to set
+ */
+CEPH_REDIS_API void redis_write_op_omap_set(redis_write_op_t write_op,
+                                            char const* const* keys,
+                                            char const* const* vals,
+                                            const size_t *lens,
+                                            size_t num);
+
+/**
+ * Set key/value pairs on an object
+ *
+ * @param write_op operation to add this action to
+ * @param keys array of null-terminated char arrays representing keys to set
+ * @param vals array of pointers to values to set
+ * @param key_lens array of lengths corresponding to each key
+ * @param val_lens array of lengths corresponding to each value
+ * @param num number of key/value pairs to set
+ */
+CEPH_REDIS_API void redis_write_op_omap_set2(redis_write_op_t write_op,
+                                            char const* const* keys,
+                                            char const* const* vals,
+                                            const size_t *key_lens,
+                                            const size_t *val_lens,
+                                            size_t num);
+
+/**
+ * Remove key/value pairs from an object
+ *
+ * @param write_op operation to add this action to
+ * @param keys array of null-terminated char arrays representing keys to remove
+ * @param keys_len number of key/value pairs to remove
+ */
+CEPH_REDIS_API void redis_write_op_omap_rm_keys(redis_write_op_t write_op,
+                                                char const* const* keys,
+                                                size_t keys_len);
+
+/**
+ * Remove key/value pairs from an object
+ *
+ * @param write_op operation to add this action to
+ * @param keys array of char arrays representing keys to remove
+ * @param key_lens array of size_t values representing length of each key
+ * @param keys_len number of key/value pairs to remove
+ */
+CEPH_REDIS_API void redis_write_op_omap_rm_keys2(redis_write_op_t write_op,
+                                                char const* const* keys,
+                                                const size_t* key_lens,
+                                                size_t keys_len);
+
+
+/**
+ * Remove key/value pairs from an object whose keys are in the range
+ * [key_begin, key_end)
+ *
+ * @param write_op operation to add this action to
+ * @param key_begin the lower bound of the key range to remove
+ * @param key_begin_len length of key_begin
+ * @param key_end the upper bound of the key range to remove
+ * @param key_end_len length of key_end
+ */
+CEPH_REDIS_API void redis_write_op_omap_rm_range2(redis_write_op_t write_op,
+                                                  const char *key_begin,
+                                                  size_t key_begin_len,
+                                                  const char *key_end,
+                                                  size_t key_end_len);
+
+/**
+ * Remove all key/value pairs from an object
+ *
+ * @param write_op operation to add this action to
+ */
+CEPH_REDIS_API void redis_write_op_omap_clear(redis_write_op_t write_op);
+
+/**
+ * Set allocation hint for an object
+ *
+ * @param write_op operation to add this action to
+ * @param expected_object_size expected size of the object, in bytes
+ * @param expected_write_size expected size of writes to the object, in bytes
+ */
+CEPH_REDIS_API void redis_write_op_set_alloc_hint(redis_write_op_t write_op,
+                                                  uint64_t expected_object_size,
+                                                  uint64_t expected_write_size);
+
+/**
+ * Set allocation hint for an object
+ *
+ * @param write_op operation to add this action to
+ * @param expected_object_size expected size of the object, in bytes
+ * @param expected_write_size expected size of writes to the object, in bytes
+ * @param flags hints about future IO patterns
+ */
+CEPH_REDIS_API void redis_write_op_set_alloc_hint2(redis_write_op_t write_op,
+						   uint64_t expected_object_size,
+						   uint64_t expected_write_size,
+						   uint32_t flags);
+
+/**
+ * Perform a write operation synchronously
+ * @param write_op operation to perform
+ * @param io the ioctx that the object is in
+ * @param oid the object id
+ * @param mtime the time to set the mtime to, NULL for the current time
+ * @param flags flags to apply to the entire operation (LIBREDIS_OPERATION_*)
+ */
+CEPH_REDIS_API int redis_write_op_operate(redis_write_op_t write_op,
+			                  redis_ioctx_t io,
+			                  const char *oid,
+			                  time_t *mtime,
+			                  int flags);
+/**
+ * Perform a write operation synchronously
+ * @param write_op operation to perform
+ * @param io the ioctx that the object is in
+ * @param oid the object id
+ * @param mtime the time to set the mtime to, NULL for the current time
+ * @param flags flags to apply to the entire operation (LIBREDIS_OPERATION_*)
+ */
+
+CEPH_REDIS_API int redis_write_op_operate2(redis_write_op_t write_op,
+                                           redis_ioctx_t io,
+                                           const char *oid,
+                                           struct timespec *mtime,
+                                           int flags);
+
+/**
+ * Perform a write operation asynchronously
+ * @param write_op operation to perform
+ * @param io the ioctx that the object is in
+ * @param completion what to do when operation has been attempted
+ * @param oid the object id
+ * @param mtime the time to set the mtime to, NULL for the current time
+ * @param flags flags to apply to the entire operation (LIBREDIS_OPERATION_*)
+ */
+CEPH_REDIS_API int redis_aio_write_op_operate(redis_write_op_t write_op,
+                                              redis_ioctx_t io,
+                                              redis_completion_t completion,
+                                              const char *oid,
+                                              time_t *mtime,
+			                      int flags);
+
+/**
+ * Perform a write operation asynchronously
+ * @param write_op operation to perform
+ * @param io the ioctx that the object is in
+ * @param completion what to do when operation has been attempted
+ * @param oid the object id
+ * @param mtime the time to set the mtime to, NULL for the current time
+ * @param flags flags to apply to the entire operation (LIBREDIS_OPERATION_*)
+ */
+CEPH_REDIS_API int redis_aio_write_op_operate2(redis_write_op_t write_op,
+                                               redis_ioctx_t io,
+                                               redis_completion_t completion,
+                                               const char *oid,
+                                               struct timespec *mtime,
+                                               int flags);
+
+/**
+ * Create a new redis_read_op_t read operation. This will store all
+ * actions to be performed atomically. You must call
+ * redis_release_read_op when you are finished with it (after it
+ * completes, or you decide not to send it in the first place).
+ *
+ * @note the ownership of a read operartion is passed to the function
+ *       performing the operation, so the same instance of @c redis_read_op_t
+ *       cannot be used again after being performed.
+ *
+ * @returns non-NULL on success, NULL on memory allocation error.
+ */
+CEPH_REDIS_API redis_read_op_t redis_create_read_op(void);
+
+/**
+ * Free a redis_read_op_t, must be called when you're done with it.
+ * @param read_op operation to deallocate, created with redis_create_read_op
+ */
+CEPH_REDIS_API void redis_release_read_op(redis_read_op_t read_op);
+
+/**
+ * Set flags for the last operation added to this read_op.
+ * At least one op must have been added to the read_op.
+ * @param read_op operation to add this action to
+ * @param flags see libredis.h constants beginning with LIBREDIS_OP_FLAG
+ */
+CEPH_REDIS_API void redis_read_op_set_flags(redis_read_op_t read_op, int flags);
+
+/**
+ * Ensure that the object exists before reading
+ * @param read_op operation to add this action to
+ */
+CEPH_REDIS_API void redis_read_op_assert_exists(redis_read_op_t read_op);
+
+/**
+ * Ensure that the object exists and that its internal version
+ * number is equal to "ver" before reading. "ver" should be a
+ * version number previously obtained with redis_get_last_version().
+ * - If the object's version is greater than the asserted version
+ *   then redis_read_op_operate will return -ERANGE instead of
+ *   executing the op.
+ * - If the object's version is less than the asserted version
+ *   then redis_read_op_operate will return -EOVERFLOW instead
+ *   of executing the op.
+ * @param read_op operation to add this action to
+ * @param ver object version number
+ */
+CEPH_REDIS_API void redis_read_op_assert_version(redis_read_op_t read_op, uint64_t ver);
+
+/**
+ * Ensure that given object range (extent) satisfies comparison.
+ *
+ * @param read_op operation to add this action to
+ * @param cmp_buf buffer containing bytes to be compared with object contents
+ * @param cmp_len length to compare and size of @c cmp_buf in bytes
+ * @param off object byte offset at which to start the comparison
+ * @param prval returned result of comparison, 0 on success, negative error code
+ *  on failure, (-MAX_ERRNO - mismatch_off) on mismatch
+ */
+CEPH_REDIS_API void redis_read_op_cmpext(redis_read_op_t read_op,
+                                         const char *cmp_buf,
+                                         size_t cmp_len,
+                                         uint64_t off,
+                                         int *prval);
+
+/**
+ * Ensure that the an xattr satisfies a comparison
+ * If the comparison is not satisfied, the return code of the
+ * operation will be -ECANCELED
+ * @param read_op operation to add this action to
+ * @param name name of the xattr to look up
+ * @param comparison_operator currently undocumented, look for
+ * LIBREDIS_CMPXATTR_OP_EQ in libredis.h
+ * @param value buffer to compare actual xattr value to
+ * @param value_len length of buffer to compare actual xattr value to
+ */
+CEPH_REDIS_API void redis_read_op_cmpxattr(redis_read_op_t read_op,
+			                   const char *name,
+			                   uint8_t comparison_operator,
+			                   const char *value,
+			                   size_t value_len);
+
+/**
+ * Start iterating over xattrs on an object.
+ *
+ * @param read_op operation to add this action to
+ * @param iter where to store the iterator
+ * @param prval where to store the return value of this action
+ */
+CEPH_REDIS_API void redis_read_op_getxattrs(redis_read_op_t read_op,
+			                    redis_xattrs_iter_t *iter,
+			                    int *prval);
+
+/**
+ * Ensure that the an omap value satisfies a comparison,
+ * with the supplied value on the right hand side (i.e.
+ * for OP_LT, the comparison is actual_value < value.
+ *
+ * @param read_op operation to add this action to
+ * @param key which omap value to compare
+ * @param comparison_operator one of LIBREDIS_CMPXATTR_OP_EQ,
+   LIBREDIS_CMPXATTR_OP_LT, or LIBREDIS_CMPXATTR_OP_GT
+ * @param val value to compare with
+ * @param val_len length of value in bytes
+ * @param prval where to store the return value from this action
+ */
+CEPH_REDIS_API void redis_read_op_omap_cmp(redis_read_op_t read_op,
+                                           const char *key,
+                                           uint8_t comparison_operator,
+                                           const char *val,
+                                           size_t val_len,
+                                           int *prval);
+
+/**
+ * Ensure that the an omap value satisfies a comparison,
+ * with the supplied value on the right hand side (i.e.
+ * for OP_LT, the comparison is actual_value < value.
+ *
+ * @param read_op operation to add this action to
+ * @param key which omap value to compare
+ * @param comparison_operator one of LIBREDIS_CMPXATTR_OP_EQ,
+   LIBREDIS_CMPXATTR_OP_LT, or LIBREDIS_CMPXATTR_OP_GT
+ * @param val value to compare with
+ * @param key_len length of key in bytes
+ * @param val_len length of value in bytes
+ * @param prval where to store the return value from this action
+ */
+CEPH_REDIS_API void redis_read_op_omap_cmp2(redis_read_op_t read_op,
+                                           const char *key,
+                                           uint8_t comparison_operator,
+                                           const char *val,
+                                           size_t key_len,
+                                           size_t val_len,
+                                           int *prval);
+
+/**
+ * Get object size and mtime
+ * @param read_op operation to add this action to
+ * @param psize where to store object size
+ * @param pmtime where to store modification time
+ * @param prval where to store the return value of this action
+ */
+CEPH_REDIS_API void redis_read_op_stat(redis_read_op_t read_op,
+			               uint64_t *psize,
+			               time_t *pmtime,
+			               int *prval);
+
+CEPH_REDIS_API void redis_read_op_stat2(redis_read_op_t read_op,
+			               uint64_t *psize,
+			               struct timespec *pmtime,
+			               int *prval);
+/**
+ * Read bytes from offset into buffer.
+ *
+ * prlen will be filled with the number of bytes read if successful.
+ * A short read can only occur if the read reaches the end of the
+ * object.
+ *
+ * @param read_op operation to add this action to
+ * @param offset offset to read from
+ * @param len length of buffer
+ * @param buffer where to put the data
+ * @param bytes_read where to store the number of bytes read by this action
+ * @param prval where to store the return value of this action
+ */
+CEPH_REDIS_API void redis_read_op_read(redis_read_op_t read_op,
+			               uint64_t offset,
+			               size_t len,
+			               char *buffer,
+			               size_t *bytes_read,
+			               int *prval);
+
+/**
+ * Compute checksum from object data
+ *
+ * @param read_op operation to add this action to
+ * @param type the checksum algorithm to utilize
+ * @param init_value the init value for the algorithm
+ * @param init_value_len the length of the init value
+ * @param offset the offset to start checksumming in the object
+ * @param len the number of bytes to checksum
+ * @param chunk_size optional length-aligned chunk size for checksums
+ * @param pchecksum where to store the checksum result for this action
+ * @param checksum_len the number of bytes available for the result
+ * @param prval where to store the return value for this action
+ */
+CEPH_REDIS_API void redis_read_op_checksum(redis_read_op_t read_op,
+					   redis_checksum_type_t type,
+					   const char *init_value,
+					   size_t init_value_len,
+					   uint64_t offset, size_t len,
+					   size_t chunk_size, char *pchecksum,
+					   size_t checksum_len, int *prval);
+
+/**
+ * Execute an OSD class method on an object
+ * See redis_exec() for general description.
+ *
+ * The output buffer is allocated on the heap; the caller is
+ * expected to release that memory with redis_buffer_free(). The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param read_op operation to add this action to
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param out_buf where to put libredis-allocated output buffer
+ * @param out_len length of out_buf in bytes
+ * @param prval where to store the return value from the method
+ */
+CEPH_REDIS_API void redis_read_op_exec(redis_read_op_t read_op,
+			               const char *cls,
+			               const char *method,
+			               const char *in_buf,
+			               size_t in_len,
+			               char **out_buf,
+			               size_t *out_len,
+			               int *prval);
+
+/**
+ * Execute an OSD class method on an object
+ * See redis_exec() for general description.
+ *
+ * If the output buffer is too small, prval will
+ * be set to -ERANGE and used_len will be 0.
+ *
+ * @param read_op operation to add this action to
+ * @param cls the name of the class
+ * @param method the name of the method
+ * @param in_buf where to find input
+ * @param in_len length of in_buf in bytes
+ * @param out_buf user-provided buffer to read into
+ * @param out_len length of out_buf in bytes
+ * @param used_len where to store the number of bytes read into out_buf
+ * @param prval where to store the return value from the method
+ */
+CEPH_REDIS_API void redis_read_op_exec_user_buf(redis_read_op_t read_op,
+				                const char *cls,
+				                const char *method,
+				                const char *in_buf,
+				                size_t in_len,
+				                char *out_buf,
+				                size_t out_len,
+				                size_t *used_len,
+				                int *prval);
+
+/**
+ * Start iterating over key/value pairs on an object.
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @param filter_prefix list only keys beginning with filter_prefix
+ * @param max_return list no more than max_return key/value pairs
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+CEPH_REDIS_API void redis_read_op_omap_get_vals(redis_read_op_t read_op,
+				                const char *start_after,
+				                const char *filter_prefix,
+				                uint64_t max_return,
+				                redis_omap_iter_t *iter,
+				                int *prval)
+  __attribute__((deprecated)); /* use v2 below */
+
+/**
+ * Start iterating over key/value pairs on an object.
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @param filter_prefix list only keys beginning with filter_prefix
+ * @param max_return list no more than max_return key/value pairs
+ * @param iter where to store the iterator
+ * @param pmore flag indicating whether there are more keys to fetch
+ * @param prval where to store the return value from this action
+ */
+CEPH_REDIS_API void redis_read_op_omap_get_vals2(redis_read_op_t read_op,
+						 const char *start_after,
+						 const char *filter_prefix,
+						 uint64_t max_return,
+						 redis_omap_iter_t *iter,
+						 unsigned char *pmore,
+						 int *prval);
+
+/**
+ * Start iterating over keys on an object.
+ *
+ * They will be returned sorted by key, and the iterator
+ * will fill in NULL for all values if specified.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @param max_return list no more than max_return keys
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+CEPH_REDIS_API void redis_read_op_omap_get_keys(redis_read_op_t read_op,
+				                const char *start_after,
+				                uint64_t max_return,
+				                redis_omap_iter_t *iter,
+				                int *prval)
+  __attribute__((deprecated)); /* use v2 below */
+
+/**
+ * Start iterating over keys on an object.
+ *
+ * They will be returned sorted by key, and the iterator
+ * will fill in NULL for all values if specified.
+ *
+ * @param read_op operation to add this action to
+ * @param start_after list keys starting after start_after
+ * @param max_return list no more than max_return keys
+ * @param iter where to store the iterator
+ * @param pmore flag indicating whether there are more keys to fetch
+ * @param prval where to store the return value from this action
+ */
+CEPH_REDIS_API void redis_read_op_omap_get_keys2(redis_read_op_t read_op,
+						 const char *start_after,
+						 uint64_t max_return,
+						 redis_omap_iter_t *iter,
+						 unsigned char *pmore,
+						 int *prval);
+
+/**
+ * Start iterating over specific key/value pairs
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param keys array of pointers to null-terminated keys to get
+ * @param keys_len the number of strings in keys
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+CEPH_REDIS_API void redis_read_op_omap_get_vals_by_keys(redis_read_op_t read_op,
+                                                        char const* const* keys,
+                                                        size_t keys_len,
+                                                        redis_omap_iter_t *iter,
+                                                        int *prval);
+
+/**
+ * Start iterating over specific key/value pairs
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param keys array of pointers to keys to get
+ * @param num_keys the number of strings in keys
+ * @param key_lens array of size_t's describing each key len (in bytes)
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+CEPH_REDIS_API void redis_read_op_omap_get_vals_by_keys2(redis_read_op_t read_op,
+                                                        char const* const* keys,
+                                                        size_t num_keys,
+                                                        const size_t* key_lens,
+                                                        redis_omap_iter_t *iter,
+                                                        int *prval);
+
+/**
+ * Perform a read operation synchronously
+ * @param read_op operation to perform
+ * @param io the ioctx that the object is in
+ * @param oid the object id
+ * @param flags flags to apply to the entire operation (LIBREDIS_OPERATION_*)
+ */
+CEPH_REDIS_API int redis_read_op_operate(redis_read_op_t read_op,
+			                 redis_ioctx_t io,
+			                 const char *oid,
+			                 int flags);
+
+/**
+ * Perform a read operation asynchronously
+ * @param read_op operation to perform
+ * @param io the ioctx that the object is in
+ * @param completion what to do when operation has been attempted
+ * @param oid the object id
+ * @param flags flags to apply to the entire operation (LIBREDIS_OPERATION_*)
+ */
+CEPH_REDIS_API int redis_aio_read_op_operate(redis_read_op_t read_op,
+			                     redis_ioctx_t io,
+			                     redis_completion_t completion,
+			                     const char *oid,
+			                     int flags);
+
+/** @} Object Operations */
+
+/**
+ * Take an exclusive lock on an object.
+ *
+ * @param io the context to operate in
+ * @param oid the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for this instance of the lock
+ * @param desc user-defined lock description
+ * @param duration the duration of the lock. Set to NULL for infinite duration.
+ * @param flags lock flags
+ * @returns 0 on success, negative error code on failure
+ * @returns -EBUSY if the lock is already held by another (client, cookie) pair
+ * @returns -EEXIST if the lock is already held by the same (client, cookie) pair
+ */
+CEPH_REDIS_API int redis_lock_exclusive(redis_ioctx_t io, const char * oid,
+                                        const char * name, const char * cookie,
+                                        const char * desc,
+                                        struct timeval * duration,
+                                        uint8_t flags);
+
+/**
+ * Take a shared lock on an object.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for this instance of the lock
+ * @param tag The tag of the lock
+ * @param desc user-defined lock description
+ * @param duration the duration of the lock. Set to NULL for infinite duration.
+ * @param flags lock flags
+ * @returns 0 on success, negative error code on failure
+ * @returns -EBUSY if the lock is already held by another (client, cookie) pair
+ * @returns -EEXIST if the lock is already held by the same (client, cookie) pair
+ */
+CEPH_REDIS_API int redis_lock_shared(redis_ioctx_t io, const char * o,
+                                     const char * name, const char * cookie,
+                                     const char * tag, const char * desc,
+	                             struct timeval * duration, uint8_t flags);
+
+/**
+ * Release a shared or exclusive lock on an object.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for the instance of the lock
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT if the lock is not held by the specified (client, cookie) pair
+ */
+CEPH_REDIS_API int redis_unlock(redis_ioctx_t io, const char *o,
+                                const char *name, const char *cookie);
+
+/**
+ * Asynchronous release a shared or exclusive lock on an object.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param cookie user-defined identifier for the instance of the lock
+ * @param completion what to do when operation has been attempted
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_aio_unlock(redis_ioctx_t io, const char *o,
+                                    const char *name, const char *cookie,
+			            redis_completion_t completion);
+
+/**
+ * List clients that have locked the named object lock and information about
+ * the lock.
+ *
+ * The number of bytes required in each buffer is put in the
+ * corresponding size out parameter. If any of the provided buffers
+ * are too short, -ERANGE is returned after these sizes are filled in.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param exclusive where to store whether the lock is exclusive (1) or shared (0)
+ * @param tag where to store the tag associated with the object lock
+ * @param tag_len number of bytes in tag buffer
+ * @param clients buffer in which locker clients are stored, separated by '\0'
+ * @param clients_len number of bytes in the clients buffer
+ * @param cookies buffer in which locker cookies are stored, separated by '\0'
+ * @param cookies_len number of bytes in the cookies buffer
+ * @param addrs buffer in which locker addresses are stored, separated by '\0'
+ * @param addrs_len number of bytes in the clients buffer
+ * @returns number of lockers on success, negative error code on failure
+ * @returns -ERANGE if any of the buffers are too short
+ */
+CEPH_REDIS_API ssize_t redis_list_lockers(redis_ioctx_t io, const char *o,
+			                  const char *name, int *exclusive,
+			                  char *tag, size_t *tag_len,
+			                  char *clients, size_t *clients_len,
+			                  char *cookies, size_t *cookies_len,
+			                  char *addrs, size_t *addrs_len);
+
+/**
+ * Releases a shared or exclusive lock on an object, which was taken by the
+ * specified client.
+ *
+ * @param io the context to operate in
+ * @param o the name of the object
+ * @param name the name of the lock
+ * @param client the client currently holding the lock
+ * @param cookie user-defined identifier for the instance of the lock
+ * @returns 0 on success, negative error code on failure
+ * @returns -ENOENT if the lock is not held by the specified (client, cookie) pair
+ * @returns -EINVAL if the client cannot be parsed
+ */
+CEPH_REDIS_API int redis_break_lock(redis_ioctx_t io, const char *o,
+                                    const char *name, const char *client,
+                                    const char *cookie);
+
+/**
+ * Blocklists the specified client from the OSDs
+ *
+ * @param cluster cluster handle
+ * @param client_address client address
+ * @param expire_seconds number of seconds to blocklist (0 for default)
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_blocklist_add(redis_t cluster,
+				       char *client_address,
+				       uint32_t expire_seconds);
+CEPH_REDIS_API int redis_blacklist_add(redis_t cluster,
+				       char *client_address,
+				       uint32_t expire_seconds)
+  __attribute__((deprecated));
+
+/**
+ * Gets addresses of the REDIS session, suitable for blocklisting.
+ *
+ * @param cluster cluster handle
+ * @param addrs the output string.
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_getaddrs(redis_t cluster, char** addrs);
+
+CEPH_REDIS_API void redis_set_osdmap_full_try(redis_ioctx_t io)
+  __attribute__((deprecated));
+
+CEPH_REDIS_API void redis_unset_osdmap_full_try(redis_ioctx_t io)
+  __attribute__((deprecated));
+
+CEPH_REDIS_API void redis_set_pool_full_try(redis_ioctx_t io);
+
+CEPH_REDIS_API void redis_unset_pool_full_try(redis_ioctx_t io);
+
+/**
+ * Enable an application on a pool
+ *
+ * @param io pool ioctx
+ * @param app_name application name
+ * @param force 0 if only single application per pool
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_application_enable(redis_ioctx_t io,
+                                            const char *app_name, int force);
+
+/**
+ * List all enabled applications
+ *
+ * If the provided buffer is too short, the required length is filled in and
+ * -ERANGE is returned. Otherwise, the buffers are filled with the application
+ * names, with a '\0' after each.
+ *
+ * @param io pool ioctx
+ * @param values buffer in which to store application names
+ * @param values_len number of bytes in values buffer
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if either buffer is too short
+ */
+CEPH_REDIS_API int redis_application_list(redis_ioctx_t io, char *values,
+                                          size_t *values_len);
+
+/**
+ * Get application metadata value from pool
+ *
+ * @param io pool ioctx
+ * @param app_name application name
+ * @param key metadata key
+ * @param value result buffer
+ * @param value_len maximum len of value
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_application_metadata_get(redis_ioctx_t io,
+                                                  const char *app_name,
+                                                  const char *key, char *value,
+                                                  size_t *value_len);
+
+/**
+ * Set application metadata on a pool
+ *
+ * @param io pool ioctx
+ * @param app_name application name
+ * @param key metadata key
+ * @param value metadata key
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_application_metadata_set(redis_ioctx_t io,
+                                                  const char *app_name,
+                                                  const char *key,
+                                                  const char *value);
+
+/**
+ * Remove application metadata from a pool
+ *
+ * @param io pool ioctx
+ * @param app_name application name
+ * @param key metadata key
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_application_metadata_remove(redis_ioctx_t io,
+                                                     const char *app_name,
+                                                     const char *key);
+
+/**
+ * List all metadata key/value pairs associated with an application.
+ *
+ * This iterates over all metadata, key_len and val_len are filled in
+ * with the number of bytes put into the keys and values buffers.
+ *
+ * If the provided buffers are too short, the required lengths are filled
+ * in and -ERANGE is returned. Otherwise, the buffers are filled with
+ * the keys and values of the metadata, with a '\0' after each.
+ *
+ * @param io pool ioctx
+ * @param app_name application name
+ * @param keys buffer in which to store key names
+ * @param key_len number of bytes in keys buffer
+ * @param values buffer in which to store values
+ * @param vals_len number of bytes in values buffer
+ * @returns 0 on success, negative error code on failure
+ * @returns -ERANGE if either buffer is too short
+ */
+CEPH_REDIS_API int redis_application_metadata_list(redis_ioctx_t io,
+                                                   const char *app_name,
+                                                   char *keys, size_t *key_len,
+                                                   char *values,
+                                                   size_t *vals_len);
+
+/**
+ * @name Mon/OSD/PG Commands
+ *
+ * These interfaces send commands relating to the monitor, OSD, or PGs.
+ *
+ * @{
+ */
+
+/**
+ * Send monitor command.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with redis_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param inbuflen input buffer length
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_mon_command(redis_t cluster, const char **cmd,
+                                     size_t cmdlen, const char *inbuf,
+                                     size_t inbuflen, char **outbuf,
+                                     size_t *outbuflen, char **outs,
+                                     size_t *outslen);
+
+/**
+ * Send ceph-mgr command.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with redis_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param inbuflen input buffer length
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_mgr_command(redis_t cluster, const char **cmd,
+                                     size_t cmdlen, const char *inbuf,
+                                     size_t inbuflen, char **outbuf,
+                                     size_t *outbuflen, char **outs,
+                                     size_t *outslen);
+
+/**
+ * Send ceph-mgr tell command.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with redis_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param name mgr name to target
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param inbuflen input buffer length
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_mgr_command_target(
+  redis_t cluster,
+  const char *name,
+  const char **cmd,
+  size_t cmdlen, const char *inbuf,
+  size_t inbuflen, char **outbuf,
+  size_t *outbuflen, char **outs,
+  size_t *outslen);
+
+/**
+ * Send monitor command to a specific monitor.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with redis_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param name target monitor's name
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param inbuflen input buffer length
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_REDIS_API int redis_mon_command_target(redis_t cluster, const char *name,
+			                    const char **cmd, size_t cmdlen,
+			                    const char *inbuf, size_t inbuflen,
+			                    char **outbuf, size_t *outbuflen,
+			                    char **outs, size_t *outslen);
+
+/**
+ * free a redis-allocated buffer
+ *
+ * Release memory allocated by libredis calls like redis_mon_command().
+ *
+ * @param buf buffer pointer
+ */
+CEPH_REDIS_API void redis_buffer_free(char *buf);
+
+CEPH_REDIS_API int redis_osd_command(redis_t cluster, int osdid,
+                                     const char **cmd, size_t cmdlen,
+		                     const char *inbuf, size_t inbuflen,
+		                     char **outbuf, size_t *outbuflen,
+		                     char **outs, size_t *outslen);
+
+CEPH_REDIS_API int redis_pg_command(redis_t cluster, const char *pgstr,
+                                    const char **cmd, size_t cmdlen,
+		                    const char *inbuf, size_t inbuflen,
+		                    char **outbuf, size_t *outbuflen,
+		                    char **outs, size_t *outslen);
+
+/*
+ * This is not a doxygen comment leadin, because doxygen breaks on
+ * a typedef with function params and returns, and I can't figure out
+ * how to fix it.
+ *
+ * Monitor cluster log
+ *
+ * Monitor events logged to the cluster log.  The callback get each
+ * log entry both as a single formatted line and with each field in a
+ * separate arg.
+ *
+ * Calling with a cb argument of NULL will deregister any previously
+ * registered callback.
+ *
+ * @param cluster cluster handle
+ * @param level minimum log level (debug, info, warn|warning, err|error)
+ * @param cb callback to run for each log message. It MUST NOT block
+ * nor call back into libredis.
+ * @param arg void argument to pass to cb
+ *
+ * @returns 0 on success, negative code on error
+ */
+typedef void (*redis_log_callback_t)(void *arg,
+				     const char *line,
+				     const char *who, 
+				     uint64_t sec, uint64_t nsec,
+				     uint64_t seq, const char *level,
+				     const char *msg);
+
+/*
+ * This is not a doxygen comment leadin, because doxygen breaks on
+ * a typedef with function params and returns, and I can't figure out
+ * how to fix it.
+ *
+ * Monitor cluster log
+ *
+ * Monitor events logged to the cluster log.  The callback get each
+ * log entry both as a single formatted line and with each field in a
+ * separate arg.
+ *
+ * Calling with a cb argument of NULL will deregister any previously
+ * registered callback.
+ *
+ * @param cluster cluster handle
+ * @param level minimum log level (debug, info, warn|warning, err|error)
+ * @param cb callback to run for each log message. It MUST NOT block
+ * nor call back into libredis.
+ * @param arg void argument to pass to cb
+ *
+ * @returns 0 on success, negative code on error
+ */
+typedef void (*redis_log_callback2_t)(void *arg,
+				     const char *line,
+				     const char *channel,
+				     const char *who,
+				     const char *name,
+				     uint64_t sec, uint64_t nsec,
+				     uint64_t seq, const char *level,
+				     const char *msg);
+
+CEPH_REDIS_API int redis_monitor_log(redis_t cluster, const char *level,
+                                     redis_log_callback_t cb, void *arg);
+CEPH_REDIS_API int redis_monitor_log2(redis_t cluster, const char *level,
+				      redis_log_callback2_t cb, void *arg);
+
+
+/**
+ * register daemon instance for a service
+ *
+ * Register us as a daemon providing a particular service.  We identify
+ * the service (e.g., 'rgw') and our instance name (e.g., 'rgw.$hostname').
+ * The metadata is a map of keys and values with arbitrary static metdata
+ * for this instance.  The encoding is a series of NULL-terminated strings,
+ * alternating key names and values, terminating with an empty key name.
+ * For example,  "foo\0bar\0this\0that\0\0" is the dict {foo=bar,this=that}.
+ *
+ * For the lifetime of the libredis instance, regular beacons will be sent
+ * to the cluster to maintain our registration in the service map.
+ *
+ * @param cluster handle
+ * @param service service name
+ * @param daemon daemon instance name
+ * @param metadata_dict static daemon metadata dict
+ */
+CEPH_REDIS_API int redis_service_register(
+  redis_t cluster,
+  const char *service,
+  const char *daemon,
+  const char *metadata_dict);
+
+/**
+ * update daemon status
+ *
+ * Update our mutable status information in the service map.
+ *
+ * The status dict is encoded the same way the daemon metadata is encoded
+ * for redis_service_register.  For example, "foo\0bar\0this\0that\0\0" is
+ * {foo=bar,this=that}.
+ *
+ * @param cluster redis cluster handle
+ * @param status_dict status dict
+ */
+CEPH_REDIS_API int redis_service_update_status(
+  redis_t cluster,
+  const char *status_dict);
+
+/** @} Mon/OSD/PG commands */
+
+/*
+ * These methods are no longer supported and return -ENOTSUP where possible.
+ */
+CEPH_REDIS_API int redis_objects_list_open(
+  redis_ioctx_t io,
+  redis_list_ctx_t *ctx) __attribute__((deprecated));
+CEPH_REDIS_API uint32_t redis_objects_list_get_pg_hash_position(
+  redis_list_ctx_t ctx) __attribute__((deprecated));
+CEPH_REDIS_API uint32_t redis_objects_list_seek(
+  redis_list_ctx_t ctx,
+  uint32_t pos) __attribute__((deprecated));
+CEPH_REDIS_API int redis_objects_list_next(
+  redis_list_ctx_t ctx,
+  const char **entry,
+  const char **key) __attribute__((deprecated));
+CEPH_REDIS_API void redis_objects_list_close(
+  redis_list_ctx_t ctx) __attribute__((deprecated));
+
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
