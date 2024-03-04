@@ -410,6 +410,9 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
   } else if(m_header_info.compare("USE")==0) {
     csv.use_header_info=true;
   }
+  if(m_output_json_format.compare("JSON") == 0) {
+    csv.output_json_format = true;
+  }
   //m_s3_csv_object.set_external_debug_system(fp_debug_mesg);
   m_s3_csv_object.set_result_formatters(fp_s3select_result_format,fp_result_header_format);
   m_s3_csv_object.set_csv_query(&s3select_syntax, csv);
@@ -504,6 +507,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
   const char* s3select_syntax_error = "s3select-Syntax-Error";
   const char* s3select_resource_id = "resourcse-id";
   const char* s3select_json_error = "json-Format-Error";
+  json_object::csv_definitions json;
 
   m_aws_response_handler.init_response();
 
@@ -517,6 +521,10 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
     return -EINVAL;
   } 
 
+  if(m_output_json_format.compare("JSON") == 0) {
+    json.output_json_format = true;
+  }
+
   //parsing the SQL statement
   s3select_syntax.parse_query(m_sql_query.c_str());
   if (s3select_syntax.get_error_description().empty() == false) {
@@ -529,7 +537,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
   }
     
   //initializing json processor
-  m_s3_json_object.set_json_query(&s3select_syntax);
+  m_s3_json_object.set_json_query(&s3select_syntax, json);
 
   if (input == nullptr) {
     input = "";
@@ -602,6 +610,10 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   } else if (m_s3select_query.find(input_tag+"><Parquet") != std::string::npos) {
     m_parquet_type=true;
     ldpp_dout(this, 10) << "s3select: engine is set to process Parquet objects" << dendl;
+  }
+
+  if (m_s3select_query.find(output_tag+"><JSON") != std::string::npos) {
+    m_output_json_format = "JSON";
   }
 
   extract_by_tag(m_s3select_query, "Expression", sql_query);
