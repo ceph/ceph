@@ -4,6 +4,7 @@ overrides:
       - MON_DOWN
       - mons down, quorum
       - is down \(out of quorum\)
+      - MDS_ALL_DOWN
 tasks:
 - cephadm:
     roleless: true
