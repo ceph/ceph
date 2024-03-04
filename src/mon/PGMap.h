@@ -82,6 +82,9 @@ public:
   mempool::pgmap::unordered_map<int32_t,pg_count> num_pg_by_osd;
 
   mempool::pgmap::map<int64_t,interval_set<snapid_t>> purged_snaps;
+  //pool -> statfs
+  using per_pool_statfs_t = mempool::pgmap::map<int64_t, store_statfs_t>;
+  per_pool_statfs_t stray_pool_sum;
 
   bool use_per_pool_stats() const {
     return osd_sum.num_osds == osd_sum.num_per_pool_osds;
@@ -111,6 +114,10 @@ public:
 
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
+  /**
+   * onode delete ops count for being removed PGs
+   */
+  uint64_t cleanup_ops_sum_delta = 0;
 
   void get_recovery_stats(
     double *misplaced_ratio,
@@ -172,6 +179,12 @@ public:
                                   uint64_t poolid) const;
 
   /**
+   * Obtain a formatted/plain output for the overall cleanup I/O, which is
+   * calculated resorting to @p cleanup_sum_delta and @p stamp_delta.
+   */
+  void overall_cleanup_io_rate_summary(ceph::Formatter *f, std::ostream *out) const;
+
+  /**
    * Return the number of additional bytes that can be stored in this
    * pool before the first OSD fills up, accounting for PG overhead.
    */
@@ -192,7 +205,7 @@ public:
 				   bool per_pool,
 				   bool per_pool_omap,
 				   const pg_pool_t *pool);
-  void dump_meta_pool_stats(std::stringstream* ss, ceph::Formatter* f) const;
+  void dump_meta_and_stray_pool_stats(std::stringstream* ss, ceph::Formatter* f) const;
 
   size_t get_num_pg_by_osd(int osd) const {
     auto p = num_pg_by_osd.find(osd);
@@ -257,9 +270,16 @@ public:
   typedef mempool::pgmap::map<
     std::pair<int64_t, int>,  // <pool, osd>
     store_statfs_t>
-      per_osd_pool_statfs_t;
+      per_pool_osd_statfs_t;
 
-  per_osd_pool_statfs_t pool_statfs;
+  per_pool_osd_statfs_t pool_statfs;
+
+  // osd -> {pool -> statfs}
+  using per_osd_per_pool_statfs_t =
+    mempool::pgmap::map<
+      int,
+      per_pool_statfs_t>;
+  per_osd_per_pool_statfs_t stray_pool_statfs;
 
   class Incremental {
   public:
@@ -270,7 +290,7 @@ public:
     epoch_t pg_scan;  // osdmap epoch
     mempool::pgmap::set<pg_t> pg_remove;
     utime_t stamp;
-    per_osd_pool_statfs_t pool_statfs_updates;
+    per_pool_osd_statfs_t pool_statfs_updates;
 
   private:
     mempool::pgmap::map<int32_t,osd_stat_t> osd_stat_updates;
@@ -318,6 +338,9 @@ public:
   mempool::pgmap::unordered_map<int,std::set<pg_t> > pg_by_osd;
   mempool::pgmap::unordered_map<int,int> blocked_by_sum;
   mempool::pgmap::list<std::pair<pool_stat_t, utime_t> > pg_sum_deltas;
+  // historic num cleanup operation deltas,
+  // to be in-sync with pg_sum_deltas.
+  mempool::pgmap::list<uint64_t> cleanup_sum_deltas;
   mempool::pgmap::unordered_map<int64_t,mempool::pgmap::unordered_map<uint64_t,int32_t>> num_pg_by_pool_state;
 
   utime_t stamp;

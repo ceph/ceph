@@ -7731,6 +7731,8 @@ MPGStats* OSD::collect_pg_stats()
 
   osd_stat_t cur_stat = service.get_osd_stat();
   cur_stat.os_perf_stat = store->get_cur_stats();
+  cur_stat.num_deletes_in_pgs = service.get_num_deletes_in_pgs();
+  cur_stat.num_deleting_pgs = logger->get(l_osd_pg_removing);
 
   auto m = new MPGStats(monc->get_fsid(), get_osdmap_epoch());
   m->osd_stat = cur_stat;
