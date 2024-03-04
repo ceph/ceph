@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10.2)
 # remove cmake/modules/FindPython* once 3.12 is required
 
 project(ceph
-  VERSION 16.2.14
+  VERSION 16.2.15
   LANGUAGES CXX C ASM)
 
 foreach(policy
