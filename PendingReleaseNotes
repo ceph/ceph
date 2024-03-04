@@ -265,6 +265,7 @@
   exposed via the new `--snap-id` option for `rbd clone` command.
 * RBD: The output of `rbd snap ls --all` command now includes the original
   type for trashed snapshots.
+* cls_cxx_gather is marked as deprecated.
 
 >=18.0.0
 
