@@ -98,17 +98,22 @@ inline std::ostream& operator<<(std::ostream& out,
 }
 
 
-// Return an identity for the given user and account.
-auto transform_old_authinfo(const RGWUserInfo& user,
-                            std::optional<RGWAccountInfo> account)
-  -> std::unique_ptr<rgw::auth::Identity>;
-
-// Return an identity for the given user, loading its account if necessary.
+// Return an identity for the given user after loading its account and policies.
 auto transform_old_authinfo(const DoutPrefixProvider* dpp,
                             optional_yield y,
-                            rgw::sal::Driver* driver,
-                            const RGWUserInfo& user)
+                            sal::Driver* driver,
+                            sal::User* user)
   -> tl::expected<std::unique_ptr<Identity>, int>;
+
+// Load the user account and all user/group policies. May throw
+// PolicyParseException on malformed policy.
+int load_account_and_policies(const DoutPrefixProvider* dpp,
+                              optional_yield y,
+                              sal::Driver* driver,
+                              const RGWUserInfo& info,
+                              const sal::Attrs& attrs,
+                              std::optional<RGWAccountInfo>& account,
+                              std::vector<IAM::Policy>& policies);
 
 
 /* Interface for classes applying changes to request state/RADOS store
@@ -609,6 +614,10 @@ protected:
   const rgw::auth::ImplicitTenants& implicit_tenant_context;
   const rgw::auth::ImplicitTenants::implicit_tenant_flag_bits implicit_tenant_bit;
 
+  // account and policies are loaded by load_acct_info()
+  mutable std::optional<RGWAccountInfo> account;
+  mutable std::vector<IAM::Policy> policies;
+
   virtual void create_account(const DoutPrefixProvider* dpp,
                               const rgw_user& acct_user,
                               bool implicit_tenant,
@@ -638,6 +647,7 @@ public:
   uint32_t get_perm_mask() const override { return info.perm_mask; }
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
   void write_ops_log_entry(rgw_log_entry& entry) const override;
   uint32_t get_identity_type() const override { return info.acct_type; }
   std::string get_acct_name() const override { return info.acct_name; }
@@ -669,6 +679,7 @@ class LocalApplier : public IdentityApplier {
 protected:
   const RGWUserInfo user_info;
   const std::optional<RGWAccountInfo> account;
+  const std::vector<IAM::Policy> policies;
   const std::string subuser;
   uint32_t perm_mask;
   const std::string access_key_id;
@@ -683,11 +694,13 @@ public:
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
                std::optional<RGWAccountInfo> account,
+               std::vector<IAM::Policy> policies,
                std::string subuser,
                const std::optional<uint32_t>& perm_mask,
                const std::string access_key_id)
     : user_info(user_info),
       account(std::move(account)),
+      policies(std::move(policies)),
       subuser(std::move(subuser)),
       perm_mask(perm_mask.value_or(RGW_PERM_INVALID)),
       access_key_id(access_key_id) {
@@ -707,6 +720,7 @@ public:
   }
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
   uint32_t get_identity_type() const override { return user_info.type; }
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return subuser; }
@@ -722,6 +736,7 @@ public:
                                       const req_state* s,
                                       const RGWUserInfo& user_info,
                                       std::optional<RGWAccountInfo> account,
+                                      std::vector<IAM::Policy> policies,
                                       const std::string& subuser,
                                       const std::optional<uint32_t>& perm_mask,
                                       const std::string& access_key_id) const = 0;

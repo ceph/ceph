@@ -514,24 +514,17 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   }
 
   std::optional<RGWAccountInfo> account;
-  if (!user->get_info().account_id.empty()) {
-    account.emplace();
-    rgw::sal::Attrs attrs; // ignored
-    RGWObjVersionTracker objv; // ignored
-    int r = driver->load_account_by_id(dpp, y, user->get_info().account_id,
-                                       *account, attrs, objv);
-    if (r < 0) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to load account "
-          << user->get_info().account_id << " for user " << *user
-          << ": " << cpp_strerror(r) << dendl;
-      return result_t::deny(-EPERM);
-    }
+  std::vector<IAM::Policy> policies;
+  ret = load_account_and_policies(dpp, y, driver, user->get_info(),
+                                  user->get_attrs(), account, policies);
+  if (ret < 0) {
+    return result_t::deny(-EPERM);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
-                                           std::move(account),
-                                           extract_swift_subuser(swift_user),
-                                           std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+  auto apl = apl_factory->create_apl_local(
+      cct, s, user->get_info(), std::move(account),
+      std::move(policies), extract_swift_subuser(swift_user),
+      std::nullopt, LocalApplier::NO_ACCESS_KEY);
   return result_t::grant(std::move(apl));
 }
 
@@ -650,18 +643,11 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
   }
 
   std::optional<RGWAccountInfo> account;
-  if (!user->get_info().account_id.empty()) {
-    account.emplace();
-    rgw::sal::Attrs attrs; // ignored
-    RGWObjVersionTracker objv; // ignored
-    int r = driver->load_account_by_id(dpp, s->yield, user->get_info().account_id,
-                                       *account, attrs, objv);
-    if (r < 0) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to load account "
-          << user->get_info().account_id << " for user " << *user
-          << ": " << cpp_strerror(r) << dendl;
-      return result_t::deny(-EPERM);
-    }
+  std::vector<IAM::Policy> policies;
+  ret = load_account_and_policies(dpp, s->yield, driver, user->get_info(),
+                                  user->get_attrs(), account, policies);
+  if (ret < 0) {
+    return result_t::deny(-EPERM);
   }
 
   ldpp_dout(dpp, 10) << "swift_user=" << swift_user << dendl;
@@ -698,10 +684,10 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::deny(-EPERM);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
-                                           std::move(account),
-                                           extract_swift_subuser(swift_user),
-                                           std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+  auto apl = apl_factory->create_apl_local(
+      cct, s, user->get_info(), std::move(account),
+      std::move(policies), extract_swift_subuser(swift_user),
+      std::nullopt, LocalApplier::NO_ACCESS_KEY);
   return result_t::grant(std::move(apl));
 }
 

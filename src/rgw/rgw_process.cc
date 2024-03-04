@@ -367,7 +367,7 @@ int process_request(const RGWProcessEnv& penv,
      * infrastructure. */
     if (nullptr == s->auth.identity) {
       auto result = rgw::auth::transform_old_authinfo(
-          op, yield, driver, s->user->get_info());
+          op, yield, driver, s->user.get());
       if (!result) {
         abort_early(s, op, result.error(), handler, yield);
         goto done;
