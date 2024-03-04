@@ -420,6 +420,8 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
     csv.use_header_info=true;
   }
 
+  m_s3_csv_object.set_external_debug_system(fp_debug_mesg);
+  m_s3_csv_object.set_result_formatters(fp_s3select_result_format,fp_result_header_format);
   m_s3_csv_object.set_csv_query(&s3select_syntax, csv);
 
   m_s3_csv_object.set_external_system_functions(fp_s3select_continue,
