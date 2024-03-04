@@ -2614,7 +2614,6 @@ class RGWUserPermHandler {
   rgw_user uid;
 
   struct _info {
-    RGWUserInfo user_info;
     rgw::IAM::Environment env;
     std::unique_ptr<rgw::auth::Identity> identity;
     RGWAccessControlPolicy user_acl;
@@ -2638,28 +2637,23 @@ class RGWUserPermHandler {
                                         uid(handler->uid),
                                         info(handler->info) {}
     int operate() override {
-      auto user_ctl = sync_env->driver->getRados()->ctl.user;
-
-      ret = user_ctl->get_info_by_uid(sync_env->dpp, uid, &info->user_info, null_yield);
+      auto user = sync_env->driver->get_user(uid);
+      ret = user->load_user(sync_env->dpp, null_yield);
       if (ret < 0) {
         return ret;
       }
 
       auto result = rgw::auth::transform_old_authinfo(
-          sync_env->dpp, null_yield, sync_env->driver, info->user_info);
+          sync_env->dpp, null_yield, sync_env->driver, user.get());
       if (!result) {
         return result.error();
       }
       info->identity = std::move(result).value();
 
-      map<string, bufferlist> uattrs;
-
-      ret = user_ctl->get_attrs_by_uid(sync_env->dpp, uid, &uattrs, null_yield);
-      if (ret == 0) {
-        ret = RGWUserPermHandler::policy_from_attrs(sync_env->cct, uattrs, &info->user_acl);
-      }
+      ret = RGWUserPermHandler::policy_from_attrs(
+          sync_env->cct, user->get_attrs(), &info->user_acl);
       if (ret == -ENOENT) {
-        info->user_acl.create_default(uid, info->user_info.display_name);
+        info->user_acl.create_default(uid, user->get_display_name());
       }
 
       return 0;

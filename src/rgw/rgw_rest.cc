@@ -1874,20 +1874,6 @@ static http_op op_from_method(const char *method)
 int RGWHandler_REST::init_permissions(RGWOp* op, optional_yield y)
 {
   if (op->get_type() == RGW_OP_CREATE_BUCKET) {
-    // We don't need user policies in case of STS token returned by AssumeRole, hence the check for user type
-    if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
-      try {
-        if (auto ret = s->user->read_attrs(s, y); ! ret) {
-          // load all user and group policies
-          load_iam_identity_policies(op, y, driver,
-                                     s->user->get_info(),
-                                     s->user->get_attrs(),
-                                     s->iam_identity_policies);
-        }
-      } catch (const std::exception& e) {
-        ldpp_dout(op, -1) << "Error reading IAM User Policy: " << e.what() << dendl;
-      }
-    }
     rgw_build_iam_environment(driver, s);
     return 0;
   }
