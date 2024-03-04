@@ -1585,7 +1585,7 @@ public:
 #ifdef DEBUG_CACHE
   void _audit(const char *when) override
   {
-    dout(10) << __func__ << " start" << dendl;
+    dout(10) << __func__ << " " << when <<  " start" << dendl;
     uint64_t s = 0;
     for (auto i = hot.begin(); i != hot.end(); ++i) {
       ceph_assert(i->cache_private == BUFFER_HOT);
@@ -1661,14 +1661,14 @@ void BlueStore::BufferSpace::_clear(BufferCacheShard* cache)
   while (!buffer_map.empty()) {
     _rm_buffer(cache, buffer_map.begin());
   }
-  writing.clear();
+  ceph_assert(writing.empty());
 }
 
 int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, uint32_t length)
 {
   // note: we already hold cache->lock
-  ldout(cache->cct, 20) << __func__ << std::hex << " 0x" << offset << "~"
-                        << length << std::dec << dendl;
+  ldout(cache->cct, 20) << __func__ << std::hex << " 0x" << offset << "~" << length 
+                        << std::dec << dendl;
   int cache_private = 0;
   cache->_audit("discard start");
   auto i = _data_lower_bound(offset);
@@ -1761,6 +1761,7 @@ void BlueStore::BufferSpace::read(
       if (b->end() <= offset) {
         break;
       }
+      ceph_assert(b->end() > offset);
 
       bool val = false;
       if (flags & BYPASS_CLEAN_CACHE)
@@ -3120,13 +3121,10 @@ void BlueStore::ExtentMap::make_range_shared_maybe_merge(
       uint32_t blob_width; // to signal when extents end
       dout(20) << __func__ << std::hex << " e.blob_start=" << e.blob_start()
                << " e.logical_offset=" << e.logical_offset << std::dec << dendl;
-      Blob *b = blob.is_compressed()
-                    ? nullptr
-                    : find_mergable_companion(e.blob.get(), e.blob_start(),
-                                              blob_width, candidates);
+      Blob *b = blob.is_compressed() ? nullptr :
+        find_mergable_companion(e.blob.get(), e.blob_start(), blob_width, candidates);
       if (b) {
-        dout(20) << __func__ << " merging to: " << *b << " bc=" << onode->bc
-                 << dendl;
+        dout(20) << __func__ << " merging to: " << *b << " bc=" << onode->bc << dendl;
         uint32_t b_logical_length = b->merge_blob(store->cct, e.blob.get());
         for (auto p : blob.get_extents()) {
           if (p.is_valid()) {
@@ -5155,18 +5153,11 @@ void BlueStore::Collection::split_cache(
       for (auto& b : o->extent_map.spanning_blob_map) {
         b.second->last_encoded_id = -1;
       }
-      // By default do not copy buffers to clones, and let them read data by
-      // themselves. The exception are 'writing' buffers, which are not yet
-      // stable on device.
+
       for (auto &i : o->bc.buffer_map) {
-        if (!i.second.is_writing()) {
-          ldout(store->cct, 1)
-              << __func__ << "   moving " << i.second << dendl;
-          dest->cache->_move(cache, &i.second);
-        } else {
-          ldout(store->cct, 1)
-              << __func__ << "   not moving " << i.second << dendl;
-        }
+        ldout(store->cct, 1)
+          << __func__ << "   moving " << i.second << dendl;
+        dest->cache->_move(cache, &i.second);
       }
       for (auto& e : o->extent_map.extent_map) {
         cache->rm_extent();
