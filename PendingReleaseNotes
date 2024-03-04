@@ -188,6 +188,7 @@
   on root inode, which then will restore layout to default layout.
 
 * cls_cxx_gather is marked as deprecated.
+
 * CephFS: cephfs-journal-tool is guarded against running on an online file system.
   The 'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset' and
   'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset --force'
@@ -209,6 +210,7 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   in the kclient.
 * S3 Get/HeadObject now support query parameter `partNumber` to read a specific
   part of a completed multipart upload.
+* cls_cxx_gather is marked as deprecated.
 
 >=18.0.0
 
