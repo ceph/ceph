@@ -3,6 +3,7 @@ overrides:
     log-ignorelist:
       - MON_DOWN
       - mons down, quorum
+      - is down \(out of quorum\)
 tasks:
 - cephadm:
     conf:
