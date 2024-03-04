@@ -8,6 +8,7 @@
 #include "rgw_account.h"
 #include "rgw_bucket.h"
 #include "rgw_quota.h"
+#include "rgw_rest_iam.h" // validate_iam_user_name()
 
 #include "services/svc_user.h"
 #include "services/svc_meta.h"
@@ -1821,6 +1822,15 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
     user_info.type = TYPE_ROOT;
   }
 
+  if (!user_info.account_id.empty()) {
+    // validate user name according to iam api
+    std::string err;
+    if (!validate_iam_user_name(user_info.display_name, err)) {
+      set_err_msg(err_msg, err);
+      return -EINVAL;
+    }
+  }
+
   if (!op_state.path.empty()) {
     user_info.path = op_state.path;
   } else {
@@ -2153,6 +2163,15 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       return -EINVAL;
     }
     user_info.type = op_state.account_root ? TYPE_ROOT : TYPE_RGW;
+  }
+
+  if (!user_info.account_id.empty()) {
+    // validate user name according to iam api
+    std::string err;
+    if (!validate_iam_user_name(user_info.display_name, err)) {
+      set_err_msg(err_msg, err);
+      return -EINVAL;
+    }
   }
 
   if (!op_state.path.empty()) {
