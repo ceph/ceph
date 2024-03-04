@@ -495,9 +495,25 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
     " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
+    std::string key = oid_in_cache;
+
     if (source->driver->get_policy_driver()->get_cache_policy()->exist_key(oid_in_cache) > 0) { 
       // Read From Cache
-      auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id); 
+      rgw::d4n::CacheBlock block;
+      block.cacheObj.objName = source->get_key().get_oid();
+      block.cacheObj.bucketName = source->get_bucket()->get_name();
+      block.blockID = adjusted_start_ofs;
+      block.size = part_len;
+
+      // check if the data is dirty and if yes, add "D" to the beggining of the oid
+      if (source->driver->get_block_dir()->get(&block, y) == 0){
+	if (block.dirty == true){ 
+          key = "D_" + oid_in_cache; //we keep track of dirty data in the cache for the metadata failure case
+	}
+      }
+
+
+      auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), key, read_ofs, len_to_read, cost, id); 
 
       this->blocks_info.insert(std::make_pair(id, std::make_pair(adjusted_start_ofs, part_len)));
 
@@ -517,7 +533,21 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 
       if ((part_len != obj_max_req_size) && source->driver->get_policy_driver()->get_cache_policy()->exist_key(oid_in_cache) > 0) {
         // Read From Cache
-        auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id);  
+        
+        rgw::d4n::CacheBlock block;
+        block.cacheObj.objName = source->get_key().get_oid();
+        block.cacheObj.bucketName = source->get_bucket()->get_name();
+        block.blockID = adjusted_start_ofs;
+        block.size = obj_max_req_size;
+
+        // check if the data is dirty and if yes, add "D" to the beggining of the oid
+        if (source->driver->get_block_dir()->get(&block, y) == 0){
+	  if (block.dirty == true){ 
+            key = "D_" + oid_in_cache; //we keep track of dirty data in the cache for the metadata failure case
+	  }
+	}
+
+        auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), key, read_ofs, len_to_read, cost, id);  
 
         this->blocks_info.insert(std::make_pair(id, std::make_pair(adjusted_start_ofs, obj_max_req_size)));
 
@@ -630,11 +660,14 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         block.blockID = ofs;
         block.size = bl.length();
         block.version = version;
+        block.dirty = false; //writing to the backend
         auto ret = filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y);
         if (ret == 0) {
           ret = filter->get_cache_driver()->put(dpp, oid, bl, bl.length(), attrs, *y);
           if (ret == 0) {
+  	    std::string objEtag = "";
  	    filter->get_policy_driver()->get_cache_policy()->update(dpp, oid, ofs, bl.length(), version, dirty, creationTime,  source->get_bucket()->get_owner(), *y);
+	    filter->get_policy_driver()->get_cache_policy()->updateObj(dpp, prefix, version, dirty, source->get_obj_size(), creationTime, source->get_bucket()->get_owner(), objEtag, *y);
 
 	    /* Store block in directory */
             if (!blockDir->exist_key(&block, *y)) {
@@ -643,6 +676,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
             } else {
               existing_block.blockID = block.blockID;
               existing_block.size = block.size;
+	      existing_block.dirty = block.dirty;
               if (blockDir->get(&existing_block, *y) < 0) {
                 ldpp_dout(dpp, 10) << "Failed to fetch existing block for: " << existing_block.cacheObj.objName << " blockID: " << existing_block.blockID << " block size: " << existing_block.size << dendl;
               } else {
@@ -667,9 +701,10 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       block.blockID = ofs;
       block.size = bl.length();
       block.version = version;
+      block.dirty = dirty;
       ofs += bl_len;
 
-      if (!filter->get_policy_driver()->get_cache_policy()->exist_key(oid)) {
+      if (!filter->get_policy_driver()->get_cache_policy()->exist_key(oid)) { //In case of concurrent reads for the same object, the block is already cached
         auto ret = filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y);
         if (ret == 0) {
           ret = filter->get_cache_driver()->put(dpp, oid, bl, bl.length(), attrs, *y);
@@ -683,6 +718,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
             } else {
               existing_block.blockID = block.blockID;
               existing_block.size = block.size;
+	      existing_block.dirty = block.dirty;
               if (blockDir->get(&existing_block, *y) < 0) {
                 ldpp_dout(dpp, 10) << "Failed to fetch existing block for: " << existing_block.cacheObj.objName << " blockID: " << existing_block.blockID << " block size: " << existing_block.size << dendl;
               }
@@ -715,6 +751,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
           block.blockID = ofs;
           block.size = bl_rem.length();
           block.version = version;
+	  block.dirty = dirty;
           ofs += bl_rem.length();
 
           auto ret = filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y);
@@ -730,6 +767,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 	      } else {
 		existing_block.blockID = block.blockID;
 		existing_block.size = block.size;
+	  	existing_block.dirty = block.dirty;
 		if (blockDir->get(&existing_block, *y) < 0) {
 		  ldpp_dout(dpp, 10) << "Failed to fetch existing block for: " << existing_block.cacheObj.objName << " blockID: " << existing_block.blockID << " block size: " << existing_block.size << dendl;
 		} else {
