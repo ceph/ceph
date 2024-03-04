@@ -230,9 +230,8 @@ class ContainerEngine:
     def __init__(self) -> None:
         self.path = find_program(self.EXE)
 
-    @classmethod
     @property
-    def EXE(cls) -> str:
+    def EXE(self) -> str:
         raise NotImplementedError()
 
     def __str__(self) -> str:
@@ -4931,7 +4930,7 @@ def infer_mon_network(ctx: CephadmContext, mon_eps: List[EndPoint]) -> Optional[
     mon_networks = []
     for net, ifaces in list_networks(ctx).items():
         # build local_ips list for the specified network
-        local_ips: List[str] = []
+        local_ips: List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]] = []
         for _, ls in ifaces.items():
             local_ips.extend([ipaddress.ip_address(ip) for ip in ls])
 

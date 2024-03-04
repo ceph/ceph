@@ -569,7 +569,7 @@ class AccessControlDB(object):
 
 
 def load_access_control_db():
-    mgr.ACCESS_CTRL_DB = AccessControlDB.load()
+    mgr.ACCESS_CTRL_DB = AccessControlDB.load()  # type: ignore
 
 
 # CLI dashboard access control scope commands

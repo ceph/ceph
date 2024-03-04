@@ -98,7 +98,7 @@ class NFSService(CephService):
 
         # generate the ganesha config
         def get_ganesha_conf() -> str:
-            context = {
+            context: Dict[str, Any] = {
                 "user": rados_user,
                 "nodeid": nodeid,
                 "pool": POOL_NAME,
