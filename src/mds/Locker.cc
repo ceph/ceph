@@ -72,7 +72,7 @@ public:
 };
 
 Locker::Locker(MDSRank *m, MDCache *c) :
-  need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c) {}
+  need_snapflush_inodes(member_offset(CInode, item_to_flush)), mds(m), mdcache(c) {}
 
 
 void Locker::dispatch(const cref_t<Message> &m)
@@ -2178,7 +2178,7 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 	lock->put_wrlock();
       }
       in->item_open_file.remove_myself();
-      in->item_caps.remove_myself();
+      in->item_to_flush.remove_myself();
       eval_cap_gather(in, &need_issue);
     }
   }
@@ -3037,15 +3037,15 @@ void Locker::snapflush_nudge(CInode *in)
     _rdlock_kick(hlock, true);
   } else {
     // also, requeue, in case of unstable lock
-    need_snapflush_inodes.push_back(&in->item_caps);
+    need_snapflush_inodes.push_back(&in->item_to_flush);
   }
 }
 
 void Locker::mark_need_snapflush_inode(CInode *in)
 {
   ceph_assert(in->last != CEPH_NOSNAP);
-  if (!in->item_caps.is_on_list()) {
-    need_snapflush_inodes.push_back(&in->item_caps);
+  if (!in->item_to_flush.is_on_list()) {
+    need_snapflush_inodes.push_back(&in->item_to_flush);
     utime_t now = ceph_clock_now();
     in->last_dirstat_prop = now;
     dout(10) << "mark_need_snapflush_inode " << *in << " - added at " << now << dendl;
@@ -4153,7 +4153,7 @@ void Locker::caps_tick()
       CInode *in = need_snapflush_inodes.front();
       if (in->last_dirstat_prop >= cutoff)
 	break;
-      in->item_caps.remove_myself();
+      in->item_to_flush.remove_myself();
       snapflush_nudge(in);
       if (in == last)
 	break;
