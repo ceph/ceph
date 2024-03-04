@@ -6,6 +6,7 @@ overrides:
       - is down \(out of quorum\)
       - PG_DEGRADED
       - PG_AVAILABILITY
+      - OSD_DOWN
 tasks:
 - cephadm.shell:
     env: [sha1]
