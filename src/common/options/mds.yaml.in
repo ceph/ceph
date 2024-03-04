@@ -1582,7 +1582,7 @@ options:
   long_desc: Laggy OSD(s) can make clients laggy or unresponsive, this can
     lead to their eviction, this option once enabled can help defer client
     eviction.
-  default: true
+  default: false
   services:
   - mds
   flags:
