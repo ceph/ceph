@@ -5488,7 +5488,7 @@ bool Locker::local_wrlock_start(LocalLockC *lock, const MDRequestRef& mut)
     ceph_assert(it->is_wrlock());
     return true;
   } else {
-    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+    lock->add_waiter(SimpleLock::WAIT_WR, new C_MDS_RetryRequest(mdcache, mut));
     return false;
   }
 }
@@ -5502,9 +5502,9 @@ void Locker::local_wrlock_finish(const MutationImpl::lock_iterator& it, Mutation
   lock->put_wrlock();
   mut->locks.erase(it);
   if (lock->get_num_wrlocks() == 0) {
-    lock->finish_waiters(SimpleLock::WAIT_STABLE |
-                         SimpleLock::WAIT_WR |
-                         SimpleLock::WAIT_RD);
+    /* wrlocks do not wait unless an xlocker is waiting */
+    ceph_assert(!lock->is_waiter_for(SimpleLock::WAIT_WR) || lock->is_waiter_for(SimpleLock::WAIT_XLOCK));
+    lock->finish_waiters(SimpleLock::WAIT_XLOCK);
   }
 }
 
@@ -5517,7 +5517,7 @@ bool Locker::local_xlock_start(LocalLockC *lock, const MDRequestRef& mut)
     invalidate_lock_caches(lock);
   }
   if (!lock->can_xlock_local()) {
-    lock->add_waiter(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE, new C_MDS_RetryRequest(mdcache, mut));
+    lock->add_waiter(SimpleLock::WAIT_XLOCK, new C_MDS_RetryRequest(mdcache, mut));
     return false;
   }
 
@@ -5535,7 +5535,7 @@ void Locker::local_xlock_finish(const MutationImpl::lock_iterator& it, MutationI
   lock->put_xlock();
   mut->locks.erase(it);
 
-  lock->finish_waiters(SimpleLock::WAIT_STABLE |
+  lock->finish_waiters(SimpleLock::WAIT_XLOCK |
 		       SimpleLock::WAIT_WR |
 		       SimpleLock::WAIT_RD);
 
