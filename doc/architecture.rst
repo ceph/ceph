@@ -51,10 +51,10 @@ A Ceph Metadata Server (MDS) manages file metadata when CephFS is used to
 provide file services.
 
 Storage cluster clients and :term:`Ceph OSD Daemon`\s use the CRUSH algorithm
-to compute information about the location of data. Use of the CRUSH algoritm
-means that clients and OSDs are not bottlenecked by a central lookup table.
+to compute information about the location of data.  By using the CRUSH
+algorithm, clients and OSDs avoid being bottlenecked by a central lookup table.
 Ceph's high-level features include a native interface to the Ceph Storage
-Cluster via ``librados``, and a number of service interfaces built on top of
+Cluster via ``librados`` and a number of service interfaces built on top of
 ``librados``.
 
 Storing Data
