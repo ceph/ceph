@@ -407,6 +407,8 @@ void osd_stat_t::dump(Formatter *f, bool with_net) const
   f->dump_unsigned("num_osds", num_osds);
   f->dump_unsigned("num_per_pool_osds", num_per_pool_osds);
   f->dump_unsigned("num_per_pool_omap_osds", num_per_pool_omap_osds);
+  f->dump_unsigned("num_deletes_in_pgs", num_deletes_in_pgs);
+  f->dump_unsigned("num_deleting_pgs", num_deleting_pgs);
 
   /// dump legacy stats fields to ensure backward compatibility.
   f->dump_unsigned("kb", statfs.kb());
@@ -502,7 +504,7 @@ void osd_stat_t::dump_ping_time(Formatter *f) const
 
 void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(14, 2, bl);
+  ENCODE_START(15, 2, bl);
 
   //////// for compatibility ////////
   int64_t kb = statfs.kb();
@@ -564,6 +566,8 @@ void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
     encode(i.second.front_max[2], bl);
     encode(i.second.front_last, bl);
   }
+  encode(num_deletes_in_pgs, bl);
+  encode(num_deleting_pgs, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -674,6 +678,13 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(ifs.front_last, bl);
       hb_pingtime[osd] = ifs;
     }
+  }
+  if (struct_v >= 15) {
+    decode(num_deletes_in_pgs, bl);
+    decode(num_deleting_pgs, bl);
+  } else {
+    num_deletes_in_pgs = 0;
+    num_deleting_pgs = 0;
   }
   DECODE_FINISH(bl);
 }
