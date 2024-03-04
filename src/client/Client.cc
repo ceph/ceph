@@ -1651,13 +1651,17 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 			  request->perms);
 
     auto fscrypt_denc = fscrypt->get_fname_denc(in->fscrypt_ctx, &in->fscrypt_key_validator, true);
-    if (fscrypt_denc && in->is_symlink()) {
-      string slname;
-      int ret = fscrypt_denc->get_decrypted_symlink(in->symlink, &slname);
-      if (ret < 0) {
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
+    if (in->is_symlink()) {
+      if (fscrypt_denc) {
+        string slname;
+        int ret = fscrypt_denc->get_decrypted_symlink(in->symlink, &slname);
+        if (ret < 0) {
+          ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
+        }
+        in->symlink_plain = slname;
+      } else {
+        in->symlink_plain = in->symlink;
       }
-      in->symlink_plain = slname;
     }
   }
 
