@@ -247,8 +247,14 @@ namespace rgw {
       /* FIXME: remove this after switching all handlers to the new
        * authentication infrastructure. */
       if (! s->auth.identity) {
-	s->auth.identity = rgw::auth::transform_old_authinfo(
-            io->get_user(), std::nullopt);
+        auto result = rgw::auth::transform_old_authinfo(
+            op, null_yield, env.driver, s->user.get());
+        if (!result) {
+          ret = result.error();
+          abort_req(s, op, ret);
+          goto done;
+        }
+	s->auth.identity = std::move(result).value();
       }
 
       ldpp_dout(s, 2) << "reading op permissions" << dendl;
@@ -378,8 +384,14 @@ namespace rgw {
     /* FIXME: remove this after switching all handlers to the new authentication
      * infrastructure. */
     if (! s->auth.identity) {
-      s->auth.identity = rgw::auth::transform_old_authinfo(
-          io_ctx.get_user(), std::nullopt);
+      auto result = rgw::auth::transform_old_authinfo(
+          op, null_yield, env.driver, s->user.get());
+      if (!result) {
+        ret = result.error();
+        abort_req(s, op, ret);
+        goto done;
+      }
+      s->auth.identity = std::move(result).value();
     }
 
     ldpp_dout(s, 2) << "reading op permissions" << dendl;

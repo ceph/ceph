@@ -24,7 +24,7 @@ class TempURLApplier : public rgw::auth::LocalApplier {
 public:
   TempURLApplier(CephContext* const cct,
                  const RGWUserInfo& user_info)
-    : LocalApplier(cct, user_info, std::nullopt, LocalApplier::NO_SUBUSER,
+    : LocalApplier(cct, user_info, std::nullopt, {}, LocalApplier::NO_SUBUSER,
                    std::nullopt, LocalApplier::NO_ACCESS_KEY)
   {}
 
@@ -156,7 +156,7 @@ class SwiftAnonymousApplier : public rgw::auth::LocalApplier {
   public:
     SwiftAnonymousApplier(CephContext* const cct,
                           const RGWUserInfo& user_info)
-      : LocalApplier(cct, user_info, std::nullopt, LocalApplier::NO_SUBUSER,
+      : LocalApplier(cct, user_info, std::nullopt, {}, LocalApplier::NO_SUBUSER,
                      std::nullopt, LocalApplier::NO_ACCESS_KEY) {
     }
     bool is_admin_of(const rgw_owner& o) const {return false;}
@@ -240,14 +240,15 @@ class DefaultStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             std::optional<RGWAccountInfo> account,
+                            std::vector<IAM::Policy> policies,
                             const std::string& subuser,
                             const std::optional<uint32_t>& perm_mask,
                             const std::string& access_key_id) const override {
     auto apl = \
       rgw::auth::add_3rdparty(driver, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, driver, s,
-          rgw::auth::LocalApplier(cct, user_info, std::move(account),
-                                  subuser, perm_mask, access_key_id)));
+          LocalApplier(cct, user_info, std::move(account), std::move(policies),
+                       subuser, perm_mask, access_key_id)));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
