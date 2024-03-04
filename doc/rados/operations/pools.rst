@@ -25,7 +25,10 @@ Pools provide:
   resources. When setting up multiple pools, set an appropriate number of PGs
   for each pool and for the cluster as a whole. Each PG belongs to a specific
   pool: when multiple pools use the same OSDs, make sure that the **sum** of PG
-  replicas per OSD is in the desired PG-per-OSD target range. 
+  replicas per OSD is in the desired PG-per-OSD target range. See :ref:`Setting
+  the Number of Placement Groups <setting the number of placement groups>` for
+  instructions on how to manually set the number of placement groups per pool
+  (this procedure works only when the autoscaler is not used).
 
 - **CRUSH Rules**: When data is stored in a pool, the placement of the object
   and its replicas (or chunks, in the case of erasure-coded pools) in your
