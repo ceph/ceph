@@ -1133,11 +1133,18 @@ class TestMirroring(CephFSTestCase):
         while turns != len(typs):
             snapname = f'snap_{turns}'
             cleanup_and_create_with_type('d0', fnames)
+            # dump perf counters
+            res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
+            vbefore = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
             self.mount_a.run_shell(['mkdir', f'd0/.snap/{snapname}'])
             time.sleep(30)
             self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
                                    "client.mirror_remote@ceph", '/d0', snapname, turns+1)
             verify_types('d0', fnames, snapname)
+            res = self.mirror_daemon_command(f'counter dump for fs: {self.primary_fs_name}', 'counter', 'dump')
+            vafter = res[TestMirroring.PERF_COUNTER_KEY_NAME_CEPHFS_MIRROR_PEER][0]
+            self.assertGreater(vafter["counters"]["snaps_synced"], vbefore["counters"]["snaps_synced"])
+
             # next type
             typs.rotate(1)
             turns += 1
