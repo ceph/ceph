@@ -1363,8 +1363,8 @@ public:
   int bucket_index_clear_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const std::string& olh_tag, const rgw_obj& obj_instance, optional_yield y);
   int apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState& obj_state, RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     bufferlist& obj_tag, std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
-                    uint64_t *plast_ver, optional_yield y, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
-  int update_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState *state, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y,
+                    uint64_t *plast_ver, optional_yield y, bool null_verid, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
+  int update_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState *state, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y, bool null_verid,
 		 rgw_zone_set *zones_trace = nullptr, bool log_op = true);
   int clear_olh(const DoutPrefixProvider *dpp,
                 RGWObjectCtx& obj_ctx,
@@ -1383,6 +1383,7 @@ public:
 	      ceph::real_time unmod_since,
 	      bool high_precision_time,
               optional_yield y,
+              bool null_verid,
 	      rgw_zone_set *zones_trace = nullptr,
 	      bool log_data_change = false,
 	      bool skip_olh_obj_update = false); // can skip the OLH object update if, for example, repairing index
@@ -1393,7 +1394,7 @@ public:
 
   void check_pending_olh_entries(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& pending_entries, std::map<std::string, bufferlist> *rm_pending_entries);
   int remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::map<std::string, bufferlist>& pending_attrs, optional_yield y);
-  int follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjectCtx& ctx, RGWObjState *state, const rgw_obj& olh_obj, rgw_obj *target, optional_yield y);
+  int follow_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, RGWObjectCtx& ctx, RGWObjState *state, const rgw_obj& olh_obj, rgw_obj *target, optional_yield y, bool null_verid);
   int get_olh(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWOLHInfo *olh, optional_yield y);
 
   void gen_rand_obj_instance_name(rgw_obj_key *target_key);

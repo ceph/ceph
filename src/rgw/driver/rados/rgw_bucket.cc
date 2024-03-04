@@ -530,7 +530,7 @@ static int check_index_olh(rgw::sal::RadosStore* const rados_store,
             ldpp_dout(dpp, -1) << "ERROR failed to get state for: " << olh_entry.key.name << " get_obj_state(): " << cpp_strerror(-ret) << dendl;
             continue;
           }
-          ret = store->update_olh(dpp, obj_ctx, state, bucket->get_info(), obj, y);
+          ret = store->update_olh(dpp, obj_ctx, state, bucket->get_info(), obj, y, false);
           if (ret < 0) {
             ldpp_dout(dpp, -1) << "ERROR failed to update olh for: " << olh_entry.key.name << " update_olh(): " << cpp_strerror(-ret) << dendl;
             continue;

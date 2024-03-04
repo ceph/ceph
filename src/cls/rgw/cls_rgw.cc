@@ -149,7 +149,7 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
 static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key& obj_key,
                                RGWModifyOp op, const string& tag, real_time timestamp,
                                const rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
-                               string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name, rgw_zone_set *zones_trace)
+                               string& max_marker, uint16_t bilog_flags, bool null_verid, string *owner, string *owner_display_name, rgw_zone_set *zones_trace)
 {
   bufferlist bl;
 
@@ -164,6 +164,7 @@ static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key&
   entry.index_ver = index_ver;
   entry.tag = tag;
   entry.bilog_flags = bilog_flags;
+  entry.null_verid = null_verid;
   if (owner) {
     entry.owner = *owner;
   }
@@ -1183,7 +1184,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (log_op) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
 			     entry.ver, CLS_RGW_STATE_COMPLETE, header.ver,
-			     header.max_marker, op.bilog_flags | RGW_BILOG_NULL_VERSION, NULL, NULL,
+			     header.max_marker, op.bilog_flags, entry.null_verid, NULL, NULL,
 			     &op.zones_trace);
     if (rc < 0) {
       CLS_LOG_BITX(bitx_inst, 0,
@@ -1862,7 +1863,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   RGWModifyOp operation = (op.delete_marker ? CLS_RGW_OP_LINK_OLH_DM : CLS_RGW_OP_LINK_OLH);
   ret = log_index_operation(hctx, op.key, operation, op.op_tag,
                             entry.meta.mtime, ver,
-                            CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP,
+                            CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, false,
                             powner, powner_display_name, &op.zones_trace);
   if (ret < 0)
     return ret;
@@ -2019,7 +2020,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
                             mtime, ver,
                             CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
-                            op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP | RGW_BILOG_NULL_VERSION, NULL, NULL, &op.zones_trace);
+                            op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, op.null_verid, NULL, NULL, &op.zones_trace);
   if (ret < 0)
     return ret;
 
@@ -2354,7 +2355,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 	}
         if (log_op && cur_disk.exists && !header.syncstopped) {
           ret = log_index_operation(hctx, cur_disk.key, CLS_RGW_OP_DEL, cur_disk.tag, cur_disk.meta.mtime,
-                                    cur_disk.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL, NULL);
+                                    cur_disk.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, false, NULL, NULL, NULL);
           if (ret < 0) {
             CLS_LOG_BITX(bitx_inst, 0, "ERROR: %s: failed to log operation ret=%d",
 			 __func__, ret);
@@ -2388,7 +2389,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
 	}
         if (log_op && !header.syncstopped) {
           ret = log_index_operation(hctx, cur_change.key, CLS_RGW_OP_ADD, cur_change.tag, cur_change.meta.mtime,
-                                    cur_change.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, NULL, NULL, NULL);
+                                    cur_change.ver, CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, 0, false, NULL, NULL, NULL);
           if (ret < 0) {
 	    CLS_LOG_BITX(bitx_inst, 0, "ERROR: %s: failed to log operation ret=%d", __func__, ret);
             return ret;
