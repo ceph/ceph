@@ -6450,6 +6450,11 @@ int Server::xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_pt
       return -CEPHFS_ENODATA;
     }
 
+    if ((flags & CEPH_XATTR_REMOVE2) && !(xattrs && xattrs->count(mempool::mds_co::string(xattr_name)))) {
+      dout(10) << "setxattr '" << xattr_name << "' XATTR_REMOVE2 and CEPHFS_ENODATA on " << *cur << dendl;
+      return -CEPHFS_ENODATA;
+    }
+
     return 0;
   }
 
@@ -6659,7 +6664,7 @@ void Server::handle_client_setxattr(const MDRequestRef& mdr)
   pi.inode->change_attr++;
   pi.inode->xattr_version++;
 
-  if ((flags & CEPH_XATTR_REMOVE)) {
+  if ((flags & (CEPH_XATTR_REMOVE | CEPH_XATTR_REMOVE2))) {
     std::invoke(handler->removexattr, this, cur, pi.xattrs, xattr_op);
   } else {
     std::invoke(handler->setxattr, this, cur, pi.xattrs, xattr_op);
