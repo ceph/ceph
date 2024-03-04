@@ -2137,9 +2137,13 @@ bool RGWFormPost::is_integral()
   bool r = false;
 
   try {
-    get_owner_info(s, s->user->get_info());
-    s->auth.identity = rgw::auth::transform_old_authinfo(
-        s->user->get_info(), std::nullopt);
+    s->user = get_owner_info(s);
+    auto result = rgw::auth::transform_old_authinfo(
+        this, s->yield, driver, s->user.get());
+    if (!result) {
+      return false;
+    }
+    s->auth.identity = std::move(result).value();
   } catch (...) {
     ldpp_dout(this, 5) << "cannot get user_info of account's owner" << dendl;
     return false;
@@ -2180,8 +2184,8 @@ bool RGWFormPost::is_integral()
   return r;
 }
 
-void RGWFormPost::get_owner_info(const req_state* const s,
-                                   RGWUserInfo& owner_info) const
+auto RGWFormPost::get_owner_info(const req_state* const s) const
+  -> std::unique_ptr<rgw::sal::User>
 {
   /* We cannot use req_state::bucket_name because it isn't available
    * now. It will be initialized in RGWHandler_REST_SWIFT::postauth_init(). */
@@ -2243,7 +2247,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
     throw -EPERM;
   }
 
-  owner_info = user->get_info();
+  return user;
 }
 
 int RGWFormPost::get_params(optional_yield y)

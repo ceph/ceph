@@ -254,8 +254,7 @@ class RGWFormPost : public RGWPostObj_ObjStore {
   bool is_next_file_to_upload() override;
   bool is_integral();
   bool is_non_expired();
-  void get_owner_info(const req_state* s,
-                      RGWUserInfo& owner_info) const;
+  std::unique_ptr<rgw::sal::User> get_owner_info(const req_state* s) const;
 
   parts_collection_t ctrl_parts;
   boost::optional<post_form_part> current_data_part;

@@ -6292,18 +6292,11 @@ rgw::auth::s3::LocalEngine::authenticate(
   }*/
 
   std::optional<RGWAccountInfo> account;
-  if (!user->get_info().account_id.empty()) {
-    account.emplace();
-    rgw::sal::Attrs attrs; // ignored
-    RGWObjVersionTracker objv; // ignored
-    int r = driver->load_account_by_id(dpp, y, user->get_info().account_id,
-                                       *account, attrs, objv);
-    if (r < 0) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to load account "
-          << user->get_info().account_id << " for user " << *user
-          << ": " << cpp_strerror(r) << dendl;
-      return result_t::deny(-EPERM);
-    }
+  std::vector<IAM::Policy> policies;
+  int ret = load_account_and_policies(dpp, y, driver, user->get_info(),
+                                      user->get_attrs(), account, policies);
+  if (ret < 0) {
+    return result_t::deny(-EPERM);
   }
 
   const auto iter = user->get_info().access_keys.find(access_key_id);
@@ -6315,8 +6308,9 @@ rgw::auth::s3::LocalEngine::authenticate(
 
   /* Ignore signature for HTTP OPTIONS */
   if (s->op_type == RGW_OP_OPTIONS_CORS) {
-    auto apl = apl_factory->create_apl_local(cct, s, user->get_info(), std::move(account),
-                                             k.subuser, std::nullopt, access_key_id);
+    auto apl = apl_factory->create_apl_local(
+        cct, s, user->get_info(), std::move(account), std::move(policies),
+        k.subuser, std::nullopt, access_key_id);
     return result_t::grant(std::move(apl), completer_factory(k.key));
   }
 
@@ -6335,8 +6329,9 @@ rgw::auth::s3::LocalEngine::authenticate(
     return result_t::reject(-ERR_SIGNATURE_NO_MATCH);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(), std::move(account),
-                                           k.subuser, std::nullopt, access_key_id);
+  auto apl = apl_factory->create_apl_local(
+      cct, s, user->get_info(), std::move(account), std::move(policies),
+      k.subuser, std::nullopt, access_key_id);
   return result_t::grant(std::move(apl), completer_factory(k.key));
 }
 
@@ -6535,24 +6530,17 @@ rgw::auth::s3::STSEngine::authenticate(
     }
 
     std::optional<RGWAccountInfo> account;
-    if (!user->get_info().account_id.empty()) {
-      account.emplace();
-      rgw::sal::Attrs attrs; // ignored
-      RGWObjVersionTracker objv; // ignored
-      int r = driver->load_account_by_id(dpp, y, user->get_info().account_id,
-                                         *account, attrs, objv);
-      if (r < 0) {
-        ldpp_dout(dpp, 1) << "ERROR: failed to load account "
-            << user->get_info().account_id << " for user " << *user
-            << ": " << cpp_strerror(r) << dendl;
-        return result_t::deny(-EPERM);
-      }
+    std::vector<IAM::Policy> policies;
+    ret = load_account_and_policies(dpp, y, driver, user->get_info(),
+                                    user->get_attrs(), account, policies);
+    if (ret < 0) {
+      return result_t::deny(-EPERM);
     }
 
     string subuser;
-    auto apl = local_apl_factory->create_apl_local(cct, s, user->get_info(),
-                                                   std::move(account), subuser,
-                                                   token.perm_mask, std::string(_access_key_id));
+    auto apl = local_apl_factory->create_apl_local(
+        cct, s, user->get_info(), std::move(account), std::move(policies),
+        subuser, token.perm_mask, std::string(_access_key_id));
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   }
 }

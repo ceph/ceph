@@ -82,14 +82,119 @@ static bool match_account_or_tenant(const std::optional<RGWAccountInfo>& account
       || (tenant == expected);
 }
 
-auto transform_old_authinfo(const RGWUserInfo& user,
-                            std::optional<RGWAccountInfo> account)
+static void load_inline_policy(CephContext* cct, const bufferlist& bl,
+                               const string* tenant,
+                               std::vector<rgw::IAM::Policy>& policies)
+{
+  map<string, string> policy_map;
+  using ceph::decode;
+  decode(policy_map, bl);
+  for (const auto& [name, policy] : policy_map) {
+    policies.emplace_back(cct, tenant, policy, false);
+  }
+}
+
+static void load_managed_policy(CephContext* cct, const bufferlist& bl,
+                                std::vector<rgw::IAM::Policy>& policies)
+{
+  rgw::IAM::ManagedPolicies policy_set;
+  using ceph::decode;
+  decode(policy_set, bl);
+  for (const auto& arn : policy_set.arns) {
+    if (auto p = rgw::IAM::get_managed_policy(cct, arn); p) {
+      policies.push_back(std::move(*p));
+    }
+  }
+}
+
+static int load_group_policies(const DoutPrefixProvider* dpp,
+                               optional_yield y,
+                               rgw::sal::Driver* driver,
+                               const std::string* tenant,
+                               std::string_view group_id,
+                               std::vector<rgw::IAM::Policy>& policies)
+{
+  RGWGroupInfo info;
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  int r = driver->load_group_by_id(dpp, y, group_id, info, attrs, objv);
+  if (r < 0) {
+    return r;
+  }
+
+  CephContext* cct = dpp->get_cct();
+  if (auto i = attrs.find(RGW_ATTR_IAM_POLICY); i != attrs.end()) {
+    load_inline_policy(cct, i->second, tenant, policies);
+  }
+  if (auto i = attrs.find(RGW_ATTR_MANAGED_POLICY); i != attrs.end()) {
+    load_managed_policy(cct, i->second, policies);
+  }
+  return 0;
+}
+
+int load_account_and_policies(const DoutPrefixProvider* dpp,
+                              optional_yield y,
+                              sal::Driver* driver,
+                              const RGWUserInfo& info,
+                              const sal::Attrs& attrs,
+                              std::optional<RGWAccountInfo>& account,
+                              std::vector<IAM::Policy>& policies)
+{
+  if (!info.account_id.empty()) {
+    account.emplace();
+    rgw::sal::Attrs attrs; // ignored
+    RGWObjVersionTracker objv; // ignored
+    int r = driver->load_account_by_id(dpp, y, info.account_id,
+                                       *account, attrs, objv);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to load account "
+          << info.account_id << " for user " << info.user_id
+          << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  // non-account identity policy is restricted to the current tenant
+  const std::string* policy_tenant = info.account_id.empty()
+      ? &info.user_id.tenant : nullptr;
+
+  // load user policies from user attrs
+  CephContext* cct = dpp->get_cct();
+  if (auto bl = attrs.find(RGW_ATTR_USER_POLICY); bl != attrs.end()) {
+    load_inline_policy(cct, bl->second, policy_tenant, policies);
+  }
+  if (auto bl = attrs.find(RGW_ATTR_MANAGED_POLICY); bl != attrs.end()) {
+    load_managed_policy(cct, bl->second, policies);
+  }
+
+  // load each group and its policies
+  for (const auto& id : info.group_ids) {
+    int r = load_group_policies(dpp, y, driver, policy_tenant, id, policies);
+    if (r == -ENOENT) {
+      // in multisite, metadata sync may race to replicate the user before its
+      // group. ignore ENOENT here so we don't reject all the user's requests
+      // in the meantime
+      ldpp_dout(dpp, 1) << "WARNING: skipping nonexistent group id " << id
+          << " for user " << info.user_id << ": " << cpp_strerror(r) << dendl;
+    } else if (r < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to load group id " << id
+          << " for user " << info.user_id << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+static auto transform_old_authinfo(const RGWUserInfo& user,
+                                   std::optional<RGWAccountInfo> account,
+                                   std::vector<IAM::Policy> policies)
   -> std::unique_ptr<rgw::auth::Identity>
 {
   /* This class is not intended for public use. Should be removed altogether
    * with this function after moving all our APIs to the new authentication
    * infrastructure. */
-  class DummyIdentityApplier : public rgw::auth::Identity {
+  class DummyIdentityApplier : public rgw::auth::IdentityApplier {
     /* For this particular case it's OK to use rgw_user structure to convey
      * the identity info as this was the policy for doing that before the
      * new auth. */
@@ -99,15 +204,18 @@ auto transform_old_authinfo(const RGWUserInfo& user,
     const bool is_admin;
     const uint32_t type;
     const std::optional<RGWAccountInfo> account;
+    const std::vector<IAM::Policy> policies;
   public:
     DummyIdentityApplier(const RGWUserInfo& user,
-                         std::optional<RGWAccountInfo> account)
+                         std::optional<RGWAccountInfo> account,
+                         std::vector<IAM::Policy> policies)
       : id(user.user_id),
         display_name(user.display_name),
         path(user.path),
         is_admin(user.admin),
         type(user.type),
-        account(std::move(account))
+        account(std::move(account)),
+        policies(std::move(policies))
     {}
 
     ACLOwner get_aclowner() const {
@@ -176,33 +284,42 @@ auto transform_old_authinfo(const RGWUserInfo& user,
       out << "RGWDummyIdentityApplier(auth_id=" << id
           << ", is_admin=" << is_admin << ")";
     }
+
+    void load_acct_info(const DoutPrefixProvider* dpp,
+                        RGWUserInfo& user_info) const override {
+      // noop, this user info was passed in on construction
+    }
+
+    void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const {
+      // copy our identity policies into req_state
+      s->iam_identity_policies.insert(s->iam_identity_policies.end(),
+                                      policies.begin(), policies.end());
+    }
   };
 
-  return std::make_unique<DummyIdentityApplier>(user, std::move(account));
+  return std::make_unique<DummyIdentityApplier>(
+      user, std::move(account), std::move(policies));
 }
 
 auto transform_old_authinfo(const DoutPrefixProvider* dpp,
                             optional_yield y,
-                            rgw::sal::Driver* driver,
-                            const RGWUserInfo& user)
+                            sal::Driver* driver,
+                            sal::User* user)
   -> tl::expected<std::unique_ptr<Identity>, int>
 {
+  const RGWUserInfo& info = user->get_info();
+  const sal::Attrs& attrs = user->get_attrs();
+
   std::optional<RGWAccountInfo> account;
-  if (!user.account_id.empty()) {
-    account.emplace();
-    rgw::sal::Attrs attrs; // ignored
-    RGWObjVersionTracker objv; // ignored
-    int r = driver->load_account_by_id(dpp, y, user.account_id,
-                                       *account, attrs, objv);
-    if (r < 0) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to load account "
-          << user.account_id << " for user " << user.user_id
-          << ": " << cpp_strerror(r) << dendl;
-      return tl::unexpected(r);
-    }
+  std::vector<IAM::Policy> policies;
+
+  int r = load_account_and_policies(dpp, y, driver, info, attrs,
+                                    account, policies);
+  if (r < 0) {
+    return tl::unexpected(r);
   }
 
-  return transform_old_authinfo(user, std::move(account));
+  return transform_old_authinfo(info, std::move(account), std::move(policies));
 }
 
 } /* namespace auth */
@@ -626,9 +743,13 @@ const std::string rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY;
 ACLOwner rgw::auth::RemoteApplier::get_aclowner() const
 {
   ACLOwner owner;
-  // TODO: handle account ownership
-  owner.id = info.acct_user;
-  owner.display_name = info.acct_name;
+  if (account) {
+    owner.id = account->id;
+    owner.display_name = account->name;
+  } else {
+    owner.id = info.acct_user;
+    owner.display_name = info.acct_name;
+  }
   return owner;
 }
 
@@ -822,7 +943,10 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 
     if (user->load_user(dpp, null_yield) >= 0) {
       /* Succeeded. */
-      user_info = user->get_info();
+      (void) load_account_and_policies(dpp, null_yield, driver, user->get_info(),
+                                       user->get_attrs(), account, policies);
+
+      user_info = std::move(user->get_info());
       return;
     }
   }
@@ -833,7 +957,10 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 	;	/* suppress lookup for id used by "other" protocol */
   else if (user->load_user(dpp, null_yield) >= 0) {
     /* Succeeded. */
-    user_info = user->get_info();
+    (void) load_account_and_policies(dpp, null_yield, driver, user->get_info(),
+                                     user->get_attrs(), account, policies);
+
+    user_info = std::move(user->get_info());
     return;
   }
 
@@ -841,6 +968,13 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   create_account(dpp, acct_user, implicit_tenant, user_info);
 
   /* Succeeded if we are here (create_account() hasn't throwed). */
+}
+
+void rgw::auth::RemoteApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
+{
+  // copy our identity policies into req_state
+  s->iam_identity_policies.insert(s->iam_identity_policies.end(),
+                                  policies.begin(), policies.end());
 }
 
 /* rgw::auth::LocalApplier */
@@ -938,6 +1072,13 @@ void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWU
   /* Load the account that belongs to the authenticated identity. An extra call
    * to RADOS may be safely skipped in this case. */
   user_info = this->user_info;
+}
+
+void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
+{
+  // copy our identity policies into req_state
+  s->iam_identity_policies.insert(s->iam_identity_policies.end(),
+                                  policies.begin(), policies.end());
 }
 
 void rgw::auth::LocalApplier::write_ops_log_entry(rgw_log_entry& entry) const
@@ -1086,7 +1227,7 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
     rgw_get_anon_user(user_info);
 
     auto apl = \
-      apl_factory->create_apl_local(cct, s, user_info, std::nullopt,
+      apl_factory->create_apl_local(cct, s, user_info, std::nullopt, {},
                                     rgw::auth::LocalApplier::NO_SUBUSER,
                                     std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
     return result_t::grant(std::move(apl));
