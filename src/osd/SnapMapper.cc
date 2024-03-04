@@ -147,7 +147,7 @@ int OSDriver::get_next_or_current(
     ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
   ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
     assert(vals.size() == 1);
-    *next_or_current = std::make_pair(key, std::move(vals[0]));
+    *next_or_current = std::make_pair(key, std::move(vals.begin()->second));
     return 0;
   }, FuturizedStore::Shard::read_errorator::all_same_way(
     [next_or_current, &key, this] {
