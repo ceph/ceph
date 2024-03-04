@@ -2374,6 +2374,7 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, get_osdmap_epoch(), num);
     t.register_on_commit(fin);
+    osd->inc_num_deletes_in_pgs(num);
   } else {
     if (cct->_conf->osd_inject_failure_on_pg_removal) {
       _exit(1);

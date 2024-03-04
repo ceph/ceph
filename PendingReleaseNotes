@@ -40,25 +40,21 @@
 * RGW: GetObject and HeadObject requests now return a x-rgw-replicated-at
   header for replicated objects. This timestamp can be compared against the
   Last-Modified header to determine how long the object took to replicate.
-* ceph df detail output has got META section in plain format:
-  * new column 'STORED' - amount of metadata the cluster keeps at main space
-    (as meta objects: osdmaps, snaptrim data, etc)
-  * new column 'USED' - total space allocated for metadata in STORED
-    column above.
-  * new column 'PGMETA' - amount of PG-related metadata the cluster keeps
-    in DB (PG logs and similar)
-  * new column 'OMAP' - amount of the remaining internal metadata the cluster
-    keeps in DB as OMAP records for meta objects.
-* ceph df detail output has got 'meta' object with the following fields
-  in json format:
-  * 'stored' field  - amount of metadata the cluster keeps at main space
-    (as meta objects: osdmaps, snaptrim data, etc)
-  * 'total_used' field - total space allocated for metadata in STORED
-    column above.
-  * 'total_pgmeta' field - amount of PG-related metadata the cluster keeps
-    in DB (PG logs and similar)
-  * 'other_omap' - amount of the remaining internal metadata the cluster
-    keeps in DB as OMAP records for meta objects.
+* ceph df detail output has got AUX section in plain format. It tracks internal
+  metadata pool and pools being wiped. The columns are:
+  * new column 'USED' - space allocated at main storage fo meta objects:
+    osdmaps, snaptrim data, etc.
+  * new column 'META' - amount of PG-related metadata the pool keeps
+    in DB (PG logs and similar).
+  * new column 'OMAP' - amount of OMAP data the pool contains.
+* ceph df detail output has got 'aux_pool_sum' array object in json format.
+  It tracks internal metadata pool and pools being wiped. The array entries
+  have the following fields in json format:
+  * 'bytes_used' field - space allocated at main storage fo meta objects:
+    osdmaps, snaptrim data, etc.
+  * 'meta' field - amount of PG-related metadata the pool keeps
+    in DB (PG logs and similar).
+  * 'omap' - amount of OMAP data the pool contains.
 * The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
   python dependencies are now available in EPEL9.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in

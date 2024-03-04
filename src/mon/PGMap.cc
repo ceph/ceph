@@ -48,7 +48,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  uint8_t v = 4;
+  uint8_t v = 5;
   assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
   ENCODE_START(v, 1, bl);
   encode(num_pg, bl);
@@ -69,12 +69,14 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(avail_space_by_rule, bl);
   encode(purged_snaps, bl);
   encode(osd_sum_by_class, bl, features);
+  encode(stray_pool_sum, bl, features);
+  encode(cleanup_ops_sum_delta, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(4, p);
+  DECODE_START(5, p);
   assert(struct_v >= 4);
   decode(num_pg, p);
   decode(num_pg_active, p);
@@ -94,6 +96,13 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   decode(avail_space_by_rule, p);
   decode(purged_snaps, p);
   decode(osd_sum_by_class, p);
+  if (struct_v >= 5) {
+    decode(stray_pool_sum, p);
+    decode(cleanup_ops_sum_delta, p);
+  } else {
+    stray_pool_sum.clear();
+    cleanup_ops_sum_delta = 0;
+  }
   DECODE_FINISH(p);
 }
 
@@ -165,6 +174,14 @@ void PGMapDigest::dump(ceph::Formatter *f) const
       f->close_section();
     }
     f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("stray_pool_sum");
+  for (auto& p : num_pg_by_osd) {
+    f->open_object_section("pool_stat");
+    f->dump_unsigned("poolid", p.first);
+    f->dump_object("statfs", p.second);
     f->close_section();
   }
   f->close_section();
@@ -301,9 +318,12 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
   overall_client_io_rate_summary(f, &ss_client_io);
   ostringstream ss_cache_io;
   overall_cache_io_rate_summary(f, &ss_cache_io);
+  ostringstream ss_cleanup_io;
+  overall_cleanup_io_rate_summary(f, &ss_cleanup_io);
 
   if (!f && (ss_client_io.str().length() || ss_rec_io.str().length()
-             || ss_cache_io.str().length())) {
+             || ss_cache_io.str().length()
+             || ss_cleanup_io.str().length())) {
     *out << "\n \n";
     *out << "  io:\n";
   }
@@ -314,6 +334,8 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
     *out << "    recovery: " << ss_rec_io.str() << "\n";
   if (!f && ss_cache_io.str().length())
     *out << "    cache:    " << ss_cache_io.str() << "\n";
+  if (!f && ss_cleanup_io.str().length())
+    *out << "    cleanup:  " << ss_cleanup_io.str() << "\n";
 }
 
 void PGMapDigest::print_oneline_summary(ceph::Formatter *f, ostream *out) const
@@ -691,6 +713,21 @@ void PGMapDigest::pool_cache_io_rate_summary(ceph::Formatter *f, ostream *out,
   cache_io_rate_summary(f, out, p->second.first, ts->second);
 }
 
+void PGMapDigest::overall_cleanup_io_rate_summary(ceph::Formatter *f, ostream *out) const
+{
+  auto pgs = osd_sum.num_deleting_pgs;
+  if (int64_t(cleanup_ops_sum_delta) > 0 || pgs > 0) {
+    int64_t ops = cleanup_ops_sum_delta / (double)stamp_delta;
+    if (f) {
+      f->dump_int("removing_pgs", pgs);
+      f->dump_int("cleaned_objects_sec", ops);
+    } else {
+      *out << pgs << " PGs, ";
+      *out << ops << " objects/s";
+    }
+  }
+}
+
 ceph_statfs PGMapDigest::get_statfs(OSDMap &osdmap,
 				    std::optional<int64_t> data_pool) const
 {
@@ -728,9 +765,6 @@ void PGMapDigest::dump_pool_stats_full(
   ceph::Formatter *f,
   bool verbose) const
 {
-  if (verbose) {
-    dump_meta_pool_stats(ss, f);
-  }
   TextTable tbl;
 
   if (f) {
@@ -814,9 +848,12 @@ void PGMapDigest::dump_pool_stats_full(
     *ss << "--- POOLS ---\n";
     *ss << tbl;
   }
+  if (verbose) {
+    dump_meta_and_stray_pool_stats(ss, f);
+  }
 }
 
-void PGMapDigest::dump_meta_pool_stats(
+void PGMapDigest::dump_meta_and_stray_pool_stats(
   stringstream* ss,
   ceph::Formatter* f) const
 {
@@ -824,25 +861,54 @@ void PGMapDigest::dump_meta_pool_stats(
   auto it = pg_pool_sum.find(-1);
   if (it != pg_pool_sum.end()) {
     meta_pool_stats = &(it->second);
+  }
+  if (!stray_pool_sum.empty() || meta_pool_stats) {
     if (f) {
-      f->open_object_section("meta");
-      f->dump_int("stored", meta_pool_stats->store_stats.data_stored);
-      f->dump_int("total_used", meta_pool_stats->store_stats.allocated);
-      f->dump_int("total_pgmeta", meta_pool_stats->store_stats.internal_metadata);
-      f->dump_int("other_omap", meta_pool_stats->store_stats.omap_allocated);
+      f->open_array_section("aux_pool_sum");
+      if (meta_pool_stats) {
+        f->open_object_section("pool_stat");
+        f->dump_string("name", "meta");
+        f->dump_int("id", -1);
+        f->dump_int("bytes_used", meta_pool_stats->store_stats.allocated);
+        f->dump_int("meta", meta_pool_stats->store_stats.internal_metadata);
+        f->dump_int("omap", meta_pool_stats->store_stats.omap_allocated);
+        f->close_section();
+      }
+      for (auto& [pool, statfs] : stray_pool_sum) {
+        f->open_object_section("pool_stat");
+        f->dump_string("name", "<wiping>");
+        f->dump_int("id", pool);
+        f->dump_int("bytes_used", statfs.allocated);
+        f->dump_int("meta", statfs.internal_metadata);
+        f->dump_int("omap", statfs.omap_allocated);
+        f->close_section();
+      }
       f->close_section();
     } else {
       TextTable tbl_meta;
-      tbl_meta.define_column("STORED", TextTable::RIGHT, TextTable::RIGHT);
+      tbl_meta.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
+      tbl_meta.define_column("ID", TextTable::RIGHT, TextTable::RIGHT);
       tbl_meta.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
-      tbl_meta.define_column("PGMETA", TextTable::RIGHT, TextTable::RIGHT);
+      tbl_meta.define_column("META", TextTable::RIGHT, TextTable::RIGHT);
       tbl_meta.define_column("OMAP", TextTable::RIGHT, TextTable::RIGHT);
-      *ss << "--- META ---\n";
-      tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.data_stored));
-      tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.allocated));
-      tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.internal_metadata));
-      tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.omap_allocated));
-      tbl_meta << TextTable::endrow;
+      *ss << " \n";
+      *ss << "---  AUX  ---\n";
+      if (meta_pool_stats) {
+        tbl_meta << "meta";
+        tbl_meta << stringify(-1);
+        tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.allocated));
+        tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.internal_metadata));
+        tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.omap_allocated));
+        tbl_meta << TextTable::endrow;
+      }
+      for (auto& [pool, statfs] : stray_pool_sum) {
+        tbl_meta << "<wiping>";
+        tbl_meta << stringify(pool);
+        tbl_meta << stringify(byte_u_t(statfs.allocated));
+        tbl_meta << stringify(byte_u_t(statfs.internal_metadata));
+        tbl_meta << stringify(byte_u_t(statfs.omap_allocated));
+        tbl_meta << TextTable::endrow;
+      }
       *ss << tbl_meta;
       *ss << " \n";
     }
@@ -1156,6 +1222,10 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   pool_stat_t pg_sum_old = pg_sum;
   mempool::pgmap::unordered_map<int32_t, pool_stat_t> pg_pool_sum_old;
   pg_pool_sum_old = pg_pool_sum;
+  per_osd_per_pool_statfs_t stray_statfs_inc;
+  std::set<int> reported_osds;
+
+  uint64_t num_deletes_old = osd_sum.num_deletes_in_pgs;
 
   for (auto p = inc.pg_stat_updates.begin();
        p != inc.pg_stat_updates.end();
@@ -1195,6 +1265,27 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
         pool_statfs_iter->second = statfs_inc;
       }
       pool_sum_ref.add(statfs_inc);
+      reported_osds.emplace(update_osd); // note OSD which reported anything
+    } else {
+      stray_statfs_inc[update_osd].emplace(update_pool, statfs_inc);
+    }
+  }
+  // Replace stray pool statfs completely for the osds reported in the
+  // incremental
+  for (auto it = stray_statfs_inc.begin(); it != stray_statfs_inc.end(); it++) {
+    for (auto& [pool, stats] : it->second) {
+      stray_pool_sum[pool].add(stats);
+    }
+    stray_pool_statfs[it->first].swap(it->second);
+    reported_osds.erase(it->first);
+    for (auto& [pool, stats] : it->second) {
+      auto p = stray_pool_sum.find(pool);
+      if (p != stray_pool_sum.end()) {
+        p->second.sub(stats);
+        if (p->second.is_zero()) {
+          stray_pool_sum.erase(p);
+        }
+      }
     }
   }
 
@@ -1208,6 +1299,13 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     if (t == osd_stat.end()) {
       osd_stat.insert(make_pair(osd, new_stats));
     } else {
+      // Adjust old delete counter to handle counter's fluctuations
+      // when osd gets in/out or started up.
+      if (t->second.num_deletes_in_pgs > new_stats.num_deletes_in_pgs) {
+        num_deletes_old -= t->second.num_deletes_in_pgs;
+      } else if (t->second.num_deletes_in_pgs == 0 ) {
+        num_deletes_old += new_stats.num_deletes_in_pgs;
+      }
       stat_osd_sub(t->first, t->second);
       t->second = new_stats;
     }
@@ -1236,21 +1334,42 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     }
   }
 
-  for (auto p = inc.get_osd_stat_rm().begin();
-       p != inc.get_osd_stat_rm().end();
-       ++p) {
-    auto t = osd_stat.find(*p);
+  for (auto osd = inc.get_osd_stat_rm().begin();
+       osd != inc.get_osd_stat_rm().end();
+       ++osd) {
+    if (cct)
+      dout(20) << __func__ << " osd removed: " << *osd << dendl;
+    auto t = osd_stat.find(*osd);
     if (t != osd_stat.end()) {
       stat_osd_sub(t->first, t->second);
       osd_stat.erase(t);
     }
     for (auto i = pool_statfs.begin();  i != pool_statfs.end();) {
-      if (i->first.second == *p) {
+      if (i->first.second == *osd) {
 	pg_pool_sum[i->first.first].sub(i->second);
 	i = pool_statfs.erase(i);
       } else {
         ++i;
       }
+    }
+    reported_osds.emplace(*osd); // to trigger statfs cleanup below
+  }
+
+  // and now remove stray pools stats for the osds which reported no
+  // stray pools or have been deleted themselves.
+  for (auto osd : reported_osds) {
+    auto it = stray_pool_statfs.find(osd);
+    if (it != stray_pool_statfs.end()) {
+      for (auto& [pool, stats] : it->second) {
+        auto p = stray_pool_sum.find(pool);
+        if (p != stray_pool_sum.end()) {
+          p->second.sub(stats);
+          if (p->second.is_zero()) {
+            stray_pool_sum.erase(p);
+          }
+        }
+      }
+      stray_pool_statfs.erase(it);
     }
   }
 
@@ -1262,15 +1381,22 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     // calculate a delta, and average over the last 2 deltas.
     pool_stat_t d = pg_sum;
     d.stats.sub(pg_sum_old.stats);
+    ceph_assert(cleanup_sum_deltas.size() == pg_sum_deltas.size());
     pg_sum_deltas.push_back(make_pair(d, delta_t));
+
+    cleanup_sum_deltas.push_back(
+      osd_sum.num_deletes_in_pgs - num_deletes_old);
     stamp_delta += delta_t;
     pg_sum_delta.stats.add(d.stats);
+    cleanup_ops_sum_delta += cleanup_sum_deltas.back();
     auto smooth_intervals =
       cct ? cct->_conf.get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
     while (pg_sum_deltas.size() > smooth_intervals) {
       pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
+      cleanup_ops_sum_delta -= cleanup_sum_deltas.front();
       stamp_delta -= pg_sum_deltas.front().second;
       pg_sum_deltas.pop_front();
+      cleanup_sum_deltas.pop_front();
     }
   }
   stamp = inc.stamp;
@@ -1287,6 +1413,16 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     last_osdmap_epoch = inc.osdmap_epoch;
   if (inc.pg_scan)
     last_pg_scan = inc.pg_scan;
+
+  // sanity print
+  if (cct &&
+      cct->_conf->subsys.should_gather<ceph_subsys_osd, 20>()) {
+    size_t count = 0;
+    for (auto& [o, pools] : stray_pool_statfs) {
+      count += pools.size();
+    }
+    dout(20) << __func__ << " " << "stray count=" << count << dendl;
+  }
 }
 
 void PGMap::calc_stats()
@@ -2219,6 +2355,7 @@ void PGMap::clear_delta()
 {
   pg_sum_delta = pool_stat_t();
   pg_sum_deltas.clear();
+  cleanup_sum_deltas.clear();
   stamp_delta = utime_t();
 }
 
