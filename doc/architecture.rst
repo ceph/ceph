@@ -133,8 +133,8 @@ massive scale by distributing the work to all the OSD daemons in the cluster
 and all the clients that communicate with them. CRUSH uses intelligent data
 replication to ensure resiliency, which is better suited to hyper-scale
 storage. The following sections provide additional details on how CRUSH works.
-For a detailed discussion of CRUSH, see `CRUSH - Controlled, Scalable,
-Decentralized Placement of Replicated Data`_.
+For an in-depth, academic discussion of CRUSH, see `CRUSH - Controlled,
+Scalable, Decentralized Placement of Replicated Data`_.
 
 .. index:: architecture; cluster map
 
