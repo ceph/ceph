@@ -5134,7 +5134,7 @@ int RGWBucketShardIncrementalSyncCR::operate(const DoutPrefixProvider *dpp)
             tn->log(20, SSTR("entry->is_null_verid=" << entry->is_null_verid()));
             using SyncCR = RGWBucketSyncSingleEntryCR<string, rgw_obj_key>;
             spawn(new SyncCR(sc, sync_pipe, key,
-                             entry->is_versioned(), entry->is_null_verid(), versioned_epoch,
+                             entry->is_versioned(), entry->null_verid, versioned_epoch,
                              entry->timestamp, owner, entry->op, entry->state,
                              cur_id, &marker_tracker, entry->zones_trace, tn),
                   false);
