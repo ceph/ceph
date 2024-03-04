@@ -17,19 +17,9 @@ uint64_t AllocatorLevel::l2_allocs = 0;
 
 inline interval_t _align2units(uint64_t offset, uint64_t len, uint64_t min_length)
 {
-  interval_t res;
-  if (len >= min_length) {
-    res.offset = p2roundup(offset, min_length);
-    auto delta_off = res.offset - offset;
-    if (len > delta_off) {
-      res.length = len - delta_off;
-      res.length = p2align<uint64_t>(res.length, min_length);
-      if (res.length) {
-	return res;
-      }
-    }
-  }
-  return interval_t();
+  return len >= min_length ?
+    interval_t(offset, p2align<uint64_t>(len, min_length)) :
+    interval_t();
 }
 
 interval_t AllocatorLevel01Loose::_get_longest_from_l0(uint64_t pos0,
