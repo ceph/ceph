@@ -3568,7 +3568,8 @@ bid_t BlueStore::ExtentMap::allocate_spanning_blob_id()
 
 void BlueStore::ExtentMap::reshard(
   KeyValueDB *db,
-  KeyValueDB::Transaction t)
+  KeyValueDB::Transaction t,
+  uint32_t segment_size)
 {
   auto cct = onode->c->store->cct; // used by dout
 
@@ -3651,12 +3652,11 @@ void BlueStore::ExtentMap::reshard(
   dout(20) << __func__ << "  extent_avg " << extent_avg << ", target " << target
 	   << ", slop " << slop << dendl;
 
-  uint32_t data_segment_size = cct->_conf->bluestore_segment_data_size;
-  uint32_t next_boundary = data_segment_size;
-  uint32_t encoded_segment_estimate = /* bytes / ((needs_reshard_end - needs_reshard_begin) / data_segment_size) */
-    bytes * data_segment_size / (data_reshard_end - needs_reshard_begin);
+  uint32_t next_boundary = segment_size;
+  uint32_t encoded_segment_estimate = /* bytes * (segment_size / (needs_reshard_end - needs_reshard_begin)) */
+    bytes * segment_size / (data_reshard_end - needs_reshard_begin);
 
-  bool onode_data_has_boundaries = (data_segment_size != 0);
+  bool onode_data_has_boundaries = (segment_size != 0);
   // reshard
   unsigned estimate = 0;
   unsigned offset = needs_reshard_begin;
@@ -3680,7 +3680,7 @@ void BlueStore::ExtentMap::reshard(
 	    /*we will be too large if we wait for next segment*/) {
 	  make_shard_here = true;
 	}
-	next_boundary = p2align(e->blob_end() + data_segment_size, data_segment_size);
+	next_boundary = p2roundup(e->blob_end(), segment_size);
       }
     } else {
       // disfavor shard boundaries that span a blob
@@ -16429,7 +16429,7 @@ void BlueStore::_do_write_data(
       uint64_t write_offset = middle_offset;
       while (write_offset < middle_offset + middle_length) {
 	uint64_t segment_end = std::min(
-	  p2roundup<uint64_t>(write_offset + segment_size, segment_size),
+	  p2roundup<uint64_t>(write_offset + 1, segment_size),
 	  middle_offset + middle_length);
 	_do_write_big(txc, c, o, write_offset, segment_end - write_offset, p, wctx);
 	write_offset = segment_end;
@@ -18092,7 +18092,7 @@ void BlueStore::_record_onode(OnodeRef& o, KeyValueDB::Transaction &txn)
   // finalize extent_map shards
   o->extent_map.update(txn, false);
   if (o->extent_map.needs_reshard()) {
-    o->extent_map.reshard(db, txn);
+    o->extent_map.reshard(db, txn, o->c->segment_size);
     o->extent_map.update(txn, true);
     if (o->extent_map.needs_reshard()) {
       dout(20) << __func__ << " warning: still wants reshard, check options?"
