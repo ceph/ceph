@@ -3778,7 +3778,7 @@ void BlueStore::ExtentMap::reshard(
           // shard boundary.
           bool must_span = false;
           BlobRef b = e->blob;
-          if (onode->bc.writing.empty() && b->can_split()) {
+          if (b->can_split()) {
             uint32_t bstart = e->blob_start();
             uint32_t bend = e->blob_end();
             for (const auto& sh : shards) {
