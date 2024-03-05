@@ -1048,14 +1048,12 @@ void OSDService::inc_osd_stat_repaired()
 {
   std::lock_guard l(stat_lock);
   osd_stat.num_shards_repaired++;
-  return;
 }
 
 void OSDService::set_osd_stat_repaired(int64_t count)
 {
   std::lock_guard l(stat_lock);
   osd_stat.num_shards_repaired = count;
-  return;
 }
 
 float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
