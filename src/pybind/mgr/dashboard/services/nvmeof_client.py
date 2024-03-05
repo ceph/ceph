@@ -25,18 +25,14 @@ else:
             logger.info('Found nvmeof gateway at %s', self.gateway_addr)
             self.stub = pb2_grpc.GatewayStub(self.channel)
 
-        def list_subsystems(self, subsystem_nqn: Optional[str] = None,
-                            serial_number: Optional[str] = None):
+        def list_subsystems(self, subsystem_nqn: Optional[str] = None):
             return self.stub.list_subsystems(pb2.list_subsystems_req(
-                subsystem_nqn=subsystem_nqn,
-                serial_number=serial_number
+                subsystem_nqn=subsystem_nqn
             ))
 
-        def create_subsystem(self, subsystem_nqn: str, serial_number: str, max_namespaces: int):
+        def create_subsystem(self, subsystem_nqn: str):
             return self.stub.create_subsystem(pb2.create_subsystem_req(
-                subsystem_nqn=subsystem_nqn,
-                serial_number=serial_number,
-                max_namespaces=int(max_namespaces)
+                subsystem_nqn=subsystem_nqn
             ))
 
         def delete_subsystem(self, subsystem_nqn: str, force: Optional[bool] = False):
