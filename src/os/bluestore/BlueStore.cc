@@ -2440,7 +2440,7 @@ void BlueStore::Blob::dup(const Blob& from, bool copy_used_in_blob)
   }
   for (auto p : blob.get_extents()) {
     if (p.is_valid()) {
-      shared_blob->get_ref(p.offset, p.length);
+      get_dirty_shared_blob()->get_ref(p.offset, p.length);
     }
   }
 }
@@ -2611,7 +2611,7 @@ void BlueStore::Blob::copy_extents_over_empty(
     if (prev != exto.end()) {
       if (prev->is_valid()) {
 	if (prev->offset + prev->length == disk_offset) {
-	  shared_blob->get_ref(disk_offset, disk_len);
+	  get_dirty_shared_blob()->get_ref(disk_offset, disk_len);
 	  prev->length += disk_len;
 	  return;
 	}
@@ -2620,7 +2620,7 @@ void BlueStore::Blob::copy_extents_over_empty(
     it = exto.insert(it, bluestore_pextent_t(disk_offset, disk_len));
     prev = it;
     ++it;
-    shared_blob->get_ref(disk_offset, disk_len);
+    get_dirty_shared_blob()->get_ref(disk_offset, disk_len);
   };
 
   while (ito != exto.end() && sto >= ito->length) {
@@ -3128,7 +3128,7 @@ void BlueStore::ExtentMap::make_range_shared_maybe_merge(
         uint32_t b_logical_length = b->merge_blob(store->cct, e.blob.get());
         for (auto p : blob.get_extents()) {
           if (p.is_valid()) {
-            b->shared_blob->get_ref(p.offset, p.length);
+            b->get_dirty_shared_blob()->get_ref(p.offset, p.length);
           }
         }
         // reblob extents might erase e
