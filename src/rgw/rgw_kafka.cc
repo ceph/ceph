@@ -199,7 +199,14 @@ connection_ptr_t& create_connection(connection_ptr_t& conn) {
     return conn;
   }
 
-  // get list of brokers based on the bootsrap broker
+  // set message timeout
+  // according to documentation, value of zero will expire the message based on retries.
+  // however, testing with librdkafka v1.6.1 did not expire the message in that case. hence, a value of zero is changed to 1ms
+  constexpr std::uint64_t min_message_timeout = 1;
+  const auto message_timeout = std::max(min_message_timeout, conn->cct->_conf->rgw_kafka_message_timeout);
+  if (rd_kafka_conf_set(conn->temp_conf, "message.timeout.ms", 
+        std::to_string(message_timeout).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+  // get list of brokers based on the bootstrap broker
   if (rd_kafka_conf_set(conn->temp_conf, "bootstrap.servers", conn->broker.c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
   if (conn->use_ssl) {
@@ -295,7 +302,6 @@ public:
   const size_t max_connections;
   const size_t max_inflight;
   const size_t max_queue;
-  const size_t max_idle_time;
 private:
   std::atomic<size_t> connection_count;
   bool stopped;
@@ -421,7 +427,7 @@ private:
         auto& conn = conn_it->second;
 
         // Checking the connection idlesness
-        if(conn->timestamp.sec() + max_idle_time < ceph_clock_now()) {
+        if(conn->timestamp.sec() + conn->cct->_conf->rgw_kafka_connection_idle < ceph_clock_now()) {
           ldout(conn->cct, 20) << "Time for deleting a connection due to idle behaviour: " << ceph_clock_now() << dendl;
           ERASE_AND_CONTINUE(conn_it, connections);
         }
@@ -468,7 +474,6 @@ public:
     max_connections(_max_connections),
     max_inflight(_max_inflight),
     max_queue(_max_queue),
-    max_idle_time(30),
     connection_count(0),
     stopped(false),
     read_timeout_ms(_read_timeout_ms),
