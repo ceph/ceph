@@ -6326,10 +6326,21 @@ void BlueStore::_init_logger()
   //****************************************
   b.add_u64_counter(l_bluestore_omap_iterator_count, "omap_iterator_count",
     "Open omap iterators count");
+  b.add_u64_counter(l_bluestore_omap_setheader_count, "omap_setheader_count",
+    "amount of omap setheader calls");
+  b.add_u64_counter(l_bluestore_omap_setheader_bytes, "omap_setheader_bytes",
+    "amount of bytes set by omap setheader calls");
+  b.add_u64_counter(l_bluestore_omap_setkeys_count, "omap_setkeys_count",
+    "amount of omap setkeys calls");
+  b.add_u64_counter(l_bluestore_omap_setkeys_records, "omap_setkeys_records",
+    "amount of keys set by omap setkeys calls");
+  b.add_u64_counter(l_bluestore_omap_setkeys_bytes, "omap_setkeys_bytes",
+    "amount of bytes set by omap setkeys calls");
   b.add_u64_counter(l_bluestore_omap_rmkeys_count, "omap_rmkeys_count",
     "amount of omap keys removed via rmkeys");
   b.add_u64_counter(l_bluestore_omap_rmkey_ranges_count, "omap_rmkey_range_count",
     "amount of omap key ranges removed via rmkeys");
+
   //****************************************
   // other client ops latencies
   //****************************************
@@ -17102,6 +17113,8 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   o->get_omap_key(string(), &final_key);
   size_t base_key_len = final_key.size();
   decode(num, p);
+  auto num0 = num;
+  uint64_t total_bytes = 0;
   while (num--) {
     string key;
     bufferlist value;
@@ -17112,7 +17125,11 @@ int BlueStore::_omap_setkeys(TransContext *txc,
     dout(20) << __func__ << "  " << pretty_binary_string(final_key)
 	     << " <- " << key << dendl;
     txc->t->set(prefix, final_key, value);
+    total_bytes += value.length();
   }
+  logger->inc(l_bluestore_omap_setkeys_count);
+  logger->inc(l_bluestore_omap_setkeys_records, num0);
+  logger->inc(l_bluestore_omap_setkeys_bytes, total_bytes);
   r = 0;
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
@@ -17145,6 +17162,8 @@ int BlueStore::_omap_setheader(TransContext *txc,
   const string& prefix = o->get_omap_prefix();
   o->get_omap_header(&key);
   txc->t->set(prefix, key, bl);
+  logger->inc(l_bluestore_omap_setheader_count);
+  logger->inc(l_bluestore_omap_setheader_bytes, bl.length());
   r = 0;
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
