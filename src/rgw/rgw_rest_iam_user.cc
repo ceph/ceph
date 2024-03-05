@@ -275,7 +275,9 @@ int RGWGetUser_IAM::init_processing(optional_yield y)
   const std::string& tenant = s->auth.identity->get_tenant();
   int r = driver->load_account_user_by_name(this, y, account_id,
                                             tenant, username, &user);
-  if (r == -ENOENT) {
+  // root user is hidden from user apis
+  const bool is_root = (user && user->get_type() == TYPE_ROOT);
+  if (r == -ENOENT || is_root) {
     s->err.message = "No such UserName in the account";
     return -ERR_NO_SUCH_ENTITY;
   }
@@ -375,7 +377,9 @@ int RGWUpdateUser_IAM::init_processing(optional_yield y)
   const std::string& tenant = s->auth.identity->get_tenant();
   int r = driver->load_account_user_by_name(this, y, account_id,
                                             tenant, username, &user);
-  if (r == -ENOENT) {
+  // root user is hidden from user apis
+  const bool is_root = (user && user->get_type() == TYPE_ROOT);
+  if (r == -ENOENT || is_root) {
     s->err.message = "No such UserName in the account";
     return -ERR_NO_SUCH_ENTITY;
   }
@@ -514,7 +518,9 @@ int RGWDeleteUser_IAM::init_processing(optional_yield y)
   const std::string& tenant = s->auth.identity->get_tenant();
   int r = driver->load_account_user_by_name(this, y, account_id,
                                             tenant, username, &user);
-  if (r == -ENOENT) {
+  // root user is hidden from user apis
+  const bool is_root = (user && user->get_type() == TYPE_ROOT);
+  if (r == -ENOENT || is_root) {
     s->err.message = "No such UserName in the account";
     return -ERR_NO_SUCH_ENTITY;
   }
@@ -764,6 +770,9 @@ void RGWListUsers_IAM::send_response_data(std::span<RGWUserInfo> users)
   }
 
   for (const auto& info : users) {
+    if (info.type == TYPE_ROOT) {
+      continue; // root user is hidden from user apis
+    }
     s->formatter->open_object_section("member");
     dump_iam_user(info, s->formatter);
     s->formatter->close_section(); // member
@@ -838,7 +847,9 @@ int RGWCreateAccessKey_IAM::init_processing(optional_yield y)
   const std::string& tenant = s->auth.identity->get_tenant();
   int r = driver->load_account_user_by_name(this, y, account_id,
                                             tenant, username, &user);
-  if (r == -ENOENT) {
+  // root user is hidden from user apis
+  const bool is_root = (user && user->get_type() == TYPE_ROOT);
+  if (r == -ENOENT || is_root) {
     s->err.message = "No such UserName in the account";
     return -ERR_NO_SUCH_ENTITY;
   }
@@ -1059,7 +1070,9 @@ int RGWUpdateAccessKey_IAM::init_processing(optional_yield y)
   const std::string& tenant = s->auth.identity->get_tenant();
   int r = driver->load_account_user_by_name(this, y, account_id,
                                             tenant, username, &user);
-  if (r == -ENOENT) {
+  // root user is hidden from user apis
+  const bool is_root = (user && user->get_type() == TYPE_ROOT);
+  if (r == -ENOENT || is_root) {
     s->err.message = "No such UserName in the account";
     return -ERR_NO_SUCH_ENTITY;
   }
@@ -1205,7 +1218,9 @@ int RGWDeleteAccessKey_IAM::init_processing(optional_yield y)
   const std::string& tenant = s->auth.identity->get_tenant();
   int r = driver->load_account_user_by_name(this, y, account_id,
                                             tenant, username, &user);
-  if (r == -ENOENT) {
+  // root user is hidden from user apis
+  const bool is_root = (user && user->get_type() == TYPE_ROOT);
+  if (r == -ENOENT || is_root) {
     s->err.message = "No such UserName in the account";
     return -ERR_NO_SUCH_ENTITY;
   }
@@ -1350,7 +1365,9 @@ int RGWListAccessKeys_IAM::init_processing(optional_yield y)
   const std::string& tenant = s->auth.identity->get_tenant();
   r = driver->load_account_user_by_name(this, y, account_id,
                                         tenant, username, &user);
-  if (r == -ENOENT) {
+  // root user is hidden from user apis
+  const bool is_root = (user && user->get_type() == TYPE_ROOT);
+  if (r == -ENOENT || is_root) {
     return -ERR_NO_SUCH_ENTITY;
   }
   return r;
