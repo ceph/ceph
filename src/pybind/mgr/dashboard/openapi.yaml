@@ -7698,7 +7698,6 @@ paths:
       - NFS-Ganesha
   /api/nvmeof/gateway/info:
     get:
-      description: "\n            Get NVMeoF gateway information\n            "
       parameters: []
       responses:
         '200':
@@ -7717,13 +7716,11 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: List all NVMeoF gateways
       tags:
       - NVMe-oF
   /api/nvmeof/hosts:
     post:
-      description: "\n            Create a new NVMeoF host\n            :param subsystem_nqn:\
-        \ NVMeoF subsystem NQN\n            :param host_nqn: NVMeoF host NQN\n   \
-        \         "
       parameters: []
       requestBody:
         content:
@@ -7731,8 +7728,10 @@ paths:
             schema:
               properties:
                 host_nqn:
+                  description: NVMeoF host NQN
                   type: string
                 subsystem_nqn:
+                  description: NVMeoF subsystem NQN
                   type: string
               required:
               - subsystem_nqn
@@ -7760,14 +7759,14 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Allow hosts to access an NVMeoF subsystem
       tags:
       - NVMe-oF
   /api/nvmeof/hosts/{subsystem_nqn}:
     get:
-      description: "\n            List all NVMeoF hosts\n            :param subsystem_nqn:\
-        \ NVMeoF subsystem NQN\n            "
       parameters:
-      - in: path
+      - description: NVMeoF subsystem NQN
+        in: path
         name: subsystem_nqn
         required: true
         schema:
@@ -7789,20 +7788,20 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: List all allowed hosts for an NVMeoF subsystem
       tags:
       - NVMe-oF
   /api/nvmeof/hosts/{subsystem_nqn}/{host_nqn}:
     delete:
-      description: "\n            Delete an existing NVMeoF host\n            :param\
-        \ subsystem_nqn: NVMeoF subsystem NQN\n            :param host_nqn: NVMeoF\
-        \ host NQN\n            "
       parameters:
-      - in: path
+      - description: NVMeoF subsystem NQN
+        in: path
         name: subsystem_nqn
         required: true
         schema:
           type: string
-      - in: path
+      - description: NVMeoF host NQN
+        in: path
         name: host_nqn
         required: true
         schema:
@@ -7829,14 +7828,14 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Disallow hosts from accessing an NVMeoF subsystem
       tags:
       - NVMe-oF
   /api/nvmeof/listener:
     get:
-      description: "\n            List all NVMeoF listeners\n            :param nqn:\
-        \ NVMeoF subsystem NQN\n            "
       parameters:
-      - in: query
+      - description: NVMeoF subsystem NQN
+        in: query
         name: subsystem_nqn
         required: true
         schema:
@@ -7858,12 +7857,10 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: List all NVMeoF listeners
       tags:
       - NVMe-oF
     post:
-      description: "\n            Create a new NVMeoF listener\n            :param\
-        \ nqn: NVMeoF subsystem NQN\n            :param gateway: NVMeoF gateway\n\
-        \            :param traddr: NVMeoF transport address\n            "
       parameters: []
       requestBody:
         content:
@@ -7871,10 +7868,13 @@ paths:
             schema:
               properties:
                 gateway:
+                  description: NVMeoF gateway
                   type: string
                 nqn:
+                  description: NVMeoF subsystem NQN
                   type: string
                 traddr:
+                  description: NVMeoF transport address
                   type: string
               required:
               - nqn
@@ -7902,25 +7902,26 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Create a new NVMeoF listener
       tags:
       - NVMe-oF
   /api/nvmeof/listener/{nqn}/{gateway}:
     delete:
-      description: "\n            Delete an existing NVMeoF listener\n           \
-        \ :param nqn: NVMeoF subsystem NQN\n            :param gateway: NVMeoF gateway\n\
-        \            :param traddr: NVMeoF transport address\n            "
       parameters:
-      - in: path
+      - description: NVMeoF subsystem NQN
+        in: path
         name: nqn
         required: true
         schema:
           type: string
-      - in: path
+      - description: NVMeoF gateway
+        in: path
         name: gateway
         required: true
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF transport address
         in: query
         name: traddr
         schema:
@@ -7947,16 +7948,11 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Delete an existing NVMeoF listener
       tags:
       - NVMe-oF
   /api/nvmeof/namespace:
     post:
-      description: "\n            Create a new NVMeoF namespace\n            :param\
-        \ rbd_pool: RBD pool name\n            :param rbd_image: RBD image name\n\
-        \            :param subsystem_nqn: NVMeoF subsystem NQN\n            :param\
-        \ create_image: Create RBD image\n            :param image_size: RBD image\
-        \ size\n            :param block_size: NVMeoF namespace block size\n     \
-        \       "
       parameters: []
       requestBody:
         content:
@@ -7965,18 +7961,24 @@ paths:
               properties:
                 block_size:
                   default: 512
+                  description: NVMeoF namespace block size
                   type: integer
                 create_image:
                   default: true
+                  description: Create RBD image
                   type: boolean
                 image_size:
                   default: 1024
+                  description: RBD image size
                   type: integer
                 rbd_image:
+                  description: RBD image name
                   type: string
                 rbd_pool:
+                  description: RBD pool name
                   type: string
                 subsystem_nqn:
+                  description: NVMeoF subsystem NQN
                   type: string
               required:
               - rbd_pool
@@ -8005,14 +8007,14 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Create a new NVMeoF namespace
       tags:
       - NVMe-oF
   /api/nvmeof/namespace/{subsystem_nqn}:
     delete:
-      description: "\n            Delete an existing NVMeoF namespace\n          \
-        \  :param subsystem_nqn: NVMeoF subsystem NQN\n            "
       parameters:
-      - in: path
+      - description: NVMeoF subsystem NQN
+        in: path
         name: subsystem_nqn
         required: true
         schema:
@@ -8039,12 +8041,13 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Delete an existing NVMeoF namespace
       tags:
       - NVMe-oF
     get:
-      description: "\n            List all NVMeoF namespaces\n            "
       parameters:
-      - in: path
+      - description: NVMeoF subsystem NQN
+        in: path
         name: subsystem_nqn
         required: true
         schema:
@@ -8066,6 +8069,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: List all NVMeoF namespaces
       tags:
       - NVMe-oF
   /api/nvmeof/subsystem:
@@ -8094,26 +8098,18 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: List all NVMeoF gateways
+      summary: List all NVMeoF subsystems
       tags:
       - NVMe-oF
     post:
-      description: "\n            Create a new NVMeoF subsystem\n\n            :param\
-        \ subsystem_nqn: NVMeoF subsystem NQN\n            :param serial_number: NVMeoF\
-        \ subsystem serial number\n            :param max_namespaces: NVMeoF subsystem\
-        \ maximum namespaces\n            "
       parameters: []
       requestBody:
         content:
           application/json:
             schema:
               properties:
-                max_namespaces:
-                  default: 256
-                  type: integer
-                serial_number:
-                  type: integer
                 subsystem_nqn:
+                  description: NVMeoF subsystem NQN
                   type: string
               required:
               - subsystem_nqn
@@ -8140,20 +8136,20 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Create a new NVMeoF subsystem
       tags:
       - NVMe-oF
   /api/nvmeof/subsystem/{subsystem_nqn}:
     delete:
-      description: "\n            Delete an existing NVMeoF subsystem\n          \
-        \  :param subsystem_nqn: NVMeoF subsystem NQN\n            :param force: Force\
-        \ delete\n            "
       parameters:
-      - in: path
+      - description: NVMeoF subsystem NQN
+        in: path
         name: subsystem_nqn
         required: true
         schema:
           type: string
       - default: false
+        description: Force delete
         in: query
         name: force
         schema:
@@ -8180,6 +8176,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Delete an existing NVMeoF subsystem
       tags:
       - NVMe-oF
   /api/osd:
