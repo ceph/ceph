@@ -639,3 +639,16 @@ void MDLockCache::print(std::ostream& out) const {
   }
   out << ")";
 }
+
+int MDLockCache::get_cap_bit_for_lock_cache(int opcode)
+{
+  switch(opcode) {
+    case CEPH_MDS_OP_CREATE:
+      return CEPH_CAP_DIR_CREATE;
+    case CEPH_MDS_OP_UNLINK:
+      return CEPH_CAP_DIR_UNLINK;
+    default:
+      ceph_abort("unsupported opcode");
+      return 0;
+  }
+}

@@ -543,10 +543,20 @@ struct MDLockCache : public MutationImpl {
   void attach_dirfrags(std::vector<CDir*>&& dfv);
   void detach_locks();
   void detach_dirfrags();
+  /* Is the lock cache still attached to a capability and does that capability
+   * still have issued the rights (create/unlink) associated with the cap?
+   */
+  bool attachable() const {
+    return client_cap && cap_ref;
+  }
+  static int get_cap_bit_for_lock_cache(int opcode);
+  int get_cap_bit() const {
+    return get_cap_bit_for_lock_cache(opcode);
+  }
 
   CInode *diri;
   Capability *client_cap;
-  int opcode;
+  const int opcode;
   file_layout_t dir_layout;
 
   elist<MDLockCache*>::item item_cap_lock_cache;
@@ -560,6 +570,7 @@ struct MDLockCache : public MutationImpl {
 
   int ref = 1;
   bool invalidating = false;
+  bool cap_ref = true; /* does the cap still have issued&cap_bit ? */
 };
 
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
