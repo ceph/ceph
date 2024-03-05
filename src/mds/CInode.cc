@@ -2210,13 +2210,6 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     encode_lock_ipolicy(bl);
     break;
-
-  case CEPH_LOCK_IQUIESCE: {
-    ENCODE_START(1, 1, bl);
-    /* skeleton */
-    ENCODE_FINISH(bl);
-    break;
-  }
   
   default:
     ceph_abort();
@@ -2283,13 +2276,6 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     decode_lock_ipolicy(p);
     break;
-
-  case CEPH_LOCK_IQUIESCE: {
-    DECODE_START(1, p);
-    /* skeleton */
-    DECODE_FINISH(p);
-    break;
-  }
 
   default:
     ceph_abort();
@@ -2879,10 +2865,19 @@ bool CInode::freeze_inode(int auth_pin_allowance)
   if (!dir->lock_caches_with_auth_pins.empty())
     mdcache->mds->locker->invalidate_lock_caches(dir);
 
-  const static int lock_types[] = {
-    CEPH_LOCK_IVERSION, CEPH_LOCK_IFILE, CEPH_LOCK_IAUTH, CEPH_LOCK_ILINK, CEPH_LOCK_IDFT,
-    CEPH_LOCK_IXATTR, CEPH_LOCK_ISNAP, CEPH_LOCK_INEST, CEPH_LOCK_IFLOCK, CEPH_LOCK_IPOLICY, 0
-    //TODO: add iquiesce here?
+  static const int lock_types[] = {
+    CEPH_LOCK_IQUIESCE,
+    CEPH_LOCK_IVERSION,
+    CEPH_LOCK_IFILE,
+    CEPH_LOCK_IAUTH,
+    CEPH_LOCK_ILINK,
+    CEPH_LOCK_IDFT,
+    CEPH_LOCK_IXATTR,
+    CEPH_LOCK_ISNAP,
+    CEPH_LOCK_INEST,
+    CEPH_LOCK_IFLOCK,
+    CEPH_LOCK_IPOLICY,
+    0
   };
   for (int i = 0; lock_types[i]; ++i) {
     auto lock = get_lock(lock_types[i]);
@@ -4308,7 +4303,6 @@ void CInode::_encode_locks_full(bufferlist& bl)
   encode(flocklock, bl);
   encode(policylock, bl);
   encode(loner_cap, bl);
-  encode(quiescelock, bl);
 }
 void CInode::_decode_locks_full(bufferlist::const_iterator& p)
 {
@@ -4325,12 +4319,11 @@ void CInode::_decode_locks_full(bufferlist::const_iterator& p)
   decode(loner_cap, p);
   set_loner_cap(loner_cap);
   want_loner_cap = loner_cap;  // for now, we'll eval() shortly.
-  decode(quiescelock, p);
 }
 
 void CInode::_encode_locks_state_for_replica(bufferlist& bl, bool need_recover)
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(1, 1, bl);
   authlock.encode_state_for_replica(bl);
   linklock.encode_state_for_replica(bl);
   dirfragtreelock.encode_state_for_replica(bl);
@@ -4341,7 +4334,6 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl, bool need_recover)
   flocklock.encode_state_for_replica(bl);
   policylock.encode_state_for_replica(bl);
   encode(need_recover, bl);
-  quiescelock.encode_state_for_replica(bl);
   ENCODE_FINISH(bl);
 }
 
@@ -4357,12 +4349,11 @@ void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
   snaplock.encode_state_for_replica(bl);
   flocklock.encode_state_for_replica(bl);
   policylock.encode_state_for_replica(bl);
-  quiescelock.encode_state_for_replica(bl);
 }
 
 void CInode::_decode_locks_state_for_replica(bufferlist::const_iterator& p, bool is_new)
 {
-  DECODE_START(2, p);
+  DECODE_START(1, p);
   authlock.decode_state(p, is_new);
   linklock.decode_state(p, is_new);
   dirfragtreelock.decode_state(p, is_new);
@@ -4375,10 +4366,6 @@ void CInode::_decode_locks_state_for_replica(bufferlist::const_iterator& p, bool
 
   bool need_recover;
   decode(need_recover, p);
-
-  if (struct_v >= 2) {
-    quiescelock.decode_state(p, is_new);
-  }
 
   if (need_recover && is_new) {
     // Auth mds replicated this inode while it's recovering. Auth mds may take xlock on the lock
@@ -4407,7 +4394,6 @@ void CInode::_decode_locks_rejoin(bufferlist::const_iterator& p, MDSContext::vec
   snaplock.decode_state_rejoin(p, waiters, survivor);
   flocklock.decode_state_rejoin(p, waiters, survivor);
   policylock.decode_state_rejoin(p, waiters, survivor);
-  quiescelock.decode_state_rejoin(p, waiters, survivor);
 
   if (!dirfragtreelock.is_stable() && !dirfragtreelock.is_wrlocked())
     eval_locks.push_back(&dirfragtreelock);
@@ -4422,7 +4408,7 @@ void CInode::_decode_locks_rejoin(bufferlist::const_iterator& p, MDSContext::vec
 
 void CInode::encode_export(bufferlist& bl)
 {
-  ENCODE_START(6, 6, bl);
+  ENCODE_START(5, 4, bl);
   _encode_base(bl, mdcache->mds->mdsmap->get_up_features());
 
   encode(state, bl);
@@ -4473,7 +4459,7 @@ void CInode::finish_export()
 void CInode::decode_import(bufferlist::const_iterator& p,
 			   LogSegment *ls)
 {
-  DECODE_START(6, p);
+  DECODE_START(5, p);
 
   _decode_base(p);
 
