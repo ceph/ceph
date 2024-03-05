@@ -771,6 +771,10 @@ class Orchestrator(object):
         """set alertmanager access information"""
         raise NotImplementedError()
 
+    def get_prometheus_cert(self, url: str) -> OrchResult[str]:
+        """set prometheus target for multi-cluster"""
+        raise NotImplementedError()
+
     def set_prometheus_access_info(self, user: str, password: str) -> OrchResult[str]:
         """set prometheus access information"""
         raise NotImplementedError()

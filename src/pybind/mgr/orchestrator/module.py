@@ -1148,6 +1148,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         completion = self.set_prometheus_target(url)
         result = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(result))
+    
+    @_cli_write_command('orch prometheus get-prometheus-cert')
+    def _get_prometheus_cert(self) -> HandleCommandResult:
+        completion = self.get_prometheus_cert()
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
 
     @_cli_write_command('orch prometheus remove-target')
     def _remove_prometheus_target(self, url: str) -> HandleCommandResult:
