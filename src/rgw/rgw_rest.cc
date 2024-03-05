@@ -322,17 +322,6 @@ void rgw_flush_formatter(req_state *s, Formatter *formatter)
   }
 }
 
-void dump_errno(int http_ret, string& out) {
-  stringstream ss;
-
-  ss <<  http_ret << " " << http_status_names[http_ret];
-  out = ss.str();
-}
-
-void dump_errno(const struct rgw_err &err, string& out) {
-  dump_errno(err.http_ret, out);
-}
-
 void dump_errno(req_state *s)
 {
   dump_status(s, s->err.http_ret, http_status_names[s->err.http_ret]);

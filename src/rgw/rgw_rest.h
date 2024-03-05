@@ -692,8 +692,6 @@ public:
 static constexpr int64_t NO_CONTENT_LENGTH = -1;
 static constexpr int64_t CHUNKED_TRANSFER_ENCODING = -2;
 
-extern void dump_errno(int http_ret, std::string& out);
-extern void dump_errno(const struct rgw_err &err, std::string& out);
 extern void dump_errno(req_state *s);
 extern void dump_errno(req_state *s, int http_ret);
 extern void end_header(req_state *s,
