@@ -1636,6 +1636,7 @@ private:
 
     //pool options
     pool_opts_t pool_opts;
+    uint32_t segment_size;
     ContextQueue *commit_queue;
 
     OnodeCacheShard* get_onode_cache() const {

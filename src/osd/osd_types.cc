@@ -1378,7 +1378,9 @@ static opt_mapping_t opt_mapping = boost::assign::map_list_of
 	   ("pg_num_max", pool_opts_t::opt_desc_t(
              pool_opts_t::PG_NUM_MAX, pool_opts_t::INT))
 	   ("read_ratio", pool_opts_t::opt_desc_t(
-             pool_opts_t::READ_RATIO, pool_opts_t::INT));
+             pool_opts_t::READ_RATIO, pool_opts_t::INT))
+           ("segment_size", pool_opts_t::opt_desc_t(
+             pool_opts_t::SEGMENT_SIZE, pool_opts_t::INT));
 
 bool pool_opts_t::is_opt_name(const std::string& name)
 {
