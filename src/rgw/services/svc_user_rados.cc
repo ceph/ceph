@@ -164,7 +164,7 @@ struct users_entry {
 };
 
 static users_entry account_users_link(const RGWUserInfo* info) {
-  if (info && !info->account_id.empty() && info->type != TYPE_ROOT) {
+  if (info && !info->account_id.empty()) {
     return {info->account_id, info->path, info->display_name};
   }
   return {};
