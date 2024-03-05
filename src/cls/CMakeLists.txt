@@ -372,3 +372,13 @@ set_target_properties(cls_test_remote_reads PROPERTIES
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_test_remote_reads DESTINATION ${cls_dir})
+
+# cls_sem_set
+set(cls_sem_set_srcs sem_set/module.cc)
+add_library(cls_sem_set SHARED ${cls_sem_set_srcs})
+set_target_properties(cls_sem_set PROPERTIES
+  VERSION "1.0.0"
+  SOVERSION "1"
+  INSTALL_RPATH ""
+  CXX_VISIBILITY_PRESET hidden)
+install(TARGETS cls_sem_set DESTINATION ${cls_dir})
