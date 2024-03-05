@@ -525,7 +525,7 @@ int RGWRestAttachedUserPolicy::init_processing(optional_yield y)
 {
   // managed policy is only supported for account users. adding them to
   // non-account roles would give blanket permissions to all buckets
-  if (!std::holds_alternative<rgw_account_id>(s->owner.id)) {
+  if (!s->auth.identity->get_account()) {
     s->err.message = "Managed policies are only supported for account users";
     return -ERR_METHOD_NOT_ALLOWED;
   }

@@ -69,8 +69,8 @@ int RGWCreateUser_IAM::init_processing(optional_yield y)
 {
   // use account id from authenticated user/role. with AssumeRole, this may not
   // match the account of s->user
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    info.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    info.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -254,8 +254,8 @@ int RGWGetUser_IAM::init_processing(optional_yield y)
 {
   // use account id from authenticated user/role. with AssumeRole, this may not
   // match the account of s->user
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -348,8 +348,8 @@ int RGWUpdateUser_IAM::init_processing(optional_yield y)
   // use account id from authenticated user/role. with AssumeRole, this may not
   // match the account of s->user
   rgw_account_id account_id;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -498,8 +498,8 @@ int RGWDeleteUser_IAM::init_processing(optional_yield y)
   // use account id from authenticated user/role. with AssumeRole, this may not
   // match the account of s->user
   rgw_account_id account_id;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -669,8 +669,8 @@ int RGWListUsers_IAM::init_processing(optional_yield y)
 {
   // use account id from authenticated user/role. with AssumeRole, this may not
   // match the account of s->user
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -814,8 +814,8 @@ int RGWCreateAccessKey_IAM::init_processing(optional_yield y)
   // use account id from authenticated user/role. with AssumeRole, this may not
   // match the account of s->user
   rgw_account_id account_id;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1015,8 +1015,8 @@ int RGWUpdateAccessKey_IAM::init_processing(optional_yield y)
   // use account id from authenticated user/role. with AssumeRole, this may not
   // match the account of s->user
   rgw_account_id account_id;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1175,8 +1175,8 @@ int RGWDeleteAccessKey_IAM::init_processing(optional_yield y)
   // use account id from authenticated user/role. with AssumeRole, this may not
   // match the account of s->user
   rgw_account_id account_id;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1318,8 +1318,8 @@ int RGWListAccessKeys_IAM::init_processing(optional_yield y)
   // use account id from authenticated user/role. with AssumeRole, this may not
   // match the account of s->user
   rgw_account_id account_id;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
