@@ -1057,6 +1057,15 @@ SegmentCleaner::do_reclaim_space(
     std::size_t &reclaimed,
     std::size_t &runs)
 {
+  // Extents satisfying any of the following requirements
+  // are considered DEAD:
+  // 1. can't find the corresponding mapping in both the
+  // 	backref tree and the backref cache;
+  // 2. the extent is logical, but its lba mapping doesn't
+  // 	exist in the lba tree or the lba mapping in the lba
+  // 	tree doesn't match the extent's paddr
+  // 3. the extent is physical and doesn't exist in the
+  // 	lba tree, backref tree or backref cache;
   return repeat_eagain([this, &backref_extents,
                         &pin_list, &reclaimed, &runs] {
     reclaimed = 0;
