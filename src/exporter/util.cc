@@ -13,34 +13,27 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_ceph_exporter
 
-BlockTimer::BlockTimer(std::string file, std::string function)
-	: file(file), function(function), stopped(false) {
-	t1 = std::chrono::high_resolution_clock::now();
+BlockTimer::BlockTimer(std::string_view file, std::string_view function)
+	: file(file),
+    function(function) {
+	t1 = clock_t::now();
 }
 BlockTimer::~BlockTimer() {
-  dout(20) << file << ":" << function << ": " << ms.count() << "ms" << dendl;
+  dout(20) << file << ":" << function << ": " << get_ms() << "ms" << dendl;
 }
 
 // useful with stop
-double BlockTimer::get_ms() {
-	return ms.count();
+double BlockTimer::get_ms() const {
+	using milliseconds_t = std::chrono::duration<double, std::milli>;
+	return std::chrono::duration_cast<milliseconds_t>(t2 - t1).count();
 }
 
 // Manually stop the timer as you might want to get the time
 void BlockTimer::stop() {
 	if (!stopped) {
 		stopped = true;
-		t2 = std::chrono::high_resolution_clock::now();
-		ms = t2 - t1;
+		t2 = clock_t::now();
 	}
-}
-
-bool string_is_digit(std::string s) {
-	size_t i = 0;
-	while (std::isdigit(s[i]) && i < s.size()) {
-		i++;
-	}
-	return i >= s.size();
 }
 
 std::string read_file_to_string(std::string path) {
