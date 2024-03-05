@@ -572,7 +572,7 @@ Aio::OpFunc RedisDriver::redis_read_op(optional_yield y, std::shared_ptr<connect
 Aio::OpFunc RedisDriver::redis_write_op(optional_yield y, std::shared_ptr<connection> conn,
                                  const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, const std::string& key)
 {
-  return [y, conn, &bl, &len, &attrs, &key] (Aio* aio, AioResult& r) mutable {
+  return [y, conn, &bl, &attrs, &key] (Aio* aio, AioResult& r) mutable {
     using namespace boost::asio;
     spawn::yield_context yield = y.get_yield_context();
     async_completion<spawn::yield_context, void()> init(yield);
