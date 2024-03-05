@@ -107,14 +107,18 @@ class MultiCluster(RESTController):
             prometheus_url = self._proxy('GET', url, 'api/multi-cluster/get_prometheus_api_url',
                                          token=cluster_token, verify=ssl_verify,
                                          cert=ssl_certificate)
+            
+            prometheus_access_info = self._proxy('GET', url,
+                                                 'ui-api/multi-cluster/get_prometheus_access_info',  # noqa E501 #pylint: disable=line-too-long
+                                                 token=cluster_token, verify=ssl_verify,
+                                                 cert=ssl_certificate)
 
             _set_prometheus_targets(prometheus_url)
 
             self.set_multi_cluster_config(fsid, username, url, cluster_alias,
-                                          cluster_token, prometheus_url,
-                                          ssl_verify, ssl_certificate)
+                                          cluster_token, prometheus_url, ssl_verify,
+                                          ssl_certificate, prometheus_access_info)
             return True
-
         return False
 
     def get_cors_endpoints_string(self, hub_url):
@@ -188,7 +192,8 @@ class MultiCluster(RESTController):
         return cluster_token
 
     def set_multi_cluster_config(self, fsid, username, url, cluster_alias, token,
-                                 prometheus_url=None, ssl_verify=False, ssl_certificate=None):
+                                 prometheus_url=None, ssl_verify=False, ssl_certificate=None,
+                                 prometheus_access_info=None):
         multi_cluster_config = self.load_multi_cluster_config()
         if fsid in multi_cluster_config['config']:
             existing_entries = multi_cluster_config['config'][fsid]
@@ -201,7 +206,8 @@ class MultiCluster(RESTController):
                     "token": token,
                     "prometheus_url": prometheus_url if prometheus_url else '',
                     "ssl_verify": ssl_verify,
-                    "ssl_certificate": ssl_certificate if ssl_certificate else ''
+                    "ssl_certificate": ssl_certificate if ssl_certificate else '',
+                    "prometheus_access_info": prometheus_access_info
                 })
         else:
             multi_cluster_config['current_user'] = username
@@ -213,7 +219,8 @@ class MultiCluster(RESTController):
                 "token": token,
                 "prometheus_url": prometheus_url if prometheus_url else '',
                 "ssl_verify": ssl_verify,
-                "ssl_certificate": ssl_certificate if ssl_certificate else ''
+                "ssl_certificate": ssl_certificate if ssl_certificate else '',
+                "prometheus_access_info": prometheus_access_info
             }]
         Settings.MULTICLUSTER_CONFIG = multi_cluster_config
 
@@ -401,6 +408,37 @@ class MultiClusterUi(RESTController):
     @UpdatePermission
     def set_cors_endpoint(self, url: str):
         configure_cors(url)
+    
+    @Endpoint('GET')
+    @ReadPermission
+    def get_prometheus_access_info(self):
+        user = ''
+        password = ''
+        prometheus_cert = ''
+        orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+        if orch_backend == 'cephadm':
+            cmd = {
+                'prefix': 'orch prometheus get-credentials',
+            }
+            ret, out, _ = mgr.mon_command(cmd)
+            if ret == 0 and out is not None:
+                access_info = json.loads(out)
+                user = access_info['user']
+                password = access_info['password']
+
+            cert_cmd = {
+                'prefix': 'orch prometheus get-prometheus-cert',
+            }
+            ret, out, _ = mgr.mon_command(cert_cmd)
+            if ret == 0 and out is not None:
+                cert = json.loads(out)
+                prometheus_cert = cert
+
+            return {
+                'user': user,
+                'password': password,
+                'certificate': prometheus_cert
+            }
 
 
 def _set_prometheus_targets(prometheus_url: str):

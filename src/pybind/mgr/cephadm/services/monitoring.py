@@ -1,5 +1,6 @@
 import errno
 import logging
+import json
 import os
 import socket
 from typing import List, Any, Tuple, Dict, Optional, cast
@@ -435,6 +436,7 @@ class PrometheusService(CephadmService):
     DEFAULT_MGR_PROMETHEUS_PORT = 9283
     USER_CFG_KEY = 'prometheus/web_user'
     PASS_CFG_KEY = 'prometheus/web_password'
+    PROMETHEUS_CERT_CFG_KEY = 'prometheus/cert'
 
     def config(self, spec: ServiceSpec) -> None:
         # make sure module is enabled
@@ -509,6 +511,18 @@ class PrometheusService(CephadmService):
         prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
         FSID = self.mgr._cluster_fsid
 
+        clusters_credentials = {}
+        multi_cluster_config_raw = str(self.mgr.get_module_option_ex('dashboard', 'MULTICLUSTER_CONFIG'))
+        multi_cluster_config_str = multi_cluster_config_raw.replace("'", '"')
+        valid_multi_cluster_config_str = multi_cluster_config_str.replace('True', '"True"').replace('False', '"False"')
+        multi_cluster_config = json.loads(valid_multi_cluster_config_str)
+        if multi_cluster_config:
+            for url in targets:
+                credentials = self.find_prometheus_credentials(multi_cluster_config, url)
+                if credentials:
+                    clusters_credentials[url] = credentials
+                    clusters_credentials[url]['cert_file_name'] = ''
+
         # generate the prometheus configuration
         context = {
             'alertmanager_url_prefix': '/alertmanager' if mgmt_gw_enabled else '/',
@@ -526,7 +540,8 @@ class PrometheusService(CephadmService):
             'external_prometheus_targets': targets,
             'cluster_fsid': FSID,
             'nfs_sd_url': nfs_sd_url,
-            'smb_sd_url': smb_sd_url
+            'smb_sd_url': smb_sd_url,
+            'clusters_credentials': clusters_credentials
         }
 
         ip_to_bind_to = ''
@@ -544,6 +559,11 @@ class PrometheusService(CephadmService):
         }
 
         if security_enabled:
+            r2: Dict[str, Any] = {'files': {}}
+            for url, credentials in clusters_credentials.items():
+                r2['files'][f'prometheus_{url}_cert.crt'] = credentials['certificate']
+                credentials['cert_file_name'] = f'prometheus_{url}_cert.crt'
+                context['clusters_credentials'] = clusters_credentials
             # Following key/cert are needed for:
             # 1- run the prometheus server (web.yml config)
             # 2- use mTLS to scrape node-exporter (prometheus acts as client)
@@ -673,6 +693,16 @@ class PrometheusService(CephadmService):
         if warn and not force:
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
         return HandleCommandResult(0, warn_message, '')
+
+    def find_prometheus_credentials(self, multicluster_config, url):
+        for cluster_id, clusters in multicluster_config['config'].items():
+            for cluster in clusters:
+                prometheus_url = cluster.get('prometheus_url')
+                if prometheus_url:
+                    valid_url = prometheus_url.replace("https://", "").replace("http://", "")
+                    if valid_url == url:
+                        return cluster.get('prometheus_access_info')
+        return None
 
 
 class NodeExporterService(CephadmService):
