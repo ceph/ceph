@@ -6469,6 +6469,321 @@ TYPED_TEST(DiffIterateTest, DiffIterateDiscard)
   ASSERT_PASSED(this->validate_object_map, image);
 }
 
+TYPED_TEST(DiffIterateTest, DiffIterateTruncate)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  int order = 22;
+  std::string name = this->get_temp_image_name();
+  uint64_t size = 20 << 20;
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  uint64_t object_size = 0;
+  if (this->whole_object) {
+    object_size = 1 << order;
+  }
+
+  ASSERT_EQ(0, image.snap_create("snap0"));
+
+  ceph::bufferlist bl;
+  bl.append(std::string(512 << 10, '1'));
+  ASSERT_EQ(512 << 10, image.write(0, 512 << 10, bl));
+  ASSERT_EQ(0, image.snap_create("snap1"));
+  ASSERT_EQ(512 << 10, image.write(512 << 10, 512 << 10, bl));
+  ASSERT_EQ(0, image.snap_create("snap2"));
+
+  std::vector<diff_extent> extents;
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 1024 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap0", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 1024 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(512 << 10, 512 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(0u, extents.size());
+
+  ASSERT_EQ(256 << 10, image.discard(768 << 10, 256 << 10));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 768 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap0", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 768 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(512 << 10, 256 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(768 << 10, 256 << 10, this->whole_object, object_size),
+            extents[0]);
+  extents.clear();
+
+  ASSERT_EQ(256 << 10, image.discard(512 << 10, 256 << 10));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 512 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap0", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 512 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  if (this->whole_object &&
+      (is_feature_enabled(RBD_FEATURE_OBJECT_MAP) ||
+       is_feature_enabled(RBD_FEATURE_FAST_DIFF))) {
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 0, true, object_size), extents[0]);
+    extents.clear();
+  } else {
+    ASSERT_EQ(0u, extents.size());
+  }
+  ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(512 << 10, 512 << 10, this->whole_object, object_size),
+            extents[0]);
+  extents.clear();
+
+  ASSERT_EQ(256 << 10, image.discard(256 << 10, 256 << 10));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 256 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap0", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 256 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(256 << 10, 256 << 10, this->whole_object, object_size),
+            extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(256 << 10, 768 << 10, this->whole_object, object_size),
+            extents[0]);
+  extents.clear();
+
+  ASSERT_EQ(256 << 10, image.discard(0, 256 << 10));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  if (this->whole_object &&
+      (is_feature_enabled(RBD_FEATURE_OBJECT_MAP) ||
+       is_feature_enabled(RBD_FEATURE_FAST_DIFF))) {
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 0, true, object_size), extents[0]);
+    extents.clear();
+  } else {
+    ASSERT_EQ(0u, extents.size());
+  }
+  ASSERT_EQ(0, image.diff_iterate2("snap0", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  if (this->whole_object &&
+      (is_feature_enabled(RBD_FEATURE_OBJECT_MAP) ||
+       is_feature_enabled(RBD_FEATURE_FAST_DIFF))) {
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 0, true, object_size), extents[0]);
+    extents.clear();
+  } else {
+    ASSERT_EQ(0u, extents.size());
+  }
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 512 << 10, this->whole_object, object_size),
+            extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 1024 << 10, this->whole_object, object_size),
+            extents[0]);
+  extents.clear();
+
+  ASSERT_PASSED(this->validate_object_map, image);
+}
+
+TYPED_TEST(DiffIterateTest, DiffIterateWriteAndTruncate)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_STRIPINGV2));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  librbd::Image image;
+  int order = 22;
+  std::string name = this->get_temp_image_name();
+  uint64_t size = 20 << 20;
+
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
+
+  uint64_t object_size = 0;
+  if (this->whole_object) {
+    object_size = 1 << order;
+  }
+
+  ASSERT_EQ(0, image.snap_create("snap0"));
+
+  ceph::bufferlist bl;
+  bl.append(std::string(512 << 10, '1'));
+  ASSERT_EQ(512 << 10, image.write(0, 512 << 10, bl));
+  ASSERT_EQ(0, image.snap_create("snap1"));
+  ASSERT_EQ(512 << 10, image.write(512 << 10, 512 << 10, bl));
+  ASSERT_EQ(0, image.snap_create("snap2"));
+
+  std::vector<diff_extent> extents;
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 1024 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap0", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 1024 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(512 << 10, 512 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(0u, extents.size());
+
+  ASSERT_EQ(1 << 10, image.write(767 << 10, 1 << 10, bl));
+  ASSERT_EQ(256 << 10, image.discard(768 << 10, 256 << 10));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 768 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap0", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 768 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(512 << 10, 256 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  if (this->whole_object) {
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 0, true, object_size), extents[0]);
+  } else {
+    ASSERT_EQ(2u, extents.size());
+    ASSERT_EQ(diff_extent(767 << 10, 1 << 10, true, object_size), extents[0]);
+    ASSERT_EQ(diff_extent(768 << 10, 256 << 10, false, object_size),
+              extents[1]);
+  }
+  extents.clear();
+
+  ASSERT_EQ(2 << 10, image.write(510 << 10, 2 << 10, bl));
+  ASSERT_EQ(256 << 10, image.discard(512 << 10, 256 << 10));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 512 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap0", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 512 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(510 << 10, 2 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  if (this->whole_object) {
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 0, true, object_size), extents[0]);
+  } else {
+    ASSERT_EQ(2u, extents.size());
+    ASSERT_EQ(diff_extent(510 << 10, 2 << 10, true, object_size), extents[0]);
+    ASSERT_EQ(diff_extent(512 << 10, 512 << 10, false, object_size),
+              extents[1]);
+  }
+  extents.clear();
+
+  ASSERT_EQ(3 << 10, image.write(253 << 10, 3 << 10, bl));
+  ASSERT_EQ(256 << 10, image.discard(256 << 10, 256 << 10));
+  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 256 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap0", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  ASSERT_EQ(1u, extents.size());
+  ASSERT_EQ(diff_extent(0, 256 << 10, true, object_size), extents[0]);
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  if (this->whole_object) {
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 0, true, object_size), extents[0]);
+  } else {
+    ASSERT_EQ(2u, extents.size());
+    ASSERT_EQ(diff_extent(253 << 10, 3 << 10, true, object_size), extents[0]);
+    ASSERT_EQ(diff_extent(256 << 10, 256 << 10, false, object_size),
+              extents[1]);
+  }
+  extents.clear();
+  ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, &extents));
+  if (this->whole_object) {
+    ASSERT_EQ(1u, extents.size());
+    ASSERT_EQ(diff_extent(0, 0, true, object_size), extents[0]);
+  } else {
+    ASSERT_EQ(2u, extents.size());
+    ASSERT_EQ(diff_extent(253 << 10, 3 << 10, true, object_size), extents[0]);
+    ASSERT_EQ(diff_extent(256 << 10, 768 << 10, false, object_size),
+              extents[1]);
+  }
+  extents.clear();
+
+  ASSERT_PASSED(this->validate_object_map, image);
+}
+
 TYPED_TEST(DiffIterateTest, DiffIterateStress)
 {
   REQUIRE(!is_rbd_pwl_enabled((CephContext *)this->_rados.cct()));
