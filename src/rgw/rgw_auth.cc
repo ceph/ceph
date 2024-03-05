@@ -279,6 +279,9 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
     const std::string& get_tenant() const override {
       return id.tenant;
     }
+    const std::optional<RGWAccountInfo>& get_account() const override {
+      return account;
+    }
 
     void write_ops_log_entry(rgw_log_entry& entry) const override {
       if (account) {

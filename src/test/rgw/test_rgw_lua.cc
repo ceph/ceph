@@ -70,6 +70,11 @@ public:
     return empty;
   }
 
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    static const std::optional<RGWAccountInfo> empty;
+    return empty;
+  }
+
   void to_str(std::ostream& out) const override {
     return;
   }

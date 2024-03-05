@@ -87,6 +87,9 @@ public:
   /* Identity's tenant namespace */
   virtual const std::string& get_tenant() const = 0;
 
+  /* Return the identity's account info if present */
+  virtual const std::optional<RGWAccountInfo>& get_account() const = 0;
+
   /* write any auth-specific fields that are safe to expose in the ops log */
   virtual void write_ops_log_entry(rgw_log_entry& entry) const {};
 };
@@ -497,6 +500,9 @@ public:
   const std::string& get_tenant() const override {
     return role_tenant;
   }
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    return account;
+  }
   void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   struct Factory {
@@ -656,6 +662,9 @@ public:
   const std::string& get_tenant() const override {
     return info.acct_user.tenant;
   }
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    return account;
+  }
 
   struct Factory {
     virtual ~Factory() {}
@@ -728,6 +737,9 @@ public:
   const std::string& get_tenant() const override {
     return user_info.user_id.tenant;
   }
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    return account;
+  }
 
   void write_ops_log_entry(rgw_log_entry& entry) const override;
 
@@ -793,6 +805,9 @@ public:
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return {}; }
   const std::string& get_tenant() const override { return role.tenant; }
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    return role.account;
+  }
   void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;

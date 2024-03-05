@@ -108,18 +108,11 @@ static rgw::ARN make_role_arn(const std::string& path,
 }
 
 static int load_role(const DoutPrefixProvider* dpp, optional_yield y,
-                     rgw::sal::Driver* driver, const rgw_owner& owner,
-                     rgw_account_id& account_id, const std::string& tenant,
-                     const std::string& name,
+                     rgw::sal::Driver* driver, const rgw_account_id& account_id,
+                     const std::string& tenant, const std::string& name,
                      std::unique_ptr<rgw::sal::RGWRole>& role,
                      rgw::ARN& resource, std::string& message)
 {
-  auto arn_account = std::ref(tenant);
-  if (const auto* id = std::get_if<rgw_account_id>(&owner); id) {
-    account_id = *id;
-    arn_account = std::ref(account_id);
-  }
-
   role = driver->get_role(name, tenant, account_id);
   const int r = role->get(dpp, y);
   if (r == -ENOENT) {
@@ -128,6 +121,7 @@ static int load_role(const DoutPrefixProvider* dpp, optional_yield y,
   }
   if (r >= 0) {
     // construct the ARN once we know the path
+    const auto& arn_account = !account_id.empty() ? account_id : tenant;
     resource = make_role_arn(role->get_path(),
                              role->get_name(),
                              arn_account);
@@ -345,9 +339,11 @@ int RGWDeleteRole::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWDeleteRole::execute(optional_yield y)
@@ -412,9 +408,11 @@ int RGWGetRole::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWGetRole::execute(optional_yield y)
@@ -450,9 +448,11 @@ int RGWModifyRoleTrustPolicy::init_processing(optional_yield y)
     return -ERR_MALFORMED_DOC;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWModifyRoleTrustPolicy::execute(optional_yield y)
@@ -565,9 +565,11 @@ int RGWPutRolePolicy::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  int r = load_role(this, y, driver, s->owner.id, account_id,
-                    s->user->get_tenant(), role_name, role, resource,
-                    s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  int r = load_role(this, y, driver, account_id, s->user->get_tenant(),
+                    role_name, role, resource, s->err.message);
   if (r < 0) {
     return r;
   }
@@ -642,9 +644,11 @@ int RGWGetRolePolicy::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWGetRolePolicy::execute(optional_yield y)
@@ -676,9 +680,11 @@ int RGWListRolePolicies::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWListRolePolicies::execute(optional_yield y)
@@ -711,9 +717,11 @@ int RGWDeleteRolePolicy::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWDeleteRolePolicy::execute(optional_yield y)
@@ -778,9 +786,11 @@ int RGWTagRole::init_processing(optional_yield y)
     return r;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWTagRole::execute(optional_yield y)
@@ -838,9 +848,11 @@ int RGWListRoleTags::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWListRoleTags::execute(optional_yield y)
@@ -884,9 +896,11 @@ int RGWUntagRole::init_processing(optional_yield y)
         });
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWUntagRole::execute(optional_yield y)
@@ -947,9 +961,11 @@ int RGWUpdateRole::init_processing(optional_yield y)
 
   max_session_duration = s->info.args.get("MaxSessionDuration");
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWUpdateRole::execute(optional_yield y)
@@ -1037,7 +1053,7 @@ int RGWAttachRolePolicy_IAM::init_processing(optional_yield y)
 {
   // managed policy is only supported for account users. adding them to
   // non-account users would give blanket permissions to all buckets
-  if (!std::holds_alternative<rgw_account_id>(s->owner.id)) {
+  if (!s->auth.identity->get_account()) {
     s->err.message = "Managed policies are only supported for account users";
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1052,9 +1068,11 @@ int RGWAttachRolePolicy_IAM::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWAttachRolePolicy_IAM::execute(optional_yield y)
@@ -1134,7 +1152,7 @@ int RGWDetachRolePolicy_IAM::init_processing(optional_yield y)
 {
   // managed policy is only supported for account users. adding them to
   // non-account users would give blanket permissions to all buckets
-  if (!std::holds_alternative<rgw_account_id>(s->owner.id)) {
+  if (!s->auth.identity->get_account()) {
     s->err.message = "Managed policies are only supported for account users";
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1149,9 +1167,11 @@ int RGWDetachRolePolicy_IAM::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWDetachRolePolicy_IAM::execute(optional_yield y)
@@ -1220,7 +1240,7 @@ int RGWListAttachedRolePolicies_IAM::init_processing(optional_yield y)
 {
   // managed policy is only supported for account roles. adding them to
   // non-account roles would give blanket permissions to all buckets
-  if (!std::holds_alternative<rgw_account_id>(s->owner.id)) {
+  if (!s->auth.identity->get_account()) {
     s->err.message = "Managed policies are only supported for account roles";
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1230,9 +1250,11 @@ int RGWListAttachedRolePolicies_IAM::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  return load_role(this, y, driver, s->owner.id, account_id,
-                   s->user->get_tenant(), role_name, role, resource,
-                   s->err.message);
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
+  }
+  return load_role(this, y, driver, account_id, s->user->get_tenant(),
+                   role_name, role, resource, s->err.message);
 }
 
 void RGWListAttachedRolePolicies_IAM::execute(optional_yield y)

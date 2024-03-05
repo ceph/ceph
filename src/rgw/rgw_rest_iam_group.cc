@@ -76,8 +76,8 @@ int RGWCreateGroup_IAM::init_processing(optional_yield y)
 {
   // use account id from authenticated user/role. with AssumeRole, this may not
   // match the account of s->user
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    info.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    info.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -254,8 +254,8 @@ class RGWGetGroup_IAM : public RGWOp {
 
 int RGWGetGroup_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -365,8 +365,8 @@ class RGWUpdateGroup_IAM : public RGWOp {
 int RGWUpdateGroup_IAM::init_processing(optional_yield y)
 {
   rgw_account_id account_id;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -512,8 +512,8 @@ class RGWDeleteGroup_IAM : public RGWOp {
 int RGWDeleteGroup_IAM::init_processing(optional_yield y)
 {
   rgw_account_id account_id;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -688,8 +688,8 @@ class RGWListGroups_IAM : public RGWOp {
 
 int RGWListGroups_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -820,8 +820,8 @@ class RGWAddUserToGroup_IAM : public RGWOp {
 
 int RGWAddUserToGroup_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    group.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    group.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -957,8 +957,8 @@ class RGWRemoveUserFromGroup_IAM : public RGWOp {
 
 int RGWRemoveUserFromGroup_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    group.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    group.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1093,8 +1093,8 @@ class RGWListGroupsForUser_IAM : public RGWOp {
 
 int RGWListGroupsForUser_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1203,8 +1203,8 @@ class RGWPutGroupPolicy_IAM : public RGWOp {
 
 int RGWPutGroupPolicy_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    info.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    info.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1354,8 +1354,8 @@ class RGWGetGroupPolicy_IAM : public RGWOp {
 
 int RGWGetGroupPolicy_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    info.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    info.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1457,8 +1457,8 @@ class RGWDeleteGroupPolicy_IAM : public RGWOp {
 
 int RGWDeleteGroupPolicy_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    info.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    info.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1592,8 +1592,8 @@ class RGWListGroupPolicies_IAM : public RGWOp {
 
 int RGWListGroupPolicies_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    info.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    info.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1698,8 +1698,8 @@ class RGWAttachGroupPolicy_IAM : public RGWOp {
 
 int RGWAttachGroupPolicy_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    info.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    info.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1847,8 +1847,8 @@ class RGWDetachGroupPolicy_IAM : public RGWOp {
 
 int RGWDetachGroupPolicy_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    info.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    info.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }
@@ -1982,8 +1982,8 @@ class RGWListAttachedGroupPolicies_IAM : public RGWOp {
 
 int RGWListAttachedGroupPolicies_IAM::init_processing(optional_yield y)
 {
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    info.account_id = *id;
+  if (const auto& account = s->auth.identity->get_account(); account) {
+    info.account_id = account->id;
   } else {
     return -ERR_METHOD_NOT_ALLOWED;
   }

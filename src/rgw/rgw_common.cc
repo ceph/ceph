@@ -1287,7 +1287,7 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
 {
   perm_state_from_req_state ps(s);
 
-  if (std::holds_alternative<rgw_account_id>(s->owner.id)) {
+  if (s->auth.identity->get_account()) {
     // account users always require an Allow from identity-based policy
     mandatory_policy = true;
   }
@@ -1366,7 +1366,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 {
   perm_state_from_req_state ps(s);
 
-  if (std::holds_alternative<rgw_account_id>(s->owner.id)) {
+  if (ps.identity->get_account()) {
     const bool account_root = (ps.identity->get_identity_type() == TYPE_ROOT);
     if (!ps.identity->is_owner_of(s->bucket_owner.id)) {
       ldpp_dout(dpp, 4) << "cross-account request for bucket owner "
@@ -1510,7 +1510,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s
 {
   perm_state_from_req_state ps(s);
 
-  if (std::holds_alternative<rgw_account_id>(s->owner.id)) {
+  if (ps.identity->get_account()) {
     const bool account_root = (ps.identity->get_identity_type() == TYPE_ROOT);
 
     const rgw_owner& object_owner = !object_acl.get_owner().empty() ?
