@@ -19,7 +19,7 @@ export class CephfsMountDetailsComponent implements OnInit, OnDestroy {
   nfs!: string;
 
   ngOnInit(): void {
-    this.mount = `sudo <CLIENT_USER>@${this.mountData?.fsId}.${this.mountData?.fsName}=${this.mountData?.rootPath} ${this.MOUNT_DIRECTORY}`;
+    this.mount = `sudo mount -t ceph <CLIENT_USER>@${this.mountData?.fsId}.${this.mountData?.fsName}=${this.mountData?.rootPath} ${this.MOUNT_DIRECTORY}`;
     this.fuse = `sudo ceph-fuse  ${this.MOUNT_DIRECTORY} -r ${this.mountData?.rootPath} --client_mds_namespace=${this.mountData?.fsName}`;
     this.nfs = `sudo mount -t nfs -o port=<PORT> <IP of active_mds daemon>:${this.mountData?.rootPath} ${this.MOUNT_DIRECTORY}`;
   }
