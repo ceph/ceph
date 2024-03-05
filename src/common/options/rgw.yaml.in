@@ -4115,7 +4115,7 @@ options:
 - name: rgw_d4n_cache_cleaning_interval
   type: int
   level: advanced
-  desc: The rgw directory port
+  desc: This is the interval for invoking write cache cleaning process
   default: 1000
   services: 
   - rgw
@@ -4268,6 +4268,16 @@ options:
     does not use this option.
   default: 127.0.0.1:6379
   services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_backend_address
+  type: str
+  level: advanced
+  desc: The backend address used by D4N cache 
+  default: 127.0.0.1:6379
+  services: 
   - rgw
   flags:
   - startup

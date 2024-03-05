@@ -488,7 +488,6 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	
   	rgw::sal::DataProcessor *filter = processor.get();
 	do {
-ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << dendl;
     	  ceph::bufferlist data;
     	  if (fst >= lst){
       	    break;
@@ -497,13 +496,9 @@ ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << dendl;
 	  off_t cur_len = cur_size - fst;
     	  std::string oid_in_cache = "D_" + prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
     	  std::string new_oid_in_cache = prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
-ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " fst is: "  << fst << dendl;
-ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " cur_len is: "  << cur_len << dendl;
     	  cacheDriver->get(dpp, oid_in_cache, 0, cur_len, data, obj_attrs, null_yield);
     	  len = data.length();
     	  fst += len;
-ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " fst is: "  << fst << dendl;
-ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " len is: "  << len << dendl;
 
     	  if (len == 0) {
       	    break;
@@ -529,11 +524,9 @@ ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << " len is: " 
 
     	  cacheDriver->rename(dpp, oid_in_cache, new_oid_in_cache, null_yield);
 
-ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << dendl;
     	  ofs += len;
   	} while (len > 0);
 
-ldpp_dout(dpp, 10) << "AMIN::" << __func__ << "(): " << __LINE__ << dendl;
   	op_ret = filter->process({}, ofs);
 	
   	const req_context rctx{dpp, null_yield, nullptr};
