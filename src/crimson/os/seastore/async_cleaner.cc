@@ -1634,7 +1634,7 @@ void RBMCleaner::mark_space_used(
   for (auto rbm : rbms) {
     if (addr.get_device_id() == rbm->get_device_id()) {
       if (rbm->get_start() <= addr) {
-	INFO("allocate addr: {} len: {}", addr, len);
+	DEBUG("allocate addr: {} len: {}", addr, len);
 	stats.used_bytes += len;
 	rbm->mark_space_used(addr, len);
       }
@@ -1653,7 +1653,7 @@ void RBMCleaner::mark_space_free(
   for (auto rbm : rbms) {
     if (addr.get_device_id() == rbm->get_device_id()) {
       if (rbm->get_start() <= addr) {
-	INFO("free addr: {} len: {}", addr, len);
+	DEBUG("free addr: {} len: {}", addr, len);
 	ceph_assert(stats.used_bytes >= len);
 	stats.used_bytes -= len;
 	rbm->mark_space_free(addr, len);
