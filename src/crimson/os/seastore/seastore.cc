@@ -1134,7 +1134,9 @@ SeaStore::Shard::omap_get_values(
 	onode.get_layout().omap_root,
 	t,
 	start,
-	OMapManager::omap_list_config_t().with_inclusive(false, false));
+	OMapManager::omap_list_config_t()
+	  .with_inclusive(false, false)
+	  .without_max());
   });
 }
 
