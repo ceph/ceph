@@ -187,6 +187,12 @@ public:
     return empty;
   }
 
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    ceph_abort();
+    static std::optional<RGWAccountInfo> empty;
+    return empty;
+  }
+
   void to_str(std::ostream& out) const override {
     out << id;
   }
