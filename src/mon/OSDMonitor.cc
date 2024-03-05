@@ -13095,6 +13095,120 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd pool force-remove-snap") {
+    /*
+     *  Forces removal of snapshots in the range of
+     *  [lower_snapid_bound, upper_snapid_bound) on pool <pool>
+     *  in order to cause OSDs to re-trim them.
+     *  The command has two mutually exclusive variants:
+     *  * Default: All the snapids in the given range which are not
+     *    marked as purged in the Monitor will be removed. Mostly useful
+     *    for cases in which the snapid is leaked in the client side.
+     *    See: https://tracker.ceph.com/issues/64646
+     *  * (Experimental) purged-snaps-only: Adding this flag will result
+     *    in the reremoval of snapids in the given range.
+     *    Only the snapids which are *already* marked as purged in the
+     *    Monitor will be removed again. This may be useful for cases in
+     *    which we would like to trigger OSD snap trimming again.
+     */
+    string poolstr;
+    cmd_getval(cmdmap, "pool", poolstr);
+    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (pool < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+
+    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    pg_pool_t *pp = nullptr;
+    if (pending_inc.new_pools.count(pool))
+      pp = &pending_inc.new_pools[pool];
+    if (!pp) {
+      pp = &pending_inc.new_pools[pool];
+      *pp = *p;
+    }
+
+    if (!p->is_unmanaged_snaps_mode() && !p->is_pool_snaps_mode()) {
+      ss << "pool " << poolstr << " invalid snaps mode";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+
+    int64_t lower_snapid_bound =
+      cmd_getval_or<int64_t>(cmdmap, "lower_snapid_bound", 1);
+    int64_t upper_snapid_bound =
+      cmd_getval_or<int64_t>(cmdmap, "upper_snapid_bound",
+                             (int64_t)p->get_snap_seq());
+
+    if (lower_snapid_bound > upper_snapid_bound) {
+      ss << "error, lower bound can't be higher than higher bound";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+
+    bool dry_run = false;
+    cmd_getval(cmdmap, "dry_run", dry_run);
+
+    bool purged_snaps_only = false;
+    cmd_getval(cmdmap, "purged_snaps_only", purged_snaps_only);
+
+    // don't redelete past pool's snap_seq
+    auto snapid_limit = std::min(upper_snapid_bound, (int64_t)p->get_snap_seq());
+
+    if (dry_run) {
+      ss << "Dry run: ";
+    }
+
+    ss << "force removing snap ids in the range of [" << lower_snapid_bound << ","
+       << snapid_limit << ") from pool " << pool << ". ";
+
+    std::set<int64_t> force_removed_snapids;
+    for (auto i = lower_snapid_bound; i < snapid_limit; i++) {
+      snapid_t before_begin, before_end;
+      int res = lookup_purged_snap(pool, i, &before_begin, &before_end);
+      if (res == 0) {
+        ss << "snapids: " << i << " was already marked as purged. ";
+        // Reremove the already purged_snaps
+        if (purged_snaps_only) {
+          force_removed_snapids.insert(i);
+        }
+      } else {
+        if (!purged_snaps_only) {
+          // Remove non purged_snaps
+          // See: https://tracker.ceph.com/issues/64646
+          force_removed_snapids.insert(i);
+        }
+      }
+    }
+
+    for (const auto i : force_removed_snapids) {
+      if (!dry_run) {
+        pending_inc.new_removed_snaps[pool].insert(snapid_t(i));
+        if (purged_snaps_only) {
+          // Kludge: In order to make this compatible with
+          // OSDMap::apply_incremental use of interval_set,
+          // specifically the erasure from removed_snaps_queue.
+          pending_inc.new_purged_snaps[pool].insert(snapid_t(i));
+        }
+      }
+    }
+
+    if (force_removed_snapids.size()) {
+      ss << "removed snapids: " << force_removed_snapids;
+    } else {
+      ss << "no snapshots were removed";
+    }
+
+    if (dry_run) {
+      err = 0;
+      goto reply_no_propose;
+    }
+    pp->set_snap_epoch(pending_inc.epoch);
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+                               get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd pool create") {
     int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
     int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
