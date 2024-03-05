@@ -8,7 +8,7 @@ parameters:
  prefix: ceph
  numcpus: 1
  memory: 2048
- image: fedora36
+ image: /var/lib/libvirt/images/ceph-dashboard/fedora36
  notify: false
  admin_password: password
  disks:

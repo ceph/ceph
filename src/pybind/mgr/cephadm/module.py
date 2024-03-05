@@ -2971,9 +2971,22 @@ Then run the following:
         self.set_store(PrometheusService.USER_CFG_KEY, user)
         self.set_store(PrometheusService.PASS_CFG_KEY, password)
         return 'prometheus credentials updated correctly'
+    
+    @handle_orch_error
+    def set_prometheus_cert(self, cert: str) -> str:
+        self.set_store(PrometheusService.PROMETHEUS_CERT_CFG_KEY, cert)
+        return 'prometheus cert stored correctly'
+    
+    @handle_orch_error
+    def get_prometheus_cert(self) -> str:
+        prometheus_cert = self.get_store(PrometheusService.PROMETHEUS_CERT_CFG_KEY)
+        return prometheus_cert
 
     @handle_orch_error
     def set_prometheus_target(self, url: str) -> str:
+        valid_url_pattern = r"^(?!http:\/\/)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5})$"
+        if re.match(valid_url_pattern, url) is None:
+            return f"Invalid URL '{url}'. It should be in the format host_ip:port"
         prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
         if url not in prometheus_spec.targets:
             prometheus_spec.targets.append(url)
