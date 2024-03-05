@@ -113,6 +113,10 @@ public:
     return get_decoratee().get_tenant();
   }
 
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    return get_decoratee().get_account();
+  }
+
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override {  /* out */
     return get_decoratee().load_acct_info(dpp, user_info);
   }

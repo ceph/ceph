@@ -120,8 +120,8 @@ int RGWCreateOIDCProvider::init_processing(optional_yield y)
     return -EINVAL;
   }
 
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    info.tenant = *id;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    info.tenant = acc->id;
   } else {
     info.tenant = s->user->get_tenant();
   }
@@ -217,8 +217,8 @@ RGWDeleteOIDCProvider::RGWDeleteOIDCProvider()
 int RGWDeleteOIDCProvider::init_processing(optional_yield y)
 {
   std::string_view account;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account = *id;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
   } else {
     account = s->user->get_tenant();
   }
@@ -252,8 +252,8 @@ RGWGetOIDCProvider::RGWGetOIDCProvider()
 int RGWGetOIDCProvider::init_processing(optional_yield y)
 {
   std::string_view account;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account = *id;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
   } else {
     account = s->user->get_tenant();
   }
@@ -308,8 +308,8 @@ RGWListOIDCProviders::RGWListOIDCProviders()
 void RGWListOIDCProviders::execute(optional_yield y)
 {
   std::string_view account;
-  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
-    account = *id;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
   } else {
     account = s->user->get_tenant();
   }
