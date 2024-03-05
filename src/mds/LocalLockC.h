@@ -34,7 +34,7 @@ public:
   }
 
   bool can_wrlock() const {
-    return !is_xlocked();
+    return !is_xlocked() && !is_waiter_for(SimpleLock::WAIT_XLOCK);
   }
   void get_wrlock(client_t client) {
     ceph_assert(can_wrlock());
