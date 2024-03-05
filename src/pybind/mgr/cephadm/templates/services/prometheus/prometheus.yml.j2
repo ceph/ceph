@@ -2,10 +2,8 @@
 global:
   scrape_interval: 10s
   evaluation_interval: 10s
-{% if not security_enabled %}
   external_labels:
     cluster: {{ cluster_fsid }}
-{% endif %}
 
 rule_files:
   - /etc/prometheus/alerting/*
@@ -39,6 +37,13 @@ alerting:
 
 scrape_configs:
   - job_name: 'ceph'
+  relabel_configs:
+    - source_labels: [__address__]
+      target_label: cluster
+      replacement: {{ cluster_fsid }}
+    - source_labels: [instance]
+      target_label: instance
+      replacement: 'ceph_cluster'
 {% if security_enabled %}
     scheme: https
     tls_config:
@@ -58,9 +63,6 @@ scrape_configs:
 {% else %}
     honor_labels: true
     relabel_configs:
-    - source_labels: [__address__]
-      target_label: cluster
-      replacement: {{ cluster_fsid }}
     - source_labels: [instance]
       target_label: instance
       replacement: 'ceph_cluster'
@@ -70,6 +72,10 @@ scrape_configs:
 
 {% if node_exporter_sd_url %}
   - job_name: 'node'
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: cluster
+      replacement: {{ cluster_fsid }}
 {% if security_enabled %}
     scheme: https
     tls_config:
@@ -86,15 +92,15 @@ scrape_configs:
 {% else %}
     http_sd_configs:
     - url: {{ node_exporter_sd_url }}
-    relabel_configs:
-    - source_labels: [__address__]
-      target_label: cluster
-      replacement: {{ cluster_fsid }}
 {% endif %}
 {% endif %}
 
 {% if haproxy_sd_url %}
   - job_name: 'haproxy'
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: cluster
+      replacement: {{ cluster_fsid }}
 {% if security_enabled %}
     scheme: https
     tls_config:
@@ -109,15 +115,15 @@ scrape_configs:
 {% else %}
     http_sd_configs:
     - url: {{ haproxy_sd_url }}
-    relabel_configs:
-    - source_labels: [__address__]
-      target_label: cluster
-      replacement: {{ cluster_fsid }}
 {% endif %}
 {% endif %}
 
 {% if ceph_exporter_sd_url %}
   - job_name: 'ceph-exporter'
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: cluster
+      replacement: {{ cluster_fsid }}
 {% if security_enabled %}
     honor_labels: true
     scheme: https
@@ -132,10 +138,6 @@ scrape_configs:
         ca_file: root_cert.pem
 {% else %}
     honor_labels: true
-    relabel_configs:
-    - source_labels: [__address__]
-      target_label: cluster
-      replacement: {{ cluster_fsid }}
     http_sd_configs:
     - url: {{ ceph_exporter_sd_url }}
 {% endif %}
@@ -161,18 +163,27 @@ scrape_configs:
 {% endif %}
 {% endif %}
 
-{% if not security_enabled %}
+{% for url, details in clusters_credentials.items() %}
   - job_name: 'federate'
     scrape_interval: 15s
     honor_labels: true
     metrics_path: '/federate'
+{% if security_enabled %}
+    scheme: https
+    tls_config:
+      ca_file: {{ details['cert_file_name'] }}
+    basic_auth:
+      username: {{ details['user'] }}
+      password: {{ details['password'] }}
+{% endif %}
     params:
       'match[]':
         - '{job="ceph"}'
         - '{job="node"}'
         - '{job="haproxy"}'
         - '{job="ceph-exporter"}'
+        - '{job="nvmeof"}'
     static_configs:
-    - targets: {{ external_prometheus_targets }}
-{% endif %}
+    - targets: ['{{ url }}']
+{% endfor %}
 
