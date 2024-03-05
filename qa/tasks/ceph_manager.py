@@ -236,6 +236,7 @@ class OSDThrasher(Thrasher):
         self.chance_force_recovery = self.config.get('chance_force_recovery', 0.3)
         self.chance_reset_purged_snaps_last = self.config.get('chance_reset_purged_snaps_last', 0.3)
         self.chance_trim_stale_osdmaps = self.config.get('chance_trim_stale_osdmaps', 0.3)
+        self.chance_force_remove_snap = self.config.get('chance_force_remove_snap', 0)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * len(num_osds)
@@ -807,6 +808,25 @@ class OSDThrasher(Thrasher):
            except CommandFailedError:
                self.log('Failed to trim stale osdmaps, ignoring')
 
+    def force_remove_snap(self):
+        """
+        Force reremove snapshots already makred as purged.
+        Please note that internal snap ids are the ones being
+        used to detect purges snaps. The internal snap ids are
+        *not* the same snap ids used by thrasher.
+        """
+        self.log('force_remove_snap')
+        pool = self.ceph_manager.get_pool()
+        if pool is None:
+            self.log('Failed to get pool')
+            return
+        try:
+            self.ceph_manager.raw_cluster_cmd('osd', 'pool',
+                                              'force-remove-snap',
+                                              pool, '--purged-snaps-only')
+        except CommandFailedError:
+            self.log('Failed to force reremove snap, ignoring')
+
     def all_up(self):
         """
         Make sure all osds are up and not out.
@@ -1269,6 +1289,8 @@ class OSDThrasher(Thrasher):
             actions.append((self.reset_purged_snaps_last, self.chance_reset_purged_snaps_last))
         if self.chance_trim_stale_osdmaps > 0:
             actions.append((self.trim_stale_osdmaps, self.chance_trim_stale_osdmaps))
+        if self.chance_force_remove_snap > 0:
+            actions.append((self.force_remove_snap, self.chance_force_remove_snap))
 
         for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
             for scenario in [
