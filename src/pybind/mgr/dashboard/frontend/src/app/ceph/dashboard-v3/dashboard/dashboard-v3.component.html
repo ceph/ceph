@@ -56,7 +56,9 @@
                      link="/hosts"
                      title="Host"
                      summaryType="simplified"
-                     *ngIf="healthData.hosts != null"></cd-card-row>
+                     *ngIf="healthData.hosts != null"
+                     [dropdownData]="(isHardwareEnabled$ | async) && (hardwareSummary$ | async)">
+        </cd-card-row>
         <!-- Monitors -->
         <cd-card-row [data]="healthData.mon_status.monmap.mons.length"
                      link="/monitor"
@@ -141,7 +143,7 @@
                 </ul>
               </ng-template>
 
-              <div class="d-flex flex-row">
+              <div class="d-flex flex-row col-md-3 ms-4">
                 <i *ngIf="healthData.health?.status"
                    [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"
                    [ngStyle]="healthData.health.status | healthColor"
@@ -157,6 +159,16 @@
                 <span class="ms-2 mt-n1 lead"
                       *ngIf="!healthData.health?.checks?.length"
                       i18n>Cluster</span>
+              </div>
+            </div>
+
+            <div class="d-flex flex-column col-md-3">
+              <div *ngIf="hasHardwareError"
+                   class="d-flex flex-row">
+                <i class="text-danger"
+                   [ngClass]="[icons.danger, icons.large2x]"></i>
+                <span class="ms-2 mt-n1 lead"
+                      i18n>Hardware</span>
               </div>
             </div>
             <section class="footer alerts"
