@@ -377,6 +377,10 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       OnodeRef &d_onode);
+    tm_ret _rename(
+      internal_context_t &ctx,
+      OnodeRef &onode,
+      OnodeRef &d_onode);
     tm_ret _zero(
       internal_context_t &ctx,
       OnodeRef &onode,
