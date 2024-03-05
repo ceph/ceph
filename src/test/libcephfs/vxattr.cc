@@ -417,3 +417,39 @@ TEST(LibCephFS, FsCrypt) {
   ceph_shutdown(cmount);
 }
 
+#define ACL_EA_ACCESS  "system.posix_acl_access"
+#define ACL_EA_DEFAULT "system.posix_acl_default"
+
+TEST(LibCephFS, Removexattr) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_xattr_file[NAME_MAX];
+  sprintf(test_xattr_file, "test_removexattr_%d", getpid());
+  int fd = ceph_open(cmount, test_xattr_file, O_RDWR|O_CREAT, 0666);
+  ASSERT_GT(fd, 0);
+
+  // remove xattr
+  ASSERT_EQ(-ENODATA, ceph_fremovexattr(cmount, fd, "user.remove.xattr"));
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "user.remove.xattr", "foo", 3, XATTR_CREATE));
+  ASSERT_EQ(0, ceph_fremovexattr(cmount, fd, "user.remove.xattr"));
+
+  // remove xattr via setxattr & XATTR_REPLACE
+  ASSERT_EQ(-ENODATA, ceph_fsetxattr(cmount, fd, "user.remove.xattr", nullptr, 0, XATTR_REPLACE));
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "user.remove.xattr", "foo", 3, XATTR_CREATE));
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "user.remove.xattr", nullptr, 0, XATTR_REPLACE));
+
+  // ACL_EA_ACCESS and ACL_EA_DEFAULT are special and will
+  ASSERT_EQ(0, ceph_fremovexattr(cmount, fd, ACL_EA_ACCESS));
+  ASSERT_EQ(0, ceph_fremovexattr(cmount, fd, ACL_EA_ACCESS));
+  ASSERT_EQ(0, ceph_fremovexattr(cmount, fd, ACL_EA_DEFAULT));
+  ASSERT_EQ(0, ceph_fremovexattr(cmount, fd, ACL_EA_DEFAULT));
+
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
