@@ -44,6 +44,7 @@ cherrypy.log.access_log.propagate = False
 
 class AgentEndpoint:
 
+    # TODO: move these constants to migrations
     KV_STORE_AGENT_ROOT_CERT = 'cephadm_agent/root/cert'
     KV_STORE_AGENT_ROOT_KEY = 'cephadm_agent/root/key'
 
@@ -60,14 +61,15 @@ class AgentEndpoint:
         cherrypy.tree.mount(self.node_proxy_endpoint, '/node-proxy', config=conf)
 
     def configure_tls(self, server: Server) -> None:
-        old_cert = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_CERT)
-        old_key = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_KEY)
+        old_cert = self.mgr.cert_key_store.get_cert('agent_endpoint_root_cert')
+        old_key = self.mgr.cert_key_store.get_key('agent_endpoint_key')
+
         if old_cert and old_key:
             self.ssl_certs.load_root_credentials(old_cert, old_key)
         else:
             self.ssl_certs.generate_root_cert(self.mgr.get_mgr_ip())
-            self.mgr.set_store(self.KV_STORE_AGENT_ROOT_CERT, self.ssl_certs.get_root_cert())
-            self.mgr.set_store(self.KV_STORE_AGENT_ROOT_KEY, self.ssl_certs.get_root_key())
+            self.mgr.cert_key_store.save_cert('agent_endpoint_root_cert', self.ssl_certs.get_root_cert())
+            self.mgr.cert_key_store.save_key('agent_endpoint_key', self.ssl_certs.get_root_key())
 
         host = self.mgr.get_hostname()
         addr = self.mgr.get_mgr_ip()
