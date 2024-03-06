@@ -153,10 +153,19 @@ struct CollectionNode
   }
 
   ceph::bufferlist get_delta() final {
-    assert(!delta_buffer.empty());
     ceph::bufferlist bl;
-    encode(delta_buffer, bl);
-    delta_buffer.clear();
+    // FIXME: CollectionNodes are always first mutated and
+    // 	      then checked whether they have enough space,
+    // 	      and if not, new ones will be created and the
+    // 	      mutation_pending ones are left untouched.
+    //
+    // 	      The above order should be reversed, nodes should
+    // 	      be mutated only if there are enough space for new
+    // 	      entries.
+    if (!delta_buffer.empty()) {
+      encode(delta_buffer, bl);
+      delta_buffer.clear();
+    }
     return bl;
   }
 
