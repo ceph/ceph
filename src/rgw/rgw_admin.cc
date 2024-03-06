@@ -9248,6 +9248,25 @@ next:
       opt_cmd == OPT::ACCOUNT_LIST) {
     if (opt_cmd == OPT::USER_LIST) {
       metadata_key = "user";
+
+      if (!account_id.empty() || !account_name.empty()) {
+        // list users by account
+        rgw::account::AdminOpState op_state;
+        op_state.account_id = account_id;
+        op_state.tenant = tenant;
+        op_state.account_name = account_name;
+
+        std::string err_msg;
+        int ret = rgw::account::list_users(
+            dpp(), driver, op_state, path_prefix, marker,
+            max_entries_specified, max_entries, err_msg,
+            stream_flusher, null_yield);
+        if (ret < 0)  {
+          cerr << "ERROR: " << err_msg << std::endl;
+          return -ret;
+        }
+        return 0;
+      }
     } else if (opt_cmd == OPT::ACCOUNT_LIST) {
       metadata_key = "account";
     }
