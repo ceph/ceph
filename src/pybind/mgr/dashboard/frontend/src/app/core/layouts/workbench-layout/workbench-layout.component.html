@@ -1,7 +1,7 @@
 <block-ui>
   <cd-navigation>
     <div class="container-fluid h-100"
-         [ngClass]="{'dashboard': (router.url == '/dashboard' || router.url == '/dashboard_3'), 'rgw-dashboard': (router.url == '/rgw/overview')}">
+         [ngClass]="{'dashboard': (router.url == '/dashboard' || router.url == '/dashboard_3' || router.url == '/multi-cluster/overview'), 'rgw-dashboard': (router.url == '/rgw/overview')}">
     <cd-context></cd-context>
       <cd-breadcrumbs></cd-breadcrumbs>
       <router-outlet></router-outlet>

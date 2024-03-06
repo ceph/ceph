@@ -10,8 +10,12 @@
         <div class="box"
              [style.background-color]="data.pointBackgroundColor">
         </div>
-        <div *ngIf="!chartTitle.includes(data.label)">{{ data.label }}:</div>
-          {{ data?.currentData || 'N/A' }} {{ data?.currentDataUnits }}
+        <ng-container *ngIf="!chartTitle.includes(data.label)">
+          <span [ngClass]="{'d-inline-block text-truncate': truncateLabel}"
+                [ngStyle]="{'width': truncateLabel ? '10rem' : 'auto'}"
+                [title]="data.label">{{ data.label }}</span>:
+        </ng-container>
+        <span>{{ data?.currentData || 'N/A' }} {{ data?.currentDataUnits }}</span>
         <div *ngIf="maxValue && data.currentData">
           used of {{ maxConvertedValue }} {{ maxConvertedValueUnits }}
         </div>
