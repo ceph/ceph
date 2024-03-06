@@ -852,6 +852,29 @@ SeaStore::Shard::read(
     });
 }
 
+SeaStore::Shard::base_errorator::future<bool>
+SeaStore::Shard::exists(
+  CollectionRef c,
+  const ghobject_t& oid)
+{
+  LOG_PREFIX(SeaStore::exists);
+  DEBUG("oid {}", oid);
+  return repeat_with_onode<bool>(
+    c,
+    oid,
+    Transaction::src_t::READ,
+    "oid_exists",
+    op_type_t::READ,
+    [](auto&, auto&) {
+    return seastar::make_ready_future<bool>(true);
+  }).handle_error(
+    crimson::ct_error::enoent::handle([] {
+      return seastar::make_ready_future<bool>(false);
+    }),
+    crimson::ct_error::assert_all{"unexpected error"}
+  );
+}
+
 SeaStore::Shard::read_errorator::future<ceph::bufferlist>
 SeaStore::Shard::readv(
   CollectionRef ch,
