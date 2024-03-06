@@ -22,7 +22,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds_quiesce
 #undef dout_prefix
-#define dout_prefix *_dout << "quiesce.mgr <" << __func__ << "> "
+#define dout_prefix *_dout << "quiesce.mgr." << membership.me << " <" << __func__ << "> "
 
 #undef dout
 #define dout(lvl)                                                        \
@@ -54,23 +54,23 @@ static QuiesceTimeInterval time_distance(QuiesceTimePoint lhs, QuiesceTimePoint 
 
 bool QuiesceDbManager::db_thread_has_work() const
 {
-  return false
+  return db_thread_should_exit
       || pending_acks.size() > 0
       || pending_requests.size() > 0
       || pending_db_updates.size() > 0
       || (agent_callback.has_value() && agent_callback->if_newer < db_version())
-      || (!cluster_membership.has_value() || cluster_membership->epoch != membership.epoch);
+      || (cluster_membership.has_value() && cluster_membership->epoch != membership.epoch);
 }
 
 void* QuiesceDbManager::quiesce_db_thread_main()
 {
-  db_thread_enter();
-
   std::unique_lock ls(submit_mutex);
   QuiesceTimeInterval next_event_at_age = QuiesceTimeInterval::max();
   QuiesceDbVersion last_acked = {0, 0};
 
-  while (true) {
+  dout(5) << "Entering the main thread" << dendl;
+  bool keep_working = true;
+  while (keep_working) {
 
     auto db_age = db.get_age();
 
@@ -78,11 +78,10 @@ void* QuiesceDbManager::quiesce_db_thread_main()
       submit_condition.wait_for(ls, next_event_at_age - db_age);
     }
 
-    if (!membership_upkeep()) {
-      break;
-    }
+    auto [is_member, should_exit] = membership_upkeep();
+    keep_working = !should_exit;
 
-    {
+    if (is_member) {
       decltype(pending_acks) acks(std::move(pending_acks));
       decltype(pending_requests) requests(std::move(pending_requests));
       decltype(pending_db_updates) db_updates(std::move(pending_db_updates));
@@ -105,6 +104,10 @@ void* QuiesceDbManager::quiesce_db_thread_main()
       } else {
         next_event_at_age = replica_upkeep(std::move(db_updates));
       }
+    } else {
+      ls.unlock();
+      dout(15) << "not a cluster member, keeping idle " << dendl;
+      next_event_at_age = QuiesceTimeInterval::max();
     }
   
     complete_requests();
@@ -131,7 +134,7 @@ void* QuiesceDbManager::quiesce_db_thread_main()
       }
     }
 
-    if (send_ack) {
+    if (is_member && send_ack) {
       auto db_version = quiesce_map.db_version;
       dout(20) << "synchronous agent ack: " << quiesce_map << dendl;
       auto rc = membership.send_ack(std::move(quiesce_map));
@@ -148,7 +151,7 @@ void* QuiesceDbManager::quiesce_db_thread_main()
 
   ls.unlock();
 
-  db_thread_exit();
+  dout(5) << "Exiting the main thread" << dendl;
 
   return 0;
 }
@@ -160,43 +163,36 @@ void QuiesceDbManager::update_membership(const QuiesceClusterMembership& new_mem
   bool will_participate = new_membership.members.contains(new_membership.me);
   dout(20) << "will participate: " << std::boolalpha << will_participate << std::noboolalpha << dendl;
 
-  if (cluster_membership && !will_participate) {
-    // stop the thread
-    cluster_membership.reset();
+  if (will_participate && !quiesce_db_thread.is_started()) {
+    // start the thread
+    dout(5) << "starting the db mgr thread at epoch: " << new_membership.epoch << dendl;
+    db_thread_should_exit = false;
+    quiesce_db_thread.create("quiesce_db_mgr");
+  } else {
     submit_condition.notify_all();
-    lock.unlock();
-    ceph_assert(quiesce_db_thread.is_started());
-    dout(5) << "stopping the db mgr thread at epoch: " << new_membership.epoch << dendl;
-    quiesce_db_thread.join();
-  } else if (will_participate) {
-    if (!cluster_membership) {
-      // start the thread
-      dout(5) << "starting the db mgr thread at epoch: " << new_membership.epoch << dendl;
-      quiesce_db_thread.create("quiesce_db_mgr");
-    } else {
-      submit_condition.notify_all();
-    }
-    if (inject_request) {
-      pending_requests.push_front(inject_request);
-    }
-    cluster_membership = new_membership;
-    
-    std::lock_guard lc(agent_mutex);
-    if (agent_callback) {
-        agent_callback->if_newer = {0, 0};
-    }
   }
 
-  if (!will_participate && inject_request) {
-    inject_request->complete(-EPERM);
+  if (inject_request) {
+    pending_requests.push_front(inject_request);
+  }
+
+  if (will_participate) {
+    cluster_membership = new_membership;
+  } else {
+    cluster_membership.reset();
+  }
+
+  std::lock_guard lc(agent_mutex);
+  if (agent_callback) {
+      agent_callback->if_newer = {0, 0};
   }
 }
 
-bool QuiesceDbManager::membership_upkeep()
+std::pair<QuiesceDbManager::IsMemberBool, QuiesceDbManager::ShouldExitBool> QuiesceDbManager::membership_upkeep()
 {
   if (cluster_membership && cluster_membership->epoch == membership.epoch) {
     // no changes
-    return true;
+    return {true, db_thread_should_exit};
   }
 
   bool was_leader = membership.epoch > 0 && membership.leader == membership.me;
@@ -206,7 +202,7 @@ bool QuiesceDbManager::membership_upkeep()
       << std::boolalpha << was_leader << "->" << is_leader << std::noboolalpha
       << " members:" << cluster_membership->members << dendl;
   } else {
-    dout(10) << "shutdown! was_leader: " << was_leader << dendl;
+    dout(10) << "not a member! was_leader: " << was_leader << dendl;
   }
 
   if (is_leader) {
@@ -238,18 +234,24 @@ bool QuiesceDbManager::membership_upkeep()
       done_requests[await_ctx.req_ctx] = EINPROGRESS;
     }
     awaits.clear();
-    // reject pending requests
+    // reject pending requests as not leader
     while (!pending_requests.empty()) {
-      done_requests[pending_requests.front()] = EPERM;
+      done_requests[pending_requests.front()] = ENOTTY;
       pending_requests.pop_front();
     }
   }
 
   if (cluster_membership) {
     membership = *cluster_membership;
+    dout(15) << "Updated membership" << dendl;
+  } else {
+    membership.epoch = 0;
+    peers.clear();
+    awaits.clear();
+    db.clear();
   }
 
-  return cluster_membership.has_value();
+  return { cluster_membership.has_value(), db_thread_should_exit };
 }
 
 QuiesceTimeInterval QuiesceDbManager::replica_upkeep(decltype(pending_db_updates)&& db_updates)
@@ -291,7 +293,7 @@ QuiesceTimeInterval QuiesceDbManager::replica_upkeep(decltype(pending_db_updates
   if (db.set_version > update.db_version.set_version) {
     dout(3) << "got an older version of DB from the leader: " << db.set_version << " > " << update.db_version.set_version << dendl;
     dout(3) << "discarding the DB" << dendl;
-    db.reset();
+    db.clear();
   } else {
     for (auto& [qs_id, qs] : update.sets) {
       db.sets.insert_or_assign(qs_id, std::move(qs));

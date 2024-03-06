@@ -49,7 +49,19 @@ class QuiesceDbManager {
     QuiesceDbManager() : quiesce_db_thread(this) {};
     virtual ~QuiesceDbManager()
     {
+      shutdown();
+    }
+
+    void shutdown() {
       update_membership({});
+
+      if (quiesce_db_thread.is_started()) {
+        submit_mutex.lock();
+        db_thread_should_exit = true;
+        submit_condition.notify_all();
+        submit_mutex.unlock();
+        quiesce_db_thread.join();
+      }
     }
 
     // This will reset the manager state
@@ -191,6 +203,7 @@ class QuiesceDbManager {
     std::queue<QuiesceDbPeerListing> pending_db_updates;
     std::queue<QuiesceDbPeerAck> pending_acks;
     std::deque<RequestContext*> pending_requests;
+    bool db_thread_should_exit = false;
 
     class QuiesceDbThread : public Thread {
       public:
@@ -220,7 +233,7 @@ class QuiesceDbManager {
       QuiesceTimeInterval get_age() const {
         return QuiesceClock::now() - time_zero;
       }
-      void reset() { 
+      void clear() { 
         set_version = 0; 
         sets.clear();
         time_zero = QuiesceClock::now();
@@ -257,23 +270,11 @@ class QuiesceDbManager {
     std::unordered_map<RequestContext*, int> done_requests;
 
     void* quiesce_db_thread_main();
-
-    void db_thread_enter() {
-      // this will invalidate the membership, see membership_upkeep()
-      membership.epoch = 0;
-      peers.clear();
-      awaits.clear();
-      done_requests.clear();
-      db.reset();
-    }
-
-    void db_thread_exit() {
-      complete_requests();
-    }
-
     bool db_thread_has_work() const;
 
-    bool membership_upkeep();
+    using IsMemberBool = bool;
+    using ShouldExitBool = bool;
+    std::pair<IsMemberBool, ShouldExitBool> membership_upkeep();
 
     QuiesceTimeInterval replica_upkeep(decltype(pending_db_updates)&& db_updates);
     bool leader_bootstrap(decltype(pending_db_updates)&& db_updates, QuiesceTimeInterval &next_event_at_age);
