@@ -459,8 +459,6 @@ public:
 	(intermediate_base == L_ADDR_NULL)
 	  == (intermediate_key == L_ADDR_NULL));
       if (ext) {
-        // FIXME: cannot and will not remap a dirty extent for now.
-        ceph_assert(!ext->is_dirty());
         ceph_assert(!ext->is_mutable());
         ceph_assert(ext->get_length() >= original_len);
 	ceph_assert(ext->get_paddr() == original_paddr);
