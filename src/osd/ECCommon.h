@@ -209,7 +209,12 @@ struct ECListener {
 };
 
 struct ECCommon {
-  using ec_align_t = boost::tuple<uint64_t, uint64_t, uint32_t>;
+  struct ec_align_t {
+    uint64_t offset;
+    uint64_t size;
+    uint32_t flags;
+  };
+  friend std::ostream &operator<<(std::ostream &lhs, const ec_align_t &rhs);
   using ec_extents_t = std::map<hobject_t,std::pair<int, extent_map>>;
 
   virtual ~ECCommon() = default;
@@ -228,12 +233,12 @@ struct ECCommon {
     GenContextURef<ec_extents_t &&> &&func) = 0;
 
   struct read_request_t {
-    const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
+    const std::list<ec_align_t> to_read;
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
     bool want_attrs;
     bool partial_read;
     read_request_t(
-      const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
+      const std::list<ec_align_t> &to_read,
       const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
       bool want_attrs,
       bool partial_read=false)
@@ -276,7 +281,7 @@ struct ECCommon {
     virtual void finish_single_request(
       const hobject_t &hoid,
       read_result_t &res,
-      std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read) = 0;
+      std::list<ECCommon::ec_align_t> to_read) = 0;
 
     virtual void finish(int priority) && = 0;
 
@@ -357,8 +362,8 @@ struct ECCommon {
 	for (auto &&extent: hpair.second.to_read) {
 	  returned.push_back(
 	    boost::make_tuple(
-	      extent.get<0>(),
-	      extent.get<1>(),
+	      extent.offset,
+	      extent.size,
 	      std::map<pg_shard_t, ceph::buffer::list>()));
 	}
       }
@@ -377,7 +382,7 @@ struct ECCommon {
       auto r = returned.begin();
       for (auto read : reads) {
         new_returned.push_back(
-            boost::make_tuple(read.get<0>(), read.get<1>(), r->get<2>()));
+            boost::make_tuple(read.offset, read.size, r->get<2>()));
         ++r;
       }
       complete[hoid].returned = new_returned;
@@ -670,7 +675,7 @@ struct ECCommon {
       for (auto &&hpair: to_read) {
         auto &l = _to_read[hpair.first];
         for (auto extent: hpair.second) {
-          l.emplace_back(extent.first, extent.second, 0);
+          l.emplace_back(ec_align_t{extent.first, extent.second, 0});
         }
       }
       ec_backend.objects_read_and_reconstruct(

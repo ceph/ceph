@@ -76,6 +76,13 @@ ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::pipeline_state_t 
   return lhs; // unreachable
 }
 
+ostream &operator<<(ostream &lhs, const ECCommon::ec_align_t &rhs)
+{
+  return lhs << rhs.offset << ","
+	     << rhs.size << ","
+	     << rhs.flags;
+}
+
 ostream &operator<<(ostream &lhs, const ECCommon::read_request_t &rhs)
 {
   return lhs << "read_request_t(to_read=[" << rhs.to_read << "]"
@@ -424,12 +431,9 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
       op.obj_to_source[i->first].insert(j->first);
       op.source_to_obj[j->first].insert(i->first);
     }
-    for (list<boost::tuple<uint64_t, uint64_t, uint32_t> >::const_iterator j =
-	   i->second.to_read.begin();
-	 j != i->second.to_read.end();
-	 ++j) {
+    for (const auto& read : i->second.to_read) {
       pair<uint64_t, uint64_t> chunk_off_len =
-	sinfo.aligned_offset_len_to_chunk(make_pair(j->get<0>(), j->get<1>()));
+	sinfo.aligned_offset_len_to_chunk(make_pair(read.offset, read.size));
       for (auto k = i->second.need.begin();
 	   k != i->second.need.end();
 	   ++k) {
@@ -437,7 +441,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
 	  boost::make_tuple(
 	    chunk_off_len.first,
 	    chunk_off_len.second,
-	    j->get<2>()));
+	    read.flags));
       }
       ceph_assert(!need_attrs);
     }
@@ -494,7 +498,7 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
   void finish_single_request(
     const hobject_t &hoid,
     ECCommon::read_result_t &res,
-    list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read) override
+    list<ECCommon::ec_align_t> to_read) override
   {
     extent_map result;
     if (res.r != 0)
@@ -502,10 +506,10 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
     ceph_assert(res.returned.size() == to_read.size());
     ceph_assert(res.errors.empty());
     for (auto &&read: to_read) {
-      auto bounds = make_pair(read.get<0>(), read.get<1>());
+      auto bounds = make_pair(read.offset, read.size);
       auto aligned = read_pipeline.sinfo.offset_len_to_stripe_bounds(bounds);
       if (g_conf()->osd_ec_partial_reads
-          && (aligned.first != read.get<0>() || aligned.second != read.get<1>())) {
+          && (aligned.first != read.offset || aligned.second != read.size)) {
         aligned = read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds);
       }
       ceph_assert(res.returned.front().get<0>() == aligned.first);
@@ -528,12 +532,12 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
         goto out;
       }
       bufferlist trimmed;
-      auto off = read.get<0>() - aligned.first;
+      auto off = read.offset - aligned.first;
       auto len =
-          std::min(read.get<1>(), bl.length() - (read.get<0>() - aligned.first));
+          std::min(read.size, bl.length() - (read.offset - aligned.first));
       trimmed.substr_of(bl, off, len);
       result.insert(
-	read.get<0>(), trimmed.length(), std::move(trimmed));
+	read.offset, trimmed.length(), std::move(trimmed));
       res.returned.pop_front();
     }
 out:
@@ -571,7 +575,7 @@ bool ECCommon::ReadPipeline::should_partial_read(
     }
     // Only partial read if the length is inside the stripe boundary
     auto read = to_read.front();
-    auto bounds = make_pair(read.get<0>(), read.get<1>());
+    auto bounds = make_pair(read.offset, read.size);
     auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
     if (sinfo.get_stripe_width() != aligned.second) {
       return false;
@@ -623,7 +627,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
       uint32_t flags = 0;
 
       for (auto read : to_read.second) {
-        auto bounds = make_pair(read.get<0>(), read.get<1>()); 
+        auto bounds = make_pair(read.offset, read.size);
 
         // By default, align to the stripe
         auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
@@ -638,12 +642,12 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
         extent_set new_es;
         new_es.insert(aligned.first, aligned.second);
         es.union_of(new_es);
-        flags |= read.get<2>();
+        flags |= read.flags;
       }
       if (!es.empty()) {
         for (auto e = es.begin(); e != es.end(); ++e) {
           align_offsets.push_back(
-            boost::make_tuple(e.get_start(), e.get_len(), flags));
+            ec_align_t{e.get_start(), e.get_len(), flags});
         }
       }
     }
@@ -700,10 +704,10 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
   if (partial_read) {
     list<ec_align_t> new_to_read;
     for(const auto& read : to_read) {
-      auto bounds = make_pair(read.get<0>(), read.get<1>());
+      auto bounds = make_pair(read.offset, read.size);
       auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
       new_to_read.push_back(
-          boost::make_tuple(aligned.first, aligned.second, read.get<2>()));
+          ec_align_t{aligned.first, aligned.second, read.flags});
     }
     to_read = new_to_read;
   }
