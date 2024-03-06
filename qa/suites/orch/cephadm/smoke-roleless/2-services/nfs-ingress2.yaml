@@ -7,7 +7,7 @@ tasks:
       - ceph orch device ls --refresh
 
 # stop kernel nfs server, if running
-- vip.exec:
+- exec:
     all-hosts:
       - systemctl stop nfs-server
 
@@ -51,7 +51,7 @@ tasks:
 
 # take each ganesha down in turn.
 # simulate "failure" by deleting the container
-- vip.exec:
+- exec:
     all-hosts:
       - |
         echo "Check with $(hostname) ganesha(s) down..."
