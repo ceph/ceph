@@ -1758,9 +1758,6 @@ void BlueStore::BufferSpace::read(
     for (auto i = _data_lower_bound(offset);
          i != buffer_map.end() && offset < end && i->first < end; ++i) {
       Buffer *b = &i->second;
-      if (b->end() <= offset) {
-        break;
-      }
       ceph_assert(b->end() > offset);
 
       bool val = false;
