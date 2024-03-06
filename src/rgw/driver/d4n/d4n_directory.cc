@@ -444,7 +444,7 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y)
         std::stringstream ss(boost::lexical_cast<std::string>(std::get<0>(resp).value()[4]));
 	block->hostsList.clear();
 
-	while (!ss.eof()) {
+	while (!ss.eof()) { // Replace with boost::split? -Sam
           std::string host;
 	  std::getline(ss, host, '_');
 	  block->hostsList.push_back(host);
