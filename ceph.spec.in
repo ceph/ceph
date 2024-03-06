@@ -112,7 +112,11 @@
 %bcond_with system_arrow
 %endif
 %if 0%{?fedora} || 0%{?rhel} >= 9
+%ifarch aarch64
+%bcond_with system_qat
+%else
 %bcond_without system_qat
+%endif
 %else
 %bcond_with system_qat
 %endif
