@@ -2137,6 +2137,11 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       return -EINVAL;
     }
     if (user_info.account_id != op_state.account_id) {
+      // allow users to migrate into an account, but don't allow them to leave
+      if (!user_info.account_id.empty()) {
+        set_err_msg(err_msg, "users cannot be moved out of their account");
+        return -EINVAL;
+      }
       user_info.account_id = op_state.account_id;
 
       // tenant must match new account.tenant
