@@ -230,7 +230,7 @@ class QuiesceDbTest: public testing::Test {
         response.clear();
         request.reset(c);
 
-        int rr = -1;
+        int rr = -ENOTTY;
 
         for (auto& [rank, mgr] : parent.managers) {
           if (!(rr = mgr->submit_request(this))) {
@@ -238,10 +238,8 @@ class QuiesceDbTest: public testing::Test {
           }
         }
 
-        if (rr == EPERM) {
-          // change the error to something never returned for a request
-          // EPIPE seems reasonable as we couldn't find the leader to send the command to
-          complete(EPIPE);
+        if (rr) {
+          complete(rr);
           return false;
         }
 
@@ -358,6 +356,7 @@ TEST_F(QuiesceDbTest, ManagerStartup) {
   ASSERT_EQ(OK(), run_request_for(100, [](auto& r) {}));
   ASSERT_NO_FATAL_FAILURE(configure_cluster({ mds_gid_t(2) }));
   ASSERT_EQ(OK(), run_request_for(100, [](auto& r) {}));
+  managers[mds_gid_t(2)]->shutdown();
   ASSERT_NO_FATAL_FAILURE(configure_cluster({ mds_gid_t(1), mds_gid_t(2) }));
   ASSERT_EQ(OK(), run_request_for(100, [](auto& r) {}));
 }
@@ -1328,9 +1327,9 @@ TEST_F(QuiesceDbTest, LeaderShutdown)
 
   ASSERT_EQ(managers.at(mds_gid_t(1))->internal_pending_requests().size(), pending_requests.size());
 
-  // reset the membership of the manager
+  // shutdown the manager
   // this will block until the db thread exits
-  managers.at(mds_gid_t(1))->update_membership({});
+  managers.at(mds_gid_t(1))->shutdown();
 
   // as of now all requests must have finished
   while(!outstanding_awaits.empty()) {
@@ -1341,7 +1340,7 @@ TEST_F(QuiesceDbTest, LeaderShutdown)
 
   while (!pending_requests.empty()) {
     auto& r = *pending_requests.front();
-    EXPECT_EQ(ERR(EPERM), r.check_result());
+    EXPECT_EQ(ERR(ENOTTY), r.check_result());
     pending_requests.pop();
   }
 }

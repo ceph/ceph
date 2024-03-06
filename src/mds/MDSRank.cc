@@ -864,17 +864,15 @@ void MDSRankDispatcher::shutdown()
 
   progress_thread.shutdown();
 
-  if (quiesce_db_manager) {
-    // shutdown the manager
-    quiesce_db_manager->update_membership({});
-  }
-
   // release mds_lock for finisher/messenger threads (e.g.
   // MDSDaemon::ms_handle_reset called from Messenger).
   mds_lock.unlock();
 
   // shut down messenger
   messenger->shutdown();
+
+  // the quiesce db membership is
+  // managed by the mds map update, no need to address that here
   if (quiesce_agent) {
     // reset any tracked roots
     quiesce_agent->shutdown();
