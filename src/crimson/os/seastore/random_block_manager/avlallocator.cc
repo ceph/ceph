@@ -192,7 +192,7 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extent(
   assert(!result.empty());
   assert(result.num_intervals() == 1);
   for (auto p : result) {
-    INFO("result start: {}, end: {}", p.first, p.first + p.second);
+    DEBUG("result start: {}, end: {}", p.first, p.first + p.second);
     if (detailed) {
       assert(!reserved_extent_tracker.contains(p.first, p.second));
       reserved_extent_tracker.insert(p.first, p.second);
@@ -236,7 +236,7 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extents(
 
   assert(!result.empty());
   for (auto p : result) {
-    INFO("result start: {}, end: {}", p.first, p.first + p.second);
+    DEBUG("result start: {}, end: {}", p.first, p.first + p.second);
     if (detailed) {
       assert(!reserved_extent_tracker.contains(p.first, p.second));
       reserved_extent_tracker.insert(p.first, p.second);
