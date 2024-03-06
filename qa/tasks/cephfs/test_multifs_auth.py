@@ -209,54 +209,16 @@ class TestMDSCaps(TestMultiFS):
 
 
 class TestClientsWithoutAuth(TestMultiFS):
+    # c.f., src/mount/mtab.c: EX_FAIL
+    RETVAL_KCLIENT = 32
+    # c.f., src/ceph_fuse.cc: (cpp EXIT_FAILURE). Normally the check for this
+    # case should be anything-except-0, but EXIT_FAILURE is 1 in most systems.
+    RETVAL_USER_SPACE_CLIENT = 1
 
     def setUp(self):
         super(TestClientsWithoutAuth, self).setUp()
-
-        # TODO: When MON and OSD caps for a Ceph FS are assigned to a
-        # client but MDS caps are not, mount.ceph prints "permission
-        # denied". But when MON caps are not assigned and MDS and OSD
-        # caps are, mount.ceph prints "no mds server or cluster laggy"
-        # instead of "permission denied".
-        #
-        # Before uncommenting the following line a fix would be required
-        # for latter case to change "no mds server is up or the cluster is
-        #  laggy" to "permission denied".
-        self.kernel_errmsgs = ('permission denied', 'no mds server is up or '
-                               'the cluster is laggy', 'no such file or '
-                               'directory',
-                               'input/output error')
-
-        # TODO: When MON and OSD caps are assigned for a Ceph FS to a
-        # client but MDS caps are not, ceph-fuse prints "operation not
-        # permitted". But when MON caps are not assigned and MDS and OSD
-        # caps are, ceph-fuse prints "no such file or directory" instead
-        # of "operation not permitted".
-        #
-        # Before uncommenting the following line a fix would be required
-        # for the latter case to change "no such file or directory" to
-        # "operation not permitted".
-        #self.assertIn('operation not permitted', retval[2].lower())
-        self.fuse_errmsgs = ('operation not permitted', 'no such file or '
-                             'directory')
-
-        if 'kernel' in str(type(self.mount_a)).lower():
-            self.errmsgs = self.kernel_errmsgs
-        elif 'fuse' in str(type(self.mount_a)).lower():
-            self.errmsgs = self.fuse_errmsgs
-        else:
-            raise RuntimeError('strange, the client was neither based on '
-                               'kernel nor FUSE.')
-
-    def check_that_mount_failed_for_right_reason(self, stderr):
-        stderr = stderr.lower()
-        for errmsg in self.errmsgs:
-            if errmsg in stderr:
-                break
-        else:
-            raise AssertionError('can\'t find expected set of words in the '
-                                 f'stderr\nself.errmsgs - {self.errmsgs}\n'
-                                 f'stderr - {stderr}')
+        self.retval = self.RETVAL_KCLIENT if 'kernel' in str(type(self.mount_a)).lower() \
+            else self.RETVAL_USER_SPACE_CLIENT
 
     def test_mount_all_caps_absent(self):
         # setup part...
@@ -264,16 +226,13 @@ class TestClientsWithoutAuth(TestMultiFS):
         keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
 
         # mount the FS for which client has no auth...
-        retval = self.mount_a.remount(client_id=self.client_id,
-                                      client_keyring_path=keyring_path,
-                                      cephfs_name=self.fs2.name,
-                                      check_status=False)
-
-        # tests...
-        self.assertIsInstance(retval, tuple)
-        self.assertEqual(len(retval), 3)
-        self.assertIsInstance(retval[0], CommandFailedError)
-        self.check_that_mount_failed_for_right_reason(retval[2])
+        try:
+            self.mount_a.remount(client_id=self.client_id,
+                                 client_keyring_path=keyring_path,
+                                 cephfs_name=self.fs2.name,
+                                 check_status=False)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, self.retval)
 
     def test_mount_mon_and_osd_caps_present_mds_caps_absent(self):
         # setup part...
@@ -285,13 +244,10 @@ class TestClientsWithoutAuth(TestMultiFS):
         keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
 
         # mount the FS for which client has no auth...
-        retval = self.mount_a.remount(client_id=self.client_id,
-                                      client_keyring_path=keyring_path,
-                                      cephfs_name=self.fs2.name,
-                                      check_status=False)
-
-        # tests...
-        self.assertIsInstance(retval, tuple)
-        self.assertEqual(len(retval), 3)
-        self.assertIsInstance(retval[0], CommandFailedError)
-        self.check_that_mount_failed_for_right_reason(retval[2])
+        try:
+            self.mount_a.remount(client_id=self.client_id,
+                                 client_keyring_path=keyring_path,
+                                 cephfs_name=self.fs2.name,
+                                 check_status=False)
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, self.retval)
