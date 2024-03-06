@@ -1,0 +1,37 @@
+<nav ngbNav
+     #nav="ngbNav"
+     class="nav-tabs">
+  <ng-container ngbNavItem>
+    <a ngbNavLink
+       i18n>Clusters List</a>
+    <ng-template ngbNavContent>
+      <cd-table #table
+                [data]="data"
+                [columns]="columns"
+                columnMode="flex"
+                selectionType="single"
+                [maxLimit]="25"
+                (updateSelection)="updateSelection($event)">
+        <div class="table-actions btn-toolbar">
+          <cd-table-actions [permission]="permissions.user"
+                            [selection]="selection"
+                            class="btn-group"
+                            id="cluster-actions"
+                            [tableActions]="tableActions">
+          </cd-table-actions>
+        </div>
+      </cd-table>
+    </ng-template>
+  </ng-container>
+</nav>
+
+<ng-template #urlTpl
+             let-row="row">
+  <a target="_blank"
+     [href]="row.url">
+      {{ row?.url?.endsWith('/') ? row?.url?.slice(0, -1) : row.url }}
+    <i class="fa fa-external-link"></i>
+  </a>
+</ng-template>
+
+<div [ngbNavOutlet]="nav"></div>
