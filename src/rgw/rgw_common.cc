@@ -1136,12 +1136,16 @@ Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
                           const ARN& arn) {
   auto policy_res = Effect::Pass, prev_res = Effect::Pass;
   for (auto& policy : policies) {
-    if (policy_res = eval_or_pass(dpp, policy, env, boost::none, op, arn); policy_res == Effect::Deny)
+    if (policy_res = eval_or_pass(dpp, policy, env, boost::none, op, arn);
+        policy_res == Effect::Deny) {
+      ldpp_dout(dpp, 10) << __func__ << " Deny from " << policy << dendl;
       return policy_res;
-    else if (policy_res == Effect::Allow)
+    } else if (policy_res == Effect::Allow) {
+      ldpp_dout(dpp, 20) << __func__ << " Allow from " << policy << dendl;
       prev_res = Effect::Allow;
-    else if (policy_res == Effect::Pass && prev_res == Effect::Allow)
+    } else if (policy_res == Effect::Pass && prev_res == Effect::Allow) {
       policy_res = Effect::Allow;
+    }
   }
   return policy_res;
 }
