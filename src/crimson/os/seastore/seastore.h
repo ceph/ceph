@@ -116,6 +116,10 @@ public:
       interval_set<uint64_t>& m,
       uint32_t op_flags = 0) final;
 
+    base_errorator::future<bool> exists(
+      CollectionRef c,
+      const ghobject_t& oid) final;
+
     get_attr_errorator::future<ceph::bufferlist> get_attr(
       CollectionRef c,
       const ghobject_t& oid,
