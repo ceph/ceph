@@ -450,4 +450,80 @@ int stats(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int list_users(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+               AdminOpState& op_state, const std::string& path_prefix,
+               const std::string& marker, bool max_entries_specified,
+               int max_entries, std::string& err_msg,
+               RGWFormatterFlusher& flusher, optional_yield y)
+{
+  int ret = 0;
+  RGWAccountInfo info;
+  rgw::sal::Attrs attrs; // ignored
+  RGWObjVersionTracker objv; // ignored
+
+  if (!op_state.account_id.empty()) {
+    // look up account by id
+    ret = driver->load_account_by_id(dpp, y, op_state.account_id,
+                                     info, attrs, objv);
+  } else if (!op_state.account_name.empty()) {
+    // look up account by tenant/name
+    ret = driver->load_account_by_name(dpp, y, op_state.tenant,
+                                       op_state.account_name,
+                                       info, attrs, objv);
+  } else {
+    err_msg = "requires account id or name";
+    return -EINVAL;
+  }
+  if (ret < 0) {
+    err_msg = "failed to load account";
+    return ret;
+  }
+
+  rgw::sal::UserList listing;
+  listing.next_marker = marker;
+
+  Formatter* formatter = flusher.get_formatter();
+  flusher.start(0);
+
+  int32_t remaining = std::numeric_limits<int32_t>::max();
+  if (max_entries_specified) {
+    remaining = max_entries;
+    formatter->open_object_section("result");
+  }
+  formatter->open_array_section("keys");
+
+  do {
+    constexpr int32_t max_chunk = 100;
+    int32_t count = std::min(max_chunk, remaining);
+
+    ret = driver->list_account_users(dpp, y, info.id, info.tenant,
+                                     path_prefix, listing.next_marker,
+                                     count, listing);
+    if (ret == -ENOENT) {
+      ret = 0;
+    } else if (ret < 0) {
+      err_msg = "failed to list users";
+      return ret;
+    }
+
+    for (const auto& user : listing.users) {
+      encode_json("key", user.user_id, formatter);
+    }
+    flusher.flush();
+
+    remaining -= listing.users.size();
+  } while (!listing.next_marker.empty() && remaining > 0);
+
+  formatter->close_section(); // keys
+
+  if (max_entries_specified) {
+    if (!listing.next_marker.empty()) {
+      encode_json("marker", listing.next_marker, formatter);
+    }
+    formatter->close_section(); // result
+  }
+  flusher.flush();
+  return 0;
+}
+
 } // namespace rgw::account
