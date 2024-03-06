@@ -215,7 +215,13 @@ struct ECCommon {
     uint32_t flags;
   };
   friend std::ostream &operator<<(std::ostream &lhs, const ec_align_t &rhs);
-  using ec_extents_t = std::map<hobject_t,std::pair<int, extent_map>>;
+
+  struct ec_extent_t {
+    int err;
+    extent_map emap;
+  };
+  friend std::ostream &operator<<(std::ostream &lhs, const ec_extent_t &rhs);
+  using ec_extents_t = std::map<hobject_t, ec_extent_t>;
 
   virtual ~ECCommon() = default;
 
@@ -295,7 +301,7 @@ struct ECCommon {
     ec_extents_t results;
     explicit ClientAsyncReadStatus(
       unsigned objects_to_read,
-      GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func)
+      GenContextURef<ec_extents_t &&> &&func)
       : objects_to_read(objects_to_read), func(std::move(func)) {}
     void complete_object(
       const hobject_t &hoid,
@@ -304,7 +310,7 @@ struct ECCommon {
       ceph_assert(objects_to_read);
       --objects_to_read;
       ceph_assert(!results.count(hoid));
-      results.emplace(hoid, std::make_pair(err, std::move(buffers)));
+      results.emplace(hoid, ec_extent_t{err, std::move(buffers)});
     }
     bool is_complete() const {
       return objects_to_read == 0;
@@ -682,7 +688,7 @@ struct ECCommon {
         _to_read,
         false,
         make_gen_lambda_context<
-        std::map<hobject_t,std::pair<int, extent_map> > &&, Func>(
+        ECCommon::ec_extents_t &&, Func>(
             std::forward<Func>(on_complete)));
     }
     void handle_sub_write(

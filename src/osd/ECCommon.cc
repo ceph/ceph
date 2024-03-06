@@ -83,6 +83,12 @@ ostream &operator<<(ostream &lhs, const ECCommon::ec_align_t &rhs)
 	     << rhs.flags;
 }
 
+ostream &operator<<(ostream &lhs, const ECCommon::ec_extent_t &rhs)
+{
+  return lhs << rhs.err << ","
+	     << rhs.emap;
+}
+
 ostream &operator<<(ostream &lhs, const ECCommon::read_request_t &rhs)
 {
   return lhs << "read_request_t(to_read=[" << rhs.to_read << "]"
@@ -817,9 +823,9 @@ bool ECCommon::RMWPipeline::try_state_to_reads()
     ceph_assert(get_parent()->get_pool().allows_ecoverwrites());
     objects_read_async_no_cache(
       op->remote_read,
-      [op, this](map<hobject_t,pair<int, extent_map> > &&results) {
+      [op, this](ec_extents_t &&results) {
 	for (auto &&i: results) {
-	  op->remote_read_result.emplace(i.first, i.second.second);
+	  op->remote_read_result.emplace(make_pair(i.first, i.second.emap));
 	}
 	check_ops();
       });
