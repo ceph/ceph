@@ -7,7 +7,7 @@ tasks:
       - ceph orch device ls --refresh
 
 # stop kernel nfs server, if running
-- vip.exec:
+- exec:
     all-hosts:
       - systemctl stop nfs-server
 
