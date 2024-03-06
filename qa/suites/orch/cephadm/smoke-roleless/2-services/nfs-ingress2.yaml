@@ -24,7 +24,7 @@ tasks:
 
 ## export and mount
 
-- vip.exec:
+- template.exec:
     host.a:
       - mkdir /mnt/foo
       - sleep 5
