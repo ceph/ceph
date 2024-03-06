@@ -1579,7 +1579,7 @@ void ECBackend::objects_read_async(
 	hoid(hoid),
 	to_read(to_read),
 	on_complete(on_complete) {}
-    void operator()(map<hobject_t,pair<int, extent_map> > &&results) {
+    void operator()(ECCommon::ec_extents_t &&results) {
       auto dpp = ec->get_parent()->get_dpp();
       ldpp_dout(dpp, 20) << "objects_read_async_cb: got: " << results
 			 << dendl;
@@ -1590,18 +1590,18 @@ void ECBackend::objects_read_async(
 
       int r = 0;
       for (auto &&read: to_read) {
-	if (got.first < 0) {
+	if (got.err < 0) {
 	  // error handling
 	  if (read.second.second) {
-	    read.second.second->complete(got.first);
+	    read.second.second->complete(got.err);
 	  }
 	  if (r == 0)
-	    r = got.first;
+	    r = got.err;
 	} else {
 	  ceph_assert(read.second.first);
 	  uint64_t offset = read.first.offset;
 	  uint64_t length = read.first.size;
-	  auto range = got.second.get_containing_range(offset, length);
+	  auto range = got.emap.get_containing_range(offset, length);
 	  ceph_assert(range.first != range.second);
 	  ceph_assert(range.first.get_off() <= offset);
           ldpp_dout(dpp, 30) << "offset: " << offset << dendl;
@@ -1637,7 +1637,7 @@ void ECBackend::objects_read_async(
     reads,
     fast_read,
     make_gen_lambda_context<
-      map<hobject_t,pair<int, extent_map> > &&, cb>(
+      ECCommon::ec_extents_t &&, cb>(
 	cb(this,
 	   hoid,
 	   to_read,
@@ -1649,7 +1649,7 @@ void ECBackend::objects_read_and_reconstruct(
     std::list<ECBackend::ec_align_t>
   > &reads,
   bool fast_read,
-  GenContextURef<map<hobject_t,pair<int, extent_map> > &&> &&func)
+  GenContextURef<ECCommon::ec_extents_t &&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct(
     reads, fast_read, std::move(func));
