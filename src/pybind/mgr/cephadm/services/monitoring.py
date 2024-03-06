@@ -376,11 +376,16 @@ class PrometheusService(CephadmService):
 
         assert self.TYPE == daemon_spec.daemon_type
         spec = cast(PrometheusSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-
         try:
             retention_time = spec.retention_time if spec.retention_time else '15d'
         except AttributeError:
             retention_time = '15d'
+
+        try:
+            targets = spec.targets
+        except AttributeError:
+            logger.warning('Prometheus targets not found in the spec. Using empty list.')
+            targets = []
 
         try:
             retention_size = spec.retention_size if spec.retention_size else '0'
@@ -406,6 +411,7 @@ class PrometheusService(CephadmService):
 
         alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
         prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
+        FSID = self.mgr._cluster_fsid
 
         # generate the prometheus configuration
         context = {
@@ -420,6 +426,8 @@ class PrometheusService(CephadmService):
             'haproxy_sd_url': haproxy_sd_url,
             'ceph_exporter_sd_url': ceph_exporter_sd_url,
             'nvmeof_sd_url': nvmeof_sd_url,
+            'external_prometheus_targets': targets,
+            'cluster_fsid': FSID
         }
 
         web_context = {
