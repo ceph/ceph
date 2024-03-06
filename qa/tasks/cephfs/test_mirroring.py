@@ -229,7 +229,7 @@ class TestMirroring(CephFSTestCase):
                                          'fs', 'mirror', 'peer', 'status',
                                          f'{fs_name}@{fs_id}', peer_uuid)
         self.assertTrue('syncing' == res[dir_name]['state'])
-        self.assertTrue(res[dir_name]['current_sycning_snap']['name'] == snap_name)
+        self.assertTrue(res[dir_name]['current_syncing_snap']['name'] == snap_name)
 
     def verify_snapshot(self, dir_name, snap_name):
         snap_list = self.mount_b.ls(path=f'{dir_name}/.snap')
