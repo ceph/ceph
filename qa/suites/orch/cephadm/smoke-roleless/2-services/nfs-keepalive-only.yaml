@@ -46,7 +46,7 @@ tasks:
 
 # make sure mount can be reached over VIP, ensuring both that
 # keepalived is maintaining the VIP and that the nfs has bound to it
-- vip.exec:
+- template.exec:
     host.a:
       - mkdir /mnt/foo
       - sleep 5
