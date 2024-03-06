@@ -1,0 +1,33 @@
+#!/bin/sh -ex
+
+export COVDIR="$HOME/cov-analysis"
+if [ ! -d "$COVDIR" ]; then
+    echo "missing $COVDIR; get that from coverity!"
+    exit 1
+fi
+if [ ! -e "$HOME/coverity.build.pass.txt" ]; then
+    echo "missing $HOME/coverity.build.pass.txt"
+    exit 1
+fi
+
+export PATH="$COVDIR/bin:$PATH"
+
+rm -rf build
+./do_cmake.sh
+cd build
+~/cov-analysis/bin/cov-build --dir cov-int make -j$(nproc)
+
+echo Sage Weil sage@newdream.net ceph >> README
+tar czvf project.tgz README cov-int
+rm -f README
+
+version=`git describe`
+token=`cat ~/coverity.build.pass.txt`
+curl --form token=$token \
+  --form email=sage@newdream.net \
+  --form file=@project.tgz \
+  --form version="$version" \
+  --form description="Automated Ceph build from `hostname`" \
+  https://scan.coverity.com/builds?project=ceph
+
+echo done.

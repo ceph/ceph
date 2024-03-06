@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      mds:
+        mds_export_ephemeral_random_max: 0.10
+tasks:
+- exec:
+    mon.a:
+      - ceph fs set cephfs balance_automate false
+      - ceph fs subvolumegroup pin cephfs qa random 0.10
