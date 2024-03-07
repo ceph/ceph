@@ -13547,16 +13547,18 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
   auto& delay = qis->delay;
   auto& splitauth = qis->splitauth;
 
-  CInode *in = get_inode(mdr->get_filepath().get_ino());
+  auto ino = mdr->get_filepath().get_ino();
+  CInode *in = get_inode(ino);
   if (in == nullptr) {
+    dout(20) << " failed to lookup " << ino << dendl;
     /* It has been trimmed from cache before we could acquire locks/pins, complete quietly. */
-    qops.erase(in); // allow a future try if it comes back into cache
+    qops.erase(ino); // allow a future try if it comes back into cache
     qs.inc_inodes_dropped();
     mds->server->respond_to_request(mdr, 0);
     return;
   }
 
-  [[maybe_unused]] const bool is_root = (mdr->get_filepath().get_ino() == mdr->get_filepath2().get_ino());
+  [[maybe_unused]] const bool is_root = (ino == mdr->get_filepath2().get_ino());
 
   dout(20) << __func__ << " " << *mdr << " quiescing " << *in << dendl;
 
@@ -13647,14 +13649,18 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
     MDSGatherBuilder gather(g_ceph_context, new C_MDS_RetryRequest(this, mdr));
     std::vector<MDRequestRef> todispatch;
     for (auto& dir : in->get_dirfrags()) {
+      dout(25) << " iterating " << *dir << dendl;
       for (auto& [dnk, dn] : *dir) {
+        dout(25) << " evaluating (" << dnk << ", " << *dn << ")" << dendl;
         auto* in = dn->get_projected_inode();
-        if (!in || !in->is_head()) {
+        if (!in) {
+          dout(25) << " skipping dentry: " << *dn << dendl;
           continue;
-        }
-
-        if (auto it = qops.find(in); it != qops.end()) {
-          dout(25) << __func__ << ": existing quiesce metareqid: "  << it->second << dendl;
+        } else if (!in->is_head()) {
+          dout(25) << " skipping non-head inode: " << *in << dendl;
+          continue;
+        } else if (auto it = qops.find(in->ino()); it != qops.end()) {
+          dout(25) << " existing quiesce metareqid: "  << it->second << dendl;
           continue;
         }
         dout(10) << __func__ << ": scheduling op to quiesce " << *in << dendl;
@@ -13663,7 +13669,7 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
         qimdr->set_filepath(filepath(in->ino()));
         qimdr->internal_op_finish = gather.new_sub();
         qimdr->internal_op_private = new QuiesceInodeStateRef(qis);
-        qops[in] = qimdr->reqid;
+        qops[in->ino()] = qimdr->reqid;
         qs.inc_inodes();
         if (delay > 0ms) {
           mds->timer.add_event_after(delay, new LambdaContext([cache=this,qimdr](int r) {
@@ -13713,7 +13719,7 @@ void MDCache::add_quiesce(CInode* parent, CInode* in)
   auto& qs = *qis->qs;
   auto& qops = qrmdr->more()->quiesce_ops;
 
-  if (auto it = qops.find(in); it != qops.end()) {
+  if (auto it = qops.find(in->ino()); it != qops.end()) {
     dout(25) << __func__ << ": existing quiesce metareqid: "  << it->second << dendl;
     return;
   }
@@ -13723,7 +13729,7 @@ void MDCache::add_quiesce(CInode* parent, CInode* in)
   qimdr->set_filepath(filepath(in->ino()));
   qimdr->internal_op_finish = new LambdaContext([](int r) {});
   qimdr->internal_op_private = new QuiesceInodeStateRef(qis);
-  qops[in] = qimdr->reqid;
+  qops[in->ino()] = qimdr->reqid;
   qs.inc_inodes();
   dispatch_request(qimdr);
   if (!(qs.inc_heartbeat_count() % mds->heartbeat_reset_grace())) {
@@ -13766,6 +13772,8 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     return;
   }
 
+  auto dirino = diri->ino();
+
   if (!diri->is_dir()) {
     dout(5) << __func__ << ": file is not a directory" << dendl;
     mds->server->respond_to_request(mdr, -CEPHFS_ENOTDIR);
@@ -13789,13 +13797,13 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
   if (!diri->is_auth() && !splitauth) {
     dout(5) << __func__ << ": skipping recursive quiesce of path for non-auth inode" << dendl;
     mdr->mark_event("quiesce complete for non-auth tree");
-  } else if (auto& qops = mdr->more()->quiesce_ops; qops.count(diri) == 0) {
+  } else if (auto& qops = mdr->more()->quiesce_ops; qops.count(dirino) == 0) {
     MDRequestRef qimdr = request_start_internal(CEPH_MDS_OP_QUIESCE_INODE);
-    qimdr->set_filepath(filepath(diri->ino()));
-    qimdr->set_filepath2(filepath(diri->ino())); /* is_root! */
+    qimdr->set_filepath(filepath(dirino));
+    qimdr->set_filepath2(filepath(dirino)); /* is_root! */
     qimdr->internal_op_finish = new C_MDS_RetryRequest(this, mdr);
     qimdr->internal_op_private = new QuiesceInodeStateRef(qis);
-    qops[diri] = qimdr->reqid;
+    qops[dirino] = qimdr->reqid;
     qs.inc_inodes();
     if (delay > 0ms) {
       mds->timer.add_event_after(delay, new LambdaContext([cache=this,qimdr](int r) {

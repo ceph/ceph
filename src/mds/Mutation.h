@@ -349,7 +349,7 @@ struct MDRequestImpl : public MutationImpl {
 
     MDSContext::vec waiting_for_finish;
 
-    std::map<CInode*, metareqid_t> quiesce_ops;
+    std::map<inodeno_t, metareqid_t> quiesce_ops;
 
     // export & fragment
     CDir* export_dir = nullptr;
