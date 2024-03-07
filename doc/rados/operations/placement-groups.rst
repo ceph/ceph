@@ -646,6 +646,8 @@ more time for peering.
 Setting the Number of PGs
 =========================
 
+:ref:`Placement Group Link <pgcalc>`
+
 Setting the initial number of PGs in a pool must be done at the time you create
 the pool. See `Create a Pool`_ for details. 
 
