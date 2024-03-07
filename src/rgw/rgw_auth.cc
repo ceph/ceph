@@ -299,6 +299,11 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
        * nullptr inside. */
       ldpp_dout(dpp, 5) << "Failed the auth strategy, reason="
                        << result.get_reason() << dendl;
+      // Special handling for disabled presigned URL
+      if (result.get_reason() == ERR_PRESIGNED_URL_DISABLED) {
+        result = result_t::deny(-EPERM);
+        set_req_state_err(s, -EPERM, "Presigned URLs are disabled by admin");
+      }
       return result.get_reason();
     }
 
