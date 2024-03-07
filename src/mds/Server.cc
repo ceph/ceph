@@ -6943,6 +6943,14 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
       // since we only handle ceph vxattrs here
       r = -CEPHFS_ENODATA; // no such attribute
     }
+  } if (xattr_name == "ceph.dir.subvolume"sv) {
+    const auto srnode = cur->get_projected_srnode();
+    // unfortunately we can't delete the presence of this vxattr on any dir
+    if (srnode && srnode->is_subvolume()) {
+      *css << "1";
+    } else {
+      *css << "0";
+    }
   } else {
     // otherwise respond as invalid request
     // since we only handle ceph vxattrs here

@@ -462,7 +462,8 @@ private:
 	    xattr_name == "ceph.dir.layout.pool_namespace" ||
 	    xattr_name == "ceph.dir.pin" ||
 	    xattr_name == "ceph.dir.pin.random" ||
-	    xattr_name == "ceph.dir.pin.distributed");
+	    xattr_name == "ceph.dir.pin.distributed" ||
+	    xattr_name == "ceph.dir.subvolume");
   }
 
   static bool is_ceph_file_vxattr(std::string_view xattr_name) {
