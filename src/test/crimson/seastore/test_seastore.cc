@@ -262,6 +262,19 @@ struct seastore_test_t :
       return clone_obj;
     }
 
+    void rename(
+      SeaStoreShard &sharded_seastore,
+      object_state_t &other) {
+      CTransaction t;
+      t.collection_move_rename(cid, oid, cid, other.oid);
+      sharded_seastore.do_transaction(
+	coll,
+	std::move(t)).get0();
+      other.contents = contents;
+      other.omap = omap;
+      other.clone_contents = clone_contents;
+    }
+
     void write(
       SeaStoreShard &sharded_seastore,
       uint64_t offset,
@@ -784,6 +797,25 @@ TEST_P(seastore_test_t, omap_test_simple)
     test_obj.check_omap_key(
       *sharded_seastore,
       "asdf");
+  });
+}
+
+TEST_P(seastore_test_t, rename)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.write(*sharded_seastore, 0, 4096, 'a');
+    test_obj.set_omap(
+      *sharded_seastore,
+      "asdf",
+      make_bufferlist(128));
+    auto test_other = object_state_t{
+      test_obj.cid, 
+      test_obj.coll,
+      ghobject_t(hobject_t(sobject_t(std::string("object_1"), CEPH_NOSNAP)))};
+    test_obj.rename(*sharded_seastore, test_other);
+    test_other.read(*sharded_seastore, 0, 4096);
+    test_other.check_omap(*sharded_seastore);
   });
 }
 
