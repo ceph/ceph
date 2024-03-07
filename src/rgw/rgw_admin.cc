@@ -491,6 +491,9 @@ void usage()
   cout << "\nradoslist options:\n";
   cout << "   --rgw-obj-fs                  the field separator that will separate the rados object name from the rgw object name;\n";
   cout << "                                 additionally rados objects for incomplete multipart uploads will not be output\n";
+  cout << "\nBucket list objects options:\n";
+  cout << "   --max-entries                 max number of entries listed (default 1000)\n";
+  cout << "   --marker                      the marker used to specify on which entry the listing begins, default none (i.e., very first entry)\n";
   cout << "\n";
   generic_client_usage();
 }
