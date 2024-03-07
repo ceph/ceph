@@ -449,6 +449,7 @@ public:
     Transaction &t,
     CachedExtentRef extent)
   {
+    assert(extent->is_valid());
     auto p_extent = extent->get_transactional_view(t);
     if (!p_extent->is_pending_in_trans(t.get_trans_id())) {
       t.add_to_read_set(p_extent);
