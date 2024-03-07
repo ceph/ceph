@@ -268,109 +268,6 @@ public:
   }
 
   /**
-   * get_extent
-   *
-   * returns ref to extent at offset~length of type T either from
-   * - extent_set if already in cache
-   * - disk
-   */
-  using src_ext_t = std::pair<Transaction::src_t, extent_types_t>;
-  using get_extent_ertr = base_ertr;
-  template <typename T>
-  using get_extent_ret = get_extent_ertr::future<TCachedExtentRef<T>>;
-  template <typename T, typename Func, typename OnCache>
-  get_extent_ret<T> get_extent(
-    paddr_t offset,                ///< [in] starting addr
-    extent_len_t length,           ///< [in] length
-    const src_ext_t* p_src_ext,    ///< [in] cache query metric key
-    Func &&extent_init_func,       ///< [in] init func for extent
-    OnCache &&on_cache
-  ) {
-    LOG_PREFIX(Cache::get_extent);
-    auto cached = query_cache(offset, p_src_ext);
-    if (!cached) {
-      auto ret = CachedExtent::make_cached_extent_ref<T>(
-        alloc_cache_buf(length));
-      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
-                offset,
-                PLACEMENT_HINT_NULL,
-                NULL_GENERATION,
-		TRANS_ID_NULL);
-      SUBDEBUG(seastore_cache,
-          "{} {}~{} is absent, add extent and reading ... -- {}",
-          T::TYPE, offset, length, *ret);
-      const auto p_src = p_src_ext ? &p_src_ext->first : nullptr;
-      add_extent(ret, p_src);
-      on_cache(*ret);
-      extent_init_func(*ret);
-      return read_extent<T>(
-	std::move(ret));
-    }
-
-    // extent PRESENT in cache
-    if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
-      auto ret = CachedExtent::make_cached_extent_ref<T>(
-        alloc_cache_buf(length));
-      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
-                offset,
-                PLACEMENT_HINT_NULL,
-                NULL_GENERATION,
-		TRANS_ID_NULL);
-      SUBDEBUG(seastore_cache,
-          "{} {}~{} is absent(placeholder), reading ... -- {}",
-          T::TYPE, offset, length, *ret);
-      extents.replace(*ret, *cached);
-      on_cache(*ret);
-
-      // replace placeholder in transactions
-      while (!cached->transactions.empty()) {
-        auto t = cached->transactions.begin()->t;
-        t->replace_placeholder(*cached, *ret);
-      }
-
-      cached->state = CachedExtent::extent_state_t::INVALID;
-      extent_init_func(*ret);
-      return read_extent<T>(
-	std::move(ret));
-    } else if (!cached->is_fully_loaded()) {
-      auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
-      on_cache(*ret);
-      SUBDEBUG(seastore_cache,
-        "{} {}~{} is present without been fully loaded, reading ... -- {}",
-        T::TYPE, offset, length, *ret);
-      auto bp = alloc_cache_buf(length);
-      ret->set_bptr(std::move(bp));
-      return read_extent<T>(
-        std::move(ret));
-    } else {
-      SUBTRACE(seastore_cache,
-          "{} {}~{} is present in cache -- {}",
-          T::TYPE, offset, length, *cached);
-      auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
-      on_cache(*ret);
-      return ret->wait_io(
-      ).then([ret=std::move(ret)]() mutable
-	     -> get_extent_ret<T> {
-        // ret may be invalid, caller must check
-        return get_extent_ret<T>(
-          get_extent_ertr::ready_future_marker{},
-          std::move(ret));
-      });
-    }
-  }
-  template <typename T>
-  get_extent_ret<T> get_extent(
-    paddr_t offset,                ///< [in] starting addr
-    extent_len_t length,           ///< [in] length
-    const src_ext_t* p_metric_key  ///< [in] cache query metric key
-  ) {
-    return get_extent<T>(
-      offset, length, p_metric_key,
-      [](T &){}, [](T &) {});
-  }
-
-
-  /**
    * get_extent_if_cached
    *
    * Returns extent at offset if in cache
@@ -435,7 +332,7 @@ public:
   }
 
   /**
-   * get_extent
+   * get_caching_extent
    *
    * returns ref to extent at offset~length of type T either from
    * - t if modified by t
@@ -443,16 +340,19 @@ public:
    * - disk
    *
    * t *must not* have retired offset
+   *
+   * Note, the current implementation leverages parent-child
+   * pointers in LBA instead, so it should only be called in tests.
    */
   using get_extent_iertr = base_iertr;
-  template <typename T, typename Func>
-  get_extent_iertr::future<TCachedExtentRef<T>> get_extent(
+  template <typename T>
+  get_extent_iertr::future<TCachedExtentRef<T>>
+  get_caching_extent(
     Transaction &t,
     paddr_t offset,
-    extent_len_t length,
-    Func &&extent_init_func) {
+    extent_len_t length) {
     CachedExtentRef ret;
-    LOG_PREFIX(Cache::get_extent);
+    LOG_PREFIX(Cache::get_caching_extent);
     auto result = t.get_extent(offset, &ret);
     if (result == Transaction::get_extent_ret::RETIRED) {
       SUBERRORT(seastore_cache, "{} {}~{} is retired on t -- {}",
@@ -485,9 +385,9 @@ public:
       };
       auto metric_key = std::make_pair(t.get_src(), T::TYPE);
       return trans_intr::make_interruptible(
-        get_extent<T>(
-	  offset, length, &metric_key,
-	  std::forward<Func>(extent_init_func), std::move(f))
+        do_get_caching_extent<T>(
+          offset, length, &metric_key,
+          [](T &){}, std::move(f))
       );
     }
   }
@@ -495,9 +395,7 @@ public:
   /*
    * get_absent_extent
    *
-   * Mostly the same as Cache::get_extent(), with the only difference
-   * that get_absent_extent won't search the transaction's context for
-   * the specific CachedExtent
+   * The extent in query is supposed to be absent in Cache.
    */
   template <typename T, typename Func>
   get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
@@ -524,18 +422,10 @@ public:
     };
     auto metric_key = std::make_pair(t.get_src(), T::TYPE);
     return trans_intr::make_interruptible(
-      get_extent<T>(
+      do_get_caching_extent<T>(
 	offset, length, &metric_key,
 	std::forward<Func>(extent_init_func), std::move(f))
     );
-  }
-
-  template <typename T>
-  get_extent_iertr::future<TCachedExtentRef<T>> get_extent(
-    Transaction &t,
-    paddr_t offset,
-    extent_len_t length) {
-    return get_extent<T>(t, offset, length, [](T &){});
   }
 
   /*
@@ -553,7 +443,9 @@ public:
     return get_absent_extent<T>(t, offset, length, [](T &){});
   }
 
-  get_extent_ertr::future<CachedExtentRef> get_extent_viewable_by_trans(
+  using get_extent_ertr = base_ertr;
+  get_extent_ertr::future<CachedExtentRef>
+  get_extent_viewable_by_trans(
     Transaction &t,
     CachedExtentRef extent)
   {
@@ -586,7 +478,10 @@ public:
   }
 
   template <typename T>
-  get_extent_ertr::future<TCachedExtentRef<T>> get_extent_viewable_by_trans(
+  using read_extent_ret = get_extent_ertr::future<TCachedExtentRef<T>>;
+
+  template <typename T>
+  read_extent_ret<T> get_extent_viewable_by_trans(
     Transaction &t,
     TCachedExtentRef<T> extent)
   {
@@ -607,6 +502,96 @@ public:
   }
 
 private:
+  /**
+   * do_get_caching_extent
+   *
+   * returns ref to extent at offset~length of type T either from
+   * - extent_set if already in cache
+   * - disk
+   */
+  using src_ext_t = std::pair<Transaction::src_t, extent_types_t>;
+  template <typename T, typename Func, typename OnCache>
+  read_extent_ret<T> do_get_caching_extent(
+    paddr_t offset,                ///< [in] starting addr
+    extent_len_t length,           ///< [in] length
+    const src_ext_t* p_src_ext,    ///< [in] cache query metric key
+    Func &&extent_init_func,       ///< [in] init func for extent
+    OnCache &&on_cache
+  ) {
+    LOG_PREFIX(Cache::do_get_caching_extent);
+    auto cached = query_cache(offset, p_src_ext);
+    if (!cached) {
+      auto ret = CachedExtent::make_cached_extent_ref<T>(
+        alloc_cache_buf(length));
+      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+                offset,
+                PLACEMENT_HINT_NULL,
+                NULL_GENERATION,
+		TRANS_ID_NULL);
+      SUBDEBUG(seastore_cache,
+          "{} {}~{} is absent, add extent and reading ... -- {}",
+          T::TYPE, offset, length, *ret);
+      const auto p_src = p_src_ext ? &p_src_ext->first : nullptr;
+      add_extent(ret, p_src);
+      on_cache(*ret);
+      extent_init_func(*ret);
+      return read_extent<T>(
+	std::move(ret));
+    }
+
+    // extent PRESENT in cache
+    if (cached->get_type() == extent_types_t::RETIRED_PLACEHOLDER) {
+      auto ret = CachedExtent::make_cached_extent_ref<T>(
+        alloc_cache_buf(length));
+      ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
+                offset,
+                PLACEMENT_HINT_NULL,
+                NULL_GENERATION,
+		TRANS_ID_NULL);
+      SUBDEBUG(seastore_cache,
+          "{} {}~{} is absent(placeholder), reading ... -- {}",
+          T::TYPE, offset, length, *ret);
+      extents.replace(*ret, *cached);
+      on_cache(*ret);
+
+      // replace placeholder in transactions
+      while (!cached->transactions.empty()) {
+        auto t = cached->transactions.begin()->t;
+        t->replace_placeholder(*cached, *ret);
+      }
+
+      cached->state = CachedExtent::extent_state_t::INVALID;
+      extent_init_func(*ret);
+      return read_extent<T>(
+	std::move(ret));
+    } else if (!cached->is_fully_loaded()) {
+      auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
+      on_cache(*ret);
+      SUBDEBUG(seastore_cache,
+        "{} {}~{} is present without been fully loaded, reading ... -- {}",
+        T::TYPE, offset, length, *ret);
+      auto bp = alloc_cache_buf(length);
+      ret->set_bptr(std::move(bp));
+      return read_extent<T>(
+        std::move(ret));
+    } else {
+      SUBTRACE(seastore_cache,
+          "{} {}~{} is present in cache -- {}",
+          T::TYPE, offset, length, *cached);
+      auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
+      on_cache(*ret);
+      return ret->wait_io(
+      ).then([ret=std::move(ret)]() mutable
+	     -> read_extent_ret<T> {
+        // ret may be invalid, caller must check
+        return read_extent_ret<T>(
+          get_extent_ertr::ready_future_marker{},
+          std::move(ret));
+      });
+    }
+  }
+
+
   // This is a workaround std::move_only_function not being available,
   // not really worth generalizing at this time.
   class extent_init_func_t {
@@ -633,7 +618,9 @@ private:
       return (*wrapped)(extent);
     }
   };
-  get_extent_ertr::future<CachedExtentRef> _get_extent_by_type(
+
+  get_extent_ertr::future<CachedExtentRef>
+  do_get_caching_extent_by_type(
     extent_types_t type,
     paddr_t offset,
     laddr_t laddr,
@@ -646,7 +633,7 @@ private:
   using get_extent_by_type_iertr = get_extent_iertr;
   using get_extent_by_type_ret = get_extent_by_type_iertr::future<
     CachedExtentRef>;
-  get_extent_by_type_ret _get_extent_by_type(
+  get_extent_by_type_ret get_caching_extent_by_type(
     Transaction &t,
     extent_types_t type,
     paddr_t offset,
@@ -654,7 +641,7 @@ private:
     extent_len_t length,
     extent_init_func_t &&extent_init_func
   ) {
-    LOG_PREFIX(Cache::get_extent_by_type);
+    LOG_PREFIX(Cache::get_caching_extent_by_type);
     CachedExtentRef ret;
     auto status = t.get_extent(offset, &ret);
     if (status == Transaction::get_extent_ret::RETIRED) {
@@ -687,7 +674,7 @@ private:
       };
       auto src = t.get_src();
       return trans_intr::make_interruptible(
-	_get_extent_by_type(
+	do_get_caching_extent_by_type(
 	  type, offset, laddr, length, &src,
 	  std::move(extent_init_func), std::move(f))
       );
@@ -721,7 +708,7 @@ private:
     };
     auto src = t.get_src();
     return trans_intr::make_interruptible(
-      _get_extent_by_type(
+      do_get_caching_extent_by_type(
 	type, offset, laddr, length, &src,
 	std::move(extent_init_func), std::move(f))
     );
@@ -768,36 +755,13 @@ private:
   }
 
 public:
-  /**
-   * get_extent_by_type
-   *
-   * Based on type, instantiate the correct concrete type
-   * and read in the extent at location offset~length.
-   */
-  template <typename Func>
-  get_extent_by_type_ret get_extent_by_type(
-    Transaction &t,         ///< [in] transaction
-    extent_types_t type,    ///< [in] type tag
-    paddr_t offset,         ///< [in] starting addr
-    laddr_t laddr,          ///< [in] logical address if logical
-    extent_len_t length,    ///< [in] length
-    Func &&extent_init_func ///< [in] extent init func
-  ) {
-    return _get_extent_by_type(
-      t,
-      type,
-      offset,
-      laddr,
-      length,
-      extent_init_func_t(std::forward<Func>(extent_init_func)));
-  }
-
   /*
    * get_absent_extent_by_type
    *
-   * Mostly the same as Cache::get_extent_by_type(), with the only difference
-   * that get_absent_extent_by_type won't search the transaction's context for
-   * the specific CachedExtent
+   * Based on type, instantiate the correct concrete type
+   * and read in the extent at location offset~length.
+   *
+   * The extent in query is supposed to be absent in Cache.
    */
   template <typename Func>
   get_extent_by_type_ret get_absent_extent_by_type(
@@ -817,25 +781,6 @@ public:
       extent_init_func_t(std::forward<Func>(extent_init_func)));
   }
 
-  get_extent_by_type_ret get_extent_by_type(
-    Transaction &t,
-    extent_types_t type,
-    paddr_t offset,
-    laddr_t laddr,
-    extent_len_t length
-  ) {
-    return get_extent_by_type(
-      t, type, offset, laddr, length, [](CachedExtent &) {});
-  }
-
-
-  /*
-   * get_absent_extent_by_type
-   *
-   * Mostly the same as Cache::get_extent_by_type(), with the only difference
-   * that get_absent_extent_by_type won't search the transaction's context for
-   * the specific CachedExtent
-   */
   get_extent_by_type_ret get_absent_extent_by_type(
     Transaction &t,
     extent_types_t type,
@@ -1678,7 +1623,7 @@ private:
   void on_transaction_destruct(Transaction& t);
 
   template <typename T>
-  get_extent_ret<T> read_extent(
+  read_extent_ret<T> read_extent(
     TCachedExtentRef<T>&& extent
   ) {
     assert(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING ||
@@ -1712,7 +1657,7 @@ private:
       },
       get_extent_ertr::pass_further{},
       crimson::ct_error::assert_all{
-        "Cache::get_extent: invalid error"
+        "Cache::read_extent: invalid error"
       }
     );
   }
