@@ -5,11 +5,11 @@ tasks:
 - tox: [client.0]
 - ragweed:
     client.0:
-      default-branch: ceph-master
+      default-branch: ceph-squid
       rgw_server: client.0
       stages: prepare
 - ragweed:
     client.0:
-      default-branch: ceph-master
+      default-branch: ceph-squid
       rgw_server: client.0
       stages: check
