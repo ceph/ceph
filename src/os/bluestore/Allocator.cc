@@ -284,7 +284,7 @@ void Allocator::FreeStateHistogram::record_extent(uint64_t alloc_unit,
                                                   uint64_t off,
                                                   uint64_t len)
 {
-  size_t idx = myTraits._get_p2_size_bucket(len);
+  size_t idx = myTraits._get_bucket(len);
   ceph_assert(idx < buckets.size());
   ++buckets[idx].total;
 
@@ -293,7 +293,7 @@ void Allocator::FreeStateHistogram::record_extent(uint64_t alloc_unit,
   auto delta = p2roundup(off, alloc_unit) - off;
   if (len >= delta + alloc_unit) {
     len -= delta;
-    idx = myTraits._get_p2_size_bucket(len);
+    idx = myTraits._get_bucket(len);
     ceph_assert(idx < buckets.size());
     ++buckets[idx].aligned;
     buckets[idx].alloc_units += len / alloc_unit;
@@ -307,7 +307,7 @@ void Allocator::FreeStateHistogram::foreach(
 {
   size_t i = 0;
   for (const auto& b : buckets) {
-    cb(myTraits._get_p2_size_bucket_max(i),
+    cb(myTraits._get_bucket_max(i),
       b.total, b.aligned, b.alloc_units);
     ++i;
   }

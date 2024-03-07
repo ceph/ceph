@@ -197,7 +197,7 @@ int64_t Btree2Allocator::_allocate(
         continue;
       }
     }
-    size_t bucket0 = myTraits._get_p2_size_bucket(want_now);
+    size_t bucket0 = myTraits._get_bucket(want_now);
     int64_t r = __allocate(bucket0, want_now,
       unit, extents);
     if (r < 0) {
@@ -331,7 +331,7 @@ int64_t Btree2Allocator::__allocate(
   auto rs_p = _pick_block(0, rs_tree, size);
 
   if (rs_p == rs_tree->end()) {
-    auto bucket_center = myTraits._get_p2_size_bucket(weight_center);
+    auto bucket_center = myTraits._get_bucket(weight_center);
 
     // requested size is to the left of weight center
     // hence we try to search up toward it first
@@ -467,7 +467,7 @@ void Btree2Allocator::_remove_from_tree(
   uint64_t end)
 {
   range_seg_t rs(rt_p->first, rt_p->second);
-  size_t bucket = myTraits._get_p2_size_bucket(rs.length());
+  size_t bucket = myTraits._get_bucket(rs.length());
   range_size_tree_t* rs_tree = &range_size_set[bucket];
   auto rs_p = rs_tree->find(rs);
   ceph_assert(rs_p != rs_tree->end());
@@ -571,7 +571,7 @@ bool Btree2Allocator::__try_insert_range(
 void Btree2Allocator::_range_size_tree_add(const range_seg_t& rs) {
   auto l = rs.length();
   ceph_assert(rs.end > rs.start);
-  size_t bucket = myTraits._get_p2_size_bucket(l);
+  size_t bucket = myTraits._get_bucket(l);
   range_size_set[bucket].insert(rs);
   num_free += l;
 
@@ -584,7 +584,7 @@ void Btree2Allocator::_range_size_tree_add(const range_seg_t& rs) {
 }
 void Btree2Allocator::_range_size_tree_rm(const range_seg_t& rs)
 {
-  size_t bucket = myTraits._get_p2_size_bucket(rs.length());
+  size_t bucket = myTraits._get_bucket(rs.length());
   range_size_tree_t* rs_tree = &range_size_set[bucket];
   ceph_assert(rs_tree->size() > 0);
   auto rs_p = rs_tree->find(rs);
