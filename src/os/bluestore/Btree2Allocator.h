@@ -23,7 +23,7 @@ class Btree2Allocator : public Allocator {
   enum {
     RANGE_SIZE_BUCKET_COUNT = 14,
   };
-  const ExtentCollectionTraits myTraits;
+  const LenPartitionedSetTraitsPow2 myTraits;
 
 public:
   // Making public to share with mempools
