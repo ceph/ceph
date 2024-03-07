@@ -24,20 +24,24 @@ typedef release_set_t::value_type release_set_entry_t;
 class Allocator {
 protected:
 
-  struct ExtentCollectionTraits {
+  /**
+   * This is a base set of traits for logical placing entries
+   * into limited collection of buckets depending on their sizes.
+   * Descandants should implement get_bucket(len) method to obtain
+   * bucket index using entry length.
+   */
+  struct LenPartitionedSetTraits {
     size_t num_buckets;
-    size_t base_bits; // min extent size
-    size_t base = 1ull << base_bits;
-    size_t factor;  // single bucket size range to be
-                    // determined as [len, len * factor * 2)
-                    // for log2(len) indexing and
-                    // [len, len + factor * base)
-                    // for linear indexing.
+    size_t base_bits; // bits in min entry size
+    size_t base;      // min entry size
+    size_t factor;    // additional factor to be applied
+                      // to entry size when calculating
+                      // target bucket
 
 
-    ExtentCollectionTraits(size_t _num_buckets,
-                           size_t _base_bits = 12,  //= 4096 bytes
-                           size_t _factor = 1) :
+    LenPartitionedSetTraits(size_t _num_buckets,
+                            size_t _base_bits = 12,  //= 4096 bytes
+                            size_t _factor = 1) :
       num_buckets(_num_buckets),
       base_bits(_base_bits),
       base(1ull << base_bits),
@@ -45,13 +49,63 @@ protected:
     {
       ceph_assert(factor);
     }
+  };
 
+  /**
+   * This extends LenPartitionedSetTraits to implement linear bucket indexing:
+   * bucket index to be determined as entry's size divided by (base * factor),
+   * i.e. buckets are:
+   * [0..base)
+   * [base, base+base*factor)
+   * [base+base*factor, base+base*factor*2)
+   * [base+base*factor*2, base+base*factor*3)
+   * ...
+   */
+  struct LenPartitionedSetTraitsLinear : public LenPartitionedSetTraits {
+    using LenPartitionedSetTraits::LenPartitionedSetTraits;
+    /*
+     * Determines bucket index for a given extent's length in a bucket set
+     * with linear (len / base / factor) indexing.
+     * The first bucket is targeted for lengths < base,
+     * the last bucket is used for lengths above the maximum
+     * detemined by bucket count.
+     */
+    inline size_t _get_bucket(uint64_t len) const {
+      size_t idx = (len / factor) >> base_bits;
+      idx = idx < num_buckets ? idx : num_buckets - 1;
+      return idx;
+    }
+    /*
+     * returns upper bound of a specific bucket
+     */
+    inline size_t _get_bucket_max(size_t bucket) const {
+      return
+        bucket < num_buckets - 1 ?
+        base * factor * (1 + bucket) :
+        std::numeric_limits<uint64_t>::max();
+    }
+  };
+
+  /**
+   * This extends LenPartitionedSetTraits to implement exponential bucket indexing:
+   * target bucket bounds are determined as
+   * [0, base]
+   * (base, base*2^factor]
+   * (base*2^factor, base*2^(factor*2)]
+   * (base*2^(factor*2), base*2^(factor*3)]
+   * ...
+   *
+   */
+  struct LenPartitionedSetTraitsPow2 : public LenPartitionedSetTraits {
     /*
      * Determines bucket index for a given extent's length in a bucket collection
      * with log2(len) indexing.
-     * The last bucket index is returned for lengths above the maximum.
+     * The first bucket is targeted for lengths < base,
+     * The last bucket index is used for lengths above the maximum
+     * detemined by bucket count.
      */
-    inline size_t _get_p2_size_bucket(uint64_t len) const {
+    using LenPartitionedSetTraits::LenPartitionedSetTraits;
+    inline size_t _get_bucket(uint64_t len) const {
       size_t idx;
       const size_t len_p2_max =
         base << ((factor * (num_buckets - 2)));
@@ -69,33 +123,12 @@ protected:
     /*
      * returns upper bound of the bucket with log2(len) indexing.
      */
-    inline size_t _get_p2_size_bucket_max(size_t bucket) const {
+    inline size_t _get_bucket_max(size_t bucket) const {
       return
         bucket < num_buckets - 1 ?
         base << (factor * bucket) :
         std::numeric_limits<uint64_t>::max();
-    };
-
-    /*
-     * Determines bucket index for a given extent's length in a bucket collection
-     * with linear (len / min_extent_size) indexing.
-     * The last bucket index is returned for lengths above the maximum.
-     */
-    inline size_t _get_linear_size_bucket(uint64_t len) const {
-      size_t idx = (len / factor) >> base_bits;
-      idx = idx < num_buckets ? idx : num_buckets - 1;
-      return idx;
     }
-    /*
-     * returns upper bound of the bucket with
-     * linear(len / min_extent_size) indexing.
-     */
-    inline size_t _get_linear_size_bucket_max(size_t bucket) const {
-      return
-        bucket < num_buckets - 1 ?
-        base * factor * (1 + bucket) :
-        std::numeric_limits<uint64_t>::max();
-    };
   };
 
   /*
@@ -145,7 +178,7 @@ protected:
    * extents aren't not cached.
    */
   class OpportunisticExtentCache {
-    const Allocator::ExtentCollectionTraits myTraits;
+    const LenPartitionedSetTraitsLinear myTraits;
     enum {
       BUCKET_COUNT = 16,
       EXTENTS_PER_BUCKET = 16, // amount of entries per single bucket,
@@ -179,7 +212,7 @@ protected:
       bool ret = false;
       ceph_assert(p2aligned(offset, myTraits.base));
       ceph_assert(p2aligned(len, myTraits.base));
-      auto idx = myTraits._get_linear_size_bucket(len);
+      auto idx = myTraits._get_bucket(len);
       if (idx < buckets.size())
         ret = buckets[idx].try_put(offset);
       lock.unlock_shared();
@@ -295,7 +328,7 @@ public:
   // - amount of allocation units in aligned extents
   //
   class FreeStateHistogram {
-    const Allocator::ExtentCollectionTraits myTraits;
+    const LenPartitionedSetTraitsPow2 myTraits;
     enum {
       BASE_BITS = 12, // 4096 bytes
       FACTOR = 2,
