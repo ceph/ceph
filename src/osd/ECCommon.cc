@@ -315,23 +315,18 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
   pair<uint64_t, uint64_t> off_len,
   set<int> *want_to_read)
 {
-  uint64_t off = off_len.first;
-  uint64_t len = off_len.second;
-  uint64_t chunk_size = sinfo.get_chunk_size();
-  int data_chunk_count = sinfo.get_stripe_width() / sinfo.get_chunk_size();
+  const auto [offset, length] = off_len;
+  const auto [left_chunk_index, right_chunk_index] =
+    sinfo.offset_length_to_data_chunk_indices(offset, length);
+  const auto left_shard_index =
+    left_chunk_index % sinfo.get_data_chunk_count();
+  const auto right_shard_index =
+    std::min(right_chunk_index, sinfo.get_data_chunk_count());
+
   const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
-
-  int total_chunks = (chunk_size - 1 + len) / chunk_size;
-  int first_chunk = (off / chunk_size) % data_chunk_count;
-
-  if (total_chunks > data_chunk_count) {
-    total_chunks = data_chunk_count;
-  }
-
-  for(int i = 0; i < total_chunks; i++) {
-    int j = (first_chunk + i) % data_chunk_count;
-    int chunk = (int)chunk_mapping.size()  > j ? chunk_mapping[j] : j;
-    want_to_read->insert(chunk);
+  for(uint64_t i = left_shard_index; i < right_shard_index; i++) {
+    auto chunk = chunk_mapping.size()  > i ? chunk_mapping[i] : i;
+    want_to_read->insert(static_cast<int>(chunk));
   }
 }
 
