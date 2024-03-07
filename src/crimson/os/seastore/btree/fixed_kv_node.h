@@ -430,6 +430,8 @@ struct FixedKVNode : ChildableCachedExtent {
 	// the foreign key is preserved
 	if (!child) {
 	  child = source.children[foreign_it.get_offset()];
+	  // child can be either valid if present, nullptr if absent,
+	  // or RESERVATION_PTR.
 	}
 	foreign_it++;
 	local_it++;
