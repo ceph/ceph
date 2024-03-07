@@ -42,6 +42,9 @@ public:
   uint64_t get_chunk_size() const {
     return chunk_size;
   }
+  uint64_t get_data_chunk_count() const {
+    return get_stripe_width() / get_chunk_size();
+  }
   uint64_t logical_to_prev_chunk_offset(uint64_t offset) const {
     return (offset / stripe_width) * chunk_size;
   }
@@ -81,6 +84,13 @@ public:
       (tmp_len - (tmp_len % chunk_size) + chunk_size) :
       tmp_len);
     return std::make_pair(off, len);
+  }
+  std::pair<uint64_t, uint64_t> offset_length_to_data_chunk_indices(
+    uint64_t off, uint64_t len) const {
+    assert(chunk_size > 0);
+    const auto first_chunk_idx = (off / chunk_size);
+    const auto last_chunk_idx = (chunk_size - 1 + len) / chunk_size;
+    return {first_chunk_idx, last_chunk_idx};
   }
 };
 
