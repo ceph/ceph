@@ -1244,8 +1244,6 @@ public:
 
   std::ostream &_print_detail(std::ostream &out) const final;
 
-  void on_replace_prior(Transaction &t) final;
-
   struct modified_region_t {
     extent_len_t offset;
     extent_len_t len;
@@ -1257,9 +1255,12 @@ public:
   virtual void clear_modified_region() {}
 
   virtual ~LogicalCachedExtent();
+
 protected:
+  void on_replace_prior(Transaction &t) final;
 
   virtual void apply_delta(const ceph::bufferlist &bl) = 0;
+
   virtual std::ostream &print_detail_l(std::ostream &out) const {
     return out;
   }
