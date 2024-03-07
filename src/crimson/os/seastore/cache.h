@@ -600,6 +600,12 @@ public:
     return epm.get_block_size();
   }
 
+// Interfaces only for tests.
+public:
+  CachedExtentRef test_query_cache(paddr_t offset) {
+    return query_cache(offset, nullptr);
+  }
+
 private:
   // This is a workaround std::move_only_function not being available,
   // not really worth generalizing at this time.
@@ -1732,16 +1738,6 @@ private:
       return CachedExtentRef();
     }
   }
-
-  template <
-    typename node_key_t,
-    typename node_val_t,
-    typename internal_node_t,
-    typename leaf_node_t,
-    typename pin_t,
-    size_t node_size,
-    bool leaf_has_children>
-  friend class FixedKVBtree;
 };
 using CacheRef = std::unique_ptr<Cache>;
 

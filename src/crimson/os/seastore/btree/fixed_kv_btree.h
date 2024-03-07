@@ -579,12 +579,12 @@ public:
           if constexpr (
             std::is_base_of_v<typename internal_node_t::base_t, child_node_t>)
           {
-            assert(!c.cache.query_cache(i->get_val(), nullptr));
+            assert(!c.cache.test_query_cache(i->get_val()));
           } else {
             if constexpr (leaf_has_children) {
               assert(i->get_val().pladdr.is_paddr()
-                ? (bool)!c.cache.query_cache(
-                    i->get_val().pladdr.get_paddr(), nullptr)
+                ? (bool)!c.cache.test_query_cache(
+                    i->get_val().pladdr.get_paddr())
                 : true);
             }
           }
