@@ -13645,6 +13645,7 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
       }
     }
     MDSGatherBuilder gather(g_ceph_context, new C_MDS_RetryRequest(this, mdr));
+    std::vector<MDRequestRef> todispatch;
     for (auto& dir : in->get_dirfrags()) {
       for (auto& [dnk, dn] : *dir) {
         auto* in = dn->get_projected_inode();
@@ -13669,11 +13670,14 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
             cache->dispatch_request(qimdr);
           }));
         } else {
-          dispatch_request(qimdr);
+          todispatch.push_back(qimdr);
         }
-        if (!(qs.inc_heartbeat_count() % mds->heartbeat_reset_grace())) {
-          mds->heartbeat_reset();
-        }
+      }
+    }
+    for (auto& qimdr : todispatch) {
+      dispatch_request(qimdr);
+      if (!(qs.inc_heartbeat_count() % mds->heartbeat_reset_grace())) {
+        mds->heartbeat_reset();
       }
     }
     if (gather.has_subs()) {
