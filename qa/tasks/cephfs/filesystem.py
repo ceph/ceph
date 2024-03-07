@@ -261,8 +261,14 @@ class CephCluster(object):
                      "-Infinity": -float("inf")}
                 return c[value]
 
-            j = json.loads(response_data.replace('inf', 'Infinity'),
-                           parse_constant=get_nonnumeric_values)
+            
+            j = {}
+            try:
+                j = json.loads(response_data.replace('inf', 'Infinity'),
+                            parse_constant=get_nonnumeric_values)
+            except json.decoder.JSONDecodeError:
+                raise RuntimeError(response_data) # assume it is an error message, pass it up
+            
             pretty = json.dumps(j, sort_keys=True, indent=2)
             log.debug(f"_json_asok output\n{pretty}")
             return j
