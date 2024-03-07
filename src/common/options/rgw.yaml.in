@@ -892,6 +892,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_s3_auth_disable_signature_url
+  type: bool
+  level: advanced
+  desc: Should authentification with presigned URLs be disabled
+  long_desc: 'If enabled, any request that is presigned with either V2 or V4 signature will be denied'
+  default: false
+  services:
+  - rgw
 - name: rgw_barbican_url
   type: str
   level: advanced
