@@ -37,7 +37,7 @@ class RawBlueStore(BlueStore):
                                     (self.db_device_path, 'db'),
                                     (self.wal_device_path, 'wal')]:
 
-            if device:
+            if device and device_type in self.encrypted_device_types:
                 kname = disk.lsblk(device)['KNAME']
                 mapping = 'ceph-{}-{}-{}-dmcrypt'.format(self.osd_fsid,
                                                          kname,

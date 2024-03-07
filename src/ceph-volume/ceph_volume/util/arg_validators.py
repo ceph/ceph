@@ -10,13 +10,17 @@ from ceph_volume.util.encryption import set_dmcrypt_no_workqueue
 def valid_osd_id(val):
     return str(int(val))
 
-class DmcryptAction(argparse._StoreTrueAction):
+class DmcryptAction(argparse._ExtendAction):
     def __init__(self, *args, **kwargs):
         super(DmcryptAction, self).__init__(*args, **kwargs)
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, parser, namespace, values, option_string=None):
         set_dmcrypt_no_workqueue()
-        super(DmcryptAction, self).__call__(*args, **kwargs)
+
+        if not values:
+            values = ['block', 'db', 'wal']
+
+        super(DmcryptAction, self).__call__(parser, namespace, values, option_string)
 
 class ValidDevice(object):
 
