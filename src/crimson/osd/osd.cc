@@ -1268,7 +1268,6 @@ seastar::future<> OSD::handle_scrub_message(
   crimson::net::ConnectionRef conn,
   Ref<MOSDFastDispatchOp> m)
 {
-  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   return pg_shard_manager.start_pg_operation<
     crimson::osd::ScrubMessage
     >(m, conn, m->get_min_epoch(), m->get_spg()).second;
