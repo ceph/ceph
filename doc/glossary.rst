@@ -213,6 +213,18 @@
                 Ceph cluster. See :ref:`the "Cluster Map" section of the
                 Architecture document<architecture_cluster_map>` for details.
 
+        Crimson
+                A next-generation OSD architecture whose core aim is the
+                reduction of latency costs incurred due to cross-core
+                communications. A re-design of the OSD that reduces lock
+                contention by reducing communication between shards in the data
+                path. Crimson improves upon the performance of classic Ceph
+                OSDs by eliminating reliance on thread pools. See `Crimson:
+                Next-generation Ceph OSD for Multi-core Scalability
+                <https://ceph.io/en/news/blog/2023/crimson-multi-core-scalability/>`_.
+                See the :ref:`Crimson developer
+                documentation<crimson_dev_doc>`.
+
 	CRUSH
                 **C**\ontrolled **R**\eplication **U**\nder **S**\calable
                 **H**\ashing. The algorithm that Ceph uses to compute object
