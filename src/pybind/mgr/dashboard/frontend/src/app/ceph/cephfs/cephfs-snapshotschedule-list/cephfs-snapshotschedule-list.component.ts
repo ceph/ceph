@@ -143,12 +143,12 @@ export class CephfsSnapshotscheduleListComponent
 
     this.columns = [
       { prop: 'pathForSelection', name: $localize`Path`, flexGrow: 3, cellTemplate: this.pathTpl },
-      { prop: 'path', isHidden: true },
+      { prop: 'path', isHidden: true, isInvisible: true },
       { prop: 'subvol', name: $localize`Subvolume`, cellTemplate: this.subvolTpl },
       { prop: 'scheduleCopy', name: $localize`Repeat interval` },
-      { prop: 'schedule', isHidden: true },
+      { prop: 'schedule', isHidden: true, isInvisible: true },
       { prop: 'retentionCopy', name: $localize`Retention policy`, cellTemplate: this.retentionTpl },
-      { prop: 'retention', isHidden: true },
+      { prop: 'retention', isHidden: true, isInvisible: true },
       { prop: 'created_count', name: $localize`Created Count` },
       { prop: 'pruned_count', name: $localize`Deleted Count` },
       { prop: 'start', name: $localize`Start time`, cellTransformation: CellTemplate.timeAgo },
