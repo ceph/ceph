@@ -425,12 +425,17 @@ public:
     for (auto &remap : remaps) {
       auto remap_offset = remap.offset;
       auto remap_len = remap.len;
+      assert(remap_len > 0);
       total_remap_len += remap.len;
-      ceph_assert(remap_offset >= (last_offset + last_len));
+      assert(remap_offset >= (last_offset + last_len));
       last_offset = remap_offset;
       last_len = remap_len;
     }
-    ceph_assert(total_remap_len < original_len);
+    if (remaps.size() == 1) {
+      assert(total_remap_len < original_len);
+    } else {
+      assert(total_remap_len <= original_len);
+    }
 #endif
 
     // FIXME: paddr can be absolute and pending
