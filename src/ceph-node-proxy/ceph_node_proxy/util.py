@@ -126,6 +126,8 @@ def normalize_dict(test_dict: Dict) -> Dict:
         if isinstance(test_dict[key], dict):
             res[key.lower()] = normalize_dict(test_dict[key])
         else:
+            if test_dict[key] is None:
+                test_dict[key] = 'unknown'
             res[key.lower()] = test_dict[key]
     return res
 
