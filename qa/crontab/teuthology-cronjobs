@@ -56,12 +56,12 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
 00 05 * * 0   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=rados;         KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 100000 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 201
-10 05 * * 1   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=orch;          KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh     64 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
-20 05 * * 2   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=rbd;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    128 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
-30 05 * * 3   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=fs;            KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    512 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
-40 05 * * 4   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=powercycle;    KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
-50 05 * * 5   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=rgw;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      1 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
-60 05 * * 6   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=krbd;          KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
+08 05 * * 1   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=orch;          KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh     64 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
+16 05 * * 2   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=rbd;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    128 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
+24 05 * * 3   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=fs;            KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    512 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
+32 05 * * 4   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=powercycle;    KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
+40 05 * * 5   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=rgw;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      1 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
+48 05 * * 6   CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=krbd;          KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 200
 
 
 ## squid branch runs - twice weekly
@@ -70,12 +70,12 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
 00 06 * * 0,4 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=rados;         KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 100000 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 101
-10 06 * * 1,5 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=orch;          KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh     64 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
-20 06 * * 2,6 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=rbd;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    128 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
-30 06 * * 3,0 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=fs;            KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    512 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
-40 06 * * 4,1 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=powercycle;    KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
-50 06 * * 5,2 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=rgw;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      1 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
-60 06 * * 6,3 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=krbd;          KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
+08 06 * * 1,5 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=orch;          KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh     64 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
+16 06 * * 2,6 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=rbd;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    128 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
+24 06 * * 3,0 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=fs;            KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    512 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
+32 06 * * 4,1 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=powercycle;    KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
+40 06 * * 5,2 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=rgw;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      1 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
+48 06 * * 6,3 CEPH_BRANCH=squid; MACHINE_NAME=smithi; SUITE_NAME=krbd;          KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 100
 
 
 ## reef branch runs - weekly
@@ -84,12 +84,12 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
 00 07 * * 0   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=rados;         KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 100000 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 181
-10 07 * * 1   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=orch;          KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh     64 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
-20 07 * * 2   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=rbd;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    128 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
-30 07 * * 3   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=fs;            KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    512 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
-40 07 * * 4   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=powercycle;    KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
-50 07 * * 5   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=rgw;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      1 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
-60 07 * * 6   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=krbd;          KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
+08 07 * * 1   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=orch;          KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh     64 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
+16 07 * * 2   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=rbd;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    128 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
+24 07 * * 3   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=fs;            KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh    512 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
+32 07 * * 4   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=powercycle;    KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
+40 07 * * 5   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=rgw;           KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      1 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
+48 07 * * 6   CEPH_BRANCH=reef; MACHINE_NAME=smithi; SUITE_NAME=krbd;          KERNEL=testing; /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh      4 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL -p 180
 
 
 ###  The suite below must run on bare-metal because it's performance suite and run 3 times to produce more data points
