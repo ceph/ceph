@@ -584,14 +584,14 @@ int RGWBucket::check_index_olh(rgw::sal::RadosStore* const rados_store,
   const int max_aio = std::max(1, op_state.get_max_aio());
 
   for (int i=0; i<max_aio; i++) {
-    spawn::spawn(context, [&](spawn::yield_context yield) {
+    boost::asio::spawn(context, [&](boost::asio::yield_context yield) {
       while (true) {
         int shard = next_shard;
         next_shard += 1;
         if (shard >= max_shards) {
           return;
         }
-        optional_yield y(context, yield);
+        optional_yield y(yield);
         uint64_t shard_count;
         int r = ::check_index_olh(rados_store, &*bucket, dpp, op_state, flusher, shard, &shard_count, y);
         if (r < 0) {
@@ -604,6 +604,8 @@ int RGWBucket::check_index_olh(rgw::sal::RadosStore* const rados_store,
             " entries " << verb << ")" << dendl;
         }
       }
+    }, [] (std::exception_ptr eptr) {
+      if (eptr) std::rethrow_exception(eptr);
     });
   }
   try {
@@ -793,7 +795,7 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
   int next_shard = 0;
   boost::asio::io_context context;
   for (int i=0; i<max_aio; i++) {
-    spawn::spawn(context, [&](spawn::yield_context yield) {
+    boost::asio::spawn(context, [&](boost::asio::yield_context yield) {
       while (true) {
         int shard = next_shard;
         next_shard += 1;
@@ -801,8 +803,7 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
           return;
         }
         uint64_t shard_count;
-        optional_yield y {context, yield};
-        int r = ::check_index_unlinked(rados_store, &*bucket, dpp, op_state, flusher, shard, &shard_count, y);
+        int r = ::check_index_unlinked(rados_store, &*bucket, dpp, op_state, flusher, shard, &shard_count, yield);
         if (r < 0) {
           ldpp_dout(dpp, -1) << "ERROR: error processing shard " << shard << 
             " check_index_unlinked(): " << r << dendl;
@@ -813,6 +814,8 @@ int RGWBucket::check_index_unlinked(rgw::sal::RadosStore* const rados_store,
             " entries " << verb << ")" << dendl;
         }
       }
+    }, [] (std::exception_ptr eptr) {
+      if (eptr) std::rethrow_exception(eptr);
     });
   }
   try {

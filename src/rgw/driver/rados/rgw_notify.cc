@@ -9,8 +9,8 @@
 #include <boost/asio/basic_waitable_timer.hpp>
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/spawn.hpp>
 #include <boost/context/protected_fixedsize_stack.hpp>
-#include <spawn/spawn.hpp>
 #include "rgw_sal_rados.h"
 #include "rgw_pubsub.h"
 #include "rgw_pubsub_push.h"
@@ -197,7 +197,7 @@ private:
       pending_tokens(0),
       timer(io_context) {}  
  
-    void async_wait(spawn::yield_context yield) { 
+    void async_wait(boost::asio::yield_context yield) {
       if (pending_tokens == 0) {
         return;
       }
@@ -220,7 +220,7 @@ private:
   // processing of a specific entry
   // return whether processing was successful (true) or not (false)
   EntryProcessingResult process_entry(const ConfigProxy& conf, persistency_tracker& entry_persistency_tracker,
-                                      const cls_queue_entry& entry, spawn::yield_context yield) {
+                                      const cls_queue_entry& entry, boost::asio::yield_context yield) {
     event_entry_t event_entry;
     auto iter = entry.data.cbegin();
     try {
@@ -269,7 +269,7 @@ private:
           cct);
       ldpp_dout(this, 20) << "INFO: push endpoint created: " << event_entry.push_endpoint <<
         " for entry: " << entry.marker << dendl;
-      const auto ret = push_endpoint->send_to_completion_async(cct, event_entry.event, optional_yield(io_context, yield));
+      const auto ret = push_endpoint->send_to_completion_async(cct, event_entry.event, yield);
       if (ret < 0) {
         ldpp_dout(this, 5) << "WARNING: push entry: " << entry.marker << " to endpoint: " << event_entry.push_endpoint 
           << " failed. error: " << ret << " (will retry)" << dendl;
@@ -288,7 +288,7 @@ private:
   }
 
   // clean stale reservation from queue
-  void cleanup_queue(const std::string& queue_name, spawn::yield_context yield) {
+  void cleanup_queue(const std::string& queue_name, boost::asio::yield_context yield) {
     while (true) {
       ldpp_dout(this, 20) << "INFO: trying to perform stale reservation cleanup for queue: " << queue_name << dendl;
       const auto now = ceph::coarse_real_time::clock::now();
@@ -301,7 +301,7 @@ private:
         "" /*no tag*/);
       cls_2pc_queue_expire_reservations(op, stale_time);
       // check ownership and do reservation cleanup in one batch
-      auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, optional_yield(io_context, yield));
+      auto ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, yield);
       if (ret == -ENOENT) {
         // queue was deleted
         ldpp_dout(this, 5) << "INFO: queue: " 
@@ -324,15 +324,18 @@ private:
   }
 
   // processing of a specific queue
-  void process_queue(const std::string& queue_name, spawn::yield_context yield) {
+  void process_queue(const std::string& queue_name, boost::asio::yield_context yield) {
     constexpr auto max_elements = 1024;
     auto is_idle = false;
     const std::string start_marker;
 
     // start a the cleanup coroutine for the queue
-    spawn::spawn(io_context, [this, queue_name](spawn::yield_context yield) {
-            cleanup_queue(queue_name, yield);
-            }, make_stack_allocator());
+    boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
+            [this, queue_name](boost::asio::yield_context yield) {
+              cleanup_queue(queue_name, yield);
+            }, [] (std::exception_ptr eptr) {
+              if (eptr) std::rethrow_exception(eptr);
+            });
 
     CountersManager queue_counters_container(queue_name, this->get_cct());
 
@@ -363,7 +366,7 @@ private:
           "" /*no tag*/);
         cls_2pc_queue_list_entries(op, start_marker, max_elements, &obl, &rval);
         // check ownership and list entries in one batch
-        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, nullptr, optional_yield(io_context, yield));
+        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, nullptr, yield);
         if (ret == -ENOENT) {
           // queue was deleted
           topics_persistency_tracker.erase(queue_name);
@@ -410,8 +413,9 @@ private:
         }
 
         entries_persistency_tracker& notifs_persistency_tracker = topics_persistency_tracker[queue_name];
-        spawn::spawn(yield, [this, &notifs_persistency_tracker, &queue_name, entry_idx, total_entries, &end_marker,
-                             &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector](spawn::yield_context yield) {
+        boost::asio::spawn(yield, std::allocator_arg, make_stack_allocator(),
+          [this, &notifs_persistency_tracker, &queue_name, entry_idx, total_entries, &end_marker,
+           &remove_entries, &has_error, &waiter, &entry, &needs_migration_vector](boost::asio::yield_context yield) {
             const auto token = waiter.make_token();
             auto& persistency_tracker = notifs_persistency_tracker[entry.marker];
             auto result = process_entry(this->get_cct()->_conf, persistency_tracker, entry, yield);
@@ -433,7 +437,9 @@ private:
               ldpp_dout(this, 20) << "INFO: processing of entry: " << 
                 entry.marker << " (" << entry_idx << "/" << total_entries << ") from: " << queue_name << " failed" << dendl;
             } 
-        }, make_stack_allocator());
+        }, [] (std::exception_ptr eptr) {
+          if (eptr) std::rethrow_exception(eptr);
+        });
         ++entry_idx;
       }
 
@@ -465,7 +471,7 @@ private:
           "" /*no tag*/);
         cls_2pc_queue_remove_entries(op, end_marker, entries_to_remove);
         // check ownership and deleted entries in one batch
-        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
+        auto ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
         if (ret == -ENOENT) {
           // queue was deleted
           ldpp_dout(this, 5) << "INFO: queue: " << queue_name << ". was removed. processing will stop" << dendl;
@@ -492,7 +498,7 @@ private:
           RGWPubSub ps(&rados_store, tenant_name);
 
           rgw_pubsub_topic topic;
-          auto ret_of_get_topic = ps.get_topic(this, queue_name, topic, optional_yield(io_context, yield));
+          auto ret_of_get_topic = ps.get_topic(this, queue_name, topic, yield);
           if (ret_of_get_topic < 0) {
             // we can't migrate entries without topic info
             ldpp_dout(this, 1) << "ERROR: failed to fetch topic: " << queue_name << " error: "
@@ -524,7 +530,7 @@ private:
           buffer::list obl;
           int rval;
           cls_2pc_queue_reserve(op, size_to_migrate, migration_vector.size(), &obl, &rval);
-          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield), librados::OPERATION_RETURNVEC);
+          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield, librados::OPERATION_RETURNVEC);
           if (ret < 0) {
             ldpp_dout(this, 1) << "ERROR: failed to reserve migration space on queue: " << queue_name << ". error: " << ret << dendl;
             return;
@@ -536,7 +542,7 @@ private:
           }
 
           cls_2pc_queue_commit(op, migration_vector, reservation_id);
-          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, optional_yield(io_context, yield));
+          ret = rgw_rados_operate(this, rados_ioctx, queue_name, &op, yield);
           reservation_id = cls_2pc_reservation::NO_ID;
           if (ret < 0) {
             ldpp_dout(this, 1) << "ERROR: failed to commit reservation to queue: " << queue_name << ". error: " << ret << dendl;
@@ -562,7 +568,7 @@ private:
 
   // process all queues
   // find which of the queues is owned by this daemon and process it
-  void process_queues(spawn::yield_context yield) {
+  void process_queues(boost::asio::yield_context yield) {
     auto has_error = false;
     owned_queues_t owned_queues;
 
@@ -588,7 +594,7 @@ private:
       timer.async_wait(yield[ec]);
 
       queues_t queues;
-      auto ret = read_queue_list(queues, optional_yield(io_context, yield));
+      auto ret = read_queue_list(queues, yield);
       if (ret < 0) {
         has_error = true;
         continue;
@@ -607,7 +613,7 @@ private:
               failover_time,
               LOCK_FLAG_MAY_RENEW);
 
-        ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, optional_yield(io_context, yield));
+        ret = rgw_rados_operate(this, rados_store.getRados()->get_notif_pool_ctx(), queue_name, &op, yield);
         if (ret == -EBUSY) {
           // lock is already taken by another RGW
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " owned (locked) by another daemon" << dendl;
@@ -629,14 +635,17 @@ private:
         if (owned_queues.insert(queue_name).second) {
           ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " now owned (locked) by this daemon" << dendl;
           // start processing this queue
-          spawn::spawn(io_context, [this, &queue_gc, &queue_gc_lock, queue_name](spawn::yield_context yield) {
+          boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
+                             [this, &queue_gc, &queue_gc_lock, queue_name](boost::asio::yield_context yield) {
             process_queue(queue_name, yield);
             // if queue processing ended, it means that the queue was removed or not owned anymore
             // mark it for deletion
             std::lock_guard lock_guard(queue_gc_lock);
             queue_gc.push_back(queue_name);
             ldpp_dout(this, 10) << "INFO: queue: " << queue_name << " marked for removal" << dendl;
-          }, make_stack_allocator());
+          }, [] (std::exception_ptr eptr) {
+            if (eptr) std::rethrow_exception(eptr);
+          });
         } else {
           ldpp_dout(this, 20) << "INFO: queue: " << queue_name << " ownership (lock) renewed" << dendl;
         }
@@ -680,9 +689,12 @@ public:
     reservations_cleanup_period_s(_reservations_cleanup_period_s),
     rados_store(*store)
     {
-      spawn::spawn(io_context, [this](spawn::yield_context yield) {
+      boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
+          [this](boost::asio::yield_context yield) {
             process_queues(yield);
-          }, make_stack_allocator());
+          }, [] (std::exception_ptr eptr) {
+            if (eptr) std::rethrow_exception(eptr);
+          });
 
       // start the worker threads to do the actual queue processing
       const std::string WORKER_THREAD_NAME = "notif-worker";
