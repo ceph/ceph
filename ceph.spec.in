@@ -143,6 +143,19 @@
 %{!?python3_version: %global python3_version 3}
 %{!?gts_version: %global gts_version 11}
 
+# gcc-toolset-13 seems to trigger a linker bug resulting in a segfault in SafeTimer
+# and perhaps elsewhere.  For now, let's just disable it.  See
+# ceph bug https://tracker.ceph.com/issues/63867
+# and
+# gcc bug https://bugzilla.redhat.com/show_bug.cgi?id=2241339
+# for details.
+#
+# Also disable lto on systems that do not support symver attribute
+# See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200 for details
+%if 0%{?gts_version} == 13 || (0%{?rhel} && 0%{?rhel} < 9)  || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
+%define _lto_cflags %{nil}
+%endif
+
 %if ! 0%{?suse_version}
 # use multi-threaded xz compression: xz level 7 using ncpus threads
 %global _source_payload w7T%{_smp_build_ncpus}.xzdio
@@ -1334,11 +1347,6 @@ This package provides a Ceph hardware monitoring agent.
 %autosetup -p1 -n @TARBALL_BASENAME@
 
 %build
-# Disable lto on systems that do not support symver attribute
-# See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200 for details
-%if ( 0%{?rhel} && 0%{?rhel} < 9 ) || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
-%define _lto_cflags %{nil}
-%endif
 
 %if 0%{with cephfs_java}
 # Find jni.h
