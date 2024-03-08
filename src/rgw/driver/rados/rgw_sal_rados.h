@@ -117,7 +117,6 @@ class RadosZone : public StoreZone {
 class RadosStore : public StoreDriver {
   private:
     boost::asio::io_context& io_context;
-    const rgw::SiteConfig& site_config;
     RGWRados* rados;
     RGWUserCtl* user_ctl;
     std::unique_ptr<RadosZone> zone;
@@ -125,9 +124,8 @@ class RadosStore : public StoreDriver {
     std::string topics_oid(const std::string& tenant) const;
 
   public:
-    RadosStore(boost::asio::io_context& io_context,
-	       const rgw::SiteConfig& site_config)
-      : io_context(io_context), site_config(site_config), rados(nullptr) {
+    RadosStore(boost::asio::io_context& io_context)
+      : io_context(io_context), rados(nullptr) {
       }
     ~RadosStore() {
       delete rados;
@@ -162,10 +160,40 @@ class RadosStore : public StoreDriver {
     std::string& _req_id, optional_yield y) override;
     int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) override;
+    int stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) override;
     int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
 	optional_yield y, const DoutPrefixProvider *dpp) override;
     int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) override;
+    int read_topic_v2(const std::string& topic_name,
+                      const std::string& tenant,
+                      rgw_pubsub_topic& topic,
+                      RGWObjVersionTracker* objv_tracker,
+                      optional_yield y,
+                      const DoutPrefixProvider* dpp) override;
+    int write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+                       RGWObjVersionTracker& objv_tracker,
+                       optional_yield y,
+                       const DoutPrefixProvider* dpp) override;
+    int remove_topic_v2(const std::string& topic_name,
+                        const std::string& tenant,
+                        RGWObjVersionTracker& objv_tracker,
+                        optional_yield y,
+                        const DoutPrefixProvider* dpp) override;
+    int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                    const std::string& bucket_key,
+                                    bool add_mapping,
+                                    optional_yield y,
+                                    const DoutPrefixProvider* dpp) override;
+    int remove_bucket_mapping_from_topics(
+        const rgw_pubsub_bucket_topics& bucket_topics,
+        const std::string& bucket_key,
+        optional_yield y,
+        const DoutPrefixProvider* dpp) override;
+    int get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                 std::set<std::string>& bucket_keys,
+                                 optional_yield y,
+                                 const DoutPrefixProvider* dpp) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
 
@@ -250,7 +278,6 @@ class RadosStore : public StoreDriver {
     void setRados(RGWRados * st) { rados = st; }
     RGWRados* getRados(void) { return rados; }
     boost::asio::io_context& get_io_context() { return io_context; }
-    const rgw::SiteConfig& get_siteconfig() { return site_config; }
     neorados::RADOS& get_neorados() { return *neorados; }
 
     RGWServices* svc() { return &rados->svc; }

@@ -35,6 +35,7 @@
 #include "rgw_acl_s3.h"
 #include "rgw_aio.h"
 #include "rgw_aio_throttle.h"
+#include "rgw_tools.h"
 #include "rgw_tracer.h"
 
 #include "rgw_zone.h"
@@ -65,6 +66,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "rgw_pubsub.h"
+#include "topic.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -324,6 +326,30 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
       this, get_attrs(), merge_attrs);
   }
 
+  // remove bucket-topic mapping
+  auto iter = get_attrs().find(RGW_ATTR_BUCKET_NOTIFICATION);
+  if (iter != get_attrs().end()) {
+    rgw_pubsub_bucket_topics bucket_topics;
+    try {
+      const auto& bl = iter->second;
+      auto biter = bl.cbegin();
+      bucket_topics.decode(biter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to decode bucket topics for bucket: "
+                        << get_name() << dendl;
+    }
+    if (!bucket_topics.topics.empty()) {
+      ret = store->remove_bucket_mapping_from_topics(
+          bucket_topics, rgw_make_bucket_entry_name(get_tenant(), get_name()),
+          y, dpp);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1)
+            << "ERROR: unable to remove notifications from bucket "
+            << get_name() << ". ret=" << ret << dendl;
+      }
+    }
+  }
+
   ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y, nullptr);
   if (ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
@@ -342,7 +368,7 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
 
   // if bucket has notification definitions associated with it
   // they should be removed (note that any pending notifications on the bucket are still going to be sent)
-  const RGWPubSub ps(store, info.owner.tenant);
+  const RGWPubSub ps(store, info.owner.tenant, *store->svc()->site);
   const RGWPubSub::Bucket ps_bucket(ps, this);
   const auto ps_ret = ps_bucket.remove_notifications(dpp, y);
   if (ps_ret < 0 && ps_ret != -ENOENT) {
@@ -1092,6 +1118,10 @@ int RadosStore::read_topics(const std::string& tenant, rgw_pubsub_topics& topics
   return 0;
 }
 
+int RadosStore::stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) {
+  return rgw_stat_system_obj(dpp, svc()->sysobj, svc()->zone->get_zone_params().log_pool, topics_oid(tenant), nullptr, nullptr, y, nullptr);
+}
+
 int RadosStore::write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
 	optional_yield y, const DoutPrefixProvider *dpp) {
   bufferlist bl;
@@ -1109,6 +1139,115 @@ int RadosStore::remove_topics(const std::string& tenant, RGWObjVersionTracker* o
       svc()->zone->get_zone_params().log_pool,
       topics_oid(tenant),
       objv_tracker, y);
+}
+
+int RadosStore::read_topic_v2(const std::string& topic_name,
+                              const std::string& tenant,
+                              rgw_pubsub_topic& topic,
+                              RGWObjVersionTracker* objv_tracker,
+                              optional_yield y,
+                              const DoutPrefixProvider* dpp)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const std::string key = get_topic_metadata_key(tenant, topic_name);
+  return rgwrados::topic::read(dpp, y, *svc()->sysobj, svc()->cache,
+                               zone, key, topic, *ctl()->meta.topic_cache,
+                               nullptr, objv_tracker);
+}
+
+int RadosStore::write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+                               RGWObjVersionTracker& objv_tracker,
+                               optional_yield y,
+                               const DoutPrefixProvider* dpp)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::topic::write(dpp, y, *svc()->sysobj, svc()->mdlog, zone,
+                                topic, objv_tracker, {}, exclusive);
+}
+
+int RadosStore::remove_topic_v2(const std::string& topic_name,
+                                const std::string& tenant,
+                                RGWObjVersionTracker& objv_tracker,
+                                optional_yield y,
+                                const DoutPrefixProvider* dpp)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const std::string key = get_topic_metadata_key(tenant, topic_name);
+  return rgwrados::topic::remove(dpp, y, *svc()->sysobj, svc()->mdlog,
+                                 zone, key, objv_tracker);
+}
+
+int RadosStore::remove_bucket_mapping_from_topics(
+    const rgw_pubsub_bucket_topics& bucket_topics,
+    const std::string& bucket_key,
+    optional_yield y,
+    const DoutPrefixProvider* dpp) {
+  // remove the bucket name from  the topic-bucket omap for each topic
+  // subscribed.
+  std::unordered_set<std::string> topics_mapping_to_remove;
+  int ret = 0;
+  for (const auto& [_, topic_filter] : bucket_topics.topics) {
+    if (!topics_mapping_to_remove.insert(topic_filter.topic.name).second) {
+      continue;  // already removed.
+    }
+    int op_ret = update_bucket_topic_mapping(topic_filter.topic, bucket_key,
+                                             /*add_mapping=*/false, y, dpp);
+    if (op_ret < 0) {
+      ret = op_ret;
+    }
+  }
+  return ret;
+}
+
+int RadosStore::update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                            const std::string& bucket_key,
+                                            bool add_mapping,
+                                            optional_yield y,
+                                            const DoutPrefixProvider* dpp) {
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const std::string key = get_topic_metadata_key(topic.user.tenant, topic.name);
+  int ret = 0;
+  if (add_mapping) {
+    ret = rgwrados::topic::link_bucket(dpp, y, rados, zone, key, bucket_key);
+  } else {
+    ret = rgwrados::topic::unlink_bucket(dpp, y, rados, zone, key, bucket_key);
+  }
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to " << (add_mapping ? "add" : "remove")
+                      << " topic bucket mapping for bucket: " << bucket_key
+                      << " and topic: " << topic.name << " with ret:" << ret << dendl;
+    return ret;
+  }
+  ldpp_dout(dpp, 20) << "Successfully " << (add_mapping ? "added" : "removed")
+                     << " topic bucket mapping for bucket: " << bucket_key
+                     << " and topic: " << topic.name << dendl;
+  return ret;
+}
+
+int RadosStore::get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                         std::set<std::string>& bucket_keys,
+                                         optional_yield y,
+                                         const DoutPrefixProvider* dpp)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const std::string key = get_topic_metadata_key(topic.user.tenant, topic.name);
+  constexpr int max_chunk = 1024;
+  std::string marker;
+
+  do {
+    int ret = rgwrados::topic::list_buckets(dpp, y, rados, zone, key, marker,
+                                            max_chunk, bucket_keys, marker);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1)
+          << "ERROR: failed to read bucket topic mapping object for topic: "
+          << topic.name << ", ret= " << ret << dendl;
+      return ret;
+    }
+  } while (!marker.empty());
+
+  return 0;
 }
 
 int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, optional_yield y)
@@ -2868,7 +3007,7 @@ std::unique_ptr<LCSerializer> RadosLifecycle::get_serializer(const std::string& 
 
 int RadosNotification::publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags)
 {
-  return rgw::notify::publish_reserve(dpp, event_type, res, obj_tags);
+  return rgw::notify::publish_reserve(dpp, *store->svc()->site, event_type, res, obj_tags);
 }
 
 int RadosNotification::publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
@@ -3760,11 +3899,10 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
 extern "C" {
 
-void* newRadosStore(void* io_context, const void* site_config)
+void* newRadosStore(void* io_context)
 {
   rgw::sal::RadosStore* store = new rgw::sal::RadosStore(
-    *static_cast<boost::asio::io_context*>(io_context),
-    *static_cast<const rgw::SiteConfig*>(site_config));
+    *static_cast<boost::asio::io_context*>(io_context));
   if (store) {
     RGWRados* rados = new RGWRados();
 
