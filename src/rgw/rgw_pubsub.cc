@@ -962,9 +962,9 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
   return 0;
 }
 
-int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
-                            const rgw_pubsub_topic& topic,
-                            optional_yield y) const {
+int RGWPubSub::create_topic_v2(const DoutPrefixProvider* dpp,
+                               const rgw_pubsub_topic& topic,
+                               optional_yield y) const {
   RGWObjVersionTracker objv_tracker;
   objv_tracker.generate_new_write_ver(dpp->get_cct());
   constexpr bool exclusive = false;
@@ -996,7 +996,7 @@ int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
     new_topic.arn = arn;
     new_topic.opaque_data = opaque_data;
     new_topic.policy_text = policy_text;
-    return create_topic(dpp, new_topic, y);
+    return create_topic_v2(dpp, new_topic, y);
   }
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
