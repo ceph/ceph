@@ -133,6 +133,23 @@ class QuiesceTestCase(CephFSTestCase):
 
         root_inode = self.fs.read_cache(root, depth=0, rank=rank, status=status)[0]
         ops = self.fs.get_ops(locks=True, rank=rank, path=f"/tmp/mds.{rank}-ops", status=status)
+        cache = self.fs.read_cache(root, rank=rank, path=f"/tmp/mds.{rank}-cache", status=status)
+        try:
+            return self._verify_quiesce_wrapped(rank, status, root, root_inode, ops, cache, splitauth)
+        except:
+            self._make_archive()
+            (fd, path) = tempfile.mkstemp(prefix="cache", dir=self.archive)
+            with os.fdopen(fd, "wt") as f:
+                os.fchmod(fd, 0o644)
+                f.write(f"{json.dumps(cache, indent=2)}")
+                log.error(f"cache written to {path}")
+            (fd, path) = tempfile.mkstemp(prefix="ops", dir=self.archive)
+            with os.fdopen(fd, "wt") as f:
+                f.write(f"{json.dumps(ops, indent=2)}")
+                log.error(f"ops written to {path}")
+            raise
+
+    def _verify_quiesce_wrapped(self, rank, status, root, root_inode, ops, cache, splitauth):
         quiesce_inode_ops = {}
 
         count_qp = 0
@@ -208,7 +225,6 @@ class QuiesceTestCase(CephFSTestCase):
         log.info(f"qp = {count_qp}; qi = {count_qi}; qib = {count_qib}; qina = {count_qina}")
 
         # now verify all files in cache have an op
-        cache = self.fs.read_cache(root, rank=rank, path=f"/tmp/mds.{rank}-cache", status=status)
         visited = set()
         locks_expected = set([
           "iquiesce",
