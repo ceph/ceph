@@ -17,6 +17,7 @@
 #include "services/svc_zone.h"
 #include "common/dout.h"
 #include "rgw_url.h"
+#include "rgw_process_env.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -125,6 +126,7 @@ int verify_topic_owner_or_policy(req_state* const s,
 // Action=CreateTopic&Name=<topic-name>[&OpaqueData=data][&push-endpoint=<endpoint>[&persistent][&<arg1>=<value1>]]
 class RGWPSCreateTopicOp : public RGWOp {
   private:
+  bufferlist bl_post_body;
   std::string topic_name;
   rgw_pubsub_dest dest;
   std::string topic_arn;
@@ -138,21 +140,13 @@ class RGWPSCreateTopicOp : public RGWOp {
       return -EINVAL;
     }
 
-    // Remove the args that are parsed, so the push_endpoint_args only contains
-    // necessary one's.
     opaque_data = s->info.args.get("OpaqueData");
-    s->info.args.remove("OpaqueData");
 
     dest.push_endpoint = s->info.args.get("push-endpoint");
-    s->info.args.remove("push-endpoint");
     s->info.args.get_bool("persistent", &dest.persistent, false);
-    s->info.args.remove("persistent");
     s->info.args.get_int("time_to_live", reinterpret_cast<int *>(&dest.time_to_live), rgw::notify::DEFAULT_GLOBAL_VALUE);
-    s->info.args.remove("time_to_live");
     s->info.args.get_int("max_retries", reinterpret_cast<int *>(&dest.max_retries), rgw::notify::DEFAULT_GLOBAL_VALUE);
-    s->info.args.remove("max_retries");
     s->info.args.get_int("retry_sleep_duration", reinterpret_cast<int *>(&dest.retry_sleep_duration), rgw::notify::DEFAULT_GLOBAL_VALUE);
-    s->info.args.remove("retry_sleep_duration");
 
     if (!validate_and_update_endpoint_secret(dest, s->cct, *(s->info.env))) {
       return -EINVAL;
@@ -162,8 +156,19 @@ class RGWPSCreateTopicOp : public RGWOp {
     if (!policy_text.empty() && !get_policy_from_text(s, policy_text)) {
       return -ERR_MALFORMED_DOC;
     }
-    s->info.args.remove("Policy");
 
+    // Remove the args that are parsed, so the push_endpoint_args only contains
+    // necessary one's which is parsed after this if. but only if master zone,
+    // else we do not remove as request is forwarded to master.
+    if (driver->is_meta_master()) {
+      s->info.args.remove("OpaqueData");
+      s->info.args.remove("push-endpoint");
+      s->info.args.remove("persistent");
+      s->info.args.remove("time_to_live");
+      s->info.args.remove("max_retries");
+      s->info.args.remove("retry_sleep_duration");
+      s->info.args.remove("Policy");
+    }
     for (const auto& param : s->info.args.get_params()) {
       if (param.first == "Action" || param.first == "Name" || param.first == "PayloadHash") {
         continue;
@@ -186,16 +191,19 @@ class RGWPSCreateTopicOp : public RGWOp {
     return 0;
   }
 
-  public:
-   int verify_permission(optional_yield y) override {
+ public:
+  explicit RGWPSCreateTopicOp(bufferlist bl_post_body)
+    : bl_post_body(std::move(bl_post_body)) {}
+
+  int verify_permission(optional_yield y) override {
     auto ret = get_params();
     if (ret < 0) {
       return ret;
     }
 
-    const RGWPubSub ps(driver, s->owner.id.tenant);
+    const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
     rgw_pubsub_topic result;
-    ret = ps.get_topic(this, topic_name, result, y);
+    ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret == -ENOENT) {
       // topic not present
       return 0;
@@ -252,6 +260,17 @@ class RGWPSCreateTopicOp : public RGWOp {
 };
 
 void RGWPSCreateTopicOp::execute(optional_yield y) {
+  // master request will replicate the topic creation.
+  if (!driver->is_meta_master()) {
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->user->get_id(), &bl_post_body, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1)
+          << "CreateTopic forward_request_to_master returned ret = " << op_ret
+          << dendl;
+      return;
+    }
+  }
   if (!dest.push_endpoint.empty() && dest.persistent) {
     op_ret = rgw::notify::add_persistent_topic(topic_name, s->yield);
     if (op_ret < 0) {
@@ -261,7 +280,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            s->owner.id, policy_text, y);
   if (op_ret < 0) {
@@ -277,6 +296,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
 class RGWPSListTopicsOp : public RGWOp {
 private:
   rgw_pubsub_topics result;
+  std::string next_token;
 
 public:
   int verify_permission(optional_yield) override {
@@ -309,15 +329,21 @@ public:
     f->close_section(); // ListTopicsResult
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
-    f->close_section(); // ResponseMetadat
+    f->close_section(); // ResponseMetadata
+    if (!next_token.empty()) {
+      encode_xml("NextToken", next_token, f);
+    }
     f->close_section(); // ListTopicsResponse
     rgw_flush_formatter_and_reset(s, f);
   }
 };
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  op_ret = ps.get_topics(this, result, y);
+  const std::string start_token = s->info.args.get("NextToken");
+
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  constexpr int max_items = 100;
+  op_ret = ps.get_topics(this, start_token, max_items, result, next_token, y);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
   if (op_ret < 0) {
@@ -403,8 +429,8 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  op_ret = ps.get_topic(this, topic_name, result, y);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -487,8 +513,8 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  op_ret = ps.get_topic(this, topic_name, result, y);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -514,6 +540,7 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
 // Action=SetTopicAttributes&TopicArn=<topic-arn>&AttributeName=<attribute-name>&AttributeValue=<attribute-value>
 class RGWPSSetTopicAttributesOp : public RGWOp {
  private:
+  bufferlist bl_post_body;
   std::string topic_name;
   std::string topic_arn;
   std::string opaque_data;
@@ -609,14 +636,17 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
   }
 
  public:
+  explicit RGWPSSetTopicAttributesOp(bufferlist bl_post_body)
+    : bl_post_body(std::move(bl_post_body)) {}
+
   int verify_permission(optional_yield y) override {
     auto ret = get_params();
     if (ret < 0) {
       return ret;
     }
     rgw_pubsub_topic result;
-    const RGWPubSub ps(driver, s->owner.id.tenant);
-    ret = ps.get_topic(this, topic_name, result, y);
+    const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+    ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 1) << "failed to get topic '" << topic_name
                          << "', ret=" << ret << dendl;
@@ -664,6 +694,16 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
 };
 
 void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
+  if (!driver->is_meta_master()) {
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->user->get_id(), &bl_post_body, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1)
+          << "SetTopicAttributes forward_request_to_master returned ret = "
+          << op_ret << dendl;
+      return;
+    }
+  }
   if (!dest.push_endpoint.empty() && dest.persistent) {
     op_ret = rgw::notify::add_persistent_topic(topic_name, s->yield);
     if (op_ret < 0) {
@@ -682,7 +722,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            topic_owner, policy_text, y);
   if (op_ret < 0) {
@@ -699,6 +739,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
 // Action=DeleteTopic&TopicArn=<topic-arn>
 class RGWPSDeleteTopicOp : public RGWOp {
   private:
+  bufferlist bl_post_body;
   std::string topic_name;
   
   int get_params() {
@@ -713,7 +754,10 @@ class RGWPSDeleteTopicOp : public RGWOp {
     return 0;
   }
 
-  public:
+ public:
+  explicit RGWPSDeleteTopicOp(bufferlist bl_post_body)
+    : bl_post_body(std::move(bl_post_body)) {}
+
   int verify_permission(optional_yield) override {
     return 0;
   }
@@ -752,62 +796,77 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  if (!driver->is_meta_master()) {
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->user->get_id(), &bl_post_body, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1)
+          << "DeleteTopic forward_request_to_master returned ret = " << op_ret
+          << dendl;
+      return;
+    }
+  }
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+
   rgw_pubsub_topic result;
-  op_ret = ps.get_topic(this, topic_name, result, y);
+  op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
   if (op_ret == 0) {
     op_ret = verify_topic_owner_or_policy(
         s, result, driver->get_zone()->get_zonegroup().get_name(),
         rgw::IAM::snsDeleteTopic);
-    if (op_ret != 0) {
+    if (op_ret < 0) {
       ldpp_dout(this, 1) << "no permission to remove topic '" << topic_name
                          << "'" << dendl;
       return;
     }
-  } else {
+    op_ret = ps.remove_topic(this, topic_name, y);
+    if (op_ret < 0 && op_ret != -ENOENT) {
+      ldpp_dout(this, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
+      return;
+    }
+    ldpp_dout(this, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
+  } else if (op_ret != -ENOENT) {
     ldpp_dout(this, 1) << "failed to fetch topic '" << topic_name
                        << "' with error: " << op_ret << dendl;
-    if (op_ret == -ENOENT) {
-      // its not an error if no topics exist, just a no-op
-      op_ret = 0;
-    }
     return;
+  }
+  if (op_ret == -ENOENT) {
+    // its not an error if no topics exist, just a no-op
+    op_ret = 0;
   }
   // upon deletion it is not known if topic is persistent or not
   // will try to delete the persistent topic anyway
-  op_ret = rgw::notify::remove_persistent_topic(topic_name, s->yield);
-  if (op_ret != -ENOENT && op_ret < 0) {
+  // doing this regardless of the topic being previously deleted
+  // to allow for cleanup if only the queue deletion failed
+  if (const auto ret = rgw::notify::remove_persistent_topic(topic_name, s->yield); ret < 0 && ret != -ENOENT) {
     ldpp_dout(this, 1) << "DeleteTopic Action failed to remove queue for "
                           "persistent topics. error:"
-                       << op_ret << dendl;
-    return;
+                       << ret << dendl;
   }
-  op_ret = ps.remove_topic(this, topic_name, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
-    return;
-  }
-  ldpp_dout(this, 1) << "successfully removed topic '" << topic_name << "'" << dendl;
 }
 
-using op_generator = RGWOp*(*)();
+using op_generator = RGWOp*(*)(bufferlist);
 static const std::unordered_map<std::string, op_generator> op_generators = {
-    {"CreateTopic", []() -> RGWOp* { return new RGWPSCreateTopicOp; }},
-    {"DeleteTopic", []() -> RGWOp* { return new RGWPSDeleteTopicOp; }},
-    {"ListTopics", []() -> RGWOp* { return new RGWPSListTopicsOp; }},
-    {"GetTopic", []() -> RGWOp* { return new RGWPSGetTopicOp; }},
+    {"CreateTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSCreateTopicOp(std::move(bl)); }},
+    {"DeleteTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSDeleteTopicOp(std::move(bl)); }},
+    {"ListTopics", [](bufferlist bl) -> RGWOp* { return new RGWPSListTopicsOp; }},
+    {"GetTopic", [](bufferlist bl) -> RGWOp* { return new RGWPSGetTopicOp; }},
     {"GetTopicAttributes",
-     []() -> RGWOp* { return new RGWPSGetTopicAttributesOp; }},
+     [](bufferlist bl) -> RGWOp* { return new RGWPSGetTopicAttributesOp; }},
     {"SetTopicAttributes",
-     []() -> RGWOp* { return new RGWPSSetTopicAttributesOp; }}};
+     [](bufferlist bl) -> RGWOp* { return new RGWPSSetTopicAttributesOp(std::move(bl)); }}};
 
-bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_state* s) 
+bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_info& info)
 {
-  if (s->info.args.exists("Action")) {
-    const std::string action_name = s->info.args.get("Action");
+  if (info.args.exists("Action")) {
+    const std::string action_name = info.args.get("Action");
     return op_generators.contains(action_name);
   }
   return false;
+}
+bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_state* s)
+{
+  return action_exists(s->info);
 }
 
 RGWOp *RGWHandler_REST_PSTopic_AWS::op_post()
@@ -819,7 +878,7 @@ RGWOp *RGWHandler_REST_PSTopic_AWS::op_post()
     const std::string action_name = s->info.args.get("Action");
     const auto action_it = op_generators.find(action_name);
     if (action_it != op_generators.end()) {
-      return action_it->second();
+      return action_it->second(std::move(bl_post_body));
     }
     ldpp_dout(s, 10) << "unknown action '" << action_name << "' for Topic handler" << dendl;
   } else {
@@ -838,29 +897,6 @@ int RGWHandler_REST_PSTopic_AWS::authorize(const DoutPrefixProvider* dpp, option
     return -ERR_INVALID_REQUEST;
   }
   return 0;
-}
-
-namespace {
-// return a unique topic by prefexing with the notification name: <notification>_<topic>
-std::string topic_to_unique(const std::string& topic, const std::string& notification) {
-  return notification + "_" + topic;
-}
-
-// extract the topic from a unique topic of the form: <notification>_<topic>
-[[maybe_unused]] std::string unique_to_topic(const std::string& unique_topic, const std::string& notification) {
-  if (unique_topic.find(notification + "_") == std::string::npos) {
-    return "";
-  }
-  return unique_topic.substr(notification.length() + 1);
-}
-
-// from list of bucket topics, find the one that was auto-generated by a notification
-auto find_unique_topic(const rgw_pubsub_bucket_topics& bucket_topics, const std::string& notif_name) {
-    auto it = std::find_if(bucket_topics.topics.begin(), bucket_topics.topics.end(), [&](const auto& val) { return notif_name == val.second.s3_id; });
-    return it != bucket_topics.topics.end() ?
-        std::optional<std::reference_wrapper<const rgw_pubsub_topic_filter>>(it->second):
-        std::nullopt;
-}
 }
 
 int remove_notification_by_topic(const DoutPrefixProvider *dpp, const std::string& topic_name, const RGWPubSub::Bucket& b, optional_yield y, const RGWPubSub& ps) {
@@ -890,6 +926,7 @@ int delete_all_notifications(const DoutPrefixProvider *dpp, const rgw_pubsub_buc
 // a "notification" and a subscription will be auto-generated
 // actual configuration is XML encoded in the body of the message
 class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
+  bufferlist data;
   int verify_params() override {
     bool exists;
     const auto no_value = s->info.args.get("notification", &exists);
@@ -911,7 +948,6 @@ class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
   int get_params_from_body(rgw_pubsub_s3_notifications& configurations) {
     const auto max_size = s->cct->_conf->rgw_max_put_param_size;
     int r;
-    bufferlist data;
     std::tie(r, data) = read_all_input(s, max_size, false);
 
     if (r < 0) {
@@ -956,9 +992,13 @@ public:
 
 
   void execute(optional_yield) override;
+  void execute_v2(optional_yield);
 };
 
 void RGWPSCreateNotifOp::execute(optional_yield y) {
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
+    return execute_v2(y);
+  }
   op_ret = verify_params();
   if (op_ret < 0) {
     return;
@@ -968,6 +1008,16 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
   op_ret = get_params_from_body(configurations);
   if (op_ret < 0) {
     return;
+  }
+  if (!driver->is_meta_master()) {
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->user->get_id(), &data, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "CreateBucketNotification "
+                            "forward_request_to_master returned ret = "
+                         << op_ret << dendl;
+      return;
+    }
   }
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -1025,8 +1075,8 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     const auto topic_name = arn->resource;
 
     // get topic information. destination information is stored in the topic
-    rgw_pubsub_topic topic_info;  
-    op_ret = ps.get_topic(this, topic_name, topic_info, y);
+    rgw_pubsub_topic topic_info;
+    op_ret = ps.get_topic(this, topic_name, topic_info, y, nullptr);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
       return;
@@ -1080,6 +1130,149 @@ int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
   return 0;
 }
 
+void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
+  op_ret = verify_params();
+  if (op_ret < 0) {
+    return;
+  }
+
+  rgw_pubsub_s3_notifications configurations;
+  op_ret = get_params_from_body(configurations);
+  if (op_ret < 0) {
+    return;
+  }
+  if (!driver->is_meta_master()) {
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->user->get_id(), &data, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "CreateBucketNotification "
+                            "forward_request_to_master returned ret = "
+                         << op_ret << dendl;
+      return;
+    }
+  }
+
+  if (const auto ret = driver->stat_topics_v1(s->bucket_tenant, y, this); ret != -ENOENT) {
+    ldpp_dout(this, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+      << ". please try again later" << dendl; 
+    op_ret = -ERR_SERVICE_UNAVAILABLE;
+    return;
+  }
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
+                               &bucket, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 1) << "failed to get bucket '"
+                       << (s->bucket_tenant.empty()
+                               ? s->bucket_name
+                               : s->bucket_tenant + ":" + s->bucket_name)
+                       << "' info, ret = " << op_ret << dendl;
+    return;
+  }
+  if (configurations.list.empty()) {
+    op_ret = remove_notification_v2(this, driver, bucket.get(),
+                                    /*delete all notif=true*/ "", y);
+    return;
+  }
+  rgw_pubsub_bucket_topics bucket_topics;
+  op_ret = get_bucket_notifications(this, bucket.get(), bucket_topics);
+  if (op_ret < 0) {
+    ldpp_dout(this, 1)
+        << "failed to load existing bucket notification on bucket: "
+        << (s->bucket_tenant.empty() ? s->bucket_name
+                                     : s->bucket_tenant + ":" + s->bucket_name)
+        << "' , ret = " << op_ret << dendl;
+    return;
+  }
+  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  std::unordered_map<std::string, rgw_pubsub_topic> topics;
+  for (const auto& c : configurations.list) {
+    const auto& notif_name = c.id;
+    if (notif_name.empty()) {
+      ldpp_dout(this, 1) << "missing notification id" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+    if (c.topic_arn.empty()) {
+      ldpp_dout(this, 1) << "missing topic ARN in notification: '" << notif_name
+                         << "'" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    const auto arn = rgw::ARN::parse(c.topic_arn);
+    if (!arn || arn->resource.empty()) {
+      ldpp_dout(this, 1) << "topic ARN has invalid format: '" << c.topic_arn
+                         << "' in notification: '" << notif_name << "'"
+                         << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    if (std::find(c.events.begin(), c.events.end(),
+                  rgw::notify::UnknownEvent) != c.events.end()) {
+      ldpp_dout(this, 1) << "unknown event type in notification: '"
+                         << notif_name << "'" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+    const auto& topic_name = arn->resource;
+    if (!topics.contains(topic_name)) {
+      // get topic information. destination information is stored in the topic
+      rgw_pubsub_topic topic_info;
+      op_ret = ps.get_topic(this, topic_name, topic_info, y,nullptr);
+      if (op_ret < 0) {
+        ldpp_dout(this, 1) << "failed to get topic '" << topic_name
+                           << "', ret=" << op_ret << dendl;
+        return;
+      }
+      op_ret = verify_topic_owner_or_policy(
+          s, topic_info, driver->get_zone()->get_zonegroup().get_name(),
+          rgw::IAM::snsPublish);
+      if (op_ret != 0) {
+        ldpp_dout(this, 1) << "failed to create notification for topic '"
+                           << topic_name << "' topic owned by other user"
+                           << dendl;
+        return;
+      }
+      topics[topic_name] = std::move(topic_info);
+    }
+    auto& topic_filter =
+        bucket_topics.topics[topic_to_unique(topic_name, notif_name)];
+    topic_filter.topic = topics[topic_name];
+    topic_filter.events = c.events;
+    topic_filter.s3_id = notif_name;
+    topic_filter.s3_filter = c.filter;
+  }
+  // finally store all the bucket notifications as attr.
+  bufferlist bl;
+  bucket_topics.encode(bl);
+  rgw::sal::Attrs& attrs = bucket->get_attrs();
+  attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
+  op_ret = bucket->merge_and_store_attrs(this, attrs, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 1)
+        << "Failed to store RGW_ATTR_BUCKET_NOTIFICATION on bucket="
+        << bucket->get_name() << " returned err= " << op_ret << dendl;
+    return;
+  }
+  for (const auto& [_, topic] : topics) {
+    const auto ret = driver->update_bucket_topic_mapping(
+        topic,
+        rgw_make_bucket_entry_name(bucket->get_tenant(), bucket->get_name()),
+        /*add_mapping=*/true, y, this);
+    if (ret < 0) {
+      ldpp_dout(this, 1) << "Failed to remove topic mapping on bucket="
+                         << bucket->get_name() << " ret= " << ret << dendl;
+      // error should be reported ??
+      // op_ret = ret;
+    }
+  }
+  ldpp_dout(this, 20) << "successfully created bucket notification for bucket: "
+                      << bucket->get_name() << dendl;
+}
+
 // command (extension to S3): DELETE /bucket?notification[=<notification-id>]
 class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
   int get_params(std::string& notif_name) const {
@@ -1095,8 +1288,9 @@ class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
     }
     return 0;
   }
+  void execute_v2(optional_yield y);
 
-public:
+ public:
   int verify_permission(optional_yield y) override;
 
   void pre_exec() override {
@@ -1111,10 +1305,24 @@ public:
 };
 
 void RGWPSDeleteNotifOp::execute(optional_yield y) {
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
+    return execute_v2(y);
+  }
   std::string notif_name;
   op_ret = get_params(notif_name);
   if (op_ret < 0) {
     return;
+  }
+  if (!driver->is_meta_master()) {
+    bufferlist indata;
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "DeleteBucketNotification "
+                            "forward_request_to_master returned error ret= "
+                         << op_ret << dendl;
+      return;
+    }
   }
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -1142,7 +1350,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     // delete a specific notification
     const auto unique_topic = find_unique_topic(bucket_topics, notif_name);
     if (unique_topic) {
-      const auto unique_topic_name = unique_topic->get().topic.name;
+      const auto unique_topic_name = unique_topic->topic.name;
       op_ret = remove_notification_by_topic(this, unique_topic_name, b, y, ps);
       return;
     }
@@ -1160,6 +1368,45 @@ int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
   }
 
   return 0;
+}
+
+void RGWPSDeleteNotifOp::execute_v2(optional_yield y) {
+  std::string notif_name;
+  op_ret = get_params(notif_name);
+  if (op_ret < 0) {
+    return;
+  }
+  if (!driver->is_meta_master()) {
+    bufferlist indata;
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1) << "DeleteBucketNotification "
+                            "forward_request_to_master returned error ret= "
+                         << op_ret << dendl;
+      return;
+    }
+  }
+
+  if (const auto ret = driver->stat_topics_v1(s->bucket_tenant, y, this); ret != -ENOENT) {
+    ldpp_dout(this, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+      << ". please try again later" << dendl; 
+    op_ret = -ERR_SERVICE_UNAVAILABLE;
+    return;
+  }
+
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
+                               &bucket, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 1) << "failed to get bucket '"
+                       << (s->bucket_tenant.empty()
+                               ? s->bucket_name
+                               : s->bucket_tenant + ":" + s->bucket_name)
+                       << "' info, ret = " << op_ret << dendl;
+    return;
+  }
+  op_ret = remove_notification_v2(this, driver, bucket.get(), notif_name, y);
 }
 
 // command (S3 compliant): GET /bucket?notification[=<notification-id>]
@@ -1224,21 +1471,26 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
     return;
   }
 
-  const RGWPubSub ps(driver, s->owner.id.tenant);
-  const RGWPubSub::Bucket b(ps, bucket.get());
-  
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
-  op_ret = b.get_topics(this, bucket_topics, y);
+  if (rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2) &&
+      driver->stat_topics_v1(s->bucket_tenant, y, this) == -ENOENT) {
+    op_ret = get_bucket_notifications(this, bucket.get(), bucket_topics);
+  } else {
+    const RGWPubSub ps(driver, s->owner.id.tenant);
+    const RGWPubSub::Bucket b(ps, bucket.get());
+    op_ret = b.get_topics(this, bucket_topics, y);
+  }
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get list of topics from bucket '"
+                       << s->bucket_name << "', ret=" << op_ret << dendl;
     return;
   }
   if (!notif_name.empty()) {
     // get info of a specific notification
     const auto unique_topic = find_unique_topic(bucket_topics, notif_name);
     if (unique_topic) {
-      notifications.list.emplace_back(unique_topic->get());
+      notifications.list.emplace_back(*unique_topic);
       return;
     }
     op_ret = -ENOENT;

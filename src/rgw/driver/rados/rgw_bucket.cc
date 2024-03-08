@@ -1336,17 +1336,6 @@ static int bucket_stats(rgw::sal::Driver* driver,
     }
   }
 
-  // bucket notifications
-  RGWPubSub ps(driver, tenant_name);
-  rgw_pubsub_bucket_topics result;
-  const RGWPubSub::Bucket b(ps, bucket.get());
-  ret = b.get_topics(dpp, result, y);
-  if (ret < 0 && ret != -ENOENT) {
-    cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
-  }
-  result.dump(formatter);
-
   // TODO: bucket CORS
   // TODO: bucket LC
   formatter->close_section();
@@ -2121,6 +2110,92 @@ int RGWMetadataHandlerPut_Bucket::put_post(const DoutPrefixProvider *dpp)
   return ret;
 }
 
+int update_bucket_topic_mappings(const DoutPrefixProvider* dpp,
+                                 RGWBucketCompleteInfo* orig_bci,
+                                 RGWBucketCompleteInfo* current_bci,
+                                 rgw::sal::Driver* driver) {
+  const auto decode_attrs = [](const rgw::sal::Attrs& attrs,
+                               rgw_pubsub_bucket_topics& bucket_topics) -> int {
+    auto iter = attrs.find(RGW_ATTR_BUCKET_NOTIFICATION);
+    if (iter == attrs.end()) {
+      return 0;
+    }
+    try {
+      const auto& bl = iter->second;
+      auto biter = bl.cbegin();
+      bucket_topics.decode(biter);
+    } catch (buffer::error& err) {
+      return -EIO;
+    }
+    return 0;
+  };
+  std::string bucket_name;
+  std::string bucket_tenant;
+  rgw_pubsub_bucket_topics old_bucket_topics;
+  if (orig_bci) {
+    auto ret = decode_attrs(orig_bci->attrs, old_bucket_topics);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1)
+          << "ERROR: failed to decode OLD bucket topics for bucket: "
+          << orig_bci->info.bucket.name << dendl;
+      return ret;
+    }
+    bucket_name = orig_bci->info.bucket.name;
+    bucket_tenant = orig_bci->info.bucket.tenant;
+  }
+  rgw_pubsub_bucket_topics current_bucket_topics;
+  if (current_bci) {
+    auto ret = decode_attrs(current_bci->attrs, current_bucket_topics);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1)
+          << "ERROR: failed to decode current bucket topics for bucket: "
+          << current_bci->info.bucket.name << dendl;
+      return ret;
+    }
+    bucket_name = current_bci->info.bucket.name;
+    bucket_tenant = current_bci->info.bucket.tenant;
+  }
+  // fetch the list of subscribed topics stored inside old_bucket attrs.
+  std::unordered_map<std::string, rgw_pubsub_topic> old_topics;
+  for (const auto& [_, topic_filter] : old_bucket_topics.topics) {
+    old_topics[topic_filter.topic.name] = topic_filter.topic;
+  }
+  // fetch the list of subscribed topics stored inside current_bucket attrs.
+  std::unordered_map<std::string, rgw_pubsub_topic> current_topics;
+  for (const auto& [_, topic_filter] : current_bucket_topics.topics) {
+    current_topics[topic_filter.topic.name] = topic_filter.topic;
+  }
+  // traverse thru old topics and check if they are not in current, then delete
+  // the mapping, if present in both current and old then delete from current
+  // set as we do not need to update those mapping.
+  int ret = 0;
+  for (const auto& [topic_name, topic] : old_topics) {
+    auto it = current_topics.find(topic_name);
+    if (it == current_topics.end()) {
+      const auto op_ret = driver->update_bucket_topic_mapping(
+          topic, rgw_make_bucket_entry_name(bucket_tenant, bucket_name),
+          /*add_mapping=*/false, null_yield, dpp);
+      if (op_ret < 0) {
+        ret = op_ret;
+      }
+    } else {
+      // already that attr is present, so do not update the mapping.
+      current_topics.erase(it);
+    }
+  }
+  // traverse thru current topics and check if they are any present, then add
+  // the mapping.
+  for (const auto& [topic_name, topic] : current_topics) {
+    const auto op_ret = driver->update_bucket_topic_mapping(
+        topic, rgw_make_bucket_entry_name(bucket_tenant, bucket_name),
+        /*add_mapping=*/true, null_yield, dpp);
+    if (op_ret < 0) {
+      ret = op_ret;
+    }
+  }
+  return ret;
+}
+
 static void get_md5_digest(const RGWBucketEntryPoint *be, string& md5_digest) {
 
    char md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -2432,7 +2507,14 @@ public:
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
-    return svc.bucket->remove_bucket_instance_info(ctx, entry, bci.info, &bci.info.objv_tracker, y, dpp);
+    ret = svc.bucket->remove_bucket_instance_info(
+        ctx, entry, bci.info, &bci.info.objv_tracker, y, dpp);
+    if (ret < 0)
+      return ret;
+    ret = update_bucket_topic_mappings(dpp, &bci, /*current_bci=*/nullptr,
+                                       driver);
+    // update_bucket_topic_mapping error is swallowed.
+    return 0;
   }
 
   int call(std::function<int(RGWSI_Bucket_BI_Ctx& ctx)> f) {
@@ -2637,6 +2719,21 @@ int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp
     }
   } /* update lc */
 
+  /* update bucket topic mapping */
+  {
+    auto* orig_obj = static_cast<RGWBucketInstanceMetadataObject*>(old_obj);
+    auto* orig_bci = (orig_obj ? &orig_obj->get_bci() : nullptr);
+    ret = update_bucket_topic_mappings(dpp, orig_bci, &bci, bihandler->driver);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__
+                        << " failed to apply bucket topic mapping for "
+                        << bci.info.bucket.name << dendl;
+      return ret;
+    }
+    ldpp_dout(dpp, 20) << __func__
+                       << " successfully applied bucket topic mapping for "
+                       << bci.info.bucket.name << dendl;
+  }
   return STATUS_APPLIED;
 }
 

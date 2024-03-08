@@ -171,6 +171,8 @@ using ceph::crypto::MD5;
 
 #define RGW_ATTR_TRACE RGW_ATTR_PREFIX "trace"
 
+#define RGW_ATTR_BUCKET_NOTIFICATION RGW_ATTR_PREFIX "bucket-notification"
+
 enum class RGWFormat : int8_t {
   BAD_FORMAT = -1,
   PLAIN = 0,
