@@ -2369,6 +2369,7 @@ public:
     RGWSI_Zone *zone{nullptr};
     RGWSI_Bucket *bucket{nullptr};
     RGWSI_BucketIndex *bi{nullptr};
+    RGWDataChangesLog *datalog_rados{nullptr};
   } svc;
 
   rgw::sal::Driver* driver;
@@ -2378,12 +2379,14 @@ public:
 
   void init(RGWSI_Zone *zone_svc,
 	    RGWSI_Bucket *bucket_svc,
-	    RGWSI_BucketIndex *bi_svc) override {
+	    RGWSI_BucketIndex *bi_svc,
+      RGWDataChangesLog *datalog_svc) override {
     base_init(bucket_svc->ctx(),
               bucket_svc->get_bi_be_handler().get());
     svc.zone = zone_svc;
     svc.bucket = bucket_svc;
     svc.bi = bi_svc;
+    svc.datalog_rados = datalog_svc;
   }
 
   string get_type() override { return "bucket.instance"; }
@@ -2424,15 +2427,9 @@ public:
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
                 optional_yield y, const DoutPrefixProvider *dpp) override {
-    RGWBucketCompleteInfo bci;
 
-    RGWSI_Bucket_BI_Ctx ctx(op->ctx());
+    return 0; // skip bucket instance removal. bilog trimming handles it on each zone.
 
-    int ret = read_bucket_instance_entry(ctx, entry, &bci, nullptr, y, dpp);
-    if (ret < 0 && ret != -ENOENT)
-      return ret;
-
-    return svc.bucket->remove_bucket_instance_info(ctx, entry, bci.info, &bci.info.objv_tracker, y, dpp);
   }
 
   int call(std::function<int(RGWSI_Bucket_BI_Ctx& ctx)> f) {
@@ -2560,6 +2557,26 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
     /* existing bucket, keep its placement */
     bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
     bci.info.placement_rule = old_bci->info.placement_rule;
+
+    //if the bucket is being deleted, create and store a special log type for
+    //bucket instance cleanup in multisite setup
+    const auto& log = bci.info.layout.logs.back();
+    if (bci.info.bucket_deleted() && log.layout.type != rgw::BucketLogType::Deleted) {
+      const auto index_log = bci.info.layout.logs.back();
+      const int shards_num = rgw::num_shards(index_log.layout.in_index);
+      bci.info.layout.logs.push_back({log.gen+1, {rgw::BucketLogType::Deleted}});
+      ldpp_dout(dpp, 10) << "store log layout type: " <<  bci.info.layout.logs.back().layout.type << dendl;
+      for (int i = 0; i < shards_num; ++i) {
+        ldpp_dout(dpp, 10) << "adding to data_log shard_id: " << i << " of gen:" << index_log.gen << dendl;
+        ret = bihandler->svc.datalog_rados->add_entry(dpp, bci.info, index_log, i,
+                                                    null_yield);
+        if (ret < 0) {
+          ldpp_dout(dpp, 1) << "WARNING: failed writing data log for bucket="
+          << bci.info.bucket << ", shard_id=" << i << "of generation="
+          << index_log.gen << dendl;
+          } // datalog error is not fatal
+      }
+    }
   }
 
   //always keep bucket versioning enabled on archive zone
@@ -2570,7 +2587,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
   /* record the read version (if any), store the new version */
   bci.info.objv_tracker.read_version = objv_tracker.read_version;
   bci.info.objv_tracker.write_version = objv_tracker.write_version;
-
+  
   return 0;
 }
 
@@ -2593,8 +2610,9 @@ int RGWMetadataHandlerPut_BucketInstance::put_checked(const DoutPrefixProvider *
                                                          false,
                                                          mtime,
                                                          pattrs,
-							 y,
+                                                         y,
                                                          dpp);
+
 }
 
 int RGWMetadataHandlerPut_BucketInstance::put_post(const DoutPrefixProvider *dpp)
