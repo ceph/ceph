@@ -79,8 +79,9 @@ WebTokenEngine::get_role_name(const string& role_arn) const
   return role_name;
 }
 
-std::unique_ptr<rgw::sal::RGWOIDCProvider>
-WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss, optional_yield y) const
+int WebTokenEngine::load_provider(const DoutPrefixProvider* dpp, optional_yield y,
+                                  const string& role_arn, const string& iss,
+                                  RGWOIDCProviderInfo& info) const
 {
   string tenant = get_role_tenant(role_arn);
 
@@ -99,16 +100,8 @@ WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_a
   } else {
     idp_url.erase(pos, 7);
   }
-  auto provider_arn = rgw::ARN(idp_url, "oidc-provider", tenant);
-  string p_arn = provider_arn.to_string();
-  std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
-  provider->set_arn(p_arn);
-  provider->set_tenant(tenant);
-  auto ret = provider->get(dpp, y);
-  if (ret < 0) {
-    return nullptr;
-  }
-  return provider;
+
+  return driver->load_oidc_provider(dpp, y, tenant, idp_url, info);
 }
 
 bool
@@ -248,8 +241,9 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     }
 
     string role_arn = s->info.args.get("RoleArn");
-    auto provider = get_provider(dpp, role_arn, iss, y);
-    if (! provider) {
+    RGWOIDCProviderInfo provider;
+    int r = load_provider(dpp, y, role_arn, iss, provider);
+    if (r < 0) {
       ldpp_dout(dpp, 0) << "Couldn't get oidc provider info using input iss" << iss << dendl;
       throw -EACCES;
     }
@@ -265,17 +259,15 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
         throw -EINVAL;
       }
     }
-    vector<string> client_ids = provider->get_client_ids();
-    vector<string> thumbprints = provider->get_thumbprints();
-    if (! client_ids.empty()) {
+    if (! provider.client_ids.empty()) {
       bool found = false;
       for (auto& it : aud) {
-        if (is_client_id_valid(client_ids, it)) {
+        if (is_client_id_valid(provider.client_ids, it)) {
           found = true;
           break;
         }
       }
-      if (! found && ! is_client_id_valid(client_ids, client_id) && ! is_client_id_valid(client_ids, azp)) {
+      if (! found && ! is_client_id_valid(provider.client_ids, client_id) && ! is_client_id_valid(provider.client_ids, azp)) {
         ldpp_dout(dpp, 0) << "Client id in token doesn't match with that registered with oidc provider" << dendl;
         throw -EACCES;
       }
@@ -284,7 +276,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     if (decoded.has_algorithm()) {
       auto& algorithm = decoded.get_algorithm();
       try {
-        validate_signature(dpp, decoded, algorithm, iss, thumbprints, y);
+        validate_signature(dpp, decoded, algorithm, iss, provider.thumbprints, y);
       } catch (...) {
         throw -EACCES;
       }

@@ -417,16 +417,37 @@ int FilterDriver::get_roles(const DoutPrefixProvider *dpp,
   return next->get_roles(dpp, y, path_prefix, tenant, roles);
 }
 
-std::unique_ptr<RGWOIDCProvider> FilterDriver::get_oidc_provider()
+int FilterDriver::store_oidc_provider(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      const RGWOIDCProviderInfo& info,
+                                      bool exclusive)
 {
-  return next->get_oidc_provider();
+  return next->store_oidc_provider(dpp, y, info, exclusive);
 }
 
-int FilterDriver::get_oidc_providers(const DoutPrefixProvider *dpp,
-				    const std::string& tenant,
-				    std::vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
+int FilterDriver::load_oidc_provider(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view tenant,
+                                     std::string_view url,
+                                     RGWOIDCProviderInfo& info)
 {
-  return next->get_oidc_providers(dpp, tenant, providers, y);
+  return next->load_oidc_provider(dpp, y, tenant, url, info);
+}
+
+int FilterDriver::delete_oidc_provider(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       std::string_view tenant,
+                                       std::string_view url)
+{
+  return next->delete_oidc_provider(dpp, y, tenant, url);
+}
+
+int FilterDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view tenant,
+                                     std::vector<RGWOIDCProviderInfo>& providers)
+{
+  return next->get_oidc_providers(dpp, y, tenant, providers);
 }
 
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,

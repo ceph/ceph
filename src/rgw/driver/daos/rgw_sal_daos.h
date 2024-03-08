@@ -28,7 +28,6 @@
 
 #include "rgw_multi.h"
 #include "rgw_notify.h"
-#include "rgw_oidc_provider.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_rados.h"
 #include "rgw_role.h"
@@ -994,10 +993,23 @@ class DaosStore : public StoreDriver {
                         const std::string& path_prefix,
                         const std::string& tenant,
                         std::vector<std::unique_ptr<RGWRole>>& roles) override;
-  virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() override;
-  virtual int get_oidc_providers(
-      const DoutPrefixProvider* dpp, const std::string& tenant,
-      std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
+  int store_oidc_provider(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          const RGWOIDCProviderInfo& info,
+                          bool exclusive) override;
+  int load_oidc_provider(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         std::string_view tenant,
+                         std::string_view url,
+                         RGWOIDCProviderInfo& info) override;
+  int delete_oidc_provider(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           std::string_view tenant,
+                           std::string_view url) override;
+  int get_oidc_providers(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         std::string_view tenant,
+                         std::vector<RGWOIDCProviderInfo>& providers) override;
   virtual std::unique_ptr<Writer> get_append_writer(
       const DoutPrefixProvider* dpp, optional_yield y,
       rgw::sal::Object* obj, const rgw_user& owner,

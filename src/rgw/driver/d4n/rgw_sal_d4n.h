@@ -17,7 +17,6 @@
 
 #include "rgw_sal_filter.h"
 #include "rgw_sal.h"
-#include "rgw_oidc_provider.h"
 #include "rgw_role.h"
 #include "common/dout.h" 
 

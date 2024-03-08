@@ -3057,17 +3057,37 @@ int MotrStore::get_roles(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-std::unique_ptr<RGWOIDCProvider> MotrStore::get_oidc_provider()
+int DaosStore::store_oidc_provider(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   const RGWOIDCProviderInfo& info,
+                                   bool exclusive)
 {
-  RGWOIDCProvider* p = nullptr;
-  return std::unique_ptr<RGWOIDCProvider>(p);
+  return -ENOTSUP;
 }
 
-int MotrStore::get_oidc_providers(const DoutPrefixProvider *dpp,
-    const std::string& tenant,
-    vector<std::unique_ptr<RGWOIDCProvider>>& providers)
+int DaosStore::load_oidc_provider(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view tenant,
+                                  std::string_view url,
+                                  RGWOIDCProviderInfo& info)
 {
-  return 0;
+  return -ENOTSUP;
+}
+
+int DaosStore::delete_oidc_provider(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view tenant,
+                                    std::string_view url)
+{
+  return -ENOTSUP;
+}
+
+int DaosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view tenant,
+                                  std::vector<RGWOIDCProviderInfo>& providers)
+{
+  return -ENOTSUP;
 }
 
 std::unique_ptr<MultipartUpload> MotrBucket::get_multipart_upload(const std::string& oid,
