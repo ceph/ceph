@@ -89,7 +89,7 @@ public:
     uint64_t off, uint64_t len) const {
     assert(chunk_size > 0);
     const auto first_chunk_idx = (off / chunk_size);
-    const auto last_chunk_idx = (chunk_size - 1 + len) / chunk_size;
+    const auto last_chunk_idx = (chunk_size - 1 + off + len) / chunk_size;
     return {first_chunk_idx, last_chunk_idx};
   }
 };

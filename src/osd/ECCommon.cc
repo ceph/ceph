@@ -312,22 +312,25 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
 }
 
 void ECCommon::ReadPipeline::get_min_want_to_read_shards(
-  pair<uint64_t, uint64_t> off_len,
+  const uint64_t offset,
+  const uint64_t length,
   set<int> *want_to_read)
 {
-  const auto [offset, length] = off_len;
   const auto [left_chunk_index, right_chunk_index] =
     sinfo.offset_length_to_data_chunk_indices(offset, length);
-  const auto left_shard_index =
-    left_chunk_index % sinfo.get_data_chunk_count();
-  const auto right_shard_index =
-    std::min(right_chunk_index, sinfo.get_data_chunk_count());
-
   const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
-  for(uint64_t i = left_shard_index; i < right_shard_index; i++) {
-    auto chunk = chunk_mapping.size()  > i ? chunk_mapping[i] : i;
-    want_to_read->insert(static_cast<int>(chunk));
+  for(uint64_t i = left_chunk_index; i < right_chunk_index; i++) {
+    auto raw_chunk = i % sinfo.get_data_chunk_count();
+    auto chunk = chunk_mapping.size() > raw_chunk ?
+      chunk_mapping[raw_chunk] : static_cast<int>(raw_chunk);
+    if (auto [_, inserted] = want_to_read->insert(chunk); !inserted) {
+      // aready processed all chunks
+      ceph_assert(want_to_read->size() == sinfo.get_data_chunk_count());
+      break;
+    }
   }
+  dout(30) << __func__ << ": offset " << offset << " length " << length
+	   << " want_to_read " << *want_to_read << dendl;
 }
 
 int ECCommon::ReadPipeline::get_remaining_shards(
@@ -433,8 +436,12 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
       op.source_to_obj[j->first].insert(i->first);
     }
     for (const auto& read : i->second.to_read) {
-      pair<uint64_t, uint64_t> chunk_off_len =
-	sinfo.aligned_offset_len_to_chunk(make_pair(read.offset, read.size));
+      auto p = make_pair(read.offset, read.size);
+      if (g_conf()->osd_ec_partial_reads) {
+        // we need to align to stripe again to deal with partial chunk read.
+        p = sinfo.offset_len_to_stripe_bounds(p);
+      }
+      pair<uint64_t, uint64_t> chunk_off_len = sinfo.aligned_offset_len_to_chunk(p);
       for (auto k = i->second.need.begin();
 	   k != i->second.need.end();
 	   ++k) {
@@ -555,46 +562,6 @@ out:
   ECCommon::ClientAsyncReadStatus *status;
 };
 
-bool ECCommon::ReadPipeline::should_partial_read(
-  const hobject_t &hoid,
-  std::list<ECCommon::ec_align_t> to_read,
-  const std::set<int> &want,
-  bool fast_read,
-  bool for_recovery)
-{
-    // Don't partial read if we are doing a fast_read
-    if (fast_read) {
-      return false;
-    }
-    // Don't partial read if the EC isn't systematic
-    if (!ec_impl->is_systematic()) {
-      return false;
-    }
-    // Don't partial read if we have multiple stripes
-    if (to_read.size() != 1) {
-      return false;
-    }
-    // Only partial read if the length is inside the stripe boundary
-    auto read = to_read.front();
-    auto bounds = make_pair(read.offset, read.size);
-    auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
-    if (sinfo.get_stripe_width() != aligned.second) {
-      return false;
-    }
-
-    set<int> have;
-    map<shard_id_t, pg_shard_t> shards;
-    set<pg_shard_t> error_shards;
-    get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
-
-    set<int> data_shards;
-    get_want_to_read_shards(&data_shards);
-
-    return includes(data_shards.begin(), data_shards.end(), want.begin(), want.end())
-        && includes(have.begin(), have.end(), want.begin(), want.end());
-}
-
-
 void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   const map<hobject_t, std::list<ECCommon::ec_align_t>> &reads,
   bool fast_read,
@@ -612,45 +579,14 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&to_read: reads) {
     set<int> want_to_read;
-    get_want_to_read_shards(&want_to_read);
-    bool partial_read = false;
-    std::list<ec_align_t> align_offsets;
     if (cct->_conf->osd_ec_partial_reads) {
-      partial_read = should_partial_read(
-          to_read.first,
-          to_read.second,
-          want_to_read,
-          fast_read,
-          false);
-
-      // Our extent set and flags
-      extent_set es;
-      uint32_t flags = 0;
-
-      for (auto read : to_read.second) {
-        auto bounds = make_pair(read.offset, read.size);
-
-        // By default, align to the stripe
-        auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
-        if (partial_read) {
-          // align to the chunk instead
-          aligned = sinfo.offset_len_to_chunk_bounds(bounds);
-          set<int> new_want_to_read;
-          get_min_want_to_read_shards(aligned, &new_want_to_read);
-          want_to_read = new_want_to_read;
-        }
-        // Add the new extents/flags
-        extent_set new_es;
-        new_es.insert(aligned.first, aligned.second);
-        es.union_of(new_es);
-        flags |= read.flags;
+      for (const auto& single_region : to_read.second) {
+        get_min_want_to_read_shards(single_region.offset,
+				    single_region.size,
+				    &want_to_read);
       }
-      if (!es.empty()) {
-        for (auto e = es.begin(); e != es.end(); ++e) {
-          align_offsets.push_back(
-            ec_align_t{e.get_start(), e.get_len(), flags});
-        }
-      }
+    } else {
+      get_want_to_read_shards(&want_to_read);
     }
     map<pg_shard_t, vector<pair<int, int>>> shards;
     int r = get_min_avail_to_read_shards(
@@ -665,10 +601,9 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
       make_pair(
 	to_read.first,
 	read_request_t(
-	  partial_read ? align_offsets : to_read.second,
+	  to_read.second,
 	  shards,
-	  false,
-	  partial_read)));
+	  false)));
     obj_want_to_read.insert(make_pair(to_read.first, want_to_read));
   }
 
@@ -700,9 +635,8 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
 
   list<ec_align_t> to_read = rop.to_read.find(hoid)->second.to_read;
 
-  bool partial_read = rop.to_read.find(hoid)->second.partial_read;
-  // realign the offset and len to make partial reads normal reads.
-  if (partial_read) {
+  if (cct->_conf->osd_ec_partial_reads) {
+    // realign the offset and len to make partial reads normal reads.
     list<ec_align_t> new_to_read;
     for(const auto& read : to_read) {
       auto bounds = make_pair(read.offset, read.size);
@@ -728,7 +662,7 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
 	to_read,
 	shards,
 	want_attrs)));
-  if (partial_read) {
+  if (cct->_conf->osd_ec_partial_reads) {
     rop.refresh_complete(hoid);
   }
   return 0;
