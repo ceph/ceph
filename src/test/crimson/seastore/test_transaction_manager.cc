@@ -1723,7 +1723,6 @@ TEST_P(tm_random_block_device_test_t, scatter_allocation)
     auto t = create_transaction();
     for (int i = 0; i < 1991; i++) {
       auto extents = alloc_extents(t, ADDR + i * 16384, 16384, 'a');
-      std::cout << "num of extents: " << extents.size() << std::endl;
     }
     alloc_extents_deemed_fail(t, ADDR + 1991 * 16384, 16384, 'a');
     check_mappings(t);
