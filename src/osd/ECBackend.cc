@@ -196,7 +196,7 @@ struct RecoveryMessages {
     bool attrs)
   {
     list<ECCommon::ec_align_t> to_read;
-    to_read.emplace_back(off, len, 0);
+    to_read.emplace_back(ECCommon::ec_align_t{off, len, 0});
     ceph_assert(!recovery_reads.count(hoid));
     want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
     recovery_reads.insert(
@@ -1529,6 +1529,21 @@ int ECBackend::objects_read_sync(
   return -EOPNOTSUPP;
 }
 
+static bool should_partial_read(
+  const ceph::ErasureCodeInterface& ec_impl,
+  bool fast_read)
+{
+  // Don't partial read if we are doing a fast_read
+  if (fast_read) {
+    return false;
+  }
+  // Don't partial read if the EC isn't systematic
+  if (!ec_impl.is_systematic()) {
+    return false;
+  }
+  return true;
+}
+
 void ECBackend::objects_read_async(
   const hobject_t &hoid,
   const list<pair<ECCommon::ec_align_t,
@@ -1541,14 +1556,13 @@ void ECBackend::objects_read_async(
   uint32_t flags = 0;
   extent_set es;
   for (const auto& [read, ctx] : to_read) {
-#if 0
-    pair<uint64_t, uint64_t> tmp =
-      sinfo.offset_len_to_stripe_bounds(
-	make_pair(read.offset, read.size));
-#else
-    pair<uint64_t, uint64_t> tmp = make_pair(read.offset, read.size);
-#endif
-
+    pair<uint64_t, uint64_t> tmp;
+    if (!cct->_conf->osd_ec_partial_reads ||
+        !should_partial_read(*ec_impl, fast_read)) {
+      tmp = sinfo.offset_len_to_stripe_bounds(make_pair(read.offset, read.size));
+    } else {
+      tmp = sinfo.offset_len_to_chunk_bounds(make_pair(read.offset, read.size));
+    }
     es.union_insert(tmp.first, tmp.second);
     flags |= read.flags;
   }
@@ -1558,7 +1572,7 @@ void ECBackend::objects_read_async(
     for (auto j = es.begin();
 	 j != es.end();
 	 ++j) {
-      offsets.emplace_back(j.get_start(), j.get_len(), flags);
+      offsets.emplace_back(ec_align_t{j.get_start(), j.get_len(), flags});
     }
   }
 

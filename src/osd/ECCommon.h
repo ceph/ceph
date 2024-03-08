@@ -242,13 +242,11 @@ struct ECCommon {
     const std::list<ec_align_t> to_read;
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
     bool want_attrs;
-    bool partial_read;
     read_request_t(
       const std::list<ec_align_t> &to_read,
       const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
-      bool want_attrs,
-      bool partial_read=false)
-      : to_read(to_read), need(need), want_attrs(want_attrs), partial_read(partial_read) {}
+      bool want_attrs)
+      : to_read(to_read), need(need), want_attrs(want_attrs) {}
   };
   friend std::ostream &operator<<(std::ostream &lhs, const read_request_t &rhs);
   struct ReadOp;
@@ -400,13 +398,6 @@ struct ECCommon {
       bool fast_read,
       GenContextURef<ec_extents_t &&> &&func);
 
-    bool should_partial_read(
-      const hobject_t &hoid,
-      std::list<ec_align_t> to_read,
-      const std::set<int> &want,
-      bool fast_read,
-      bool for_recovery);
-
     template <class F, class G>
     void filter_read_op(
       const OSDMapRef& osdmap,
@@ -467,24 +458,17 @@ struct ECCommon {
     }
 
     /**
-     * The basic idea here is that we only call this function when there is a
-     * partial read.  The criteria for performing a partial read involves
-     * checking to make sure that we don't read across multiple stripes and that
-     * the read is within the stripe boundary (see should_partial_read).
-     *
      * While get_want_to_read_shards creates a want_to_read based on the EC
-     * plugin's get_data_chunk_count(), this instead uses the number of chunks
-     * necessary to read the length of data and only inserts those chunks.  Just
-     * like in get_want_to_read_shards, we check the plugin's mapping but the
-     * difference is that we start at first_chunk and we end when we no longer
-     * have chunks based on the read's length.
+     * plugin's all get_data_chunk_count() (full stripe), this method
+     * inserts only the chunks actually necessary to read the length of data.
+     * That is, we can do so called "partial read" -- fetch subset of stripe.
      *
-     * The resulting want_to_read has fewer chunks than a normal read, and thus
-     * gets intercepted in ErasureCode::decode_concat to be handled differently
-     * than when get_want_to_read_shards is used and we decode all data chunks.
+     * Like in get_want_to_read_shards, we check the plugin's mapping.
+     *
      */
     void get_min_want_to_read_shards(
-      std::pair<uint64_t, uint64_t> off_len,    ///< [in]
+      uint64_t offset,				///< [in]
+      uint64_t length,    			///< [in]
       std::set<int> *want_to_read               ///< [out]
       );
 

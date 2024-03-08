@@ -370,6 +370,8 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
       }
     }
     if (!need_decode) {
+      // we need to decode if the input `chunks` contains anything else
+      // than data chunks (which boils down into coding chunks)
       want_to_read.swap(decode_chunks);
     }
   }
