@@ -562,6 +562,19 @@ class RGWPubSub
   int write_topics_v1(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
                       RGWObjVersionTracker* objv_tracker, optional_yield y) const;
 
+  // remove a topic according to its name
+  // if the topic does not exists it is a no-op (considered success)
+  // return 0 on success, error code otherwise
+  int remove_topic_v2(const DoutPrefixProvider* dpp,
+                      const std::string& name,
+                      optional_yield y) const;
+  // create a topic with a name only
+  // if the topic already exists it is a no-op (considered success)
+  // return 0 on success, error code otherwise
+  int create_topic_v2(const DoutPrefixProvider* dpp,
+                      const rgw_pubsub_topic& topic,
+                      optional_yield y) const;
+
 public:
   RGWPubSub(rgw::sal::Driver* _driver,
             const std::string& _tenant,
@@ -641,18 +654,6 @@ public:
   // if the topic does not exists it is a no-op (considered success)
   // return 0 on success, error code otherwise
   int remove_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const;
-  // remove a topic according to its name
-  // if the topic does not exists it is a no-op (considered success)
-  // return 0 on success, error code otherwise
-  int remove_topic_v2(const DoutPrefixProvider* dpp,
-                      const std::string& name,
-                      optional_yield y) const;
-  // create a topic with a name only
-  // if the topic already exists it is a no-op (considered success)
-  // return 0 on success, error code otherwise
-  int create_topic(const DoutPrefixProvider* dpp,
-                   const rgw_pubsub_topic& topic,
-                   optional_yield y) const;
 };
 
 namespace rgw::notify {
