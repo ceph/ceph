@@ -86,4 +86,12 @@ public:
     std::ostream &ss) = 0;
 };
 
+
+static constexpr auto errmsg_for_unhealthy_mds = \
+  "MDS has one of two health warnings which could extend recovery: "
+  "MDS_TRIM or MDS_CACHE_OVERSIZED. MDS failover is not recommended "
+  "since it might cause unexpected file system unavailability. If "
+  "you wish to proceed, pass --yes-i-really-mean-it";
+
+
 #endif
