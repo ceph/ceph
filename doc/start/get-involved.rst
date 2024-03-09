@@ -32,6 +32,10 @@ These are exciting times in the Ceph community! Get involved!
 |                      | ``#ceph-devel``, ``#ceph-dashboard`` and        |     ``#cephfs``                               |
 |                      | ``#cephfs`` dedicated for Ceph developers.      |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
+| **Slack**            | Since 2023, the Upstream Ceph community has     |                                               |
+|                      | maintained a community in Slack. Ask your Ceph- | - `Ceph Slack Invite`_                        |
+|                      | related questions in Ceph's Slack channels.     |                                               |
++----------------------+-------------------------------------------------+-----------------------------------------------+
 | **User List**        | Ask and answer user-related questions by        |                                               |
 |                      | subscribing to the email list at                | - `User Subscribe`_                           |
 |                      | ceph-users@ceph.io. You can opt out of the email| - `User Unsubscribe`_                         |
@@ -96,4 +100,4 @@ These are exciting times in the Ceph community! Get involved!
 .. _Blog: http://ceph.com/community/blog/
 .. _Tracker: http://tracker.ceph.com/
 .. _Ceph Source Code: http://github.com/ceph/ceph
-
+.. _Ceph Slack Invite: https://ceph-storage.slack.com/join/shared_invite/zt-2b91em8b6-NQOKhGYReEIrE28OVncnLQ#/shared-invite/email
