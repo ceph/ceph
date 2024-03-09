@@ -1,7 +1,9 @@
-#!/bin/sh -ex
+#!/usr/bin/env bash
 #
 # rbd_mirror_bootstrap.sh - test peer bootstrap create/import
 #
+
+set -ex
 
 RBD_MIRROR_MANUAL_PEERS=1
 RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-1}
