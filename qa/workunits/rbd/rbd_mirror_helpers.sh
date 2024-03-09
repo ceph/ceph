@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 #
 # rbd_mirror_helpers.sh - shared rbd-mirror daemon helper functions
 #
