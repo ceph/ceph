@@ -1762,6 +1762,16 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 					const RGWAccessControlPolicy& object_acl,
 					const int perm);
 
+// determine whether a request is allowed or denied within an account
+rgw::IAM::Effect evaluate_iam_policies(
+    const DoutPrefixProvider* dpp,
+    const rgw::IAM::Environment& env,
+    const rgw::auth::Identity& identity,
+    bool account_root, uint64_t op, const rgw::ARN& arn,
+    const boost::optional<rgw::IAM::Policy>& resource_policy,
+    const std::vector<rgw::IAM::Policy>& identity_policies,
+    const std::vector<rgw::IAM::Policy>& session_policies);
+
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             req_state * const s,
                             const RGWAccessControlPolicy& user_acl,
