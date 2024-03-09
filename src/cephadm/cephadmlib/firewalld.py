@@ -14,7 +14,6 @@ logger = logging.getLogger()
 
 
 class Firewalld(object):
-
     # for specifying ports we should always open when opening
     # ports for a daemon of that type. Main use case is for ports
     # that we should open when deploying the daemon type but that
@@ -51,26 +50,44 @@ class Firewalld(object):
     def enable_service_for(self, svc: str) -> None:
         assert svc, 'service name not provided'
         if not self.available:
-            logger.debug('Not possible to enable service <%s>. firewalld.service is not available' % svc)
+            logger.debug(
+                'Not possible to enable service <%s>. firewalld.service is not available'
+                % svc
+            )
             return
 
         if not self.cmd:
             raise RuntimeError('command not defined')
 
-        out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--query-service', svc], verbosity=CallVerbosity.DEBUG)
+        out, err, ret = call(
+            self.ctx,
+            [self.cmd, '--permanent', '--query-service', svc],
+            verbosity=CallVerbosity.DEBUG,
+        )
         if ret:
-            logger.info('Enabling firewalld service %s in current zone...' % svc)
-            out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--add-service', svc])
+            logger.info(
+                'Enabling firewalld service %s in current zone...' % svc
+            )
+            out, err, ret = call(
+                self.ctx, [self.cmd, '--permanent', '--add-service', svc]
+            )
             if ret:
                 raise RuntimeError(
-                    'unable to add service %s to current zone: %s' % (svc, err))
+                    'unable to add service %s to current zone: %s'
+                    % (svc, err)
+                )
         else:
-            logger.debug('firewalld service %s is enabled in current zone' % svc)
+            logger.debug(
+                'firewalld service %s is enabled in current zone' % svc
+            )
 
     def open_ports(self, fw_ports):
         # type: (List[int]) -> None
         if not self.available:
-            logger.debug('Not possible to open ports <%s>. firewalld.service is not available' % fw_ports)
+            logger.debug(
+                'Not possible to open ports <%s>. firewalld.service is not available'
+                % fw_ports
+            )
             return
 
         if not self.cmd:
@@ -78,20 +95,36 @@ class Firewalld(object):
 
         for port in fw_ports:
             tcp_port = str(port) + '/tcp'
-            out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--query-port', tcp_port], verbosity=CallVerbosity.DEBUG)
+            out, err, ret = call(
+                self.ctx,
+                [self.cmd, '--permanent', '--query-port', tcp_port],
+                verbosity=CallVerbosity.DEBUG,
+            )
             if ret:
-                logger.info('Enabling firewalld port %s in current zone...' % tcp_port)
-                out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--add-port', tcp_port])
+                logger.info(
+                    'Enabling firewalld port %s in current zone...' % tcp_port
+                )
+                out, err, ret = call(
+                    self.ctx,
+                    [self.cmd, '--permanent', '--add-port', tcp_port],
+                )
                 if ret:
-                    raise RuntimeError('unable to add port %s to current zone: %s' %
-                                       (tcp_port, err))
+                    raise RuntimeError(
+                        'unable to add port %s to current zone: %s'
+                        % (tcp_port, err)
+                    )
             else:
-                logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
+                logger.debug(
+                    'firewalld port %s is enabled in current zone' % tcp_port
+                )
 
     def close_ports(self, fw_ports):
         # type: (List[int]) -> None
         if not self.available:
-            logger.debug('Not possible to close ports <%s>. firewalld.service is not available' % fw_ports)
+            logger.debug(
+                'Not possible to close ports <%s>. firewalld.service is not available'
+                % fw_ports
+            )
             return
 
         if not self.cmd:
@@ -99,13 +132,22 @@ class Firewalld(object):
 
         for port in fw_ports:
             tcp_port = str(port) + '/tcp'
-            out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--query-port', tcp_port], verbosity=CallVerbosity.DEBUG)
+            out, err, ret = call(
+                self.ctx,
+                [self.cmd, '--permanent', '--query-port', tcp_port],
+                verbosity=CallVerbosity.DEBUG,
+            )
             if not ret:
                 logger.info('Disabling port %s in current zone...' % tcp_port)
-                out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--remove-port', tcp_port])
+                out, err, ret = call(
+                    self.ctx,
+                    [self.cmd, '--permanent', '--remove-port', tcp_port],
+                )
                 if ret:
-                    raise RuntimeError('unable to remove port %s from current zone: %s' %
-                                       (tcp_port, err))
+                    raise RuntimeError(
+                        'unable to remove port %s from current zone: %s'
+                        % (tcp_port, err)
+                    )
                 else:
                     logger.info(f'Port {tcp_port} disabled')
             else:
