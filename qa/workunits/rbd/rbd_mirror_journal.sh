@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/usr/bin/env bash
 #
 # rbd_mirror_journal.sh - test rbd-mirror daemon in journal-based mirroring mode
 #
@@ -6,6 +6,8 @@
 # creates a temporary directory, used for cluster configs, daemon logs, admin
 # socket, temporary files, and launches rbd-mirror daemon.
 #
+
+set -ex
 
 . $(dirname $0)/rbd_mirror_helpers.sh
 
