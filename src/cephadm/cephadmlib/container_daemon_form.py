@@ -40,7 +40,9 @@ class ContainerDaemonForm(DaemonForm):
         """
         return []
 
-    def sidecar_containers(self, ctx: CephadmContext) -> List[SidecarContainer]:
+    def sidecar_containers(
+        self, ctx: CephadmContext
+    ) -> List[SidecarContainer]:
         """Returns a list of sidecar containers that should be executed along
         with the primary service container.
         """
@@ -167,7 +169,9 @@ def daemon_to_container(
         ctx.container_engine.update_mounts(ctx, container_mounts)
     if auto_podman_args and _is_podman:
         container_args.extend(
-            ctx.container_engine.service_args(ctx, daemon.identity.service_name)
+            ctx.container_engine.service_args(
+                ctx, daemon.identity.service_name
+            )
         )
 
     return CephContainer.for_daemon(
