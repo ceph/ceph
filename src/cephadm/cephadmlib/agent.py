@@ -6,13 +6,14 @@ import logging
 logger = logging.getLogger()
 
 
-def http_query(addr: str = '',
-               port: str = '',
-               data: Optional[bytes] = None,
-               endpoint: str = '',
-               ssl_ctx: Optional[Any] = None,
-               timeout: Optional[int] = 10) -> Tuple[int, str]:
-
+def http_query(
+    addr: str = '',
+    port: str = '',
+    data: Optional[bytes] = None,
+    endpoint: str = '',
+    ssl_ctx: Optional[Any] = None,
+    timeout: Optional[int] = 10,
+) -> Tuple[int, str]:
     url = f'https://{addr}:{port}{endpoint}'
     logger.debug(f'sending query to {url}')
     try:
