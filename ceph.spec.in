@@ -1376,6 +1376,9 @@ cmake .. \
     -DCMAKE_C_COMPILER=gcc-11 \
     -DCMAKE_CXX_COMPILER=g++-11 \
 %endif
+%if 0%{?gts_version} == 13
+    -DCMAKE_EXE_LINKER_FLAGS=-lstdc++ \
+%endif
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR:PATH=%{_libdir} \
     -DCMAKE_INSTALL_LIBEXECDIR:PATH=%{_libexecdir} \
