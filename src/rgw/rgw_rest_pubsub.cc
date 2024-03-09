@@ -102,8 +102,9 @@ bool topics_has_endpoint_secret(const rgw_pubsub_topics& topics) {
     return false;
 }
 
-std::optional<rgw::IAM::Policy> get_policy_from_text(req_state* const s,
-                                                     const std::string& policy_text) {
+auto get_policy_from_text(req_state* const s, const std::string& policy_text)
+  -> boost::optional<rgw::IAM::Policy>
+{
   try {
     return rgw::IAM::Policy(
         s->cct, nullptr, policy_text,
@@ -112,43 +113,91 @@ std::optional<rgw::IAM::Policy> get_policy_from_text(req_state* const s,
     ldout(s->cct, 1) << "failed to parse policy: '" << policy_text
                      << "' with error: " << e.what() << dendl;
     s->err.message = e.what();
-    return std::nullopt;
+    return boost::none;
   }
 }
 
-int verify_topic_owner_or_policy(req_state* const s,
-                                 const rgw_pubsub_topic& topic,
-                                 const std::string& zonegroup_name,
-                                 const uint64_t op) {
-  if (s->auth.identity->is_owner_of(topic.owner)) {
-    return 0;
-  }
-  // no policy set.
-  if (topic.policy_text.empty()) {
-    // if rgw_topic_require_publish_policy is "false" dont validate "publish" policies
-    if (op == rgw::IAM::snsPublish && !s->cct->_conf->rgw_topic_require_publish_policy) {
-      return 0;
+using rgw::IAM::Effect;
+using rgw::IAM::Policy;
+
+bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
+                             const rgw_owner& owner, const rgw::ARN& arn,
+                             const boost::optional<Policy>& policy,
+                             uint64_t op)
+{
+  if (s->auth.identity->get_account()) {
+    const bool account_root = (s->auth.identity->get_identity_type() == TYPE_ROOT);
+    if (!s->auth.identity->is_owner_of(owner)) {
+      ldpp_dout(dpp, 4) << "cross-account request for resource owner "
+          << owner << " != " << s->owner.id << dendl;
+      // cross-account requests evaluate the identity-based policies separately
+      // from the resource-based policies and require Allow from both
+      const auto identity_res = evaluate_iam_policies(
+          dpp, s->env, *s->auth.identity, account_root, op, arn,
+          {}, s->iam_identity_policies, s->session_policies);
+      if (identity_res == Effect::Deny) {
+        return false;
+      }
+      const auto resource_res = evaluate_iam_policies(
+          dpp, s->env, *s->auth.identity, false, op, arn,
+          policy, {}, {});
+      return identity_res == Effect::Allow && resource_res == Effect::Allow;
+    } else {
+      // require an Allow from either identity- or resource-based policy
+      return Effect::Allow == evaluate_iam_policies(
+          dpp, s->env, *s->auth.identity, account_root, op, arn,
+          policy, s->iam_identity_policies, s->session_policies);
     }
-    if (std::visit([] (const auto& o) { return o.empty(); }, topic.owner)) {
+  }
+
+  constexpr bool account_root = false;
+  const auto effect = evaluate_iam_policies(
+      dpp, s->env, *s->auth.identity, account_root, op, arn,
+      policy, s->iam_identity_policies, s->session_policies);
+  if (effect == Effect::Deny) {
+    return false;
+  }
+  if (effect == Effect::Allow) {
+    return true;
+  }
+
+  if (s->auth.identity->is_owner_of(owner)) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted to resource owner" << dendl;
+    return true;
+  }
+
+  if (!policy) {
+    if (op == rgw::IAM::snsPublish &&
+        !s->cct->_conf->rgw_topic_require_publish_policy) {
+      return true;
+    }
+
+    if (std::visit([] (const auto& o) { return o.empty(); }, owner)) {
       // if we don't know the original user and there is no policy
       // we will not reject the request.
       // this is for compatibility with versions that did not store the user in the topic
-      return 0;
+      return true;
     }
-    s->err.message = "Topic was created by another user.";
-    return -EACCES;
   }
-  const auto p = get_policy_from_text(s, topic.policy_text);
-  rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
-  const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, zonegroup_name,
-                     s->user->get_tenant(), topic.name);
-  if (!p || p->eval(s->env, *s->auth.identity, op, arn, princ_type) !=
-                rgw::IAM::Effect::Allow) {
-    ldout(s->cct, 4) << "topic policy failed validation, topic policy: " << p
-                     << dendl;
-    return -EACCES;
+
+  s->err.message = "Topic was created by another user.";
+  return false;
+}
+
+// parse topic policy if present and evaluate permissions
+bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
+                             const rgw_pubsub_topic& topic,
+                             const rgw::ARN& arn, uint64_t op)
+{
+  boost::optional<Policy> policy;
+  if (!topic.policy_text.empty()) {
+    policy = get_policy_from_text(s, topic.policy_text);
+    if (!policy) {
+      return false;
+    }
   }
-  return 0;
+
+  return verify_topic_permission(dpp, s, topic.owner, arn, policy, op);
 }
 
 // command (AWS compliant): 
@@ -250,9 +299,11 @@ class RGWPSCreateTopicOp : public RGWOp {
     if (!existing) {
       return 0;
     }
-    return verify_topic_owner_or_policy(
-        s, *existing, driver->get_zone()->get_zonegroup().get_name(),
-        rgw::IAM::snsCreateTopic);
+    if (!verify_topic_permission(this, s, *existing, topic_arn,
+                                 rgw::IAM::snsCreateTopic)) {
+      return -EACCES;
+    }
+    return 0;
   }
 
   void pre_exec() override {
@@ -385,9 +436,9 @@ void RGWPSListTopicsOp::execute(optional_yield y) {
     return;
   }
   for (auto it = result.topics.cbegin(); it != result.topics.cend();) {
-    if (verify_topic_owner_or_policy(
-            s, it->second, driver->get_zone()->get_zonegroup().get_name(),
-            rgw::IAM::snsGetTopicAttributes) != 0) {
+    const auto arn = rgw::ARN::parse(it->second.arn);
+    if (!arn || !verify_topic_permission(this, s, it->second, *arn,
+                                         rgw::IAM::snsGetTopicAttributes)) {
       result.topics.erase(it++);
     } else {
       ++it;
@@ -435,9 +486,11 @@ class RGWPSGetTopicOp : public RGWOp {
   }
 
   int verify_permission(optional_yield y) override {
-    return verify_topic_owner_or_policy(
-        s, result, driver->get_zone()->get_zonegroup().get_name(),
-        rgw::IAM::snsGetTopicAttributes);
+    if (!verify_topic_permission(this, s, result, topic_arn,
+                                 rgw::IAM::snsGetTopicAttributes)) {
+      return -EACCES;
+    }
+    return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
@@ -515,9 +568,11 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
   }
 
   int verify_permission(optional_yield y) override {
-    return verify_topic_owner_or_policy(
-        s, result, driver->get_zone()->get_zonegroup().get_name(),
-        rgw::IAM::snsGetTopicAttributes);
+    if (!verify_topic_permission(this, s, result, topic_arn,
+                                 rgw::IAM::snsGetTopicAttributes)) {
+      return -EACCES;
+    }
+    return 0;
   }
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
@@ -677,9 +732,11 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
   }
 
   int verify_permission(optional_yield y) override {
-    return verify_topic_owner_or_policy(
-        s, result, driver->get_zone()->get_zonegroup().get_name(),
-        rgw::IAM::snsSetTopicAttributes);
+    if (!verify_topic_permission(this, s, result, topic_arn,
+                                 rgw::IAM::snsSetTopicAttributes)) {
+      return -EACCES;
+    }
+    return 0;
   }
 
   void pre_exec() override { rgw_bucket_object_pre_exec(s); }
@@ -798,12 +855,11 @@ class RGWPSDeleteTopicOp : public RGWOp {
   }
 
   int verify_permission(optional_yield y) override {
-    if (!topic) {
-      return 0;
+    if (topic && !verify_topic_permission(this, s, *topic, topic_arn,
+                                          rgw::IAM::snsDeleteTopic)) {
+      return -EACCES;
     }
-    return verify_topic_owner_or_policy(
-        s, *topic, driver->get_zone()->get_zonegroup().get_name(),
-        rgw::IAM::snsDeleteTopic);
+    return 0;
   }
 
   void pre_exec() override {
@@ -1082,6 +1138,21 @@ int RGWPSCreateNotifOp::init_processing(optional_yield y)
   return RGWOp::init_processing(y);
 }
 
+int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
+  // require s3:PutBucketNotification permission for the bucket
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
+    return -EACCES;
+  }
+
+  // require sns:Publish permission for each topic
+  for (const auto& [arn, topic] : topics) {
+    if (!verify_topic_permission(this, s, topic, arn, rgw::IAM::snsPublish)) {
+      return -EACCES;
+    }
+  }
+  return 0;
+}
+
 void RGWPSCreateNotifOp::execute(optional_yield y) {
   if (!driver->is_meta_master()) {
     op_ret = rgw_forward_request_to_master(
@@ -1160,26 +1231,6 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     }
     ldpp_dout(this, 20) << "successfully auto-generated notification for unique topic '" << unique_topic_name << "'" << dendl;
   }
-}
-
-int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
-  // require s3:PutBucketNotification permission for the bucket
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
-    return -EACCES;
-  }
-
-  // require sns:Publish permission for each topic
-  for (const auto& [arn, topic] : topics) {
-    int ret = verify_topic_owner_or_policy(
-        s, topic, driver->get_zone()->get_zonegroup().get_name(),
-        rgw::IAM::snsPublish);
-    if (ret < 0) {
-      ldpp_dout(this, 4) << "no permission to create notification for topic '"
-                         << arn << "'" << dendl;
-      return ret;
-    }
-  }
-  return 0;
 }
 
 void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
@@ -1296,6 +1347,14 @@ int RGWPSDeleteNotifOp::init_processing(optional_yield y)
   return RGWOp::init_processing(y);
 }
 
+int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
 void RGWPSDeleteNotifOp::execute(optional_yield y) {
   if (!driver->is_meta_master()) {
     bufferlist indata;
@@ -1338,14 +1397,6 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
   }
 
   op_ret = delete_all_notifications(this, bucket_topics, b, y, ps);
-}
-
-int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
-    return -EACCES;
-  }
-
-  return 0;
 }
 
 void RGWPSDeleteNotifOp::execute_v2(optional_yield y) {
