@@ -1150,6 +1150,8 @@ Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
   return policy_res;
 }
 
+} // anonymous namespace
+
 // determine whether a request is allowed or denied within an account
 Effect evaluate_iam_policies(
     const DoutPrefixProvider* dpp,
@@ -1230,8 +1232,6 @@ Effect evaluate_iam_policies(
   ldpp_dout(dpp, 10) << __func__ << ": implicit deny from identity-based policy" << dendl;
   return Effect::Pass;
 }
-
-} // anonymous namespace
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             perm_state_base * const s,
