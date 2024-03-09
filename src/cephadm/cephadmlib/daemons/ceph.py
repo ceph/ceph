@@ -327,7 +327,9 @@ class CephExporter(ContainerDaemonForm):
 
     def validate(self) -> None:
         if not os.path.isdir(self.sock_dir):
-            raise Error(f'Desired sock dir for ceph-exporter is not directory: {self.sock_dir}')
+            raise Error(
+                f'Desired sock dir for ceph-exporter is not directory: {self.sock_dir}'
+            )
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         ctr = daemon_to_container(ctx, self)
