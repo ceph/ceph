@@ -1753,15 +1753,11 @@ class TestCephadm(object):
 
                         # being in offline/maint mode should disqualify hosts from being
                         # candidates for scheduling
-                        candidates = [
-                            h.hostname for h in cephadm_module.cache.get_schedulable_hosts()]
-                        assert 'test2' in candidates
-                        assert 'test3' in candidates
+                        assert cephadm_module.cache.is_host_schedulable('test2')
+                        assert cephadm_module.cache.is_host_schedulable('test3')
 
-                        unreachable = [
-                            h.hostname for h in cephadm_module.cache.get_unreachable_hosts()]
-                        assert 'test2' in unreachable
-                        assert 'test3' in unreachable
+                        assert cephadm_module.cache.is_host_unreachable('test2')
+                        assert cephadm_module.cache.is_host_unreachable('test3')
 
                         with with_service(cephadm_module, ServiceSpec('crash', placement=PlacementSpec(host_pattern='*'))):
                             # re-apply services. No mgr should be removed from maint/offline hosts
@@ -1942,9 +1938,9 @@ class TestCephadm(object):
         cephadm_module.offline_hosts.add('host3')
 
         # verify host2 and host3 are correctly marked as unreachable but host1 is not
-        assert 'host1' not in [h.hostname for h in cephadm_module.cache.get_unreachable_hosts()]
-        assert 'host2' in [h.hostname for h in cephadm_module.cache.get_unreachable_hosts()]
-        assert 'host3' in [h.hostname for h in cephadm_module.cache.get_unreachable_hosts()]
+        assert not cephadm_module.cache.is_host_unreachable('host1')
+        assert cephadm_module.cache.is_host_unreachable('host2')
+        assert cephadm_module.cache.is_host_unreachable('host3')
 
         _get_client_files.side_effect = Exception('Called _get_client_files')
 

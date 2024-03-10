@@ -1038,6 +1038,18 @@ class HostCache():
             )
         ]
 
+    def is_host_unreachable(self, hostname: str) -> bool:
+        # take hostname and return if it matches the hostname of an unreachable host
+        return hostname in [h.hostname for h in self.get_unreachable_hosts()]
+
+    def is_host_schedulable(self, hostname: str) -> bool:
+        # take hostname and return if it matches the hostname of a schedulable host
+        return hostname in [h.hostname for h in self.get_schedulable_hosts()]
+
+    def is_host_draining(self, hostname: str) -> bool:
+        # take hostname and return if it matches the hostname of a draining host
+        return hostname in [h.hostname for h in self.get_draining_hosts()]
+
     def get_facts(self, host: str) -> Dict[str, Any]:
         return self.facts.get(host, {})
 
@@ -1287,8 +1299,7 @@ class HostCache():
         return True
 
     def all_host_metadata_up_to_date(self) -> bool:
-        unreachables = [h.hostname for h in self.get_unreachable_hosts()]
-        if [h for h in self.get_hosts() if (not self.host_metadata_up_to_date(h) and h not in unreachables)]:
+        if [h for h in self.get_hosts() if (not self.host_metadata_up_to_date(h) and not self.is_host_unreachable(h))]:
             # this function is primarily for telling if it's safe to try and apply a service
             # spec. Since offline/maintenance hosts aren't considered in that process anyway
             # we don't want to return False if the host without up-to-date metadata is in one
