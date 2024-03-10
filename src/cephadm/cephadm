@@ -3813,6 +3813,18 @@ def install_base_units(ctx, fsid):
         first child (bash), but that isn't the ceph daemon.  This is simpler and
         should be harmless.
         """
+        targets: List[str] = [
+            'ceph-mon',
+            'ceph-mgr',
+            'ceph-mds',
+            'ceph-osd',
+            'ceph-fuse',
+            'radosgw',
+            'rbd-mirror',
+            'cephfs-mirror',
+            'tcmu-runner'
+        ]
+
         f.write("""# created by cephadm
 /var/log/ceph/%s/*.log {
     rotate 7
@@ -3820,13 +3832,13 @@ def install_base_units(ctx, fsid):
     compress
     sharedscripts
     postrotate
-        killall -q -1 ceph-mon ceph-mgr ceph-mds ceph-osd ceph-fuse radosgw rbd-mirror cephfs-mirror || pkill -1 -x 'ceph-mon|ceph-mgr|ceph-mds|ceph-osd|ceph-fuse|radosgw|rbd-mirror|cephfs-mirror' || true
+        killall -q -1 %s || pkill -1 -x '%s' || true
     endscript
     missingok
     notifempty
     su root root
 }
-""" % fsid)
+""" % (fsid, ' '.join(targets), '|'.join(targets)))
 
 
 def get_unit_file(ctx, fsid):
