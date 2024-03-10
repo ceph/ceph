@@ -12,7 +12,12 @@ test ${CONT_COUNT} -eq 2
 
 for i in ${ISCSI_CONT_IDS}
 do
-  sudo podman exec ${i} /bin/sh -c 'for j in {0..20000}; do sleep 30 & done'
+  test $(sudo podman exec ${i} cat /sys/fs/cgroup/pids/pids.max) == max
+done
+
+for i in ${ISCSI_CONT_IDS}
+do
+  sudo podman exec ${i} /bin/sh -c 'for j in {0..20000}; do sleep 300 & done'
 done
 
 for i in ${ISCSI_CONT_IDS}
