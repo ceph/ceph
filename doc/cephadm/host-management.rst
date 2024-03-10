@@ -502,7 +502,23 @@ There are two ways to customize this configuration for your environment:
    manually distributed to the mgr data directory
    (``/var/lib/ceph/<cluster-fsid>/mgr.<id>`` on the host, visible at
    ``/var/lib/ceph/mgr/ceph-<id>`` from inside the container).
-   
+
+Setting up CA signed keys for the cluster
+-----------------------------------------
+
+Cephadm also supports using CA signed keys for SSH authentication
+across cluster nodes. In this setup, instead of needing a private
+key and public key, we instead need a private key and certificate
+created by signing that private key with a CA key. For more info
+on setting up nodes for authentication using a CA signed key, see
+:ref:`cephadm-bootstrap-ca-signed-keys`. Once you have your private
+key and signed cert, they can be set up for cephadm to use by running:
+
+.. prompt:: bash #
+
+   ceph config-key set mgr/cephadm/ssh_identity_key -i <private-key-file>
+   ceph config-key set mgr/cephadm/ssh_identity_cert -i <signed-cert-file>
+
 .. _cephadm-fqdn:
 
 Fully qualified domain names vs bare host names

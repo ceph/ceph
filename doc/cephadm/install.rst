@@ -205,6 +205,8 @@ This command will:
   with this label will (also) get a copy of ``/etc/ceph/ceph.conf`` and
   ``/etc/ceph/ceph.client.admin.keyring``.
 
+.. _cephadm-bootstrap-further-info:
+
 Further information about cephadm bootstrap
 -------------------------------------------
 
@@ -478,3 +480,104 @@ have access to all hosts that you plan to add to the cluster.
       cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
 
 .. _cluster network: ../rados/configuration/network-config-ref#cluster-network
+
+.. _cephadm-bootstrap-custom-ssh-keys:
+
+Deployment with custom SSH keys
+-------------------------------
+
+Bootstrap allows users to create their own private/public SSH key pair
+rather than having cephadm generate them automatically.
+
+To use custom SSH keys, pass the ``--ssh-private-key`` and ``--ssh-public-key``
+fields to bootstrap. Both parameters require a path to the file where the
+keys are stored:
+
+.. prompt:: bash #
+
+  cephadm bootstrap --mon-ip <ip-addr> --ssh-private-key <private-key-filepath> --ssh-public-key <public-key-filepath>
+
+This setup allows users to use a key that has already been distributed to hosts
+the user wants in the cluster before bootstrap.
+
+.. note:: In order for cephadm to connect to other hosts you'd like to add
+   to the cluster, make sure the public key of the key pair provided is set up
+   as an authorized key for the ssh user being used, typically root. If you'd
+   like more info on using a non-root user as the ssh user, see :ref:`cephadm-bootstrap-further-info`
+
+.. _cephadm-bootstrap-ca-signed-keys:
+
+Deployment with CA signed SSH keys
+----------------------------------
+
+As an alternative to standard public key authentication, cephadm also supports
+deployment using CA signed keys. Before bootstrapping it's recommended to set up
+the CA public key as a trusted CA key on hosts you'd like to eventually add to
+the cluster. For example:
+
+.. prompt:: bash
+
+  # we will act as our own CA, therefore we'll need to make a CA key
+  [root@host1 ~]# ssh-keygen -t rsa -f ca-key -N ""
+
+  # make the ca key trusted on the host we've generated it on
+  # this requires adding in a line in our /etc/sshd_config
+  # to mark this key as trusted
+  [root@host1 ~]# cp ca-key.pub /etc/ssh
+  [root@host1 ~]# vi /etc/ssh/sshd_config
+  [root@host1 ~]# cat /etc/ssh/sshd_config | grep ca-key
+  TrustedUserCAKeys /etc/ssh/ca-key.pub
+  # now restart sshd so it picks up the config change
+  [root@host1 ~]# systemctl restart sshd
+
+  # now, on all other hosts we want in the cluster, also install the CA key
+  [root@host1 ~]# scp /etc/ssh/ca-key.pub host2:/etc/ssh/
+
+  # on other hosts, make the same changes to the sshd_config
+  [root@host2 ~]# vi /etc/ssh/sshd_config
+  [root@host2 ~]# cat /etc/ssh/sshd_config | grep ca-key
+  TrustedUserCAKeys /etc/ssh/ca-key.pub
+  # and restart sshd so it picks up the config change
+  [root@host2 ~]# systemctl restart sshd
+
+Once the CA key has been installed and marked as a trusted key, you are ready
+to use a private key/CA signed cert combination for SSH. Continuing with our
+current example, we will create a new key-pair for for host access and then
+sign it with our CA key
+
+.. prompt:: bash
+
+  # make a new key pair
+  [root@host1 ~]# ssh-keygen -t rsa -f cephadm-ssh-key -N ""
+  # sign the private key. This will create a new cephadm-ssh-key-cert.pub
+  # note here we're using user "root". If you'd like to use a non-root
+  # user the arguments to the -I and -n params would need to be adjusted
+  # Additionally, note the -V param indicates how long until the cert
+  # this creates will expire
+  [root@host1 ~]# ssh-keygen -s ca-key -I user_root -n root -V +52w cephadm-ssh-key
+  [root@host1 ~]# ls
+  ca-key  ca-key.pub  cephadm-ssh-key  cephadm-ssh-key-cert.pub  cephadm-ssh-key.pub
+
+  # verify our signed key is working. To do this, make sure the generated private
+  # key ("cephadm-ssh-key" in our example) and the newly signed cert are stored
+  # in the same directory. Then try to ssh using the private key
+  [root@host1 ~]# ssh -i cephadm-ssh-key host2
+
+Once you have your private key and corresponding CA signed cert and have tested
+SSH authentication using that key works, you can pass those keys to bootstrap
+in order to have cephadm use them for SSHing between cluster hosts
+
+.. prompt:: bash
+
+  [root@host1 ~]# cephadm bootstrap --mon-ip <ip-addr> --ssh-private-key cephadm-ssh-key --ssh-signed-cert cephadm-ssh-key-cert.pub
+
+Note that this setup does not require installing the corresponding public key
+from the private key passed to bootstrap on other nodes. In fact, cephadm will
+reject the ``--ssh-public-key`` argument when passed along with ``--ssh-signed-cert``.
+Not because having the public key breaks anything, but because it is not at all needed
+for this setup and it helps bootstrap differentiate if the user wants the CA signed
+keys setup or standard pubkey encryption. What this means is, SSH key rotation
+would simply be a matter of getting another key signed by the same CA and providing
+cephadm with the new private key and signed cert. No additional distribution of
+keys to cluster nodes is needed after the initial setup of the CA key as a trusted key,
+no matter how many new private key/signed cert pairs are rotated in.

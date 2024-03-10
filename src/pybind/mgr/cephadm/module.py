@@ -487,6 +487,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self._temp_files: List = []
             self.ssh_key: Optional[str] = None
             self.ssh_pub: Optional[str] = None
+            self.ssh_cert: Optional[str] = None
             self.use_agent = False
             self.agent_refresh_rate = 0
             self.agent_down_multiplier = 0.0
@@ -1018,11 +1019,24 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         return 0, "", ""
 
     @orchestrator._cli_write_command(
+        'cephadm set-signed-cert')
+    def _set_signed_cert(self, inbuf: Optional[str] = None) -> Tuple[int, str, str]:
+        """Set a signed cert if CA signed keys are being used (use -i <cert_filename>)"""
+        if inbuf is None or len(inbuf) == 0:
+            return -errno.EINVAL, "", "empty cert file provided"
+        old = self.ssh_cert
+        if inbuf == old:
+            return 0, "value unchanged", ""
+        self._validate_and_set_ssh_val('ssh_identity_cert', inbuf, old)
+        return 0, "", ""
+
+    @orchestrator._cli_write_command(
         'cephadm clear-key')
     def _clear_key(self) -> Tuple[int, str, str]:
         """Clear cluster SSH key"""
         self.set_store('ssh_identity_key', None)
         self.set_store('ssh_identity_pub', None)
+        self.set_store('ssh_identity_cert', None)
         self.ssh._reconfig_ssh()
         self.log.info('Cleared cluster SSH key')
         return 0, '', ''
@@ -1035,6 +1049,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return 0, self.ssh_pub, ''
         else:
             return -errno.ENOENT, '', 'No cluster SSH key defined'
+
+    @orchestrator._cli_read_command(
+        'cephadm get-signed-cert')
+    def _get_signed_cert(self) -> Tuple[int, str, str]:
+        """Show SSH signed cert for connecting to cluster hosts using CA signed keys"""
+        if self.ssh_cert:
+            return 0, self.ssh_cert, ''
+        else:
+            return -errno.ENOENT, '', 'No signed cert defined'
 
     @orchestrator._cli_read_command(
         'cephadm get-user')
