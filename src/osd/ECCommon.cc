@@ -514,12 +514,10 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
     ceph_assert(res.returned.size() == to_read.size());
     ceph_assert(res.errors.empty());
     for (auto &&read: to_read) {
-      auto bounds = make_pair(read.offset, read.size);
-      auto aligned = read_pipeline.sinfo.offset_len_to_stripe_bounds(bounds);
-      if (g_conf()->osd_ec_partial_reads
-          && (aligned.first != read.offset || aligned.second != read.size)) {
-        aligned = read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds);
-      }
+      const auto bounds = make_pair(read.offset, read.size);
+      const auto aligned = g_conf()->osd_ec_partial_reads \
+        ? read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds)
+        : read_pipeline.sinfo.offset_len_to_stripe_bounds(bounds);
       ceph_assert(res.returned.front().get<0>() == aligned.first);
       ceph_assert(res.returned.front().get<1>() == aligned.second);
       map<int, bufferlist> to_decode;
