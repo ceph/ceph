@@ -30,8 +30,8 @@ This table shows which version pairs are expected to work or not work together:
 
 .. note::
 
-  While not all podman versions have been actively tested against
-  all Ceph versions, there are no known issues with using podman
+  While not all Podman versions have been actively tested against
+  all Ceph versions, there are no known issues with using Podman
   version 3.0 or greater with Ceph Quincy and later releases.
 
 .. warning:: 

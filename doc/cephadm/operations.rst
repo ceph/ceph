@@ -397,15 +397,15 @@ You can disable this health warning by running the following command:
 
 Cluster Configuration Checks
 ----------------------------
-Cephadm periodically scans each of the hosts in the cluster in order
-to understand the state of the OS, disks, NICs etc. These facts can
-then be analysed for consistency across the hosts in the cluster to
+Cephadm periodically scans each host in the cluster in order
+to understand the state of the OS, disks, network interfacess etc. This information can
+then be analyzed for consistency across the hosts in the cluster to
 identify any configuration anomalies.
 
 Enabling Cluster Configuration Checks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The configuration checks are an **optional** feature, and are enabled
+These configuration checks are an **optional** feature, and are enabled
 by running the following command:
 
 .. prompt:: bash #
@@ -415,7 +415,7 @@ by running the following command:
 States Returned by Cluster Configuration Checks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The configuration checks are triggered after each host scan (1m). The
+Configuration checks are triggered after each host scan. The
 cephadm log entries will show the current state and outcome of the
 configuration checks as follows:
 
@@ -452,14 +452,14 @@ To list all the configuration checks and their current states, run the following
   # ceph cephadm config-check ls
 
     NAME             HEALTHCHECK                      STATUS   DESCRIPTION
-  kernel_security  CEPHADM_CHECK_KERNEL_LSM         enabled  checks SELINUX/Apparmor profiles are consistent across cluster hosts
-  os_subscription  CEPHADM_CHECK_SUBSCRIPTION       enabled  checks subscription states are consistent for all cluster hosts
-  public_network   CEPHADM_CHECK_PUBLIC_MEMBERSHIP  enabled  check that all hosts have a NIC on the Ceph public_network
+  kernel_security  CEPHADM_CHECK_KERNEL_LSM         enabled  check that SELINUX/Apparmor profiles are consistent across cluster hosts
+  os_subscription  CEPHADM_CHECK_SUBSCRIPTION       enabled  check that subscription states are consistent for all cluster hosts
+  public_network   CEPHADM_CHECK_PUBLIC_MEMBERSHIP  enabled  check that all hosts have a network interface on the Ceph public_network
   osd_mtu_size     CEPHADM_CHECK_MTU                enabled  check that OSD hosts share a common MTU setting
-  osd_linkspeed    CEPHADM_CHECK_LINKSPEED          enabled  check that OSD hosts share a common linkspeed
-  network_missing  CEPHADM_CHECK_NETWORK_MISSING    enabled  checks that the cluster/public networks defined exist on the Ceph hosts
-  ceph_release     CEPHADM_CHECK_CEPH_RELEASE       enabled  check for Ceph version consistency - ceph daemons should be on the same release (unless upgrade is active)
-  kernel_version   CEPHADM_CHECK_KERNEL_VERSION     enabled  checks that the MAJ.MIN of the kernel on Ceph hosts is consistent
+  osd_linkspeed    CEPHADM_CHECK_LINKSPEED          enabled  check that OSD hosts share a common network link speed
+  network_missing  CEPHADM_CHECK_NETWORK_MISSING    enabled  check that the cluster/public networks as defined exist on the Ceph hosts
+  ceph_release     CEPHADM_CHECK_CEPH_RELEASE       enabled  check for Ceph version consistency: all Ceph daemons should be the same release unless upgrade is in progress
+  kernel_version   CEPHADM_CHECK_KERNEL_VERSION     enabled  checks that the maj.min version of the kernel is consistent across Ceph hosts
 
 The name of each configuration check can be used to enable or disable a specific check by running a command of the following form:
 :
@@ -483,31 +483,31 @@ flagged as an anomaly and a healthcheck (WARNING) state raised.
 
 CEPHADM_CHECK_SUBSCRIPTION
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
-This check relates to the status of vendor subscription. This check is
-performed only for hosts using RHEL, but helps to confirm that all hosts are
+This check relates to the status of OS vendor subscription. This check is
+performed only for hosts using RHEL and helps to confirm that all hosts are
 covered by an active subscription, which ensures that patches and updates are
 available.
 
 CEPHADM_CHECK_PUBLIC_MEMBERSHIP
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-All members of the cluster should have NICs configured on at least one of the
+All members of the cluster should have a network interface configured on at least one of the
 public network subnets. Hosts that are not on the public network will rely on
 routing, which may affect performance.
 
 CEPHADM_CHECK_MTU
 ~~~~~~~~~~~~~~~~~
-The MTU of the NICs on OSDs can be a key factor in consistent performance. This
+The MTU of the network interfaces on OSD hosts can be a key factor in consistent performance. This
 check examines hosts that are running OSD services to ensure that the MTU is
-configured consistently within the cluster. This is determined by establishing
+configured consistently within the cluster. This is determined by determining
 the MTU setting that the majority of hosts is using. Any anomalies result in a
-Ceph health check.
+health check.
 
 CEPHADM_CHECK_LINKSPEED
 ~~~~~~~~~~~~~~~~~~~~~~~
-This check is similar to the MTU check. Linkspeed consistency is a factor in
-consistent cluster performance, just as the MTU of the NICs on the OSDs is.
-This check determines the linkspeed shared by the majority of OSD hosts, and a
-health check is run for any hosts that are set at a lower linkspeed rate.
+This check is similar to the MTU check. Link speed consistency is a factor in
+consistent cluster performance, as is the MTU of the OSD node network interfaces.
+This check determines the link speed shared by the majority of OSD hosts, and a
+health check is run for any hosts that are set at a lower link speed rate.
 
 CEPHADM_CHECK_NETWORK_MISSING
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -517,15 +517,14 @@ a health check is raised.
 
 CEPHADM_CHECK_CEPH_RELEASE
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
-Under normal operations, the Ceph cluster runs daemons under the same ceph
-release (that is, the Ceph cluster runs all daemons under (for example)
-Octopus).  This check determines the active release for each daemon, and
+Under normal operations, the Ceph cluster runs daemons that are of the same Ceph
+release (for example, Reef).  This check determines the active release for each daemon, and
 reports any anomalies as a healthcheck. *This check is bypassed if an upgrade
-process is active within the cluster.*
+is in process.*
 
 CEPHADM_CHECK_KERNEL_VERSION
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-The OS kernel version (maj.min) is checked for consistency across the hosts.
+The OS kernel version (maj.min) is checked for consistency across hosts.
 The kernel version of the majority of the hosts is used as the basis for
 identifying anomalies.
 
