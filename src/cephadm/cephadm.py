@@ -7295,7 +7295,8 @@ def command_list_networks(ctx):
 def command_ls(ctx):
     # type: (CephadmContext) -> None
     ls = list_daemons(ctx, detail=not ctx.no_detail,
-                      legacy_dir=ctx.legacy_dir)
+                      legacy_dir=ctx.legacy_dir,
+                      daemon_name=ctx.name)
     print(json.dumps(ls, indent=4))
 
 
@@ -7320,8 +7321,12 @@ def with_units_to_int(v: str) -> int:
     return int(float(v) * mult)
 
 
-def list_daemons(ctx, detail=True, legacy_dir=None):
-    # type: (CephadmContext, bool, Optional[str]) -> List[Dict[str, str]]
+def list_daemons(
+    ctx: CephadmContext,
+    detail: bool = True,
+    legacy_dir: Optional[str] = None,
+    daemon_name: Optional[str] = None,
+) -> List[Dict[str, str]]:
     host_version: Optional[str] = None
     ls = []
     container_path = ctx.container_engine.path
@@ -7390,6 +7395,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                 for j in os.listdir(os.path.join(data_dir, i)):
                     if '.' in j and os.path.isdir(os.path.join(data_dir, fsid, j)):
                         name = j
+                        if daemon_name and name != daemon_name:
+                            continue
                         (daemon_type, daemon_id) = j.split('.', 1)
                         unit_name = get_unit_name(fsid,
                                                   daemon_type,
@@ -10216,6 +10223,9 @@ def _get_parser():
         '--legacy-dir',
         default='/',
         help='base directory for legacy daemon data')
+    parser_ls.add_argument(
+        '--name', '-n',
+        help='Only get data for specific daemon. Format of daemon name: (type.id)')
 
     parser_list_networks = subparsers.add_parser(
         'list-networks', help='list IP networks')
