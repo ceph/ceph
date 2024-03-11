@@ -103,9 +103,10 @@
         </button>
         <div ngbDropdownMenu>
           <ng-container *ngFor="let column of columns">
-            <button ngbDropdownItem
-                    *ngIf="column.name !== ''"
-                    (click)="toggleColumn(column); false;">
+            <ng-container *ngIf="!column?.isInvisible">
+              <button ngbDropdownItem
+                      *ngIf="column.name !== ''"
+                      (click)="toggleColumn(column); false;">
               <div class="custom-control custom-checkbox py-0">
                 <input class="custom-control-input"
                        type="checkbox"
@@ -116,6 +117,7 @@
                        for="{{ column.prop }}{{ tableName }}">{{ column.name }}</label>
               </div>
             </button>
+            </ng-container>
           </ng-container>
         </div>
       </div>
