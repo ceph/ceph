@@ -1047,6 +1047,7 @@ struct ReplicaActiveOp
 
   using reactions = mpl::list<
       sc::custom_reaction<StartReplica>,
+      sc::custom_reaction<ReplicaRelease>,
       sc::transition<FullReset, ReplicaIdle>>;
 
   /**
@@ -1060,6 +1061,15 @@ struct ReplicaActiveOp
    * - and we should log this unexpected scenario clearly in the cluster log.
    */
   sc::result react(const StartReplica&);
+
+  /**
+   * a 'release' was send by the primary. Possible scenario: 'no-scrub'
+   * abort. Our two-steps reaction:
+   * - we exit the 'ActiveOp' state, and
+   * - we make sure the 'release' is remembered, to be handled by the state
+   *   we would transition into (which should be ReplicaReserved).
+   */
+  sc::result react(const ReplicaRelease&);
 };
 
 /*

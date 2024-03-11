@@ -886,7 +886,7 @@ void ReplicaActive::clear_remote_reservation(bool warn_if_no_reservation)
   dout(10) << fmt::format(
 		  "ReplicaActive::clear_remote_reservation(): "
 		  "pending_reservation_nonce {}, reservation_granted {}",
-		  reservation_granted, pending_reservation_nonce)
+		  pending_reservation_nonce, reservation_granted)
 	   << dendl;
   if (reservation_granted || pending_reservation_nonce) {
     m_osds->get_scrub_reserver().cancel_reservation(pg_id);
@@ -1148,6 +1148,14 @@ sc::result ReplicaActiveOp::react(const StartReplica&)
   post_event(ReplicaPushesUpd{});
   return transit<ReplicaActiveOp>();
 }
+
+sc::result ReplicaActiveOp::react(const ReplicaRelease& ev)
+{
+  dout(10) << "ReplicaActiveOp::react(const ReplicaRelease&)" << dendl;
+  post_event(ev);
+  return transit<sc::shallow_history<ReplicaReserved>>();
+}
+
 
 // ------------- ReplicaActive/ReplicaWaitUpdates ------------------------
 
