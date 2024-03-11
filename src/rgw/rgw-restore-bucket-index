@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# version 2024-03-04
+# version 2024-03-11
 
 # rgw-restore-bucket-index is an EXPERIMENTAL tool to use in case
 # bucket index entries for objects in the bucket are somehow lost. It
@@ -65,7 +65,7 @@ EOF
 # cleans all temporary files
 clean() {
   if [ "$clean_temps" == 1 ] ;then
-    rm -f $bkt_entry $temp_file_list
+    rm -f $bkt_entry $temp_file_list \
        $zone_info $olh_info_enc $olh_info_json
   fi
 }
@@ -272,7 +272,7 @@ handle_versioned() {
 		test_temp_space
 		rados -p $pool stat2 $obj --object-locator "$loc"
 	    done | # output of stat2, which includes mtime
-	    sort -k 3 | # stat2 but sorted by mtime earlier to later
+	    sort -T $temp_dir -k 3 | # stat2 but sorted by mtime earlier to later
 	    grep -v -e "$filter_out_last_instance" | # remove the final instance in case it's not last
 
 	    # sed 1) removes pool and marker, 2) removes indicator of
