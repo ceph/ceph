@@ -3999,11 +3999,22 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_localize_read
-  type: bool
+- name: rgw_replica_read_policy
+  type: str
   level: advanced
-  desc: Enable localization of read operations
-  default: false
+  desc: read policy for sending read requests to OSD
+  fmt_desc : |
+    Policy for determining which OSD will receive read operations.
+    If set to ``default``, each PG's primary OSD will always be used
+    for read operations. If set to ``balance``, read operations will
+    be sent to a randomly selected OSD within the replica set. If set
+    to ``localize``, read operations will be sent to the closest OSD
+    as determined by the CRUSH map.
+  default: default
   services:
   - rgw
+  enum_values:
+  - default
+  - balance
+  - localize
   with_legacy: true

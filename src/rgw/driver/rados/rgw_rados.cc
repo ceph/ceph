@@ -7141,13 +7141,16 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end,
 
   state.cur_ioctx->locator_set_key(read_obj.loc);
 
-  // set localise read flag if the option is set
-  int localise_read_flag = 0;
-  if (store->ctx()->_conf.get_val<bool>("rgw_localize_read")) {
-    localise_read_flag = librados::OPERATION_LOCALIZE_READS;
+  // set read flag if the option is set
+  int read_flag = 0;
+  auto read_policy = store->ctx()->_conf.get_val<std::string>("rgw_replica_read_policy");
+  if (read_policy == "localize") {
+    read_flag = librados::OPERATION_LOCALIZE_READS;
+  } else if (read_policy == "balance") {
+    read_policy = librados::OPERATION_BALANCE_READS;
   }
 
-  r = state.cur_ioctx->operate(read_obj.oid, &op, NULL, localise_read_flag);
+  r = state.cur_ioctx->operate(read_obj.oid, &op, NULL, read_flag);
   ldpp_dout(dpp, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r < 0) {
@@ -8626,11 +8629,14 @@ int RGWRados::raw_obj_stat(const DoutPrefixProvider *dpp,
     op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
   }
   bufferlist outbl;
-  int localise_read_flag = 0;
-  if (cct->_conf->rgw_localize_read) {
-    localise_read_flag = librados::OPERATION_LOCALIZE_READS;
+  int read_flag = 0;
+  auto read_policy = cct->_conf->rgw_replica_read_policy;
+  if (read_policy == "localize") {
+    read_flag = librados::OPERATION_LOCALIZE_READS;
+  } else if (read_policy == "balance") {
+    read_policy = librados::OPERATION_BALANCE_READS;
   }
-  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &op, &outbl, y, localise_read_flag);
+  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &op, &outbl, y, read_flag);
 
   if (epoch) {
     *epoch = ref.ioctx.get_last_version();
