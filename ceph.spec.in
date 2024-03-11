@@ -141,7 +141,7 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
-%{!?gts_prefix: %global gts_prefix gcc-toolset-11}
+%{!?gts_version: %global gts_version 11}
 
 %if ! 0%{?suse_version}
 # use multi-threaded xz compression: xz level 7 using ncpus threads
@@ -230,9 +230,9 @@ BuildRequires:	gcc-c++ >= 11
 BuildRequires: gcc11-c++
 %endif
 %if 0%{?rhel} == 8
-BuildRequires:	%{gts_prefix}-gcc-c++
-BuildRequires:	%{gts_prefix}-build
-BuildRequires:	%{gts_prefix}-libatomic-devel
+BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++
+BuildRequires:	gcc-toolset-%{gts_version}-build
+BuildRequires:	gcc-toolset-%{gts_version}-libatomic-devel
 %endif
 %if 0%{?fedora} || 0%{?rhel} == 9 || 0%{?openEuler}
 BuildRequires:  libatomic
@@ -359,10 +359,10 @@ BuildRequires:  libasan
 BuildRequires:  protobuf-devel
 BuildRequires:  protobuf-compiler
 %if 0%{?rhel} == 8
-BuildRequires:  %{gts_prefix}-annobin
-BuildRequires:  %{gts_prefix}-annobin-plugin-gcc
-BuildRequires:  %{gts_prefix}-libubsan-devel
-BuildRequires:  %{gts_prefix}-libasan-devel
+BuildRequires:  gcc-toolset-%{gts_version}-annobin
+BuildRequires:  gcc-toolset-%{gts_version}-annobin-plugin-gcc
+BuildRequires:  gcc-toolset-%{gts_version}-libubsan-devel
+BuildRequires:  gcc-toolset-%{gts_version}-libasan-devel
 %endif
 %endif
 #################################################################################
