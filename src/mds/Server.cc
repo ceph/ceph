@@ -7936,16 +7936,6 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
     ceph_assert(referent_ino);
     pi.inode->add_referent_ino(referent_ino);
     dout(20) << "handle_peer_link_prep " << "referent_inodes " << std::hex << pi.inode->get_referent_inodes() << " referent ino added " << referent_ino << dendl;
-
-    CDentry *target_pdn = targeti->get_projected_parent_dn();
-    SnapRealm *target_realm = target_pdn->get_dir()->inode->find_snaprealm();
-    if (!target_realm->get_subvolume_ino() && !targeti->is_projected_snaprealm_global()) {
-      sr_t *newsnap = targeti->project_snaprealm();
-      targeti->mark_snaprealm_global(newsnap);
-      targeti->record_snaprealm_parent_dentry(newsnap, target_realm, target_pdn, true);
-      adjust_realm = true;
-      realm_projected = true;
-    }
   } else {
     inc = false;
     pi.inode->nlink--;
