@@ -16,6 +16,7 @@
 #include "librbd/io/ObjectDispatcherInterface.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/io/Utils.h"
+#include "librbd/asio/Utils.h"
 #include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -30,6 +31,7 @@ using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 using librbd::util::get_image_ctx;
+using librbd::util::data_object_name;
 
 template <typename I>
 ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
@@ -137,7 +139,8 @@ void ObjectCopyRequest<I>::send_read() {
     merge_write_ops();
     compute_zero_ops();
 
-    send_update_object_map();
+//    send_update_object_map();
+    copyup();
     return;
   }
 
@@ -833,6 +836,192 @@ void ObjectCopyRequest<I>::compute_dst_object_may_exist() {
 
   ldout(m_cct, 20) << "dst_object_may_exist=" << m_dst_object_may_exist
                    << dendl;
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::copyup() {
+  // When performing a deep copy with incremental snapshots, it is possible
+  // that not all data will be synced correctly. A write to a non-existent
+  // object in a cloned image triggers a copyup which updates the older synced
+  // snaps with the parent data. As this snapshot was already processed, the changes
+  // are not copied again and the parent data will not be synced, causing data
+  // corruption.
+  // For cloned images, we now trigger a copyup on the object and write the parent
+  // data to the object before writing the new clone image data.
+  
+  if ((m_dst_image_ctx->parent != nullptr) &&
+      (m_src_snap_id_start != 0 && m_src_image_ctx->parent != nullptr)) {
+
+    ldout(m_cct, 20) << dendl;
+    auto io_context = m_dst_image_ctx->get_data_io_context();
+    uint64_t raw_overlap;
+    auto area = io::ImageArea::DATA;
+    std::shared_lock image_locker{m_dst_image_ctx->image_lock};	
+  //NITHYA: This is an image (not object) level check for the image data 
+  // that overlaps with the child.
+    int r = m_dst_image_ctx->get_parent_overlap(
+	  io_context->get_read_snap(), &raw_overlap);
+  if (r < 0) {
+    // NOTE: it's possible for a snapshot to be deleted while we are
+    // still reading from it
+    image_locker.unlock();
+    lderr(m_cct) << "failed to get parent overlap: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+  if (raw_overlap == 0) {
+  // TODO
+  //  return false;
+  }
+
+//NITHYA : convert object extents to image extents. parent_extents are Image extents.
+  std::tie(m_parent_extents, area) = io::util::object_to_area_extents(
+      m_dst_image_ctx, m_dst_object_number, {{0, m_dst_image_ctx->layout.object_size}});
+
+  uint64_t object_overlap = m_dst_image_ctx->prune_parent_extents(
+      m_parent_extents, m_image_area, raw_overlap, false);
+
+  if (object_overlap == 0) {
+  // TODO
+  image_locker.unlock();
+  //  return false;
+  }
+    m_read_extents.push_back({0, m_dst_image_ctx->layout.object_size});
+/*
+    auto on_finish = create_context_callback<
+       ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_copyup>(this);
+*/
+    ldout(m_cct, 20) << "NITHYA: m_read_extents : " << m_read_extents << dendl;
+
+
+  auto comp = io::AioCompletion::create_and_start<
+	ObjectCopyRequest<I>,
+	&ObjectCopyRequest<I>::handle_copyup>(
+	this, librbd::util::get_image_ctx(m_dst_image_ctx->parent), io::AIO_TYPE_READ);
+
+  ldout(m_cct, 20) << "completion=" << comp
+                 << " image_extents=" << m_image_extents
+                 << " area=" << m_image_area << dendl;
+  auto req = io::ImageDispatchSpec::create_read(
+    *m_dst_image_ctx->parent, io::IMAGE_DISPATCH_LAYER_INTERNAL_START, comp,
+    std::move(m_parent_extents), m_image_area,
+    io::ReadResult{&m_copyup_extent_map, &m_copyup_data},
+    m_dst_image_ctx->parent->get_data_io_context(), 0, 0, {});
+  req->send();
+/*
+    io::util::read_parent(m_dst_image_ctx, m_dst_object_number, &m_read_extents,
+                 CEPH_NOSNAP, {}, on_finish);
+*/
+    return;
+  } else {
+    send_update_object_map();
+    return;
+  }
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::handle_copyup(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    lderr(m_cct) << "failed to read parent for destination object: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
+    return;
+  }
+  ldout(m_cct, 20) << "NITHYA: m_read_extents : " << m_read_extents << dendl;
+
+  io::Extents image_extent_map;
+  image_extent_map.swap(m_copyup_extent_map);
+  m_copyup_extent_map.reserve(image_extent_map.size());
+
+  // convert the image-extent extent map to object-extents
+  for (auto [image_offset, image_length] : image_extent_map) {
+    striper::LightweightObjectExtents object_extents;
+    io::util::area_to_object_extents(m_dst_image_ctx, image_offset, image_length,
+                                 m_image_area, 0, &object_extents);
+    for (auto& object_extent : object_extents) {
+      m_copyup_extent_map.emplace_back(
+        object_extent.offset, object_extent.length);
+    }
+  }
+
+  ldout(m_cct, 20) << "image_extents=" << image_extent_map << ", "
+                 << "object_extents=" << m_copyup_extent_map << dendl;
+
+
+  io::SnapshotSparseBufferlist snapshot_sparse_bufferlist;
+  auto& sparse_bufferlist = snapshot_sparse_bufferlist[0];
+  uint64_t buffer_offset = 0;
+  for (auto [object_offset, object_length] : m_copyup_extent_map) {
+    bufferlist sub_bl;
+    sub_bl.substr_of(m_copyup_data, buffer_offset, object_length);
+    buffer_offset += object_length;
+
+    sparse_bufferlist.insert(
+      object_offset, object_length,
+      {io::SPARSE_EXTENT_STATE_DATA, object_length, std::move(sub_bl)});
+  }
+
+  // Let dispatch layers have a chance to process the data
+  auto ret = m_dst_image_ctx->io_object_dispatcher->prepare_copyup(
+    m_dst_object_number, &snapshot_sparse_bufferlist);
+  if (ret < 0) {
+    //return ret;
+  }
+
+  // Convert sparse extents back to extent map
+  m_copyup_data.clear();
+  m_copyup_extent_map.clear();
+  m_copyup_extent_map.reserve(sparse_bufferlist.ext_count());
+  for (auto& extent : sparse_bufferlist) {
+    auto& sbe = extent.get_val();
+    if (sbe.state == io::SPARSE_EXTENT_STATE_DATA) {
+      m_copyup_extent_map.emplace_back(extent.get_off(), extent.get_len());
+      m_copyup_data.append(sbe.bl);
+    }   
+  }
+
+  //send_update_object_map();
+  copyup2();
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::copyup2() {
+
+  neorados::WriteOp op;
+  if (m_dst_image_ctx->enable_sparse_copyup) {
+    cls_client::sparse_copyup(&op, m_copyup_extent_map, m_copyup_data);
+  } else {
+    // convert the sparse read back into a standard (thick) read
+    Striper::StripedReadResult destriper;
+    destriper.add_partial_sparse_result(
+      m_cct, std::move(m_copyup_data), m_copyup_extent_map, 0,
+      {{0, m_dst_image_ctx->layout.object_size}});
+
+    bufferlist thick_bl;
+    destriper.assemble_result(m_cct, thick_bl, false);
+    cls_client::copyup(&op, thick_bl);
+  }
+  auto io_context = m_dst_image_ctx->get_data_io_context();
+  auto copyup_io_context = *io_context;
+  copyup_io_context.set_write_snap_context({});
+  auto object = neorados::Object{data_object_name(m_dst_image_ctx, m_dst_object_number)};
+  m_dst_image_ctx->rados_api.execute(
+      object, copyup_io_context, std::move(op),
+      asio::util::get_callback_adapter(
+      [this](int r) { handle_copyup2(r); }), nullptr,
+      nullptr);
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::handle_copyup2(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+  if (r < 0) {
+    finish(r);
+    return;
+  }
+  send_update_object_map();
 }
 
 } // namespace deep_copy
