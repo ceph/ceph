@@ -23,20 +23,20 @@ Preparation
 #. Make sure that the ``cephadm`` command line tool is available on each host
    in the existing cluster.  See :ref:`get-cephadm` to learn how.
 
-#. Prepare each host for use by ``cephadm`` by running this command:
+#. Prepare each host for use by ``cephadm`` by running this command on that host:
 
    .. prompt:: bash #
 
       cephadm prepare-host
 
 #. Choose a version of Ceph to use for the conversion. This procedure will work
-   with any release of Ceph that is Octopus (15.2.z) or later, inclusive.  The
+   with any release of Ceph that is Octopus (15.2.z) or later.  The
    latest stable release of Ceph is the default. You might be upgrading from an
    earlier Ceph release at the same time that you're performing this
-   conversion; if you are upgrading from an earlier release, make sure to
+   conversion.  If you are upgrading from an earlier release, make sure to
    follow any upgrade-related instructions for that release.
 
-   Pass the image to cephadm with the following command:
+   Pass the Ceph container image to cephadm with the following command:
 
    .. prompt:: bash #
 
@@ -51,25 +51,27 @@ Preparation
 
       cephadm ls
 
-   Before starting the conversion process, ``cephadm ls`` shows all existing
-   daemons to have a style of ``legacy``. As the adoption process progresses,
-   adopted daemons will appear with a style of ``cephadm:v1``.
+   Before starting the conversion process, ``cephadm ls`` reports all existing
+   daemons with the style ``legacy``. As the adoption process progresses,
+   adopted daemons will appear with the style ``cephadm:v1``.
 
 
 Adoption process
 ----------------
 
-#. Make sure that the ceph configuration has been migrated to use the cluster
-   config database.  If the ``/etc/ceph/ceph.conf`` is identical on each host,
-   then the following command can be run on one single host and will affect all
-   hosts:
+#. Make sure that the ceph configuration has been migrated to use the cluster's
+   central config database.  If ``/etc/ceph/ceph.conf`` is identical on all
+   hosts, then the following command can be run on one host and will take
+   effect for all hosts:
 
    .. prompt:: bash #
 
       ceph config assimilate-conf -i /etc/ceph/ceph.conf
 
    If there are configuration variations between hosts, you will need to repeat
-   this command on each host. During this adoption process, view the cluster's
+   this command on each host, taking care that if there are conflicting option
+   settings across hosts, the values from the last host will be used. During this
+   adoption process, view the cluster's central
    configuration to confirm that it is complete by running the following
    command:
 
@@ -77,36 +79,36 @@ Adoption process
 
       ceph config dump
 
-#. Adopt each monitor:
+#. Adopt each Monitor:
 
    .. prompt:: bash #
 
       cephadm adopt --style legacy --name mon.<hostname>
 
-   Each legacy monitor should stop, quickly restart as a cephadm
+   Each legacy Monitor will stop, quickly restart as a cephadm
    container, and rejoin the quorum.
 
-#. Adopt each manager:
+#. Adopt each Manager:
 
    .. prompt:: bash #
 
       cephadm adopt --style legacy --name mgr.<hostname>
 
-#. Enable cephadm:
+#. Enable cephadm orchestration:
 
    .. prompt:: bash #
 
       ceph mgr module enable cephadm
       ceph orch set backend cephadm
 
-#. Generate an SSH key:
+#. Generate an SSH key for cephadm:
 
    .. prompt:: bash #
 
       ceph cephadm generate-key
       ceph cephadm get-pub-key > ~/ceph.pub
 
-#. Install the cluster SSH key on each host in the cluster:
+#. Install the cephadm SSH key on each host in the cluster:
 
    .. prompt:: bash #
 
@@ -119,9 +121,10 @@ Adoption process
      SSH keys.
 
    .. note::
-     It is also possible to have cephadm use a non-root user to SSH 
+     It is also possible to arrange for cephadm to use a non-root user to SSH 
      into cluster hosts. This user needs to have passwordless sudo access.
-     Use ``ceph cephadm set-user <user>`` and copy the SSH key to that user.
+     Use ``ceph cephadm set-user <user>`` and copy the SSH key to that user's
+     home directory on each host.
      See :ref:`cephadm-ssh-user`
 
 #. Tell cephadm which hosts to manage:
@@ -130,10 +133,10 @@ Adoption process
 
       ceph orch host add <hostname> [ip-address]
 
-   This will perform a ``cephadm check-host`` on each host before adding it;
-   this check ensures that the host is functioning properly. The IP address
-   argument is recommended; if not provided, then the host name will be resolved
-   via DNS.
+   This will run ``cephadm check-host`` on each host before adding it.
+   This check ensures that the host is functioning properly. The IP address
+   argument is recommended. If the address is not provided, then the host name
+   will be resolved via DNS.
 
 #. Verify that the adopted monitor and manager daemons are visible:
 
@@ -154,8 +157,8 @@ Adoption process
       cephadm adopt --style legacy --name osd.1
       cephadm adopt --style legacy --name osd.2
 
-#. Redeploy MDS daemons by telling cephadm how many daemons to run for
-   each file system. List file systems by name with the command ``ceph fs
+#. Redeploy CephFS MDS daemons (if deployed) by telling cephadm how many daemons to run for
+   each file system. List CephFS file systems by name with the command ``ceph fs
    ls``. Run the following command on the master nodes to redeploy the MDS
    daemons:
 
@@ -190,19 +193,19 @@ Adoption process
       systemctl stop ceph-mds.target
       rm -rf /var/lib/ceph/mds/ceph-*
 
-#. Redeploy RGW daemons. Cephadm manages RGW daemons by zone. For each
-   zone, deploy new RGW daemons with cephadm:
+#. Redeploy Ceph Object Gateway RGW daemons if deployed. Cephadm manages RGW
+   daemons by zone. For each zone, deploy new RGW daemons with cephadm:
 
    .. prompt:: bash #
 
       ceph orch apply rgw <svc_id> [--realm=<realm>] [--zone=<zone>] [--port=<port>] [--ssl] [--placement=<placement>]
 
    where *<placement>* can be a simple daemon count, or a list of
-   specific hosts (see :ref:`orchestrator-cli-placement-spec`), and the
+   specific hosts (see :ref:`orchestrator-cli-placement-spec`). The
    zone and realm arguments are needed only for a multisite setup.
 
    After the daemons have started and you have confirmed that they are
-   functioning, stop and remove the old, legacy daemons:
+   functioning, stop and remove the legacy daemons:
 
    .. prompt:: bash #
 
