@@ -10,6 +10,7 @@ tasks:
     objects: 1024
     size: 16384
     localize_reads: true
+    max_attr_len: 8192
     op_weights:
       read: 100
       write: 100

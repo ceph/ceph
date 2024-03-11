@@ -9,6 +9,7 @@ tasks:
     max_in_flight: 64
     objects: 1024
     size: 16384
+    max_attr_len: 8192
     op_weights:
       read: 100
       write: 100

@@ -175,7 +175,8 @@ def task(ctx, config):
         '--size', str(object_size),
         '--min-stride-size', str(config.get('min_stride_size', object_size // 10)),
         '--max-stride-size', str(config.get('max_stride_size', object_size // 5)),
-        '--max-seconds', str(config.get('max_seconds', 0))
+        '--max-seconds', str(config.get('max_seconds', 0)),
+        '--max-attr-len', str(config.get('max_attr_len', 20000))
         ])
 
     weights = {}

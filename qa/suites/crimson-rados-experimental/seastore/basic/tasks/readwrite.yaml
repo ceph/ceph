@@ -11,6 +11,7 @@ tasks:
     clients: [client.0]
     ops: 4000
     objects: 500
+    max_attr_len: 8192
     op_weights:
       read: 45
       write: 45
