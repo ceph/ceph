@@ -215,6 +215,7 @@ public:
 		   bool enable_dedup,
 		   std::string chunk_algo,
 		   std::string chunk_size,
+		   size_t max_attr_len,
 		   const char *id = 0) :
     pool_obj_cont(),
     current_snap(0),
@@ -226,7 +227,7 @@ public:
     rados_id(id), initialized(false),
     max_size(max_size), 
     min_stride_size(min_stride_size), max_stride_size(max_stride_size),
-    attr_gen(2000, 20000),
+    attr_gen(2000, max_attr_len),
     no_omap(no_omap),
     no_sparse(no_sparse),
     pool_snaps(pool_snaps),
