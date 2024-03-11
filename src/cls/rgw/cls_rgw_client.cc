@@ -36,7 +36,7 @@ int CLSRGWConcurrentIO::operator()() {
   std::map<int, std::string> retry_objs;
   while (manager.wait_for_completions(valid_ret_code(), &num_completions, &r,
 				      need_multiple_rounds() ? &completed_objs : nullptr,
-				      !need_multiple_rounds() ? &retry_objs : nullptr)) {
+				      need_retries() ? &retry_objs : nullptr)) {
     if (r >= 0 && ret >= 0) {
       for (; num_completions && iter != objs_container.end(); --num_completions, ++iter) {
 	int issue_ret = issue_op(iter->first, iter->second);
@@ -56,7 +56,7 @@ int CLSRGWConcurrentIO::operator()() {
 	// the container
 	reset_container(completed_objs);
 	iter = objs_container.begin();
-      } else if (! need_multiple_rounds() && !retry_objs.empty()) {
+      } else if (need_retries() && !retry_objs.empty()) {
 	reset_container(retry_objs);
 	iter = objs_container.begin();
       }
@@ -150,6 +150,10 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
   for (; iter != completions.end(); ++iter) {
     int r = iter->second->get_return_value();
 
+    if (r == RGWBIAdvanceAndRetryError) {
+      r = 0;
+    }
+
     // see if we may need to copy completions or retries
     if (completed_objs || retry_objs) {
       auto liter = completion_objs.find(iter->first);
@@ -159,7 +163,6 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
 	}
 
 	if (r == RGWBIAdvanceAndRetryError) {
-	  r = 0;
 	  if (retry_objs) {
 	    (*retry_objs)[liter->second.shard_id] = liter->second.oid;
 	  }

@@ -1791,6 +1791,7 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id, const DoutPr
  * placed here.
  * is_truncated: if number of objects in the bucket is bigger than
  * max, then truncated.
+ * requires_nonempty_result: if false, may return no results with is_truncated=true
  */
 int RGWRados::Bucket::List::list_objects_ordered(
   const DoutPrefixProvider *dpp,
@@ -1798,7 +1799,8 @@ int RGWRados::Bucket::List::list_objects_ordered(
   std::vector<rgw_bucket_dir_entry> *result,
   std::map<std::string, bool> *common_prefixes,
   bool *is_truncated,
-  optional_yield y)
+  optional_yield y,
+  bool requires_nonempty_result)
 {
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
@@ -1855,15 +1857,6 @@ int RGWRados::Bucket::List::list_objects_ordered(
   for (uint16_t attempt = 1; /* empty */; ++attempt) {
     ldpp_dout(dpp, 20) << __func__ <<
       ": starting attempt " << attempt << dendl;
-
-    if (attempt > 1 && !(prev_marker < cur_marker)) {
-      // we've failed to make forward progress
-      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
-	" marker failed to make forward progress; attempt=" << attempt <<
-	", prev_marker=" << prev_marker <<
-	", cur_marker=" << cur_marker << dendl;
-      break;
-    }
     prev_marker = cur_marker;
 
     ent_map_t ent_map;
@@ -1883,9 +1876,15 @@ int RGWRados::Bucket::List::list_objects_ordered(
 					   &cls_filtered,
 					   &cur_marker,
                                            y,
-					   params.force_check_filter);
+					   params.force_check_filter,
+                                           requires_nonempty_result && count == 0);
     if (r < 0) {
       return r;
+    }
+    
+    if (ent_map.empty()) {
+      next_marker = cur_marker;
+      break;
     }
 
     for (auto eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
@@ -2112,6 +2111,10 @@ done:
  * Even though there are key differences with the ordered counterpart,
  * the parameters are the same to maintain some compatability.
  *
+ * Attempts to return max entries if sufficient entries are available. If
+ * excessive iteration is required (due to filtering), may return fewer
+ * than max_p.
+ *
  * max: maximum number of results to return
  * bucket: bucket to list contents of
  * prefix: only return results that match this prefix
@@ -2123,13 +2126,15 @@ done:
  *                  is maintained for compatibility
  * is_truncated: if number of objects in the bucket is bigger than max, then
  *               truncated.
+ * requires_nonempty_result: if false, may return zero entries when is_truncated=true
  */
 int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp,
                                                    int64_t max_p,
 						   std::vector<rgw_bucket_dir_entry>* result,
 						   std::map<std::string, bool>* common_prefixes,
 						   bool* is_truncated,
-                                                   optional_yield y)
+                                                   optional_yield y,
+                                                   const bool requires_nonempty_result)
 {
   RGWRados *store = target->get_store();
   int shard_id = target->get_shard_id();
@@ -2167,8 +2172,9 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
   rgw_obj_key prefix_obj(params.prefix);
   prefix_obj.set_ns(params.ns);
   std::string cur_prefix = prefix_obj.get_index_key_name();
+  bool excessive_iteration = false;
 
-  while (truncated && count <= max) {
+  while (truncated && count <= max && !excessive_iteration) {
     std::vector<rgw_bucket_dir_entry> ent_list;
     ent_list.reserve(read_ahead);
 
@@ -2183,12 +2189,21 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
 					     ent_list,
 					     &truncated,
 					     &cur_marker,
-                                             y);
+                                             y,
+                                             {},
+                                             requires_nonempty_result);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	" cls_bucket_list_unordered returned " << r << " for " <<
 	target->get_bucket_info().bucket << dendl;
       return r;
+    }
+    excessive_iteration = ent_list.size() < read_ahead && truncated;
+    if (excessive_iteration && result->size() == 0) {
+      *is_truncated = true;
+      params.marker.set(cur_marker);
+      next_marker.set(cur_marker);
+      return 0;
     }
 
     // NB: while regions of ent_list will be sorted, we have no
@@ -9424,7 +9439,8 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 				      bool* cls_filtered,
 				      rgw_obj_index_key* last_entry,
                                       optional_yield y,
-				      RGWBucketListNameFilter force_check_filter)
+				      RGWBucketListNameFilter force_check_filter,
+                                      const bool requires_nonempty_result)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
 
@@ -9499,20 +9515,12 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   auto& ioctx = index_pool;
   std::map<int, rgw_cls_list_ret> shard_list_results;
   cls_rgw_obj_key start_after_key(start_after.name, start_after.instance);
-  r = CLSRGWIssueBucketList(ioctx, start_after_key, prefix, delimiter,
-			    num_entries_per_shard,
-			    list_versions, shard_oids, shard_list_results,
-			    cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << __func__ <<
-      ": CLSRGWIssueBucketList for " << bucket_info.bucket <<
-      " failed" << dendl;
-    return r;
-  }
+
+  *is_truncated = false;
 
   // to manage the iterators through each shard's list results
   struct ShardTracker {
-    const size_t shard_idx;
+    const int shard_idx;
     rgw_cls_list_ret& result;
     const std::string& oid_name;
     RGWRados::ent_map_t::iterator cursor;
@@ -9520,7 +9528,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 
     // manages an iterator through a shard and provides other
     // accessors
-    ShardTracker(size_t _shard_idx,
+    ShardTracker(int _shard_idx,
 		 rgw_cls_list_ret& _result,
 		 const std::string& _oid_name):
       shard_idx(_shard_idx),
@@ -9545,63 +9553,124 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       // as x.advance().at_end()
       return *this;
     }
+    inline const cls_rgw_obj_key& marker() const {
+      return result.marker;
+    }
     inline bool at_end() const {
       return cursor == end;
     }
   }; // ShardTracker
 
+  std::map<int, ShardTracker> results_trackers;
+
   // add the next unique candidate, or return false if we reach the end
   auto next_candidate = [] (CephContext *cct, ShardTracker& t,
-                            std::multimap<std::string, size_t>& candidates,
-                            size_t tracker_idx) {
+                            std::multimap<std::string, int>& candidates,
+                            int shard_id) {
     if (!t.at_end()) {
-      candidates.emplace(t.entry_name(), tracker_idx);
+      candidates.emplace(t.entry_name(), shard_id);
+    } else if (t.is_truncated()) {
+      candidates.emplace(t.marker().name, shard_id);
     }
-    return;
   };
 
-  // one tracker per shard requested (may not be all shards)
-  std::vector<ShardTracker> results_trackers;
-  results_trackers.reserve(shard_list_results.size());
-  for (auto& r : shard_list_results) {
-    results_trackers.emplace_back(r.first, r.second, shard_oids[r.first]);
-
-    // if any *one* shard's result is truncated, the entire result is
-    // truncated
-    *is_truncated = *is_truncated || r.second.is_truncated;
-
-    // unless *all* are shards are cls_filtered, the entire result is
-    // not filtered
-    *cls_filtered = *cls_filtered && r.second.cls_filtered;
-  }
-
   // create a map to track the next candidate entry from ShardTracker
-  // (key=candidate, value=index into results_trackers); as we consume
+  // (key=candidate, value=shard_id); as we consume
   // entries from shards, we replace them with the next entries in the
   // shards until we run out
-  std::multimap<std::string, size_t> candidates;
-  size_t tracker_idx = 0;
-  std::vector<size_t> vidx;
-  vidx.reserve(shard_list_results.size());
-  for (auto& t : results_trackers) {
-    // it's important that the values in the map refer to the index
-    // into the results_trackers vector, which may not be the same
-    // as the shard number (i.e., when not all shards are requested)
-    next_candidate(cct, t, candidates, tracker_idx);
-    ++tracker_idx;
+  std::multimap<std::string, int> candidates;
+
+  auto fetch_entries = [&](std::map<int, std::string> &shards_to_fetch) {
+    int r = CLSRGWIssueBucketList(ioctx, start_after_key, prefix, delimiter,
+                                  num_entries_per_shard,
+                                  list_versions, shards_to_fetch, shard_list_results,
+                                  cct->_conf->rgw_bucket_index_max_aio, false)();
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << __func__ <<
+        ": CLSRGWIssueBucketList for " << bucket_info.bucket <<
+        " failed" << dendl;
+      return r;
+    }
+    // one tracker per shard requested (may not be all shards)
+    for (auto& [shard_id, oid] : shards_to_fetch) {
+      rgw_cls_list_ret& ret = shard_list_results[shard_id];
+      ldpp_dout(dpp, 0) << __func__ <<
+        ": shard " << shard_id << " size: " << ret.dir.m.size() << " truncated: " << ret.is_truncated << dendl;
+      
+      results_trackers.erase(shard_id);
+      results_trackers.emplace(
+        std::piecewise_construct,
+        std::forward_as_tuple(shard_id),
+        std::forward_as_tuple(shard_id, ret, shard_oids[shard_id])
+      );
+  
+      // unless *all* are shards are cls_filtered, the entire result is
+      // not filtered
+      *cls_filtered = *cls_filtered && ret.cls_filtered;
+
+      next_candidate(cct, results_trackers.at(shard_id), candidates, shard_id);
+    }
+    return r;
+  };
+  
+  r = fetch_entries(shard_oids);
+  if (r < 0) {
+    return r;
   }
 
-  rgw_bucket_dir_entry*
-    last_entry_visited = nullptr; // to set last_entry (marker)
+  std::vector<int> vidx;
+  vidx.reserve(shard_list_results.size());
+
+  const rgw_obj_index_key* marker = nullptr; // to set last_entry (marker)
   std::map<std::string, bufferlist> updates;
   uint32_t count = 0;
   while (count < num_entries && !candidates.empty()) {
     r = 0;
     // select the next entry in lexical order (first key in map);
-    // again tracker_idx is not necessarily shard number, but is index
-    // into results_trackers vector
-    tracker_idx = candidates.begin()->second;
-    auto& tracker = results_trackers.at(tracker_idx);
+    if (count == 0 && requires_nonempty_result) {
+      std::map<int, std::string> shards_to_fetch;
+      int shard_id = candidates.begin()->second;
+      while(candidates.begin() != candidates.end()) {
+        if (!results_trackers.at(shard_id).at_end()) {
+          break;
+        }
+        shards_to_fetch.emplace(shard_id, shard_oids[shard_id]);
+        candidates.erase(candidates.begin());
+        shard_id = int(candidates.begin()->second);
+      }
+      if (!shards_to_fetch.empty()) {
+        // In cases where shards' results are truncated but contain zero entries due
+        // to excessive iteration in the cls code, and the associated continuation marker
+        // sorts before entries from other shards, and the requires_nonempty_result arg
+        // is true, we must loop and try listing entries from those shards again until either:
+        // 
+        // 1) these shards return listable entries that sort before those from other shards
+        // 2) the new continuation marker from these shards no longer sorts before other
+        //    shards that did return valid/listable entries
+        //
+        // this ensures that we do the least extra iteration to find at least one entry
+        // to return
+        r = fetch_entries(shards_to_fetch);
+        if (r < 0) {
+          return r;
+        }
+        continue;
+      }
+    }
+    int shard_id = candidates.begin()->second;
+    auto& tracker = results_trackers.at(shard_id);
+    if (tracker.at_end()) {
+      // This only happens if the CLS code returned an RGWBIAdvanceAndRetryError 
+      // due to excessive iteration. In that case we return what we have
+      // and avoid attempting further excessive iteration at this level.
+      marker = &tracker.marker();
+      *is_truncated = true;
+      ldpp_dout(dpp, 10) << __func__ <<
+	": stopped accumulating results at count=" << count <<
+	", marker=\"" << marker << "\"" <<
+	", due to excessive iteration on shard=" << shard_id << dendl;
+      break;
+    }
 
     const std::string& name = tracker.entry_name();
     rgw_bucket_dir_entry& dirent = tracker.dir_entry();
@@ -9645,7 +9714,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 	dirent_key << dendl;
 
       auto [it, inserted] = m.insert_or_assign(name, std::move(dirent));
-      last_entry_visited = &it->second;
+      marker = &it->second.key;
       if (inserted) {
 	++count;
       } else {
@@ -9656,12 +9725,11 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
     } else {
       ldpp_dout(dpp, 10) << __func__ << ": skipping " <<
 	dirent.key.name << "[" << dirent.key.instance << "]" << dendl;
-      last_entry_visited = &tracker.dir_entry();
+      marker = &tracker.dir_entry().key;
     }
 
     // refresh the candidates map
     vidx.clear();
-    bool need_to_stop = false;
     auto range = candidates.equal_range(name);
     for (auto i = range.first; i != range.second; ++i) {
       vidx.push_back(i->second);
@@ -9671,21 +9739,6 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       auto& tracker_match = results_trackers.at(idx);
       tracker_match.advance();
       next_candidate(cct, tracker_match, candidates, idx);
-      if (tracker_match.at_end() && tracker_match.is_truncated()) {
-        need_to_stop = true;
-        break;
-      }
-    }
-    if (need_to_stop) {
-      // once we exhaust one shard that is truncated, we need to stop,
-      // as we cannot be certain that one of the next entries needs to
-      // come from that shard; S3 and swift protocols allow returning
-      // fewer than what was requested
-      ldpp_dout(dpp, 10) << __func__ <<
-	": stopped accumulating results at count=" << count <<
-	", dirent=\"" << dirent_key <<
-	"\", because its shard is truncated and exhausted" << dendl;
-      break;
     }
   } // while we haven't provided requested # of result entries
 
@@ -9705,13 +9758,14 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
     }
   } // updates loop
 
-  // determine truncation by checking if all the returned entries are
-  // consumed or not
-  *is_truncated = false;
-  for (const auto& t : results_trackers) {
-    if (!t.at_end() || t.is_truncated()) {
-      *is_truncated = true;
-      break;
+  if (!*is_truncated) {
+    // determine truncation by checking if all the returned entries are
+    // consumed or not
+    for (const auto& [_, t] : results_trackers) {
+      if (!t.at_end() || t.is_truncated()) {
+        *is_truncated = true;
+        break;
+      }
     }
   }
 
@@ -9725,8 +9779,8 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       count << ", which is truncated" << dendl;
   }
 
-  if (last_entry_visited != nullptr && last_entry) {
-    *last_entry = last_entry_visited->key;
+  if (marker != nullptr && last_entry) {
+    *last_entry = *marker;
     ldpp_dout(dpp, 20) << __func__ <<
       ": returning, last_entry=" << *last_entry << dendl;
   } else {
@@ -9755,7 +9809,6 @@ static int parse_index_hash_source(const std::string& oid_wo_ns, std::string *in
   return 0;
 }
 
-
 int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
                                         RGWBucketInfo& bucket_info,
                                         const rgw::bucket_index_layout_generation& idx_layout,
@@ -9768,7 +9821,8 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 					bool *is_truncated,
 					rgw_obj_index_key *last_entry,
                                         optional_yield y,
-					RGWBucketListNameFilter force_check_filter) {
+					RGWBucketListNameFilter force_check_filter,
+                                        const bool requires_nonempty_result) {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
 
   ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": " << bucket_info.bucket <<
@@ -9860,7 +9914,22 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 			   num_entries,
                            list_versions, &result);
     r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
-    if (r < 0) {
+    if (r == RGWBIAdvanceAndRetryError) {
+      if (!requires_nonempty_result || ent_list.size() > 0) {
+        if (last_entry) {
+          *last_entry = result.marker;
+        }
+        *is_truncated = true;
+        return 0;
+      } else {
+        marker = result.marker;
+        ldpp_dout(dpp, 1) << "WARN: " << __func__ <<
+	  ": RGWBIAdvanceAndRetryError, excessive iteration for" <<
+          "  bucket=" << bucket_info.bucket <<
+          ", current_count=" << ent_list.size() << dendl;
+        continue;
+      }
+    } else if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	": error in rgw_rados_operate (bucket list op), r=" << r << dendl;
       return r;

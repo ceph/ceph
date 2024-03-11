@@ -377,11 +377,10 @@ public:
   }
 
   int fetch(const DoutPrefixProvider *dpp) {
-    int ret = bucket->list(dpp, list_params, 1000, list_results, null_yield);
+    int ret = bucket->list(dpp, list_params, 1000, list_results, null_yield, false);
     if (ret < 0) {
       return ret;
     }
-
     obj_iter = list_results.objs.begin();
 
     return 0;
@@ -394,7 +393,7 @@ public:
   bool get_obj(const DoutPrefixProvider *dpp, rgw_bucket_dir_entry **obj,
 	       std::function<void(void)> fetch_barrier
 	       = []() { /* nada */}) {
-    if (obj_iter == list_results.objs.end()) {
+    while (obj_iter == list_results.objs.end()) {
       if (!list_results.is_truncated) {
         delay();
         return false;
