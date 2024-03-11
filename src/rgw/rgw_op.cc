@@ -2240,11 +2240,11 @@ void RGWGetObj::execute(optional_yield y)
   read_op->params.lastmod = &lastmod;
 
   op_ret = read_op->prepare(s->yield, this);
-  if (op_ret < 0)
-    goto done_err;
   version_id = s->object->get_instance();
   s->obj_size = s->object->get_obj_size();
   attrs = s->object->get_attrs();
+  if (op_ret < 0)
+    goto done_err;
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {

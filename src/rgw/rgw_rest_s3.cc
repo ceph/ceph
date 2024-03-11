@@ -563,6 +563,20 @@ done:
   }
 
   if (op_ret == -ERR_NOT_MODIFIED) {
+      dump_last_modified(s, lastmod);
+
+      auto iter = attrs.find(RGW_ATTR_ETAG);
+      if (iter != attrs.end())
+        dump_etag(s, iter->second.to_str());
+
+      iter = attrs.find(RGW_ATTR_CACHE_CONTROL);
+      if (iter != attrs.end())
+        dump_header(s, rgw_to_http_attrs[RGW_ATTR_CACHE_CONTROL], iter->second);
+
+      iter = attrs.find(RGW_ATTR_EXPIRES);
+      if (iter != attrs.end())
+        dump_header(s, rgw_to_http_attrs[RGW_ATTR_EXPIRES], iter->second);
+
       end_header(s, this);
   } else {
       if (!content_type)
