@@ -229,9 +229,9 @@ public:
     const utime_t start = ceph_clock_now();
     utime_t next_report;
     const uint32_t report_period;
-    size_t total_bytes = 0;
+    size_t total_bytes = 0; // Accessed in the worker threads under fingerprint_lock
     const size_t memory_threshold;
-    FpMap<std::string, dup_count_t> fp_map;
+    FpMap<std::string, dup_count_t> fp_map; // Accessed in the worker threads under fingerprint_lock
   };
 
   struct SampleDedupGlobal {
