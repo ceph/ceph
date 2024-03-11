@@ -106,7 +106,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
       std::string oid = build_index(block->cacheObj.bucketName, block->cacheObj.objName, block->blockID, block->size);
 
       if (this->policyDriver->get_cache_policy()->exist_key(build_index(block->cacheObj.bucketName, block->cacheObj.objName, block->blockID, block->size))) { /* Local copy */
-	policyDriver->get_cache_policy()->update(env->dpp, oid, 0, bl.length(), "", y);
+	policyDriver->get_cache_policy()->update(env->dpp, oid, 0, bl.length(), "", false, time(NULL), user, y);
         return 0;
       } else {
 	if (this->policyDriver->get_cache_policy()->eviction(dpp, block->size, y) < 0)
@@ -134,7 +134,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	  if (dir->set(block, y) < 0)
 	    return -1;
 
-	  this->policyDriver->get_cache_policy()->update(dpp, oid, 0, bl.length(), "", y);
+	  this->policyDriver->get_cache_policy()->update(dpp, oid, 0, bl.length(), "", false, time(NULL), user, y);
 	  if (cacheDriver->put(dpp, oid, bl, bl.length(), attrs, y) < 0)
             return -1;
 	  return cacheDriver->set_attr(dpp, oid, "localWeight", std::to_string(age), y);
@@ -148,6 +148,8 @@ class LFUDAPolicyFixture : public ::testing::Test {
     rgw::d4n::BlockDirectory* dir;
     rgw::d4n::PolicyDriver* policyDriver;
     rgw::cache::RedisDriver* cacheDriver;
+    rgw::sal::D4NFilterDriver* driver = nullptr;
+    rgw_user user;
 
     net::io_context io;
     std::shared_ptr<connection> conn;

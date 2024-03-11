@@ -48,8 +48,7 @@ void redis_exec(std::shared_ptr<connection> conn,
   }
 }
 
-int LFUDAPolicy::init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context) {
-  cct = _cct;
+int LFUDAPolicy::init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver *_driver) {
   dir->init(cct);
   driver = _driver;
   int result = 0;
@@ -419,7 +418,7 @@ bool LFUDAPolicy::eraseObj(const DoutPrefixProvider* dpp, const std::string& key
 
 void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 {
-  const int interval = cct->_conf->rgw_d4n_cache_cleaning_interval;
+  const int interval = dpp->get_cct()->_conf->rgw_d4n_cache_cleaning_interval;
   while(true){
     ldpp_dout(dpp, 20) << __func__ << " : " << " Cache cleaning!" << dendl;
     std::string name = ""; 
@@ -492,7 +491,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
     	  if (fst >= lst){
       	    break;
     	  }
-    	  off_t cur_size = std::min<off_t>(fst + cct->_conf->rgw_max_chunk_size, lst);
+    	  off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
 	  off_t cur_len = cur_size - fst;
     	  std::string oid_in_cache = "D_" + prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
     	  std::string new_oid_in_cache = prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);

@@ -412,7 +412,7 @@ void SSDDriver::AsyncWriteRequest::libaio_write_cb(sigval sigval) {
 
     ldpp_dout(op.dpp, 20) << "INFO: AsyncWriteRequest::libaio_write_yield_cb: temp_key: " << op.temp_key << dendl;
 
-    ret = rename(old_path.c_str(), new_path.c_str());
+    ret = std::rename(old_path.c_str(), new_path.c_str());
     if (ret < 0) {
         ret = errno;
         ldpp_dout(op.dpp, 0) << "ERROR: put::rename: failed to rename file: " << ret << dendl;

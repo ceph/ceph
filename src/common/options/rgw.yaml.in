@@ -4122,6 +4122,20 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_d4n_cache_backend
+  type: str
+  level: advanced
+  desc: Cache backend for D4N filter 
+  long_desc: Defaults to the SSDDriver. The other option corresponds to the RedisDriver.
+  default: ssd
+  services:
+  - rgw
+  enum_values:
+  - ssd
+  - redis
+  #flags:
+  #- startup # Is this ok? -Sam
+  with_legacy: true
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced

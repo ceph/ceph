@@ -343,6 +343,28 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
   return 0;
 }
 
+int RedisDriver::rename(const DoutPrefixProvider* dpp, const::std::string& oldKey, const::std::string& newKey, optional_yield y) {
+  std::string location = partition_info.location;
+
+  try {
+    boost::system::error_code ec;
+    response<std::string> resp;
+    request req;
+    req.push("RENAME", location + oldKey, location + newKey);
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 10) << "RedisDriver::" << __func__ << "(): ERROR: " << e.what() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+} 
+
 int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;

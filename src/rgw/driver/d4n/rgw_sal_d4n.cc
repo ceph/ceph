@@ -36,15 +36,22 @@ static inline Object* nextObject(Object* t)
 D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next),
                                                                                        io_context(io_context) 
 {
+  const auto& config_cache = g_conf().get_val<std::string>("rgw_d4n_cache_backend");
   conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
 
   rgw::cache::Partition partition_info;
-  partition_info.location = g_conf()->rgw_d4n_l1_datacache_persistent_path;
   partition_info.name = "d4n";
   partition_info.type = "read-cache";
   partition_info.size = g_conf()->rgw_d4n_l1_datacache_size;
 
-  cacheDriver = new rgw::cache::SSDDriver(partition_info);
+  if (config_cache == "ssd") {
+    partition_info.location = g_conf()->rgw_d4n_l1_datacache_persistent_path;
+    cacheDriver = new rgw::cache::SSDDriver(partition_info);
+  } else if (config_cache == "redis")  {
+    partition_info.location = "RedisCache"; // Does this value make sense? -Sam
+    cacheDriver = new rgw::cache::RedisDriver(io_context, partition_info);
+  } 
+
   objDir = new rgw::d4n::ObjectDirectory(conn);
   blockDir = new rgw::d4n::BlockDirectory(conn);
   policyDriver = new rgw::d4n::PolicyDriver(conn, cacheDriver, "lfuda");
