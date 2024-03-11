@@ -589,7 +589,7 @@ class DaosObject : public StoreObject {
     DaosDeleteOp(DaosObject* _source);
 
     virtual int delete_obj(const DoutPrefixProvider* dpp,
-                           optional_yield y) override;
+                           optional_yield y, uint32_t flags) override;
   };
 
   ds3_obj_t* ds3o = nullptr;
@@ -606,7 +606,7 @@ class DaosObject : public StoreObject {
   virtual ~DaosObject();
 
   virtual int delete_object(const DoutPrefixProvider* dpp, optional_yield y,
-                            bool prevent_versioning = false) override;
+                            uint32_t flags) override;
   virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
                              Completions* aio, bool keep_index_consistent,
                              optional_yield y) override;
@@ -652,7 +652,8 @@ class DaosObject : public StoreObject {
                          const rgw_placement_rule& placement_rule,
                          const real_time& mtime, uint64_t olh_epoch,
                          const DoutPrefixProvider* dpp,
-                         optional_yield y) override;
+                         optional_yield y,
+                         uint32_t flags) override;
   virtual int transition_to_cloud(Bucket* bucket, rgw::sal::PlacementTier* tier,
                                   rgw_bucket_dir_entry& o,
                                   std::set<std::string>& cloud_targets,
@@ -763,7 +764,8 @@ class DaosAtomicWriter : public StoreWriter {
                        ceph::real_time delete_at, const char* if_match,
                        const char* if_nomatch, const std::string* user_data,
                        rgw_zone_set* zones_trace, bool* canceled,
-                       optional_yield y) override;
+                       optional_yield y,
+                       uint32_t flags) override;
 };
 
 class DaosMultipartWriter : public StoreWriter {
@@ -808,7 +810,8 @@ class DaosMultipartWriter : public StoreWriter {
                        ceph::real_time delete_at, const char* if_match,
                        const char* if_nomatch, const std::string* user_data,
                        rgw_zone_set* zones_trace, bool* canceled,
-                       optional_yield y) override;
+                       optional_yield y,
+                       uint32_t flags) override;
 
   const std::string& get_bucket_name();
 };

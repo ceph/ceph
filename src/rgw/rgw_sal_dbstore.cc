@@ -734,7 +734,8 @@ namespace rgw::sal {
       const real_time& mtime,
       uint64_t olh_epoch,
       const DoutPrefixProvider* dpp,
-      optional_yield y)
+      optional_yield y,
+      uint32_t flags)
   {
     DB::Object op_target(store->getDB(),
         get_bucket()->get_info(), get_obj());
@@ -815,7 +816,7 @@ namespace rgw::sal {
     parent_op(&op_target)
   { }
 
-  int DBObject::DBDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y)
+  int DBObject::DBDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
   {
     parent_op.params.bucket_owner = params.bucket_owner.get_id();
     parent_op.params.versioning_status = params.versioning_status;
@@ -842,7 +843,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, bool prevent_versioning)
+  int DBObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
   {
     DB::Object del_target(store->getDB(), bucket->get_info(), get_obj());
     DB::Object::Delete del_op(&del_target);
@@ -923,7 +924,7 @@ namespace rgw::sal {
     // Since the data objects are associated with meta obj till
     // MultipartUpload::Complete() is done, removing the metadata obj
     // should remove all the uploads so far.
-    ret = del_op->delete_obj(dpp, null_yield);
+    ret = del_op->delete_obj(dpp, null_yield, 0);
     if (ret < 0) {
       ldpp_dout(dpp, 20) << __func__ << ": del_op.delete_obj returned " <<
         ret << dendl;
@@ -1350,7 +1351,8 @@ namespace rgw::sal {
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       optional_yield y,
+                       uint32_t flags)
   {
     int ret = 0;
     /* XXX: same as AtomicWriter..consolidate code */
@@ -1508,7 +1510,8 @@ namespace rgw::sal {
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
                          rgw_zone_set *zones_trace, bool *canceled,
-                         optional_yield y)
+                         optional_yield y,
+                         uint32_t flags)
   {
     parent_op.meta.mtime = mtime;
     parent_op.meta.delete_at = delete_at;

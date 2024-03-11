@@ -567,7 +567,7 @@ protected:
         public:
           DBDeleteOp(DBObject* _source);
 
-          virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
+          virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
       };
 
       DBObject() = default;
@@ -586,7 +586,7 @@ protected:
 
       virtual int delete_object(const DoutPrefixProvider* dpp,
           optional_yield y,
-          bool prevent_versioning = false) override;
+          uint32_t flags) override;
       virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
           bool keep_index_consistent, optional_yield y) override;
       virtual int copy_object(User* user,
@@ -624,7 +624,8 @@ protected:
           const real_time& mtime,
           uint64_t olh_epoch,
           const DoutPrefixProvider* dpp,
-          optional_yield y) override;
+          optional_yield y,
+          uint32_t flags) override;
       virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
       virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
@@ -705,7 +706,8 @@ protected:
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
                          rgw_zone_set *zones_trace, bool *canceled,
-                         optional_yield y) override;
+                         optional_yield y,
+                         uint32_t flags) override;
   };
 
   class DBMultipartWriter : public StoreWriter {
@@ -753,7 +755,8 @@ public:
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) override;
+                       optional_yield y,
+                       uint32_t flags) override;
   };
 
   class DBStore : public StoreDriver {

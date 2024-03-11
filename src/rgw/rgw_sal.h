@@ -210,6 +210,9 @@ enum AttrsMod {
   ATTRSMOD_MERGE   = 2
 };
 
+static constexpr uint32_t FLAG_LOG_OP = 0x0001;
+static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
+
 // a simple streaming data processing abstraction
 /**
  * @brief A simple streaming data processing abstraction
@@ -243,7 +246,8 @@ class ObjectProcessor : public DataProcessor {
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) = 0;
+                       optional_yield y,
+                       uint32_t flags) = 0;
 };
 
 /** Base class for AIO completions */
@@ -947,7 +951,7 @@ class Object {
       virtual ~DeleteOp() = default;
 
       /** Delete the object */
-      virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+      virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) = 0;
     };
 
     Object() {}
@@ -956,7 +960,7 @@ class Object {
     /** Shortcut synchronous delete call for common deletes */
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y,
-			      bool prevent_versioning = false) = 0;
+			      uint32_t flags) = 0;
     /** Asynchronous delete call */
     virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
 			       bool keep_index_consistent, optional_yield y) = 0;
@@ -1025,7 +1029,8 @@ class Object {
 			   const real_time& mtime,
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider* dpp,
-			   optional_yield y) = 0;
+			   optional_yield y,
+                           uint32_t flags) = 0;
     /** Move an object to the cloud */
     virtual int transition_to_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
@@ -1436,7 +1441,8 @@ public:
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) = 0;
+                       optional_yield y,
+                       uint32_t flags) = 0;
 };
 
 

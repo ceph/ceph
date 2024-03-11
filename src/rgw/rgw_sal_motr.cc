@@ -1336,7 +1336,8 @@ int MotrObject::transition(Bucket* bucket,
     const real_time& mtime,
     uint64_t olh_epoch,
     const DoutPrefixProvider* dpp,
-    optional_yield y)
+    optional_yield y,
+    uint32_t flags)
 {
   return 0;
 }
@@ -1498,7 +1499,7 @@ MotrObject::MotrDeleteOp::MotrDeleteOp(MotrObject *_source) :
 // Delete::delete_obj() in rgw_rados.cc shows how rados backend process the
 // params.
 // 2. Delete an object when its versioning is turned on.
-int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y)
+int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
 {
   ldpp_dout(dpp, 20) << "delete " << source->get_key().get_oid() << " from " << source->get_bucket()->get_name() << dendl;
 
@@ -1542,13 +1543,13 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
   return 0;
 }
 
-int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, bool prevent_versioning)
+int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
 {
   MotrObject::MotrDeleteOp del_op(this);
   del_op.params.bucket_owner = bucket->get_info().owner;
   del_op.params.versioning_status = bucket->get_info().versioning_status();
 
-  return del_op.delete_obj(dpp, y);
+  return del_op.delete_obj(dpp, y, flags);
 }
 
 int MotrObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
@@ -2374,7 +2375,8 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       optional_yield y,
+                       uint32_t flags)
 {
   int rc = 0;
 
@@ -3031,7 +3033,8 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       optional_yield y,
+                       uint32_t flags)
 {
   // Should the dir entry(object metadata) be updated? For example
   // mtime.
