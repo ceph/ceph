@@ -664,6 +664,39 @@ def test_object_delete():
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
             check_bucket_eq(source_conn, target_conn, bucket)
 
+def test_multi_object_delete():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns)
+
+    objnames = [f'obj{i}' for i in range(1,50)]
+    content = 'asdasd'
+
+    # don't wait for meta sync just yet
+    for zone, bucket in zone_bucket:
+        create_objects(zone, bucket, objnames, content)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # check objects exist
+    for source_conn, bucket in zone_bucket:
+        for target_conn in zonegroup_conns.zones:
+            if source_conn.zone == target_conn.zone:
+                continue
+
+            zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
+            check_bucket_eq(source_conn, target_conn, bucket)
+
+    # check object removal
+    for source_conn, bucket in zone_bucket:
+        bucket.delete_keys(objnames)
+        for target_conn in zonegroup_conns.zones:
+            if source_conn.zone == target_conn.zone:
+                continue
+
+            zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
+            check_bucket_eq(source_conn, target_conn, bucket)
+
 def get_latest_object_version(key):
     for k in key.bucket.list_versions(key.name):
         if k.is_latest:
