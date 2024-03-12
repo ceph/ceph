@@ -97,6 +97,7 @@ public:
 int decode(
   const stripe_info_t &sinfo,
   ceph::ErasureCodeInterfaceRef &ec_impl,
+  const std::set<int> want_to_read,
   std::map<int, ceph::buffer::list> &to_decode,
   ceph::buffer::list *out);
 

@@ -463,7 +463,8 @@ struct RecoveryReadCompleter : ECCommon::ReadCompleter {
   void finish_single_request(
     const hobject_t &hoid,
     ECCommon::read_result_t &res,
-    list<ECCommon::ec_align_t>) override
+    list<ECCommon::ec_align_t>,
+    set<int> wanted_to_read) override
   {
     if (!(res.r == 0 && res.errors.empty())) {
       backend._failed_push(hoid, res);

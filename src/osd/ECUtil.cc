@@ -24,8 +24,10 @@ std::pair<uint64_t, uint64_t> ECUtil::stripe_info_t::aligned_offset_len_to_chunk
 int ECUtil::decode(
   const stripe_info_t &sinfo,
   ErasureCodeInterfaceRef &ec_impl,
+  const set<int> want_to_read,
   map<int, bufferlist> &to_decode,
-  bufferlist *out) {
+  bufferlist *out)
+{
   ceph_assert(to_decode.size());
 
   uint64_t total_data_size = to_decode.begin()->second.length();
@@ -51,8 +53,9 @@ int ECUtil::decode(
       chunks[j->first].substr_of(j->second, i, sinfo.get_chunk_size());
     }
     bufferlist bl;
-    int r = ec_impl->decode_concat(chunks, &bl);
+    int r = ec_impl->decode_concat(want_to_read, chunks, &bl);
     ceph_assert(r == 0);
+    ceph_assert(bl.length() % sinfo.get_chunk_size() == 0);
     if (!g_conf()->osd_ec_partial_reads) {
       ceph_assert(bl.length() == sinfo.get_stripe_width());
     }

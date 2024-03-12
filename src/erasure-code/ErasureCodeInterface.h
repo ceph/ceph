@@ -453,10 +453,17 @@ namespace ceph {
      *
      * Returns 0 on success.
      *
-     * @param [in] chunks map chunk indexes to chunk data
-     * @param [out] decoded concatenante of the data chunks
+     * @param [in] want_to_read mapped std::set of chunks caller wants
+     *				concatenated to `decoded`. This works as
+     *				selectors for `chunks`
+     * @param [in] chunks set of chunks with data available for decoding
+     * @param [out] decoded must be non-null, chunks specified in `want_to_read`
+     * 			    will be concatenated into `decoded` in index order
      * @return **0** on success or a negative errno on error.
      */
+    virtual int decode_concat(const std::set<int>& want_to_read,
+			      const std::map<int, bufferlist> &chunks,
+			      bufferlist *decoded) = 0;
     virtual int decode_concat(const std::map<int, bufferlist> &chunks,
 			      bufferlist *decoded) = 0;
 

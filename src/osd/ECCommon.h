@@ -285,7 +285,8 @@ struct ECCommon {
     virtual void finish_single_request(
       const hobject_t &hoid,
       read_result_t &res,
-      std::list<ECCommon::ec_align_t> to_read) = 0;
+      std::list<ECCommon::ec_align_t> to_read,
+      std::set<int> wanted_to_read) = 0;
 
     virtual void finish(int priority) && = 0;
 
