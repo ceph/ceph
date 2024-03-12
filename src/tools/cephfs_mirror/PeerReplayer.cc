@@ -1705,7 +1705,7 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
   return 0;
 }
 
-void PeerReplayer::sync_snaps(const std::string &dir_root,
+int PeerReplayer::sync_snaps(const std::string &dir_root,
                               std::unique_lock<ceph::mutex> &locker) {
   dout(20) << ": dir_root=" << dir_root << dendl;
   locker.unlock();
@@ -1716,12 +1716,10 @@ void PeerReplayer::sync_snaps(const std::string &dir_root,
   locker.lock();
   if (r < 0) {
     _inc_failed_count(dir_root);
-    if (m_perf_counters) {
-      m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
-    }
   } else {
     _reset_failed_count(dir_root);
   }
+  return r;
 }
 
 void PeerReplayer::run(SnapshotReplayerThread *replayer) {
@@ -1758,13 +1756,19 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
         dout(5) << ": picked dir_root=" << *dir_root << dendl;
         int r = register_directory(*dir_root, replayer);
         if (r == 0) {
-	  r = sync_perms(*dir_root);
-	  if (r < 0) {
-	    _inc_failed_count(*dir_root);
-	  } else {
-	    sync_snaps(*dir_root, locker);
-	  }
-	  unregister_directory(*dir_root);
+          r = sync_perms(*dir_root);
+          if (r == 0) {
+            r = sync_snaps(*dir_root, locker);
+            if (r < 0 && m_perf_counters) {
+              m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
+            }
+          } else {
+            _inc_failed_count(*dir_root);
+            if (m_perf_counters) {
+              m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snap_sync_failures);
+            }
+          }
+          unregister_directory(*dir_root);
         }
       }
 
