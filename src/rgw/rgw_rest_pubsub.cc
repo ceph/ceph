@@ -5,6 +5,7 @@
 #include <boost/tokenizer.hpp>
 #include <optional>
 #include <regex>
+#include "include/function2.hpp"
 #include "rgw_iam_policy.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_pubsub_push.h"
@@ -89,6 +90,14 @@ auto validate_topic_arn(const std::string& str, std::string& message)
     return boost::none;
   }
   return arn;
+}
+
+const std::string& get_account_or_tenant(const rgw_owner& owner)
+{
+  return std::visit(fu2::overload(
+      [] (const rgw_user& u) -> const std::string& { return u.tenant; },
+      [] (const rgw_account_id& a) -> const std::string& { return a; }
+      ), owner);
 }
 
 bool topic_has_endpoint_secret(const rgw_pubsub_topic& topic) {
@@ -265,7 +274,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     // the topic ARN will be sent in the reply
     topic_arn = rgw::ARN{rgw::Partition::aws, rgw::Service::sns,
         driver->get_zone()->get_zonegroup().get_name(),
-        s->user->get_tenant(), topic_name};
+        get_account_or_tenant(s->owner.id), topic_name};
     return 0;
   }
 
@@ -280,7 +289,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     }
 
     // try to load existing topic for owner and policy
-    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
     rgw_pubsub_topic result;
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret == -ENOENT) {
@@ -360,7 +369,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn.to_string(),
                            opaque_data, s->owner.id, policy_text, y);
   if (op_ret < 0) {
@@ -421,7 +430,7 @@ public:
 void RGWPSListTopicsOp::execute(optional_yield y) {
   const std::string start_token = s->info.args.get("NextToken");
 
-  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   constexpr int max_items = 100;
   op_ret = ps.get_topics(this, start_token, max_items, result, next_token, y);
   // if there are no topics it is not considered an error
@@ -472,7 +481,7 @@ class RGWPSGetTopicOp : public RGWOp {
     if (ret < 0) {
       return ret;
     }
-    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 4) << "failed to get topic '" << topic_name << "', ret=" << ret << dendl;
@@ -554,7 +563,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
     if (ret < 0) {
       return ret;
     }
-    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 4) << "failed to get topic '" << topic_name << "', ret=" << ret << dendl;
@@ -714,7 +723,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       return ret;
     }
 
-    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 4) << "failed to get topic '" << topic_name
@@ -796,7 +805,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn.to_string(),
                            opaque_data, topic_owner, policy_text, y);
   if (op_ret < 0) {
@@ -838,7 +847,7 @@ class RGWPSDeleteTopicOp : public RGWOp {
       return ret;
     }
 
-    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
     rgw_pubsub_topic result;
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret == -ENOENT) {
@@ -908,7 +917,7 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
     return;
   }
 
-  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   op_ret = ps.remove_topic(this, topic_name, y);
   if (op_ret < 0 && op_ret != -ENOENT) {
     ldpp_dout(this, 4) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
@@ -1096,7 +1105,7 @@ int RGWPSCreateNotifOp::init_processing(optional_yield y)
     return ret;
   }
 
-  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
 
   for (const auto& c : configurations.list) {
     const auto& notif_name = c.id;
@@ -1169,7 +1178,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     return execute_v2(y);
   }
 
-  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   const RGWPubSub::Bucket b(ps, s->bucket.get());
 
   if(configurations.list.empty()) {
@@ -1254,7 +1263,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
         << s->bucket << ", ret = " << op_ret << dendl;
     return;
   }
-  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   for (const auto& c : configurations.list) {
     const auto& notif_name = c.id;
 
@@ -1372,7 +1381,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     return execute_v2(y);
   }
 
-  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+  const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
   const RGWPubSub::Bucket b(ps, s->bucket.get());
 
   // get all topics on a bucket
@@ -1478,7 +1487,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
       driver->stat_topics_v1(s->bucket_tenant, y, this) == -ENOENT) {
     op_ret = get_bucket_notifications(this, bucket.get(), bucket_topics);
   } else {
-    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
+    const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
     const RGWPubSub::Bucket b(ps, bucket.get());
     op_ret = b.get_topics(this, bucket_topics, y);
   }
