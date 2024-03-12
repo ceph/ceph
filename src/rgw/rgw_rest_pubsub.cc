@@ -35,24 +35,26 @@ bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
 // make sure that endpoint is a valid URL
 // make sure that if user/password are passed inside URL, it is over secure connection
 // update rgw_pubsub_dest to indicate that a password is stored in the URL
-bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct, const RGWEnv& env) {
+bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct,
+                                         const RGWEnv& env, std::string& message)
+{
   if (dest.push_endpoint.empty()) {
-      return true;
+    return true;
   }
   std::string user;
   std::string password;
   if (!rgw::parse_url_userinfo(dest.push_endpoint, user, password)) {
-    ldout(cct, 1) << "endpoint validation error: malformed endpoint URL:" << dest.push_endpoint << dendl;
+    message = "Malformed URL for push-endpoint";
     return false;
   }
   // this should be verified inside parse_url()
   ceph_assert(user.empty() == password.empty());
   if (!user.empty()) {
-      dest.stored_secret = true;
-      if (!verify_transport_security(cct, env)) {
-        ldout(cct, 1) << "endpoint validation error: sending secrets over insecure transport" << dendl;
-        return false;
-      }
+    dest.stored_secret = true;
+    if (!verify_transport_security(cct, env)) {
+      message = "Topic contains secrets that must be transmitted over a secure transport";
+      return false;
+    }
   }
   return true;
 }
@@ -127,7 +129,7 @@ int verify_topic_owner_or_policy(req_state* const s,
                      s->user->get_tenant(), topic.name);
   if (!p || p->eval(s->env, *s->auth.identity, op, arn, princ_type) !=
                 rgw::IAM::Effect::Allow) {
-    ldout(s->cct, 1) << "topic policy failed validation, topic policy: " << p
+    ldout(s->cct, 4) << "topic policy failed validation, topic policy: " << p
                      << dendl;
     return -EACCES;
   }
@@ -160,7 +162,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     s->info.args.get_int("max_retries", reinterpret_cast<int *>(&dest.max_retries), rgw::notify::DEFAULT_GLOBAL_VALUE);
     s->info.args.get_int("retry_sleep_duration", reinterpret_cast<int *>(&dest.retry_sleep_duration), rgw::notify::DEFAULT_GLOBAL_VALUE);
 
-    if (!validate_and_update_endpoint_secret(dest, s->cct, *(s->info.env))) {
+    if (!validate_and_update_endpoint_secret(dest, s->cct, *s->info.env, s->err.message)) {
       return -EINVAL;
     }
     // Store topic Policy.
@@ -229,11 +231,11 @@ class RGWPSCreateTopicOp : public RGWOp {
         return 0;
       }
 
-      ldpp_dout(this, 1) << "no permission to modify topic '" << topic_name
+      ldpp_dout(this, 4) << "no permission to modify topic '" << topic_name
                          << "', topic already exist." << dendl;
       return -EACCES;
     }
-    ldpp_dout(this, 1) << "failed to read topic '" << topic_name
+    ldpp_dout(this, 4) << "failed to read topic '" << topic_name
                        << "', with error:" << ret << dendl;
     return ret;
    }
@@ -277,7 +279,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->user->get_id(), &bl_post_body, nullptr, s->info, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1)
+      ldpp_dout(this, 4)
           << "CreateTopic forward_request_to_master returned ret = " << op_ret
           << dendl;
       return;
@@ -296,7 +298,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            s->owner.id, policy_text, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 4) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
   }
   ldpp_dout(this, 20) << "successfully created topic '" << topic_name << "'" << dendl;
@@ -363,7 +365,7 @@ void RGWPSListTopicsOp::execute(optional_yield y) {
     return;
   }
   if (topics_has_endpoint_secret(result) && !verify_transport_security(s->cct, *(s->info.env))) {
-    ldpp_dout(this, 1) << "topics contain secrets and cannot be sent over insecure transport" << dendl;
+    s->err.message = "Topic contains secrets that must be transmitted over a secure transport";
     op_ret = -EPERM;
     return;
   }
@@ -607,7 +609,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
                            rgw::notify::DEFAULT_GLOBAL_VALUE);
     } else if (attribute_name == "push-endpoint") {
       dest.push_endpoint = s->info.args.get("AttributeValue");
-      if (!validate_and_update_endpoint_secret(dest, s->cct, *(s->info.env))) {
+      if (!validate_and_update_endpoint_secret(dest, s->cct, *s->info.env, s->err.message)) {
         return -EINVAL;
       }
     } else if (attribute_name == "Policy") {
@@ -638,10 +640,8 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
         return 0;
       }
-      ldpp_dout(this, 1)
-          << "SetTopicAttribute Action 'AttributeName' argument is "
-             "invalid: 'AttributeName' = "
-          << attribute_name << dendl;
+      s->err.message = fmt::format("Invalid value for AttributeName '{}'",
+                                   attribute_name);
       return -EINVAL;
     }
     return 0;
@@ -660,7 +660,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
     const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
-      ldpp_dout(this, 1) << "failed to get topic '" << topic_name
+      ldpp_dout(this, 4) << "failed to get topic '" << topic_name
                          << "', ret=" << ret << dendl;
       return ret;
     }
@@ -943,15 +943,15 @@ class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
     bool exists;
     const auto no_value = s->info.args.get("notification", &exists);
     if (!exists) {
-      ldpp_dout(this, 1) << "missing required param 'notification'" << dendl;
+      s->err.message = "Missing required parameter 'notification'";
       return -EINVAL;
     } 
     if (no_value.length() > 0) {
-      ldpp_dout(this, 1) << "param 'notification' should not have any value" << dendl;
+      s->err.message = "Parameter 'notification' should not have any value";
       return -EINVAL;
     }
     if (s->bucket_name.empty()) {
-      ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
+      s->err.message = "Missing required bucket name";
       return -EINVAL;
     }
     return 0;
@@ -963,30 +963,30 @@ class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
     std::tie(r, data) = read_all_input(s, max_size, false);
 
     if (r < 0) {
-      ldpp_dout(this, 1) << "failed to read XML payload" << dendl;
+      ldpp_dout(this, 4) << "failed to read XML payload" << dendl;
       return r;
     }
     if (data.length() == 0) {
-      ldpp_dout(this, 1) << "XML payload missing" << dendl;
+      ldpp_dout(this, 4) << "XML payload missing" << dendl;
       return -EINVAL;
     }
 
     RGWXMLDecoder::XMLParser parser;
 
     if (!parser.init()){
-      ldpp_dout(this, 1) << "failed to initialize XML parser" << dendl;
+      ldpp_dout(this, 4) << "failed to initialize XML parser" << dendl;
       return -EINVAL;
     }
     if (!parser.parse(data.c_str(), data.length(), 1)) {
-      ldpp_dout(this, 1) << "failed to parse XML payload" << dendl;
+      ldpp_dout(this, 4) << "failed to parse XML payload" << dendl;
       return -ERR_MALFORMED_XML;
     }
     try {
       // NotificationConfigurations is mandatory
       // It can be empty which means we delete all the notifications
       RGWXMLDecoder::decode_xml("NotificationConfiguration", configurations, &parser, true);
-    } catch (RGWXMLDecoder::err& err) {
-      ldpp_dout(this, 1) << "failed to parse XML payload. error: " << err << dendl;
+    } catch (const RGWXMLDecoder::err& err) {
+      s->err.message = err.what();
       return -ERR_MALFORMED_XML;
     }
     return 0;
@@ -1025,7 +1025,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->user->get_id(), &data, nullptr, s->info, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "CreateBucketNotification "
+      ldpp_dout(this, 4) << "CreateBucketNotification "
                             "forward_request_to_master returned ret = "
                          << op_ret << dendl;
       return;
@@ -1036,7 +1036,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
   op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
                                &bucket, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get bucket '" << 
+    ldpp_dout(this, 4) << "failed to get bucket '" <<
       (s->bucket_tenant.empty() ? s->bucket_name : s->bucket_tenant + ":" + s->bucket_name) << 
       "' info, ret = " << op_ret << dendl;
     return;
@@ -1050,7 +1050,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     rgw_pubsub_bucket_topics bucket_topics;
     op_ret = b.get_topics(this, bucket_topics, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
+      ldpp_dout(this, 4) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
       return;
     }
 
@@ -1061,25 +1061,25 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
   for (const auto& c : configurations.list) {
     const auto& notif_name = c.id;
     if (notif_name.empty()) {
-      ldpp_dout(this, 1) << "missing notification id" << dendl;
+      s->err.message = "Missing required element Id";
       op_ret = -EINVAL;
       return;
     }
     if (c.topic_arn.empty()) {
-      ldpp_dout(this, 1) << "missing topic ARN in notification: '" << notif_name << "'" << dendl;
+      s->err.message = "Missing required element Topic";
       op_ret = -EINVAL;
       return;
     }
 
     const auto arn = rgw::ARN::parse(c.topic_arn);
     if (!arn || arn->resource.empty()) {
-      ldpp_dout(this, 1) << "topic ARN has invalid format: '" << c.topic_arn << "' in notification: '" << notif_name << "'" << dendl;
+      s->err.message = "Invalid Topic ARN";
       op_ret = -EINVAL;
       return;
     }
 
     if (std::find(c.events.begin(), c.events.end(), rgw::notify::UnknownEvent) != c.events.end()) {
-      ldpp_dout(this, 1) << "unknown event type in notification: '" << notif_name << "'" << dendl;
+      s->err.message = "Unknown Event type: " + notif_name;
       op_ret = -EINVAL;
       return;
     }
@@ -1090,14 +1090,14 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     rgw_pubsub_topic topic_info;
     op_ret = ps.get_topic(this, topic_name, topic_info, y, nullptr);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
+      ldpp_dout(this, 4) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
       return;
     }
     op_ret = verify_topic_owner_or_policy(
         s, topic_info, driver->get_zone()->get_zonegroup().get_name(),
         rgw::IAM::snsPublish);
     if (op_ret != 0) {
-      ldpp_dout(this, 1) << "no permission to create notification for topic '"
+      ldpp_dout(this, 4) << "no permission to create notification for topic '"
                          << topic_name << "'" << dendl;
       return;
     }
@@ -1189,30 +1189,26 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
   for (const auto& c : configurations.list) {
     const auto& notif_name = c.id;
     if (notif_name.empty()) {
-      ldpp_dout(this, 1) << "missing notification id" << dendl;
+      s->err.message = "Missing required element Id";
       op_ret = -EINVAL;
       return;
     }
     if (c.topic_arn.empty()) {
-      ldpp_dout(this, 1) << "missing topic ARN in notification: '" << notif_name
-                         << "'" << dendl;
+      s->err.message = "Missing required element Topic";
       op_ret = -EINVAL;
       return;
     }
 
     const auto arn = rgw::ARN::parse(c.topic_arn);
     if (!arn || arn->resource.empty()) {
-      ldpp_dout(this, 1) << "topic ARN has invalid format: '" << c.topic_arn
-                         << "' in notification: '" << notif_name << "'"
-                         << dendl;
+      s->err.message = "Invalid Topic ARN";
       op_ret = -EINVAL;
       return;
     }
 
     if (std::find(c.events.begin(), c.events.end(),
                   rgw::notify::UnknownEvent) != c.events.end()) {
-      ldpp_dout(this, 1) << "unknown event type in notification: '"
-                         << notif_name << "'" << dendl;
+      s->err.message = "Unknown Event type: " + notif_name;
       op_ret = -EINVAL;
       return;
     }
@@ -1222,7 +1218,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
       rgw_pubsub_topic topic_info;
       op_ret = ps.get_topic(this, topic_name, topic_info, y,nullptr);
       if (op_ret < 0) {
-        ldpp_dout(this, 1) << "failed to get topic '" << topic_name
+        ldpp_dout(this, 4) << "failed to get topic '" << topic_name
                            << "', ret=" << op_ret << dendl;
         return;
       }
@@ -1230,7 +1226,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
           s, topic_info, driver->get_zone()->get_zonegroup().get_name(),
           rgw::IAM::snsPublish);
       if (op_ret != 0) {
-        ldpp_dout(this, 1) << "failed to create notification for topic '"
+        ldpp_dout(this, 4) << "failed to create notification for topic '"
                            << topic_name << "' topic owned by other user"
                            << dendl;
         return;
@@ -1251,7 +1247,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
   attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
   op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1)
+    ldpp_dout(this, 4)
         << "Failed to store RGW_ATTR_BUCKET_NOTIFICATION on bucket="
         << s->bucket->get_name() << " returned err= " << op_ret << dendl;
     return;
@@ -1262,7 +1258,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
         rgw_make_bucket_entry_name(s->bucket->get_tenant(), s->bucket->get_name()),
         /*add_mapping=*/true, y, this);
     if (ret < 0) {
-      ldpp_dout(this, 1) << "Failed to remove topic mapping on bucket="
+      ldpp_dout(this, 4) << "Failed to remove topic mapping on bucket="
                          << s->bucket->get_name() << " ret= " << ret << dendl;
       // error should be reported ??
       // op_ret = ret;
@@ -1278,11 +1274,11 @@ class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
     bool exists;
     notif_name = s->info.args.get("notification", &exists);
     if (!exists) {
-      ldpp_dout(this, 1) << "missing required param 'notification'" << dendl;
+      s->err.message = "Missing required parameter 'notification'";
       return -EINVAL;
     } 
     if (s->bucket_name.empty()) {
-      ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
+      s->err.message = "Missing required bucket name";
       return -EINVAL;
     }
     return 0;
@@ -1317,7 +1313,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "DeleteBucketNotification "
+      ldpp_dout(this, 4) << "DeleteBucketNotification "
                             "forward_request_to_master returned error ret= "
                          << op_ret << dendl;
       return;
@@ -1331,7 +1327,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
   rgw_pubsub_bucket_topics bucket_topics;
   op_ret = b.get_topics(this, bucket_topics, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 4) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
     return;
   }
 
@@ -1370,7 +1366,7 @@ void RGWPSDeleteNotifOp::execute_v2(optional_yield y) {
     op_ret = rgw_forward_request_to_master(
         this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "DeleteBucketNotification "
+      ldpp_dout(this, 4) << "DeleteBucketNotification "
                             "forward_request_to_master returned error ret= "
                          << op_ret << dendl;
       return;
@@ -1378,7 +1374,7 @@ void RGWPSDeleteNotifOp::execute_v2(optional_yield y) {
   }
 
   if (const auto ret = driver->stat_topics_v1(s->bucket_tenant, y, this); ret != -ENOENT) {
-    ldpp_dout(this, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+    ldpp_dout(this, 4) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
       << ". please try again later" << dendl; 
     op_ret = -ERR_SERVICE_UNAVAILABLE;
     return;
@@ -1395,11 +1391,11 @@ class RGWPSListNotifsOp : public RGWOp {
     bool exists;
     notif_name = s->info.args.get("notification", &exists);
     if (!exists) {
-      ldpp_dout(this, 1) << "missing required param 'notification'" << dendl;
+      s->err.message = "Missing required parameter 'notification'";
       return -EINVAL;
     } 
     if (s->bucket_name.empty()) {
-      ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
+      s->err.message = "Missing required bucket name";
       return -EINVAL;
     }
     return 0;
@@ -1443,7 +1439,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
   op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
                                &bucket, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get bucket '" << 
+    ldpp_dout(this, 4) << "failed to get bucket '" <<
       (s->bucket_tenant.empty() ? s->bucket_name : s->bucket_tenant + ":" + s->bucket_name) << 
       "' info, ret = " << op_ret << dendl;
     return;
@@ -1460,7 +1456,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
     op_ret = b.get_topics(this, bucket_topics, y);
   }
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get list of topics from bucket '"
+    ldpp_dout(this, 4) << "failed to get list of topics from bucket '"
                        << s->bucket_name << "', ret=" << op_ret << dendl;
     return;
   }
@@ -1472,7 +1468,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
       return;
     }
     op_ret = -ENOENT;
-    ldpp_dout(this, 1) << "failed to get notification info for '" << notif_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 4) << "failed to get notification info for '" << notif_name << "', ret=" << op_ret << dendl;
     return;
   }
   // loop through all topics of the bucket
