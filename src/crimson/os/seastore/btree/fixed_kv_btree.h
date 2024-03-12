@@ -529,7 +529,7 @@ public:
           }
         } else if (child_node->is_pending()) {
           if (child_node->is_mutation_pending()) {
-            auto &prior = (child_node_t &)*child_node->prior_instance;
+            auto &prior = (child_node_t &)*child_node->get_prior_instance();
             assert(prior.is_valid());
             assert(prior.is_parent_valid());
             if (node->is_mutation_pending()) {
@@ -587,6 +587,13 @@ public:
                     i->get_val().pladdr.get_paddr(), nullptr)
                 : true);
             }
+          }
+        } else if (child == RESERVATION_PTR) {
+          if constexpr(
+            !std::is_base_of_v<typename internal_node_t::base_t,
+                               child_node_t>) {
+            assert(i->get_val().pladdr.is_paddr());
+            assert(i->get_val().pladdr.get_paddr() == P_ADDR_ZERO);
           }
         }
       } else {
@@ -1030,45 +1037,7 @@ public:
         fixed_kv_extent.get_user_hint(),
         // get target rewrite generation
         fixed_kv_extent.get_rewrite_generation());
-      fixed_kv_extent.get_bptr().copy_out(
-        0,
-        fixed_kv_extent.get_length(),
-        n_fixed_kv_extent->get_bptr().c_str());
-      n_fixed_kv_extent->set_modify_time(fixed_kv_extent.get_modify_time());
-      n_fixed_kv_extent->range = n_fixed_kv_extent->get_node_meta();
-
-      if (fixed_kv_extent.get_type() == internal_node_t::TYPE ||
-          leaf_node_t::do_has_children) {
-        if (!fixed_kv_extent.is_pending()) {
-          n_fixed_kv_extent->copy_sources.emplace(&fixed_kv_extent);
-          n_fixed_kv_extent->prior_instance = &fixed_kv_extent;
-        } else {
-          ceph_assert(fixed_kv_extent.is_mutation_pending());
-          n_fixed_kv_extent->copy_sources.emplace(
-            (typename internal_node_t::base_t*
-             )fixed_kv_extent.get_prior_instance().get());
-          n_fixed_kv_extent->children = std::move(fixed_kv_extent.children);
-          n_fixed_kv_extent->prior_instance = fixed_kv_extent.get_prior_instance();
-          n_fixed_kv_extent->adjust_ptracker_for_children();
-        }
-      }
-      
-      /* This is a bit underhanded.  Any relative addrs here must necessarily
-       * be record relative as we are rewriting a dirty extent.  Thus, we
-       * are using resolve_relative_addrs with a (likely negative) block
-       * relative offset to correct them to block-relative offsets adjusted
-       * for our new transaction location.
-       *
-       * Upon commit, these now block relative addresses will be interpretted
-       * against the real final address.
-       */
-      if (!n_fixed_kv_extent->get_paddr().is_absolute()) {
-	// backend_type_t::SEGMENTED
-	assert(n_fixed_kv_extent->get_paddr().is_record_relative());
-	n_fixed_kv_extent->resolve_relative_addrs(
-	  make_record_relative_paddr(0).block_relative_to(
-	    n_fixed_kv_extent->get_paddr()));
-      } // else: backend_type_t::RANDOM_BLOCK
+      n_fixed_kv_extent->rewrite(fixed_kv_extent, 0);
       
       SUBTRACET(
         seastore_fixedkv_tree,

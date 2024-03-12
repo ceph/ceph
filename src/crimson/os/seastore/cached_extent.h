@@ -27,15 +27,6 @@ class SegmentedAllocator;
 class TransactionManager;
 class ExtentPlacementManager;
 
-template <
-  typename node_key_t,
-  typename node_val_t,
-  typename internal_node_t,
-  typename leaf_node_t,
-  typename pin_t,
-  size_t node_size,
-  bool leaf_has_children>
-class FixedKVBtree;
 template <typename, typename>
 class BtreeNodeMapping;
 
@@ -189,15 +180,6 @@ class CachedExtent
   friend class onode::DummyNodeExtent;
   friend class onode::TestReplayExtent;
 
-  template <
-    typename node_key_t,
-    typename node_val_t,
-    typename internal_node_t,
-    typename leaf_node_t,
-    typename pin_t,
-    size_t node_size,
-    bool leaf_has_children>
-  friend class FixedKVBtree;
   uint32_t last_committed_crc = 0;
 
   // Points at current version while in state MUTATION_PENDING
@@ -296,7 +278,7 @@ public:
    * with the states of Cache and can't wait till transaction
    * completes.
    */
-  virtual void on_replace_prior(Transaction &t) {}
+  virtual void on_replace_prior() {}
 
   /**
    * on_invalidated
@@ -321,6 +303,24 @@ public:
   virtual bool may_conflict() const {
     return true;
   }
+
+  void rewrite(CachedExtent &e, extent_len_t o) {
+    if (!e.is_pending()) {
+      prior_instance = &e;
+    } else {
+      assert(e.is_mutation_pending());
+      prior_instance = e.get_prior_instance();
+    }
+    on_rewrite(e, o);
+  }
+
+  /**
+   * on_rewrite
+   *
+   * Called when this extent is rewriting another one.
+   *
+   */
+  virtual void on_rewrite(CachedExtent &, extent_len_t) = 0;
 
   friend std::ostream &operator<<(std::ostream &, extent_state_t);
   virtual std::ostream &print_detail(std::ostream &out) const { return out; }
@@ -416,6 +416,10 @@ public:
     return is_mutable() || state == extent_state_t::EXIST_CLEAN;
   }
 
+  bool is_rewrite() {
+    return is_initial_pending() && get_prior_instance();
+  }
+
   /// Returns true if extent is stable, written and shared among transactions
   bool is_stable_written() const {
     return state == extent_state_t::CLEAN_PENDING ||
@@ -432,7 +436,8 @@ public:
 
   /// Returns true if extent has a pending delta
   bool is_mutation_pending() const {
-    return state == extent_state_t::MUTATION_PENDING;
+    return state == extent_state_t::MUTATION_PENDING
+      || state == extent_state_t::EXIST_MUTATION_PENDING;
   }
 
   /// Returns true if extent is a fresh extent
@@ -783,6 +788,10 @@ protected:
     prior_instance.reset();
   }
 
+  void set_prior_instance(CachedExtentRef p) {
+    prior_instance = p;
+  }
+
   /// Sets last_committed_crc
   void set_last_committed_crc(uint32_t crc) {
     last_committed_crc = crc;
@@ -1128,6 +1137,8 @@ public:
     return false;
   }
 
+  void on_rewrite(CachedExtent&, extent_len_t) final {}
+
   std::ostream &print_detail(std::ostream &out) const final {
     return out << ", RetiredExtentPlaceholder";
   }
@@ -1213,6 +1224,17 @@ public:
     : ChildableCachedExtent(std::forward<T>(t)...)
   {}
 
+  void on_rewrite(CachedExtent &extent, extent_len_t off) final {
+    assert(get_type() == extent.get_type());
+    auto &lextent = (LogicalCachedExtent&)extent;
+    lextent.get_bptr().copy_out(
+      off,
+      get_length(),
+      get_bptr().c_str());
+    set_laddr(lextent.get_laddr() + off);
+    set_modify_time(lextent.get_modify_time());
+  }
+
   bool has_laddr() const {
     return laddr != L_ADDR_NULL;
   }
@@ -1244,7 +1266,7 @@ public:
 
   std::ostream &_print_detail(std::ostream &out) const final;
 
-  void on_replace_prior(Transaction &t) final;
+  void on_replace_prior() final;
 
   struct modified_region_t {
     extent_len_t offset;
