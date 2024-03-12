@@ -2,7 +2,6 @@ import logging
 
 from teuthology import misc as teuthology
 from teuthology.task import Task
-from teuthology.orchestra import run
 from teuthology.packaging import remove_package
 
 log = logging.getLogger(__name__)
