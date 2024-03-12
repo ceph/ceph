@@ -4344,12 +4344,12 @@ def test_ps_s3_topic_permissions():
     try:
         # 2nd user tries to override the topic
         topic_arn = topic_conf2.set_config()
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
@@ -4360,12 +4360,12 @@ def test_ps_s3_topic_permissions():
     try:
         # 2nd user tries to set the attribute
         status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
@@ -4390,12 +4390,12 @@ def test_ps_s3_topic_permissions():
     try:
         # 2nd user tries to delete the topic
         status = topic_conf2.del_config(topic_arn=topic_arn)
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
@@ -4442,12 +4442,12 @@ def test_ps_s3_topic_no_permissions():
     try:
         # 2nd user tries to override the topic
         topic_arn = topic_conf2.set_config()
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
@@ -4458,12 +4458,12 @@ def test_ps_s3_topic_no_permissions():
     try:
         # 2nd user tries to set the attribute
         status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
@@ -4481,12 +4481,12 @@ def test_ps_s3_topic_no_permissions():
     try:
         # 2nd user tries to delete the topic
         status = topic_conf2.del_config(topic_arn=topic_arn)
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 

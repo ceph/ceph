@@ -325,6 +325,7 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_INVALID_OBJECT_STATE			 2222
 #define ERR_PRESIGNED_URL_EXPIRED			 2223
 #define ERR_PRESIGNED_URL_DISABLED     2224
+#define ERR_AUTHORIZATION        2225 // SNS 403 AuthorizationError
 
 #define ERR_BUSY_RESHARDING      2300
 #define ERR_NO_SUCH_ENTITY       2301
