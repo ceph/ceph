@@ -125,6 +125,23 @@ struct LogEntry {
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<LogEntry*>& o);
   static clog_type str_to_level(std::string const &str);
+  static std::string_view level_to_str(clog_type t) {
+    switch (t) {
+    case CLOG_DEBUG:
+      return "DBG";
+    case CLOG_INFO:
+      return "INF";
+    case CLOG_SEC:
+      return "SEC";
+    case CLOG_WARN:
+      return "WRN";
+    case CLOG_ERROR:
+      return "ERR";
+    case CLOG_UNKNOWN:
+      return "UNKNOWN";
+    }
+    return "???";
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(LogEntry)
 
@@ -208,8 +225,9 @@ template <> struct fmt::formatter<EntityName> : fmt::formatter<std::string_view>
 template <> struct fmt::formatter<LogEntry> : fmt::formatter<std::string_view> {
   template <typename FormatContext>
   auto format(const LogEntry& e, FormatContext& ctx) {
-    return fmt::format_to(ctx.out(), "{} {} ({}) {} : {} {} {}",
-			  e.stamp, e.name, e.rank, e.seq, e.channel, e.prio, e.msg);
+    return fmt::format_to(ctx.out(), "{} {} ({}) {} : {} [{}] {}",
+                          e.stamp, e.name, e.rank, e.seq, e.channel,
+                          LogEntry::level_to_str(e.prio), e.msg);
   }
 };
 
