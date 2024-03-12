@@ -96,7 +96,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_BUCKET, {404, "NoSuchBucket" }},
     { ERR_NO_SUCH_WEBSITE_CONFIGURATION, {404, "NoSuchWebsiteConfiguration" }},
     { ERR_NO_SUCH_UPLOAD, {404, "NoSuchUpload" }},
-    { ERR_NOT_FOUND, {404, "Not Found"}},
+    { ERR_NOT_FOUND, {404, "NotFound"}},
     { ERR_NO_SUCH_LC, {404, "NoSuchLifecycleConfiguration"}},
     { ERR_NO_SUCH_BUCKET_POLICY, {404, "NoSuchBucketPolicy"}},
     { ERR_NO_SUCH_USER, {404, "NoSuchUser"}},
