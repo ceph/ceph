@@ -11,7 +11,7 @@ tasks:
 - s3tests:
     client.0:
       rgw_server: client.0
-      force-branch: ceph-master
+      force-branch: ceph-squid
 overrides:
   ceph:
     fs: xfs

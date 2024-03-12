@@ -1,4 +1,4 @@
 overrides:
   s3tests:
-    force-branch: ceph-master
+    force-branch: ceph-squid
     # git_remote: https://github.com/ceph/

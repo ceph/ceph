@@ -55,7 +55,7 @@ tasks:
       lifecycle_tests: True
       cloudtier_tests: True
     #client.2:
-      #force-branch: ceph-master
+      #force-branch: ceph-squid
       #rgw_server: client.2
       #storage classes: LUKEWARM, FROZEN
       #extra_attrs: ["cloud_transition"]

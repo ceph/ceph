@@ -7,7 +7,7 @@ tasks:
 - tox: [client.0]
 - s3tests:
     client.0:
-      force-branch: ceph-master
+      force-branch: ceph-squid
       unit_test_scan: True
       rgw_server: client.0
 overrides:
