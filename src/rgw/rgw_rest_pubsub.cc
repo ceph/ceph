@@ -512,6 +512,10 @@ class RGWPSGetTopicOp : public RGWOp {
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 4) << "failed to get topic '" << topic_name << "', ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        s->err.message = "No such TopicArn";
+        return -ERR_NOT_FOUND; // return NotFound instead of NoSuchKey
+      }
       return ret;
     }
     if (topic_has_endpoint_secret(result) && !verify_transport_security(s->cct, *(s->info.env))) {
@@ -594,6 +598,10 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 4) << "failed to get topic '" << topic_name << "', ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        s->err.message = "No such TopicArn";
+        return -ERR_NOT_FOUND; // return NotFound instead of NoSuchKey
+      }
       return ret;
     }
     if (topic_has_endpoint_secret(result) && !verify_transport_security(s->cct, *(s->info.env))) {
@@ -755,6 +763,10 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
     if (ret < 0) {
       ldpp_dout(this, 4) << "failed to get topic '" << topic_name
                          << "', ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        s->err.message = "No such TopicArn";
+        return -ERR_NOT_FOUND; // return NotFound instead of NoSuchKey
+      }
       return ret;
     }
     topic_owner = result.owner;
