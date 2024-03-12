@@ -30,6 +30,7 @@ tasks:
       - slow request
       - unfound
       - \(POOL_APP_NOT_ENABLED\)
+      - enough copies available
     conf:
       osd:
         osd min pg log entries: 5
