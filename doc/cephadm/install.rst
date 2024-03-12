@@ -588,6 +588,6 @@ This is not because having the public key breaks anything, but rather because it
 and helps the bootstrap command differentiate if the user wants the CA signed
 keys setup or standard pubkey encryption. What this means is that SSH key rotation
 would simply be a matter of getting another key signed by the same CA and providing
-cephadm with the new private key and signed cert. No additional distribution of
+cephadm with the new private key and signed cert.  No additional distribution of
 keys to cluster nodes is needed after the initial setup of the CA key as a trusted key,
 no matter how many new private key/signed cert pairs are rotated in.
