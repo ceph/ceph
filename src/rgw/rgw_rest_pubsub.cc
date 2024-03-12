@@ -217,7 +217,7 @@ class RGWPSCreateTopicOp : public RGWOp {
   bufferlist bl_post_body;
   std::string topic_name;
   rgw::ARN topic_arn;
-  std::optional<rgw_pubsub_topic> existing;
+  std::optional<rgw_pubsub_topic> topic;
   rgw_pubsub_dest dest;
   std::string opaque_data;
   std::string policy_text;
@@ -287,6 +287,15 @@ class RGWPSCreateTopicOp : public RGWOp {
     if (ret < 0) {
       return ret;
     }
+    ret = RGWOp::init_processing(y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (s->auth.identity->get_account()) {
+      // account users don't consult the existing owner/policy
+      return 0;
+    }
 
     // try to load existing topic for owner and policy
     const RGWPubSub ps(driver, get_account_or_tenant(s->owner.id), *s->penv.site);
@@ -299,17 +308,23 @@ class RGWPSCreateTopicOp : public RGWOp {
           << "', with error:" << ret << dendl;
       return ret;
     } else {
-      existing = std::move(result);
+      topic = std::move(result);
     }
-    return RGWOp::init_processing(y);
+    return 0;
   }
 
   int verify_permission(optional_yield y) override {
-    if (!existing) {
+    if (s->auth.identity->get_account()) {
+      // account users don't consult the existing owner/policy
+      if (!verify_user_permission(this, s, topic_arn,
+                                  rgw::IAM::snsCreateTopic)) {
+        return -EACCES;
+      }
       return 0;
     }
-    if (!verify_topic_permission(this, s, *existing, topic_arn,
-                                 rgw::IAM::snsCreateTopic)) {
+
+    if (topic && !verify_topic_permission(this, s, *topic, topic_arn,
+                                          rgw::IAM::snsCreateTopic)) {
       return -EACCES;
     }
     return 0;
@@ -389,6 +404,12 @@ private:
 
 public:
   int verify_permission(optional_yield) override {
+    // check account permissions up front
+    if (s->auth.identity->get_account() &&
+        !verify_user_permission(this, s, {}, rgw::IAM::snsListTopics)) {
+      return -EACCES;
+    }
+
     return 0;
   }
   void pre_exec() override {
@@ -444,6 +465,13 @@ void RGWPSListTopicsOp::execute(optional_yield y) {
     op_ret = -EPERM;
     return;
   }
+
+  ldpp_dout(this, 20) << "successfully got topics" << dendl;
+
+  // non-account users filter out topics they aren't permitted to see
+  if (s->auth.identity->get_account()) {
+    return;
+  }
   for (auto it = result.topics.cbegin(); it != result.topics.cend();) {
     const auto arn = rgw::ARN::parse(it->second.arn);
     if (!arn || !verify_topic_permission(this, s, it->second, *arn,
@@ -453,7 +481,6 @@ void RGWPSListTopicsOp::execute(optional_yield y) {
       ++it;
     }
   }
-  ldpp_dout(this, 20) << "successfully got topics" << dendl;
 }
 
 // command (extension to AWS): 
@@ -864,6 +891,14 @@ class RGWPSDeleteTopicOp : public RGWOp {
   }
 
   int verify_permission(optional_yield y) override {
+    if (s->auth.identity->get_account()) {
+      if (!verify_user_permission(this, s, topic_arn,
+                                  rgw::IAM::snsDeleteTopic)) {
+        return -EACCES;
+      }
+      return 0;
+    }
+
     if (topic && !verify_topic_permission(this, s, *topic, topic_arn,
                                           rgw::IAM::snsDeleteTopic)) {
       return -EACCES;
