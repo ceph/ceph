@@ -204,6 +204,7 @@
      --gen-access-key                  generate random access key (for S3)
      --gen-secret                      generate random secret key
      --key-type=<type>                 key type, options are: swift, s3
+     --key-active=<bool>               activate or deactivate a key
      --temp-url-key[-2]=<key>          temp url key
      --access=<access>                 Set access permissions for sub-user, should be one
                                        of read, write, readwrite, full

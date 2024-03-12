@@ -665,7 +665,9 @@ void RGWOp_Key_Create::execute(optional_yield y)
   std::string secret_key;
   std::string key_type_str;
 
-  bool gen_key;
+  bool gen_key = true;
+  bool active = true;
+  bool active_specified = false;
 
   RGWUserAdminOpState op_state(driver);
 
@@ -676,12 +678,16 @@ void RGWOp_Key_Create::execute(optional_yield y)
   RESTArgs::get_string(s, "access-key", access_key, &access_key);
   RESTArgs::get_string(s, "secret-key", secret_key, &secret_key);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
-  RESTArgs::get_bool(s, "generate-key", true, &gen_key);
+  RESTArgs::get_bool(s, "generate-key", gen_key, &gen_key);
+  RESTArgs::get_bool(s, "active", active, &active, &active_specified);
 
   op_state.set_user_id(uid);
   op_state.set_subuser(subuser);
   op_state.set_access_key(access_key);
   op_state.set_secret_key(secret_key);
+  if (active_specified) {
+    op_state.access_key_active = active;
+  }
 
   if (gen_key)
     op_state.set_generate_key();

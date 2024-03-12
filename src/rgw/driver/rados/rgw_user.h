@@ -135,6 +135,7 @@ struct RGWUserAdminOpState {
   std::map<std::string, RGWAccessKey> op_access_keys;
   int32_t key_type{-1};
   bool access_key_exist = false;
+  std::optional<bool> access_key_active;
 
   std::set<std::string> mfa_ids;
 
@@ -273,6 +274,10 @@ struct RGWUserAdminOpState {
 
   void set_access_key_exist() {
     access_key_exist = true;
+  }
+
+  void set_access_key_active(bool active) {
+    access_key_active = active;
   }
 
   void set_suspension(__u8 is_suspended) {
