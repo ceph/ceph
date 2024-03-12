@@ -1171,30 +1171,17 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
     return;
   }
 
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
-                               &bucket, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get bucket '"
-                       << (s->bucket_tenant.empty()
-                               ? s->bucket_name
-                               : s->bucket_tenant + ":" + s->bucket_name)
-                       << "' info, ret = " << op_ret << dendl;
-    return;
-  }
   if (configurations.list.empty()) {
-    op_ret = remove_notification_v2(this, driver, bucket.get(),
+    op_ret = remove_notification_v2(this, driver, s->bucket.get(),
                                     /*delete all notif=true*/ "", y);
     return;
   }
   rgw_pubsub_bucket_topics bucket_topics;
-  op_ret = get_bucket_notifications(this, bucket.get(), bucket_topics);
+  op_ret = get_bucket_notifications(this, s->bucket.get(), bucket_topics);
   if (op_ret < 0) {
     ldpp_dout(this, 1)
         << "failed to load existing bucket notification on bucket: "
-        << (s->bucket_tenant.empty() ? s->bucket_name
-                                     : s->bucket_tenant + ":" + s->bucket_name)
-        << "' , ret = " << op_ret << dendl;
+        << s->bucket << ", ret = " << op_ret << dendl;
     return;
   }
   const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
@@ -1260,29 +1247,29 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
   // finally store all the bucket notifications as attr.
   bufferlist bl;
   bucket_topics.encode(bl);
-  rgw::sal::Attrs& attrs = bucket->get_attrs();
+  rgw::sal::Attrs& attrs = s->bucket->get_attrs();
   attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
-  op_ret = bucket->merge_and_store_attrs(this, attrs, y);
+  op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1)
         << "Failed to store RGW_ATTR_BUCKET_NOTIFICATION on bucket="
-        << bucket->get_name() << " returned err= " << op_ret << dendl;
+        << s->bucket->get_name() << " returned err= " << op_ret << dendl;
     return;
   }
   for (const auto& [_, topic] : topics) {
     const auto ret = driver->update_bucket_topic_mapping(
         topic,
-        rgw_make_bucket_entry_name(bucket->get_tenant(), bucket->get_name()),
+        rgw_make_bucket_entry_name(s->bucket->get_tenant(), s->bucket->get_name()),
         /*add_mapping=*/true, y, this);
     if (ret < 0) {
       ldpp_dout(this, 1) << "Failed to remove topic mapping on bucket="
-                         << bucket->get_name() << " ret= " << ret << dendl;
+                         << s->bucket->get_name() << " ret= " << ret << dendl;
       // error should be reported ??
       // op_ret = ret;
     }
   }
   ldpp_dout(this, 20) << "successfully created bucket notification for bucket: "
-                      << bucket->get_name() << dendl;
+                      << s->bucket->get_name() << dendl;
 }
 
 // command (extension to S3): DELETE /bucket?notification[=<notification-id>]
@@ -1337,18 +1324,8 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     }
   }
 
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
-                               &bucket, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get bucket '" << 
-      (s->bucket_tenant.empty() ? s->bucket_name : s->bucket_tenant + ":" + s->bucket_name) << 
-      "' info, ret = " << op_ret << dendl;
-    return;
-  }
-
   const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
-  const RGWPubSub::Bucket b(ps, bucket.get());
+  const RGWPubSub::Bucket b(ps, s->bucket.get());
 
   // get all topics on a bucket
   rgw_pubsub_bucket_topics bucket_topics;
@@ -1407,18 +1384,7 @@ void RGWPSDeleteNotifOp::execute_v2(optional_yield y) {
     return;
   }
 
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
-                               &bucket, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get bucket '"
-                       << (s->bucket_tenant.empty()
-                               ? s->bucket_name
-                               : s->bucket_tenant + ":" + s->bucket_name)
-                       << "' info, ret = " << op_ret << dendl;
-    return;
-  }
-  op_ret = remove_notification_v2(this, driver, bucket.get(), notif_name, y);
+  op_ret = remove_notification_v2(this, driver, s->bucket.get(), notif_name, y);
 }
 
 // command (S3 compliant): GET /bucket?notification[=<notification-id>]
