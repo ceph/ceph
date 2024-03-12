@@ -8276,6 +8276,7 @@ def check_time_sync(ctx, enabler=None):
         'ntp.service',  # 18.04 (at least)
         'ntpsec.service',  # 20.04 (at least) / buster
         'openntpd.service',  # ubuntu / debian
+        'timemaster.service',  # linuxptp on ubuntu/debian
     ]
     if not check_units(ctx, units, enabler):
         logger.warning('No time sync service is running; checked for %s' % units)
