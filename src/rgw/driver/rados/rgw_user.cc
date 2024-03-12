@@ -1753,6 +1753,12 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
   user_info.display_name = display_name;
   user_info.type = TYPE_RGW;
 
+  // tenant must not look like a valid account id
+  if (rgw::account::validate_id(uid.tenant)) {
+    set_err_msg(err_msg, "tenant must not be formatted as an account id");
+    return -EINVAL;
+  }
+
   if (!user_email.empty())
     user_info.user_email = user_email;
 
