@@ -95,7 +95,7 @@ curl-based installation
    source code.  Unlike for earlier versions of Ceph it is no longer sufficient
    to copy a single script from Ceph's git tree and run it. If you wish to run
    cephadm using a development version you should create your own build of
-   cephadm. See :ref:`compiling-cephadm` for details on how to create your own
+   cephadm. See the `compiling-cephadm` in the documentation for newer releases for details on how to create your own
    standalone cephadm executable.
 
 .. _cephadm_install_distros:
