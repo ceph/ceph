@@ -880,7 +880,14 @@ public:
       std::string& _req_id,
       optional_yield y) override;
 
-  virtual RGWLC* get_rgwlc(void) override;
+  int list_account_topics(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          std::string_view marker,
+                          uint32_t max_items,
+                          TopicList& listing) override;
+
+      virtual RGWLC* get_rgwlc(void) override;
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
       virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) override;
       virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) override;

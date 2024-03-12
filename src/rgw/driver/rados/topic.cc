@@ -15,6 +15,8 @@
 
 #include "topic.h"
 #include "common/errno.h"
+#include "account.h"
+#include "rgw_account.h"
 #include "rgw_common.h"
 #include "rgw_metadata.h"
 #include "rgw_metadata_lister.h"
@@ -26,6 +28,7 @@
 #include "rgw_zone.h"
 #include "svc_mdlog.h"
 #include "svc_sys_obj_cache.h"
+#include "topics.h"
 
 namespace rgwrados::topic {
 
@@ -95,7 +98,8 @@ int read(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int write(const DoutPrefixProvider* dpp, optional_yield y,
-          RGWSI_SysObj& sysobj, RGWSI_MDLog* mdlog, const RGWZoneParams& zone,
+          RGWSI_SysObj& sysobj, RGWSI_MDLog* mdlog,
+          librados::Rados& rados, const RGWZoneParams& zone,
           const rgw_pubsub_topic& info, RGWObjVersionTracker& objv,
           ceph::real_time mtime, bool exclusive)
 {
@@ -113,6 +117,17 @@ int write(const DoutPrefixProvider* dpp, optional_yield y,
     return r;
   }
 
+  if (const auto* id = std::get_if<rgw_account_id>(&info.owner); id) {
+    // link the topic to its account
+    const auto& topics = account::get_topics_obj(zone, *id);
+    r = topics::add(dpp, y, rados, topics, info, false,
+                    std::numeric_limits<uint32_t>::max());
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "WARNING: could not link topic to account "
+          << *id << ": " << cpp_strerror(r) << dendl;
+    } // not fatal
+  }
+
   // record in the mdlog on success
   if (mdlog) {
     return mdlog->complete_entry(dpp, y, "topic", topic_key, &objv);
@@ -121,9 +136,13 @@ int write(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int remove(const DoutPrefixProvider* dpp, optional_yield y,
-           RGWSI_SysObj& sysobj, RGWSI_MDLog* mdlog, const RGWZoneParams& zone,
-           const std::string& topic_key, RGWObjVersionTracker& objv)
+           RGWSI_SysObj& sysobj, RGWSI_MDLog* mdlog,
+           librados::Rados& rados, const RGWZoneParams& zone,
+           const std::string& tenant, const std::string& name,
+           RGWObjVersionTracker& objv)
 {
+  const std::string topic_key = get_topic_metadata_key(tenant, name);
+
   // delete topic info
   const rgw_raw_obj topic = get_topic_obj(zone, topic_key);
   int r = rgw_delete_system_obj(dpp, &sysobj, topic.pool, topic.oid, &objv, y);
@@ -141,6 +160,16 @@ int remove(const DoutPrefixProvider* dpp, optional_yield y,
     ldpp_dout(dpp, 20) << "WARNING: failed to remove topic buckets obj "
         << buckets.oid << " with: " << cpp_strerror(r) << dendl;
   } // not fatal
+
+  if (rgw::account::validate_id(tenant)) {
+    // unlink the name from its account
+    const auto& topics = account::get_topics_obj(zone, tenant);
+    r = topics::remove(dpp, y, rados, topics, name);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not unlink from account "
+          << tenant << ": " << cpp_strerror(r) << dendl;
+    } // not fatal
+  }
 
   // record in the mdlog on success
   if (mdlog) {
@@ -265,14 +294,16 @@ class MetadataHandler : public RGWMetadataHandler {
   RGWSI_SysObj& sysobj;
   RGWSI_SysObj_Cache* cache_svc;
   RGWSI_MDLog& mdlog;
+  librados::Rados& rados;
   const RGWZoneParams& zone;
   RGWChainedCacheImpl<cache_entry>& cache;
  public:
   MetadataHandler(RGWSI_SysObj& sysobj, RGWSI_SysObj_Cache* cache_svc,
-                  RGWSI_MDLog& mdlog, const RGWZoneParams& zone,
+                  RGWSI_MDLog& mdlog, librados::Rados& rados,
+                  const RGWZoneParams& zone,
                   RGWChainedCacheImpl<cache_entry>& cache)
     : sysobj(sysobj), cache_svc(cache_svc), mdlog(mdlog),
-      zone(zone), cache(cache)
+      rados(rados), zone(zone), cache(cache)
   {}
 
   std::string get_type() final { return "topic";  }
@@ -316,8 +347,8 @@ class MetadataHandler : public RGWMetadataHandler {
     auto mtime = robj->get_mtime();
 
     constexpr bool exclusive = false;
-    int r = write(dpp, y, sysobj, &mdlog, zone, info,
-                  objv_tracker, mtime, exclusive);
+    int r = write(dpp, y, sysobj, &mdlog, rados, zone,
+                  info, objv_tracker, mtime, exclusive);
     if (r < 0) {
       return r;
     }
@@ -335,14 +366,17 @@ class MetadataHandler : public RGWMetadataHandler {
   int remove(std::string& entry, RGWObjVersionTracker& objv_tracker,
              optional_yield y, const DoutPrefixProvider *dpp) override
   {
-    int r = topic::remove(dpp, y, sysobj, &mdlog, zone, entry, objv_tracker);
-    if (r < 0) {
-      return r;
-    }
-    // delete persistent topic queue. expect ENOENT for non-persistent topics
     std::string name;
     std::string tenant;
     parse_topic_metadata_key(entry, tenant, name);
+
+    int r = topic::remove(dpp, y, sysobj, &mdlog, rados, zone,
+                          tenant, name, objv_tracker);
+    if (r < 0) {
+      return r;
+    }
+
+    // delete persistent topic queue. expect ENOENT for non-persistent topics
     r = rgw::notify::remove_persistent_topic(name, y);
     if (r < 0 && r != -ENOENT) {
       ldpp_dout(dpp, 1) << "Failed to delete queue for persistent topic: "
@@ -397,12 +431,13 @@ class MetadataHandler : public RGWMetadataHandler {
 
 auto create_metadata_handler(RGWSI_SysObj& sysobj,
                              RGWSI_SysObj_Cache* cache_svc,
-                             RGWSI_MDLog& mdlog, const RGWZoneParams& zone,
+                             RGWSI_MDLog& mdlog, librados::Rados& rados,
+                             const RGWZoneParams& zone,
                              RGWChainedCacheImpl<cache_entry>& cache)
     -> std::unique_ptr<RGWMetadataHandler>
 {
   return std::make_unique<MetadataHandler>(sysobj, cache_svc, mdlog,
-                                           zone, cache);
+                                           rados, zone, cache);
 }
 
 } // rgwrados::topic
