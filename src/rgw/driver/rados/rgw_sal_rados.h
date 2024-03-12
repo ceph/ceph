@@ -313,6 +313,12 @@ class RadosStore : public StoreDriver {
                         RGWObjVersionTracker& objv_tracker,
                         optional_yield y,
                         const DoutPrefixProvider* dpp) override;
+    int list_account_topics(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            std::string_view marker,
+                            uint32_t max_items,
+                            TopicList& listing) override;
     int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
                                     const std::string& bucket_key,
                                     bool add_mapping,

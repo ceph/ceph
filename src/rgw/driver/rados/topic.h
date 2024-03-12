@@ -52,14 +52,16 @@ int read(const DoutPrefixProvider* dpp, optional_yield y,
 
 /// Write or overwrite topic info.
 int write(const DoutPrefixProvider* dpp, optional_yield y,
-          RGWSI_SysObj& sysobj, RGWSI_MDLog* mdlog, const RGWZoneParams& zone,
+          RGWSI_SysObj& sysobj, RGWSI_MDLog* mdlog,
+          librados::Rados& rados, const RGWZoneParams& zone,
           const rgw_pubsub_topic& info, RGWObjVersionTracker& objv,
           ceph::real_time mtime, bool exclusive);
 
 /// Remove a topic by metadata key.
 int remove(const DoutPrefixProvider* dpp, optional_yield y,
            RGWSI_SysObj& sysobj, RGWSI_MDLog* mdlog,
-           const RGWZoneParams& zone, const std::string& topic_key,
+           librados::Rados& rados, const RGWZoneParams& zone,
+           const std::string& tenant, const std::string& name,
            RGWObjVersionTracker& objv);
 
 
@@ -87,7 +89,8 @@ int list_buckets(const DoutPrefixProvider* dpp, optional_yield y,
 /// Topic metadata handler factory.
 auto create_metadata_handler(RGWSI_SysObj& sysobj,
                              RGWSI_SysObj_Cache* cache_svc,
-                             RGWSI_MDLog& mdlog, const RGWZoneParams& zone,
+                             RGWSI_MDLog& mdlog, librados::Rados& rados,
+                             const RGWZoneParams& zone,
                              RGWChainedCacheImpl<cache_entry>& cache)
     -> std::unique_ptr<RGWMetadataHandler>;
 

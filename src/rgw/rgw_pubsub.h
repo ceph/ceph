@@ -575,6 +575,11 @@ class RGWPubSub
                       const rgw_pubsub_topic& topic,
                       optional_yield y) const;
 
+  int list_account_topics(const DoutPrefixProvider* dpp,
+                          const std::string& start_marker, int max_items,
+                          rgw_pubsub_topics& result, std::string& next_marker,
+                          optional_yield y) const;
+
 public:
   RGWPubSub(rgw::sal::Driver* _driver,
             const std::string& _tenant,

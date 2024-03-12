@@ -77,6 +77,7 @@
 #include "users.h"
 #include "rgw_pubsub.h"
 #include "topic.h"
+#include "topics.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1693,9 +1694,10 @@ int RadosStore::write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
                                optional_yield y,
                                const DoutPrefixProvider* dpp)
 {
+  librados::Rados& rados = *getRados()->get_rados_handle();
   const RGWZoneParams& zone = svc()->zone->get_zone_params();
-  return rgwrados::topic::write(dpp, y, *svc()->sysobj, svc()->mdlog, zone,
-                                topic, objv_tracker, {}, exclusive);
+  return rgwrados::topic::write(dpp, y, *svc()->sysobj, svc()->mdlog, rados,
+                                zone, topic, objv_tracker, {}, exclusive);
 }
 
 int RadosStore::remove_topic_v2(const std::string& topic_name,
@@ -1704,10 +1706,24 @@ int RadosStore::remove_topic_v2(const std::string& topic_name,
                                 optional_yield y,
                                 const DoutPrefixProvider* dpp)
 {
+  librados::Rados& rados = *getRados()->get_rados_handle();
   const RGWZoneParams& zone = svc()->zone->get_zone_params();
-  const std::string key = get_topic_metadata_key(tenant, topic_name);
   return rgwrados::topic::remove(dpp, y, *svc()->sysobj, svc()->mdlog,
-                                 zone, key, objv_tracker);
+                                 rados, zone, tenant, topic_name, objv_tracker);
+}
+
+int RadosStore::list_account_topics(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    std::string_view marker,
+                                    uint32_t max_items,
+                                    TopicList& listing)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_topics_obj(zone, account_id);
+  return rgwrados::topics::list(dpp, y, rados, obj, marker, max_items,
+                                listing.topics, listing.next_marker);
 }
 
 int RadosStore::remove_bucket_mapping_from_topics(

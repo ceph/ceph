@@ -267,6 +267,14 @@ struct GroupList {
   std::string next_marker;
 };
 
+/// A list of topic names
+struct TopicList {
+  /// The list of results, sorted by name
+  std::vector<std::string> topics;
+  /// The next marker to resume listing, or empty
+  std::string next_marker;
+};
+
 /** A list of key-value attributes */
   using Attrs = std::map<std::string, ceph::buffer::list>;
 
@@ -527,6 +535,13 @@ class Driver {
                                 RGWObjVersionTracker& objv_tracker,
                                 optional_yield y,
                                 const DoutPrefixProvider* dpp) = 0;
+    /** Return a paginated listing of the account's topic names */
+    virtual int list_account_topics(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    std::string_view marker,
+                                    uint32_t max_items,
+                                    TopicList& listing) = 0;
     /** Update the bucket-topic mapping in the store, if |add_mapping|=true then
      * adding the |bucket_key| |topic| mapping to store, else delete the
      * |bucket_key| |topic| mapping from the store.  The |bucket_key| is

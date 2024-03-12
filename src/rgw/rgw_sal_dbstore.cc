@@ -1902,6 +1902,16 @@ namespace rgw::sal {
     return std::make_unique<DBNotification>(obj, src_obj, event_types);
   }
 
+  int DBStore::list_account_topics(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   std::string_view marker,
+                                   uint32_t max_items,
+                                   TopicList& listing)
+  {
+    return -ENOTSUP;
+  }
+
   RGWLC* DBStore::get_rgwlc(void) {
     return lc;
   }
