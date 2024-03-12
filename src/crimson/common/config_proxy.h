@@ -54,13 +54,18 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
       // avoid racings with other do_change() calls in parallel.
       ObserverMgr<ConfigObserver>::rev_obs_map rev_obs;
       owner.values.reset(new_values);
-      owner.obs_mgr.for_each_change(owner.values->changed, owner,
-                                    [&rev_obs](ConfigObserver *obs,
+      std::map<std::string, bool> changes_present;
+      for (const auto& change : owner.values->changed) {
+        std::string dummy;
+        changes_present[change] = owner.get_val(change, &dummy);
+      }
+      owner.obs_mgr.for_each_change(changes_present,
+                                    [&rev_obs](auto obs,
                                                const std::string &key) {
                                       rev_obs[obs].insert(key);
                                     }, nullptr);
       for (auto& [obs, keys] : rev_obs) {
-        obs->handle_conf_change(owner, keys);
+        (*obs)->handle_conf_change(owner, keys);
       }
 
       return seastar::parallel_for_each(boost::irange(1u, seastar::smp::count),
@@ -70,13 +75,19 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
             proxy.values.reset();
             proxy.values = std::move(foreign_values);
 
+            std::map<std::string, bool> changes_present;
+            for (const auto& change : proxy.values->changed) {
+              std::string dummy;
+              changes_present[change] = proxy.get_val(change, &dummy);
+            }
+
             ObserverMgr<ConfigObserver>::rev_obs_map rev_obs;
-            proxy.obs_mgr.for_each_change(proxy.values->changed, proxy,
-              [&rev_obs](ConfigObserver *obs, const std::string& key) {
+            proxy.obs_mgr.for_each_change(changes_present,
+              [&rev_obs](auto obs, const std::string& key) {
                 rev_obs[obs].insert(key);
               }, nullptr);
-            for (auto& obs_keys : rev_obs) {
-              obs_keys.first->handle_conf_change(proxy, obs_keys.second);
+            for (auto& [obs, keys] : rev_obs) {
+              (*obs)->handle_conf_change(proxy, keys);
             }
           });
         }).finally([new_values] {
