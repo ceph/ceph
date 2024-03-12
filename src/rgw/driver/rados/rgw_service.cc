@@ -416,8 +416,8 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
   meta.topic_cache->init(svc.cache);
 
   meta.topic = rgwrados::topic::create_metadata_handler(
-      *svc.sysobj, svc.cache, *svc.mdlog, svc.zone->get_zone_params(),
-      *meta.topic_cache);
+      *svc.sysobj, svc.cache, *svc.mdlog, rados,
+      svc.zone->get_zone_params(), *meta.topic_cache);
 
   RGWOTPMetadataHandlerBase *otp_handler = static_cast<RGWOTPMetadataHandlerBase *>(meta.otp.get());
   otp_handler->init(svc.zone, svc.meta_be_otp, svc.otp);

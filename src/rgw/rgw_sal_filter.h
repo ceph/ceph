@@ -344,6 +344,15 @@ public:
                       const DoutPrefixProvider* dpp) override {
     return next->remove_topic_v2(topic_name, tenant, objv_tracker, y, dpp);
   }
+  int list_account_topics(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          std::string_view marker,
+                          uint32_t max_items,
+                          TopicList& listing) override {
+    return next->list_account_topics(dpp, y, account_id, marker,
+                                     max_items, listing);
+  }
   int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
                                   const std::string& bucket_key,
                                   bool add_mapping,
