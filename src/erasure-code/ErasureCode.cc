@@ -348,33 +348,10 @@ int ErasureCode::to_string(const std::string &name,
   return 0;
 }
 
-int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
+int ErasureCode::decode_concat(const set<int>& want_to_read,
+			       const map<int, bufferlist> &chunks,
 			       bufferlist *decoded)
 {
-  set<int> want_to_read;
-  set<int> decode_chunks;
-  bool need_decode = false;
-
-  for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
-    want_to_read.insert(chunk_index(i));
-  }
-  if (g_conf()->osd_ec_partial_reads &&
-      chunks.size() < get_data_chunk_count()) {
-    // for partial_read
-    for (const auto& [key, bl] : chunks) {
-      if (want_to_read.contains(key)) {
-        decode_chunks.insert(key);
-      } else {
-        need_decode = true;
-        break;
-      }
-    }
-    if (!need_decode) {
-      // we need to decode if the input `chunks` contains anything else
-      // than data chunks (which boils down into coding chunks)
-      want_to_read.swap(decode_chunks);
-    }
-  }
   map<int, bufferlist> decoded_map;
   int r = _decode(want_to_read, chunks, &decoded_map);
   if (r == 0) {
@@ -385,6 +362,16 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
     }
   }
   return r;
+}
+
+int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
+			       bufferlist *decoded)
+{
+  set<int> want_to_read;
+  for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
+    want_to_read.insert(chunk_index(i));
+  }
+  return decode_concat(want_to_read, chunks, decoded);
 }
 
 bool ErasureCode::is_systematic() const {

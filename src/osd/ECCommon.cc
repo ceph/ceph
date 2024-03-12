@@ -177,10 +177,12 @@ void ECCommon::ReadPipeline::complete_read_op(ReadOp &rop)
     rop.complete.begin();
   ceph_assert(rop.to_read.size() == rop.complete.size());
   for (; req_iter != rop.to_read.end(); ++req_iter, ++resiter) {
+    ceph_assert(rop.want_to_read.contains(req_iter->first));
     rop.on_complete->finish_single_request(
       req_iter->first,
       resiter->second,
-      req_iter->second.to_read);
+      req_iter->second.to_read,
+      rop.want_to_read[req_iter->first]);
   }
   ceph_assert(rop.on_complete);
   std::move(*rop.on_complete).finish(rop.priority);
@@ -506,7 +508,8 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
   void finish_single_request(
     const hobject_t &hoid,
     ECCommon::read_result_t &res,
-    list<ECCommon::ec_align_t> to_read) override
+    list<ECCommon::ec_align_t> to_read,
+    set<int> wanted_to_read) override
   {
     extent_map result;
     if (res.r != 0)
@@ -531,6 +534,7 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
       int r = ECUtil::decode(
 	read_pipeline.sinfo,
 	read_pipeline.ec_impl,
+	wanted_to_read,
 	to_decode,
 	&bl);
       if (r < 0) {
