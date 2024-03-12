@@ -11033,7 +11033,8 @@ next:
         return -ret;
       }
     } else {
-      RGWPubSub ps(driver, tenant, *site);
+      const std::string& account = !account_id.empty() ? account_id : tenant;
+      RGWPubSub ps(driver, account, *site);
       const RGWPubSub::Bucket b(ps, bucket.get());
       ret = b.get_topics(dpp(), result, null_yield);
       if (ret < 0 && ret != -ENOENT) {
@@ -11046,7 +11047,8 @@ next:
   }
 
   if (opt_cmd == OPT::PUBSUB_TOPIC_LIST) {
-    RGWPubSub ps(driver, tenant, *site);
+    const std::string& account = !account_id.empty() ? account_id : tenant;
+    RGWPubSub ps(driver, account, *site);
     std::string next_token = marker;
 
     std::optional<rgw_owner> owner;
@@ -11104,7 +11106,8 @@ next:
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
       return EINVAL;
     }
-    RGWPubSub ps(driver, tenant, *site);
+    const std::string& account = !account_id.empty() ? account_id : tenant;
+    RGWPubSub ps(driver, account, *site);
 
     rgw_pubsub_topic topic;
     std::set<std::string> subscribed_buckets;
@@ -11148,7 +11151,8 @@ next:
         return -ret;
       }
     } else {
-      RGWPubSub ps(driver, tenant, *site);
+      const std::string& account = !account_id.empty() ? account_id : tenant;
+      RGWPubSub ps(driver, account, *site);
       const RGWPubSub::Bucket b(ps, bucket.get());
       ret = b.get_topics(dpp(), bucket_topics, null_yield);
       if (ret < 0 && ret != -ENOENT) {
@@ -11175,7 +11179,8 @@ next:
       return -EINVAL;
     }
 
-    RGWPubSub ps(driver, tenant, *site);
+    const std::string& account = !account_id.empty() ? account_id : tenant;
+    RGWPubSub ps(driver, account, *site);
 
     ret = ps.remove_topic(dpp(), topic_name, null_yield);
     if (ret < 0) {
@@ -11215,7 +11220,8 @@ next:
       ret = remove_notification_v2(dpp(), driver, bucket.get(), notification_id,
                                    null_yield);
     } else {
-      RGWPubSub ps(driver, tenant, *site);
+      const std::string& account = !account_id.empty() ? account_id : tenant;
+      RGWPubSub ps(driver, account, *site);
 
       rgw_pubsub_bucket_topics bucket_topics;
       const RGWPubSub::Bucket b(ps, bucket.get());
