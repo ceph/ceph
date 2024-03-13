@@ -4472,6 +4472,7 @@ def command_prepare_host(ctx: CephadmContext) -> None:
         if not pkg:
             pkg = create_packager(ctx)
         pkg.install_podman()
+        ctx.container_engine = find_container_engine(ctx)
 
     logger.info('Verifying lvm2 is present...')
     if not find_executable('lvcreate'):
@@ -5508,7 +5509,8 @@ def main() -> None:
                     command_prepare_host,
                     command_add_repo,
                     command_rm_repo,
-                    command_install
+                    command_install,
+                    command_bootstrap
                 ]:
             check_container_engine(ctx)
         # command handler
