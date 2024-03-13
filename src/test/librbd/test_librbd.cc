@@ -1894,6 +1894,8 @@ TEST_F(TestLibRBD, TestGetSnapShotTimeStamp)
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
 
+  ASSERT_EQ(-ENOENT, rbd_snap_get_timestamp(image, 0, NULL));
+
   ASSERT_EQ(0, rbd_snap_create(image, "snap1"));
   num_snaps = rbd_snap_list(image, snaps, &max_size);
   ASSERT_EQ(1, num_snaps);
