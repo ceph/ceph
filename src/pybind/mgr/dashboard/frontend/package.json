@@ -99,7 +99,7 @@
     "@types/brace-expansion": "1.1.0",
     "@types/cypress-cucumber-preprocessor": "4.0.1",
     "@types/jest": "29.5.4",
-    "@types/lodash": "4.14.161",
+    "@types/lodash": "4.17.0",
     "@types/node": "18.17.12",
     "@types/swagger-ui": "3.52.0",
     "@types/xml2js": "0.4.14",
