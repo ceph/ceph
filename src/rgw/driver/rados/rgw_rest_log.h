@@ -209,6 +209,7 @@ class RGWOp_DATALog_List : public RGWRESTOp {
   std::string last_marker;
   bool truncated;
   bool extra_info;
+  ceph::real_time last_update;
 public:
   RGWOp_DATALog_List() : truncated(false), extra_info(false) {}
   ~RGWOp_DATALog_List() override {}
