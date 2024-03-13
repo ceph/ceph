@@ -499,7 +499,7 @@ public:
                   nullptr);
       cache->_trim();
     }
-    void _finish_write(BufferCacheShard* cache, uint64_t seq);
+    void _finish_write(OnodeRef onode, uint64_t seq);
     void did_read(BufferCacheShard* cache, uint32_t offset, uint32_t length, ceph::buffer::list&& bl) {
       std::lock_guard l(cache->lock);
       uint16_t cache_private = _discard(cache, offset, bl.length());
