@@ -1675,8 +1675,9 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, u
   uint32_t end = offset + length;
   while (i != buffer_map.end()) {
     Buffer *b = &i->second;
-    // If no overlap is found between what we want to read and what we have
-    // cached, then forget about continuing
+    // First iteration either finds a buffer that contains the offset or the next buffer after it.
+    // Subsequent iterations are either buffers inside range or after the range.
+    // If we already found a buffer that doesn't overlaps with the range, we can break, as it must be next to the range.
     bool overlaps = offset < b->end() && end > b->offset;
     if (!overlaps) {
       break;
