@@ -749,14 +749,18 @@ if(WITH_SELINUX)
   add_subdirectory(selinux)
 endif(WITH_SELINUX)
 
+if(WITH_TESTS)
 # enables testing and creates Make check command
-add_custom_target(tests
+  add_custom_target(tests
   COMMENT "Building tests")
-enable_testing()
-set(CMAKE_CTEST_COMMAND ctest)
-add_custom_target(check
+  add_custom_target(check
   COMMAND ${CMAKE_CTEST_COMMAND}
   DEPENDS tests)
+
+  include(CTest)
+  include(CTestScript)
+  build_tests()
+endif()
 
 option(WITH_SYSTEMD "build with systemd support" ON)
 
