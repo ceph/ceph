@@ -83,6 +83,22 @@ if(WITH_CCACHE)
   endif()
 endif(WITH_CCACHE)
 
+option(WITH_SCCACHE "Build with sccache.")
+if(WITH_SCCACHE)
+  if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
+    message(WARNING "Compiler launcher already set. stop configuring ccache")
+  else()
+    find_program(SCCACHE_EXECUTABLE sccache)
+    if(NOT SCCACHE_EXECUTABLE)
+      message(FATAL_ERROR "Can't find sccache. Is it installed?")
+    endif()
+    message(STATUS "Building with sccache: ${CCACHE_EXECUTABLE}")
+    set(CMAKE_C_COMPILER_LAUNCHER ${SCCACHE_EXECUTABLE})
+    set(CMAKE_CXX_COMPILER_LAUNCHER ${SCCACHE_EXECUTABLE})
+  endif()
+endif(WITH_SCCACHE)
+
+
 option(WITH_MANPAGE "Build man pages." ON)
 if(WITH_MANPAGE)
   find_program(SPHINX_BUILD
@@ -366,7 +382,7 @@ if(WITH_KRBD AND NOT WITH_RBD)
 endif()
 if(LINUX)
   if(WITH_LIBCEPHFS OR WITH_KRBD)
-    # keyutils is only used when talking to the Linux Kernel key store 
+    # keyutils is only used when talking to the Linux Kernel key store
     find_package(keyutils REQUIRED)
     set(HAVE_KEYUTILS ${KEYUTILS_FOUND})
   endif()
