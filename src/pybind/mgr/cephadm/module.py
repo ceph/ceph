@@ -1,4 +1,5 @@
 import asyncio
+import concurrent
 import json
 import errno
 import ipaddress
@@ -419,7 +420,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         ),
         Option(
             'default_cephadm_command_timeout',
-            type='secs',
+            type='int',
             default=15 * 60,
             desc='Default timeout applied to cephadm commands run directly on '
             'the host (in seconds)'
@@ -652,7 +653,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         # are provided, that will be included in the OrchestratorError's message
         try:
             yield
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
             err_str: str = ''
             if cmd:
                 err_str = f'Command "{cmd}" timed out '

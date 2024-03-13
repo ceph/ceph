@@ -1,6 +1,7 @@
 import logging
 import os
 import asyncio
+import concurrent
 from tempfile import NamedTemporaryFile
 from threading import Thread
 from contextlib import contextmanager
@@ -61,7 +62,7 @@ class EventLoopThread(Thread):
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         try:
             return future.result(timeout)
-        except asyncio.TimeoutError:
+        except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
             # try to cancel the task before raising the exception further up
             future.cancel()
             raise
