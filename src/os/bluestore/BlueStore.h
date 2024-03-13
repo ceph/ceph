@@ -322,7 +322,7 @@ public:
     Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, ceph::buffer::list&& b,
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), offset(o),
-	length(b.length()), data(b) {}
+	length(b.length()), data(std::move(b)) {}
 
     Buffer(Buffer &&other) {
       std::swap(space, other.space);
@@ -483,8 +483,6 @@ public:
     void write(BufferCacheShard* cache, uint64_t seq, uint32_t offset, ceph::buffer::list&& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
-      Buffer b(this, Buffer::STATE_WRITING, seq, offset, std::move(bl),
-			     flags);
       uint16_t cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, this, Buffer(this, Buffer::STATE_WRITING, seq, offset, std::move(bl),
 			     flags), cache_private, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
@@ -749,9 +747,6 @@ public:
 #endif
       return blob;
     }
-
-    /// discard buffers for unallocated regions
-    void discard_unallocated(Collection *coll, BlueStore::Onode *onode, uint32_t logical_offset);
 
     /// get logical references
     void get_ref(Collection *coll, uint32_t offset, uint32_t length);
@@ -1911,7 +1906,7 @@ private:
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
 
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
-    std::set<std::tuple<Onode*, uint64_t>> buffers_written; ///< update these on io completion (buffer -> offset, seq pair)
+    std::set<std::pair<Onode*, uint64_t>> buffers_written; ///< update these on io completion (buffer -> onode, seq pair)
 
     KeyValueDB::Transaction t; ///< then we will commit this
     std::list<Context*> oncommits;  ///< more commit completions

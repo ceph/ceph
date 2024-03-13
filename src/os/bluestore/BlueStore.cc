@@ -1675,13 +1675,10 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, u
   uint32_t end = offset + length;
   while (i != buffer_map.end()) {
     Buffer *b = &i->second;
-    if (b->offset >= end) {
-      break;
-    }
     // If no overlap is found between what we want to read and what we have
     // cached, then forget about continuing
-    if (std::max(b->end(), offset + length) - std::min(b->offset, offset) >
-        length + b->length) {
+    bool overlaps = offset < b->end() && end > b->offset;
+    if (!overlaps) {
       break;
     }
     if (b->cache_private > cache_private) {
@@ -2251,46 +2248,6 @@ ostream& operator<<(ostream& out, const BlueStore::Blob& b)
   }
   out << ")";
   return out;
-}
-
-void BlueStore::Blob::discard_unallocated(Collection *coll, Onode* onode, uint32_t logical_offset)
-{
-  if (get_blob().is_shared()) {
-    return;
-  }
-  if (get_blob().is_compressed()) {
-    bool discard = false;
-    bool all_invalid = true;
-    for (auto e : get_blob().get_extents()) {
-      if (!e.is_valid()) {
-        discard = true;
-      } else {
-        all_invalid = false;
-      }
-    }
-    ceph_assert(discard == all_invalid); // in case of compressed blob all
-				    // or none pextents are invalid.
-    if (discard) {
-      onode->bc.discard(onode->c->cache, logical_offset,
-                              get_blob().get_logical_length());
-    }
-  } else {
-    size_t pos = 0;
-    for (auto e : get_blob().get_extents()) {
-      if (!e.is_valid()) {
-        dout(20) << __func__ << " 0x" << std::hex << pos
-		 << "~" << e.length
-                 << std::dec << dendl;
-        onode->bc.discard(onode->c->cache, logical_offset + pos, e.length);
-      }
-      pos += e.length;
-    }
-    if (get_blob().can_prune_tail()) {
-      dirty_blob().prune_tail();
-      used_in_blob.prune_tail(get_blob().get_ondisk_length());
-      dout(20) << __func__ << " pruned tail, now " << get_blob() << dendl;
-    }
-  }
 }
 
 void BlueStore::Blob::get_ref(
@@ -16490,13 +16447,7 @@ void BlueStore::_wctx_finish(
 	r.swap(final);
       }
     }
-    // we can't invalidate our logical extents as we drop them because
-    // other lextents (either in our onode or others) may still
-    // reference them.  but we can throw out anything that is no
-    // longer allocated.  Note that this will leave behind edge bits
-    // that are no longer referenced but not deallocated (until they
-    // age out of the cache naturally).
-    // b->discard_unallocated(c.get(), o.get(), lo.e.logical_offset);
+
     for (auto e : r) {
       dout(20) << __func__ << "  release " << e << dendl;
       txc->released.insert(e.offset, e.length);
@@ -16872,6 +16823,7 @@ int BlueStore::_do_zero(TransContext *txc,
   WriteContext wctx;
   o->extent_map.fault_range(db, offset, length);
   o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
+  o->bc.discard(o->c->cache, offset, length);
   o->extent_map.dirty_range(offset, length);
   _wctx_finish(txc, c, o, &wctx);
 
@@ -16906,6 +16858,7 @@ void BlueStore::_do_truncate(
     o->bc.discard(o->c->cache, offset, length);
     o->extent_map.fault_range(db, offset, length);
     o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
+    o->bc.discard(o->c->cache, offset, length);
     o->extent_map.dirty_range(offset, length);
 
     _wctx_finish(txc, c, o, &wctx, maybe_unshared_blobs);
