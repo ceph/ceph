@@ -1095,6 +1095,22 @@ inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
     decode(m[k], p);
   }
 }
+template <std::move_constructible T, std::move_constructible U, class Comp, class Alloc,
+    typename t_traits, typename u_traits>
+inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
+decode(std::map<T, U, Comp, Alloc>& m, bufferlist::const_iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  m.clear();
+  while (n--) {
+    T k;
+    U v;
+    decode(k, p);
+    decode(v, p);
+    m.emplace(std::move(k), std::move(v));
+  }
+}
 template<class T, class U, class Comp, class Alloc>
 inline void decode_noclear(std::map<T,U,Comp,Alloc>& m, bufferlist::const_iterator& p)
 {
@@ -1104,6 +1120,19 @@ inline void decode_noclear(std::map<T,U,Comp,Alloc>& m, bufferlist::const_iterat
     T k;
     decode(k, p);
     decode(m[k], p);
+  }
+}
+template<std::move_constructible T, std::move_constructible U, class Comp, class Alloc>
+inline void decode_noclear(std::map<T,U,Comp,Alloc>& m, bufferlist::const_iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  while (n--) {
+    T k;
+    U v;
+    decode(k, p);
+    decode(v, p);
+    m.emplace(std::move(k), std::move(v));
   }
 }
 template<class T, class U, class Comp, class Alloc,
@@ -1136,6 +1165,21 @@ inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
     T k;
     decode(k, p);
     decode(m[k], p);
+  }
+}
+
+template <std::move_constructible T, std::move_constructible U, class Comp, class Alloc,
+    typename t_traits, typename u_traits>
+inline std::enable_if_t<!t_traits::supported || !u_traits::supported>
+decode_nohead(int n, std::map<T, U, Comp, Alloc>& m, bufferlist::const_iterator& p)
+{
+  m.clear();
+  while (n--) {
+    T k;
+    U v;
+    decode(k, p);
+    decode(v, p);
+    m.emplace(std::move(k), std::move(v));
   }
 }
 
@@ -1287,6 +1331,21 @@ inline void decode(unordered_map<T,U,Hash,Pred,Alloc>& m, bufferlist::const_iter
     T k;
     decode(k, p);
     decode(m[k], p);
+  }
+}
+
+template <std::move_constructible T, std::move_constructible U, class Hash, class Pred, class Alloc>
+inline void decode(unordered_map<T, U, Hash, Pred, Alloc>& m, bufferlist::const_iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  m.clear();
+  while (n--) {
+    T k;
+    U v;
+    decode(k, p);
+    decode(v, p);
+    m.emplace(std::move(k), std::move(v));
   }
 }
 

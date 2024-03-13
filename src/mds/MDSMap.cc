@@ -228,6 +228,12 @@ void MDSMap::dump(Formatter *f) const
   f->dump_string("balancer", balancer);
   f->dump_string("bal_rank_mask", bal_rank_mask);
   f->dump_int("standby_count_wanted", std::max(0, standby_count_wanted));
+  f->dump_unsigned("qdb_leader", qdb_cluster_leader);
+  f->open_array_section("qdb_cluster");
+  for (auto m: qdb_cluster_members) {
+    f->dump_int("member", m);
+  }
+  f->close_section();
 }
 
 void MDSMap::dump_flags_state(Formatter *f) const
@@ -290,6 +296,7 @@ void MDSMap::print(ostream& out) const
   out << "balancer\t" << balancer << "\n";
   out << "bal_rank_mask\t" << bal_rank_mask << "\n";
   out << "standby_count_wanted\t" << std::max(0, standby_count_wanted) << "\n";
+  out << "qdb_cluster\tleader: " << qdb_cluster_leader << " members: " << qdb_cluster_members << std::endl;
 
   multimap< pair<mds_rank_t, unsigned>, mds_gid_t > foo;
   for (const auto &p : mds_info) {
@@ -773,7 +780,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(data_pools, bl);
   encode(cas_pool, bl);
 
-  __u16 ev = 18;
+  __u16 ev = 19;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -802,6 +809,8 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(required_client_features, bl);
   encode(bal_rank_mask, bl);
   encode(max_xattr_size, bl);
+  encode(qdb_cluster_leader, bl);
+  encode(qdb_cluster_members, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -955,6 +964,11 @@ void MDSMap::decode(bufferlist::const_iterator& p)
 
   if (ev >= 18) {
     decode(max_xattr_size, p);
+  }
+
+  if (ev >= 19) {
+    decode(qdb_cluster_leader, p);
+    decode(qdb_cluster_members, p);
   }
 
   /* All MDS since at least v14.0.0 understand INLINE */

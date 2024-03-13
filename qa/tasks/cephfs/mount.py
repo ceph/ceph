@@ -761,17 +761,18 @@ class CephFSMount(object):
             'rm', '-f', os.path.join(self.hostfs_mntpt, filename)
         ])
 
-    def _run_python(self, pyscript, py_version='python3', sudo=False):
+    def _run_python(self, pyscript, py_version='python3', sudo=False, timeout=None):
         args, omit_sudo = [], True
         if sudo:
             args.append('sudo')
             omit_sudo = False
-        args += ['stdin-killer', '--', py_version, '-c', pyscript]
+        timeout_args = ['--timeout', "%d" % timeout] if timeout is not None else []
+        args += ['stdin-killer', *timeout_args, '--', py_version, '-c', pyscript]
         return self.client_remote.run(args=args, wait=False, stdin=run.PIPE,
                                       stdout=StringIO(), omit_sudo=omit_sudo)
 
-    def run_python(self, pyscript, py_version='python3', sudo=False):
-        p = self._run_python(pyscript, py_version, sudo=sudo)
+    def run_python(self, pyscript, py_version='python3', sudo=False, timeout=None):
+        p = self._run_python(pyscript, py_version, sudo=sudo, timeout=timeout)
         p.wait()
         return p.stdout.getvalue().strip()
 
@@ -1243,7 +1244,7 @@ class CephFSMount(object):
             size=size
         )))
 
-    def validate_test_pattern(self, filename, size):
+    def validate_test_pattern(self, filename, size, timeout=None):
         log.info("Validating {0} bytes from {1}".format(size, filename))
         # Use sudo because cephfs-data-scan may recreate the file with owner==root
         return self.run_python(dedent("""
@@ -1262,7 +1263,7 @@ class CephFSMount(object):
         """.format(
             path=os.path.join(self.hostfs_mntpt, filename),
             size=size
-        )), sudo=True)
+        )), sudo=True, timeout=timeout)
 
     def open_n_background(self, fs_path, count):
         """
