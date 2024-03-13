@@ -23,12 +23,6 @@ std::string_view MDSCacheObject::generic_pin_name(int p) const {
   }
 }
 
-void MDSCacheObject::finish_waiting(uint64_t mask, int result) {
-  MDSContext::vec finished;
-  take_waiting(mask, finished);
-  finish_contexts(g_ceph_context, finished, result);
-}
-
 void MDSCacheObject::dump(ceph::Formatter *f) const
 {
   f->dump_bool("is_auth", is_auth());
@@ -84,54 +78,3 @@ void MDSCacheObject::dump_states(ceph::Formatter *f) const
   if (state_test(STATE_REJOINUNDEF))
     f->dump_string("state", "rejoinundef");
 }
-
-bool MDSCacheObject::is_waiter_for(uint64_t mask, uint64_t min) {
-  if (!min) {
-    min = mask;
-    while (min & (min-1))  // if more than one bit is set
-      min &= min-1;        //  clear LSB
-  }
-  for (auto p = waiting.lower_bound(min); p != waiting.end(); ++p) {
-    if (p->first & mask) return true;
-    if (p->first > mask) return false;
-  }
-  return false;
-}
-
-void MDSCacheObject::take_waiting(uint64_t mask, MDSContext::vec& ls) {
-  if (waiting.empty()) return;
-
-  // process ordered waiters in the same order that they were added.
-  std::map<uint64_t, MDSContext*> ordered_waiters;
-
-  for (auto it = waiting.begin(); it != waiting.end(); ) {
-    if (it->first & mask) {
-        if (it->second.first > 0) {
-          ordered_waiters.insert(it->second);
-        } else {
-          ls.push_back(it->second.second);
-        }
-//      pdout(10,g_conf()->debug_mds) << (mdsco_db_line_prefix(this))
-//                                 << "take_waiting mask " << hex << mask << dec << " took " << it->second
-//                                 << " tag " << hex << it->first << dec
-//                                 << " on " << *this
-//                                 << dendl;
-        waiting.erase(it++);
-    } else {
-//      pdout(10,g_conf()->debug_mds) << "take_waiting mask " << hex << mask << dec << " SKIPPING " << it->second
-//                                 << " tag " << hex << it->first << dec
-//                                 << " on " << *this 
-//                                 << dendl;
-        ++it;
-    }
-  }
-  for (auto it = ordered_waiters.begin(); it != ordered_waiters.end(); ++it) {
-    ls.push_back(it->second);
-  }
-  if (waiting.empty()) {
-    put(PIN_WAITER);
-    waiting.clear();
-  }
-}
-
-uint64_t MDSCacheObject::last_wait_seq = 0;

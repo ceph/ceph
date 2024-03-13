@@ -393,13 +393,16 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    */
   static const int MASK_STATE_REPLICATED = STATE_RANDEPHEMERALPIN;
 
+  constexpr static WaitTag const  WAIT_ID_CINODE   = WaitTag(0);
+
   // -- waiters --
-  static const uint64_t WAIT_DIR         = (1<<0);
-  static const uint64_t WAIT_FROZEN      = (1<<1);
-  static const uint64_t WAIT_TRUNC       = (1<<2);
-  static const uint64_t WAIT_FLOCK       = (1<<3);
-  
-  static const uint64_t WAIT_ANY_MASK	= (uint64_t)(-1);
+  constexpr static WaitTag const  WAIT_DIR         = WAIT_ID_CINODE.bit_mask(0);
+  constexpr static WaitTag const  WAIT_FROZEN      = WAIT_ID_CINODE.bit_mask(1);
+  constexpr static WaitTag const  WAIT_TRUNC       = WAIT_ID_CINODE.bit_mask(2);
+  constexpr static WaitTag const  WAIT_FLOCK       = WAIT_ID_CINODE.bit_mask(3);
+  static const uint64_t WAIT_BITS        = 4;
+
+  constexpr static WaitTag const  WAIT_ANY_MASK = WAIT_ID_CINODE | (uint64_t)((1 << WAIT_BITS) - 1);
 
   // misc
   static const unsigned EXPORT_NONCE = 1; // nonce given to replicas created by export
@@ -767,8 +770,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_waiting_for_dir(frag_t fg) {
     return waiting_on_dir.count(fg);
   }
-  void add_waiter(uint64_t tag, MDSContext *c) override;
-  void take_waiting(uint64_t tag, MDSContext::vec& ls) override;
+  void add_waiter(WaitTag tag, MDSContext *c, bool ordered = false) override;
+  void take_waiting(WaitTag tag, MDSContext::vec& ls) override;
 
   // -- encode/decode helpers --
   void _encode_base(ceph::buffer::list& bl, uint64_t features);

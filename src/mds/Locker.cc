@@ -1635,7 +1635,7 @@ bool Locker::rdlock_start(SimpleLock *lock, const MDRequestRef& mut, bool as_ano
   }
 
   // wait!
-  int wait_on;
+  WaitTag wait_on;
   if (lock->get_parent()->is_auth() && lock->is_stable())
     wait_on = SimpleLock::WAIT_RD;
   else

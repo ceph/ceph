@@ -2773,9 +2773,9 @@ void CInode::take_dir_waiting(frag_t fg, MDSContext::vec& ls)
   }
 }
 
-void CInode::add_waiter(uint64_t tag, MDSContext *c) 
+void CInode::add_waiter(WaitTag tag, MDSContext *c, bool ordered) 
 {
-  dout(10) << __func__ << " tag " << std::hex << tag << std::dec << " " << c
+  dout(10) << __func__ << tag << c
 	   << " !ambig " << !state_test(STATE_AMBIGUOUSAUTH)
 	   << " !frozen " << !is_frozen_inode()
 	   << " !freezing " << !is_freezing_inode()
@@ -2790,12 +2790,12 @@ void CInode::add_waiter(uint64_t tag, MDSContext *c)
     return;
   }
   dout(15) << "taking waiter here" << dendl;
-  MDSCacheObject::add_waiter(tag, c);
+  MDSCacheObject::add_waiter(tag, c, ordered);
 }
 
-void CInode::take_waiting(uint64_t mask, MDSContext::vec& ls)
+void CInode::take_waiting(WaitTag tag, MDSContext::vec& ls)
 {
-  if ((mask & WAIT_DIR) && !waiting_on_dir.empty()) {
+  if ((tag & WAIT_DIR) && !waiting_on_dir.empty()) {
     // take all dentry waiters
     while (!waiting_on_dir.empty()) {
       auto it = waiting_on_dir.begin();
@@ -2808,7 +2808,7 @@ void CInode::take_waiting(uint64_t mask, MDSContext::vec& ls)
   }
 
   // waiting
-  MDSCacheObject::take_waiting(mask, ls);
+  MDSCacheObject::take_waiting(tag, ls);
 }
 
 void CInode::maybe_finish_freeze_inode()
