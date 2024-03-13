@@ -96,6 +96,7 @@ class MDSCommandOp : public CommandOp
 {
   public:
   mds_gid_t     mds_gid;
+  bool          one_shot = false;
 
   explicit MDSCommandOp(ceph_tid_t t) : CommandOp(t) {}
   explicit MDSCommandOp(ceph_tid_t t, ceph_tid_t multi_id) : CommandOp(t, multi_id) {}
@@ -335,7 +336,7 @@ public:
     const std::string &mds_spec,
     const std::vector<std::string>& cmd,
     const bufferlist& inbl,
-    bufferlist *poutbl, std::string *prs, Context *onfinish);
+    bufferlist *poutbl, std::string *prs, Context *onfinish, bool one_shot = false);
 
   // these should (more or less) mirror the actual system calls.
   int statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms);
@@ -714,6 +715,27 @@ public:
   virtual void shutdown();
 
   // messaging
+  int cancel_commands_if(std::regular_invocable<MDSCommandOp const&> auto && error_for_op)
+  {
+    std::vector<ceph_tid_t> cancel_ops;
+
+    std::scoped_lock cmd_lock(command_lock);
+    auto& commands = command_table.get_commands();
+    for (const auto &[tid, op]: commands) {
+      int rc = static_cast<int>(error_for_op(op));
+      if (rc) {
+        cancel_ops.push_back(tid);
+        if (op.on_finish)
+          op.on_finish->complete(rc);
+      }
+    }
+
+    for (const auto& tid : cancel_ops)
+      command_table.erase(tid);
+
+    return cancel_ops.size();
+  }
+
   void cancel_commands(const MDSMap& newmap);
   void handle_mds_map(const MConstRef<MMDSMap>& m);
   void handle_fs_map(const MConstRef<MFSMap>& m);
