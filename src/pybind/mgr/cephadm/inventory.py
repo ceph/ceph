@@ -1698,6 +1698,8 @@ class EventStore():
 
         for e in self.events[event.kind_subject()]:
             if e.message == event.message:
+                # if subject and message match, just update the timestamp
+                e.created = event.created
                 return
 
         self.events[event.kind_subject()].append(event)
