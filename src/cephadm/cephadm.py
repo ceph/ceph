@@ -1340,6 +1340,13 @@ class CephExporter(object):
         ]
         return args
 
+    def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
+        if not os.path.exists(self.sock_dir):
+            os.mkdir(self.sock_dir)
+        # part of validation is for the sock dir, so we postpone
+        # it until now
+        self.validate()
+
     def validate(self) -> None:
         if not os.path.isdir(self.sock_dir):
             raise Error(f'Directory does not exist. Got: {self.sock_dir}')
@@ -3303,6 +3310,10 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
     elif daemon_type == NodeProxy.daemon_type:
         node_proxy = NodeProxy.init(ctx, fsid, daemon_id)
         node_proxy.create_daemon_dirs(data_dir, uid, gid)
+
+    elif daemon_type == CephExporter.daemon_type:
+        ceph_exporter = CephExporter.init(ctx, fsid, daemon_id)
+        ceph_exporter.create_daemon_dirs(data_dir, uid, gid)
 
     _write_custom_conf_files(ctx, daemon_type, str(daemon_id), fsid, uid, gid)
 
