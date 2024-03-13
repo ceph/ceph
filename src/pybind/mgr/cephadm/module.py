@@ -42,6 +42,7 @@ from cephadm.agent import CephadmAgentHelpers
 
 
 from mgr_module import MgrModule, HandleCommandResult, Option, NotifyType
+from mgr_util import build_url
 import orchestrator
 from orchestrator.module import to_format, Format
 
@@ -2814,6 +2815,12 @@ Then run the following:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'promtail':
             deps += get_daemon_names(['loki'])
+        elif daemon_type == JaegerAgentService.TYPE:
+            for dd in self.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
+                assert dd.hostname is not None
+                port = dd.ports[0] if dd.ports else JaegerCollectorService.DEFAULT_SERVICE_PORT
+                deps.append(build_url(host=dd.hostname, port=port).lstrip('/'))
+            deps = sorted(deps)
         else:
             # TODO(redo): some error message!
             pass
