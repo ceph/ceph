@@ -1,0 +1,81 @@
+---
+roles:
+  # Test is for basic smb deployment & functionality. one node cluster is OK
+  - - host.a
+    - mon.a
+    - mgr.x
+    - osd.0
+    - osd.1
+    - client.0
+  # Reserve a host for acting as a test client
+  - - host.b
+    - cephadm.exclude
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+tasks:
+  # TODO: (jjm) I don't think `install` is necessary for this file. Remove?
+  - install:
+  - cephadm.configure_samba_client_container:
+      role: host.b
+  - cephadm:
+  - cephadm.shell:
+      host.a:
+        - ceph fs volume create cephfs
+  - cephadm.wait_for_service:
+      service: mds.cephfs
+  - cephadm.shell:
+      host.a:
+        # create a subvolume so we can verify that we're sharing something
+        - cmd: ceph fs subvolumegroup create cephfs g1
+        - cmd: ceph fs subvolume create cephfs sub1 --group-name=g1 --mode=0777
+        # Create a user access the file system from samba
+        - cmd: ceph fs authorize cephfs client.smbdata / rw
+        # Create a rados pool and store the config in it
+        - cmd: ceph osd pool create .smb --yes-i-really-mean-it
+        - cmd: ceph osd pool application enable .smb smb
+        - cmd: rados --pool=.smb --namespace=saserv1 put conf.toml /dev/stdin
+          stdin: |
+            samba-container-config = "v0"
+            [configs.saserv1]
+            shares = ["share1"]
+            globals = ["default", "domain"]
+            instance_name = "SAMBA"
+            [shares.share1.options]
+            "vfs objects" = "ceph"
+            path = "/"
+            "ceph:config_file" = "/etc/ceph/ceph.conf"
+            "ceph:user_id" = "smbdata"
+            "kernel share modes" = "no"
+            "read only" = "no"
+            "browseable" = "yes"
+            [globals.default.options]
+            "server min protocol" = "SMB2"
+            "load printers" = "no"
+            "printing" = "bsd"
+            "printcap name" = "/dev/null"
+            "disable spoolss" = "yes"
+            "guest ok" = "no"
+            [globals.domain.options]
+            security = "USER"
+            workgroup = "STANDALONE1"
+            [[users.all_entries]]
+            name = "smbuser1"
+            password = "insecure321"
+  - cephadm.apply:
+      specs:
+        - service_type: smb
+          service_id: saserv1
+          placement:
+            count: 1
+          cluster_id: saserv1
+          config_uri: "rados://.smb/saserv1/conf.toml"
+          include_ceph_users:
+            - "client.smbdata"
+  - cephadm.wait_for_service:
+      service: smb.saserv1
+  - cephadm.exec:
+      host.b:
+        - sleep 30
+        - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U smbuser1%insecure321 //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
