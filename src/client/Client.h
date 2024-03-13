@@ -1067,14 +1067,15 @@ protected:
   Dentry* link(Dir *dir, const std::string& name, Inode *in, Dentry *dn);
   void unlink(Dentry *dn, bool keepdir, bool keepdentry);
 
-  int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
-  int fill_stat(InodeRef& in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
-    return fill_stat(in.get(), st, dirstat, rstat);
+  int get_stat_size(Inode *in, const UserPerm& perms, uint64_t *stat_size);
+  int fill_stat(Inode *in, struct stat *st, const UserPerm& perms, frag_info_t *dirstat=0, nest_info_t *rstat=0);
+  int fill_stat(InodeRef& in, struct stat *st, const UserPerm& perms, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
+    return fill_stat(in.get(), st, perms, dirstat, rstat);
   }
 
-  void fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx);
-  void fill_statx(InodeRef& in, unsigned int mask, struct ceph_statx *stx) {
-    return fill_statx(in.get(), mask, stx);
+  int fill_statx(Inode *in, const UserPerm& perms, unsigned int mask, struct ceph_statx *stx);
+  int fill_statx(InodeRef& in, const UserPerm& perms, unsigned int mask, struct ceph_statx *stx) {
+    return fill_statx(in.get(), perms, mask, stx);
   }
 
   void touch_dn(Dentry *dn);
