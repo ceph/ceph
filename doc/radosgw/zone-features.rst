@@ -2,9 +2,9 @@
 Zone Features
 =============
 
-Some multisite features require support from all zones before they can be enabled. Each zone lists its ``supported_features``, and each zonegroup lists its ``enabled_features``. Before a feature can be enabled in the zonegroup, it must be supported by all of its zones.
+Some features require support from all cooperating radosgws before they can be enabled. Each zone lists its ``supported_features``, and each zonegroup lists its ``enabled_features``. Before a feature can be enabled in the zonegroup, it must be supported by all of its zones.
 
-On creation of new zones and zonegroups, all known features are supported and some features (see table below) are enabled by default. After upgrading an existing multisite configuration, however, new features must be enabled manually.
+On creation of new zones and zonegroups, all known features are supported and some features (see table below) are enabled by default. After upgrading an existing zone, however, new features must be enabled manually.
 
 Supported Features
 ------------------
@@ -61,6 +61,9 @@ On the cluster that contains the given zone:
 
    radosgw-admin zone modify --rgw-zone={zone-name} --enable-feature={feature-name}
    radosgw-admin period update --commit
+
+.. note:: The ``period update`` command only works if the zone belongs to a realm.
+   Otherwise, all radosgws will need to restart before they notice the change.
 
 
 Remove support for a zone feature
