@@ -1221,7 +1221,7 @@ class CephNvmeof(object):
         out, err, ret = call(ctx,
                              [ctx.container_engine.path, 'inspect',
                               '--format', '{{index .Config.Labels "io.ceph.version"}}',
-                              ctx.image])
+                              container_id])
         version = None
         if ret == 0:
             version = out.strip()
