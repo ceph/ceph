@@ -16,6 +16,10 @@
 #include "include/mempool.h"
 #include "include/demangle.h"
 
+#if defined(MEMPOOL_SCHED_GETCPU) && defined(__GNUC__) && defined(__x86_64__)
+#include <sys/platform/x86.h>
+#endif
+
 // default to debug_mode off
 bool mempool::debug_mode = false;
 
@@ -26,74 +30,7 @@ namespace mempool {
 static size_t num_shard_bits;
 static size_t num_shards;
 
-static thread_local size_t thread_shard_index = max_shards;
-
-#if !defined(MEMPOOL_SCHED_GETCPU)
-// There is no cheap way of determining which core a thread is assigned to.
-// Statically assign threads to shards to minimize how many threads use the
-// same shard
-static int thread_shard_next;
-static std::mutex thread_shard_mtx;
-
-#else
-// Use sched_getcpu() to determine which core a thread is running on,
-// use this to assign the thread a shard and cache this value to
-// eliminate overhead of repeatedly calling sched_getcpu. Periodically
-// check the cached value to deal with non-bound threads switching cores.
-// Ideally this means that each CPU core accesses its own shard and there
-// are no shared CPU cachelines. If a thread switches cores performance
-// will be non-optimal (but atomics ensure correctness) until the switch
-// is noticed and a new shard is selected
-
-enum {
-  thread_shard_recheck_min_interval = 1,
-  thread_shard_recheck_max_interval = 10000
-};
-
-static thread_local int thread_shard_recheck_count;
-static thread_local int thread_shard_recheck_interval;
-
-// Keep statistics on how successfully we manage to track which core a thread
-// is running on
-//
-// correct_core - number of times thread to core binding is correctly tracked
-// incorrect_core - number of times thread to core binding is incorrectly tracked
-// checked_core - number of times sched_getcpu() has been called
-//
-// sched_getcpu_cost = 32 cycles
-// cacheline_ping_pong_cost = 150 cycles (intra socket), 400 cycles (inter socket)
-//
-// These costs will vary between CPU architectures, but relative difference between
-// costs is likely to be similar
-//
-// cached_algorithm_cost = checked_core * sched_getcpu_cost + incorrect_core * cacheline_ping_pong_cost
-// uncached_algorithm_cost = (correct_core + incorrect_core) * sched_getcpu_cost
-
-struct fault_stats_t {
-  ceph::atomic<size_t> correct_core = {0};
-  ceph::atomic<size_t> incorrect_core = {0};
-  ceph::atomic<size_t> checked_core = {0};
-
-  char __padding[128 - sizeof(ceph::atomic<size_t>)*3];
-
-  void dump(ceph::Formatter *f) const {
-    f->dump_int("correct_core", correct_core );
-    f->dump_int("incorrect_core", incorrect_core);
-    f->dump_int("checked_core", checked_core);
-  }
-
-  fault_stats_t& operator+=(const fault_stats_t& o) {
-    correct_core += o.correct_core;
-    incorrect_core += o.incorrect_core;
-    checked_core += o.checked_core;
-    return *this;
-  }
-} __attribute__ ((aligned (128)));
-static_assert(sizeof(fault_stats_t) == 128, "fault_stats_t should be cacheline-sized");
-
-static std::unique_ptr<fault_stats_t[]> shard_faults;
-#endif
-
+std::unique_ptr<shard_t[]> shards = std::make_unique<shard_t[]>(get_num_shards());
 }
 
 size_t mempool::get_num_shards(void) {
@@ -110,53 +47,72 @@ size_t mempool::get_num_shards(void) {
       threads>>=1;
     }
     num_shards = 1 << num_shard_bits;
-#if defined(MEMPOOL_SCHED_GETCPU)
-    shard_faults = std::make_unique<fault_stats_t[]>(num_shards);
-#endif
   });
   return num_shards;
 }
 
+// There are 3 implementations of pick_a_shard_int, THREAD_OWNER is the
+// preferred implementaion, ROUND ROBIN is used if sched_getcpu() is not
+// available.
 int mempool::pick_a_shard_int(void) {
-#if !defined(MEMPOOL_SCHED_GETCPU)
+#if defined(MEMPOOL_THREAD_OWNER)
+  // THREAD_OWNER: Shards are owed by a thread, ownership is updated whenever
+  // a thread uses a shard. Threads call sched_getcpu() to select which shard
+  // to use and cache this value. Threads update their cached value whenever
+  // they access a shard they do not currently own. There is very little cache
+  // line ping pong and minimal calls to sched_getcpu()
+  static int thread_owner_id_next = 1;
+  static std::mutex thread_owner_mtx;
+  struct threadinfo_t {
+    int    owner_id;
+    size_t shard_index;
+  };
+  static thread_local struct threadinfo_t threadinfo = { -1,0 };
+  if (shards[threadinfo.shard_index].owner_id==threadinfo.owner_id) {
+    return threadinfo.shard_index;
+  }
+  if (threadinfo.owner_id == -1) {
+    // Thread has not been assigned an owner yet
+    std::lock_guard<std::mutex> lck (thread_owner_mtx);
+    threadinfo.owner_id = thread_owner_id_next++;
+  }
+  threadinfo.shard_index = sched_getcpu() & ((1 << num_shard_bits) - 1);
+  shards[threadinfo.shard_index].owner_id = threadinfo.owner_id;
+  return threadinfo.shard_index;
+#elif defined(MEMPOOL_SCHED_GETCPU)
+  // SCHED_GETCPU: Shards are assigned to CPU cores. Threads use sched_getcpu()
+  // to query the core before every access to the shard. Other than the (very
+  // rare) situation where a context switch occurs between calling
+  // sched_getcpu() and updating the shard there is no cache line
+  // contention
+  //
+  // For modern x86 platforms (e.g. Intel Icelake and newer) use rdpid to
+  // determine the core.
+#if defined(__GNUC__) && defined(__x86_64__)
+  static bool has_rdpid = CPU_FEATURE_ACTIVE(RDPID);
+  if (has_rdpid) {
+      long shard;
+      asm ("rdpid %0" : "=r" (shard));
+      return shard & ((1 << num_shard_bits) - 1);
+  }
+#endif
+  return sched_getcpu() & ((1 << num_shard_bits) - 1);
+#else
+  // ROUND_ROBIN: Static assignment of threads to shards using a round robin
+  // distribution. This minimizes the number of threads sharing the same shard,
+  // but threads sharing the same shard will cause cache line ping pong when
+  // the threads are running on different cores (likely)
+  static int thread_shard_next;
+  static std::mutex thread_shard_mtx;
+  static thread_local size_t thread_shard_index = max_shards;
+
   if (thread_shard_index == max_shards) {
     // Thread has not been assigned to a shard yet
     std::lock_guard<std::mutex> lck (thread_shard_mtx);
     thread_shard_index = thread_shard_next++ & ((1 << num_shard_bits) - 1);
   }
-#else
-  if (thread_shard_index == max_shards) {
-    // Thread has not been assigned to a shard yet
-    thread_shard_index = sched_getcpu() & ((1 << num_shard_bits) - 1);
-    thread_shard_recheck_count = 0;
-    thread_shard_recheck_interval = thread_shard_recheck_min_interval;
-  }else if (++thread_shard_recheck_count >= thread_shard_recheck_interval) {
-    // Periodically recheck that thread has not changed cores
-    size_t new_index = sched_getcpu() & ((1 << num_shard_bits) - 1);
-    shard_faults[thread_shard_index].checked_core++;
-    thread_shard_recheck_count = 0;
-    if (thread_shard_index == new_index) {
-      // Thread has not moved, recheck less often
-      shard_faults[thread_shard_index].correct_core += thread_shard_recheck_interval;
-      if (thread_shard_recheck_interval < thread_shard_recheck_max_interval) {
-	thread_shard_recheck_interval++;
-      }
-    }else{
-      // Thread has moved, recheck more often
-      thread_shard_index = new_index;
-      shard_faults[thread_shard_index].incorrect_core += thread_shard_recheck_interval / 2;
-      int decrease = thread_shard_recheck_interval / 2;
-      if ( decrease == 0) {
-	decrease = 1;
-      }
-      thread_shard_recheck_interval -= decrease;
-      if (thread_shard_recheck_interval < thread_shard_recheck_min_interval) {
-	thread_shard_recheck_interval = thread_shard_recheck_min_interval;
-      }
-    }
-  }
-#endif
   return thread_shard_index;
+#endif
 }
 
 mempool::pool_t& mempool::get_pool(mempool::pool_index_t ix)
@@ -165,6 +121,7 @@ mempool::pool_t& mempool::get_pool(mempool::pool_index_t ix)
   // this function, even if it is called by ctors in other compilation
   // units that are being initialized before this compilation unit.
   static mempool::pool_t table[num_pools];
+  table[ix].pool_index = ix;
   return table[ix];
 }
 
@@ -191,13 +148,6 @@ void mempool::dump(ceph::Formatter *f)
   }
   f->close_section();
   f->dump_object("total", total);
-#if defined(MEMPOOL_SCHED_GETCPU)
-  fault_stats_t total_fault_stats;
-  for (size_t i = 0; i < get_num_shards(); ++i) {
-      total_fault_stats += shard_faults[i];
-  }
-  f->dump_object("fault_stats", total_fault_stats);
-#endif
   f->close_section();
 }
 
@@ -213,7 +163,7 @@ size_t mempool::pool_t::allocated_bytes() const
 {
   ssize_t result = 0;
   for (size_t i = 0; i < get_num_shards(); ++i) {
-    result += shard[i].bytes;
+    result += shards[i].pool[pool_index].bytes;
   }
   if (result < 0) {
     // we raced with some unbalanced allocations/deallocations
@@ -226,7 +176,7 @@ size_t mempool::pool_t::allocated_items() const
 {
   ssize_t result = 0;
   for (size_t i = 0; i < get_num_shards(); ++i) {
-    result += shard[i].items;
+    result += shards[i].pool[pool_index].items;
   }
   if (result < 0) {
     // we raced with some unbalanced allocations/deallocations
@@ -238,8 +188,9 @@ size_t mempool::pool_t::allocated_items() const
 void mempool::pool_t::adjust_count(ssize_t items, ssize_t bytes)
 {
   const auto shid = pick_a_shard_int();
-  shard[shid].items += items;
-  shard[shid].bytes += bytes;
+  auto& shard = shards[shid].pool[pool_index];
+  shard.items += items;
+  shard.bytes += bytes;
 }
 
 void mempool::pool_t::get_stats(
@@ -247,8 +198,8 @@ void mempool::pool_t::get_stats(
   std::map<std::string, stats_t> *by_type) const
 {
   for (size_t i = 0; i < get_num_shards(); ++i) {
-    total->items += shard[i].items;
-    total->bytes += shard[i].bytes;
+    total->items += shards[i].pool[pool_index].items;
+    total->bytes += shards[i].pool[pool_index].bytes;
   }
   if (debug_mode) {
     std::lock_guard shard_lock(lock);

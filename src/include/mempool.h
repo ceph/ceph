@@ -27,7 +27,7 @@
 #include <boost/container/flat_map.hpp>
 
 #if defined(_GNU_SOURCE)
-#  define MEMPOOL_SCHED_GETCPU
+#  define MEMPOOL_THREAD_OWNER
 #  include <sched.h>
 #endif
 
@@ -198,7 +198,7 @@ extern void set_debug_mode(bool d);
 class pool_t;
 
 enum {
-#if defined(MEMPOOL_SCHED_GETCPU)
+#if defined(MEMPOOL_SCHED_GETCPU) || defined(MEMPOOL_THREAD_OWNER)
   min_shards = 1,        //1
 #else
   min_shards = 1<<5,     //32
@@ -210,27 +210,10 @@ enum {
 int pick_a_shard_int(void);
 size_t get_num_shards(void);
 
-//
-// Align shard to a cacheline.
-//
-// It would be possible to retrieve the value at runtime (for instance
-// with getconf LEVEL1_DCACHE_LINESIZE or grep -m1 cache_alignment
-// /proc/cpuinfo). It is easier to hard code the largest cache
-// linesize for all known processors (128 bytes). If the actual cache
-// linesize is smaller on a given processor, it will just waste a few
-// bytes.
-//
-struct shard_t {
-  ceph::atomic<size_t> bytes = {0};
-  ceph::atomic<size_t> items = {0};
-  char __padding[128 - sizeof(ceph::atomic<size_t>)*2];
-} __attribute__ ((aligned (128)));
-
-static_assert(sizeof(shard_t) == 128, "shard_t should be cacheline-sized");
-
 struct stats_t {
-  ssize_t items = 0;
-  ssize_t bytes = 0;
+  ceph::atomic<size_t> items = {0};
+  ceph::atomic<size_t> bytes = {0};
+
   void dump(ceph::Formatter *f) const {
     f->dump_int("items", items);
     f->dump_int("bytes", bytes);
@@ -242,6 +225,26 @@ struct stats_t {
     return *this;
   }
 };
+
+// Align shard to a cacheline, group stats for all mempools in the
+// same shard to improve cache line density.
+//
+// It would be possible to retrieve the value at runtime (for instance
+// with getconf LEVEL1_DCACHE_LINESIZE or grep -m1 cache_alignment
+// /proc/cpuinfo). It is easier to hard code the largest cache
+// linesize for all known processors (128 bytes). If the actual cache
+// linesize is smaller on a given processor, it will just waste a few
+// bytes.
+//
+struct shard_t {
+  stats_t pool[num_pools];
+#if defined(MEMPOOL_THREAD_OWNER)
+  int     owner_id;
+#endif
+} __attribute__ ((aligned (128)));
+static_assert(sizeof(shard_t)%128 == 0, "shard_t should be cacheline-sized");
+
+extern std::unique_ptr<shard_t[]> shards;
 
 pool_t& get_pool(pool_index_t ix);
 const char *get_pool_name(pool_index_t ix);
@@ -265,14 +268,14 @@ struct type_info_hash {
 };
 
 class pool_t {
-  std::unique_ptr<shard_t[]> shard = std::make_unique<shard_t[]>(get_num_shards());
-
   mutable std::mutex lock;  // only used for types list
   std::unordered_map<const char *, type_t> type_map;
 
   template<pool_index_t, typename T>
   friend class pool_allocator;
 public:
+  pool_index_t pool_index;
+
   //
   // How much this pool consumes. O(<num_shards>)
   //
@@ -344,7 +347,7 @@ public:
   T* allocate(size_t n, void *p = nullptr) {
     size_t total = sizeof(T) * n;
     const auto shid = pick_a_shard_int();
-    auto& shard = pool->shard[shid];
+    auto& shard = shards[shid].pool[pool->pool_index];
     shard.bytes += total;
     shard.items += n;
     if (type) {
@@ -357,7 +360,7 @@ public:
   void deallocate(T* p, size_t n) {
     size_t total = sizeof(T) * n;
     const auto shid = pick_a_shard_int();
-    auto& shard = pool->shard[shid];
+    auto& shard = shards[shid].pool[pool->pool_index];
     shard.bytes -= total;
     shard.items -= n;
     if (type) {
@@ -369,7 +372,7 @@ public:
   T* allocate_aligned(size_t n, size_t align, void *p = nullptr) {
     size_t total = sizeof(T) * n;
     const auto shid = pick_a_shard_int();
-    auto& shard = pool->shard[shid];
+    auto& shard = shards[shid].pool[pool->pool_index];
     shard.bytes += total;
     shard.items += n;
     if (type) {
@@ -386,7 +389,7 @@ public:
   void deallocate_aligned(T* p, size_t n) {
     size_t total = sizeof(T) * n;
     const auto shid = pick_a_shard_int();
-    auto& shard = pool->shard[shid];
+    auto& shard = shards[shid].pool[pool->pool_index];
     shard.bytes -= total;
     shard.items -= n;
     if (type) {

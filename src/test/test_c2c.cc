@@ -25,7 +25,7 @@ void sigterm_handler(int signum)
 {
   size_t total = 0;
   for (size_t i = 0; i < mempool::get_num_shards();i++) {
-    auto& shard = shards[i];
+    auto& shard = shards[i].pool[mempool::mempool_unittest_1];
     total += shard.bytes;
   }
   std::cout << total << std::endl;
@@ -76,7 +76,7 @@ int main(int argc, const char **argv)
 	    } else {
 	      i = 0;
 	    }
-	    shards[i].bytes++;
+	    shards[i].pool[mempool::mempool_unittest_1].bytes++;
 	  }
 	}));
   }
