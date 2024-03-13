@@ -15439,7 +15439,7 @@ void BlueStore::_do_write_small(
             b->get_blob().get_ondisk_length() >= b_off + b_len &&
             b->get_blob().is_unused(b_off, b_len) &&
             b->get_blob().is_allocated(b_off, b_len)) {
-          _buffer_cache_write(txc, b, o, offset, bl,
+          _buffer_cache_write(txc, o, offset, bl,
                               wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
           _apply_padding(head_pad, tail_pad, bl);
 
@@ -15536,7 +15536,7 @@ void BlueStore::_do_write_small(
 
           bufferlist without_padding;
           without_padding.substr_of(bl, head_pad, bl.length() - head_pad);
-          _buffer_cache_write(txc, b, o, offset - head_read, std::move(without_padding),
+          _buffer_cache_write(txc, o, offset - head_read, std::move(without_padding),
                               wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
           b->dirty_blob().calc_csum(b_off, bl);
@@ -15825,7 +15825,7 @@ void BlueStore::_do_write_big_apply_deferred(
     logger->inc(l_bluestore_write_penalty_read_ops);
   }
   auto& b0 = dctx.blob_ref;
-  _buffer_cache_write(txc, b0, o, dctx.off - dctx.head_read, bl,
+  _buffer_cache_write(txc, o, dctx.off - dctx.head_read, bl,
     wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
   b0->dirty_blob().calc_csum(dctx.b_off, bl);
@@ -16365,7 +16365,7 @@ int BlueStore::_do_alloc_write(
     dout(20) << __func__ << "  lex " << *le << dendl;
     bufferlist without_pad;
     without_pad.substr_of(wi.bl, wi.b_off0-wi.b_off, wi.length0);
-    _buffer_cache_write(txc, wi.b, o, wi.logical_offset, std::move(without_pad),
+    _buffer_cache_write(txc, o, wi.logical_offset, std::move(without_pad),
                         wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
     // queue io
