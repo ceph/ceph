@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import http.cookies
+import json
 import logging
 import sys
+
+import cherrypy
 
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
@@ -34,16 +37,65 @@ class Auth(RESTController, ControllerAuthMixin):
     """
     Provide authenticates and returns JWT token.
     """
-
+    # pylint: disable=R0912
     def create(self, username, password):
         user_data = AuthManager.authenticate(username, password)
         user_perms, pwd_expiration_date, pwd_update_required = None, None, None
         max_attempt = Settings.ACCOUNT_LOCKOUT_ATTEMPTS
+        origin = cherrypy.request.headers.get('Origin', None)
+        try:
+            fsid = mgr.get('config')['fsid']
+        except KeyError:
+            fsid = ''
         if max_attempt == 0 or mgr.ACCESS_CTRL_DB.get_attempt(username) < max_attempt:
             if user_data:
                 user_perms = user_data.get('permissions')
                 pwd_expiration_date = user_data.get('pwdExpirationDate', None)
                 pwd_update_required = user_data.get('pwdUpdateRequired', False)
+
+            if isinstance(Settings.MULTICLUSTER_CONFIG, str):
+                try:
+                    item_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
+                except json.JSONDecodeError:
+                    item_to_dict = {}
+                multicluster_config = item_to_dict.copy()
+            else:
+                multicluster_config = Settings.MULTICLUSTER_CONFIG.copy()
+            try:
+                if fsid in multicluster_config['config']:
+                    existing_entries = multicluster_config['config'][fsid]
+                    if not any(entry['user'] == username for entry in existing_entries):
+                        existing_entries.append({
+                            "name": fsid,
+                            "url": origin,
+                            "cluster_alias": "local-cluster",
+                            "user": username
+                        })
+                else:
+                    multicluster_config['config'][fsid] = [{
+                        "name": fsid,
+                        "url": origin,
+                        "cluster_alias": "local-cluster",
+                        "user": username
+                    }]
+
+            except KeyError:
+                multicluster_config = {
+                    'current_url': origin,
+                    'current_user': username,
+                    'hub_url': origin,
+                    'config': {
+                        fsid: [
+                            {
+                                "name": fsid,
+                                "url": origin,
+                                "cluster_alias": "local-cluster",
+                                "user": username
+                            }
+                        ]
+                    }
+                }
+            Settings.MULTICLUSTER_CONFIG = multicluster_config
 
             if user_perms is not None:
                 url_prefix = 'https' if mgr.get_localized_module_option('ssl') else 'http'

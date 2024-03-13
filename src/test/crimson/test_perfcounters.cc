@@ -6,6 +6,7 @@
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
 #include "crimson/common/perf_counters_collection.h"
+#include "test/crimson/ctest_utils.h"
 
 #include <seastar/core/app-template.hh>
 #include <seastar/core/sharded.hh>
@@ -47,7 +48,7 @@ static seastar::future<> test_perfcounters(){
 
 int main(int argc, char** argv)
 {
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   return app.run(argc, argv, [&] {
     return test_perfcounters().then([] {
       std::cout << "All tests succeeded" << std::endl;

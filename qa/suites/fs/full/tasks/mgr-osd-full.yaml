@@ -12,7 +12,7 @@ overrides:
         debug mds: 20
       osd: # force bluestore since it's required for ec overwrites
         osd objectstore: bluestore
-        bluestore block size: 1073741824
+        bluestore block size: 2147483648
 tasks:
 - workunit:
     cleanup: true

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# version 2023-10-30
+# version 2024-03-04
 
 # rgw-restore-bucket-index is an EXPERIMENTAL tool to use in case
 # bucket index entries for objects in the bucket are somehow lost. It
@@ -13,7 +13,7 @@
 # Because this script must process json objects, the `jq` tool must be
 # installed on the system.
 #
-# Usage: $0 [--proceed] <bucket-name> [data-pool-name]
+# Usage: see the usage() function below for details
 #
 # This tool is designed to be interactive, allowing the user to
 # examine the list of objects to be reindexed before
@@ -27,29 +27,62 @@ export TOP_PID=$$
 # relies on this ordering
 export LC_ALL=C
 
-# temporary files
-export bkt_entry=/tmp/rgwrbi-bkt-entry.$$
-export bkt_inst=/tmp/rgwrbi-bkt-inst.$$
-export marker_ls=/tmp/rgwrbi-marker-ls.$$
-export obj_list=/tmp/rgwrbi-object-list.$$
-export obj_list_ver=/tmp/rgwrbi-object-list-ver.$$
-export obj_reindex_script=/tmp/rgwrbi-object-list-script.$$
-export zone_info=/tmp/rgwrbi-zone-info.$$
-export olh_info_enc=/tmp/rgwrbi-olh-info-enc.$$
-export olh_info_json=/tmp/rgwrbi-olh-info-json.$$
-export debug_log=/tmp/rgwrbi-debug-log.$$
-
+# whether or not the temporary files are cleaned on completion
 export clean_temps=1
 
 # make explicit tabs easier to see in code
 export TAB="	"
 
 
+#
+# helper functions
+#
+
+super_exit() {
+    kill -s TERM -${TOP_PID}
+}
+
+usage() {
+  >&2 cat << EOF
+
+Usage: $0 -b <bucket-name> [-l <rados-ls-file>] [-p <pool>] [-y]
+
+where:
+  -b <bucket-name>     Required - name of the bucket to operate on
+  -l <rados-ls-file>   Optional - file containing the output of 'rados ls -p <pool>'
+  -r <realm-name>      Optional - specify the realm if not applying to the default realm"
+  -g <zonegroup-name>  Optional - specify the zonegroup if not applying to the default zonegroup"
+  -z <zone-name>       Optional - specify the zone if not applying to the default zone"
+  -p <pool>            Optional - data pool; if not provided will be inferred from bucket and zone information
+  -t <tmp-dir>         Optional - specify a directory for temporary files other than the default of /tmp
+  -y                   Optional - proceed with restoring without confirming with the user
+                       USE WITH CAUTION.
+  -d                   Optional - run with debugging output
+EOF
+  super_exit
+}
+
+# cleans all temporary files
 clean() {
   if [ "$clean_temps" == 1 ] ;then
-    rm -f $bkt_entry $bkt_inst $marker_ls $obj_list $obj_list_ver \
-       $obj_reindex_script $zone_info $olh_info_enc $olh_info_json
+    rm -f $bkt_entry $temp_file_list
+       $zone_info $olh_info_enc $olh_info_json
   fi
+}
+
+test_temp_space() {
+    # use df to determine percentage of data and inodes used; strip
+    # out spaces and percent signs from the output, so we just have a
+    # number from 0 to 100
+    pcent=$(df -k $temp_dir --output=pcent | tail -1 | sed 's/[ %]//g')
+    ipcent=$(df -k $temp_dir --output=ipcent | tail -1 | sed 's/[ %]//g')
+    if [ "$pcent" -eq 100 -o "$ipcent" -eq 100 ] ;then
+	>&2 echo "ERROR: the temporary directory's partition is full, preventing continuation."
+	>&2 echo "    NOTE: the temporary directory is \"${temp_dir}\"."
+	>&2 df -k $temp_dir -h --output="target,used,avail,pcent,iused,iavail,ipcent"
+	>&2 echo "    NOTE: cleaning temporary files before exiting...."
+	super_exit
+    fi
 }
 
 # number of seconds for a bucket index pending op to be completed via
@@ -88,33 +121,6 @@ if [ "$exit_code" -ne 0 ] ;then
     exit $exit_code
 fi
 
-#
-# helper functions
-#
-
-super_exit() {
-   kill -s TERM $TOP_PID
-}
-
-usage() {
-  >&2 cat << EOF
-
-Usage: $0 -b <bucket-name> [-l <rados-ls-file>] [-p <pool>] [-y]
-
-where:
-  -b <bucket-name>     Required - name of the bucket to operate on
-  -l <rados-ls-file>   Optional - file containing the output of 'rados ls -p <pool>'
-  -r <realm-name>      Optional - specify the realm if not applying to the default realm"
-  -g <zonegroup-name>  Optional - specify the zonegroup if not applying to the default zonegroup"
-  -z <zone-name>       Optional - specify the zone if not applying to the default zone"
-  -p <pool>            Optional - data pool; if not provided will be inferred from bucket and zone information
-  -y                   Optional - proceed with restoring without confirming with the user
-                       USE WITH CAUTION.
-  -d                   Optional - run with debugging output
-EOF
-  super_exit
-}
-
 # Determines the name of the data pool. Expects the optional
 # command-line argument to appear as $1 if there is one. The
 # command-line has the highest priority, then the "explicit_placement"
@@ -137,6 +143,7 @@ get_pool() {
   fi
 
   radosgw-admin zone get $multisite_spec >$zone_info 2>/dev/null
+  test_temp_space
   pool=$(jq -r ".placement_pools [] | select(.key | contains(\"${plmt_pool}\")) .val .storage_classes.${plmt_class}.data_pool" $zone_info)
 
   if [ -z "$pool" ] ;then
@@ -147,12 +154,13 @@ get_pool() {
 }
 
 export bucket=""
+export temp_dir=/tmp
 pool=""
 multisite_spec=""
 lsoutput=""
 debug=0
 
-while getopts "b:l:p:r:g:z:yd" o; do
+while getopts "b:l:p:r:g:z:ydt:" o; do
     case "${o}" in
 	b)
 	    bucket="${OPTARG}"
@@ -187,6 +195,9 @@ while getopts "b:l:p:r:g:z:yd" o; do
 	    debug=1
 	    clean_temps=0
 	    ;;
+	t)
+	    temp_dir="${OPTARG}"
+	    ;;
 	*)
 	    echo
 	    usage
@@ -202,6 +213,24 @@ else
     export debugging_rgwadmin=" 2>/dev/null "
 fi
 
+if [ ! -d "$temp_dir" ] ;then
+    echo "ERROR: temporary directory $temp_dir is not a directory"
+    exit 1
+fi
+
+# temporary files
+export bkt_entry=${temp_dir}/rgwrbi-bkt-entry.$$
+export bkt_inst=${temp_dir}/rgwrbi-bkt-inst.$$
+export marker_ls=${temp_dir}/rgwrbi-marker-ls.$$
+export obj_list=${temp_dir}/rgwrbi-object-list.$$
+export obj_list_ver=${temp_dir}/rgwrbi-object-list-ver.$$
+export zone_info=${temp_dir}/rgwrbi-zone-info.$$
+export olh_info_enc=${temp_dir}/rgwrbi-olh-info-enc.$$
+export olh_info_json=${temp_dir}/rgwrbi-olh-info-json.$$
+export debug_log=${temp_dir}/rgwrbi-debug-log.$$
+
+export temp_file_list="$bkt_entry $bkt_inst $marker_ls $obj_list $obj_list_ver $zone_info $olh_info_enc $olh_info_json"
+
 # special code path for versioned buckets
 handle_versioned() {
     while read o ;do
@@ -213,7 +242,9 @@ handle_versioned() {
 
 	# process OLH object; determine final instance or delete-marker
 	rados -p $pool getxattr $olh_obj user.rgw.olh.info --object-locator "$olh_loc" >$olh_info_enc
+	test_temp_space
 	ceph-dencoder import $olh_info_enc type RGWOLHInfo decode dump_json >$olh_info_json
+	test_temp_space
 	last_instance=$(jq -r ".target.key.instance" $olh_info_json)
 	if [ -z "$last_instance" ] ;then
 	    # filters out entry without an instance
@@ -228,6 +259,7 @@ handle_versioned() {
 	    echo "last instance is $last_instance"
 	    echo "filter_out_last_instance is $filter_out_last_instance"
 	fi >>$debug_log
+	test_temp_space
 
 	# we currently don't need the delete marker, but we can have access to it
 	# delete_marker=$(jq -r ".removed" $olh_info_json) # true or false
@@ -237,6 +269,7 @@ handle_versioned() {
 		if [ "$debug" == 1 ] ;then
 		    echo "obj=$obj ; loc=$loc" >>$debug_log
 		fi
+		test_temp_space
 		rados -p $pool stat2 $obj --object-locator "$loc"
 	    done | # output of stat2, which includes mtime
 	    sort -k 3 | # stat2 but sorted by mtime earlier to later
@@ -255,6 +288,8 @@ handle_versioned() {
 		-e "s/^/${o}\t/"
 	echo "${o}${TAB}$last_instance" # now add the final instance; could be delete marker
     done <$obj_list 2>/dev/null | sed 's/\t$//' >$obj_list_ver
+    test_temp_space
+
 } # handle_versioned
 
 if [ -z "$bucket" ]; then
@@ -265,6 +300,7 @@ fi
 
 # read bucket entry metadata
 eval "radosgw-admin metadata get bucket:$bucket $debugging_rgwadmin $multisite_spec >$bkt_entry"
+test_temp_space
 export marker=$(jq -r ".data.bucket.marker" $bkt_entry)
 export bucket_id=$(jq -r ".data.bucket.bucket_id" $bkt_entry)
 if [ -z "$marker" -o -z "$bucket_id" ] ;then
@@ -282,6 +318,7 @@ echo bucket_id is $bucket_id
 
 # read bucket instance metadata
 eval "radosgw-admin metadata get bucket.instance:${bucket}:$bucket_id $multisite_spec $debugging_rgwadmin >$bkt_inst"
+test_temp_space
 
 # examine number of bucket index shards
 num_shards=$(jq ".data.bucket_info.num_shards" $bkt_inst)
@@ -309,11 +346,14 @@ fi
 # single.
 if [ -z "$lsoutput" ]; then
   ( rados -p $pool ls | grep "^${marker}_" >$marker_ls ) 2>/dev/null
+  test_temp_space
 else
   ( grep "^${marker}_" "${lsoutput}" >$marker_ls ) 2>/dev/null
+  test_temp_space
 fi
 
 ( sed -E 's/\t.*//' $marker_ls | grep -v -E "^${marker}__[^_]+_" | sed -E "s/^${marker}_(.*)/\1/" | sed 's/^__/_/' >$obj_list ) 2>/dev/null
+test_temp_space
 
 # mask bit indicating it's a versioned bucket
 export is_versioned=$(( $bkt_flags & 2))

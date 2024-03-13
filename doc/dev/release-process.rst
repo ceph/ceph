@@ -33,8 +33,11 @@ Summarized build process
 4. Packages are pushed to chacra.ceph.com.
 5. Packages are pulled from chacra.ceph.com to the Signer VM.
 6. Packages are signed.
-7. Packages are pushed to download.ceph.com.
-8. Release containers are built and pushed to quay.io.
+7. Packages are pushed to a prerelease area on download.ceph.com.
+8. Prerelease containers are built and pushed to quay.ceph.io.
+9. Final test and validation are done on prerelease packages and containers.
+10. Prerelease packages and containers are promoted to official releases on
+    download.ceph.com and quay.io.
 
 Hotfix Release Process Deviation
 --------------------------------
@@ -205,13 +208,27 @@ See `the Ceph Tracker wiki page that explains how to write the release notes <ht
 
       sync-push octopus
 
+This leaves the packages in a password-protected prerelease area
+at https://download.ceph.com/prerelease.  Verify them from there.  
+When done and ready for release, mv the directories to the parent
+directory (that is, "mv <whatever you're promoting> ..".  
+
+
 5. Build Containers
 ===================
 
-Start the following two jobs:
+Prerelease containers (x86_64 only) are built by 
+https://2.jenkins.ceph.com/job/ceph-container-prerelease-build; run it 
+with appropriate parameters.  Test container images will appear on
+quay.ceph.io in the ceph/prerelease repo, built from the prerelease area
+on download.ceph.com.  When satisfied with them, and after you have promoted
+the prerelease packages to released status as above, start the following two jobs:
 
 #. https://2.jenkins.ceph.com/job/ceph-container-build-ceph-base-push-imgs/
 #. https://2.jenkins.ceph.com/job/ceph-container-build-ceph-base-push-imgs-arm64/
+
+which will rebuild and publish both architectures using the released packages
+on download.ceph.com (into a multiarchitecture container image).
 
 6. Announce the Release
 =======================

@@ -147,7 +147,7 @@ export class CRUDTableComponent implements OnInit {
   setExpandedRow(event: any) {
     for (let i = 0; i < this.meta.detail_columns.length; i++) {
       let column = this.meta.detail_columns[i];
-      let columnDetail = event[column];
+      let columnDetail = event?.[column];
       this.expandedRow[column] = this.formatColumnDetails(columnDetail);
     }
   }

@@ -393,6 +393,9 @@ state_update_interval_sec = 5
 min_controller_id = 1
 max_controller_id = 65519
 enable_spdk_discovery_controller = False
+enable_prometheus_exporter = True
+prometheus_exporter_ssl = False
+prometheus_port = 10008
 
 [ceph]
 pool = {pool}
@@ -689,6 +692,9 @@ class TestMonitoring:
                 global:
                   scrape_interval: 10s
                   evaluation_interval: 10s
+                  external_labels:
+                    cluster: fsid
+
                 rule_files:
                   - /etc/prometheus/alerting/*
 
@@ -701,21 +707,54 @@ class TestMonitoring:
                 scrape_configs:
                   - job_name: 'ceph'
                     honor_labels: true
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=mgr-prometheus
 
                   - job_name: 'node'
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=node-exporter
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
 
                   - job_name: 'haproxy'
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=haproxy
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
 
                   - job_name: 'ceph-exporter'
                     honor_labels: true
+                    relabel_configs:
+                    - source_labels: [__address__]
+                      target_label: cluster
+                      replacement: fsid
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
+
+                  - job_name: 'nvmeof'
+                    http_sd_configs:
+                    - url: http://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
+
+                  - job_name: 'federate'
+                    scrape_interval: 15s
+                    honor_labels: true
+                    metrics_path: '/federate'
+                    params:
+                      'match[]':
+                        - '{job="ceph"}'
+                        - '{job="node"}'
+                        - '{job="haproxy"}'
+                        - '{job="ceph-exporter"}'
+                    static_configs:
+                    - targets: []
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -803,6 +842,7 @@ class TestMonitoring:
                 global:
                   scrape_interval: 10s
                   evaluation_interval: 10s
+
                 rule_files:
                   - /etc/prometheus/alerting/*
 
@@ -872,6 +912,20 @@ class TestMonitoring:
                         password: sd_password
                       tls_config:
                         ca_file: root_cert.pem
+
+                  - job_name: 'nvmeof'
+                    honor_labels: true
+                    scheme: https
+                    tls_config:
+                      ca_file: root_cert.pem
+                    http_sd_configs:
+                    - url: https://[::1]:8765/sd/prometheus/sd-config?service=nvmeof
+                      basic_auth:
+                        username: sd_user
+                        password: sd_password
+                      tls_config:
+                        ca_file: root_cert.pem
+
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -1650,7 +1704,7 @@ class TestIngressService:
         )
         if enable_haproxy_protocol:
             haproxy_txt += '    default-server send-proxy-v2\n'
-        haproxy_txt += '    server nfs.foo.0 192.168.122.111:12049\n'
+        haproxy_txt += '    server nfs.foo.0 192.168.122.111:12049 check\n'
         haproxy_expected_conf = {
             'files': {'haproxy.cfg': haproxy_txt}
         }
@@ -2428,7 +2482,7 @@ class TestIngressService:
             '    balance     source\n'
             '    hash-type   consistent\n'
             '    default-server send-proxy-v2\n'
-            '    server nfs.foo.0 192.168.122.111:12049\n'
+            '    server nfs.foo.0 192.168.122.111:12049 check\n'
         )
         haproxy_expected_conf = {
             'files': {'haproxy.cfg': haproxy_txt}
@@ -2448,6 +2502,7 @@ class TestIngressService:
             '        Delegations = false;\n'
             "        RecoveryBackend = 'rados_cluster';\n"
             '        Minor_Versions = 1, 2;\n'
+            '        IdmapConf = "/etc/ganesha/idmap.conf";\n'
             '}\n'
             '\n'
             'RADOS_KV {\n'
@@ -2471,7 +2526,7 @@ class TestIngressService:
             "%url    rados://.nfs/foo/conf-nfs.foo"
         )
         nfs_expected_conf = {
-            'files': {'ganesha.conf': nfs_ganesha_txt},
+            'files': {'ganesha.conf': nfs_ganesha_txt, 'idmap.conf': ''},
             'config': '',
             'extra_args': ['-N', 'NIV_EVENT'],
             'keyring': (

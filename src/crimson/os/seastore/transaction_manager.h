@@ -425,16 +425,20 @@ public:
     for (auto &remap : remaps) {
       auto remap_offset = remap.offset;
       auto remap_len = remap.len;
+      assert(remap_len > 0);
       total_remap_len += remap.len;
-      ceph_assert(remap_offset >= (last_offset + last_len));
+      assert(remap_offset >= (last_offset + last_len));
       last_offset = remap_offset;
       last_len = remap_len;
     }
-    ceph_assert(total_remap_len < original_len);
+    if (remaps.size() == 1) {
+      assert(total_remap_len < original_len);
+    } else {
+      assert(total_remap_len <= original_len);
+    }
 #endif
 
-    // FIXME: paddr can be absolute and pending
-    ceph_assert(pin->get_val().is_absolute());
+    // The according extent might be stable or pending.
     return cache->get_extent_if_cached(
       t, pin->get_val(), T::TYPE
     ).si_then([this, &t, remaps,
@@ -459,8 +463,6 @@ public:
 	(intermediate_base == L_ADDR_NULL)
 	  == (intermediate_key == L_ADDR_NULL));
       if (ext) {
-        // FIXME: cannot and will not remap a dirty extent for now.
-        ceph_assert(!ext->is_dirty());
         ceph_assert(!ext->is_mutable());
         ceph_assert(ext->get_length() >= original_len);
 	ceph_assert(ext->get_paddr() == original_paddr);

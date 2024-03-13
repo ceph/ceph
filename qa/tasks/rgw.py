@@ -301,6 +301,43 @@ def assign_endpoints(ctx, config, default_cert):
     return role_endpoints
 
 @contextlib.contextmanager
+def create_realm(ctx, clients):
+    if ctx.rgw.realm:
+        log.info('Creating realm {}'.format(ctx.rgw.realm))
+
+        client = next(iter(clients))
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        cluster_name, daemon_type, client_id = teuthology.split_role(client)
+
+        # create the realm/zonegroup/zone and set as default
+        rgwadmin(ctx, client,
+                 cmd=['realm', 'create',
+                      '--rgw-realm', ctx.rgw.realm,
+                      '--default'],
+                 check_status=True)
+        rgwadmin(ctx, client,
+                 cmd=['zonegroup', 'create',
+                      '--rgw-realm', ctx.rgw.realm,
+                      '--rgw-zonegroup', ctx.rgw.zonegroup,
+                      '--master', '--default'],
+                 check_status=True)
+        rgwadmin(ctx, client,
+                 cmd=['zone', 'create',
+                      '--rgw-realm', ctx.rgw.realm,
+                      '--rgw-zonegroup', ctx.rgw.zonegroup,
+                      '--rgw-zone', ctx.rgw.zone,
+                      '--master', '--default'],
+                 check_status=True)
+
+        rgwadmin(ctx, client,
+                 cmd=['period', 'update', '--commit',
+                      '--rgw-realm', ctx.rgw.realm,
+                      '--rgw-zonegroup', ctx.rgw.zonegroup,
+                      '--rgw-zone', ctx.rgw.zone],
+                 check_status=True)
+    yield
+
+@contextlib.contextmanager
 def create_pools(ctx, clients):
     """Create replicated or erasure coded data pools for rgw."""
 
@@ -308,7 +345,7 @@ def create_pools(ctx, clients):
     for client in clients:
         log.debug("Obtaining remote for client {}".format(client))
         (remote,) = ctx.cluster.only(client).remotes.keys()
-        data_pool = 'default.rgw.buckets.data'
+        data_pool = '{}.rgw.buckets.data'.format(ctx.rgw.zone)
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
 
         if ctx.rgw.ec_data_pool:
@@ -317,7 +354,7 @@ def create_pools(ctx, clients):
         else:
             create_replicated_pool(remote, data_pool, ctx.rgw.data_pool_pg_size, cluster_name, 'rgw')
 
-        index_pool = 'default.rgw.buckets.index'
+        index_pool = '{}.rgw.buckets.index'.format(ctx.rgw.zone)
         create_replicated_pool(remote, index_pool, ctx.rgw.index_pool_pg_size, cluster_name, 'rgw')
 
         if ctx.rgw.cache_pools:
@@ -331,12 +368,13 @@ def configure_compression(ctx, clients, compression):
     """ set a compression type in the default zone placement """
     log.info('Configuring compression type = %s', compression)
     for client in clients:
-        # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
-        # issue a 'radosgw-admin user list' command to trigger this
-        rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
+        if not ctx.rgw.realm:
+            # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
+            # issue a 'radosgw-admin user list' command to trigger this
+            rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
 
         rgwadmin(ctx, client,
-                cmd=['zone', 'placement', 'modify', '--rgw-zone', 'default',
+                cmd=['zone', 'placement', 'modify', '--rgw-zone', ctx.rgw.zone,
                      '--placement-id', 'default-placement',
                      '--compression', compression],
                 check_status=True)
@@ -345,12 +383,13 @@ def configure_compression(ctx, clients, compression):
 @contextlib.contextmanager
 def disable_inline_data(ctx, clients):
     for client in clients:
-        # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
-        # issue a 'radosgw-admin user list' command to trigger this
-        rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
+        if not ctx.rgw.realm:
+            # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
+            # issue a 'radosgw-admin user list' command to trigger this
+            rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
 
         rgwadmin(ctx, client,
-                cmd=['zone', 'placement', 'modify', '--rgw-zone', 'default',
+                cmd=['zone', 'placement', 'modify', '--rgw-zone', ctx.rgw.zone,
                      '--placement-id', 'default-placement',
                      '--placement-inline-data', 'false'],
                 check_status=True)
@@ -375,21 +414,22 @@ def configure_storage_classes(ctx, clients, storage_classes):
     sc = [s.strip() for s in storage_classes.split(',')]
 
     for client in clients:
-        # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
-        # issue a 'radosgw-admin user list' command to trigger this
-        rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
+        if not ctx.rgw.realm:
+            # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
+            # issue a 'radosgw-admin user list' command to trigger this
+            rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
 
         for storage_class in sc:
             log.info('Configuring storage class type = %s', storage_class)
             rgwadmin(ctx, client,
                     cmd=['zonegroup', 'placement', 'add',
-                        '--rgw-zone', 'default',
+                        '--rgw-zone', ctx.rgw.zone,
                         '--placement-id', 'default-placement',
                         '--storage-class', storage_class],
                     check_status=True)
             rgwadmin(ctx, client,
                     cmd=['zone', 'placement', 'add',
-                        '--rgw-zone', 'default',
+                        '--rgw-zone', ctx.rgw.zone,
                         '--placement-id', 'default-placement',
                         '--storage-class', storage_class,
                         '--data-pool', 'default.rgw.buckets.data.' + storage_class.lower()],
@@ -429,6 +469,15 @@ def task(ctx, config):
             client.3:
               valgrind: [--tool=memcheck]
 
+    To create a custom realm, zonegroup and zone:
+
+        tasks:
+        - ceph:
+        - rgw:
+            realm: MyRealm
+            zonegroup: MyZoneGroup
+            zone: MyZone
+
     To configure data or index pool pg_size:
 
         overrides:
@@ -463,6 +512,9 @@ def task(ctx, config):
     ctx.rgw.index_pool_pg_size = config.pop('index_pool_pg_size', 64)
     ctx.rgw.datacache = bool(config.pop('datacache', False))
     ctx.rgw.datacache_path = config.pop('datacache_path', None)
+    ctx.rgw.realm = config.pop('realm', None)
+    ctx.rgw.zonegroup = config.pop('zonegroup', 'default')
+    ctx.rgw.zone = config.pop('zone', 'default')
     ctx.rgw.config = config
 
     log.debug("config is {}".format(config))
@@ -473,6 +525,10 @@ def task(ctx, config):
     subtasks = [
         lambda: create_pools(ctx=ctx, clients=clients),
     ]
+    if ctx.rgw.realm:
+        subtasks.extend([
+            lambda: create_realm(ctx=ctx, clients=clients),
+        ])
     if ctx.rgw.compression_type:
         subtasks.extend([
             lambda: configure_compression(ctx=ctx, clients=clients,

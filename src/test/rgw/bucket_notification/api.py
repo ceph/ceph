@@ -236,8 +236,8 @@ def bash(cmd, **kwargs):
     s = process.communicate()[0].decode('utf-8')
     return (s, process.returncode)
 
-def admin(args, **kwargs):
+def admin(args, cluster='noname', **kwargs):
     """ radosgw-admin command """
-    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', 'noname'] + args
+    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', cluster] + args
     return bash(cmd, **kwargs)
 

@@ -805,6 +805,11 @@ def create_daemon_dirs(
         node_proxy = NodeProxy.init(ctx, fsid, ident.daemon_id)
         node_proxy.create_daemon_dirs(data_dir, uid, gid)
 
+    else:
+        daemon = daemon_form_create(ctx, ident)
+        if isinstance(daemon, ContainerDaemonForm):
+            daemon.prepare_data_dir(data_dir, uid, gid)
+
     _write_custom_conf_files(ctx, ident, uid, gid)
 
 
@@ -4372,6 +4377,8 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
             # remove all cephadm logs
             for fname in glob(f'{ctx.log_dir}/cephadm.log*'):
                 os.remove(fname)
+
+        unlink_file(Path('/etc/ceph/podman-auth.json'), missing_ok=True, ignore_errors=True)
 
     # rm sysctl settings
     sysctl_dirs: List[Path] = [Path(ctx.sysctl_dir), Path('/usr/lib/sysctl.d')]

@@ -110,7 +110,7 @@
         </div>
       </div>
       <div class="form-group row">
-        <label class="cd-col-form-label required"
+        <label class="cd-col-form-label"
                for="access_key"
                i18n>S3 access key
           <cd-helper>
@@ -118,29 +118,41 @@
           </cd-helper>
         </label>
         <div class="cd-col-form-input">
-          <input class="form-control"
-                 type="text"
-                 placeholder="DiPt4V7WWvy2njL1z6aC"
-                 id="access_key"
-                 name="access_key"
-                 formControlName="access_key">
+          <div class="input-group">
+            <input class="form-control"
+                   type="password"
+                   placeholder="DiPt4V7WWvy2njL1z6aC"
+                   id="access_key"
+                   name="access_key"
+                   formControlName="access_key">
+            <button type="button"
+                    class="btn btn-light"
+                    cdPasswordButton="access_key">
+            </button>
+          </div>
         </div>
       </div>
       <div class="form-group row">
-        <label class="cd-col-form-label required"
-               for="access_key"
+        <label class="cd-col-form-label"
+               for="secret_key"
                i18n>S3 secret key
           <cd-helper>
             <span>To see or copy your S3 access key, go to <b>Object Gateway > Users</b> and click on your user name. In <b>Keys</b>, click <b>Show</b>. View the secret key by clicking Show and copy the key by clicking <b>Copy to Clipboard</b>.</span>
           </cd-helper>
         </label>
         <div class="cd-col-form-input">
-          <input class="form-control"
-                 type="text"
-                 placeholder="xSZUdYky0bTctAdCEEW8ikhfBVKsBV5LFYL82vvh"
-                 id="secret_key"
-                 name="secret_key"
-                 formControlName="secret_key">
+          <div class="input-group">
+            <input class="form-control"
+                   type="password"
+                   placeholder="xSZUdYky0bTctAdCEEW8ikhfBVKsBV5LFYL82vvh"
+                   id="secret_key"
+                   name="secret_key"
+                   formControlName="secret_key">
+            <button type="button"
+                    class="btn btn-light"
+                    cdPasswordButton="secret_key">
+            </button>
+          </div>
         </div>
       </div>
       <div class="form-group row"

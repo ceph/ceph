@@ -21,8 +21,8 @@ The Ceph Storage Cluster
 Ceph provides an infinitely scalable :term:`Ceph Storage Cluster` based upon
 :abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, a reliable,
 distributed storage service that uses the intelligence in each of its nodes to
-secure the data it stores and to provide that data to client. See Sage Weil's
-"`The RADOS Object Store
+secure the data it stores and to provide that data to :term:`client`\s. See
+Sage Weil's "`The RADOS Object Store
 <https://ceph.io/en/news/blog/2009/the-rados-distributed-object-store/>`_" blog
 post for a brief explanation of RADOS and see `RADOS - A Scalable, Reliable
 Storage Service for Petabyte-scale Storage Clusters`_ for an exhaustive
@@ -51,10 +51,10 @@ A Ceph Metadata Server (MDS) manages file metadata when CephFS is used to
 provide file services.
 
 Storage cluster clients and :term:`Ceph OSD Daemon`\s use the CRUSH algorithm
-to compute information about the location of data. Use of the CRUSH algoritm
-means that clients and OSDs are not bottlenecked by a central lookup table.
+to compute information about the location of data.  By using the CRUSH
+algorithm, clients and OSDs avoid being bottlenecked by a central lookup table.
 Ceph's high-level features include a native interface to the Ceph Storage
-Cluster via ``librados``, and a number of service interfaces built on top of
+Cluster via ``librados`` and a number of service interfaces built on top of
 ``librados``.
 
 Storing Data
@@ -133,8 +133,8 @@ massive scale by distributing the work to all the OSD daemons in the cluster
 and all the clients that communicate with them. CRUSH uses intelligent data
 replication to ensure resiliency, which is better suited to hyper-scale
 storage. The following sections provide additional details on how CRUSH works.
-For a detailed discussion of CRUSH, see `CRUSH - Controlled, Scalable,
-Decentralized Placement of Replicated Data`_.
+For an in-depth, academic discussion of CRUSH, see `CRUSH - Controlled,
+Scalable, Decentralized Placement of Replicated Data`_.
 
 .. index:: architecture; cluster map
 

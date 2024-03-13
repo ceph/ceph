@@ -1552,11 +1552,21 @@ bool AWSv4ComplMulti::complete()
     std::string_view expected_trailer_signature;
     std::string calculated_trailer_signature;
 
-    /* the trailer boundary is just "\r\n0" when we have no trailer
-     * signature */
+    /* I have seen variations in the 0-byte case, with and without
+     * ssl transport. I have observed "\r\n0;" but also "0;" in the
+     * trailer-signature case.  I have observed only "\r\n0" in the
+     * no-trailer-signature case--but assume "0" might be possible.
+     * The logic below handles all 4 cases. */
     if (tbuf_pos > sarrlen("\r\n0")) {
-      auto trailer_off = sarrlen("\r\n0");
-      if (*(trailer_vec.data() + trailer_off) == ';') {
+      const char* tv_data = trailer_vec.data();
+      auto trailer_off = 0;
+      if (*(tv_data + trailer_off) == '\r') {
+	trailer_off += 2;
+      }
+      if (*(tv_data + trailer_off) == '0') {
+	++trailer_off;
+      }
+      if (*(tv_data + trailer_off) == ';') {
 	++trailer_off;
       }
       const std::string_view sv_trailer(

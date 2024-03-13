@@ -150,7 +150,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         ]
       ],
       lock_mode: ['COMPLIANCE'],
-      lock_retention_period_days: [0, [CdValidators.number(false), lockDaysValidator]],
+      lock_retention_period_days: [10, [CdValidators.number(false), lockDaysValidator]],
       bucket_policy: ['{}', CdValidators.json()],
       grantee: [Grantee.Owner, [Validators.required]],
       aclPermission: [[aclPermission.FullControl], [Validators.required]]

@@ -11,16 +11,13 @@ multiple zones.
 Tuning
 ======
 
-When ``radosgw`` first tries to operate on a zone pool that does not
-exist, it will create that pool with the default values from
-``osd pool default pg num`` and ``osd pool default pgp num``. These defaults
-are sufficient for some pools, but others (especially those listed in
-``placement_pools`` for the bucket index and data) will require additional
-tuning. We recommend using the `Ceph Placement Group’s per Pool
-Calculator <https://old.ceph.com/pgcalc/>`__ to calculate a suitable number of
-placement groups for these pools. See
-`Pools <http://docs.ceph.com/en/latest/rados/operations/pools/#pools>`__
-for details on pool creation.
+When ``radosgw`` first tries to operate on a zone pool that does not exist, it
+will create that pool with the default values from ``osd pool default pg num``
+and ``osd pool default pgp num``. These defaults are sufficient for some pools,
+but others (especially those listed in ``placement_pools`` for the bucket index
+and data) will require additional tuning. See `Pools
+<http://docs.ceph.com/en/latest/rados/operations/pools/#pools>`__ for details
+on pool creation.
 
 .. _radosgw-pool-namespaces:
 

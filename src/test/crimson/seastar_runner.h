@@ -13,6 +13,8 @@
 #include <seastar/core/alien.hh>
 #include <seastar/core/thread.hh>
 
+#include "test/crimson/ctest_utils.h"
+
 struct SeastarRunner {
   static constexpr eventfd_t APP_RUNNING = 1;
   static constexpr eventfd_t APP_NOT_RUN = 2;
@@ -26,7 +28,7 @@ struct SeastarRunner {
   bool begin_signaled = false;
 
   SeastarRunner() :
-    begin_fd{seastar::file_desc::eventfd(0, 0)} {}
+    app{get_smp_opts_from_ctest()}, begin_fd{seastar::file_desc::eventfd(0, 0)} {}
 
   ~SeastarRunner() {}
 

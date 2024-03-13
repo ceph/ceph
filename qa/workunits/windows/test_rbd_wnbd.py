@@ -162,7 +162,6 @@ def execute(*args, **kwargs):
         exc = CommandFailed(
             command=args, returncode=result.returncode,
             stdout=result.stdout, stderr=result.stderr)
-        LOG.error(exc)
         raise exc
     return result
 
@@ -367,6 +366,7 @@ class RbdImage(object):
             self.mapped = False
 
     @Tracer.trace
+    @retry_decorator()
     def remove(self):
         if not self.removed:
             LOG.info("Removing image: %s", self.name)

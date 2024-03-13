@@ -98,6 +98,15 @@ public:
   }
   void dump(ceph::Formatter *f) const;
 
+  template <typename FormatContext>
+  auto fmt_print_ctx(FormatContext& ctx) const {
+    if (is_new() || _num < 0) {
+      return fmt::format_to(ctx.out(), "{}.?", type_str());
+    } else {
+      return fmt::format_to(ctx.out(), "{}.{}",type_str(), _num);
+    }
+  }
+
   static void generate_test_instances(std::list<entity_name_t*>& o);
 };
 WRITE_CLASS_DENC(entity_name_t)

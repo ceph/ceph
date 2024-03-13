@@ -53,6 +53,8 @@ import { CardComponent } from './card/card.component';
 import { CardRowComponent } from './card-row/card-row.component';
 import { CodeBlockComponent } from './code-block/code-block.component';
 import { VerticalNavigationComponent } from './vertical-navigation/vertical-navigation.component';
+import { CardGroupComponent } from './card-group/card-group.component';
+import { HelpTextComponent } from './help-text/help-text.component';
 
 @NgModule({
   imports: [
@@ -109,7 +111,9 @@ import { VerticalNavigationComponent } from './vertical-navigation/vertical-navi
     CardComponent,
     CardRowComponent,
     CodeBlockComponent,
-    VerticalNavigationComponent
+    VerticalNavigationComponent,
+    CardGroupComponent,
+    HelpTextComponent
   ],
   providers: [],
   exports: [
@@ -143,7 +147,9 @@ import { VerticalNavigationComponent } from './vertical-navigation/vertical-navi
     CardComponent,
     CardRowComponent,
     CodeBlockComponent,
-    VerticalNavigationComponent
+    VerticalNavigationComponent,
+    CardGroupComponent,
+    HelpTextComponent
   ]
 })
 export class ComponentsModule {}

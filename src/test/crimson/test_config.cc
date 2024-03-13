@@ -6,6 +6,7 @@
 #include "common/ceph_argparse.h"
 #include "common/config_obs.h"
 #include "crimson/common/config_proxy.h"
+#include "test/crimson/ctest_utils.h"
 
 using namespace std::literals;
 using Config = crimson::common::ConfigProxy;
@@ -88,7 +89,7 @@ static seastar::future<> test_config()
 
 int main(int argc, char** argv)
 {
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   return app.run(argc, argv, [&] {
     return test_config().then([] {
       std::cout << "All tests succeeded" << std::endl;

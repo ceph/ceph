@@ -14,7 +14,9 @@
 #include "rgw_sal_rados.h"
 #include "rgw_pubsub.h"
 #include "rgw_pubsub_push.h"
+#include "rgw_zone_features.h"
 #include "rgw_perf_counters.h"
+#include "services/svc_zone.h"
 #include "common/dout.h"
 #include <chrono>
 
@@ -119,6 +121,7 @@ class Manager : public DoutPrefixProvider {
   const uint32_t stale_reservations_period_s;
   const uint32_t reservations_cleanup_period_s;
   queues_persistency_tracker topics_persistency_tracker;
+  const SiteConfig& site;
 public:
   rgw::sal::RadosStore& rados_store;
 
@@ -489,10 +492,11 @@ private:
           std::string tenant_name;
           // TODO: extract tenant name from queue_name once it is fixed
           uint64_t size_to_migrate = 0;
-          RGWPubSub ps(&rados_store, tenant_name);
+          RGWPubSub ps(&rados_store, tenant_name, site);
 
           rgw_pubsub_topic topic;
-          auto ret_of_get_topic = ps.get_topic(this, queue_name, topic, optional_yield(io_context, yield));
+          auto ret_of_get_topic = ps.get_topic(this, queue_name, topic,
+                           optional_yield(io_context, yield), nullptr);
           if (ret_of_get_topic < 0) {
             // we can't migrate entries without topic info
             ldpp_dout(this, 1) << "ERROR: failed to fetch topic: " << queue_name << " error: "
@@ -666,7 +670,8 @@ public:
   Manager(CephContext* _cct, uint32_t _max_queue_size, uint32_t _queues_update_period_ms, 
           uint32_t _queues_update_retry_ms, uint32_t _queue_idle_sleep_us, u_int32_t failover_time_ms, 
           uint32_t _stale_reservations_period_s, uint32_t _reservations_cleanup_period_s,
-          uint32_t _worker_count, rgw::sal::RadosStore* store) :
+          uint32_t _worker_count, rgw::sal::RadosStore* store,
+          const SiteConfig& site) :
     max_queue_size(_max_queue_size),
     queues_update_period_ms(_queues_update_period_ms),
     queues_update_retry_ms(_queues_update_retry_ms),
@@ -678,6 +683,7 @@ public:
     worker_count(_worker_count),
     stale_reservations_period_s(_stale_reservations_period_s),
     reservations_cleanup_period_s(_reservations_cleanup_period_s),
+    site(site),
     rados_store(*store)
     {
       spawn::spawn(io_context, [this](spawn::yield_context yield) {
@@ -750,7 +756,8 @@ constexpr uint32_t WORKER_COUNT = 1;                 // 1 worker thread
 constexpr uint32_t STALE_RESERVATIONS_PERIOD_S = 120;   // cleanup reservations that are more than 2 minutes old
 constexpr uint32_t RESERVATIONS_CLEANUP_PERIOD_S = 30; // reservation cleanup every 30 seconds
 
-bool init(CephContext* cct, rgw::sal::RadosStore* store, const DoutPrefixProvider *dpp) {
+bool init(CephContext* cct, rgw::sal::RadosStore* store,
+          const SiteConfig& site, const DoutPrefixProvider *dpp) {
   if (s_manager) {
     return false;
   }
@@ -760,7 +767,7 @@ bool init(CephContext* cct, rgw::sal::RadosStore* store, const DoutPrefixProvide
       IDLE_TIMEOUT_USEC, FAILOVER_TIME_MSEC, 
       STALE_RESERVATIONS_PERIOD_S, RESERVATIONS_CLEANUP_PERIOD_S,
       WORKER_COUNT,
-      store);
+      store, site);
   return true;
 }
 
@@ -975,17 +982,40 @@ static inline bool notification_match(reservation_t& res,
 }
 
   int publish_reserve(const DoutPrefixProvider* dpp,
+		      const SiteConfig& site,
 		      EventType event_type,
 		      reservation_t& res,
 		      const RGWObjTags* req_tags)
 {
-  const RGWPubSub ps(res.store, res.user_tenant);
-  const RGWPubSub::Bucket ps_bucket(ps, res.bucket);
   rgw_pubsub_bucket_topics bucket_topics;
-  auto rc = ps_bucket.get_topics(res.dpp, bucket_topics, res.yield);
-  if (rc < 0) {
-    // failed to fetch bucket topics
-    return rc;
+  if (all_zonegroups_support(site, zone_features::notification_v2) &&
+      res.store->stat_topics_v1(res.user_tenant, res.yield, res.dpp) == -ENOENT) {
+    auto ret = 0;
+    if (!res.s) {
+      //  for non S3-request caller (e.g., lifecycle, ObjectSync), bucket attrs
+      //  are not loaded, so force to reload the bucket, that reloads the attr.
+      // for non S3-request caller, res.s is nullptr
+      ret = res.bucket->load_bucket(dpp, res.yield);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1)
+            << "ERROR: failed to reload bucket: '" << res.bucket->get_name()
+            << "' to get bucket notification attrs with error ret= " << ret
+            << dendl;
+        return ret;
+      }
+    }
+    ret = get_bucket_notifications(dpp, res.bucket, bucket_topics);
+    if (ret < 0) {
+      return ret;
+    }
+  } else {
+    const RGWPubSub ps(res.store, res.user_tenant, site);
+    const RGWPubSub::Bucket ps_bucket(ps, res.bucket);
+    auto rc = ps_bucket.get_topics(res.dpp, bucket_topics, res.yield);
+    if (rc < 0) {
+      // failed to fetch bucket topics
+      return rc;
+    }
   }
   for (const auto& bucket_topic : bucket_topics.topics) {
     const rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
@@ -1026,7 +1056,29 @@ static inline bool notification_match(reservation_t& res,
         return ret;
       }
     }
-    res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id);
+    // load the topic,if there is change in topic config while it's stored in
+    // notification.
+    rgw_pubsub_topic result;
+    const RGWPubSub ps(res.store, res.user_tenant, site);
+    auto ret = ps.get_topic(res.dpp, topic_cfg.name, result, res.yield, nullptr);
+    if (ret < 0) {
+      ldpp_dout(res.dpp, 1)
+          << "INFO: failed to load topic: " << topic_cfg.name
+          << ". error: " << ret
+          << " while reserving persistent notification event" << dendl;
+      if (ret == -ENOENT) {
+        // either the topic is deleted but the corresponding notification still
+        // exist or in v2 mode the notification could have synced first but
+        // topic is not synced yet.
+        return 0;
+      }
+      ldpp_dout(res.dpp, 1)
+          << "WARN: Using the stored topic from bucket notification struct."
+          << dendl;
+      res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id);
+    } else {
+      res.topics.emplace_back(topic_filter.s3_id, result, res_id);
+    }
   }
   return 0;
 }

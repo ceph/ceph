@@ -46,6 +46,17 @@ from orchestrator import DaemonDescription
             ],
             {},
             62 * 1024 * 1024 * 1024,
+        ),
+        (
+            128 * 1024 * 1024 * 1024,
+            [
+                DaemonDescription('mgr', 'a', 'host1'),
+                DaemonDescription('osd', '1', 'host1'),
+                DaemonDescription('osd', '2', 'host1'),
+                DaemonDescription('nvmeof', 'a', 'host1'),
+            ],
+            {},
+            60 * 1024 * 1024 * 1024,
         )
     ])
 def test_autotune(total, daemons, config, result):

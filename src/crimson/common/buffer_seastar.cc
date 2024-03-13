@@ -14,6 +14,8 @@
 
 #include <seastar/core/sharded.hh>
 #include <seastar/net/packet.hh>
+#include <seastar/core/reactor.hh>
+#include <seastar/core/alien.hh>
 
 #include "include/buffer_raw.h"
 #include "buffer_seastar.h"
@@ -24,9 +26,21 @@ namespace ceph::buffer {
 
 class raw_seastar_foreign_ptr : public raw {
   seastar::foreign_ptr<temporary_buffer> ptr;
+  seastar::alien::instance& alien;
  public:
   raw_seastar_foreign_ptr(temporary_buffer&& buf)
-    : raw(buf.get_write(), buf.size()), ptr(std::move(buf)) {}
+    : raw(buf.get_write(), buf.size()), ptr(std::move(buf)),
+      alien(seastar::engine().alien()) {}
+
+  ~raw_seastar_foreign_ptr() {
+    if (!seastar::engine_is_ready()) {
+      // we should let a seastar reactor destroy this memory, we are alien.
+      seastar::alien::run_on(alien, ptr.get_owner_shard(),
+      [_ptr = std::move(ptr)]() mutable noexcept {
+        _ptr.reset();
+      });
+    }
+  }
 };
 
 class raw_seastar_local_ptr : public raw {

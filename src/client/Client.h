@@ -163,7 +163,7 @@ struct dir_result_t {
   };
 
 
-  explicit dir_result_t(Inode *in, const UserPerm& perms);
+  explicit dir_result_t(Inode *in, const UserPerm& perms, int fd);
 
 
   static uint64_t make_fpos(unsigned h, unsigned l, bool hash) {
@@ -240,6 +240,8 @@ struct dir_result_t {
 
   std::vector<dentry> buffer;
   struct dirent de;
+
+  int fd;                // fd attached using fdopendir (-1 if none)
 };
 
 class Client : public Dispatcher, public md_config_obs_t {
@@ -1026,6 +1028,9 @@ protected:
     return it->second;
   }
   int get_fd_inode(int fd, InodeRef *in);
+  bool _ll_fh_exists(Fh *f) {
+    return ll_unclosed_fh_set.count(f);
+  }
 
   // helpers
   void wake_up_session_caps(MetaSession *s, bool reconnect);
@@ -1563,7 +1568,7 @@ private:
 
   void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
 
-  int _opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms);
+  int _opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms, int fd = -1);
   void _readdir_drop_dirp_buffer(dir_result_t *dirp);
   bool _readdir_have_frag(dir_result_t *dirp);
   void _readdir_next_frag(dir_result_t *dirp);

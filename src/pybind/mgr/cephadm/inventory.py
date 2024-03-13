@@ -8,7 +8,7 @@ import logging
 import math
 import socket
 from typing import TYPE_CHECKING, Dict, List, Iterator, Optional, Any, Tuple, Set, Mapping, cast, \
-    NamedTuple, Type
+    NamedTuple, Type, ValuesView
 
 import orchestrator
 from ceph.deployment import inventory
@@ -1485,10 +1485,12 @@ class NodeProxyCache:
         """
         hostname = kw.get('hostname')
         hosts = [hostname] if hostname else self.data.keys()
-        mapper: Dict[bool, str] = {
-            True: 'error',
-            False: 'ok'
-        }
+
+        def is_unknown(statuses: ValuesView) -> bool:
+            return any([status['status']['health'].lower() == 'unknown' for status in statuses]) and not is_error(statuses)
+
+        def is_error(statuses: ValuesView) -> bool:
+            return any([status['status']['health'].lower() == 'error' for status in statuses])
 
         _result: Dict[str, Any] = {}
 
@@ -1496,9 +1498,15 @@ class NodeProxyCache:
             _result[host] = {}
             _result[host]['status'] = {}
             data = self.data[host]
-            for component, details in data['status'].items():
-                res = any([member['status']['health'].lower() != 'ok' for member in data['status'][component].values()])
-                _result[host]['status'][component] = mapper[res]
+            for component in data['status'].keys():
+                values = data['status'][component].values()
+                if is_error(values):
+                    state = 'error'
+                elif is_unknown(values):
+                    state = 'unknown'
+                else:
+                    state = 'ok'
+                _result[host]['status'][component] = state
             _result[host]['sn'] = data['sn']
             _result[host]['host'] = data['host']
             _result[host]['firmwares'] = data['firmwares']

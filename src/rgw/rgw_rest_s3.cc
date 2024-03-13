@@ -3935,7 +3935,42 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
     return ret;
   }
 
-  return create_s3_policy(s, driver, policy, s->owner);
+  ret = create_s3_policy(s, driver, policy, s->owner);
+  if (ret < 0)
+    return ret;
+
+  //handle object lock
+  auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
+  auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
+  auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
+  if (obj_lock_mode_str && obj_lock_date_str) {
+    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
+    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+      ldpp_dout(this,0) << "invalid x-amz-object-lock-retain-until-date value" << dendl;
+      return -EINVAL;;
+    }
+    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
+      ldpp_dout(this,0) << "invalid x-amz-object-lock-mode value" << dendl;
+      return -EINVAL;
+    }
+    obj_retention = RGWObjectRetention(obj_lock_mode_str, *date);
+  } else if ((obj_lock_mode_str && !obj_lock_date_str) || (!obj_lock_mode_str && obj_lock_date_str)) {
+    ldpp_dout(this,0) << "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date " << dendl;
+    return -EINVAL;
+  }
+  if (obj_legal_hold_str) {
+    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
+      ldpp_dout(this,0) << "invalid x-amz-object-lock-legal-hold value" << dendl;
+      return -EINVAL;
+    }
+    obj_legal_hold = RGWObjectLegalHold(obj_legal_hold_str);
+  }
+  if (!s->bucket->get_info().obj_lock_enabled() && (obj_retention || obj_legal_hold)) {
+    ldpp_dout(this, 0) << "ERROR: object retention or legal hold can't be set if bucket object lock not configured" << dendl;
+    return -ERR_INVALID_REQUEST;
+  }
+
+  return 0;
 }
 
 void RGWInitMultipart_ObjStore_S3::send_response()
@@ -5171,8 +5206,12 @@ void parse_post_action(const std::string& post_body, req_state* s)
       }
     }
   }
-  const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
-  s->info.args.append("PayloadHash", payload_hash);
+  // PayloadHash is present if request is fwd from secondary site in multisite
+  // environment, so then do not calculate and append.
+  if (!s->info.args.exists("PayloadHash")) {
+    const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
+    s->info.args.append("PayloadHash", payload_hash);
+  }
 }
 
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
@@ -5218,7 +5257,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
         return new RGWHandler_REST_IAM(auth_registry, data);
       }
       if (enable_pubsub && RGWHandler_REST_PSTopic_AWS::action_exists(s)) {
-        return new RGWHandler_REST_PSTopic_AWS(auth_registry); 
+        return new RGWHandler_REST_PSTopic_AWS(auth_registry, std::move(data));
       }
       return nullptr;
     }
@@ -5588,7 +5627,9 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
 
   const char* exp_payload_hash = nullptr;
   string payload_hash;
-  if (is_non_s3_op) {
+  // if the request is related to topics (bucket notification), they are part of
+  // sns service and hence it's a no_s3_op,
+  if (is_non_s3_op || RGWHandler_REST_PSTopic_AWS::action_exists(info)) {
     //For non s3 ops, we need to calculate the payload hash
     payload_hash = info.args.get("PayloadHash");
     exp_payload_hash = payload_hash.c_str();

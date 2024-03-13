@@ -74,19 +74,19 @@ static bool is_sparse_read_supported(librados::IoCtx &ioctx,
                                      const std::string &oid) {
   EXPECT_EQ(0, ioctx.create(oid, true));
   bufferlist inbl;
-  inbl.append(std::string(1, 'X'));
-  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 1));
-  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 3));
+  inbl.append(std::string(4096, 'X'));
+  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 4096));
+  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 4096 * 3));
 
   std::map<uint64_t, uint64_t> m;
   bufferlist outbl;
-  int r = ioctx.sparse_read(oid, m, outbl, 4, 0);
+  int r = ioctx.sparse_read(oid, m, outbl, 4096 * 4, 0);
   ioctx.remove(oid);
 
   int expected_r = 2;
-  std::map<uint64_t, uint64_t> expected_m = {{1, 1}, {3, 1}};
+  std::map<uint64_t, uint64_t> expected_m = {{4096, 4096}, {4096 * 3, 4096}};
   bufferlist expected_outbl;
-  expected_outbl.append(std::string(2, 'X'));
+  expected_outbl.append(std::string(4096 * 2, 'X'));
 
   return (r == expected_r && m == expected_m &&
           outbl.contents_equal(expected_outbl));
@@ -205,7 +205,7 @@ TEST_F(TestClsRbd, sparse_copyup)
   // create some data to write
   inbl.append(std::string(4096, '1'));
   inbl.append(std::string(4096, '2'));
-  m = {{1024, 4096}, {8192, 4096}};
+  m = {{4096, 4096}, {4096 * 3, 4096}};
 
   // copyup to nonexistent object should create new object
   ioctx.remove(oid);
@@ -214,9 +214,9 @@ TEST_F(TestClsRbd, sparse_copyup)
   // and its contents should match
   bufferlist outbl;
   bufferlist expected_outbl;
-  expected_outbl.append(std::string(1024, '\0'));
+  expected_outbl.append(std::string(4096, '\0'));
   expected_outbl.append(std::string(4096, '1'));
-  expected_outbl.append(std::string(8192 - 4096 - 1024, '\0'));
+  expected_outbl.append(std::string(4096, '\0'));
   expected_outbl.append(std::string(4096, '2'));
   ASSERT_EQ((int)expected_outbl.length(),
             ioctx.read(oid, outbl, expected_outbl.length() + 1, 0));

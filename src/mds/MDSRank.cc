@@ -3388,8 +3388,14 @@ void MDSRank::command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostrea
   in->dirfragtree.get_leaves_under(frag_t(), leaves);
   for (const auto& leaf : leaves) {
     CDir *dir = in->get_dirfrag(leaf);
-    if (dir)
+    if (dir) {
       mdcache->dump_dir(f, dir, dentry_dump);
+    } else {
+      f->open_object_section("frag");
+      f->dump_stream("frag") << leaf;
+      f->dump_string("status", "dirfrag not in cache");
+      f->close_section();
+    }
   }
   f->close_section();
 }

@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { Observable, Subscription } from 'rxjs';
-import { take } from 'rxjs/operators';
+import { BehaviorSubject, Observable, Subscription, of } from 'rxjs';
+import { switchMap, take } from 'rxjs/operators';
 
 import { HealthService } from '~/app/shared/api/health.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -24,6 +24,7 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AlertClass } from '~/app/shared/enum/health-icon.enum';
+import { HardwareService } from '~/app/shared/api/hardware.service';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -69,6 +70,12 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   telemetryEnabled: boolean;
   telemetryURL = 'https://telemetry-public.ceph.com/';
   origin = window.location.origin;
+  hardwareHealth: any;
+  hardwareEnabled: boolean = false;
+  hasHardwareError: boolean = false;
+  isHardwareEnabled$: Observable<boolean>;
+  hardwareSummary$: Observable<any>;
+  hardwareSubject = new BehaviorSubject<any>([]);
 
   constructor(
     private summaryService: SummaryService,
@@ -80,7 +87,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     public prometheusService: PrometheusService,
     private mgrModuleService: MgrModuleService,
     private refreshIntervalService: RefreshIntervalService,
-    public prometheusAlertService: PrometheusAlertService
+    public prometheusAlertService: PrometheusAlertService,
+    private hardwareService: HardwareService
   ) {
     super(prometheusService);
     this.permissions = this.authStorageService.getPermissions();
@@ -89,9 +97,21 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
 
   ngOnInit() {
     super.ngOnInit();
+    this.isHardwareEnabled$ = this.getHardwareConfig();
+    this.hardwareSummary$ = this.hardwareSubject.pipe(
+      switchMap(() =>
+        this.hardwareService.getSummary().pipe(
+          switchMap((data: any) => {
+            this.hasHardwareError = data.host.flawed;
+            return of(data);
+          })
+        )
+      )
+    );
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
       this.getCapacityCardData();
+      if (this.hardwareEnabled) this.hardwareSubject.next([]);
     });
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
@@ -162,5 +182,14 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
 
   trackByFn(index: any) {
     return index;
+  }
+
+  getHardwareConfig(): Observable<any> {
+    return this.mgrModuleService.getConfig('cephadm').pipe(
+      switchMap((resp: any) => {
+        this.hardwareEnabled = resp?.hw_monitoring;
+        return of(resp?.hw_monitoring);
+      })
+    );
   }
 }

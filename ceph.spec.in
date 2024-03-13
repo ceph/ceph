@@ -111,9 +111,14 @@
 # this is tracked in https://bugzilla.redhat.com/2152265
 %bcond_with system_arrow
 %endif
+# qat only supported for intel devices
+%ifarch x86_64
 %if 0%{?fedora} || 0%{?rhel} >= 9
 %bcond_without system_qat
-%else
+%else # not fedora/rhel
+%bcond_with system_qat
+%endif
+%else # not x86_64
 %bcond_with system_qat
 %endif
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8 || 0%{?openEuler}

@@ -116,6 +116,10 @@ public:
       interval_set<uint64_t>& m,
       uint32_t op_flags = 0) final;
 
+    base_errorator::future<bool> exists(
+      CollectionRef c,
+      const ghobject_t& oid) final;
+
     get_attr_errorator::future<ceph::bufferlist> get_attr(
       CollectionRef c,
       const ghobject_t& oid,
@@ -343,6 +347,10 @@ public:
       std::vector<OnodeRef> &d_onodes,
       ceph::os::Transaction::iterator &i);
 
+    tm_ret _remove_omaps(
+      internal_context_t &ctx,
+      OnodeRef &onode,
+      omap_root_t &&omap_root);
     tm_ret _remove(
       internal_context_t &ctx,
       OnodeRef &onode);
@@ -355,6 +363,16 @@ public:
       uint64_t offset, size_t len,
       ceph::bufferlist &&bl,
       uint32_t fadvise_flags);
+    enum class omap_type_t : uint8_t {
+      XATTR = 0,
+      OMAP,
+      NUM_TYPES
+    };
+    tm_ret _clone_omaps(
+      internal_context_t &ctx,
+      OnodeRef &onode,
+      OnodeRef &d_onode,
+      const omap_type_t otype);
     tm_ret _clone(
       internal_context_t &ctx,
       OnodeRef &onode,
@@ -412,7 +430,7 @@ public:
       const coll_t& cid);
     using omap_set_kvs_ret = tm_iertr::future<omap_root_t>;
     omap_set_kvs_ret _omap_set_kvs(
-      OnodeRef &onode,
+      const OnodeRef &onode,
       const omap_root_le_t& omap_root,
       Transaction& t,
       std::map<std::string, ceph::bufferlist>&& kvs);

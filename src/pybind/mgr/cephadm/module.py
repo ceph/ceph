@@ -16,6 +16,8 @@ from threading import Event
 
 from cephadm.service_discovery import ServiceDiscovery
 
+from ceph.deployment.service_spec import PrometheusSpec
+
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
     Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, Type, \
@@ -117,7 +119,7 @@ os._exit = os_exit_noop   # type: ignore
 DEFAULT_IMAGE = 'quay.io/ceph/ceph'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.43.0'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.5.0'
-DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:latest'
+DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.0.0'
 DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
 DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.4.0'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.25.0'
@@ -760,6 +762,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 err_str += f'(non-default {timeout} second timeout)'
             else:
                 err_str += (f'(default {self.default_cephadm_command_timeout} second timeout)')
+            raise OrchestratorError(err_str)
+        except concurrent.futures.CancelledError as e:
+            err_str = ''
+            if cmd:
+                err_str = f'Command "{cmd}" failed '
+            else:
+                err_str = 'Command failed '
+            if host:
+                err_str += f'on host {host} '
+            err_str += f' - {str(e)}'
             raise OrchestratorError(err_str)
 
     def set_container_image(self, entity: str, image: str) -> None:
@@ -2969,6 +2981,38 @@ Then run the following:
         self.set_store(PrometheusService.USER_CFG_KEY, user)
         self.set_store(PrometheusService.PASS_CFG_KEY, password)
         return 'prometheus credentials updated correctly'
+
+    @handle_orch_error
+    def set_prometheus_target(self, url: str) -> str:
+        prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if url not in prometheus_spec.targets:
+            prometheus_spec.targets.append(url)
+        else:
+            return f"Target '{url}' already exists.\n"
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('prometheus')
+        spec = ServiceSpec.from_json(prometheus_spec.to_json())
+        self.apply([spec], no_overwrite=False)
+        for daemon in daemons:
+            self.daemon_action(action='redeploy', daemon_name=daemon.daemon_name)
+        return 'prometheus multi-cluster targets updated'
+
+    @handle_orch_error
+    def remove_prometheus_target(self, url: str) -> str:
+        prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        if url in prometheus_spec.targets:
+            prometheus_spec.targets.remove(url)
+        else:
+            return f"Target '{url}' does not exist.\n"
+        if not prometheus_spec:
+            return "Service prometheus not found\n"
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('prometheus')
+        spec = ServiceSpec.from_json(prometheus_spec.to_json())
+        self.apply([spec], no_overwrite=False)
+        for daemon in daemons:
+            self.daemon_action(action='redeploy', daemon_name=daemon.daemon_name)
+        return 'prometheus multi-cluster targets updated'
 
     @handle_orch_error
     def set_alertmanager_access_info(self, user: str, password: str) -> str:

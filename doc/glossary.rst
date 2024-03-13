@@ -213,6 +213,18 @@
                 Ceph cluster. See :ref:`the "Cluster Map" section of the
                 Architecture document<architecture_cluster_map>` for details.
 
+        Crimson
+                A next-generation OSD architecture whose main aim is the
+                reduction of latency costs incurred due to cross-core
+                communications. A re-design of the OSD reduces lock
+                contention by reducing communication between shards in the data
+                path. Crimson improves upon the performance of classic Ceph
+                OSDs by eliminating reliance on thread pools. See `Crimson:
+                Next-generation Ceph OSD for Multi-core Scalability
+                <https://ceph.io/en/news/blog/2023/crimson-multi-core-scalability/>`_.
+                See the :ref:`Crimson developer
+                documentation<crimson_dev_doc>`.
+
 	CRUSH
                 **C**\ontrolled **R**\eplication **U**\nder **S**\calable
                 **H**\ashing. The algorithm that Ceph uses to compute object
@@ -263,11 +275,18 @@
                 Ceph-specific information about devices and its relationship
                 with OSDs.
 
-	:ref:`MDS<cephfs_add_remote_mds>`
+	MDS
                 The Ceph **M**\eta\ **D**\ata **S**\erver daemon. Also referred
                 to as "ceph-mds". The Ceph metadata server daemon must be
                 running in any Ceph cluster that runs the CephFS file system.
-                The MDS stores all filesystem metadata. 
+                The MDS stores all filesystem metadata. :term:`Client`\s work
+                together with either a single MDS or a group of MDSes to
+                maintain a distributed metadata cache that is required by
+                CephFS.
+
+                See :ref:`Deploying Metadata Servers<cephfs_add_remote_mds>`.
+
+                See the :ref:`ceph-mds man page<ceph_mds_man>`.
 
 	MGR
                 The Ceph manager software, which collects all the state from
@@ -286,6 +305,19 @@
 
 	Object Storage Device
                 See :term:`OSD`.
+
+        OMAP
+                "object map". A key-value store (a database) that is used to
+                reduce the time it takes to read data from and to write to the
+                Ceph cluster. RGW bucket indexes are stored as OMAPs.
+                Erasure-coded pools cannot store RADOS OMAP data structures.
+               
+                Run the command ``ceph osd df`` to see your OMAPs.
+
+                See Eleanor Cawthon's 2012 paper `A Distributed Key-Value Store
+                using Ceph
+                <https://ceph.io/assets/pdfs/CawthonKeyValueStore.pdf>`_ (17
+                pages).
 
 	OSD
                 Probably :term:`Ceph OSD`, but not necessarily. Sometimes

@@ -15,6 +15,7 @@ class MemoryAutotuner(object):
         'crash': 128 * 1048576,
         'keepalived': 128 * 1048576,
         'haproxy': 128 * 1048576,
+        'nvmeof': 4096 * 1048576,
     }
     default_size = 1024 * 1048576
 

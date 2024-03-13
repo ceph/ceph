@@ -725,12 +725,12 @@ SeaStore::Shard::list_objects(CollectionRef ch,
 		  LOG_PREFIX(SeaStore::list_objects);
 		  DEBUGT("got {} objects, left limit {}",
 		    t, next_objects.size(), limit);
-		  if (last && std::get<1>(ret) == pend) {
-		    std::get<1>(ret) = end;
-		  }
 		  assert(limit == 0 ||
 			 std::get<1>(ret) == pend ||
 			 std::get<1>(ret) == ghobject_t::get_max());
+		  if (last && std::get<1>(ret) == pend) {
+		    std::get<1>(ret) = end;
+		  }
 		  return list_iertr::make_ready_future<
 		    seastar::stop_iteration
 		    >(seastar::stop_iteration::no);
@@ -852,6 +852,29 @@ SeaStore::Shard::read(
     });
 }
 
+SeaStore::Shard::base_errorator::future<bool>
+SeaStore::Shard::exists(
+  CollectionRef c,
+  const ghobject_t& oid)
+{
+  LOG_PREFIX(SeaStore::exists);
+  DEBUG("oid {}", oid);
+  return repeat_with_onode<bool>(
+    c,
+    oid,
+    Transaction::src_t::READ,
+    "oid_exists",
+    op_type_t::READ,
+    [](auto&, auto&) {
+    return seastar::make_ready_future<bool>(true);
+  }).handle_error(
+    crimson::ct_error::enoent::handle([] {
+      return seastar::make_ready_future<bool>(false);
+    }),
+    crimson::ct_error::assert_all{"unexpected error"}
+  );
+}
+
 SeaStore::Shard::read_errorator::future<ceph::bufferlist>
 SeaStore::Shard::readv(
   CollectionRef ch,
@@ -937,18 +960,22 @@ SeaStore::Shard::get_attrs(
     [=, this](auto &t, auto& onode) {
       auto& layout = onode.get_layout();
       return omap_list(onode, layout.xattr_root, t, std::nullopt,
-        OMapManager::omap_list_config_t().with_inclusive(false, false)
-      ).si_then([&layout](auto p) {
+        OMapManager::omap_list_config_t()
+	  .with_inclusive(false, false)
+	  .without_max()
+      ).si_then([&layout, &t, FNAME](auto p) {
         auto& attrs = std::get<1>(p);
         ceph::bufferlist bl;
         if (layout.oi_size) {
           bl.append(ceph::bufferptr(&layout.oi[0], layout.oi_size));
           attrs.emplace(OI_ATTR, std::move(bl));
+         DEBUGT("set oi from onode layout", t);
         }
         if (layout.ss_size) {
           bl.clear();
           bl.append(ceph::bufferptr(&layout.ss[0], layout.ss_size));
           attrs.emplace(SS_ATTR, std::move(bl));
+         DEBUGT("set ss from onode layout", t);
         }
         return seastar::make_ready_future<omap_values_t>(std::move(attrs));
       });
@@ -1130,7 +1157,9 @@ SeaStore::Shard::omap_get_values(
 	onode.get_layout().omap_root,
 	t,
 	start,
-	OMapManager::omap_list_config_t().with_inclusive(false, false));
+	OMapManager::omap_list_config_t()
+	  .with_inclusive(false, false)
+	  .without_max());
   });
 }
 
@@ -1476,28 +1505,49 @@ SeaStore::Shard::_do_transaction_step(
 }
 
 SeaStore::Shard::tm_ret
+SeaStore::Shard::_remove_omaps(
+  internal_context_t &ctx,
+  OnodeRef &onode,
+  omap_root_t &&omap_root)
+{
+  if (omap_root.get_location() != L_ADDR_NULL) {
+    return seastar::do_with(
+      BtreeOMapManager(*transaction_manager),
+      std::move(omap_root),
+      [&ctx, onode](auto &omap_manager, auto &omap_root) {
+      return omap_manager.omap_clear(
+	omap_root,
+	*ctx.transaction
+      ).handle_error_interruptible(
+	crimson::ct_error::input_output_error::pass_further(),
+	crimson::ct_error::assert_all{
+	  "Invalid error in SeaStore::_remove"
+	}
+      );
+    });
+  }
+  return tm_iertr::now();
+}
+
+SeaStore::Shard::tm_ret
 SeaStore::Shard::_remove(
   internal_context_t &ctx,
   OnodeRef &onode)
 {
   LOG_PREFIX(SeaStore::_remove);
   DEBUGT("onode={}", *ctx.transaction, *onode);
-  auto fut = BtreeOMapManager::omap_clear_iertr::now();
-  auto omap_root = onode->get_layout().omap_root.get(
-    onode->get_metadata_hint(device->get_block_size()));
-  if (omap_root.get_location() != L_ADDR_NULL) {
-    fut = seastar::do_with(
-      BtreeOMapManager(*transaction_manager),
-      onode->get_layout().omap_root.get(
-	onode->get_metadata_hint(device->get_block_size())),
-      [&ctx, onode](auto &omap_manager, auto &omap_root) {
-      return omap_manager.omap_clear(
-	omap_root,
-	*ctx.transaction
-      );
-    });
-  }
-  return fut.si_then([this, &ctx, onode] {
+  return _remove_omaps(
+    ctx,
+    onode,
+    onode->get_layout().omap_root.get(
+      onode->get_metadata_hint(device->get_block_size()))
+  ).si_then([this, &ctx, onode]() mutable {
+    return _remove_omaps(
+      ctx,
+      onode,
+      onode->get_layout().xattr_root.get(
+	onode->get_metadata_hint(device->get_block_size())));
+  }).si_then([this, &ctx, onode] {
     return seastar::do_with(
       ObjectDataHandler(max_object_size),
       [=, this, &ctx](auto &objhandler) {
@@ -1560,6 +1610,69 @@ SeaStore::Shard::_write(
 }
 
 SeaStore::Shard::tm_ret
+SeaStore::Shard::_clone_omaps(
+  internal_context_t &ctx,
+  OnodeRef &onode,
+  OnodeRef &d_onode,
+  const omap_type_t otype)
+{
+  return trans_intr::repeat([&ctx, onode, d_onode, this, otype] {
+    return seastar::do_with(
+      std::optional<std::string>(std::nullopt),
+      [&ctx, onode, d_onode, this, otype](auto &start) {
+      auto& layout = onode->get_layout();
+      return omap_list(
+	*onode,
+	otype == omap_type_t::XATTR
+	  ? layout.xattr_root
+	  : layout.omap_root,
+	*ctx.transaction,
+	start,
+	OMapManager::omap_list_config_t().with_inclusive(false, false)
+      ).si_then([&ctx, onode, d_onode, this, otype, &start](auto p) mutable {
+	auto complete = std::get<0>(p);
+	auto &attrs = std::get<1>(p);
+	if (attrs.empty()) {
+	  assert(complete);
+	  return tm_iertr::make_ready_future<
+	    seastar::stop_iteration>(
+	      seastar::stop_iteration::yes);
+	}
+	std::string nstart = attrs.rbegin()->first;
+	return _omap_set_kvs(
+	  d_onode,
+	  otype == omap_type_t::XATTR
+	    ? d_onode->get_layout().xattr_root
+	    : d_onode->get_layout().omap_root,
+	  *ctx.transaction,
+	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end())
+	).si_then([complete, nstart=std::move(nstart),
+		  &start, &ctx, d_onode, otype](auto root) mutable {
+	  if (root.must_update()) {
+	    if (otype == omap_type_t::XATTR) {
+	      d_onode->update_xattr_root(*ctx.transaction, root);
+	    } else {
+	      assert(otype == omap_type_t::OMAP);
+	      d_onode->update_omap_root(*ctx.transaction, root);
+	    }
+	  }
+	  if (complete) {
+	    return seastar::make_ready_future<
+	      seastar::stop_iteration>(
+		seastar::stop_iteration::yes);
+	  } else {
+	    start = std::move(nstart);
+	    return seastar::make_ready_future<
+	      seastar::stop_iteration>(
+		seastar::stop_iteration::no);
+	  }
+	});
+      });
+    });
+  });
+}
+
+SeaStore::Shard::tm_ret
 SeaStore::Shard::_clone(
   internal_context_t &ctx,
   OnodeRef &onode,
@@ -1570,8 +1683,6 @@ SeaStore::Shard::_clone(
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [this, &ctx, &onode, &d_onode](auto &objHandler) {
-    //TODO: currently, we only care about object data, leaving cloning
-    //      of xattr/omap for future work
     auto &object_size = onode->get_layout().size;
     d_onode->update_onode_size(*ctx.transaction, object_size);
     return objHandler.clone(
@@ -1580,6 +1691,10 @@ SeaStore::Shard::_clone(
 	*ctx.transaction,
 	*onode,
 	d_onode.get()});
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return _clone_omaps(ctx, onode, d_onode, omap_type_t::XATTR);
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return _clone_omaps(ctx, onode, d_onode, omap_type_t::OMAP);
   });
 }
 
@@ -1615,7 +1730,7 @@ SeaStore::Shard::_zero(
 
 SeaStore::Shard::omap_set_kvs_ret
 SeaStore::Shard::_omap_set_kvs(
-  OnodeRef &onode,
+  const OnodeRef &onode,
   const omap_root_le_t& omap_root,
   Transaction& t,
   std::map<std::string, ceph::bufferlist>&& kvs)
@@ -1841,6 +1956,7 @@ SeaStore::Shard::_setattrs(
       }
       onode->update_object_info(*ctx.transaction, val);
       aset.erase(it);
+      DEBUGT("set oi in onode layout", *ctx.transaction);
     } else {
       onode->clear_object_info(*ctx.transaction);
     }
@@ -1855,15 +1971,18 @@ SeaStore::Shard::_setattrs(
       }
       onode->update_snapset(*ctx.transaction, val);
       aset.erase(it);
+      DEBUGT("set ss in onode layout", *ctx.transaction);
     } else {
       onode->clear_snapset(*ctx.transaction);
     }
   }
 
   if (aset.empty()) {
+    DEBUGT("all attrs set in onode layout", *ctx.transaction);
     return fut;
   }
 
+  DEBUGT("set attrs in omap", *ctx.transaction);
   return fut.si_then(
     [this, onode, &ctx, aset=std::move(aset)]() mutable {
     return _omap_set_kvs(

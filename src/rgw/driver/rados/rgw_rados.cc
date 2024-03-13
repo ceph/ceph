@@ -1353,7 +1353,7 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (run_notification_thread) {
-    ret = rgw::notify::init(cct, driver, dpp);
+    ret = rgw::notify::init(cct, driver, *svc.site, dpp);
     if (ret < 0 ) {
       ldpp_dout(dpp, 1) << "ERROR: failed to initialize notification manager" << dendl;
     }
@@ -1362,29 +1362,25 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   return ret;
 }
 
-int RGWRados::init_svc(bool raw, const DoutPrefixProvider *dpp)
+int RGWRados::init_svc(bool raw, const DoutPrefixProvider *dpp,
+                       const rgw::SiteConfig& site)
 {
   if (raw) {
-    return svc.init_raw(cct, driver, use_cache, null_yield, dpp);
+    return svc.init_raw(cct, driver, use_cache, null_yield, dpp, site);
   }
 
-  return svc.init(cct, driver, use_cache, run_sync_thread, null_yield, dpp);
-}
-
-int RGWRados::init_ctl(const DoutPrefixProvider *dpp)
-{
-  return ctl.init(&svc, driver, dpp);
+  return svc.init(cct, driver, use_cache, run_sync_thread, null_yield, dpp, site);
 }
 
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
  */
-int RGWRados::init_begin(const DoutPrefixProvider *dpp)
+int RGWRados::init_begin(CephContext* _cct, const DoutPrefixProvider *dpp,
+                         const rgw::SiteConfig& site)
 {
-  int ret;
-
-  ret = driver->init_neorados(dpp);
+  set_context(_cct);
+  int ret = driver->init_neorados(dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to initialize neorados (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
@@ -1395,13 +1391,13 @@ int RGWRados::init_begin(const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  ret = init_svc(false, dpp);
+  ret = init_svc(false, dpp, site);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
   }
 
-  ret = init_ctl(dpp);
+  ret = ctl.init(&svc, driver, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to init ctls (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
@@ -3269,7 +3265,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   state = NULL;
 
   if (versioned_op && meta.olh_epoch) {
-    r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, log_op);
+    bool add_log = log_op && store->svc.zone->need_to_log_data();
+    r = store->set_olh(rctx.dpp, target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, rctx.y, meta.zones_trace, add_log);
     if (r < 0) {
       return r;
     }

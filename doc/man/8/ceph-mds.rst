@@ -1,5 +1,7 @@
 :orphan:
 
+.. _ceph_mds_man:
+
 =========================================
  ceph-mds -- ceph metadata server daemon
 =========================================

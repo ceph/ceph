@@ -7,8 +7,8 @@ set -ex
 # Hence the subsequent subvolume commands on the clone fails with
 # 'MetadataMgrException: -2 (section 'GLOBAL' does not exist)' traceback.
 
-# The osd is of the size 1GB. The full-ratios are set so that osd is treated full
-# at around 600MB. The subvolume is created and 100MB is written.
+# The osd is of the size 2GiB. The full-ratios are set so that osd is treated full
+# at around 1.2GB. The subvolume is created and 200MB is written.
 # The subvolume is snapshotted and cloned ten times. Since the clone delay is set to 15 seconds,
 # all the clones reach pending state for sure. Among ten clones, only few succeed and rest fails
 # with ENOSPACE.
@@ -46,7 +46,7 @@ echo "After ratios are set"
 df -h
 ceph osd df
 
-for i in {1..100};do sudo dd if=/dev/urandom of=$CEPH_MNT$subvol_path_0/1MB_file-$i status=progress bs=1M count=1 conv=fdatasync;done
+for i in {1..100};do sudo dd if=/dev/urandom of=$CEPH_MNT$subvol_path_0/2MB_file-$i status=progress bs=1M count=2 conv=fdatasync;done
 
 # For debugging
 echo "After subvolumes are written"

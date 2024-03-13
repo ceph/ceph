@@ -1117,6 +1117,19 @@ auto find_zone_placement(const DoutPrefixProvider* dpp,
   return &i->second;
 }
 
+bool all_zonegroups_support(const SiteConfig& site, std::string_view feature)
+{
+  const auto& period = site.get_period();
+  if (!period) {
+    // if we're not in a realm, just check the local zonegroup
+    return site.get_zonegroup().supports(feature);
+  }
+  const auto& zgs = period->period_map.zonegroups;
+  return std::all_of(zgs.begin(), zgs.end(), [feature] (const auto& pair) {
+      return pair.second.supports(feature);
+    });
+}
+
 static int read_or_create_default_zone(const DoutPrefixProvider* dpp,
                                        optional_yield y,
                                        sal::ConfigStore* cfgstore,

@@ -9,7 +9,7 @@ void PublicAccessBlockConfiguration::decode_xml(XMLObj *obj) {
 }
 
 void PublicAccessBlockConfiguration::dump_xml(Formatter *f) const {
-  Formatter::ObjectSection os(*f, "BlockPublicAccessBlockConfiguration");
+  Formatter::ObjectSection os(*f, "PublicAccessBlockConfiguration");
   // Note: AWS spec mentions the values to be ALL CAPs, but clients seem to
   // require all small letters, and S3 itself doesn't seem to follow the API
   // spec here

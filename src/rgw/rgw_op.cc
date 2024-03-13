@@ -1407,16 +1407,20 @@ int RGWOp::do_aws4_auth_completion()
 {
   ldpp_dout(this, 5) << "NOTICE: call to do_aws4_auth_completion"  << dendl;
   if (s->auth.completer) {
-    if (!s->auth.completer->complete()) {
-      return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
-    } else {
-      ldpp_dout(this, 10) << "v4 auth ok -- do_aws4_auth_completion" << dendl;
-    }
-
     /* TODO(rzarzynski): yes, we're really called twice on PUTs. Only first
      * call passes, so we disable second one. This is old behaviour, sorry!
      * Plan for tomorrow: seek and destroy. */
-    s->auth.completer = nullptr;
+    auto completer = std::move(s->auth.completer);
+
+    try {
+      if (!completer->complete()) {
+        return -ERR_AMZ_CONTENT_SHA256_MISMATCH;
+      }
+    } catch (const rgw::io::Exception& e) {
+      return -e.code().value();
+    }
+
+    ldpp_dout(this, 10) << "v4 auth ok -- do_aws4_auth_completion" << dendl;
   }
 
   return 0;
@@ -5267,7 +5271,6 @@ void RGWDeleteObj::execute(optional_yield y)
     {
       RGWObjState* astate = nullptr;
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
-
       op_ret = s->object->get_obj_state(this, &astate, s->yield, true);
       if (op_ret < 0) {
         if (need_object_expiration() || multipart_delete) {
@@ -5290,7 +5293,6 @@ void RGWDeleteObj::execute(optional_yield y)
 
       // ignore return value from get_obj_attrs in all other cases
       op_ret = 0;
-
       if (check_obj_lock) {
         ceph_assert(astate);
         int object_lock_response = verify_object_lock(this, astate->attrset, bypass_perm, bypass_governance_mode);
@@ -6527,6 +6529,8 @@ void RGWInitMultipart::execute(optional_yield y)
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
   upload = s->bucket->get_multipart_upload(s->object->get_name(),
 				       upload_id);
+  upload->obj_legal_hold = obj_legal_hold;
+  upload->obj_retention = obj_retention;
   op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
 
   if (op_ret == 0) {
@@ -8985,7 +8989,7 @@ int RGWGetBucketPublicAccessBlock::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketPolicy)) {
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketPublicAccessBlock)) {
     return -EACCES;
   }
 
@@ -8999,7 +9003,10 @@ void RGWGetBucketPublicAccessBlock::execute(optional_yield y)
       aiter == attrs.end()) {
     ldpp_dout(this, 0) << "can't find bucket IAM POLICY attr bucket_name = "
 		       << s->bucket_name << dendl;
-    // return the default;
+
+    op_ret = -ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION;
+    s->err.message = "The public access block configuration was not found";
+
     return;
   } else {
     bufferlist::const_iterator iter{&aiter->second};
@@ -9016,9 +9023,12 @@ void RGWGetBucketPublicAccessBlock::execute(optional_yield y)
 
 void RGWDeleteBucketPublicAccessBlock::send_response()
 {
-  if (op_ret) {
-    set_req_state_err(s, op_ret);
+  if (!op_ret) {
+    /* A successful Delete request should return a 204 */
+    op_ret = STATUS_NO_CONTENT;
   }
+
+  set_req_state_err(s, op_ret);
   dump_errno(s);
   end_header(s);
 }

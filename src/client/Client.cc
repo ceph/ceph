@@ -257,10 +257,10 @@ int Client::get_fd_inode(int fd, InodeRef *in) {
   return r;
 }
 
-dir_result_t::dir_result_t(Inode *in, const UserPerm& perms)
+dir_result_t::dir_result_t(Inode *in, const UserPerm& perms, int fd)
   : inode(in), offset(0), next_offset(2),
     release_count(0), ordered_count(0), cache_index(0), start_shared_gen(0),
-    perms(perms)
+    perms(perms), fd(fd)
   { }
 
 void Client::_reset_faked_inos()
@@ -6273,6 +6273,11 @@ int Client::resolve_mds(
   if (role_r == 0) {
     // We got a role, resolve it to a GID
     const auto& mdsmap = fsmap->get_filesystem(role.fscid).get_mds_map();
+    if (mdsmap.is_down(role.rank)) {
+      lderr(cct) << __func__ << ": targets rank: " << role.rank
+                 << " is down" << dendl;
+      return -CEPHFS_EAGAIN;
+    }
     auto& info = mdsmap.get_info(role.rank);
     ldout(cct, 10) << __func__ << ": resolved " << mds_spec << " to role '"
       << role << "' aka " << info.human_name() << dendl;
@@ -6981,11 +6986,13 @@ void Client::_unmount(bool abort)
 
 void Client::unmount()
 {
+  ldout(cct, 2) << __func__ << dendl;
   _unmount(false);
 }
 
 void Client::abort_conn()
 {
+  ldout(cct, 2) << __func__ << dendl;
   _unmount(true);
 }
 
@@ -9122,7 +9129,9 @@ int Client::fdopendir(int dirfd, dir_result_t **dirpp, const UserPerm &perms) {
       return r;
     }
   }
-  r = _opendir(dirinode.get(), dirpp, perms);
+  // Posix says that closedir will also close the file descriptor passed to fdopendir, so we associate
+  // dirfd to the new dir_result_t so that it can be closed later.
+  r = _opendir(dirinode.get(), dirpp, perms, dirfd);
   /* if ENOTDIR, dirpp will be an uninitialized point and it's very dangerous to access its value */
   if (r != -CEPHFS_ENOTDIR) {
       tout(cct) << (uintptr_t)*dirpp << std::endl;
@@ -9130,11 +9139,11 @@ int Client::fdopendir(int dirfd, dir_result_t **dirpp, const UserPerm &perms) {
   return r;
 }
 
-int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms)
+int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms, int fd)
 {
   if (!in->is_dir())
     return -CEPHFS_ENOTDIR;
-  *dirpp = new dir_result_t(in, perms);
+  *dirpp = new dir_result_t(in, perms, fd);
   opened_dirs.insert(*dirpp);
   ldout(cct, 8) << __func__ << "(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
   return 0;
@@ -9162,6 +9171,12 @@ void Client::_closedir(dir_result_t *dirp)
   }
   _readdir_drop_dirp_buffer(dirp);
   opened_dirs.erase(dirp);
+
+  /* Close the associated fd if this dir_result_t comes from an fdopendir request. */
+  if (dirp->fd >= 0) {
+    _close(dirp->fd);
+  }
+
   delete dirp;
 }
 
@@ -15764,8 +15779,14 @@ loff_t Client::ll_lseek(Fh *fh, loff_t offset, int whence)
 int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
+  if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
+  }
+
+  if (fh == NULL || !_ll_fh_exists(fh)) {
+    ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    return -CEPHFS_EBADF;
+  }
 
   ldout(cct, 3) << "ll_read " << fh << " " << fh->inode->ino << " " << " " << off << "~" << len << dendl;
   tout(cct) << "ll_read" << std::endl;
@@ -15902,16 +15923,22 @@ int Client::ll_commit_blocks(Inode *in,
 
 int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 {
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied()) {
+    return -CEPHFS_ENOTCONN;
+  }
+
+  if (fh == NULL || !_ll_fh_exists(fh)) {
+    ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    return -CEPHFS_EBADF;
+  }
+
   ldout(cct, 3) << "ll_write " << fh << " " << fh->inode->ino << " " << off <<
     "~" << len << dendl;
   tout(cct) << "ll_write" << std::endl;
   tout(cct) << (uintptr_t)fh << std::endl;
   tout(cct) << off << std::endl;
   tout(cct) << len << std::endl;
-
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -CEPHFS_ENOTCONN;
 
   /* We can't return bytes written larger than INT_MAX, clamp len to that */
   len = std::min(len, (loff_t)INT_MAX);
@@ -15926,8 +15953,14 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
 int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
+  if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
+  }
+
+  if (fh == NULL || !_ll_fh_exists(fh)) {
+    ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    return -CEPHFS_EBADF;
+  }
 
   std::scoped_lock cl(client_lock);
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
@@ -15936,8 +15969,14 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
 int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
 {
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
+  if (!mref_reader.is_state_satisfied()) {
     return -CEPHFS_ENOTCONN;
+  }
+
+  if (fh == NULL || !_ll_fh_exists(fh)) {
+    ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    return -CEPHFS_EBADF;
+  }
 
   std::scoped_lock cl(client_lock);
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
@@ -15948,23 +15987,34 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
                                   Context *onfinish, bufferlist *bl,
                                   bool do_fsync, bool syncdataonly)
 {
+    int64_t retval = -1;
+
     RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
     if (!mref_reader.is_state_satisfied()) {
-      int64_t rc = -CEPHFS_ENOTCONN;
+      retval = -CEPHFS_ENOTCONN;
       if (onfinish != nullptr) {
-        onfinish->complete(rc);
+        onfinish->complete(retval);
         /* async call should always return zero to caller and allow the
         caller to wait on callback for the actual errno. */
-        rc = 0;
+        retval = 0;
       }
-      return rc;
+      return retval;
+    }
+
+    if(fh == NULL || !_ll_fh_exists(fh)) {
+      ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+      retval = -CEPHFS_EBADF;
+      if (onfinish != nullptr) {
+        onfinish->complete(retval);
+        retval = 0;
+      }
+      return retval;
     }
 
     std::scoped_lock cl(client_lock);
 
-    int64_t retval = _preadv_pwritev_locked(fh, iov, iovcnt, offset, write,
-                                            true, onfinish, bl, do_fsync,
-                                            syncdataonly);
+    retval = _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
+                                    onfinish, bl, do_fsync, syncdataonly);
     /* There are two scenarios with each having two cases to handle here
     1) async io
       1.a) r == 0:

@@ -69,7 +69,6 @@ namespace seastar::internal {
   {};
 }
 
-SEASTAR_CONCEPT(
 namespace crimson::interruptible {
   template<typename InterruptCond, typename FutureType>
   class interruptible_future_detail;
@@ -79,7 +78,6 @@ namespace seastar::impl {
   struct is_tuple_of_futures<std::tuple<crimson::interruptible::interruptible_future_detail<InterruptCond, FutureType>, Rest...>>
     : is_tuple_of_futures<std::tuple<Rest...>> {};
 }
-)
 
 namespace crimson::interruptible {
 

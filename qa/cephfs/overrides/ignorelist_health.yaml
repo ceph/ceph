@@ -13,3 +13,4 @@ overrides:
       - POOL_APP_NOT_ENABLED
       - overall HEALTH_
       - Replacing daemon
+      - deprecated feature inline_data

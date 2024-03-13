@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# /nightlies/cron_wrapper.sh
 
 # check for no argument case and stop
 if [ -z $1 ]; then
@@ -7,47 +6,18 @@ if [ -z $1 ]; then
   exit 1
 fi
 
-# set permanent $LOG file var
-LOG="/var/log/crontab-nightlies-log/crontab.log"
-# set $LOG_LOCKED_ERR in case locking failed
-LOG_LOCK_ERR="/var/log/crontab-nightlies-log/crontab_lock_problem.$$"
+# Make a temporary unlinked file to hold the stdout/stderr
+T=$(mktemp)
+exec 10>"$T"
+exec 11<"$T"
+rm -f "$T"
 
-# temp files to store stdout and stderr
-# named with the PID of this script in their name so they'll be unique
-STDERR="/var/tmp/stderr.$$"
-STDOUT="/var/tmp/stdout.$$"
-
-# $STDOUT and $STDERR are removed when the script exits for any reason
-trap  "rm -f $STDOUT $STDERR" 0
-
-# run a command from this script's argument
-# redirect stdout to $STDOUT file and redirect stderr to $STDERR file
-
-DATE=$(date)
-echo -n "$DATE: "  >> $STDOUT
-echo "Running command: $@" >> $STDOUT
-"$@" > $STDOUT 2> $STDERR
-
-# get return code from the command run
+# Forward to syslog (journald)
+printf 'Running command: %s' "$*" | logger
+"$@" |& tee >(logger) >&10
 code=$?
 
-if [ $code != 0 ] ; then
-        # echoing to stdout/stderr makes cron send email
-        echo "stdout:"
-        cat $STDOUT
-        echo "stderr:"
-        cat $STDERR
-else
-        # normal exit: just log stdout
-
-	# lock $LOG with file descriptor 200
-	exec 200>>$LOG
-	# if $LOG is locked by other process - wait for 20 sec
-	flock -w 20 200 || LOG=$LOG_LOCK_ERR
-	echo "stdout:" >> $LOG
-	cat $STDOUT >> $LOG
-	echo "stderr:" >> $LOG
-	cat $STDERR >> $LOG
-	# unlock
-	flock -u 200
+if [ "$code" != 0 ] ; then
+    printf 'teuthology cronjob encountered error:\n'
+    head -n 10000 <&11
 fi

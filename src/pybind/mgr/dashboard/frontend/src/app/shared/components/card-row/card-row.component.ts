@@ -1,5 +1,6 @@
 import { Component, Input, OnChanges } from '@angular/core';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { HardwareNameMapping } from '~/app/shared/enum/hardware.enum';
 
 @Component({
   selector: 'cd-card-row',
@@ -19,8 +20,14 @@ export class CardRowComponent implements OnChanges {
   @Input()
   summaryType = 'default';
 
+  @Input()
+  dropdownData: any;
+
+  hwNames = HardwareNameMapping;
   icons = Icons;
   total: number;
+  dropdownTotalError: number = 0;
+  dropdownToggled: boolean = false;
 
   ngOnChanges(): void {
     if (this.data.total || this.data.total === 0) {
@@ -30,5 +37,15 @@ export class CardRowComponent implements OnChanges {
     } else {
       this.total = this.data;
     }
+
+    if (this.dropdownData) {
+      if (this.title == 'Host') {
+        this.dropdownTotalError = this.dropdownData.host.flawed;
+      }
+    }
+  }
+
+  toggleDropdown(): void {
+    this.dropdownToggled = !this.dropdownToggled;
   }
 }
