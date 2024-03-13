@@ -43,7 +43,8 @@ class RedFishClient(BaseClient):
                 self.log.error(msg)
                 raise RuntimeError
             self.token = _headers['X-Auth-Token']
-            self.location = _headers['Location']
+            location_endpoint: str = _headers['Location'].split('/', 3)[-1:][0]
+            self.location = f'/{location_endpoint}'
 
     def is_logged_in(self) -> bool:
         self.log.debug(f'Checking token validity for {self.url}')
