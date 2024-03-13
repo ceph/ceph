@@ -67,7 +67,6 @@ class CephadmServe:
         of cephadm. This loop will then attempt to apply this new state.
         """
         self.log.debug("serve starting")
-        self.mgr.config_checker.load_network_config()
 
         while self.mgr.run:
             self.log.debug("serve loop start")
@@ -322,7 +321,9 @@ class CephadmServe:
         self.mgr.agent_helpers._update_agent_down_healthcheck(agents_down)
         self.mgr.http_server.config_update()
 
-        self.mgr.config_checker.run_checks()
+        if self.mgr.config_checks_enabled:
+            self.mgr.config_checker.load_network_config()
+            self.mgr.config_checker.run_checks()
 
         for k in [
                 'CEPHADM_HOST_CHECK_FAILED',
