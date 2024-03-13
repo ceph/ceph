@@ -2030,6 +2030,8 @@ class TestPermErrMsg(CephFSTestCase):
 
 class TestMDSFail(TestAdminCommands):
 
+    CLIENTS_REQUIRED = 1
+
     def test_with_health_warn_oversize_cache(self):
         self.fs.set_max_mds(1)
         self.fs.wait_for_daemons()

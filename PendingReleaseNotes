@@ -154,6 +154,12 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   This is to prevent accidental MDS failure with such health warnings because
   restarting it may create new problems due to slow recovery.
 
+* CephFS: It is now not possible to fail an FS without confirmation flag
+  when its MDS has MDS_HEALTH_TRIM or MDS_HEALTH_CACHE_OVERSIZED health
+  warnings. This is to prevent accidental MDS failure with such health
+  warnings because it may create new problems due to slow recovery during
+  restart.
+
 >=18.0.0
 
 * The RGW policy parser now rejects unknown principals by default. If you are
