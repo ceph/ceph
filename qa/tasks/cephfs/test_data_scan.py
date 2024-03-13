@@ -395,7 +395,7 @@ class TestDataScan(CephFSTestCase):
         mds_map = self.fs.get_mds_map()
         return rank in mds_map['damaged']
 
-    def _rebuild_metadata(self, workload, workers=1):
+    def _rebuild_metadata(self, workload, workers=1, unmount=True):
         """
         That when all objects in metadata pool are removed, we can rebuild a metadata pool
         based on the contents of a data pool, and a client can see and read our files.
@@ -407,7 +407,8 @@ class TestDataScan(CephFSTestCase):
 
         # Unmount the client and flush the journal: the tool should also cope with
         # situations where there is dirty metadata, but we'll test that separately
-        self.mount_a.umount_wait()
+        if unmount:
+          self.mount_a.umount_wait()
         workload.flush()
 
         # Stop the MDS
@@ -469,7 +470,8 @@ class TestDataScan(CephFSTestCase):
         workload.scrub()
 
         # Mount a client
-        self.mount_a.mount_wait()
+        if unmount:
+            self.mount_a.mount_wait()
 
         # See that the files are present and correct
         errors = workload.validate()
@@ -495,7 +497,7 @@ class TestDataScan(CephFSTestCase):
         self._rebuild_metadata(BacktracelessFile(self.fs, self.mount_a))
 
     def test_rebuild_backtraceless_with_lf_dir_removed(self):
-        self._rebuild_metadata(BacktracelessFileRemoveLostAndFoundDirectory(self.fs, self.mount_a))
+        self._rebuild_metadata(BacktracelessFileRemoveLostAndFoundDirectory(self.fs, self.mount_a), unmount=False)
 
     def test_rebuild_moved_dir(self):
         self._rebuild_metadata(MovedDir(self.fs, self.mount_a))
