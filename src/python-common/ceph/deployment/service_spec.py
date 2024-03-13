@@ -1373,7 +1373,6 @@ class CustomContainerSpec(ServiceSpec):
                  preview_only: bool = False,
                  image: Optional[str] = None,
                  entrypoint: Optional[str] = None,
-                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  uid: Optional[int] = None,
                  gid: Optional[int] = None,
                  volume_mounts: Optional[Dict[str, str]] = {},
@@ -1385,6 +1384,9 @@ class CustomContainerSpec(ServiceSpec):
                  ports: Optional[List[int]] = [],
                  dirs: Optional[List[str]] = [],
                  files: Optional[Dict[str, Any]] = {},
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'container'
         assert service_id is not None
@@ -1394,7 +1396,9 @@ class CustomContainerSpec(ServiceSpec):
             service_type, service_id,
             placement=placement, unmanaged=unmanaged,
             preview_only=preview_only, config=config,
-            networks=networks, extra_entrypoint_args=extra_entrypoint_args)
+            networks=networks, extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs)
 
         self.image = image
         self.entrypoint = entrypoint
@@ -1426,6 +1430,19 @@ class CustomContainerSpec(ServiceSpec):
             if value is not None:
                 config_json[prop] = value
         return config_json
+
+    def validate(self) -> None:
+        super(CustomContainerSpec, self).validate()
+
+        if self.args and self.extra_container_args:
+            raise SpecValidationError(
+                '"args" and "extra_container_args" are mutually exclusive '
+                '(and both serve the same purpose)')
+
+        if self.files and self.custom_configs:
+            raise SpecValidationError(
+                '"files" and "custom_configs" are mutually exclusive '
+                '(and both serve the same purpose)')
 
 
 yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
@@ -1821,6 +1838,7 @@ class MONSpec(ServiceSpec):
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
                  extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  crush_locations: Optional[Dict[str, List[str]]] = None,
                  ):
@@ -1833,6 +1851,7 @@ class MONSpec(ServiceSpec):
                                       preview_only=preview_only,
                                       networks=networks,
                                       extra_container_args=extra_container_args,
+                                      extra_entrypoint_args=extra_entrypoint_args,
                                       custom_configs=custom_configs)
 
         self.crush_locations = crush_locations
@@ -1981,6 +2000,7 @@ class CephExporterSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  ):
         assert service_type == 'ceph-exporter'
 
@@ -1989,7 +2009,8 @@ class CephExporterSpec(ServiceSpec):
             placement=placement,
             unmanaged=unmanaged,
             preview_only=preview_only,
-            extra_container_args=extra_container_args)
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args)
 
         self.service_type = service_type
         self.sock_dir = sock_dir
