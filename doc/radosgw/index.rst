@@ -43,6 +43,7 @@ Cluster with one API and then retrieve that data with the other API.
 
    HTTP Frontends <frontends>
    Multisite Configuration <multisite>
+   Zone Features <zone-features>
    Pool Placement and Storage Classes <placement>
    Multisite Sync Policy Configuration <multisite-sync-policy>
    Configuring Pools <pools>
