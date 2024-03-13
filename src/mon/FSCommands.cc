@@ -108,6 +108,19 @@ class FailHandler : public FileSystemCommandHandler
       return -ENOENT;
     }
 
+  bool confirm = false;
+  cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+  if (!confirm &&
+      mon->mdsmon()->has_health_warnings({
+	MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED})) {
+    ss << "This MDS has one of the two health warnings -- MDS_HEALTH_TRIM "
+       << "or MDS_HEALTH_CACHE_OVERSIZED. Restarting such an MDS is not "
+       << "recommended since a restart might create problems due to slow "
+       << "recovery. If you wish to proceed, run again with "
+       << "--yes-i-really-mean-it to bring MDS offline";
+    return -EPERM;
+  }
+
     auto f = [](auto&& fs) {
       fs.get_mds_map().set_flag(CEPH_MDSMAP_NOT_JOINABLE);
     };
