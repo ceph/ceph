@@ -7,6 +7,9 @@ port = {{ port }}
 enable_auth = {{ spec.enable_auth }}
 state_update_notify = True
 state_update_interval_sec = 5
+enable_prometheus_exporter = True
+prometheus_exporter_ssl = False
+prometheus_port = 10008
 
 [ceph]
 pool = {{ spec.pool }}
