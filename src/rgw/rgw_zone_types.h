@@ -85,16 +85,19 @@ WRITE_CLASS_ENCODER(RGWNameToId)
 
 struct RGWDefaultSystemMetaObjInfo {
   std::string default_id;
+  std::string default_name;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(default_id, bl);
+    encode(default_name, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(default_id, bl);
+    decode(default_name, bl);
     DECODE_FINISH(bl);
   }
 

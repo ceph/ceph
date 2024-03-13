@@ -30,10 +30,12 @@ class SQLiteConfigStore : public sal::ConfigStore {
 
   int write_default_realm_id(const DoutPrefixProvider* dpp,
                              optional_yield y, bool exclusive,
-                             std::string_view realm_id) override;
+                             std::string_view realm_id,
+                             std::string_view realm_name) override;
   int read_default_realm_id(const DoutPrefixProvider* dpp,
                             optional_yield y,
-                            std::string& realm_id) override;
+                            std::string& realm_id,
+                            std::string& realm_name) override;
   int delete_default_realm_id(const DoutPrefixProvider* dpp,
                               optional_yield y) override;
 

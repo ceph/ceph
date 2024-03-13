@@ -48,14 +48,16 @@ class ConfigStore {
   /// @group Realm
   ///@{
 
-  /// Set the cluster-wide default realm id
+  /// Set the cluster-wide default realm id and name
   virtual int write_default_realm_id(const DoutPrefixProvider* dpp,
                                      optional_yield y, bool exclusive,
-                                     std::string_view realm_id) = 0;
-  /// Read the cluster's default realm id
+                                     std::string_view realm_id,
+                                     std::string_view realm_name) = 0;
+  /// Read the cluster's default realm id and name
   virtual int read_default_realm_id(const DoutPrefixProvider* dpp,
                                     optional_yield y,
-                                    std::string& realm_id) = 0;
+                                    std::string& realm_id,
+                                    std::string& realm_name) = 0;
   /// Delete the cluster's default realm id
   virtual int delete_default_realm_id(const DoutPrefixProvider* dpp,
                                       optional_yield y) = 0;
