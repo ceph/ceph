@@ -16,6 +16,8 @@ Supported Features
 +-----------------------------------+---------+----------+
 | :ref:`feature_compress_encrypted` | Reef    | Disabled |
 +-----------------------------------+---------+----------+
+| :ref:`feature_notification_v2`    | Squid   | Enabled  |
++-----------------------------------+---------+----------+
 
 .. _feature_resharding:
 
@@ -48,6 +50,20 @@ must upgrade to Reef or later before enabling.
    and allow attackers to distinguish whether two same-sized objects might contain
    the same data. Due to these security considerations, this feature is disabled
    by default.
+
+
+.. _feature_notification_v2:
+
+notification_v2
+~~~~~~~~~~~~~~~
+
+This feature opts in to a new "v2" metadata format for bucket notifications and
+topics. Unlike "v1", this format is supported by multisite replication and can
+scale to many topics.
+
+Once this feature is enabled on all zonegroups in the realm, a background process
+will convert existing v1 topics and bucket notifications into their v2 format.
+
 
 Commands
 --------

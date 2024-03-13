@@ -4,6 +4,10 @@ Bucket Notifications
 
 .. versionadded:: Nautilus
 
+.. versionchanged:: Squid
+   A new "v2" format for Topic and Notification metadata can be enabled with
+   the :ref:`feature_notification_v2` zone feature.
+
 .. contents::
 
 Bucket notifications provide a mechanism for sending information out of radosgw
