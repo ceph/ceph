@@ -105,7 +105,7 @@ message namespace_add_req {
 	optional string uuid = 6;
 	optional int32 anagrpid = 7;
 	optional bool create_image = 8;
-	optional uint32 size = 9;
+	optional uint64 size = 9;
 	optional bool force = 10;
 }
 
@@ -113,7 +113,7 @@ message namespace_resize_req {
 	string subsystem_nqn = 1;
 	optional uint32 nsid = 2;
 	optional string uuid = 3;
-	uint32 new_size = 4;
+	uint64 new_size = 4;
 }
 
 message namespace_get_io_stats_req {
@@ -319,6 +319,7 @@ message subsystem_cli {
 	uint32 max_cntlid = 6;
 	uint32 namespace_count = 7;
 	string subtype = 8;
+	uint32 max_namespaces = 9;
 }
 
 message gateway_info {
@@ -332,6 +333,7 @@ message gateway_info {
 	int32 status = 8;
 	string error_message = 9;
 	optional string spdk_version = 10;
+        uint32 load_balancing_group = 11;
 }
 
 message cli_version {
