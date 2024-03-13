@@ -1,0 +1,83 @@
+---
+roles:
+  # Test is for basic smb deployment & functionality. one node cluster is OK
+  - - host.a
+    - mon.a
+    - mgr.x
+    - osd.0
+    - osd.1
+    - client.0
+  # Reserve a host for acting as a domain controller
+  - - host.b
+    - cephadm.exclude
+tasks:
+  - install:
+  - cephadm:
+  - cephadm.shell:
+      host.a:
+        - ceph fs volume create cephfs
+  - cephadm.wait_for_service:
+      service: mds.cephfs
+  - cephadm.shell:
+      host.a:
+        # create a subvolume so we can verify that we're sharing something
+        - cmd: ceph fs subvolumegroup create cephfs g1
+        - cmd: ceph fs subvolume create cephfs sub1 --group-name=g1 --mode=0777
+        # Create a user access the file system from samba
+        - cmd: ceph fs authorize cephfs client.smbdata / rw
+        # Create a rados pool and store the config in it
+        - cmd: ceph osd pool create .smb --yes-i-really-mean-it
+        - cmd: ceph osd pool application enable .smb smb
+        - cmd: rados --pool=.smb --namespace=admem1 put conf.toml /dev/stdin
+          stdin: |
+            samba-container-config = "v0"
+            [configs.admem1]
+            shares = ["share1"]
+            globals = ["default", "domain"]
+            instance_name = "SAMBA"
+            [shares.share1.options]
+            "vfs objects" = "ceph"
+            path = "/"
+            "ceph:config_file" = "/etc/ceph/ceph.conf"
+            "ceph:user_id" = "smbdata"
+            "kernel share modes" = "no"
+            "read only" = "no"
+            "browseable" = "yes"
+            [globals.default.options]
+            "server min protocol" = "SMB2"
+            "load printers" = "no"
+            "printing" = "bsd"
+            "printcap name" = "/dev/null"
+            "disable spoolss" = "yes"
+            "guest ok" = "no"
+            [globals.domain.options]
+            security = "USER"
+            workgroup = "DOMAIN1"
+            "idmap config * : backend" = "tdb"
+            [[users.all_entries]]
+            name = "smbuser1"
+            password = "insecure321"
+        # Store the join auth user/pass in the config-key store
+        - cmd: ceph config-key set smb/config/admem1/join1.json  -i -
+          stdin: |
+            {"username": "Administrator", "password": "Passw0rd"}
+  - cephadm.apply:
+      specs:
+        - service_type: smb
+          service_id: admem1
+          placement:
+            count: 1
+          cluster_id: admem1
+          features:
+            - domain
+          config_uri: "rados://.smb/admem1/conf.toml"
+          join_sources:
+            - "rados:mon-config-key:smb/config/admem1/join1.json"
+          include_ceph_users:
+            - "client.smbdata"
+  - cephadm.wait_for_service:
+      service: smb.admem1
+  - cephadm.exec:
+      host.b:
+        - sleep 30
+        - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U smbuser1%insecure321 //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
