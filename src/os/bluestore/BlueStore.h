@@ -705,7 +705,6 @@ public:
     }
 
     bool can_split() {
-      std::lock_guard l(get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
       return used_in_blob.can_split() &&
              get_blob().can_split();
