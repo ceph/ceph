@@ -354,7 +354,8 @@ COMMAND("fs new "
 	"make new filesystem using named pools <metadata> and <data>",
 	"fs", "rw")
 COMMAND("fs fail "
-	"name=fs_name,type=CephString ",
+	"name=fs_name,type=CephString "
+        "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"bring the file system down and all of its ranks",
 	"fs", "rw")
 COMMAND("fs rm "
