@@ -373,8 +373,4 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
   }
   return decode_concat(want_to_read, chunks, decoded);
 }
-
-bool ErasureCode::is_systematic() const {
-  return true;
-}
 }
