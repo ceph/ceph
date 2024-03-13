@@ -240,6 +240,18 @@ The same applies to creating a formatted clone of an unformatted
 (plaintext) image since an unformatted image does not have a header at
 all.
 
+To map a formatted clone, provide encryption formats and passphrases
+for the clone itself and all of its explicitly formatted parent images.
+The order in which ``encryption-format`` and ``encryption-passphrase-file``
+options should be provided is based on the image hierarchy: start with
+that of the cloned image, then its parent and so on.
+
+Here is an example of a command that maps a formatted clone:
+
+.. prompt:: bash #
+
+   rbd device map -t nbd -o encryption-passphrase-file=clone-passphrase.bin -o encryption-passphrase-file=passphrase.bin mypool/myclone
+
 .. _journal feature: ../rbd-mirroring/#enable-image-journaling-feature
 .. _Supported Formats: #supported-formats
 .. _rbd-nbd: ../../man/8/rbd-nbd
