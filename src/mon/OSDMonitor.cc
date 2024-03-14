@@ -8004,33 +8004,6 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (name.length() == 0)
     return -EINVAL;
 
-  if (pg_num == 0) {
-    auto pg_num_from_mode =
-      [pg_num=g_conf().get_val<uint64_t>("osd_pool_default_pg_num")]
-      (const string& mode) {
-      return mode == "on" ? 1 : pg_num;
-    };
-    pg_num = pg_num_from_mode(
-      pg_autoscale_mode.empty() ?
-      g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode") :
-      pg_autoscale_mode);
-  }
-  if (pgp_num == 0)
-    pgp_num = g_conf().get_val<uint64_t>("osd_pool_default_pgp_num");
-  if (!pgp_num)
-    pgp_num = pg_num;
-  if (pg_num > g_conf().get_val<uint64_t>("mon_max_pool_pg_num")) {
-    *ss << "'pg_num' must be greater than 0 and less than or equal to "
-        << g_conf().get_val<uint64_t>("mon_max_pool_pg_num")
-        << " (you may adjust 'mon max pool pg num' for higher values)";
-    return -ERANGE;
-  }
-  if (pgp_num > pg_num) {
-    *ss << "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'"
-        << ", which in this case is " << pg_num;
-    return -ERANGE;
-  }
-
   if (crimson) {
     /* crimson-osd requires that the pool be replicated and that pg_num/pgp_num
      * be static.  User must also have specified set-allow-crimson */
@@ -8064,6 +8037,40 @@ int OSDMonitor::prepare_new_pool(string& name,
     dout(10) << "prepare_pool_size returns " << r << dendl;
     return r;
   }
+
+  if (pg_num == 0) {
+    auto pg_num_from_mode =
+      [pg_num=g_conf().get_val<uint64_t>("osd_pool_default_pg_num")]
+      (const string& mode,
+       const unsigned calc_pg_num) {
+      return mode == "on" ? (calc_pg_num < pg_num ? calc_pg_num : pg_num) : pg_num;
+    };
+    auto target_pg_per_osd = cct->_conf.get_val<uint64_t>("mon_target_pg_per_osd");
+    unsigned calc_pg_num =
+      ((target_pg_per_osd * osdmap.get_num_in_osds() ) / size) / osdmap.get_num_in_osds();
+    pg_num = pg_num_from_mode(
+      pg_autoscale_mode.empty() ?
+      g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode") :
+      pg_autoscale_mode,
+      std::bit_floor(calc_pg_num));
+  }
+
+  if (pgp_num == 0)
+    pgp_num = g_conf().get_val<uint64_t>("osd_pool_default_pgp_num");
+  if (!pgp_num)
+    pgp_num = pg_num;
+  if (pg_num > g_conf().get_val<uint64_t>("mon_max_pool_pg_num")) {
+    *ss << "'pg_num' must be greater than 0 and less than or equal to "
+        << g_conf().get_val<uint64_t>("mon_max_pool_pg_num")
+        << " (you may adjust 'mon max pool pg num' for higher values)";
+    return -ERANGE;
+  }
+  if (pgp_num > pg_num) {
+    *ss << "'pgp_num' must be greater than 0 and lower or equal than 'pg_num'"
+        << ", which in this case is " << pg_num;
+    return -ERANGE;
+  }
+
   if (g_conf()->mon_osd_crush_smoke_test) {
     CrushWrapper newcrush = _get_pending_crush();
     ostringstream err;
