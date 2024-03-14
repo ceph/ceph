@@ -681,8 +681,8 @@ ln dir_1/original dir_2/linkto
 
         # empty mds cache. otherwise mds reintegrates stray when unlink finishes
         self.mount_a.umount_wait()
-        self.fs.mds_asok(['flush', 'journal'], rank_1_id)
-        self.fs.mds_asok(['cache', 'drop'], rank_1_id)
+        self.fs.mds_asok(['flush', 'journal'], mds_id=rank_1_id)
+        self.fs.mds_asok(['cache', 'drop'], mds_id=rank_1_id)
 
         self.mount_a.mount_wait()
         self.mount_a.run_shell(["rm", "-f", "dir_1/original"])
@@ -726,8 +726,8 @@ touch pin/placeholder
         self.assertEqual(self.get_mdc_stat("strays_enqueued", mds_id=rank_1_id), 0)
 
         # Test loading unlinked dir into cache
-        self.fs.mds_asok(['flush', 'journal'], rank_1_id)
-        self.fs.mds_asok(['cache', 'drop'], rank_1_id)
+        self.fs.mds_asok(['flush', 'journal'], mds_id=rank_1_id)
+        self.fs.mds_asok(['cache', 'drop'], mds_id=rank_1_id)
 
         # Shut down rank 1
         self.fs.set_max_mds(1)
