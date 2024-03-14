@@ -5495,7 +5495,8 @@ int RGWCopyObj::verify_permission(optional_yield y)
     rgw_placement_rule src_placement;
 
     /* check source object permissions */
-    op_ret = read_obj_policy(this, driver, s, src_bucket->get_info(), src_bucket->get_attrs(), src_acl, &src_placement.storage_class,
+    op_ret = read_obj_policy(this, driver, s, src_bucket->get_info(),
+			     src_bucket->get_attrs(), src_acl, &src_placement.storage_class,
 			     src_policy, src_bucket.get(), s->src_object.get(), y);
     if (op_ret < 0) {
       return op_ret;
