@@ -19,7 +19,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 CW="/home/teuthology/ceph/qa/nightlies/cron_wrapper"
 SS="/home/teuthology/ceph/qa/nightlies/schedule_subset.sh"
 # default/common arguments added by schedule_subset.sh
-TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ceph.com/ceph.git --suite-repo=https://git.ceph.com/ceph.git --machine-type smithi --force-priority"
+TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ceph.com/ceph.git --suite-repo=https://git.ceph.com/ceph.git --machine-type smithi"
 
 ### !!!!!!!!!!!!!!!!!!!!!!!!!!
 ## THIS CRONTAB MUST NOT BE EDITED MANUALLY !!!!
@@ -49,10 +49,10 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 
 
 ## ********** smoke tests on main and release branches
-00 05  * * 0,2,4   $CW $SS      1 --ceph main    --suite smoke -p 70
-08 05  * * 0       $CW $SS      1 --ceph squid   --suite smoke -p 70
-16 05  * * 0       $CW $SS      1 --ceph reef    --suite smoke -p 70
-24 05  * * 0       $CW $SS      1 --ceph quincy  --suite smoke -p 70
+00 05  * * 0,2,4   $CW $SS      1 --ceph main    --suite smoke -p 100 --force-priority
+08 05  * * 0       $CW $SS      1 --ceph squid   --suite smoke -p 100 --force-priority
+16 05  * * 0       $CW $SS      1 --ceph reef    --suite smoke -p 100 --force-priority
+24 05  * * 0       $CW $SS      1 --ceph quincy  --suite smoke -p 100 --force-priority
 
 ## ********** windows tests on main branch - weekly
 # 00 03 * * 1 CEPH_BRANCH=main; MACHINE_NAME=smithi; $CW teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s windows -k distro -e $CEPH_QA_EMAIL
@@ -63,7 +63,7 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 
 
 ## ********** teuthology/nop on main branch - daily
-@daily             $CW $SS      1 --ceph main --suite teuthology/nop -p 50
+@daily             $CW $SS      1 --ceph main --suite teuthology/nop -p 1 --force-priority
 
 
 ## main branch runs - weekly
@@ -71,13 +71,13 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 ## see script in https://github.com/ceph/ceph/tree/main/qa/machine_types
 
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
-00 20 * * 0        $CW $SS 100000 --ceph main --suite      rados -p 201
-08 20 * * 1        $CW $SS     64 --ceph main --suite       orch -p 200
-16 20 * * 2        $CW $SS    128 --ceph main --suite        rbd -p 200
-24 20 * * 3        $CW $SS    512 --ceph main --suite         fs -p 200
-32 20 * * 4        $CW $SS      4 --ceph main --suite powercycle -p 200
-40 20 * * 5        $CW $SS      1 --ceph main --suite        rgw -p 200
-48 20 * * 6        $CW $SS      4 --ceph main --suite       krbd -p 200 --kernel testing
+00 20 * * 0        $CW $SS 100000 --ceph main --suite      rados -p 951
+08 20 * * 1        $CW $SS     64 --ceph main --suite       orch -p 950
+16 20 * * 2        $CW $SS    128 --ceph main --suite        rbd -p 950
+24 20 * * 3        $CW $SS    512 --ceph main --suite         fs -p 950
+32 20 * * 4        $CW $SS      4 --ceph main --suite powercycle -p 950
+40 20 * * 5        $CW $SS      1 --ceph main --suite        rgw -p 950
+48 20 * * 6        $CW $SS      4 --ceph main --suite       krbd -p 950 --kernel testing
 
 
 ## squid branch runs - twice weekly
@@ -85,26 +85,27 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 ## see script in https://github.com/ceph/ceph/tree/main/qa/machine_types
 
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
-00 21 * * 0,4      $CW $SS 100000 --ceph squid --suite      rados -p 101
-08 21 * * 1,5      $CW $SS     64 --ceph squid --suite       orch -p 100
-16 21 * * 2,6      $CW $SS    128 --ceph squid --suite        rbd -p 100
-24 21 * * 3,0      $CW $SS    512 --ceph squid --suite         fs -p 100
-32 21 * * 4,1      $CW $SS      4 --ceph squid --suite powercycle -p 100
-40 21 * * 5,2      $CW $SS      1 --ceph squid --suite        rgw -p 100
-48 21 * * 6,3      $CW $SS      4 --ceph squid --suite       krbd -p 100 --kernel testing
+#                                                                 -p 94-
+00 21 * * 0,4      $CW $SS 100000 --ceph squid --suite      rados -p 101 --force-priority
+08 21 * * 1,5      $CW $SS     64 --ceph squid --suite       orch -p 100 --force-priority
+16 21 * * 2,6      $CW $SS    128 --ceph squid --suite        rbd -p 100 --force-priority
+24 21 * * 3,0      $CW $SS    512 --ceph squid --suite         fs -p 100 --force-priority
+32 21 * * 4,1      $CW $SS      4 --ceph squid --suite powercycle -p 100 --force-priority
+40 21 * * 5,2      $CW $SS      1 --ceph squid --suite        rgw -p 100 --force-priority
+48 21 * * 6,3      $CW $SS      4 --ceph squid --suite       krbd -p 100 --force-priority --kernel testing
 
 ## reef branch runs - weekly
 ## suites rados and rbd use --subset arg and must be call with schedule_subset.sh
 ## see script in https://github.com/ceph/ceph/tree/main/qa/machine_types
 
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
-00 22 * * 0        $CW $SS 100000 --ceph reef --suite      rados -p 181
-08 22 * * 1        $CW $SS     64 --ceph reef --suite       orch -p 180
-16 22 * * 2        $CW $SS    128 --ceph reef --suite        rbd -p 180
-24 22 * * 3        $CW $SS    512 --ceph reef --suite         fs -p 180
-32 22 * * 4        $CW $SS      4 --ceph reef --suite powercycle -p 180
-40 22 * * 5        $CW $SS      1 --ceph reef --suite        rgw -p 180
-48 22 * * 6        $CW $SS      4 --ceph reef --suite       krbd -p 180 --kernel testing
+00 22 * * 0        $CW $SS 100000 --ceph reef --suite      rados -p 931
+08 22 * * 1        $CW $SS     64 --ceph reef --suite       orch -p 930
+16 22 * * 2        $CW $SS    128 --ceph reef --suite        rbd -p 930
+24 22 * * 3        $CW $SS    512 --ceph reef --suite         fs -p 930
+32 22 * * 4        $CW $SS      4 --ceph reef --suite powercycle -p 930
+40 22 * * 5        $CW $SS      1 --ceph reef --suite        rgw -p 930
+48 22 * * 6        $CW $SS      4 --ceph reef --suite       krbd -p 930 --kernel testing
 
 
 ###  The suite below must run on bare-metal because it's performance suite and run 3 times to produce more data points
@@ -119,24 +120,25 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 
 ## !!!! the client suites below MUST use --suite-branch octopus, pacific (see https://tracker.ceph.com/issues/24021)
 
-08 00 * * 1        $CW $SS      1 --ceph quincy --suite upgrade-clients/client-upgrade-octopus-quincy --suite-branch octopus -p 175
-16 00 * * 1        $CW $SS      1 --ceph quincy --suite upgrade-clients/client-upgrade-pacific-quincy --suite-branch pacific -p 175
-24 00 * * 1        $CW $SS 120000 --ceph quincy --suite upgrade:octopus-x -p 175
-32 00 * * 1        $CW $SS 120000 --ceph quincy --suite upgrade:pacific-x -p 175
-40 00 * * 1        $CW $SS      1 --ceph quincy --suite upgrade/quincy-p2p -p 175
+08 00 * * 1        $CW $SS      1 --ceph quincy --suite upgrade-clients/client-upgrade-octopus-quincy --suite-branch octopus -p 820
+16 00 * * 1        $CW $SS      1 --ceph quincy --suite upgrade-clients/client-upgrade-pacific-quincy --suite-branch pacific -p 820
+24 00 * * 1        $CW $SS 120000 --ceph quincy --suite upgrade:octopus-x -p 820
+32 00 * * 1        $CW $SS 120000 --ceph quincy --suite upgrade:pacific-x -p 820
+40 00 * * 1        $CW $SS      1 --ceph quincy --suite upgrade/quincy-p2p -p 820
 
 ### upgrade runs for reef release
 ###### on smithi
 
-08 01 * * 3        $CW $SS      1 --ceph reef --suite upgrade:pacific-x -p 170
-16 01 * * 3        $CW $SS      1 --ceph reef --suite upgrade:quincy-x  -p 170
+08 01 * * 3        $CW $SS      1 --ceph reef --suite upgrade:pacific-x -p 830
+16 01 * * 3        $CW $SS      1 --ceph reef --suite upgrade:quincy-x  -p 830
 
 ### upgrade runs for squid release
 ###### on smithi
 
-08 02 * * 5        $CW $SS     32 --ceph squid --suite upgrade -p 165
+#                                                              -p 840
+08 02 * * 5        $CW $SS     32 --ceph squid --suite upgrade -p 100 --force-priority
 
 ### upgrade runs for main
 ###### on smithi
 
-08 03 * * 6        $CW $SS     32 --ceph main --suite upgrade -p 160
+08 03 * * 6        $CW $SS     32 --ceph main --suite upgrade -p 850
