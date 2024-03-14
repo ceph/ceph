@@ -1,0 +1,233 @@
+<div class="row h-25"
+     *cdScope="'configOpt'">
+  <ng-container *ngIf="healthData$ | async as healthData">
+    <cd-card class="col-sm-3 px-3 d-flex"
+             cardTitle="New Version"
+             i18n-cardTitle
+             aria-label="New Version"
+             i18n-aria-label
+             id="newVersionAvailable"
+             *ngIf="upgradeStatus$ | async as status">
+      <ng-container *ngIf="status.in_progress; else upgradeStatusTpl">
+        <div class="d-flex flex-column justify-content-center align-items-center mt-2">
+          <h5 i18n
+              *ngIf="status.is_paused; else inProgress">
+            <i [ngClass]="[icons.spinner]"></i>
+            Upgrade is paused {{executingTasks?.progress}}%</h5>
+          <a class="mt-2 link-primary mb-2"
+             routerLink="/upgrade/progress"
+             i18n>View Details...</a>
+        </div>
+
+        <ng-template #inProgress>
+          <h5 i18n>
+            <i [ngClass]="[icons.spin, icons.spinner]"></i>
+              Upgrade in progress {{executingTasks?.progress}}%
+          </h5>
+        </ng-template>
+      </ng-container>
+    </cd-card>
+
+    <cd-card class="col-sm-3 px-3 d-flex"
+             cardTitle="Current Version"
+             i18n-cardTitle
+             aria-label="Current Version"
+             i18n-aria-label
+             id="currentVersion">
+      <div class="d-flex flex-column justify-content-center align-items-center">
+        <h5>{{ version }}</h5>
+      </div>
+    </cd-card>
+
+    <cd-card class="col-sm-3 px-3 d-flex"
+             cardTitle="Cluster Status"
+             i18n-cardTitle
+             aria-label="Cluster Status"
+             i18n-aria-label
+             id="clusterStatus">
+      <div class="d-flex flex-column justify-content-center align-items-center">
+        <ng-template #healthChecks>
+          <ul>
+            <li *ngFor="let check of healthData.health.checks">
+              <span [ngStyle]="check.severity | healthColor"
+                    [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
+              {{ check.type }}</span>: {{ check.summary.message }}
+            </li>
+          </ul>
+        </ng-template>
+        <ng-template #healthWarningAndError>
+        <div class="info-card-content-clickable mt-1"
+             [ngStyle]="healthData.health.status | healthColor"
+             [ngbPopover]="healthChecks"
+             popoverClass="info-card-popover-cluster-status">
+            {{ healthData.health.status | healthLabel | uppercase }}
+          <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
+             class="fa fa-exclamation-triangle"></i>
+        </div></ng-template>
+
+      <ng-container *ngIf="!healthData.health?.checks?.length; else healthWarningAndError">
+        <div [ngStyle]="healthData.health.status | healthColor">
+          {{ healthData.health.status | healthLabel | uppercase }}
+        </div>
+      </ng-container>
+      </div>
+    </cd-card>
+
+    <cd-card class="col-sm-3 px-3 d-flex"
+             cardTitle="MGR Count"
+             i18n-cardTitle
+             aria-label="MGR Count"
+             i18n-aria-label
+             id="mgrCount">
+      <div class="d-flex flex-column justify-content-center align-items-center">
+        <h5>
+          <i class="text-success"
+             [ngClass]="[icons.success]"
+             *ngIf="(healthData.mgr_map | mgrSummary).total > 1; else warningIcon">
+          </i>
+          {{ (healthData.mgr_map | mgrSummary).total }}
+        </h5>
+      </div>
+    </cd-card>
+
+    <div class="d-flex mt-3">
+      <dl class="w-50"
+          *ngIf="fsid$ | async as fsid">
+        <dt class="bold mt-5"
+            i18n>Cluster FSID</dt>
+        <dd class="mt-2">{{ fsid }}</dd>
+
+        <ng-container *ngIf="info$ | async as info; else loadingDetails">
+          <dt class="bold mt-5"
+              i18n>Release Image</dt>
+          <dd class="mt-2">{{ info.image }}</dd>
+          <dt class="bold mt-5"
+              i18n>Registry</dt>
+          <dd class="mt-2">{{ info.registry }}</dd>
+        </ng-container>
+      </dl>
+      <div class="w-50">
+        <ng-container *ngIf="daemons$ | async as daemons">
+          <legend class="cd-header"
+                  i18n>Daemon versions</legend>
+          <div>
+            <cd-table #daemonsTable
+                      [data]="daemons"
+                      selectionType="single"
+                      [columns]="columns"
+                      columnMode="flex"
+                      [limit]="5">
+            </cd-table>
+          </div>
+        </ng-container>
+      </div>
+    </div>
+
+    <legend class="cd-header"
+            i18n>Cluster logs</legend>
+    <cd-logs [showAuditLogs]="false"
+             [showDaemonLogs]="false"
+             [showNavLinks]="false"
+             [showFilterTools]="false"
+             [showDownloadCopyButton]="false"
+             defaultTab="cluster-logs"
+             [scrollable]="true"></cd-logs>
+
+
+    <ng-template #upgradeStatusTpl>
+      <div class="d-flex flex-column justify-content-center align-items-center"
+           *ngIf="info$ | async as info; else checkingForUpgradeStatus">
+        <ng-container *ngIf="info.versions.length > 0; else noUpgradesAvailable">
+          <div i18n-ngbTooltip
+               [ngbTooltip]="(healthData.mgr_map | mgrSummary).total <= 1 ? 'To upgrade, you need minimum 2 mgr daemons.' : ''">
+            <button class="btn btn-accent mt-2"
+                    id="upgrade"
+                    aria-label="Upgrade now"
+                    (click)="upgradeNow(info.versions[info.versions.length - 1])"
+                    [disabled]="(healthData.mgr_map | mgrSummary).total <= 1"
+                    i18n>Upgrade to {{ info.versions[info.versions.length - 1] }}</button>
+          </div>
+          <a class="mt-2 link-primary mb-2"
+             (click)="startUpgradeModal()"
+             i18n>Select another version...</a>
+        </ng-container>
+      </div>
+    </ng-template>
+  </ng-container>
+</div>
+
+<ng-template #noUpgradesAvailable>
+  <span class="mt-1"
+        id="no-upgrades-available"
+        i18n>
+    <i [ngClass]="[icons.success]"
+       class="text-success"></i>
+    Cluster is up-to-date
+  </span>
+  <a class="link-primary mb-2"
+     (click)="startUpgradeModal()"
+     i18n>Upgrade using custom image...</a>
+</ng-template>
+
+<ng-template #warningIcon>
+  <i class="text-warning"
+     [ngClass]="[icons.warning]"
+     title="To upgrade, you need minimum 2 mgr daemons.">
+  </i>
+</ng-template>
+
+<ng-template #checkingForUpgradeStatus>
+  <div class="d-flex flex-column justify-content-center align-items-center"
+       *ngIf="!errorMessage; else upgradeStatusError">
+    <button class="btn btn-accent mt-2 mb-4"
+            id="upgrade"
+            aria-label="Upgrade now"
+            [disabled]="true"
+            i18n>Checking for upgrades
+      <i [ngClass]="[icons.spin, icons.spinner]"></i>
+    </button>
+  </div>
+</ng-template>
+
+<ng-template #loadingDetails>
+  <div class="w-50"
+       *ngIf="!errorMessage; else upgradeInfoError">
+    <span class="text-info justify-content-center align-items-center"
+          i18n>Fetching registry informations
+      <i [ngClass]="[icons.spin, icons.spinner]"></i>
+    </span>
+  </div>
+</ng-template>
+
+<ng-template #upgradeStatusError>
+  <div class="d-flex flex-column justify-content-center align-items-center">
+    <span class="text-danger mt-2 mb-4"
+          id="upgrade-status-error"
+          i18n>
+      <i [ngClass]="[icons.danger]"></i>
+      {{ errorMessage }}
+    </span>
+    <a class="link-primary mb-2"
+       (click)="startUpgradeModal()"
+       i18n>Upgrade using custom image...</a>
+  </div>
+</ng-template>
+
+<ng-template #upgradeInfoError>
+  <span class="text-danger justify-content-center align-items-center"
+        i18n>
+    <i [ngClass]="[icons.danger]"></i>
+    Failed to fetch registry informations
+  </span>
+</ng-template>
+
+<ng-template #upgradeProgress>
+  <div class="d-flex flex-column justify-content-center align-items-center mt-2">
+    <h5 i18n>
+      <i [ngClass]="[icons.spin, icons.spinner]"></i>
+      Upgrade in progress {{executingTasks?.progress}}%</h5>
+    <a class="mt-2 link-primary mb-2"
+       routerLink="/upgrade/progress"
+       i18n>View Details...</a>
+  </div>
+</ng-template>
