@@ -760,8 +760,6 @@ ReplicaActive::ReplicaActive(my_context ctx)
   dout(10) << "-- state -->> ReplicaActive" << dendl;
   m_pg = scrbr->get_pg();
   m_osds = m_pg->get_pg_osd(ScrubberPasskey());
-  clear_shallow_history<ReplicaIdle, 0>();
-  clear_shallow_history<ReplicaActive, 0>();
 }
 
 ReplicaActive::~ReplicaActive()
@@ -769,55 +767,55 @@ ReplicaActive::~ReplicaActive()
   clear_remote_reservation(false);
 }
 
-/*
- * Note: we are expected to be in the initial internal state (Idle) when
- * receiving any registration request. Our other internal states, the
- * active ones, have their own handler for this event, and will treat it
- * as an abort request.
- *
- * Process:
- * - if already reserved: clear existing reservation, then continue
- * - for async requests:
- *   - enqueue the request with reserver;
- *   - move to the ReplicaWaitingReservation state
- *   - no reply is expected by the caller
- * - for legacy requests:
- *   - ask the OSD for the "reservation resource"
- *   - if granted: move to ReplicaReserved and notify the Primary.
- *   - otherwise: just notify the requesting primary.
- *
- * implementation note: sc::result objects cannot be copied or moved. Thus,
- * we've resorted to returning a code indicating the next action.
- */
-ReplicaReactCode ReplicaActive::on_reserve_request(
-    const ReplicaReserveReq& ev,
-    bool async_request)
+void ReplicaActive::exit()
+{
+  // temporary debug. Not to be backported into Squid
+  dout(10) << "ReplicaActive::exit()" << dendl;
+}
+
+sc::result ReplicaActive::react(const ReplicaReserveReq& ev)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  const auto m = ev.m_op->get_req<MOSDScrubReserve>();
+  const auto& m = *(ev.m_op->get_req<MOSDScrubReserve>());
+
+  // should we handle the request asynchronously, using the reserver?
+  const auto async_disabled = scrbr->get_pg_cct()->_conf.get_val<bool>(
+      "osd_scrub_disable_reservation_queuing");
+  const bool async_request = !async_disabled && m.wait_for_resources;
   dout(10) << fmt::format(
-		  "ReplicaActive::on_reserve_req() request:{} async_request:{} "
-		  "reservation_nonce:{}",
-		  ev, async_request, m->reservation_nonce)
+		  "ReplicaActive::react(const ReplicaReserveReq&): async "
+		  "request?:{} disabled?:{} -> async? {}",
+		  m.wait_for_resources, async_disabled, async_request)
 	   << dendl;
 
-  ceph_assert(!reservation_granted);
-  ceph_assert(!pending_reservation_nonce);
-  ReplicaReactCode next_action{ReplicaReactCode::discard};
-  AsyncScrubResData request_details{
-      pg_id, ev.m_from, ev.m_op->sent_epoch, m->reservation_nonce};
-  auto& reserver = m_osds->get_scrub_reserver();
+  if (m_reservation_status != reservation_status_t::unreserved) {
+    // we are not expected to be in this state when a new request arrives.
+    // Exit-then-reenter ReplicaActive, causing the existing reservation - be
+    // it granted or pending - to be cleared. This maneuver also aborts
+    // any on-going chunk request.
+    dout(1) << fmt::format(
+		   "{}: unexpected request (granted:{} request:{})", __func__,
+		   reservation_granted, m)
+	    << dendl;
+    post_event(ev);
+    return transit<ReplicaActive>();
+  }
 
+  auto& reserver = m_osds->get_scrub_reserver();
   if (async_request) {
     // the request is to be handled asynchronously
-    dout(20) << fmt::format(
-		    "{}: async request: {} details:{}", __func__, ev,
-		    request_details)
+    AsyncScrubResData request_details{
+	pg_id, ev.m_from, ev.m_op->sent_epoch, m.reservation_nonce};
+    dout(15) << fmt::format(
+		    "ReplicaActive::react(const ReplicaReserveReq& ev): async "
+		    "request: {} details:{}",
+		    ev, request_details)
 	     << dendl;
-    pending_reservation_nonce = m->reservation_nonce;
+
+    pending_reservation_nonce = m.reservation_nonce;
     const auto reservation_cb = new RtReservationCB(m_pg, request_details);
-    reserver.request_reservation(pg_id, reservation_cb, 0, nullptr);
-    next_action = ReplicaReactCode::goto_waiting_reservation;
+    reserver.request_reservation(pg_id, reservation_cb, /*prio=*/0, nullptr);
+    m_reservation_status = reservation_status_t::requested_or_granted;
 
   } else {
     // an immediate yes/no is required
@@ -825,39 +823,58 @@ ReplicaReactCode ReplicaActive::on_reserve_request(
     reservation_granted = reserver.request_reservation_or_fail(pg_id);
     if (reservation_granted) {
       dout(10) << fmt::format("{}: reserved? yes", __func__) << dendl;
+      m_reservation_status = reservation_status_t::requested_or_granted;
       reply = new MOSDScrubReserve(
 	  spg_t(pg_id.pgid, m_pg->get_primary().shard), ev.m_op->sent_epoch,
-	  MOSDScrubReserve::GRANT, m_pg->pg_whoami, m->reservation_nonce);
-      next_action = ReplicaReactCode::goto_replica_reserved;
+	  MOSDScrubReserve::GRANT, m_pg->pg_whoami, m.reservation_nonce);
 
     } else {
       dout(10) << fmt::format("{}: reserved? no", __func__) << dendl;
       reply = new MOSDScrubReserve(
 	  spg_t(pg_id.pgid, m_pg->get_primary().shard), ev.m_op->sent_epoch,
-	  MOSDScrubReserve::REJECT, m_pg->pg_whoami, m->reservation_nonce);
-      // the event is discarded
-      next_action = ReplicaReactCode::discard;
+	  MOSDScrubReserve::REJECT, m_pg->pg_whoami, m.reservation_nonce);
     }
 
     m_osds->send_message_osd_cluster(
 	reply, ev.m_op->get_req()->get_connection());
   }
-
-  return next_action;
+  return discard_event();
 }
 
-bool ReplicaActive::granted_by_reserver(const AsyncScrubResData& reservation)
+
+sc::result ReplicaActive::react(const ReserverGranted& ev)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << fmt::format("{}: reservation granted: {}", __func__, reservation)
-	   << dendl;
+  const AsyncScrubResData& reservation = ev.value;
+  dout(10)
+      << fmt::format(
+	     "ReplicaActive::react(const ReserverGranted&). Reservation:{}",
+	     reservation)
+      << dendl;
+
+  /**
+   * discard (and log) unexpected 'reservation granted' messages
+   * from the async reserver.
+   * As canceled reservations may still be triggered, this is not
+   * necessarily a bug.
+   */
+  if (!pending_reservation_nonce) {
+    dout(5) << fmt::format(
+		   "ReplicaActive::react(const ReserverGranted&): reservation "
+		   "granted while not being waited for{} (pending_nonce:{})",
+		   __func__, reservation, pending_reservation_nonce)
+	    << dendl;
+    return discard_event();
+  }
 
   /// verify that the granted reservation is the one we were waiting for
   if (reservation.nonce != pending_reservation_nonce) {
     dout(5) << fmt::format(
-	"{}: reservation_nonce mismatch: {} != {}", __func__, reservation.nonce,
-	pending_reservation_nonce) << dendl;
-    return false;
+		   "{}: reservation_nonce mismatch: {} != {}", __func__,
+		   reservation.nonce, pending_reservation_nonce)
+	    << dendl;
+    // not investing the effort to handle this gracefully
+    return transit<ReplicaActive>();
   }
 
   reservation_granted = true;
@@ -869,42 +886,32 @@ bool ReplicaActive::granted_by_reserver(const AsyncScrubResData& reservation)
       MOSDScrubReserve::GRANT, m_pg->pg_whoami, pending_reservation_nonce);
   m_pg->send_cluster_message(
       m_pg->get_primary().osd, grant_msg, reservation.request_epoch, false);
-  return true;
+  return discard_event();
 }
 
-void ReplicaActive::on_release(const ReplicaRelease& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << fmt::format("ReplicaActive::on_release() from {}", ev.m_from)
-	   << dendl;
-  clear_remote_reservation(true);
-}
 
 void ReplicaActive::clear_remote_reservation(bool warn_if_no_reservation)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << fmt::format(
-		  "ReplicaActive::clear_remote_reservation(): "
-		  "pending_reservation_nonce {}, reservation_granted {}",
+		  "{}: pending_reservation_nonce {}, reservation_granted {}", __func__,
 		  pending_reservation_nonce, reservation_granted)
 	   << dendl;
+
   if (reservation_granted || pending_reservation_nonce) {
     m_osds->get_scrub_reserver().cancel_reservation(pg_id);
     reservation_granted = false;
     pending_reservation_nonce = 0;
+    ceph_assert(m_reservation_status != reservation_status_t::unreserved);
+    m_reservation_status = reservation_status_t::unreserved;
+
   } else if (warn_if_no_reservation) {
     const auto msg =
 	"ReplicaActive::clear_remote_reservation(): "
 	"not reserved!";
     dout(5) << msg << dendl;
-    scrbr->get_clog()->warn() << msg;
+    scrbr->get_clog()->info() << msg;
   }
-}
-
-void ReplicaActive::ignore_unhandled_grant(const ReserverGranted&)
-{
-  dout(10) << "ReplicaActive::react(const ReserverGranted&): ignored"
-	   << dendl;
 }
 
 
@@ -917,201 +924,41 @@ ReplicaIdle::ReplicaIdle(my_context ctx)
   dout(10) << "-- state -->> ReplicaActive/ReplicaIdle" << dendl;
 }
 
+sc::result ReplicaIdle::react(const ReplicaRelease& ev)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << fmt::format(
+		  "ReplicaIdle::react(const ReplicaRelease&) from {}",
+		  ev.m_from)
+	   << dendl;
+  context<ReplicaActive>().clear_remote_reservation(true);
+  return discard_event();
+}
+
+sc::result ReplicaIdle::react(const StartReplica& ev)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "ReplicaIdle::react(const StartReplica&)" << dendl;
+
+  // if we are waiting for a reservation grant from the reserver (an
+  // illegal scenario!), that reservation must be cleared.
+  if (context<ReplicaActive>().pending_reservation_nonce) {
+    scrbr->get_clog()->warn() << fmt::format(
+	"osd.{} pg[{}]: new chunk request while still waiting for "
+	"reservation",
+	scrbr->get_whoami(), scrbr->get_spgid());
+    context<ReplicaActive>().clear_remote_reservation(true);
+  }
+  post_event(ReplicaPushesUpd{});
+  return transit<ReplicaActiveOp>();
+}
+
 void ReplicaIdle::reset_ignored(const FullReset&)
 {
   dout(10) << "ReplicaIdle::react(const FullReset&): FullReset ignored"
 	   << dendl;
 }
 
-
-// ---------------- ReplicaIdle/ReplicaUnreserved ---------------------------
-
-ReplicaUnreserved::ReplicaUnreserved(my_context ctx)
-    : my_base(ctx)
-    , NamedSimply(
-	  context<ScrubMachine>().m_scrbr,
-	  "ReplicaActive/ReplicaIdle/ReplicaUnreserved")
-{
-  dout(10) << "-- state -->> ReplicaActive/ReplicaIdle/ReplicaUnreserved"
-	   << dendl;
-}
-
-sc::result ReplicaUnreserved::react(const ReplicaReserveReq& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaUnreserved::react(const ReplicaReserveReq&)" << dendl;
-
-  const auto& m = *(ev.m_op->get_req<MOSDScrubReserve>());
-  const auto async_disabled = scrbr->get_pg_cct()->_conf.get_val<bool>(
-      "osd_scrub_disable_reservation_queuing");
-  const bool async_request = !async_disabled && m.wait_for_resources;
-  dout(15) << fmt::format(
-		  "ReplicaUnreserved::react(const ReplicaReserveReq&): "
-		  "request:{} disabled?:{} -> async? {}", m.wait_for_resources,
-		  async_disabled, async_request)
-	   << dendl;
-
-  switch (context<ReplicaActive>().on_reserve_request(ev, async_request)) {
-    case ReplicaReactCode::discard:
-      return discard_event();
-    case ReplicaReactCode::goto_waiting_reservation:
-      return transit<ReplicaWaitingReservation>();
-    case ReplicaReactCode::goto_replica_reserved:
-      return transit<ReplicaReserved>();
-    default:
-      ceph_abort_msg("unexpected return value");
-  }
-  // can't happen, but some compilers complain:
-  return transit<ReplicaReserved>();
-}
-
-sc::result ReplicaUnreserved::react(const StartReplica& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaUnreserved::react(const StartReplica&)" << dendl;
-  post_event(ReplicaPushesUpd{});
-  return transit<ReplicaActiveOp>();
-}
-
-sc::result ReplicaUnreserved::react(const ReplicaRelease&)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaUnreserved::react(const ReplicaRelease&)" << dendl;
-  // this is a bug. We should never receive a release request unless we
-  // are reserved or have a pending reservation.
-  scrbr->get_clog()->error() << fmt::format(
-      "osd.{} pg[{}]: reservation released while not reserved",
-      scrbr->get_whoami(), scrbr->get_spgid());
-  return discard_event();
-}
-
-sc::result ReplicaUnreserved::react(const ReserverGranted&)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaUnreserved::react(const ReserverGranted&)" << dendl;
-  // shouldn't happen. Might be a result of a cancelled reservation
-  // that was still delivered.
-  // must unreserve
-  dout(5) << "ReplicaUnreserved::react(const ReserverGranted&): reservation "
-	     "granted while not being waited for"
-	  << dendl;
-  context<ReplicaActive>().clear_remote_reservation(false);
-  return discard_event();
-}
-
-
-// ---------------- ReplicaIdle/ReplicaWaitingReservation ---------------------------
-
-ReplicaWaitingReservation::ReplicaWaitingReservation(my_context ctx)
-    : my_base(ctx)
-    , NamedSimply(
-	  context<ScrubMachine>().m_scrbr,
-	  "ReplicaActive/ReplicaIdle/ReplicaWaitingReservation")
-{
-  dout(10)
-      << "-- state -->> ReplicaActive/ReplicaIdle/ReplicaWaitingReservation"
-      << dendl;
-}
-
-sc::result ReplicaWaitingReservation::react(const ReserverGranted& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << fmt::format(
-		  "ReplicaWaitingReservation::react(const ReserverGranted&): "
-		  "event:{}",
-		  ev)
-	   << dendl;
-  if (context<ReplicaActive>().granted_by_reserver(ev.value)) {
-    return transit<ReplicaReserved>();
-  }
-  return discard_event();
-}
-
-sc::result ReplicaWaitingReservation::react(const ReplicaRelease& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaWaitingReservation::react(const ReplicaRelease&)"
-	   << dendl;
-  // must cancel the queued reservation request
-  context<ReplicaActive>().on_release(ev);
-  return transit<ReplicaUnreserved>();
-}
-
-sc::result ReplicaWaitingReservation::react(const StartReplica& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaWaitingReservation::react(const StartReplica&)" << dendl;
-
-  // this shouldn't happen. We will handle it, but will also log an error.
-  scrbr->get_clog()->error() << fmt::format(
-      "osd.{} pg[{}]: new chunk request while still waiting for "
-      "reservation",
-      scrbr->get_whoami(), scrbr->get_spgid());
-  context<ReplicaActive>().clear_remote_reservation(true);
-  clear_shallow_history<ReplicaIdle, 0>();
-  post_event(ReplicaPushesUpd{});
-  return transit<ReplicaActiveOp>();
-}
-
-sc::result ReplicaWaitingReservation::react(const ReplicaReserveReq& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaWaitingReservation::react(const ReplicaReserveReq&)"
-	   << dendl;
-  // this shouldn't happen. We will handle it, but will also log an error.
-  scrbr->get_clog()->error() << fmt::format(
-      "osd.{} pg[{}]: reservation requested while previous is pending",
-      scrbr->get_whoami(), scrbr->get_spgid());
-  // cancel the existing reservation, and re-request
-  context<ReplicaActive>().clear_remote_reservation(true);
-  post_event(ev);
-  return transit<ReplicaUnreserved>();
-}
-
-
-// ---------------- ReplicaIdle/ReplicaReserved ---------------------------
-
-ReplicaReserved::ReplicaReserved(my_context ctx)
-    : my_base(ctx)
-    , NamedSimply(
-	  context<ScrubMachine>().m_scrbr,
-	  "ReplicaActive/ReplicaIdle/ReplicaReserved")
-{
-  dout(10) << "-- state -->> ReplicaActive/ReplicaIdle/ReplicaReserved"
-	   << dendl;
-}
-
-sc::result ReplicaReserved::react(const ReplicaRelease& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaReserved::react(const ReplicaRelease&)" << dendl;
-  context<ReplicaActive>().on_release(ev);
-  return transit<ReplicaUnreserved>();
-}
-
-sc::result ReplicaReserved::react(const ReplicaReserveReq& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaReserved::react(const ReplicaReserveReq&)" << dendl;
-  scrbr->get_clog()->error() << fmt::format(
-      "osd.{} pg[{}]: reservation requested while still reserved",
-      scrbr->get_whoami(), scrbr->get_spgid());
-  // This is a bug. We should never receive a new request unless the
-  // previous one was cancelled - either by the primary, or on interval
-  // change.
-  // cancel the existing reservation, and re-request
-  context<ReplicaActive>().clear_remote_reservation(true);
-  post_event(ev);
-  return transit<ReplicaUnreserved>();
-}
-
-sc::result ReplicaReserved::react(const StartReplica& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaReserved::react(const StartReplica&)" << dendl;
-  post_event(ReplicaPushesUpd{});
-  return transit<ReplicaActiveOp>();
-}
 
 
 // ------------- ReplicaActive/ReplicaActiveOp --------------------------
@@ -1149,11 +996,11 @@ sc::result ReplicaActiveOp::react(const StartReplica&)
   return transit<ReplicaActiveOp>();
 }
 
+
 sc::result ReplicaActiveOp::react(const ReplicaRelease& ev)
 {
   dout(10) << "ReplicaActiveOp::react(const ReplicaRelease&)" << dendl;
-  post_event(ev);
-  return transit<sc::shallow_history<ReplicaReserved>>();
+  return transit<ReplicaActive>();
 }
 
 
@@ -1210,9 +1057,9 @@ sc::result ReplicaBuildingMap::react(const SchedReplica&)
 
   if (scrbr->get_preemptor().was_preempted()) {
     dout(10) << "replica scrub job preempted" << dendl;
-
     scrbr->send_preempted_replica();
-    return transit<sc::shallow_history<ReplicaReserved>>();
+    // RRR verify we are not missing the handling of the event
+    return transit<ReplicaIdle>();
   }
 
   // start or check progress of build_replica_map_chunk()
@@ -1220,7 +1067,7 @@ sc::result ReplicaBuildingMap::react(const SchedReplica&)
   if (ret_init != -EINPROGRESS) {
     dout(10) << "ReplicaBuildingMap::react(const SchedReplica&): back to idle"
 	     << dendl;
-    return transit<sc::shallow_history<ReplicaReserved>>();
+    return transit<ReplicaIdle>();
   }
 
   dout(20) << "ReplicaBuildingMap::react(const SchedReplica&): discarded"
