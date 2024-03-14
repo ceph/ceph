@@ -61,6 +61,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   kmsVaultConfig = false;
   s3VaultConfig = false;
   tags: Record<string, string>[] = [];
+  dirtyTags = false;
   tagConfig = [
     {
       attribute: 'key'
@@ -437,6 +438,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   deleteTag(index: number) {
     this.tags.splice(index, 1);
+    this.dirtyTags = true;
     this.bucketForm.markAsDirty();
     this.bucketForm.updateValueAndValidity();
   }
@@ -447,11 +449,13 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     } else {
       this.tags.push(tag);
     }
+    this.dirtyTags = true;
     this.bucketForm.markAsDirty();
     this.bucketForm.updateValueAndValidity();
   }
 
   private tagsToXML(tags: Record<string, string>[]): string {
+    if (!this.dirtyTags && tags.length === 0) return '';
     let xml = '<Tagging><TagSet>';
     for (const tag of tags) {
       xml += '<Tag>';
