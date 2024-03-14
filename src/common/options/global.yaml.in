@@ -2503,7 +2503,7 @@ options:
   fmt_desc: The default number of placement groups for a pool. The default
     value is the same as ``pg_num`` with ``mkpool``.
   long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being 
-    `on` the number of PGs for new pools will start out with 1 pg, unless the 
+    `on` the number of PGs for new pools will start out with 8 PGs, unless the
     user specifies the pg_num.
   default: 32
   services:
