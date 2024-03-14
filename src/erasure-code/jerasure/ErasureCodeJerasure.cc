@@ -77,12 +77,12 @@ int ErasureCodeJerasure::parse(ErasureCodeProfile &profile,
   return err;
 }
 
-unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
+unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int stripe_width) const
 {
   unsigned alignment = get_alignment();
   if (per_chunk_alignment) {
-    unsigned chunk_size = object_size / k;
-    if (object_size % k)
+    unsigned chunk_size = stripe_width / k;
+    if (stripe_width % k)
       chunk_size++;
     dout(20) << "get_chunk_size: chunk_size " << chunk_size
 	     << " must be modulo " << alignment << dendl; 
@@ -95,8 +95,8 @@ unsigned int ErasureCodeJerasure::get_chunk_size(unsigned int object_size) const
     }
     return chunk_size;
   } else {
-    unsigned tail = object_size % alignment;
-    unsigned padded_length = object_size + ( tail ?  ( alignment - tail ) : 0 );
+    unsigned tail = stripe_width % alignment;
+    unsigned padded_length = stripe_width + (tail ? (alignment - tail) : 0);
     ceph_assert(padded_length % k == 0);
     return padded_length / k;
   }

@@ -63,10 +63,10 @@ ErasureCodeIsa::init(ErasureCodeProfile &profile, ostream *ss)
 // -----------------------------------------------------------------------------
 
 unsigned int
-ErasureCodeIsa::get_chunk_size(unsigned int object_size) const
+ErasureCodeIsa::get_chunk_size(unsigned int stripe_width) const
 {
   unsigned alignment = get_alignment();
-  unsigned chunk_size = ( object_size + k - 1 ) / k;
+  unsigned chunk_size = (stripe_width + k - 1) / k;
   dout(20) << "get_chunk_size: chunk_size " << chunk_size
            << " must be modulo " << alignment << dendl;
   unsigned modulo = chunk_size % alignment;
