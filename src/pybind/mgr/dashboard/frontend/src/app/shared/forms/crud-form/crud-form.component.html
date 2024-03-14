@@ -1,0 +1,25 @@
+<div class="cd-col-form">
+  <div class="card pb-0"
+       *ngIf="formUISchema$ | async as formUISchema">
+    <div i18n="form title"
+         class="card-header">{{ formUISchema.title }}</div>
+    <form *ngIf="formUISchema.uiSchema"
+          [formGroup]="form"
+          (ngSubmit)="submit(model, formUISchema.taskInfo)">
+
+      <div class="card-body position-relative">
+        <formly-form [form]="form"
+                     [fields]="formUISchema.controlSchema"
+                     [model]="model"
+                     [options]="{formState: formUISchema.uiSchema}"></formly-form>
+      </div>
+      <div class="card-footer">
+        <cd-form-button-panel (submitActionEvent)="submit(model, formUISchema.taskInfo)"
+                              [form]="formDir"
+                              [submitText]="formUISchema.title"
+                              [disabled]="!form.valid"
+                              wrappingClass="text-right"></cd-form-button-panel>
+      </div>
+    </form>
+  </div>
+</div>
