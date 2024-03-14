@@ -734,10 +734,10 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
                                                : end_pos;
         push_endpoint_args.replace(pos, end_pos - pos, replaced_str);
       };
-      const std::unordered_set<std::string> push_endpoint_args = {
+      static constexpr std::initializer_list<const char*> args = {
           "verify-ssl",    "use-ssl",         "ca-location", "amqp-ack-level",
           "amqp-exchange", "kafka-ack-level", "mechanism",   "cloudevents"};
-      if (push_endpoint_args.count(attribute_name) == 1) {
+      if (std::find(args.begin(), args.end(), attribute_name) != args.end()) {
         replace_str(attribute_name, s->info.args.get("AttributeValue"));
         return 0;
       }
