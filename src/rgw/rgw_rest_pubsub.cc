@@ -293,7 +293,13 @@ class RGWPSCreateTopicOp : public RGWOp {
     }
 
     if (s->auth.identity->get_account()) {
-      // account users don't consult the existing owner/policy
+      // account users don't consult the existing owner/policy, but they do
+      // require the notification_v2 format to index the topic metadata
+      if (!rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
+        s->err.message = "The 'notification_v2' zone feature must be enabled "
+            "to create topics in an account";
+        return -EINVAL;
+      }
       return 0;
     }
 
