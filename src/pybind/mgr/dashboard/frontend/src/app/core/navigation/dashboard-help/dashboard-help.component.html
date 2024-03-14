@@ -1,0 +1,29 @@
+<div ngbDropdown
+     placement="bottom-right">
+  <a ngbDropdownToggle
+     i18n-title
+     title="Help"
+     role="button">
+    <i [ngClass]="[icons.questionCircle]"></i>
+    <span i18n
+          class="d-md-none">Help</span>
+  </a>
+  <div ngbDropdownMenu>
+    <a ngbDropdownItem
+       class="text-capitalize"
+       [ngClass]="{'disabled': !docsUrl}"
+       href="{{ docsUrl }}"
+       target="_blank"
+       i18n>documentation</a>
+    <button ngbDropdownItem
+            routerLink="/api-docs"
+            target="_blank"
+            i18n>API</button>
+    <button ngbDropdownItem
+            (click)="openAboutModal()"
+            i18n>About</button>
+    <button ngbDropdownItem
+            (click)="openFeedbackModal()"
+            i18n>Report an issue...</button>
+  </div>
+</div>
