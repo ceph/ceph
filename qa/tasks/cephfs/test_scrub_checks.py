@@ -278,7 +278,7 @@ class TestScrubChecks(CephFSTestCase):
         command = "scrub start {file}".format(file=test_new_file)
 
         def _check_and_clear_damage(ino, dtype):
-            all_damage = self.fs.rank_tell(["damage", "ls"], mds_rank)
+            all_damage = self.fs.rank_tell(["damage", "ls"], rank=mds_rank)
             damage = [d for d in all_damage if d['ino'] == ino and d['damage_type'] == dtype]
             for d in damage:
                 self.run_ceph_cmd(
@@ -308,7 +308,7 @@ class TestScrubChecks(CephFSTestCase):
         mnt.run_shell(["mkdir", f"{client_path}/.snap/snap1-{test_dir}"])
         mnt.run_shell(f"find {client_path}/ -type f -delete")
         mnt.run_shell(["rmdir", f"{client_path}/.snap/snap1-{test_dir}"])
-        perf_dump = fs.rank_tell(["perf", "dump"], 0)
+        perf_dump = fs.rank_tell(["perf", "dump"], rank=0)
         self.assertNotEqual(perf_dump.get('mds_cache').get('num_strays'),
                             0, "mdcache.num_strays is zero")
 
@@ -322,7 +322,7 @@ class TestScrubChecks(CephFSTestCase):
         self.assertEqual(
             fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
-        perf_dump = fs.rank_tell(["perf", "dump"], 0)
+        perf_dump = fs.rank_tell(["perf", "dump"], rank=0)
         self.assertEqual(int(perf_dump.get('mds_cache').get('num_strays')),
                          0, "mdcache.num_strays is non-zero")
 
@@ -390,7 +390,7 @@ class TestScrubChecks(CephFSTestCase):
         log.info("Running command '{command}'".format(command=command))
 
         command_list = command.split()
-        jout = self.fs.rank_tell(command_list, mds_rank)
+        jout = self.fs.rank_tell(command_list, rank=mds_rank)
 
         log.info("command '{command}' returned '{jout}'".format(
                      command=command, jout=jout))
