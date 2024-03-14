@@ -1260,9 +1260,9 @@ Infiniband::CompletionQueue* Infiniband::create_comp_queue(
 
 Infiniband::QueuePair::~QueuePair()
 {
-  ldout(cct, 20) << __func__ << " destroy Queue Pair, qp number: " << qp->qp_num << " left SQ WR " << recv_queue.size() << dendl;
+  ldout(cct, 20) << __func__ << " destroy Queue Pair: " << this  << " left SQ WR " << recv_queue.size() << dendl;
   if (qp) {
-    ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
+    ldout(cct, 20) << __func__ << " destroy qp=" << qp << " qp number=" << qp->qp_num  << dendl;
     ceph_assert(!ibv_destroy_qp(qp));
   }
 

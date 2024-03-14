@@ -115,8 +115,7 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
   server = new RDMAConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w));
   if (!server->get_qp()) {
     lderr(cct) << __func__ << " server->qp is null" << dendl;
-    // cann't use delete server here, destructor will fail.
-    server->cleanup();
+    delete server;
     ::close(sd);
     return -1;
   }
