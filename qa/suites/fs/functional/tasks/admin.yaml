@@ -9,6 +9,7 @@ overrides:
       - \(MDS_TRIM\)
       - \(MDS_CLIENTS_BROKEN_ROOTSQUASH\)
       - report clients with broken root_squash implementation
+      - evicting unresponsive client
 tasks:
   - cephfs_test_runner:
       fail_on_skip: false
