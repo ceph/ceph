@@ -389,6 +389,7 @@ Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},
+         libprotobuf23 <pkg.ceph.crimson>,
 Replaces: ceph (<< 10),
           ceph-test (<< 12.2.2-14),
           ceph-osd (<< 17.0.0)
