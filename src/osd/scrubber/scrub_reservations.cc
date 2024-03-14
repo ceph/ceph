@@ -98,6 +98,7 @@ void ReplicaReservations::discard_remote_reservations()
 
 void ReplicaReservations::log_success_and_duration()
 {
+  ceph_assert(m_process_started_at.has_value());
   auto logged_duration = ScrubClock::now() - m_process_started_at.value();
   m_perf_set.tinc(scrbcnt_resrv_successful_elapsed, logged_duration);
   m_perf_set.inc(scrbcnt_resrv_success);
