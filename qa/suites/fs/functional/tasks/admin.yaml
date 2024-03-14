@@ -5,6 +5,7 @@ overrides:
         lockdep: true
     log-ignorelist:
       - missing required features
+      - evicting unresponsive client
 tasks:
   - cephfs_test_runner:
       fail_on_skip: false
