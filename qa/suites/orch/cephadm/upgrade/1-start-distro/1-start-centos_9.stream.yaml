@@ -1,0 +1,30 @@
+os_type: centos
+os_version: "9.stream"
+
+tasks:
+- cephadm:
+    image: quay.io/ceph/ceph:v17.2.0
+    cephadm_branch: v17.2.0
+    cephadm_git_url: https://github.com/ceph/ceph
+
+roles:
+- - mon.a
+  - mon.c
+  - mgr.y
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+  - client.0
+  - node-exporter.a
+  - alertmanager.a
+- - mon.b
+  - mgr.x
+  - osd.4
+  - osd.5
+  - osd.6
+  - osd.7
+  - client.1
+  - prometheus.a
+  - grafana.a
+  - node-exporter.b
