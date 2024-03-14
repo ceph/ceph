@@ -1,0 +1,4 @@
+overrides:
+  ceph:
+    valgrind:
+      exit_on_first_error: false
