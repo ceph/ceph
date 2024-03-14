@@ -920,17 +920,21 @@ class RGWPSDeleteTopicOp : public RGWOp {
   }
 
   int verify_permission(optional_yield y) override {
-    if (s->auth.identity->get_account()) {
-      if (!verify_user_permission(this, s, topic_arn,
-                                  rgw::IAM::snsDeleteTopic)) {
+    if (topic) {
+      // consult topic policy for delete permission
+      if (!verify_topic_permission(this, s, *topic, topic_arn,
+                                   rgw::IAM::snsDeleteTopic)) {
         return -ERR_AUTHORIZATION;
       }
-      return 0;
-    }
-
-    if (topic && !verify_topic_permission(this, s, *topic, topic_arn,
-                                          rgw::IAM::snsDeleteTopic)) {
-      return -ERR_AUTHORIZATION;
+    } else {
+      // if no topic policy exists, just check identity policies
+      // account users require an Allow, non-account users just check for Deny
+      const bool mandatory_policy = !!s->auth.identity->get_account();
+      if (!verify_user_permission(this, s, topic_arn,
+                                  rgw::IAM::snsDeleteTopic,
+                                  mandatory_policy)) {
+        return -ERR_AUTHORIZATION;
+      }
     }
     return 0;
   }
