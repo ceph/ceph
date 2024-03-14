@@ -103,7 +103,7 @@ void ReplicaReservations::log_success_and_duration()
   m_perf_set.tinc(scrbcnt_resrv_successful_elapsed, logged_duration);
   m_perf_set.inc(scrbcnt_resrv_success);
   m_osds->logger->hinc(
-      l_osd_scrub_reservation_dur_hist, m_sorted_secondaries.size(),
+      l_osd_scrub_reservation_dur_hist, std::ssize(m_sorted_secondaries),
       logged_duration.count());
   m_process_started_at.reset();
 }
