@@ -604,7 +604,7 @@ class Filesystem(MDSCluster):
 
     def set_config(self, opt, val, rank=0, status=None):
         command = ["config", "set", opt, val]
-        self.rank_asok(command, rank, status=status)
+        self.rank_asok(command, rank=rank, status=status)
 
     def set_allow_multifs(self, yes=True):
         self.set_flag("enable_multiple", yes)
