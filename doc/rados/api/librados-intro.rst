@@ -1,3 +1,5 @@
+.. _librados-intro:
+
 ==========================
  Introduction to librados
 ==========================
