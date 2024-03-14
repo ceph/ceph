@@ -1611,7 +1611,7 @@ void PeerReplayer::peer_status(Formatter *f) {
       f->dump_string("state", "idle");
     } else {
       f->dump_string("state", "syncing");
-      f->open_object_section("current_sycning_snap");
+      f->open_object_section("current_syncing_snap");
       f->dump_unsigned("id", (*sync_stat.current_syncing_snap).first);
       f->dump_string("name", (*sync_stat.current_syncing_snap).second);
       f->close_section();
