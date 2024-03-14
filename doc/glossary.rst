@@ -273,6 +273,13 @@
         Hybrid OSD  
                 Refers to an OSD that has both HDD and SSD drives.
 
+        librados
+                An API that can be used to create a custom interface to a Ceph
+                storage cluster. ``librados`` makes it possible to interact
+                with Ceph Monitors and with OSDs. See :ref:`Introduction to
+                librados <librados-intro>`. See :ref:`librados (Python)
+                <librados-python>`.
+
 	LVM tags
                 Extensible metadata for LVM volumes and groups. It is used to
                 store Ceph-specific information about devices and its
