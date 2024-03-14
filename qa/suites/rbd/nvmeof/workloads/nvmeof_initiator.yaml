@@ -1,0 +1,27 @@
+tasks:
+- nvmeof:
+    client: client.0
+    version: latest  # "default" uses packaged version; change to test specific nvmeof images, example "latest"
+    rbd:
+        pool_name: mypool
+        image_name: myimage
+    gateway_config:
+        source: host.a 
+        target: client.2
+        vars:
+            cli_version: latest
+
+- cephadm.wait_for_service:
+    service: nvmeof.mypool
+
+- workunit:
+    no_coverage_and_limits: true
+    clients:
+      client.2:
+        - rbd/nvmeof_initiator.sh
+        - rbd/nvmeof_basic_tests.sh
+        - rbd/nvmeof_fio_test.sh
+    env:
+      RBD_POOL: mypool
+      RBD_IMAGE: myimage
+      IOSTAT_INTERVAL: '10'

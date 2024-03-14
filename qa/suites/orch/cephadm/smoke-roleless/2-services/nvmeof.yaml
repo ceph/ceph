@@ -1,0 +1,8 @@
+tasks:
+- cephadm.shell:
+    host.a:
+      - ceph osd pool create foo
+      - rbd pool init foo
+      - ceph orch apply nvmeof foo
+- cephadm.wait_for_service:
+    service: nvmeof.foo
