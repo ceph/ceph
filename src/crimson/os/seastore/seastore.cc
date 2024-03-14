@@ -1347,7 +1347,9 @@ SeaStore::Shard::_do_transaction_step(
       o = get_onode;
       d_onodes[op->oid] = get_onode;
     }
-    if (op->op == Transaction::OP_CLONE && !d_onodes[op->dest_oid]) {
+    if ((op->op == Transaction::OP_CLONE
+	  || op->op == Transaction::OP_COLL_MOVE_RENAME)
+	&& !d_onodes[op->dest_oid]) {
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
       return onode_manager->get_or_create_onode(
@@ -1471,6 +1473,20 @@ SeaStore::Shard::_do_transaction_step(
 	  i.get_oid(op->dest_oid));
 	return _clone(ctx, onodes[op->oid], d_onodes[op->dest_oid]);
       }
+      case Transaction::OP_COLL_MOVE_RENAME:
+      {
+	ceph_assert(op->cid == op->dest_cid);
+	TRACET("renaming {} to {}",
+	  *ctx.transaction,
+	  i.get_oid(op->oid),
+	  i.get_oid(op->dest_oid));
+	return _rename(
+	  ctx, onodes[op->oid], d_onodes[op->dest_oid]
+	).si_then([&onodes, &d_onodes, op] {
+	  onodes[op->oid].reset();
+	  d_onodes[op->oid].reset();
+	});
+      }
       default:
         ERROR("bad op {}", static_cast<unsigned>(op->op));
         return crimson::ct_error::input_output_error::make();
@@ -1501,6 +1517,41 @@ SeaStore::Shard::_do_transaction_step(
     crimson::ct_error::assert_all{
       "Invalid error in SeaStore::do_transaction_step"
     }
+  );
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_rename(
+  internal_context_t &ctx,
+  OnodeRef &onode,
+  OnodeRef &d_onode)
+{
+  auto olayout = onode->get_layout();
+  uint32_t size = olayout.size;
+  auto omap_root = olayout.omap_root.get(
+    d_onode->get_metadata_hint(device->get_block_size()));
+  auto xattr_root = olayout.xattr_root.get(
+    d_onode->get_metadata_hint(device->get_block_size()));
+  auto object_data = olayout.object_data.get();
+  auto oi_bl = ceph::bufferlist::static_from_mem(
+    &olayout.oi[0],
+    (uint32_t)olayout.oi_size);
+  auto ss_bl = ceph::bufferlist::static_from_mem(
+    &olayout.ss[0],
+    (uint32_t)olayout.ss_size);
+
+  d_onode->update_onode_size(*ctx.transaction, size);
+  d_onode->update_omap_root(*ctx.transaction, omap_root);
+  d_onode->update_xattr_root(*ctx.transaction, xattr_root);
+  d_onode->update_object_data(*ctx.transaction, object_data);
+  d_onode->update_object_info(*ctx.transaction, oi_bl);
+  d_onode->update_snapset(*ctx.transaction, ss_bl);
+  return onode_manager->erase_onode(
+    *ctx.transaction, onode
+  ).handle_error_interruptible(
+    crimson::ct_error::input_output_error::pass_further(),
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStore::_rename"}
   );
 }
 
