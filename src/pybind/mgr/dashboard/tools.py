@@ -873,7 +873,7 @@ def cors_tool():
     cross_origin_url_list = [url.strip() for url in cross_origin_urls.split(',')]
     if req_header_cross_origin_url in cross_origin_url_list:
         resp_head['Access-Control-Allow-Origin'] = req_header_cross_origin_url
-    resp_head['Access-Control-Expose-Headers'] = 'GET, POST'
+    resp_head['Access-Control-Expose-Headers'] = 'GET, POST, X-Total-Count'
     resp_head['Access-Control-Allow-Credentials'] = 'true'
 
     # Non-simple CORS preflight request; short-circuit the normal handler.
@@ -883,7 +883,7 @@ def cors_tool():
             resp_head['Access-Control-Allow-Origin'] = req_header_origin_url
         ac_method = req_head.get('Access-Control-Request-Method', None)
 
-        allowed_methods = ['GET', 'POST', 'PUT']
+        allowed_methods = ['GET', 'POST', 'PUT', 'DELETE']
         allowed_headers = [
             'Content-Type',
             'Authorization',
