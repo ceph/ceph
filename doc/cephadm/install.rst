@@ -41,9 +41,8 @@ There are two ways to install ``cephadm``:
 #. a :ref:`curl-based installation<cephadm_install_curl>` method
 #. :ref:`distribution-specific installation methods<cephadm_install_distros>`
 
-.. note:: Recent versions of cephadm are distributed as an executable compiled
-   from source code.  Unlike for earlier versions of Ceph it is no longer
-   sufficient to copy a single script from Ceph's git tree and run it. 
+.. note:: In Quincy, cephadm is not distributed as an executable compiled from
+   source code. That feature was introduced in the Reef release.
 
 .. _cephadm_install_distros:
 
