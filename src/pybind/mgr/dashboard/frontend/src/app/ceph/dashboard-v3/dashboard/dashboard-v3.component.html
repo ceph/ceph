@@ -43,6 +43,18 @@
               </a>
             </dd>
           </ng-container>
+          <ng-container *ngIf="managedByConfig$ | async as managedByConfig">
+            <span *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length > 0">
+              <dt>Managed By</dt>
+              <dd>
+                <a target="_blank"
+                   [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
+                  {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
+                  <i class="fa fa-external-link"></i>
+                </a>
+              </dd>
+            </span>
+          </ng-container>
         </dl>
       </cd-card>
 
