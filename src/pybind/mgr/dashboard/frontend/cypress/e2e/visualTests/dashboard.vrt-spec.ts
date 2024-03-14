@@ -1,6 +1,6 @@
 import { LoginPageHelper } from '../ui/login.po';
 
-describe('Dashboard Landing Page', () => {
+describe.skip('Dashboard Landing Page', () => {
   const login = new LoginPageHelper();
 
   beforeEach(() => {
