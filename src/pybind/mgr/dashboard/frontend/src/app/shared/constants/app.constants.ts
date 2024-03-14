@@ -147,6 +147,7 @@ export class ActionLabelsI18n {
   CONNECT: string;
   DISCONNECT: string;
   RECONNECT: string;
+  AUTHORIZE: string;
 
   constructor() {
     /* Create a new item */
@@ -206,6 +207,7 @@ export class ActionLabelsI18n {
     this.FLAGS = $localize`Flags`;
     this.ENTER_MAINTENANCE = $localize`Enter Maintenance`;
     this.EXIT_MAINTENANCE = $localize`Exit Maintenance`;
+    this.AUTHORIZE = $localize`Authorize`;
 
     this.START_DRAIN = $localize`Start Drain`;
     this.STOP_DRAIN = $localize`Stop Drain`;

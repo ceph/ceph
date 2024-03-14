@@ -101,6 +101,29 @@ class CephFS(RESTController):
                 component='cephfs')
         return f'Volume {name} renamed successfully to {new_name}'
 
+    @UpdatePermission
+    @Endpoint('PUT')
+    @EndpointDoc("Set Ceph authentication capabilities for the specified user ID in the given path",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'client_id': (str, 'Cephx user ID'),
+                     'caps': (str, 'Path and given capabilities'),
+                     'root_squash': (str, 'File System Identifier'),
+
+                 })
+    def auth(self, fs_name: str, client_id: int, caps: List[str], root_squash: bool):
+        if root_squash:
+            caps.insert(2, 'root_squash')
+        error_code, _, err = mgr.mon_command({'prefix': 'fs authorize',
+                                              'filesystem': fs_name,
+                                              'entity': client_id,
+                                              'caps': caps})
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Error setting authorization for {client_id} with {caps}: {err}',
+                component='cephfs')
+        return f'Updated {client_id} authorization successfully'
+
     def get(self, fs_id):
         fs_id = self.fs_id_to_int(fs_id)
         return self.fs_status(fs_id)
