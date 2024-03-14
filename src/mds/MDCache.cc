@@ -9722,6 +9722,12 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
   // remove from map
   active_requests.erase(mdr->reqid);
 
+  // queue next replay op?
+  if (mdr->is_queued_for_replay() && !mdr->get_queued_next_replay_op()) {
+    mdr->set_queued_next_replay_op();
+    mds->queue_one_replay();
+  }
+
   if (mds->logger)
     log_stat();
 
