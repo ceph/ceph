@@ -329,9 +329,20 @@ class RGWPSCreateTopicOp : public RGWOp {
       return 0;
     }
 
-    if (topic && !verify_topic_permission(this, s, *topic, topic_arn,
-                                          rgw::IAM::snsCreateTopic)) {
-      return -ERR_AUTHORIZATION;
+    if (topic) {
+      // consult topic policy for overwrite permission
+      if (!verify_topic_permission(this, s, *topic, topic_arn,
+                                   rgw::IAM::snsCreateTopic)) {
+        return -ERR_AUTHORIZATION;
+      }
+    } else {
+      // if no topic policy exists, just check identity policies for denies
+      constexpr bool mandatory_policy = false;
+      if (!verify_user_permission(this, s, topic_arn,
+                                  rgw::IAM::snsCreateTopic,
+                                  mandatory_policy)) {
+        return -ERR_AUTHORIZATION;
+      }
     }
     return 0;
   }
