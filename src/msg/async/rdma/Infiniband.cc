@@ -1109,7 +1109,13 @@ void Infiniband::init()
   memory_manager->create_tx_pool(cct->_conf->ms_async_rdma_buffer_size, tx_queue_len);
 
   if (support_srq) {
-    srq = create_shared_receive_queue(rx_queue_len, MAX_SHARED_RX_SGE_COUNT);
+    while (!srq) {
+      srq = create_shared_receive_queue(rx_queue_len, MAX_SHARED_RX_SGE_COUNT);
+      if (!srq) {
+        lderr(cct) << __func__ << " failed to create srq. " << cpp_strerror(errno) << dendl;
+        sleep(5);
+      }
+    }
     post_chunks_to_rq(rx_queue_len, NULL); //add to srq
   }
 }
