@@ -143,6 +143,83 @@ encryption operations of actual image IO, assuming AES-NI is enabled,
 a relative small microseconds latency should be added, as well as a small
 increase in CPU utilization.
 
+Examples
+========
+
+Create a LUKS2-formatted image with the effective size of 50GiB:
+
+.. prompt:: bash $
+
+    rbd create --size 50G mypool/myimage
+    rbd encryption format mypool/myimage luks2 passphrase.bin
+    rbd resize --size 50G --encryption-passphrase-file passphrase.bin mypool/myimage
+
+``rbd resize`` command at the end grows the image to compensate for the
+overhead associated with the LUKS2 header.
+
+Given a LUKS2-formatted image, create a LUKS2-formatted clone with the
+same effective size:
+
+.. prompt:: bash $
+
+    rbd snap create mypool/myimage@snap
+    rbd snap protect mypool/myimage@snap
+    rbd clone mypool/myimage@snap mypool/myclone
+    rbd encryption format mypool/myclone luks2 clone-passphrase.bin
+
+Given a LUKS2-formatted image with the effective size of 50GiB, create
+a LUKS1-formatted clone with the same effective size:
+
+.. prompt:: bash $
+
+    rbd snap create mypool/myimage@snap
+    rbd snap protect mypool/myimage@snap
+    rbd clone mypool/myimage@snap mypool/myclone
+    rbd encryption format mypool/myclone luks1 clone-passphrase.bin
+    rbd resize --size 50G --allow-shrink --encryption-passphrase-file clone-passphrase.bin --encryption-passphrase-file passphrase.bin mypool/myclone
+
+Since LUKS1 header is usually smaller than LUKS2 header, ``rbd resize``
+command at the end shrinks the cloned image to get rid of unneeded
+space allowance.
+
+Given a LUKS1-formatted image with the effective size of 50GiB, create
+a LUKS2-formatted clone with the same effective size:
+
+.. prompt:: bash $
+
+    rbd resize --size 51G mypool/myimage
+    rbd snap create mypool/myimage@snap
+    rbd snap protect mypool/myimage@snap
+    rbd clone mypool/myimage@snap mypool/myclone
+    rbd encryption format mypool/myclone luks2 clone-passphrase.bin
+    rbd resize --size 50G --allow-shrink --encryption-passphrase-file passphrase.bin mypool/myimage
+    rbd resize --size 50G --allow-shrink --encryption-passphrase-file clone-passphrase.bin --encryption-passphrase-file passphrase.bin mypool/myclone
+
+Since LUKS2 header is usually bigger than LUKS1 header, ``rbd resize``
+command at the beginning temporarily grows the parent image to reserve
+some extra space in the parent snapshot and consequently the cloned
+image. This is necessary to make all parent data accessible in the
+cloned image. ``rbd resize`` commands at the end shrink the parent
+image back to its original size (this does not impact the parent
+snapshot) and also the cloned image to get rid of unused reserved
+space.
+
+The same applies to creating a formatted clone of an unformatted
+(plaintext) image since an unformatted image does not have a header at
+all.
+
+To map a formatted clone, provide encryption formats and passphrases
+for the clone itself and all of its explicitly formatted parent images.
+The order in which ``encryption-format`` and ``encryption-passphrase-file``
+options should be provided is based on the image hierarchy: start with
+that of the cloned image, then its parent and so on.
+
+Here is an example of a command that maps a formatted clone:
+
+.. prompt:: bash #
+
+   rbd device map -t nbd -o encryption-passphrase-file=clone-passphrase.bin,encryption-passphrase-file=passphrase.bin mypool/myclone
+
 .. _journal feature: ../rbd-mirroring/#enable-image-journaling-feature
 .. _Supported Formats: #supported-formats
 .. _rbd-nbd: ../../man/8/rbd-nbd
