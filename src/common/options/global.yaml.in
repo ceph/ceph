@@ -4016,15 +4016,26 @@ options:
   default: false
   with_legacy: true
 - name: bdev_enable_discard
+  desc: send discards to the block device
   type: bool
   level: advanced
   default: false
   with_legacy: true
-- name: bdev_async_discard
-  type: bool
+  flags:
+  - runtime
+  see_also:
+  - bdev_async_discard_threads
+- name: bdev_async_discard_threads
+  desc: number of discard threads used to issue discards to the device
+  type: uint
   level: advanced
-  default: false
-  with_legacy: true
+  default: 0
+  min: 0
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bdev_enable_discard
 - name: bdev_flock_retry_interval
   type: float
   level: advanced
