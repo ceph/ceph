@@ -220,40 +220,27 @@
         </div>
 
         <!-- ssl_cert -->
-          <div *ngIf="remoteClusterForm.controls.ssl.value"
-               class="form-group row">
-            <label class="cd-col-form-label"
-                   for="ssl_cert">
-              <span i18n>Certificate</span>
-              <cd-helper i18n>The SSL certificate in PEM format.</cd-helper>
-            </label>
-            <div class="cd-col-form-input">
-              <textarea id="ssl_cert"
-                        class="form-control resize-vertical text-monospace text-pre"
-                        formControlName="ssl_cert"
-                        rows="5">
-              </textarea>
-              <input type="file"
-                     (change)="fileUpload($event.target.files, 'ssl_cert')">
-              <span class="invalid-feedback"
-                    *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'required')"
-                    i18n>This field is required.</span>
-              <span class="invalid-feedback"
-                    *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'pattern')"
-                    i18n>Invalid SSL certificate.</span>
-            </div>
-          </div>
-        <div class="form-group row"
-             *ngIf="!showCrossOriginError && action !== 'edit' && !remoteClusterForm.getValue('showToken') && !connectionVerified">
-          <div class="cd-col-form-offset">
-            <div class="custom-control">
-              <button class="btn btn-primary"
-                      type="button"
-                      [disabled]="(remoteClusterForm.getValue('showToken') && remoteClusterForm.getValue('apiToken') === '') || (!remoteClusterForm.getValue('showToken') && (remoteClusterForm.getValue('username') === '' || remoteClusterForm.getValue('password') === ''))"
-                      (click)="verifyConnection()">
-                Verify Connection
-              </button>
-            </div>
+        <div *ngIf="remoteClusterForm.controls.ssl.value"
+             class="form-group row">
+          <label class="cd-col-form-label"
+                 for="ssl_cert">
+            <span i18n>Certificate</span>
+            <cd-helper i18n>The SSL certificate in PEM format.</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <textarea id="ssl_cert"
+                      class="form-control resize-vertical text-monospace text-pre"
+                      formControlName="ssl_cert"
+                      rows="5">
+            </textarea>
+            <input type="file"
+                   (change)="fileUpload($event.target.files, 'ssl_cert')">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'pattern')"
+                  i18n>Invalid SSL certificate.</span>
           </div>
         </div>
       </div>
