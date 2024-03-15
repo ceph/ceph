@@ -1,8 +1,9 @@
 import json
+import re
 import logging
-from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any
+from typing import TYPE_CHECKING, Iterator, Optional, Dict, Any, List
 
-from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec
+from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, HostPlacementSpec, RGWSpec
 from cephadm.schedule import HostAssignment
 import rados
 
@@ -12,7 +13,7 @@ from orchestrator import OrchestratorError, DaemonDescription
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
-LAST_MIGRATION = 5
+LAST_MIGRATION = 6
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,9 @@ class Migrations:
 
         v = mgr.get_store('nfs_migration_queue')
         self.nfs_migration_queue = json.loads(v) if v else []
+
+        r = mgr.get_store('rgw_migration_queue')
+        self.rgw_migration_queue = json.loads(r) if r else []
 
         # for some migrations, we don't need to do anything except for
         # incrementing migration_current.
@@ -95,6 +99,10 @@ class Migrations:
         if self.mgr.migration_current == 4:
             if self.migrate_4_5():
                 self.set(5)
+
+        if self.mgr.migration_current == 5:
+            if self.migrate_5_6():
+                self.set(6)
 
     def migrate_0_1(self) -> bool:
         """
@@ -335,6 +343,84 @@ class Migrations:
 
             self.mgr.log.info('Done migrating registry login info')
         return True
+
+    def migrate_rgw_spec(self, spec: Dict[Any, Any]) -> Optional[RGWSpec]:
+        """ Migrate an old rgw spec to the new format."""
+        new_spec = spec.copy()
+        field_content: List[str] = re.split(' +', new_spec['spec']['rgw_frontend_type'])
+        valid_spec = False
+        if 'beast' in field_content:
+            new_spec['spec']['rgw_frontend_type'] = 'beast'
+            field_content.remove('beast')
+            valid_spec = True
+        elif 'civetweb' in field_content:
+            new_spec['spec']['rgw_frontend_type'] = 'civetweb'
+            field_content.remove('civetweb')
+            valid_spec = True
+        else:
+            # Error: Should not happen as that would be an invalid RGW spec. In that case
+            # we keep the spec as it, mark it as unmanaged to avoid the daemons being deleted
+            # and raise a health warning so the user can fix the issue manually later.
+            self.mgr.log.error("Cannot migrate RGW spec, bad rgw_frontend_type value: {spec['spec']['rgw_frontend_type']}.")
+
+        if valid_spec:
+            new_spec['spec']['rgw_frontend_extra_args'] = []
+            new_spec['spec']['rgw_frontend_extra_args'].extend(field_content)
+
+        return RGWSpec.from_json(new_spec)
+
+    def rgw_spec_needs_migration(self, spec: Dict[Any, Any]) -> bool:
+        if 'spec' not in spec:
+            # if users allowed cephadm to set up most of the
+            # attributes, it's possible there is no "spec" section
+            # inside the spec. In that case, no migration is needed
+            return False
+        return 'rgw_frontend_type' in spec['spec'] \
+            and spec['spec']['rgw_frontend_type'] is not None \
+            and spec['spec']['rgw_frontend_type'].strip() not in ['beast', 'civetweb']
+
+    def migrate_5_6(self) -> bool:
+        """
+        Migration 5 -> 6
+
+        Old RGW spec used to allow 'bad' values on the rgw_frontend_type field. For example
+        the following value used to be valid:
+
+          rgw_frontend_type: "beast endpoint=10.16.96.54:8043 tcp_nodelay=1"
+
+        As of 17.2.6 release, these kind of entries are not valid anymore and a more strict check
+        has been added to validate this field.
+
+        This migration logic detects this 'bad' values and tries to transform them to the new
+        valid format where rgw_frontend_type field can only be either 'beast' or 'civetweb'.
+        Any extra arguments detected on rgw_frontend_type field will be parsed and passed in the
+        new spec field rgw_frontend_extra_args.
+        """
+        self.mgr.log.debug(f'Starting rgw migration (queue length is {len(self.rgw_migration_queue)})')
+        for s in self.rgw_migration_queue:
+            spec = s['spec']
+            if self.rgw_spec_needs_migration(spec):
+                rgw_spec = self.migrate_rgw_spec(spec)
+                if rgw_spec is not None:
+                    logger.info(f"Migrating {spec} to new RGW with extra args format {rgw_spec}")
+                    self.mgr.spec_store.save(rgw_spec)
+            else:
+                logger.info(f"No Migration is needed for rgw spec: {spec}")
+        self.rgw_migration_queue = []
+        return True
+
+
+def queue_migrate_rgw_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:
+    """
+    As aprt of 17.2.6 a stricter RGW spec validation has been added so the field
+    rgw_frontend_type cannot be used to pass rgw-frontends parameters.
+    """
+    service_id = spec_dict['spec']['service_id']
+    queued = mgr.get_store('rgw_migration_queue') or '[]'
+    ls = json.loads(queued)
+    ls.append(spec_dict)
+    mgr.set_store('rgw_migration_queue', json.dumps(ls))
+    mgr.log.info(f'Queued rgw.{service_id} for migration')
 
 
 def queue_migrate_nfs_spec(mgr: "CephadmOrchestrator", spec_dict: Dict[Any, Any]) -> None:

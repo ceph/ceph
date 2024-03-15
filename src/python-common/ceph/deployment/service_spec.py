@@ -868,6 +868,7 @@ class RGWSpec(ServiceSpec):
                  rgw_frontend_port: Optional[int] = None,
                  rgw_frontend_ssl_certificate: Optional[List[str]] = None,
                  rgw_frontend_type: Optional[str] = None,
+                 rgw_frontend_extra_args: Optional[List[str]] = None,
                  unmanaged: bool = False,
                  ssl: bool = False,
                  preview_only: bool = False,
@@ -912,6 +913,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_frontend_ssl_certificate: Optional[List[str]] = rgw_frontend_ssl_certificate
         #: civetweb or beast (default: beast). See :ref:`rgw_frontends`
         self.rgw_frontend_type: Optional[str] = rgw_frontend_type
+        #: List of extra arguments for rgw_frontend in the form opt=value. See :ref:`rgw_frontends`
+        self.rgw_frontend_extra_args: Optional[List[str]] = rgw_frontend_extra_args
         #: enable SSL
         self.ssl = ssl
         self.rgw_realm_token = rgw_realm_token
@@ -937,6 +940,13 @@ class RGWSpec(ServiceSpec):
                     'Cannot add RGW: Realm specified but no zone specified')
         if self.rgw_zone and not self.rgw_realm:
             raise SpecValidationError('Cannot add RGW: Zone specified but no realm specified')
+
+        if self.rgw_frontend_type is not None:
+            if self.rgw_frontend_type not in ['beast', 'civetweb']:
+                raise SpecValidationError(
+                    'Invalid rgw_frontend_type value. Valid values are: beast, civetweb.\n'
+                    'Additional rgw type parameters can be passed using rgw_frontend_extra_args.'
+                )
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)

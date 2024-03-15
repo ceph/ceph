@@ -816,18 +816,19 @@ spec:
 class TestRGWService:
 
     @pytest.mark.parametrize(
-        "frontend, ssl, expected",
+        "frontend, ssl, extra_args, expected",
         [
-            ('beast', False, 'beast endpoint=[fd00:fd00:fd00:3000::1]:80'),
-            ('beast', True,
-             'beast ssl_endpoint=[fd00:fd00:fd00:3000::1]:443 ssl_certificate=config://rgw/cert/rgw.foo'),
-            ('civetweb', False, 'civetweb port=[fd00:fd00:fd00:3000::1]:80'),
-            ('civetweb', True,
+            ('beast', False, ['tcp_nodelay=1'],
+             'beast endpoint=[fd00:fd00:fd00:3000::1]:80 tcp_nodelay=1'),
+            ('beast', True, ['tcp_nodelay=0', 'max_header_size=65536'],
+             'beast ssl_endpoint=[fd00:fd00:fd00:3000::1]:443 ssl_certificate=config://rgw/cert/rgw.foo tcp_nodelay=0 max_header_size=65536'),
+            ('civetweb', False, [], 'civetweb port=[fd00:fd00:fd00:3000::1]:80'),
+            ('civetweb', True, None,
              'civetweb port=[fd00:fd00:fd00:3000::1]:443s ssl_certificate=config://rgw/cert/rgw.foo'),
         ]
     )
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    def test_rgw_update(self, frontend, ssl, expected, cephadm_module: CephadmOrchestrator):
+    def test_rgw_update(self, frontend, ssl, extra_args, expected, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'host1'):
             cephadm_module.cache.update_host_networks('host1', {
                 'fd00:fd00:fd00:3000::/64': {
@@ -837,7 +838,8 @@ class TestRGWService:
             s = RGWSpec(service_id="foo",
                         networks=['fd00:fd00:fd00:3000::/64'],
                         ssl=ssl,
-                        rgw_frontend_type=frontend)
+                        rgw_frontend_type=frontend,
+                        rgw_frontend_extra_args=extra_args)
             with with_service(cephadm_module, s) as dds:
                 _, f, _ = cephadm_module.check_mon_command({
                     'prefix': 'config get',
