@@ -1961,6 +1961,44 @@ def _samba_ad_dc_conf(ctx, remote, cengine):
 
 
 @contextlib.contextmanager
+def configure_samba_client_container(ctx, config):
+    # TODO: deduplicate logic between this task and deploy_samba_ad_dc
+    role = config.get('role')
+    samba_client_image = config.get(
+        'samba_client_image', 'quay.io/samba.org/samba-client:latest'
+    )
+    if not role:
+        raise ConfigError(
+            "you must specify a role to discover container engine / pull image"
+        )
+    (remote,) = ctx.cluster.only(role).remotes.keys()
+    cengine = 'podman'
+    try:
+        log.info("Testing if podman is available")
+        remote.run(args=['sudo', cengine, '--help'])
+    except CommandFailedError:
+        log.info("Failed to find podman. Using docker")
+        cengine = 'docker'
+
+    remote.run(args=['sudo', cengine, 'pull', samba_client_image])
+    samba_client_container_cmd = [
+        'sudo',
+        cengine,
+        'run',
+        '--rm',
+        '--net=host',
+        '-eKRB5_CONFIG=/dev/null',
+        samba_client_image,
+    ]
+
+    setattr(ctx, 'samba_client_container_cmd', samba_client_container_cmd)
+    try:
+        yield
+    finally:
+        setattr(ctx, 'samba_client_container_cmd', None)
+
+
+@contextlib.contextmanager
 def deploy_samba_ad_dc(ctx, config):
     role = config.get('role')
     ad_dc_image = config.get(
