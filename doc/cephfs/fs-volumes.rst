@@ -605,6 +605,31 @@ On successful cancellation, the cloned subvolume is moved to the ``canceled`` st
 
 .. note:: The canceled cloned may be deleted by supplying the ``--force`` option to the `fs subvolume rm` command.
 
+Configurables
+~~~~~~~~~~~~~
+
+Configure the maximum number of concurrent clone operations. The default is 4:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/volumes/max_concurrent_clones <value>
+
+Configure the snapshot_clone_no_wait option :
+
+The ``snapshot_clone_no_wait`` config option is used to reject clone creation requests when cloner threads 
+(which can be configured using above option i.e. ``max_concurrent_clones``) are not available.
+It is enabled by default i.e. the value set is True, whereas it can be configured by using below command.
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/volumes/snapshot_clone_no_wait <bool>
+
+The current value of ``snapshot_clone_no_wait`` can be fetched by using below command.
+
+.. prompt:: bash #
+    
+   ceph config get mgr mgr/volumes/snapshot_clone_no_wait
+
 
 .. _subvol-pinning:
 
