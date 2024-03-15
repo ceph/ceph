@@ -30,6 +30,7 @@ class RedFishClient(BaseClient):
             oob_credentials = json.dumps({'UserName': self.username,
                                           'Password': self.password})
             headers = {'Content-Type': 'application/json'}
+            location_endpoint: str = ''
 
             try:
                 _headers, _data, _status_code = self.query(data=oob_credentials,
@@ -43,8 +44,14 @@ class RedFishClient(BaseClient):
                 self.log.error(msg)
                 raise RuntimeError
             self.token = _headers['X-Auth-Token']
-            location_endpoint: str = _headers['Location'].split('/', 3)[-1:][0]
-            self.location = f'/{location_endpoint}'
+            if _headers['Location'].startswith('http'):
+                # We assume the value has the following format:
+                # scheme://address:port/redfish/v1/SessionService/Session
+                location_endpoint = f"/{_headers['Location'].split('/', 3)[-1:][0]}"
+            else:
+                location_endpoint = _headers['Location']
+            self.location = location_endpoint
+            self.log.info(f'Logged in to {self.url}, Received header "Location": {self.location}')
 
     def is_logged_in(self) -> bool:
         self.log.debug(f'Checking token validity for {self.url}')
