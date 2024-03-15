@@ -250,7 +250,7 @@ Here is an example of a command that maps a formatted clone:
 
 .. prompt:: bash #
 
-   rbd device map -t nbd -o encryption-passphrase-file=clone-passphrase.bin -o encryption-passphrase-file=passphrase.bin mypool/myclone
+   rbd device map -t nbd -o encryption-passphrase-file=clone-passphrase.bin,encryption-passphrase-file=passphrase.bin mypool/myclone
 
 .. _journal feature: ../rbd-mirroring/#enable-image-journaling-feature
 .. _Supported Formats: #supported-formats
