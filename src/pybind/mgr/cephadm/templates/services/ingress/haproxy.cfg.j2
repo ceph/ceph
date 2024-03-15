@@ -48,7 +48,7 @@ defaults
 frontend stats
     mode http
     bind {{ ip }}:{{ monitor_port }}
-    bind localhost:{{ monitor_port }}
+    bind {{ local_host_ip }}:{{ monitor_port }}
     stats enable
     stats uri /stats
     stats refresh 10s

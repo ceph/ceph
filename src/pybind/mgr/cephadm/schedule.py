@@ -148,7 +148,7 @@ class HostAssignment(object):
                  daemons: List[orchestrator.DaemonDescription],
                  related_service_daemons: Optional[List[DaemonDescription]] = None,
                  networks: Dict[str, Dict[str, Dict[str, List[str]]]] = {},
-                 filter_new_host: Optional[Callable[[str], bool]] = None,
+                 filter_new_host: Optional[Callable[[str, ServiceSpec], bool]] = None,
                  allow_colo: bool = False,
                  primary_daemon_type: Optional[str] = None,
                  per_host_daemon_type: Optional[str] = None,
@@ -451,7 +451,7 @@ class HostAssignment(object):
             old = ls.copy()
             ls = []
             for h in old:
-                if self.filter_new_host(h.hostname):
+                if self.filter_new_host(h.hostname, self.spec):
                     ls.append(h)
             if len(old) > len(ls):
                 logger.debug('Filtered %s down to %s' % (old, ls))
