@@ -258,30 +258,30 @@ class TestMisc(CephFSTestCase):
                 self.mount_a.run_shell(["mkdir", os.path.join(dir_path, f"{i}_{j}")])
             start = time.time()
             if file_sync:
-                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript])
+                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript], timeout=4)
             else:
-                self.mount_a.run_shell(["sync"])
+                self.mount_a.run_shell(["sync"], timeout=4)
+            # the real duration should be less than the rough one
             duration = time.time() - start
-            log.info(f"sync mkdir i = {i}, duration = {duration}")
-            self.assertLess(duration, 4)
+            log.info(f"sync mkdir i = {i}, rough duration = {duration}")
 
             for j in range(5):
                 self.mount_a.run_shell(["rm", "-rf", os.path.join(dir_path, f"{i}_{j}")])
             start = time.time()
             if file_sync:
-                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript])
+                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript], timeout=4)
             else:
-                self.mount_a.run_shell(["sync"])
+                self.mount_a.run_shell(["sync"], timeout=4)
+            # the real duration should be less than the rough one
             duration = time.time() - start
-            log.info(f"sync rmdir i = {i}, duration = {duration}")
-            self.assertLess(duration, 4)
+            log.info(f"sync rmdir i = {i}, rough duration = {duration}")
 
         self.mount_a.run_shell(["rm", "-rf", dir_path])
 
     def test_filesystem_sync_stuck_for_around_5s(self):
         """
-        To check whether the fsync will be stuck to wait for the mdlog to be
-        flushed for at most 5 seconds.
+        To check whether the filesystem sync will be stuck to wait for the
+        mdlog to be flushed for at most 5 seconds.
         """
 
         dir_path = "filesystem_sync_do_not_wait_mdlog_testdir"
@@ -289,8 +289,8 @@ class TestMisc(CephFSTestCase):
 
     def test_file_sync_stuck_for_around_5s(self):
         """
-        To check whether the filesystem sync will be stuck to wait for the
-        mdlog to be flushed for at most 5 seconds.
+        To check whether the fsync will be stuck to wait for the mdlog to
+        be flushed for at most 5 seconds.
         """
 
         dir_path = "file_sync_do_not_wait_mdlog_testdir"
