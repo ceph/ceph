@@ -1,0 +1,23 @@
+#!/bin/sh
+# vim: set noet ts=8:
+
+set -e
+
+case "$1" in
+    remove)
+	[ -x /sbin/stop ] && stop ceph-mds-all || :
+	invoke-rc.d ceph stop mds || {
+	    RESULT=$?
+	    if [ $RESULT != 100 ]; then
+		exit $RESULT
+	    fi
+	}
+	;;
+
+    *)
+	;;
+esac
+
+#DEBHELPER#
+
+exit 0
