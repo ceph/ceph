@@ -292,15 +292,12 @@ class RGWPSCreateTopicOp : public RGWOp {
       return ret;
     }
 
-    if (s->auth.identity->get_account()) {
-      // account users don't consult the existing owner/policy, but they do
-      // require the notification_v2 format to index the topic metadata
-      if (!rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
-        s->err.message = "The 'notification_v2' zone feature must be enabled "
-            "to create topics in an account";
-        return -EINVAL;
-      }
-      return 0;
+      // account users require the notification_v2 format to index the topic metadata
+    if (s->auth.identity->get_account() &&
+        !rgw::all_zonegroups_support(*s->penv.site, rgw::zone_features::notification_v2)) {
+      s->err.message = "The 'notification_v2' zone feature must be enabled "
+          "to create topics in an account";
+      return -EINVAL;
     }
 
     // try to load existing topic for owner and policy
@@ -320,15 +317,6 @@ class RGWPSCreateTopicOp : public RGWOp {
   }
 
   int verify_permission(optional_yield y) override {
-    if (s->auth.identity->get_account()) {
-      // account users don't consult the existing owner/policy
-      if (!verify_user_permission(this, s, topic_arn,
-                                  rgw::IAM::snsCreateTopic)) {
-        return -ERR_AUTHORIZATION;
-      }
-      return 0;
-    }
-
     if (topic) {
       // consult topic policy for overwrite permission
       if (!verify_topic_permission(this, s, *topic, topic_arn,
@@ -337,7 +325,8 @@ class RGWPSCreateTopicOp : public RGWOp {
       }
     } else {
       // if no topic policy exists, just check identity policies for denies
-      constexpr bool mandatory_policy = false;
+      // account users require an Allow, non-account users just check for Deny
+      const bool mandatory_policy{s->auth.identity->get_account()};
       if (!verify_user_permission(this, s, topic_arn,
                                   rgw::IAM::snsCreateTopic,
                                   mandatory_policy)) {
