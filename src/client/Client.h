@@ -97,6 +97,7 @@ class MDSCommandOp : public CommandOp
   mds_gid_t     mds_gid;
 
   explicit MDSCommandOp(ceph_tid_t t) : CommandOp(t) {}
+  explicit MDSCommandOp(ceph_tid_t t, ceph_tid_t multi_id) : CommandOp(t, multi_id) {}
 };
 
 /* error code for ceph_fuse */

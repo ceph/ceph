@@ -10,6 +10,7 @@ import random
 import time
 import stat
 import uuid
+import json
 from datetime import datetime
 
 cephfs = None
@@ -907,3 +908,35 @@ def test_snapdiff(testdir):
 
     # remove directory
     purge_dir(b"/snapdiff_test");
+
+def test_single_target_command():
+    command = {'prefix': u'session ls', 'format': 'json'}
+    mds_spec  = "a"
+    inbuf = b''
+    ret, outbl, outs = cephfs.mds_command(mds_spec, json.dumps(command), inbuf)
+    if outbl:
+        session_map = json.loads(outbl)
+    # Standby MDSs will return -38
+    assert(ret == 0 or ret == -38)
+
+def test_multi_target_command():
+    mds_get_command = {'prefix': 'status', 'format': 'json'}
+    inbuf = b''
+    ret, outbl, outs = cephfs.mds_command('*', json.dumps(mds_get_command), inbuf)
+    print(outbl)
+    mds_status = json.loads(outbl)
+    print(mds_status)
+
+    command = {'prefix': u'session ls', 'format': 'json'}
+    mds_spec  = "*"
+    inbuf = b''
+
+    ret, outbl, outs = cephfs.mds_command(mds_spec, json.dumps(command), inbuf)
+    # Standby MDSs will return -38
+    assert(ret == 0 or ret == -38)
+    print(outbl)
+    session_map = json.loads(outbl)
+
+    if isinstance(mds_status, list): # if multi target command result
+        for mds_sessions in session_map:
+            assert(list(mds_sessions.keys())[0].startswith('mds.'))

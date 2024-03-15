@@ -6358,6 +6358,12 @@ int Client::mds_command(
     populate_metadata("");
   }
 
+  ceph_tid_t multi_target_id = 0;
+  if (non_laggy.size() > 1) {
+      std::scoped_lock cmd_lock(command_lock);
+      multi_target_id = command_table.get_new_multi_target_id();
+  }
+
   // Send commands to targets
   C_GatherBuilder gather(cct, onfinish);
   for (const auto& target_gid : non_laggy) {
@@ -6370,7 +6376,7 @@ int Client::mds_command(
     {
       std::scoped_lock cmd_lock(command_lock);
       // Generate MDSCommandOp state
-      auto &op = command_table.start_command();
+      auto &op = command_table.start_command(multi_target_id);
 
       op.on_finish = gather.new_sub();
       op.cmd = cmd;
@@ -6381,7 +6387,7 @@ int Client::mds_command(
       op.con = conn;
 
       ldout(cct, 4) << __func__ << ": new command op to " << target_gid
-        << " tid=" << op.tid << cmd << dendl;
+        << " tid=" << op.tid << " multi_id=" << op.multi_target_id << " "<< cmd << dendl;
 
       // Construct and send MCommand
       MessageRef m = op.get_message(monclient->get_fsid());
@@ -6407,8 +6413,33 @@ void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
   }
 
   auto &op = command_table.get_command(tid);
+  ceph_tid_t multi_id = op.multi_target_id;
+
   if (op.outbl) {
-    *op.outbl = m->get_data();
+    if (multi_id != 0 && m->r == 0) {
+      string prefix;
+      string mds_name = fmt::format("mds.{}", fsmap->get_info_gid(op.mds_gid).name);
+
+      if (op.outbl->length() == 0) { // very first command result
+        prefix = fmt::format("[{{\"{}\":", mds_name);
+      }
+      else {
+        prefix = fmt::format(",{{\"{}\":", mds_name);
+      }
+      op.outbl->append(prefix);
+      op.outbl->append(m->get_data());
+      op.outbl->append("}");
+    }
+
+    if (multi_id == 0) {
+      *op.outbl = m->get_data();
+    }
+    else {
+      // when this command is the last one
+      if (command_table.count_multi_commands(multi_id) == 1) {
+        op.outbl->append("]");
+      }
+    }
   }
   if (op.outs) {
     *op.outs = m->rs;
