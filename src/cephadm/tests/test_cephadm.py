@@ -300,6 +300,7 @@ class TestCephAdm(object):
     @mock.patch('cephadm.migrate_sysctl_dir')
     @mock.patch('cephadm.check_unit', lambda *args, **kwargs: (None, 'running', None))
     @mock.patch('cephadm.get_unit_name', lambda *args, **kwargs: 'mon-unit-name')
+    @mock.patch('cephadm.extract_uid_gid', lambda *args, **kwargs: (167, 167))
     @mock.patch('cephadm.get_deployment_container')
     def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _get_parm, _deploy_daemon, _file_lock, _logger):
         """
