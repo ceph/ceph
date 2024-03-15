@@ -222,13 +222,17 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
     this.cd.detectChanges();
   }
 
+  convertNumberToString(input: number, length = 2, format = '0'): string {
+    return padStart(input.toString(), length, format);
+  }
+
   parseDatetime(date: NgbDateStruct, time?: NgbTimeStruct): string {
     if (!date || !time) return null;
-    return `${date.year}-${padStart(date.month.toString(), 2, '0')}-${padStart(
-      date.day.toString(),
-      2,
-      '0'
-    )}T${time.hour || '00'}:${time.minute || '00'}:${time.second || '00'}`;
+    return `${date.year}-${this.convertNumberToString(date.month)}-${this.convertNumberToString(
+      date.day
+    )}T${this.convertNumberToString(time.hour)}:${this.convertNumberToString(
+      time.minute
+    )}:${this.convertNumberToString(time.second)}`;
   }
   parseSchedule(interval: number, frequency: string): string {
     return `${interval}${frequency}`;
