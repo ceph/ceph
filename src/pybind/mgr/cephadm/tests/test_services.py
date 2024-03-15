@@ -2451,6 +2451,7 @@ class TestIngressService:
             '        Delegations = false;\n'
             "        RecoveryBackend = 'rados_cluster';\n"
             '        Minor_Versions = 1, 2;\n'
+            '        IdmapConf = "/etc/ganesha/idmap.conf";\n'
             '}\n'
             '\n'
             'RADOS_KV {\n'
@@ -2474,7 +2475,7 @@ class TestIngressService:
             "%url    rados://.nfs/foo/conf-nfs.foo"
         )
         nfs_expected_conf = {
-            'files': {'ganesha.conf': nfs_ganesha_txt},
+            'files': {'ganesha.conf': nfs_ganesha_txt, 'idmap.conf': ''},
             'config': '',
             'extra_args': ['-N', 'NIV_EVENT'],
             'keyring': (

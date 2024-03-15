@@ -953,6 +953,7 @@ class NFSServiceSpec(ServiceSpec):
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  enable_haproxy_protocol: bool = False,
+                 idmap_conf: Optional[Dict[str, Dict[str, str]]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'nfs'
@@ -965,6 +966,7 @@ class NFSServiceSpec(ServiceSpec):
         self.port = port
         self.virtual_ip = virtual_ip
         self.enable_haproxy_protocol = enable_haproxy_protocol
+        self.idmap_conf = idmap_conf
 
     def get_port_start(self) -> List[int]:
         if self.port:
