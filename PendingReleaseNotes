@@ -1,5 +1,8 @@
 >=19.0.0
 
+* RGW: GetObject and HeadObject requests now return a x-rgw-replicated-at
+  header for replicated objects. This timestamp can be compared against the
+  Last-Modified header to determine how long the object took to replicate.
 * The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
   python dependencies are now available in EPEL9.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
