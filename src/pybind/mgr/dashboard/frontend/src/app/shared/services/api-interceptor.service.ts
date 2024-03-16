@@ -20,6 +20,7 @@ import { NotificationService } from './notification.service';
 import { MultiClusterService } from '../api/multi-cluster.service';
 import { SummaryService } from './summary.service';
 import { AuthStorageService } from './auth-storage.service';
+import { CookiesService } from './cookie.service';
 
 export class CdHttpErrorResponse extends HttpErrorResponse {
   preventDefault: Function;
@@ -37,7 +38,8 @@ export class ApiInterceptorService implements HttpInterceptor {
     public notificationService: NotificationService,
     private summaryService: SummaryService,
     private authStorageService: AuthStorageService,
-    private multiClusterService: MultiClusterService
+    private multiClusterService: MultiClusterService,
+    private cookieService: CookiesService
   ) {
     this.multiClusterService.subscribe((resp: any) => {
       const clustersConfig = resp['config'];
@@ -91,14 +93,13 @@ export class ApiInterceptorService implements HttpInterceptor {
       'api/multi-cluster/auth'
     ];
 
-    const token = localStorage.getItem('token_of_selected_cluster');
-
     if (
       !currentRoute.includes('login') &&
       !ALWAYS_TO_HUB_APIs.includes(request.url) &&
       apiUrl &&
       !apiUrl.includes(origin)
     ) {
+      const token = this.cookieService.getToken(localStorage.getItem('current_cluster_name'));
       reqWithVersion = reqWithVersion.clone({
         url: `${apiUrl}${reqWithVersion.url}`,
         setHeaders: {

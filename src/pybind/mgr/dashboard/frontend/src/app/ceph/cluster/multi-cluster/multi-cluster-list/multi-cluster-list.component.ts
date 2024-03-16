@@ -18,6 +18,7 @@ import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MultiCluster } from '~/app/shared/models/multi-cluster';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { Router } from '@angular/router';
+import { CookiesService } from '~/app/shared/services/cookie.service';
 
 @Component({
   selector: 'cd-multi-cluster-list',
@@ -48,7 +49,8 @@ export class MultiClusterListComponent {
     public actionLabels: ActionLabelsI18n,
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
-    private modalService: ModalService
+    private modalService: ModalService,
+    private cookieService: CookiesService
   ) {
     this.tableActions = [
       {
@@ -189,6 +191,7 @@ export class MultiClusterListComponent {
       itemNames: [cluster['cluster_alias'] + ' - ' + cluster['user']],
       submitAction: () =>
         this.multiClusterService.deleteCluster(cluster['name'], cluster['user']).subscribe(() => {
+          this.cookieService.deleteToken(`${cluster['name']}-${cluster['user']}`);
           this.modalRef.close();
           this.notificationService.show(
             NotificationType.success,
