@@ -8,17 +8,15 @@ import random
 import time
 
 from gevent import sleep
-from gevent.greenlet import Greenlet
-from gevent.event import Event
 from teuthology import misc as teuthology
 
 from tasks import ceph_manager
 from tasks.cephfs.filesystem import MDSCluster, Filesystem, FSMissing
-from tasks.thrasher import Thrasher
+from tasks.thrasher import ThrasherGreenlet
 
 log = logging.getLogger(__name__)
 
-class MDSThrasher(Thrasher, Greenlet):
+class MDSThrasher(ThrasherGreenlet):
     """
     MDSThrasher::
 
@@ -107,7 +105,6 @@ class MDSThrasher(Thrasher, Greenlet):
         self.manager = manager
         self.max_mds = max_mds
         self.name = 'thrasher.fs.[{f}]'.format(f = fs.name)
-        self.stopping = Event()
 
         self.randomize = bool(self.config.get('randomize', True))
         self.thrash_max_mds = float(self.config.get('thrash_max_mds', 0.05))
@@ -145,9 +142,6 @@ class MDSThrasher(Thrasher, Greenlet):
     def log(self, x):
         """Write data to the logger assigned to MDSThrasher"""
         self.logger.info(x)
-
-    def stop(self):
-        self.stopping.set()
 
     def kill_mds(self, mds):
         if self.config.get('powercycle'):
@@ -233,16 +227,14 @@ class MDSThrasher(Thrasher, Greenlet):
             "kill": 0,
         }
 
-        while not self.stopping.is_set():
+        while not self.is_stopped:
             delay = self.max_thrash_delay
             if self.randomize:
                 delay = random.randrange(0.0, self.max_thrash_delay)
 
             if delay > 0.0:
                 self.log('waiting for {delay} secs before thrashing'.format(delay=delay))
-                self.stopping.wait(delay)
-                if self.stopping.is_set():
-                    continue
+                self.sleep_unless_stopped(delay)
 
             status = self.fs.status()
 
@@ -319,7 +311,7 @@ class MDSThrasher(Thrasher, Greenlet):
 
                 self.log('waiting for {delay} secs before reviving {label}'.format(
                     delay=delay, label=label))
-                sleep(delay)
+                self.sleep_unless_stopped(delay)
 
                 self.log('reviving {label}'.format(label=label))
                 self.revive_mds(name)
@@ -334,7 +326,7 @@ class MDSThrasher(Thrasher, Greenlet):
                         break
                     self.log(
                         'waiting till mds map indicates {label} is in active, standby or standby-replay'.format(label=label))
-                    sleep(2)
+                    self.sleep_unless_stopped(2)
 
         for stat in stats:
             self.log("stat['{key}'] = {value}".format(key = stat, value = stats[stat]))
