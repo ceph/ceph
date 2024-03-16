@@ -87,6 +87,8 @@ class EntryEncoderBase {
     m_msg_vec[0].iov_len = static_segment.size();
   }
 
+  EntryEncoderBase(const EntryEncoderBase&) = delete; // we have self-referencing pointers
+
   constexpr struct iovec *iovec() { return this->m_msg_vec; }
   constexpr std::size_t iovec_len()
   {
