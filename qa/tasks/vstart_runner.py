@@ -168,11 +168,11 @@ if os.path.exists("./CMakeCache.txt") and os.path.exists("./bin"):
 
 try:
     from tasks.ceph_manager import CephManager
-    from tasks.cephfs.fuse_mount import FuseMount
-    from tasks.cephfs.kernel_mount import KernelMount
-    from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
-    from tasks.cephfs.mount import CephFSMount
-    from tasks.mgr.mgr_test_case import MgrCluster
+    import tasks.cephfs.fuse_mount
+    import tasks.cephfs.kernel_mount
+    import tasks.cephfs.filesystem
+    import tasks.cephfs.mount
+    import tasks.mgr.mgr_test_case
     from teuthology.task import interactive
 except ImportError:
     sys.stderr.write("***\nError importing packages, have you activated your teuthology virtualenv "
@@ -678,15 +678,16 @@ class LocalCephFSMount():
         return self.addr in output
 
 
-class LocalKernelMount(LocalCephFSMount, KernelMount):
-    def __init__(self, ctx, test_dir, client_id=None,
-                 client_keyring_path=None, client_remote=None,
-                 hostfs_mntpt=None, cephfs_name=None, cephfs_mntpt=None,
-                 brxnet=None):
+class LocalKernelMount(LocalCephFSMount, tasks.cephfs.kernel_mount.KernelMountBase):
+    def __init__(self, ctx, test_dir, client_id, client_remote=LocalRemote(),
+                 client_keyring_path=None, hostfs_mntpt=None,
+                 cephfs_name=None, cephfs_mntpt=None, brxnet=None,
+                 client_config={}):
         super(LocalKernelMount, self).__init__(ctx=ctx, test_dir=test_dir,
-            client_id=client_id, client_keyring_path=client_keyring_path,
-            client_remote=LocalRemote(), hostfs_mntpt=hostfs_mntpt,
-            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
+            client_id=client_id, client_remote=client_remote,
+            client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
+            cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet,
+            client_config=client_config)
 
         # Make vstart_runner compatible with teuth and qa/tasks/cephfs.
         self._mount_bin = [os.path.join(BIN_PREFIX , 'mount.ceph')]
@@ -706,14 +707,16 @@ class LocalKernelMount(LocalCephFSMount, KernelMount):
                 self.inst = c['inst']
                 return self.inst
 
+tasks.cephfs.kernel_mount.KernelMount = LocalKernelMount
 
-class LocalFuseMount(LocalCephFSMount, FuseMount):
-    def __init__(self, ctx, test_dir, client_id, client_keyring_path=None,
-                 client_remote=None, hostfs_mntpt=None, cephfs_name=None,
-                 cephfs_mntpt=None, brxnet=None):
+class LocalFuseMount(LocalCephFSMount, tasks.cephfs.fuse_mount.FuseMountBase):
+    def __init__(self, ctx, test_dir, client_id, client_remote=LocalRemote(),
+                client_keyring_path=None, cephfs_name=None,
+                cephfs_mntpt=None, hostfs_mntpt=None, brxnet=None,
+                client_config={}):
         super(LocalFuseMount, self).__init__(ctx=ctx, test_dir=test_dir,
-            client_id=client_id, client_keyring_path=client_keyring_path,
-            client_remote=LocalRemote(), hostfs_mntpt=hostfs_mntpt,
+            client_id=client_id, client_remote=client_remote,
+            client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet)
 
         # Following block makes tests meant for teuthology compatible with
@@ -775,6 +778,8 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
             else:
                 pass
 
+tasks.cephfs.fuse_mount.FuseMount = LocalFuseMount
+
 # XXX: this class has nothing to do with the Ceph daemon (ceph-mgr) of
 # the same name.
 class LocalCephManager(CephManager):
@@ -826,7 +831,7 @@ class LocalCephManager(CephManager):
                                    timeout=timeout, stdout=stdout)
 
 
-class LocalCephCluster(CephCluster):
+class LocalCephCluster(tasks.cephfs.filesystem.CephClusterBase):
     def __init__(self, ctx):
         # Deliberately skip calling CephCluster constructor
         self._ctx = ctx
@@ -896,8 +901,9 @@ class LocalCephCluster(CephCluster):
         del self._conf[subsys][key]
         self._write_conf()
 
+tasks.cephfs.filesystem.CephCluster = LocalCephCluster
 
-class LocalMDSCluster(LocalCephCluster, MDSCluster):
+class LocalMDSCluster(LocalCephCluster, tasks.cephfs.filesystem.MDSClusterBase):
     def __init__(self, ctx):
         LocalCephCluster.__init__(self, ctx)
         # Deliberately skip calling MDSCluster constructor
@@ -927,16 +933,18 @@ class LocalMDSCluster(LocalCephCluster, MDSCluster):
         for fs in self.status().get_filesystems():
             LocalFilesystem(ctx=self._ctx, fscid=fs['id']).destroy()
 
+tasks.cephfs.filesystem.MDSCluster = LocalMDSCluster
 
-class LocalMgrCluster(LocalCephCluster, MgrCluster):
+class LocalMgrCluster(LocalCephCluster, tasks.mgr.mgr_test_case.MgrClusterBase):
     def __init__(self, ctx):
         super(LocalMgrCluster, self).__init__(ctx)
 
         self.mgr_ids = ctx.daemons.daemons['ceph.mgr'].keys()
         self.mgr_daemons = dict([(id_, LocalDaemon("mgr", id_)) for id_ in self.mgr_ids])
 
+tasks.mgr.mgr_test_case.MgrCluster = LocalMgrCluster
 
-class LocalFilesystem(LocalMDSCluster, Filesystem):
+class LocalFilesystem(LocalMDSCluster, tasks.cephfs.filesystem.FilesystemBase):
     def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False,
                  **kwargs):
         # Deliberately skip calling Filesystem constructor
@@ -985,15 +993,16 @@ class LocalFilesystem(LocalMDSCluster, Filesystem):
     def set_clients_block(self, blocked, mds_id=None):
         raise NotImplementedError()
 
+tasks.cephfs.filesystem.Filesystem = LocalFilesystem
 
 class LocalCluster(object):
-    def __init__(self, rolename="placeholder"):
+    def __init__(self, rolenames=["mon.","mds.","osd.","mgr."]):
         self.remotes = {
-            LocalRemote(): [rolename]
+            LocalRemote(): rolenames
         }
 
     def only(self, requested):
-        return self.__class__(rolename=requested)
+        return self.__class__(rolenames=[requested])
 
     def run(self, *args, **kwargs):
         r = []
@@ -1006,15 +1015,20 @@ class LocalContext(object):
     def __init__(self):
         FSID = remote.run(args=[os.path.join(BIN_PREFIX, 'ceph'), 'fsid'],
                           stdout=StringIO()).stdout.getvalue()
+        from teuthology.run import get_summary
 
         cluster_name = 'ceph'
         self.archive = "./"
         self.config = {'cluster': cluster_name}
-        self.ceph = {cluster_name: Namespace()}
-        self.ceph[cluster_name].fsid = FSID
+        cluster_namespace = Namespace()
+        cluster_namespace.fsid = FSID
+        cluster_namespace.thrashers = []
+        self.ceph = {cluster_name: cluster_namespace}
         self.teuthology_config = teuth_config
         self.cluster = LocalCluster()
         self.daemons = DaemonGroup()
+
+        self.summary = get_summary("vstart_runner", None)
         if not hasattr(self, 'managers'):
             self.managers = {}
         self.managers[self.config['cluster']] = LocalCephManager(ctx=self)
@@ -1278,6 +1292,12 @@ def launch_entire_suite(overall_suite):
     return testrunner.run(overall_suite)
 
 
+import enum
+
+class Mode(enum.Enum):
+    unittest = enum.auto()
+    config = enum.auto()
+
 def exec_test():
     # Parse arguments
     global opt_interactive_on_error
@@ -1297,12 +1317,19 @@ def exec_test():
     opt_rotate_logs = False
     global opt_exit_on_test_failure
     opt_exit_on_test_failure = True
+    mode = Mode.unittest
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
     modules = [a for a in args if not a.startswith("-")]
     for f in flags:
-        if f == "--interactive":
+        if f == '-':
+            # using `-` here as a module name for the --config-mode
+            # In config mode modules are config paths,
+            # and `-` means reading the config from stdin
+            # This won't mean much for the unit test mode, but it will fail quickly.
+            modules.append("-")
+        elif f == "--interactive":
             opt_interactive_on_error = True
         elif f == "--create":
             opt_create_cluster = True
@@ -1340,9 +1367,15 @@ def exec_test():
             opt_exit_on_test_failure = False
         elif f == '--debug':
             log.setLevel(logging.DEBUG)
+        elif f == '--config-mode':
+            mode = Mode.config
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
+
+    if mode == Mode.config and (opt_create_cluster or opt_create_cluster_only):
+        log.error("Incompatible options: --config-mode and --create*")
+        sys.exit(-1)
 
     # Help developers by stopping up-front if their tree isn't built enough for all the
     # tools that the tests might want to use (add more here if needed)
@@ -1356,23 +1389,25 @@ def exec_test():
         sys.exit(-1)
 
     max_required_mds, max_required_clients, \
-            max_required_mgr, require_memstore = scan_tests(modules)
+            max_required_mgr, require_memstore = scan_tests(modules) if mode == Mode.unittest else (1, 1, False, False)
+    # in the config mode we rely on a manually setup vstart cluster
 
     global remote
     remote = LocalRemote()
 
-    CephFSMount.cleanup_stale_netnses_and_bridge(remote)
+    tasks.cephfs.mount.CephFSMountBase.cleanup_stale_netnses_and_bridge(remote)
 
-    # Tolerate no MDSs or clients running at start
-    ps_txt = remote.run(args=["ps", "-u"+str(os.getuid())],
-                        stdout=StringIO()).stdout.getvalue().strip()
-    lines = ps_txt.split("\n")[1:]
-    for line in lines:
-        if 'ceph-fuse' in line or 'ceph-mds' in line:
-            pid = int(line.split()[0])
-            log.warning("Killing stray process {0}".format(line))
-            remote.run(args=f'sudo kill -{signal.SIGKILL.value} {pid}',
-                       omit_sudo=False)
+    if mode == Mode.unittest:
+        # Tolerate no MDSs or clients running at start
+        ps_txt = remote.run(args=["ps", "-u"+str(os.getuid())],
+                            stdout=StringIO()).stdout.getvalue().strip()
+        lines = ps_txt.split("\n")[1:]
+        for line in lines:
+            if 'ceph-fuse' in line or 'ceph-mds' in line:
+                pid = int(line.split()[0])
+                log.warning("Killing stray process {0}".format(line))
+                remote.run(args=f'sudo kill -{signal.SIGKILL.value} {pid}',
+                        omit_sudo=False)
 
     # Fire up the Ceph cluster if the user requested it
     if opt_create_cluster or opt_create_cluster_only:
@@ -1492,6 +1527,10 @@ def exec_test():
     import teuthology.packaging
     teuthology.packaging.get_package_version = _get_package_version
 
+    if mode == Mode.config:
+        run_configs(modules)
+        return
+
     overall_suite = load_tests(modules, decorating_loader)
 
     # Filter out tests that don't lend themselves to interactive running,
@@ -1527,7 +1566,7 @@ def exec_test():
     overall_suite = load_tests(modules, loader.TestLoader())
     result = launch_tests(overall_suite)
 
-    CephFSMount.cleanup_stale_netnses_and_bridge(remote)
+    tasks.cephfs.mount.CephFSMountBase.cleanup_stale_netnses_and_bridge(remote)
     if opt_teardown_cluster:
         teardown_cluster()
 
@@ -1547,6 +1586,14 @@ def exec_test():
     else:
         sys.exit(0)
 
+def run_configs(configs):
+    from teuthology.run import setup_config, run_tasks
+
+    config = setup_config(configs)
+    ctx = LocalContext()
+    tasks = config['tasks']
+    run_tasks(tasks, ctx)
+    sys.exit(0 if ctx.summary['success'] else 1)
 
 if __name__ == "__main__":
     exec_test()
