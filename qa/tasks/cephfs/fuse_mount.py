@@ -10,17 +10,17 @@ from teuthology.contextutil import safe_while
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
 from tasks.ceph_manager import get_valgrind_args
-from tasks.cephfs.mount import CephFSMount, UMOUNT_TIMEOUT
+from tasks.cephfs.mount import CephFSMountBase, UMOUNT_TIMEOUT
 
 log = logging.getLogger(__name__)
 
 # Refer mount.py for docstrings.
-class FuseMount(CephFSMount):
+class FuseMountBase(CephFSMountBase):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, cephfs_name=None,
                  cephfs_mntpt=None, hostfs_mntpt=None, brxnet=None,
                  client_config={}):
-        super(FuseMount, self).__init__(ctx=ctx, test_dir=test_dir,
+        super(FuseMountBase, self).__init__(ctx=ctx, test_dir=test_dir,
             client_id=client_id, client_remote=client_remote,
             client_keyring_path=client_keyring_path, hostfs_mntpt=hostfs_mntpt,
             cephfs_name=cephfs_name, cephfs_mntpt=cephfs_mntpt, brxnet=brxnet,
@@ -416,7 +416,7 @@ class FuseMount(CephFSMount):
         """
         Whatever the state of the mount, get it gone.
         """
-        super(FuseMount, self).teardown()
+        super(FuseMountBase, self).teardown()
 
         if self.fuse_daemon and not self.fuse_daemon.finished:
             self.fuse_daemon.stdin.close()
@@ -532,3 +532,5 @@ print(_find_admin_socket("{client_name}"))
 
     def get_op_read_count(self):
         return self.admin_socket(['perf', 'dump', 'objecter'])['objecter']['osdop_read']
+
+FuseMount = FuseMountBase

@@ -226,7 +226,7 @@ class FSStatus(RunCephCmd):
         #all matching
         return False
 
-class CephCluster(RunCephCmd):
+class CephClusterBase(RunCephCmd):
     @property
     def admin_remote(self):
         first_mon = misc.get_first_mon(self._ctx, None)
@@ -296,8 +296,9 @@ class CephCluster(RunCephCmd):
         log.warn(f'The address {addr} is not blocklisted')
         return False
 
+CephCluster = CephClusterBase
 
-class MDSCluster(CephCluster):
+class MDSClusterBase(CephClusterBase):
     """
     Collective operations on all the MDS daemons in the Ceph cluster.  These
     daemons may be in use by various Filesystems.
@@ -308,7 +309,7 @@ class MDSCluster(CephCluster):
     """
 
     def __init__(self, ctx):
-        super(MDSCluster, self).__init__(ctx)
+        super(MDSClusterBase, self).__init__(ctx)
 
     @property
     def mds_ids(self):
@@ -349,7 +350,7 @@ class MDSCluster(CephCluster):
         get_config specialization of service_type="mds"
         """
         if service_type != "mds":
-            return super(MDSCluster, self).get_config(key, service_type)
+            return super(MDSClusterBase, self).get_config(key, service_type)
 
         # Some tests stop MDS daemons, don't send commands to a dead one:
         running_daemons = [i for i, mds in self.mds_daemons.items() if mds.running()]
@@ -515,8 +516,9 @@ class MDSCluster(CephCluster):
         grace = float(self.get_config("mds_beacon_grace", service_type="mon"))
         return grace*2+15
 
+MDSCluster = MDSClusterBase
 
-class Filesystem(MDSCluster):
+class FilesystemBase(MDSClusterBase):
 
     """
     Generator for all Filesystems in the cluster.
@@ -538,7 +540,7 @@ class Filesystem(MDSCluster):
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
         yes_i_really_really_mean_it: bool and fs_ops: list[str]
         """
-        super(Filesystem, self).__init__(ctx)
+        super(FilesystemBase, self).__init__(ctx)
 
         self.name = name
         self.id = None
@@ -1852,3 +1854,5 @@ class Filesystem(MDSCluster):
 
     def kill_op(self, reqid, rank=None):
         return self.rank_tell(['op', 'kill', reqid], rank=rank)
+
+Filesystem = FilesystemBase
