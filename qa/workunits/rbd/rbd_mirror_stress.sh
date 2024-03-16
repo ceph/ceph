@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/usr/bin/env bash
 #
 # rbd_mirror_stress.sh - stress test rbd-mirror daemon
 #
@@ -7,6 +7,8 @@
 #  RBD_MIRROR_REDUCE_WRITES - if not empty, don't run the stress bench write
 #                             tool during the many image test
 #
+
+set -ex
 
 IMAGE_COUNT=50
 export LOCKDEP=0

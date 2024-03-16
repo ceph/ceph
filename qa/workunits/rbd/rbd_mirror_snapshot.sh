@@ -1,4 +1,4 @@
-#!/bin/sh -ex
+#!/usr/bin/env bash
 #
 # rbd_mirror_snapshot.sh - test rbd-mirror daemon in snapshot-based mirroring mode
 #
@@ -6,6 +6,8 @@
 # creates a temporary directory, used for cluster configs, daemon logs, admin
 # socket, temporary files, and launches rbd-mirror daemon.
 #
+
+set -ex
 
 MIRROR_POOL_MODE=image
 MIRROR_IMAGE_MODE=snapshot
