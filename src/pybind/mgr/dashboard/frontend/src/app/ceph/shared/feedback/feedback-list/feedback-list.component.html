@@ -1,0 +1,16 @@
+<cd-table [data]="(issues$ | async)?.message?.issues"
+          [columns]="columns"
+          selectionType="single"
+          columnMode="flex">
+</cd-table>
+
+<ng-template #subjectTpl
+             let-row="row">
+  <span *ngIf="row['subject']">
+    <a [href]="'https://tracker.ceph.com/issues/' + row['id']"
+       target="_blank">
+      {{ row['subject'] }}
+      <i [ngClass]="[icons.externalUrl]"></i>
+    </a>
+  </span>
+</ng-template>

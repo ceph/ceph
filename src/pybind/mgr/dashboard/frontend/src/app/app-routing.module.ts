@@ -50,6 +50,7 @@ import { CephfsVolumeFormComponent } from './ceph/cephfs/cephfs-form/cephfs-form
 import { UpgradeProgressComponent } from './ceph/cluster/upgrade/upgrade-progress/upgrade-progress.component';
 import { MultiClusterComponent } from './ceph/cluster/multi-cluster/multi-cluster.component';
 import { MultiClusterListComponent } from './ceph/cluster/multi-cluster/multi-cluster-list/multi-cluster-list.component';
+import { FeedbackListComponent } from './ceph/shared/feedback/feedback-list/feedback-list.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -351,6 +352,16 @@ const routes: Routes = [
             data: {
               breadcrumbs: StartCaseBreadcrumbsResolver
             }
+          }
+        ]
+      },
+      {
+        path: 'feedback',
+        data: { breadcrumbs: 'Administrator/Feedback' },
+        children: [
+          {
+            path: '',
+            component: FeedbackListComponent
           }
         ]
       },

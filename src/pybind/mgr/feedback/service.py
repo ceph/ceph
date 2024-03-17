@@ -12,15 +12,16 @@ class config:
 
 class CephTrackerClient():
 
-    def list_issues(self):
+    def list_issues(self, key: str):
         '''
         Fetch an issue from the Ceph Issue tracker
         '''
         headers = {
             'Content-Type': 'application/json',
+            'X-Redmine-API-Key': key,
         }
         response = requests.get(
-            f'https://{config.url}/issues.json', headers=headers)
+            f'https://{config.url}/issues.json?assigned_to_id=me&limit=200', headers=headers)
         if not response.ok:
             if response.status_code == 404:
                 raise FileNotFoundError

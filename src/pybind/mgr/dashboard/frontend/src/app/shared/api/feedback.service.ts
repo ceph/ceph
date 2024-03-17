@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
+import { CdHelperClass } from '../classes/cd-helper.class';
 
 @Injectable({
   providedIn: 'root'
@@ -34,5 +35,11 @@ export class FeedbackService {
         headers: { Accept: 'application/vnd.ceph.api.v0.1+json' }
       }
     );
+  }
+
+  list() {
+    return this.http.get('api/feedback', {
+      headers: { Accept: CdHelperClass.cdVersionHeader('0', '1') }
+    });
   }
 }

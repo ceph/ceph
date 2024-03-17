@@ -44,4 +44,10 @@ describe('FeedbackService', () => {
       tracker: 'bug'
     });
   });
+
+  it('should call list to get feedback list', () => {
+    service.list().subscribe();
+    const req = httpTesting.expectOne('api/feedback');
+    expect(req.request.method).toBe('GET');
+  });
 });

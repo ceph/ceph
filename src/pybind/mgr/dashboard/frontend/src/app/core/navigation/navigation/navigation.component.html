@@ -372,6 +372,8 @@
           </li>
         </ul>
       </li>
+
+      <!-- Administration -->
       <li routerLinkActive="active"
           class="nav-item tc_menuitem_admin"
           *ngIf="permissions.configOpt.read ||
@@ -418,6 +420,12 @@
               *ngIf="permissions.configOpt.read">
             <a i18n
                routerLink="/configuration">Configuration</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_admin_feedback"
+              *ngIf="permissions.configOpt.read">
+            <a i18n
+               routerLink="/feedback">Feedback</a>
           </li>
         </ul>
       </li>
