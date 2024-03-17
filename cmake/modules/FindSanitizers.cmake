@@ -14,8 +14,8 @@ foreach(component ${Sanitizers_FIND_COMPONENTS})
   elseif(component STREQUAL "leak")
     set(Sanitizers_leak_COMPILE_OPTIONS "-fsanitize=leak")
   elseif(component STREQUAL "thread")
-    if ("address" IN_LIST ${Sanitizers_FIND_COMPONENTS} OR
-        "leak" IN_LIST ${Sanitizers_FIND_COMPONENTS})
+    if ("address" IN_LIST "${Sanitizers_FIND_COMPONENTS}" OR
+        "leak" IN_LIST "${Sanitizers_FIND_COMPONENTS}")
       message(SEND_ERROR "Cannot combine -fsanitize-leak w/ -fsanitize-thread")
     elseif(NOT CMAKE_POSITION_INDEPENDENT_CODE)
       message(SEND_ERROR "TSan requires all code to be position independent")
