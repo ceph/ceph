@@ -98,6 +98,7 @@ EOM
     local cxx_compiler="${discovered_cxx_compiler}"
     local c_compiler="${discovered_c_compiler}"
     local cmake_opts
+    cmake_opts+=" -DWITH_ASAN=ON"
     cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
     cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
     cmake_opts+=" -DENABLE_GIT_VERSION=OFF"
