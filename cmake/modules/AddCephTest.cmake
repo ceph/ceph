@@ -19,6 +19,12 @@ function(add_ceph_test test_name test_path)
     PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
     PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.3:${CMAKE_SOURCE_DIR}/src/pybind
     CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV})
+  if(WITH_UBSAN)
+    set_property(TEST ${test_name}
+      APPEND
+      PROPERTY ENVIRONMENT
+      UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1)
+  endif()
   set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
   # Crimson seastar unittest always run with --smp N to start N threads. By default, crimson seastar unittest
