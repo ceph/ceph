@@ -73,6 +73,8 @@ function(distutils_add_cython_module target name src)
   set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1})
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
+  string(REPLACE " " ";" PY_LDFLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
+  list(APPEND PY_LDFLAGS -L${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
 
   execute_process(COMMAND "${Python3_EXECUTABLE}" -c
     "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
@@ -98,7 +100,7 @@ function(distutils_add_cython_module target name src)
     CXX="${PY_CXX}"
     LDSHARED="${PY_LDSHARED}"
     OPT=\"-DNDEBUG -g -fwrapv -O2 -w\"
-    LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+    LDFLAGS="${PY_LDFLAGS}"
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
     CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     ${Python3_EXECUTABLE} ${setup_py}
@@ -130,7 +132,7 @@ function(distutils_install_cython_module name)
                         -D'void0=dead_function\(void\)' \
                         -D'__Pyx_check_single_interpreter\(ARG\)=ARG\#\#0' \
                         ${CFLAG_DISABLE_VTA}\")
-    set(ENV{LDFLAGS} \"-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\")
+    set(ENV{LDFLAGS} \"${PY_LDFLAGS}\")
     set(ENV{CYTHON_BUILD_DIR} \"${CMAKE_CURRENT_BINARY_DIR}\")
     set(ENV{CEPH_LIBDIR} \"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\")
 
