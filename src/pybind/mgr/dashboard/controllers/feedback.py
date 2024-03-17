@@ -1,5 +1,7 @@
 # # -*- coding: utf-8 -*-
 
+from typing import Any, Dict
+
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -104,17 +106,34 @@ class FeedbackApiController(RESTController):
 
 @UIRouter('/feedback/api_key', Scope.CONFIG_OPT)
 class FeedbackUiController(BaseController):
+    def _get_key(self):
+        try:
+            return mgr.remote('feedback', 'get_api_key')
+        except RuntimeError:
+            raise DashboardException(msg='Feedback module is not enabled',
+                                     http_status_code=404,
+                                     component='feedback')
+
     @Endpoint()
     @ReadPermission
     def exist(self):
         """
         Checks if Ceph tracker API key is stored.
         """
-        try:
-            response = mgr.remote('feedback', 'is_api_key_set')
-        except RuntimeError:
-            raise DashboardException(msg='Feedback module is not enabled',
-                                     http_status_code=404,
-                                     component='feedback')
+        return self._get_key()
 
-        return response
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        """
+        Returns the status of the Ceph tracker API key.
+        """
+        status: Dict[str, Any] = {'available': True, 'message': None}
+        response = self._get_key()
+        if not response:
+            status['available'] = False
+            status['message'] = """Redmine API key is not set.
+                                Please set the Redmine API key to manage issues
+                                through the dashboard."""
+            return status
+        return status

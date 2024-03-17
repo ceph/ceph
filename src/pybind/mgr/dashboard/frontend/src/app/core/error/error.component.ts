@@ -32,6 +32,7 @@ export class ErrorComponent implements OnDestroy, OnInit {
   secondaryButtonName: string;
   secondaryButtonTitle: string;
   component: string;
+  feedbackAPISetCommand: string;
 
   constructor(
     private router: Router,
@@ -41,6 +42,7 @@ export class ErrorComponent implements OnDestroy, OnInit {
   ) {}
 
   ngOnInit() {
+    this.feedbackAPISetCommand = 'ceph feedback set api-key <api_key>';
     this.fetchData();
     this.routerSubscription = this.router.events
       .pipe(filter((event: RouterEvent) => event instanceof NavigationEnd))

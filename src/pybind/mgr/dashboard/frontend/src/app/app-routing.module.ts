@@ -357,7 +357,16 @@ const routes: Routes = [
       },
       {
         path: 'feedback',
-        data: { breadcrumbs: 'Administrator/Feedback' },
+        canActivate: [ModuleStatusGuardService],
+        data: {
+          breadcrumbs: 'Administrator/Feedback',
+          moduleStatusGuardConfig: {
+            uiApiPath: 'feedback/api_key',
+            redirectTo: 'error',
+            section: 'feedback',
+            header: $localize`Feedback module is not configured`
+          }
+        },
         children: [
           {
             path: '',
