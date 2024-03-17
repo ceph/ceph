@@ -9,6 +9,9 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { FeedbackComponent } from '../feedback.component';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 
 @Component({
   selector: 'cd-feedback-form',
@@ -31,7 +34,9 @@ export class FeedbackListComponent implements OnInit {
 
   constructor(
     private feedbackService: FeedbackService,
-    private authStorageService: AuthStorageService
+    private authStorageService: AuthStorageService,
+    private modalService: ModalService,
+    private actionLabels: ActionLabelsI18n
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -75,9 +80,32 @@ export class FeedbackListComponent implements OnInit {
       }
     ];
 
+    this.tableActions = [
+      {
+        name: this.actionLabels.CREATE,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.openModal()
+      }
+    ];
+
     this.issues$ = this.subject.pipe(
       switchMap(() => this.feedbackService.list())
     )
     this.subject.next([]);
+  }
+
+  openModal() {
+    this.modalService.show(
+      FeedbackComponent,
+      null,
+      {
+        size: 'lg'
+      }
+    );
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
   }
 }

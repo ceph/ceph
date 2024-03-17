@@ -1,7 +1,16 @@
 <cd-table [data]="(issues$ | async)?.message?.issues"
           [columns]="columns"
           selectionType="single"
-          columnMode="flex">
+          columnMode="flex"
+          (updateSelection)="updateSelection($event)">
+  <div class="table-actions btn-toolbar">
+    <cd-table-actions [selection]="selection"
+                      [tableActions]="tableActions"
+                      class="btn-group"
+                      id="feedback-actions"
+                      [permission]="permissions.configOpt">
+    </cd-table-actions>
+  </div>
 </cd-table>
 
 <ng-template #subjectTpl

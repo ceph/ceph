@@ -1,6 +1,6 @@
 <cd-modal [modalRef]="activeModal">
   <div class="modal-title"
-       i18n>Report an issue</div>
+       i18n>{{ action }} {{ resource }}</div>
 
   <div class="modal-content">
     <form name="feedbackForm"
@@ -38,7 +38,7 @@
                  for="project"
                  i18n>Project name</label>
           <div class="cd-col-form-input">
-            <select class="form-control"
+            <select class="form-select"
                     id="project"
                     formControlName="project">
               <option ngValue=""
@@ -58,7 +58,7 @@
                  for="tracker"
                  i18n>Tracker</label>
           <div class="cd-col-form-input">
-            <select class="form-control"
+            <select class="form-select"
                     id="tracker"
                     formControlName="tracker">
               <option ngValue=""
@@ -98,7 +98,7 @@
             <textarea id="description"
                       type="text"
                       formControlName="description"
-                      class="form-control"
+                      class="form-control resize-vertical"
                       placeholder="Add issue description">
             </textarea>
             <span class="invalid-feedback"
@@ -111,7 +111,7 @@
       <div class="modal-footer">
         <cd-form-button-panel (submitActionEvent)="onSubmit()"
                               [form]="feedbackForm"
-                              [submitText]="actionLabels.SUBMIT"
+                              [submitText]="action + ' ' + resource"
                               wrappingClass="text-right">
         </cd-form-button-panel>
       </div>
