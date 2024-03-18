@@ -4,7 +4,7 @@
 
 .. index:: Ceph Block Device; image management
 
-The ``rbd`` command enables you to create, list, introspect and remove block
+The ``rbd`` command enables you to create, list, inspect and remove block
 device images. You can also use it to clone images, create snapshots,
 rollback an image to a snapshot, view a snapshot, etc. For details on using
 the ``rbd`` command, see `RBD – Manage RADOS Block Device (RBD) Images`_ for
@@ -139,7 +139,7 @@ Retrieving Image Information
 ============================
 
 To retrieve information from a particular image, run the following command, but
-replace ``{image-name}`` with the name for the image:
+replace ``{image-name}`` with the name of the image:
 
 .. prompt:: bash $
 
@@ -250,13 +250,13 @@ Removing a Deferred Block Device from a Pool
 --------------------------------------------
 
 To remove a deferred block device from a pool, run the following command but
-replace ``{image-}`` with the ID of the image to be removed, and replace
+replace ``{image-id}`` with the ID of the image to be removed, and replace
 ``{pool-name}`` with the name of the pool from which the image is to be
 removed:
 
 .. prompt:: bash $
 
-   rbd trash rm {pool-name}/{image-}
+   rbd trash rm {pool-name}/{image-id}
 
 For example:
 
