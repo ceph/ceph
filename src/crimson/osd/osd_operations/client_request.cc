@@ -99,6 +99,23 @@ bool ClientRequest::is_pg_op() const
     [](auto& op) { return ceph_osd_op_type_pg(op.op.op); });
 }
 
+ClientRequest::interruptible_future<>
+ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
+{
+  LOG_PREFIX(ClientRequest::reply_op_error);
+  DEBUGDPP("{}: replying with error {}", *pg, *this, err);
+  auto reply = crimson::make_message<MOSDOpReply>(
+    m.get(), err, pg->get_osdmap_epoch(),
+    m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
+    !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
+  reply->set_reply_versions(eversion_t(), 0);
+  reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
+  // TODO: gate the crosscore sending
+  return interruptor::make_interruptible(
+    get_foreign_connection().send_with_throttling(std::move(reply))
+  );
+}
+
 ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptible(
   Ref<PG> pgref, const unsigned this_instance_id, instance_handle_t &ihref)
 {
@@ -109,6 +126,15 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 
   DEBUGDPP("{} start", *pgref, *this);
   PG &pg = *pgref;
+  if (!m->get_hobj().get_key().empty()) {
+    // There are no users of locator. It was used to ensure that multipart-upload
+    // parts would end up in the same PG so that they could be clone_range'd into
+    // the same object via librados, but that's not how multipart upload works
+    // anymore and we no longer support clone_range via librados.
+    get_handle().exit();
+    co_await reply_op_error(pgref, -ENOTSUP);
+    co_return;
+  }
   if (pg.can_discard_op(*m)) {
     co_await interruptor::make_interruptible(
       shard_services->send_incremental_map(
@@ -224,23 +250,6 @@ ClientRequest::process_pg_op(
   // TODO: gate the crosscore sending
   co_await interruptor::make_interruptible(
     get_foreign_connection().send_with_throttling(std::move(reply)));
-}
-
-ClientRequest::interruptible_future<>
-ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
-{
-  LOG_PREFIX(ClientRequest::reply_op_error);
-  DEBUGDPP("{}: replying with error {}", *pg, *this, err);
-  auto reply = crimson::make_message<MOSDOpReply>(
-    m.get(), err, pg->get_osdmap_epoch(),
-    m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK),
-    !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
-  reply->set_reply_versions(eversion_t(), 0);
-  reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
-  // TODO: gate the crosscore sending
-  return interruptor::make_interruptible(
-    get_foreign_connection().send_with_throttling(std::move(reply))
-  );
 }
 
 ClientRequest::interruptible_future<>
