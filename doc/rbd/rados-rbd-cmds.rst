@@ -4,7 +4,7 @@
 
 .. index:: Ceph Block Device; image management
 
-The ``rbd`` command enables you to create, list, introspect and remove block
+The ``rbd`` command enables you to create, list, inspect and remove block
 device images. You can also use it to clone images, create snapshots,
 rollback an image to a snapshot, view a snapshot, etc. For details on using
 the ``rbd`` command, see `RBD – Manage RADOS Block Device (RBD) Images`_ for
