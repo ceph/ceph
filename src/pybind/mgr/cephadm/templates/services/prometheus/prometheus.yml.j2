@@ -15,9 +15,10 @@ scrape_configs:
   - job_name: 'ceph'
     honor_labels: true
     static_configs:
-    - targets:
 {% for mgr in mgr_scrape_list %}
-      - '{{ mgr }}'
+    - targets: ['{{ mgr }}']
+      labels:
+        instance: 'ceph_cluster'
 {% endfor %}
 
 {% if nodes %}

@@ -476,8 +476,9 @@ class TestMonitoring:
                   - job_name: 'ceph'
                     honor_labels: true
                     static_configs:
-                    - targets:
-                      - '[::1]:9283'
+                    - targets: ['[::1]:9283']
+                      labels:
+                        instance: 'ceph_cluster'
 
                   - job_name: 'node'
                     static_configs:
