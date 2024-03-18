@@ -16,6 +16,7 @@
 
 #include "include/compat.h"
 #include "common/errno.h"
+#include <cerrno>
 #include "Event.h"
 
 #ifdef HAVE_DPDK
@@ -285,7 +286,10 @@ void EventCenter::delete_file_event(int fd, int mask)
     return ;
 
   int r = driver->del_event(fd, event->mask, mask);
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
+    // if the socket fd is closed by the underlying nic driver, the
+    // corresponding epoll item would be removed from the interest list, that'd
+    // lead to ENOENT when removing the fd from the list.
     // see create_file_event
     ceph_abort_msg("BUG!");
   }
