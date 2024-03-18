@@ -526,7 +526,7 @@ public:
   void queue_scrub_applied_update(PG* pg, Scrub::scrub_prio_t with_priority);
 
   /// Signals that the selected chunk (objects range) is available for scrubbing
-  void queue_scrub_chunk_free(PG* pg, Scrub::scrub_prio_t with_priority);
+  void queue_scrub_chunk_free(PG* pg, Scrub::scrub_prio_t with_priority, uint64_t cost);
 
   /// The chunk selected is blocked by user operations, and cannot be scrubbed now
   void queue_scrub_chunk_busy(PG* pg, Scrub::scrub_prio_t with_priority);
@@ -552,7 +552,8 @@ public:
   void queue_for_rep_scrub(PG* pg,
 			   Scrub::scrub_prio_t with_high_priority,
 			   unsigned int qu_priority,
-			   Scrub::act_token_t act_token);
+			   Scrub::act_token_t act_token,
+			   uint64_t cost);
 
   /// Signals a change in the number of in-flight recovery writes
   void queue_scrub_replica_pushes(PG *pg, Scrub::scrub_prio_t with_priority);
