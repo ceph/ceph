@@ -333,7 +333,7 @@ Commands
   Enable the specified feature on the specified image. Multiple features can
   be specified.
 
-:command:`flatten` [--encryption-format *encryption-format* --encryption-passphrase-file *passphrase-file*]... *image-spec*
+:command:`flatten` *image-spec*
   If the image is a clone, copy all shared blocks from the parent snapshot and
   make the child independent of the parent, severing the link between
   parent snap and child.  The parent snapshot can be unprotected and
