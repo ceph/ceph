@@ -1062,6 +1062,8 @@ public:
     child_pos->link_child(c);
   }
 
+  // For reserved mappings, the return values are
+  // undefined although it won't crash
   virtual bool is_stable() const = 0;
   virtual bool is_clone() const = 0;
   bool is_zero_reserved() const {
