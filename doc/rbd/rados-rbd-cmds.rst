@@ -250,13 +250,13 @@ Removing a Deferred Block Device from a Pool
 --------------------------------------------
 
 To remove a deferred block device from a pool, run the following command but
-replace ``{image-}`` with the ID of the image to be removed, and replace
+replace ``{image-id}`` with the ID of the image to be removed, and replace
 ``{pool-name}`` with the name of the pool from which the image is to be
 removed:
 
 .. prompt:: bash $
 
-   rbd trash rm {pool-name}/{image-}
+   rbd trash rm {pool-name}/{image-id}
 
 For example:
 
