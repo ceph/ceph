@@ -8,8 +8,9 @@ import pytest
 
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection
 from cephadm.serve import CephadmServe
-from cephadm.inventory import HostCacheStatus
+from cephadm.inventory import HostCacheStatus, ClientKeyringSpec
 from cephadm.services.osd import OSD, OSDRemovalQueue, OsdIdClaims
+from cephadm.utils import SpecialHostLabels
 
 try:
     from typing import List
@@ -2040,6 +2041,35 @@ osd_k2 = osd_v2
 
         assert cephadm_module.get_minimal_ceph_conf() == expected_combined_conf
 
+    def test_client_keyrings_special_host_labels(self, cephadm_module):
+        cephadm_module.inventory.add_host(HostSpec('host1', labels=['keyring1']))
+        cephadm_module.inventory.add_host(HostSpec('host2', labels=['keyring1', SpecialHostLabels.DRAIN_DAEMONS]))
+        cephadm_module.inventory.add_host(HostSpec('host3', labels=['keyring1', SpecialHostLabels.DRAIN_DAEMONS, SpecialHostLabels.DRAIN_CONF_KEYRING]))
+        # hosts need to be marked as having had refresh to be available for placement
+        # so "refresh" with empty daemon list
+        cephadm_module.cache.update_host_daemons('host1', {})
+        cephadm_module.cache.update_host_daemons('host2', {})
+        cephadm_module.cache.update_host_daemons('host3', {})
+
+        assert 'host1' in [h.hostname for h in cephadm_module.cache.get_conf_keyring_available_hosts()]
+        assert 'host2' in [h.hostname for h in cephadm_module.cache.get_conf_keyring_available_hosts()]
+        assert 'host3' not in [h.hostname for h in cephadm_module.cache.get_conf_keyring_available_hosts()]
+
+        assert 'host1' not in [h.hostname for h in cephadm_module.cache.get_conf_keyring_draining_hosts()]
+        assert 'host2' not in [h.hostname for h in cephadm_module.cache.get_conf_keyring_draining_hosts()]
+        assert 'host3' in [h.hostname for h in cephadm_module.cache.get_conf_keyring_draining_hosts()]
+
+        cephadm_module.keys.update(ClientKeyringSpec('keyring1', PlacementSpec(label='keyring1')))
+
+        with mock.patch("cephadm.module.CephadmOrchestrator.mon_command") as _mon_cmd:
+            _mon_cmd.return_value = (0, 'real-keyring', '')
+            client_files = CephadmServe(cephadm_module)._calc_client_files()
+            assert 'host1' in client_files.keys()
+            assert '/etc/ceph/ceph.keyring1.keyring' in client_files['host1'].keys()
+            assert 'host2' in client_files.keys()
+            assert '/etc/ceph/ceph.keyring1.keyring' in client_files['host2'].keys()
+            assert 'host3' not in client_files.keys()
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_registry_login(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         def check_registry_credentials(url, username, password):
@@ -2241,12 +2271,12 @@ Traceback (most recent call last):
     def test_host_rm_last_admin(self, cephadm_module: CephadmOrchestrator):
         with pytest.raises(OrchestratorError):
             with with_host(cephadm_module, 'test', refresh_hosts=False, rm_with_force=False):
-                cephadm_module.inventory.add_label('test', '_admin')
+                cephadm_module.inventory.add_label('test', SpecialHostLabels.ADMIN)
                 pass
             assert False
         with with_host(cephadm_module, 'test1', refresh_hosts=False, rm_with_force=True):
             with with_host(cephadm_module, 'test2', refresh_hosts=False, rm_with_force=False):
-                cephadm_module.inventory.add_label('test2', '_admin')
+                cephadm_module.inventory.add_label('test2', SpecialHostLabels.ADMIN)
 
     @pytest.mark.parametrize("facts, settings, expected_value",
                              [
@@ -2446,3 +2476,14 @@ Traceback (most recent call last):
         with pytest.raises(OrchestratorError, match=r'Command "very slow" timed out on host hostC \(non-default 999 second timeout\)'):
             with cephadm_module.async_timeout_handler('hostC', 'very slow', 999):
                 cephadm_module.wait_async(_timeout())
+
+    @mock.patch("cephadm.CephadmOrchestrator.remove_osds")
+    @mock.patch("cephadm.CephadmOrchestrator.add_host_label", lambda *a, **kw: None)
+    @mock.patch("cephadm.inventory.HostCache.get_daemons_by_host", lambda *a, **kw: [])
+    def test_host_drain_zap(self, _rm_osds, cephadm_module):
+        # pass force=true in these tests to bypass _admin label check
+        cephadm_module.drain_host('host1', force=True, zap_osd_devices=False)
+        assert _rm_osds.called_with([], zap=False)
+
+        cephadm_module.drain_host('host1', force=True, zap_osd_devices=True)
+        assert _rm_osds.called_with([], zap=True)

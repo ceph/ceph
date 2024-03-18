@@ -26,7 +26,7 @@ from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.schedule import HostAssignment
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
-    CephadmNoImage, CEPH_TYPES, ContainerInspectInfo
+    CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels
 from mgr_module import MonCommandFailed
 from mgr_util import format_bytes
 
@@ -266,7 +266,7 @@ class CephadmServe:
 
             if (
                     self.mgr.cache.host_needs_autotune_memory(host)
-                    and not self.mgr.inventory.has_label(host, '_no_autotune_memory')
+                    and not self.mgr.inventory.has_label(host, SpecialHostLabels.NO_MEMORY_AUTOTUNE)
             ):
                 self.log.debug(f"autotuning memory for {host}")
                 self._autotune_host_memory(host)
@@ -1113,9 +1113,9 @@ class CephadmServe:
                 pspec = PlacementSpec.from_string(self.mgr.manage_etc_ceph_ceph_conf_hosts)
                 ha = HostAssignment(
                     spec=ServiceSpec('mon', placement=pspec),
-                    hosts=self.mgr.cache.get_schedulable_hosts(),
+                    hosts=self.mgr.cache.get_conf_keyring_available_hosts(),
                     unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
-                    draining_hosts=self.mgr.cache.get_draining_hosts(),
+                    draining_hosts=self.mgr.cache.get_conf_keyring_draining_hosts(),
                     daemons=[],
                     networks=self.mgr.cache.networks,
                 )
@@ -1144,9 +1144,9 @@ class CephadmServe:
                     keyring.encode('utf-8')).digest())
                 ha = HostAssignment(
                     spec=ServiceSpec('mon', placement=ks.placement),
-                    hosts=self.mgr.cache.get_schedulable_hosts(),
+                    hosts=self.mgr.cache.get_conf_keyring_available_hosts(),
                     unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
-                    draining_hosts=self.mgr.cache.get_draining_hosts(),
+                    draining_hosts=self.mgr.cache.get_conf_keyring_draining_hosts(),
                     daemons=[],
                     networks=self.mgr.cache.networks,
                 )

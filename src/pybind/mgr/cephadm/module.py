@@ -71,7 +71,7 @@ from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, 
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
-    cephadmNoImage, CEPH_UPGRADE_ORDER
+    cephadmNoImage, CEPH_UPGRADE_ORDER, SpecialHostLabels
 from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
 from .tuned_profiles import TunedProfileUtils
@@ -1593,11 +1593,11 @@ Then run the following:
 
         # check, if there we're removing the last _admin host
         if not force:
-            p = PlacementSpec(label='_admin')
+            p = PlacementSpec(label=SpecialHostLabels.ADMIN)
             admin_hosts = p.filter_matching_hostspecs(self.inventory.all_specs())
             if len(admin_hosts) == 1 and admin_hosts[0] == host:
-                raise OrchestratorValidationError(f"Host {host} is the last host with the '_admin'"
-                                                  " label. Please add the '_admin' label to a host"
+                raise OrchestratorValidationError(f"Host {host} is the last host with the '{SpecialHostLabels.ADMIN}'"
+                                                  f" label. Please add the '{SpecialHostLabels.ADMIN}' label to a host"
                                                   " or add --force to this command")
 
         def run_cmd(cmd_args: dict) -> None:
@@ -1693,14 +1693,14 @@ Then run the following:
     def remove_host_label(self, host: str, label: str, force: bool = False) -> str:
         # if we remove the _admin label from the only host that has it we could end up
         # removing the only instance of the config and keyring and cause issues
-        if not force and label == '_admin':
-            p = PlacementSpec(label='_admin')
+        if not force and label == SpecialHostLabels.ADMIN:
+            p = PlacementSpec(label=SpecialHostLabels.ADMIN)
             admin_hosts = p.filter_matching_hostspecs(self.inventory.all_specs())
             if len(admin_hosts) == 1 and admin_hosts[0] == host:
-                raise OrchestratorValidationError(f"Host {host} is the last host with the '_admin'"
-                                                  " label.\nRemoving the _admin label from this host could cause the removal"
+                raise OrchestratorValidationError(f"Host {host} is the last host with the '{SpecialHostLabels.ADMIN}'"
+                                                  f" label.\nRemoving the {SpecialHostLabels.ADMIN} label from this host could cause the removal"
                                                   " of the last cluster config/keyring managed by cephadm.\n"
-                                                  "It is recommended to add the _admin label to another host"
+                                                  f"It is recommended to add the {SpecialHostLabels.ADMIN} label to another host"
                                                   " before completing this operation.\nIf you're certain this is"
                                                   " what you want rerun this command with --force.")
         self.inventory.rm_label(host, label)
@@ -3206,8 +3206,7 @@ Then run the following:
         return self.to_remove_osds.all_osds()
 
     @handle_orch_error
-    def drain_host(self, hostname, force=False):
-        # type: (str, bool) -> str
+    def drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False, zap_osd_devices: bool = False) -> str:
         """
         Drain all daemons from a host.
         :param host: host name
@@ -3216,22 +3215,24 @@ Then run the following:
         # if we drain the last admin host we could end up removing the only instance
         # of the config and keyring and cause issues
         if not force:
-            p = PlacementSpec(label='_admin')
+            p = PlacementSpec(label=SpecialHostLabels.ADMIN)
             admin_hosts = p.filter_matching_hostspecs(self.inventory.all_specs())
             if len(admin_hosts) == 1 and admin_hosts[0] == hostname:
-                raise OrchestratorValidationError(f"Host {hostname} is the last host with the '_admin'"
+                raise OrchestratorValidationError(f"Host {hostname} is the last host with the '{SpecialHostLabels.ADMIN}'"
                                                   " label.\nDraining this host could cause the removal"
                                                   " of the last cluster config/keyring managed by cephadm.\n"
-                                                  "It is recommended to add the _admin label to another host"
+                                                  f"It is recommended to add the {SpecialHostLabels.ADMIN} label to another host"
                                                   " before completing this operation.\nIf you're certain this is"
                                                   " what you want rerun this command with --force.")
 
         self.add_host_label(hostname, '_no_schedule')
+        if not keep_conf_keyring:
+            self.add_host_label(hostname, SpecialHostLabels.DRAIN_CONF_KEYRING)
 
         daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_host(hostname)
 
         osds_to_remove = [d.daemon_id for d in daemons if d.daemon_type == 'osd']
-        self.remove_osds(osds_to_remove)
+        self.remove_osds(osds_to_remove, zap=zap_osd_devices)
 
         daemons_table = ""
         daemons_table += "{:<20} {:<15}\n".format("type", "id")
