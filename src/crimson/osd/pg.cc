@@ -136,7 +136,7 @@ PG::PG(
     osdriver(
       &shard_services.get_store(),
       coll_ref,
-      make_snapmapper_oid()),
+      pgmeta_oid),
     snap_mapper(
       this->shard_services.get_cct(),
       &osdriver,
@@ -608,15 +608,7 @@ seastar::future<> PG::init(
     role, newup, new_up_primary, newacting,
     new_acting_primary, history, pi, t);
   assert(coll_ref);
-  return shard_services.get_store().exists(
-    get_collection_ref(), make_snapmapper_oid()
-  ).safe_then([&t, this](bool existed) {
-      if (!existed) {
-        t.touch(coll_ref->get_cid(), make_snapmapper_oid());
-      }
-    },
-    ::crimson::ct_error::assert_all{"unexpected eio"}
-  );
+  return seastar::now();
 }
 
 seastar::future<> PG::read_state(crimson::os::FuturizedStore::Shard* store)
