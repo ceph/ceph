@@ -610,7 +610,6 @@ option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
 set(UNIT_TESTS_BUILT ${WITH_TESTS})
 set(CEPH_TEST_TIMEOUT 7200 CACHE STRING
   "Maximum time before a CTest gets killed" )
-
 # fio
 option(WITH_FIO "build with fio plugin enabled" OFF)
 if(WITH_FIO)
@@ -641,6 +640,11 @@ endif()
 option(WITH_UBSAN "build with UBSAN" OFF)
 if(WITH_UBSAN)
   list(APPEND sanitizers "undefined_behavior")
+endif()
+
+option(WITH_UNITTEST_MEMCHECK "enable ASAN and UBSAN memcheck for unit tests" OFF)
+if(WITH_UNITTEST_MEMCHECK)
+  list(APPEND sanitizers "address" "undefined_behavior")
 endif()
 
 if(sanitizers)
