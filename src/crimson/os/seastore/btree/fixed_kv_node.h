@@ -134,7 +134,7 @@ struct FixedKVNode : ChildableCachedExtent {
       // copy sources when committing this lba node, because
       // we rely on pointers' "nullness" to avoid copying
       // pointers for updated values
-      children[offset] = RESERVATION_PTR;
+      children[offset] = get_reserved_ptr();
     }
   }
 
@@ -431,7 +431,7 @@ struct FixedKVNode : ChildableCachedExtent {
 	if (!child) {
 	  child = source.children[foreign_it.get_offset()];
 	  // child can be either valid if present, nullptr if absent,
-	  // or RESERVATION_PTR.
+	  // or reserved ptr.
 	}
 	foreign_it++;
 	local_it++;
@@ -972,6 +972,7 @@ struct FixedKVLeafNode
   get_child_ret_t<LogicalCachedExtent>
   get_logical_child(op_context_t<NODE_KEY> c, uint16_t pos) final {
     auto child = this->children[pos];
+    ceph_assert(!is_reserved_ptr(child));
     if (is_valid_child_ptr(child)) {
       ceph_assert(child->is_logical());
       return c.cache.template get_extent_viewable_by_trans<
@@ -996,9 +997,13 @@ struct FixedKVLeafNode
   // children are considered stable if any of the following case is true:
   // 1. The child extent is absent in cache
   // 2. The child extent is stable
+  //
+  // For reserved mappings, the return values are undefined.
   bool is_child_stable(uint16_t pos) const final {
     auto child = this->children[pos];
-    if (is_valid_child_ptr(child)) {
+    if (is_reserved_ptr(child)) {
+      return true;
+    } else if (is_valid_child_ptr(child)) {
       ceph_assert(child->is_logical());
       return child->is_stable();
     } else if (this->is_pending()) {
