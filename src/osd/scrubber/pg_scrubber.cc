@@ -948,11 +948,12 @@ std::optional<uint64_t> PgScrubber::select_range()
 void PgScrubber::select_range_n_notify()
 {
   get_counters_set().inc(scrbcnt_chunks_selected);
-
-  if (select_range()) {
+  auto num_chunk_objects = select_range();
+  if (num_chunk_objects.has_value()) {
     // the next chunk to handle is not blocked
     dout(20) << __func__ << ": selection OK" << dendl;
-    m_osds->queue_scrub_chunk_free(m_pg, Scrub::scrub_prio_t::low_priority);
+    auto cost = get_scrub_cost(num_chunk_objects.value());
+    m_osds->queue_scrub_chunk_free(m_pg, Scrub::scrub_prio_t::low_priority, cost);
   } else {
     // we will wait for the objects range to become available for scrubbing
     dout(10) << __func__ << ": selected chunk is busy" << dendl;
@@ -1566,10 +1567,15 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
 
   set_queued_or_active();
   advance_token();
+  const auto& conf = m_pg->get_cct()->_conf;
+  const int max_from_conf = size_from_conf(
+    m_is_deep, conf, "osd_scrub_chunk_max", "osd_shallow_scrub_chunk_max");
+  auto cost = get_scrub_cost(max_from_conf);
   m_osds->queue_for_rep_scrub(m_pg,
 			      m_replica_request_priority,
 			      m_flags.priority,
-			      m_current_token);
+			      m_current_token,
+			      cost);
 }
 
 void PgScrubber::set_op_parameters(const requested_scrub_t& request)
