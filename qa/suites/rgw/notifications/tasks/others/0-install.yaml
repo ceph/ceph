@@ -4,6 +4,7 @@ tasks:
 - openssl_keys:
 - rgw:
     client.0:
+    client.1:
 
 overrides:
   ceph:
