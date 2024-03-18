@@ -139,7 +139,7 @@ Retrieving Image Information
 ============================
 
 To retrieve information from a particular image, run the following command, but
-replace ``{image-name}`` with the name for the image:
+replace ``{image-name}`` with the name of the image:
 
 .. prompt:: bash $
 
