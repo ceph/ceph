@@ -1798,17 +1798,6 @@ void OSDService::queue_scrub_event_msg_default_cost(PG* pg,
   queue_scrub_event_msg<MSG_TYPE>(pg, with_priority, cost);
 }
 
-int64_t OSDService::get_scrub_cost()
-{
-
-  int64_t cost_for_queue = cct->_conf->osd_scrub_cost;
-  if (op_queue_type_t::mClockScheduler == osd->osd_op_queue_type()) {
-    cost_for_queue = cct->_conf->osd_scrub_event_cost *
-                     cct->_conf->osd_shallow_scrub_chunk_max;
-  }
-  return cost_for_queue;
-}
-
 void OSDService::queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   queue_scrub_event_msg_default_cost<PGScrub>(pg, with_priority);

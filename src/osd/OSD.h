@@ -600,8 +600,6 @@ private:
 		                          Scrub::scrub_prio_t with_priority,
 					  unsigned int qu_priority,
 					  Scrub::act_token_t act_token);
-  int64_t get_scrub_cost();
-
   utime_t defer_recovery_until;
   uint64_t recovery_ops_active;
   uint64_t recovery_ops_reserved;
