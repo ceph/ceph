@@ -55,6 +55,8 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
     : LogicalCachedExtent(std::move(ptr)) {}
   TestBlock(const TestBlock &other)
     : LogicalCachedExtent(other), modified_region(other.modified_region) {}
+  TestBlock(extent_len_t length)
+    : LogicalCachedExtent(length) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new TestBlock(*this));
