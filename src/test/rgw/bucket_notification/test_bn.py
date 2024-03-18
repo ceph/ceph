@@ -486,13 +486,14 @@ def another_user(tenant=None):
         _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
     else:
         _, result = admin(['user', 'create', '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
+    arn = f'arn:aws:iam::{tenant or ""}:user/{uid}'
 
     assert_equal(result, 0)
     conn = S3Connection(aws_access_key_id=access_key,
                   aws_secret_access_key=secret_key,
                       is_secure=False, port=get_config_port(), host=get_config_host(), 
                       calling_format='boto.s3.connection.OrdinaryCallingFormat')
-    return conn
+    return conn, arn
 
 ##############
 # bucket notifications tests
@@ -4318,7 +4319,7 @@ def test_ps_s3_multiple_topics_notification():
 def test_ps_s3_topic_permissions():
     """ test s3 topic set/get/delete permissions """
     conn1 = connection()
-    conn2 = another_user()
+    conn2, arn2 = another_user()
     zonegroup = get_config_zonegroup()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
@@ -4328,7 +4329,7 @@ def test_ps_s3_topic_permissions():
             {
                 "Sid": "Statement",
                 "Effect": "Deny",
-                "Principal": "*",
+                "Principal": {"AWS": arn2},
                 "Action": ["sns:Publish", "sns:SetTopicAttributes", "sns:GetTopicAttributes", "sns:DeleteTopic", "sns:CreateTopic"],
                 "Resource": f"arn:aws:sns:{zonegroup}::{topic_name}"
             }
@@ -4427,7 +4428,7 @@ def test_ps_s3_topic_permissions():
 def test_ps_s3_topic_no_permissions():
     """ test s3 topic set/get/delete permissions """
     conn1 = connection()
-    conn2 = another_user()
+    conn2, _ = another_user()
     zonegroup = 'default'
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
