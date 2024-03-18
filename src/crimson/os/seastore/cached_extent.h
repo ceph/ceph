@@ -426,6 +426,9 @@ public:
   /// Returns true if extent is stable and shared among transactions
   bool is_stable() const {
     return is_stable_written() ||
+	   // MUTATION_PENDING and under-io extents are to-be-stable extents,
+	   // for the sake of caveats that checks the correctness of extents
+	   // states, we consider them stable.
            (is_mutation_pending() &&
             is_pending_io());
   }
