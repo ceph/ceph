@@ -3189,8 +3189,7 @@ Then run the following:
         """
         for osd_id in osd_ids:
             try:
-                self.to_remove_osds.rm(OSD(osd_id=int(osd_id),
-                                           remove_util=self.to_remove_osds.rm_util))
+                self.to_remove_osds.rm_by_osd_id(int(osd_id))
             except (NotFoundError, KeyError, ValueError):
                 return f'Unable to find OSD in the queue: {osd_id}'
 

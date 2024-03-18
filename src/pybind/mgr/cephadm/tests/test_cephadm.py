@@ -1130,7 +1130,11 @@ class TestCephadm(object):
     ))
     @mock.patch("cephadm.services.osd.OSD.exists", True)
     @mock.patch("cephadm.services.osd.RemoveUtil.get_pg_count", lambda _, __: 0)
-    def test_remove_osds(self, cephadm_module):
+    @mock.patch("cephadm.services.osd.RemoveUtil.get_weight")
+    @mock.patch("cephadm.services.osd.RemoveUtil.reweight_osd")
+    def test_remove_osds(self, _reweight_osd, _get_weight, cephadm_module):
+        osd_initial_weight = 2.1
+        _get_weight.return_value = osd_initial_weight
         with with_host(cephadm_module, 'test'):
             CephadmServe(cephadm_module)._refresh_host_daemons('test')
             c = cephadm_module.list_daemons()
@@ -1140,13 +1144,23 @@ class TestCephadm(object):
             out = wait(cephadm_module, c)
             assert out == ["Removed osd.0 from host 'test'"]
 
-            cephadm_module.to_remove_osds.enqueue(OSD(osd_id=0,
-                                                      replace=False,
-                                                      force=False,
-                                                      hostname='test',
-                                                      process_started_at=datetime_now(),
-                                                      remove_util=cephadm_module.to_remove_osds.rm_util
-                                                      ))
+            osd_0 = OSD(osd_id=0,
+                        replace=False,
+                        force=False,
+                        hostname='test',
+                        process_started_at=datetime_now(),
+                        remove_util=cephadm_module.to_remove_osds.rm_util
+                        )
+
+            cephadm_module.to_remove_osds.enqueue(osd_0)
+            _get_weight.assert_called()
+
+            # test that OSD is properly reweighted on removal
+            cephadm_module.stop_remove_osds([0])
+            _reweight_osd.assert_called_with(mock.ANY, osd_initial_weight)
+
+            # add OSD back to queue and test normal removal queue processing
+            cephadm_module.to_remove_osds.enqueue(osd_0)
             cephadm_module.to_remove_osds.process_removal_queue()
             assert cephadm_module.to_remove_osds == OSDRemovalQueue(cephadm_module)
 
