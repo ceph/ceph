@@ -346,7 +346,8 @@ public:
 
 void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
                                  bool absolute,
-                                 const std::map<RGWObjCategory, rgw_bucket_category_stats>& stats);
+                                 const std::map<RGWObjCategory, rgw_bucket_category_stats>& stats,
+                                 const std::map<RGWObjCategory, rgw_bucket_category_stats>* dec_stats = nullptr);
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
                                const cls_rgw_obj_key& key, const std::string& locator, bool log_op,
@@ -368,6 +369,9 @@ void cls_rgw_obj_check_mtime(librados::ObjectOperation& o, const ceph::real_time
 int cls_rgw_bi_get(librados::IoCtx& io_ctx, const std::string oid,
                    BIIndexType index_type, const cls_rgw_obj_key& key,
                    rgw_cls_bi_entry *entry);
+int cls_rgw_bi_get_vals(librados::IoCtx& io_ctx, const std::string oid,
+                        std::set<std::string> log_entries_wanted,
+                        std::list<rgw_cls_bi_entry> *entries);
 int cls_rgw_bi_put(librados::IoCtx& io_ctx, const std::string oid, const rgw_cls_bi_entry& entry);
 void cls_rgw_bi_put(librados::ObjectWriteOperation& op, const std::string oid, const rgw_cls_bi_entry& entry);
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,

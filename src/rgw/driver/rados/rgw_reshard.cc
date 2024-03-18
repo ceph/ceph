@@ -217,7 +217,8 @@ public:
   }
 
   int add_entry(rgw_cls_bi_entry& entry, bool account, RGWObjCategory category,
-                const rgw_bucket_category_stats& entry_stats) {
+                const rgw_bucket_category_stats& entry_stats,
+                bool process_log = false) {
     entries.push_back(entry);
     if (account) {
       rgw_bucket_category_stats& target = stats[category];
@@ -227,7 +228,7 @@ public:
       target.actual_size += entry_stats.actual_size;
     }
     if (entries.size() >= reshard_shard_batch_size) {
-      int ret = flush();
+      int ret = flush(process_log);
       if (ret < 0) {
         return ret;
       }
@@ -236,16 +237,48 @@ public:
     return 0;
   }
 
-  int flush() {
+  int flush(bool process_log = false) {
     if (entries.size() == 0) {
       return 0;
     }
 
     librados::ObjectWriteOperation op;
-    for (auto& entry : entries) {
-      store->getRados()->bi_put(op, bs, entry, null_yield);
+    if (process_log) {
+      map<RGWObjCategory, rgw_bucket_category_stats> dec_stats;
+      list<rgw_cls_bi_entry> dec_entries;
+      set<string> dec_entry_names_wanted;
+      for (auto& entry : entries) {
+        store->getRados()->bi_put(op, bs, entry, null_yield);
+        dec_entry_names_wanted.emplace(entry.idx);
+      }
+
+      // getting the index entry in target shard
+      int ret = store->getRados()->bi_get_vals(bs, dec_entry_names_wanted, &dec_entries, null_yield);
+      if(ret < 0) {
+        derr << "ERROR: bi_get_vals(): " << cpp_strerror(-ret) << dendl;
+        return ret;
+      }
+
+      for (auto& dec_entry : dec_entries) {
+        cls_rgw_obj_key cls_key;
+        RGWObjCategory category;
+        rgw_bucket_category_stats accounted_stats;
+        bool account = dec_entry.get_info(&cls_key, &category, &accounted_stats);
+        if (account) {
+          auto& dest = dec_stats[category];
+          dest.total_size += accounted_stats.total_size;
+          dest.total_size_rounded += accounted_stats.total_size_rounded;
+          dest.num_entries += accounted_stats.num_entries;
+          dest.actual_size += accounted_stats.actual_size;
+        }
+      }
+      cls_rgw_bucket_update_stats(op, false, stats, &dec_stats);
+    } else {
+      for (auto& entry : entries) {
+        store->getRados()->bi_put(op, bs, entry, null_yield);
+      }
+      cls_rgw_bucket_update_stats(op, false, stats);
     }
-    cls_rgw_bucket_update_stats(op, false, stats);
 
     librados::AioCompletion *c;
     int ret = get_completion(&c);
@@ -307,9 +340,10 @@ public:
 
   int add_entry(int shard_index,
                 rgw_cls_bi_entry& entry, bool account, RGWObjCategory category,
-                const rgw_bucket_category_stats& entry_stats) {
+                const rgw_bucket_category_stats& entry_stats,
+                bool process_log = false) {
     int ret = target_shards[shard_index].add_entry(entry, account, category,
-						   entry_stats);
+						   entry_stats, process_log);
     if (ret < 0) {
       derr << "ERROR: target_shards.add_entry(" << entry.idx <<
 	") returned error: " << cpp_strerror(-ret) << dendl;
@@ -319,10 +353,10 @@ public:
     return 0;
   }
 
-  int finish() {
+  int finish(bool process_log = false) {
     int ret = 0;
     for (auto& shard : target_shards) {
-      int r = shard.flush();
+      int r = shard.flush(process_log);
       if (r < 0) {
         derr << "ERROR: target_shards[" << shard.get_shard_id() << "].flush() returned error: " << cpp_strerror(-r) << dendl;
         ret = r;
@@ -980,15 +1014,15 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
   list<rgw_cls_bi_entry> entries;
 
   string stage;
-  bool read_reshardlog;
+  bool process_log = false;
   switch (reshard_stage) {
   case rgw::BucketReshardState::InLogrecord:
     stage = "inventory";
-    read_reshardlog = false;
+    process_log = false;
     break;
   case rgw::BucketReshardState::InProgress:
     stage = "inc";
-    read_reshardlog = true;
+    process_log = true;
     break;
   default:
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " unknown reshard stage" << dendl;
@@ -1016,7 +1050,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
 
       int ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter,
                                            marker, max_op_entries, &entries,
-                                           &is_truncated, read_reshardlog, y);
+                                           &is_truncated, process_log, y);
       if (ret == -ENOENT) {
         ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
             << i << ", skipping" << dendl;
@@ -1069,7 +1103,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
         int shard_index = (target_shard_id > 0 ? target_shard_id : 0);
 
         ret = target_shards_mgr.add_entry(shard_index, entry, account,
-                  category, stats);
+                  category, stats, process_log);
         if (ret < 0) {
           return ret;
         }
@@ -1107,7 +1141,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
     (*out) << " " << stage_entries << std::endl;
   }
 
-  int ret = target_shards_mgr.finish();
+  int ret = target_shards_mgr.finish(process_log);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to reshard: " << ret << dendl;
     return -EIO;

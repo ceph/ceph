@@ -373,6 +373,10 @@ void rgw_cls_bucket_update_stats_op::generate_test_instances(list<rgw_cls_bucket
   s.total_size = 1;
   s.total_size_rounded = 4096;
   s.num_entries = 1;
+  rgw_bucket_category_stats& dec_s = r->dec_stats[RGWObjCategory::None];
+  dec_s.total_size = 1;
+  dec_s.total_size_rounded = 4096;
+  dec_s.num_entries = 1;
   o.push_back(r);
 
   o.push_back(new rgw_cls_bucket_update_stats_op);
@@ -386,6 +390,11 @@ void rgw_cls_bucket_update_stats_op::dump(Formatter *f) const
     s[(int)entry.first] = entry.second;
   }
   encode_json("stats", s, f);
+  map<int, rgw_bucket_category_stats> dec_s;
+  for (auto& entry : dec_stats) {
+    dec_s[(int)entry.first] = entry.second;
+  }
+  encode_json("dec_stats", dec_s, f);
 }
 
 void cls_rgw_bi_log_list_op::dump(Formatter *f) const
