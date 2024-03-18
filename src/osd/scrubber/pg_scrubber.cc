@@ -841,8 +841,11 @@ int PgScrubber::get_whoami() const
  * - m_max_end
  * - end
  * - start
+ * returns:
+ * - std::nullopt if the range is blocked
+ * - otherwise, the number of objects in the selected range
  */
-bool PgScrubber::select_range()
+std::optional<uint64_t> PgScrubber::select_range()
 {
   m_be->new_chunk();
 
@@ -924,7 +927,7 @@ bool PgScrubber::select_range()
     // we'll be requeued by whatever made us unavailable for scrub
     dout(10) << __func__ << ": scrub blocked somewhere in range "
 	     << "[" << m_start << ", " << candidate_end << ")" << dendl;
-    return false;
+    return std::nullopt;
   }
 
   m_end = candidate_end;
@@ -937,9 +940,9 @@ bool PgScrubber::select_range()
   // debug: be 'blocked' if told so by the 'pg scrub_debug block' asok command
   if (m_debug_blockrange > 0) {
     m_debug_blockrange--;
-    return false;
+    return std::nullopt;
   }
-  return true;
+  return objects.size();
 }
 
 void PgScrubber::select_range_n_notify()
@@ -950,12 +953,33 @@ void PgScrubber::select_range_n_notify()
     // the next chunk to handle is not blocked
     dout(20) << __func__ << ": selection OK" << dendl;
     m_osds->queue_scrub_chunk_free(m_pg, Scrub::scrub_prio_t::low_priority);
-
   } else {
     // we will wait for the objects range to become available for scrubbing
     dout(10) << __func__ << ": selected chunk is busy" << dendl;
     m_osds->queue_scrub_chunk_busy(m_pg, Scrub::scrub_prio_t::low_priority);
     get_counters_set().inc(scrbcnt_chunks_busy);
+  }
+}
+
+uint64_t PgScrubber::get_scrub_cost(uint64_t num_chunk_objects)
+{
+  const auto& conf = m_pg->get_cct()->_conf;
+  if (op_queue_type_t::WeightedPriorityQueue == m_osds->osd->osd_op_queue_type()) {
+    // if the osd_op_queue is WPQ, we will use the default osd_scrub_cost value
+    return conf->osd_scrub_cost;
+  }
+  uint64_t cost = 0;
+  double scrub_metadata_cost = m_osds->get_cost_per_io();
+  if (m_is_deep) {
+    auto pg_avg_object_size = m_pg->get_average_object_size();
+    cost = conf->osd_scrub_event_cost + (num_chunk_objects
+    * (scrub_metadata_cost + pg_avg_object_size));
+    dout(20) << fmt::format("{} : deep-scrub cost = {}", __func__, cost) << dendl;
+    return cost;
+  } else {
+    cost = conf->osd_scrub_event_cost + (num_chunk_objects *  scrub_metadata_cost);
+    dout(20) << fmt::format("{} : shallow-scrub cost = {}", __func__, cost) << dendl;
+    return cost;
   }
 }
 
