@@ -1822,9 +1822,10 @@ void OSDService::queue_scrub_after_repair(PG* pg, Scrub::scrub_prio_t with_prior
 void OSDService::queue_for_rep_scrub(PG* pg,
 				     Scrub::scrub_prio_t with_priority,
 				     unsigned int qu_priority,
-				     Scrub::act_token_t act_token)
+				     Scrub::act_token_t act_token,
+				     uint64_t cost)
 {
-  queue_scrub_event_msg<PGRepScrub>(pg, with_priority, qu_priority, act_token, get_scrub_cost());
+  queue_scrub_event_msg<PGRepScrub>(pg, with_priority, qu_priority, act_token, cost);
 }
 
 void OSDService::queue_for_rep_scrub_resched(PG* pg,
@@ -1849,10 +1850,10 @@ void OSDService::queue_scrub_pushes_update(PG* pg, Scrub::scrub_prio_t with_prio
   queue_scrub_event_msg_default_cost<PGScrubPushesUpdate>(pg, with_priority);
 }
 
-void OSDService::queue_scrub_chunk_free(PG* pg, Scrub::scrub_prio_t with_priority)
+void OSDService::queue_scrub_chunk_free(PG* pg, Scrub::scrub_prio_t with_priority, uint64_t cost)
 {
   // Resulting scrub event: 'SelectedChunkFree'
-  queue_scrub_event_msg<PGScrubChunkIsFree>(pg, with_priority, get_scrub_cost());
+  queue_scrub_event_msg<PGScrubChunkIsFree>(pg, with_priority, cost);
 }
 
 void OSDService::queue_scrub_chunk_busy(PG* pg, Scrub::scrub_prio_t with_priority)
