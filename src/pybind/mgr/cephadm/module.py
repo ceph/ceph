@@ -123,7 +123,7 @@ DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.0.0'
 DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
 DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.4.0'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.25.0'
-DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:9.4.12'
+DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:9.4.12'
 DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.2.4'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
@@ -334,6 +334,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             type='str',
             default='/etc/prometheus/ceph/ceph_default_alerts.yml',
             desc='location of alerts to include in prometheus deployments',
+        ),
+        Option(
+            'grafana_dashboards_path',
+            type='str',
+            default='/etc/grafana/dashboards/ceph-dashboard/',
+            desc='location of dashboards to include in grafana deployments',
         ),
         Option(
             'migration_current',
@@ -551,6 +557,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.allow_ptrace = False
             self.container_init = True
             self.prometheus_alerts_path = ''
+            self.grafana_dashboards_path = ''
             self.migration_current: Optional[int] = None
             self.config_dashboard = True
             self.manage_etc_ceph_ceph_conf = True
