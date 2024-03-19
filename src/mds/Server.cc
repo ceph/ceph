@@ -8024,6 +8024,9 @@ void Server::_logged_peer_link(const MDRequestRef& mdr, CInode *targeti, bool ad
   // ack
   if (!mdr->aborted) {
     auto reply = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt, MMDSPeerRequest::OP_LINKPREPACK);
+    dout(10) << __func__ << " send targeti with link_prep_ack " << *targeti << dendl;
+    mdcache->encode_replica_inode(targeti, mdr->peer_to_mds, reply->targeti_bl,
+		                  mds->mdsmap->get_up_features());
     mds->send_message_mds(reply, mdr->peer_to_mds);
   } else {
     dout(10) << " abort flag set, finishing" << dendl;
@@ -8196,7 +8199,16 @@ void Server::handle_peer_link_prep_ack(const MDRequestRef& mdr, const cref_t<MMD
 
   // note peer
   mdr->more()->peers.insert(from);
-  
+
+  // update the targeti
+  CInode *targeti = nullptr;
+  auto p = m->targeti_bl.cbegin();
+  MDSContext::vec finished;
+  mdcache->decode_replica_inode(targeti, p, nullptr, finished);
+  if (!finished.empty())
+    mds->queue_waiters(finished);
+  dout(10) << "handle_peer_link_prep_ack referent-inodes " << std::hex << targeti->get_projected_inode()->referent_inodes << dendl;
+
   // witnessed!
   ceph_assert(mdr->more()->witnessed.count(from) == 0);
   mdr->more()->witnessed.insert(from);
