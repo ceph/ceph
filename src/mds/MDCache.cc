@@ -13571,8 +13571,6 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
     return;
   }
 
-  [[maybe_unused]] const bool is_root = (ino == mdr->get_filepath2().get_ino());
-
   dout(20) << __func__ << " " << *mdr << " quiescing " << *in << dendl;
 
   if (quiesce_counter.get() > quiesce_threshold) {
@@ -13813,7 +13811,6 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
   } else if (auto& qops = mdr->more()->quiesce_ops; qops.count(dirino) == 0) {
     MDRequestRef qimdr = request_start_internal(CEPH_MDS_OP_QUIESCE_INODE);
     qimdr->set_filepath(filepath(dirino));
-    qimdr->set_filepath2(filepath(dirino)); /* is_root! */
     qimdr->internal_op_finish = new C_MDS_RetryRequest(this, mdr);
     qimdr->internal_op_private = new QuiesceInodeStateRef(qis);
     qops[dirino] = qimdr->reqid;
