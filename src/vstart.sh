@@ -1497,7 +1497,7 @@ EOF
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace add $name
         prun env CEPH_CONF="${conf_fn}" ganesha-rados-grace --userid $test_user -p $pool_name -n $namespace
 
-        prun env CEPH_CONF="${conf_fn}" ganesha.nfsd -L "$CEPH_OUT_DIR/ganesha-$name.log" -f "$ganesha_dir/ganesha-$name.conf" -p "$CEPH_OUT_DIR/ganesha-$name.pid" -N NIV_DEBUG
+        prun env CEPH_CONF="${conf_fn}" ganesha.nfsd -L "$CEPH_OUT_DIR/ganesha-$name.log" -f "$ganesha_dir/ganesha-$name.conf" -p "$CEPH_OUT_DIR/ganesha-$name.pid" -N NIV_EVENT
 
         # Wait few seconds for grace period to be removed
         sleep 2
