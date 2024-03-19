@@ -37,7 +37,7 @@ public:
   /// Returns mapping for pgid, creates new one if it doesn't already exist
   seastar::future<core_id_t> get_or_create_pg_mapping(
     spg_t pgid,
-    core_id_t core = NULL_CORE);
+    core_id_t core_expected = NULL_CORE);
 
   /// Remove pgid mapping
   seastar::future<> remove_pg_mapping(spg_t pgid);
@@ -60,7 +60,9 @@ public:
   }
 
 private:
+  // only in shard 0
   std::map<core_id_t, unsigned> core_to_num_pgs;
+  // per-shard, updated by shard 0
   std::map<spg_t, core_id_t> pg_to_core;
 };
 
