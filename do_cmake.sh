@@ -14,7 +14,7 @@ if [ -e $BUILD_DIR ]; then
 fi
 
 PYBUILD="3"
-ARGS="-GNinja"
+ARGS="${ARGS} -GNinja"
 if [ -r /etc/os-release ]; then
   source /etc/os-release
   case "$ID" in
