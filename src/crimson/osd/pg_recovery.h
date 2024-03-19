@@ -90,6 +90,7 @@ private:
     const ObjectRecoveryInfo &recovery_info);
   void _committed_pushed_object(epoch_t epoch,
 				eversion_t last_complete);
+  friend class RecoveryBackend;
   friend class ReplicatedRecoveryBackend;
   friend class crimson::osd::UrgentRecovery;
 

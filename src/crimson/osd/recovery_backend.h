@@ -82,12 +82,13 @@ public:
   virtual interruptible_future<> recover_object(
     const hobject_t& soid,
     eversion_t need) = 0;
-  virtual interruptible_future<> recover_delete(
+
+  interruptible_future<> recover_delete(
     const hobject_t& soid,
-    eversion_t need) = 0;
-  virtual interruptible_future<> push_delete(
+    eversion_t need);
+  interruptible_future<> push_delete(
     const hobject_t& soid,
-    eversion_t need) = 0;
+    eversion_t need);
 
   interruptible_future<BackfillInterval> scan_for_backfill(
     const hobject_t& from,
@@ -269,6 +270,20 @@ protected:
   void clean_up(ceph::os::Transaction& t, interrupt_cause_t why);
   virtual seastar::future<> on_stop() = 0;
 private:
+  interruptible_future<> on_local_recover_persist(
+    const hobject_t& soid,
+    const ObjectRecoveryInfo& _recovery_info,
+    bool is_delete,
+    epoch_t epoch_to_freeze);
+  interruptible_future<> local_recover_delete(
+    const hobject_t& soid,
+    eversion_t need,
+    epoch_t epoch_frozen);
+  interruptible_future<> handle_recovery_delete(
+    Ref<MOSDPGRecoveryDelete> m);
+  interruptible_future<> handle_recovery_delete_reply(
+    Ref<MOSDPGRecoveryDeleteReply> m);
+
   void handle_backfill_finish(
     MOSDPGBackfill& m,
     crimson::net::ConnectionXcoreRef conn);
