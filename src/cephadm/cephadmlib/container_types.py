@@ -147,13 +147,7 @@ class BasicContainer:
             [],
         )
 
-        return (
-            cmd_args
-            + self.container_args
-            + envs
-            + vols
-            + binds
-        )
+        return cmd_args + self.container_args + envs + vols + binds
 
     def build_run_cmd(self) -> List[str]:
         return (
@@ -190,7 +184,7 @@ class BasicContainer:
         cls,
         other: 'BasicContainer',
         *,
-        ident: Optional[DaemonIdentity] = None
+        ident: Optional[DaemonIdentity] = None,
     ) -> 'BasicContainer':
         return cls(
             other.ctx,
@@ -582,7 +576,6 @@ def extract_uid_gid(
     img: str = '',
     file_path: Union[str, List[str]] = '/var/lib/ceph',
 ) -> Tuple[int, int]:
-
     if not img:
         img = ctx.image
 
