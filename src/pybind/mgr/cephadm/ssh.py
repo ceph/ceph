@@ -1,3 +1,4 @@
+import enum
 import logging
 import os
 import asyncio
@@ -42,6 +43,77 @@ Host *
   UserKnownHostsFile /dev/null
   ConnectTimeout=30
 """
+
+
+class RemoteExecutable(str):
+    pass
+
+
+class RemoteCommand:
+    exe: RemoteExecutable
+    args: List[str]
+
+    def __init__(self, exe: RemoteExecutable, args: Optional[List[str]] = None) -> None:
+        self.exe = exe
+        self.args = args or []
+
+    def __iter__(self) -> Iterator[str]:
+        yield str(self.exe)
+        for arg in self.args:
+            yield arg
+
+    def quoted(self) -> Iterator[str]:
+        return (quote(a) for a in self)
+
+    def __str__(self) -> str:
+        return " ".join(self.quoted())
+
+    def __repr__(self) -> str:
+        # handy when debugging tests
+        return f'<RemoteCommand>({self.exe!r}, {self.args!r})'
+
+    def __eq__(self, other: object) -> bool:
+        # handy when working with unit tests
+        if not isinstance(other, self.__class__):
+            return NotImplemented
+        return other.exe == self.exe and other.args == self.args
+
+
+class RemoteSudoCommand(RemoteCommand):
+    use_sudo: bool = True
+
+    def __init__(
+        self, exe: RemoteExecutable, args: List[str], use_sudo: bool = True
+    ) -> None:
+        super().__init__(exe, args)
+        self.use_sudo = use_sudo
+
+    def __iter__(self) -> Iterator[str]:
+        if self.use_sudo:
+            yield 'sudo'
+        for a in super().__iter__():
+            yield a
+
+    @classmethod
+    def wrap(
+        cls, other: RemoteCommand, use_sudo: bool = True
+    ) -> 'RemoteSudoCommand':
+        return cls(other.exe, other.args, use_sudo)
+
+
+class Executables(RemoteExecutable, enum.Enum):
+    CHMOD = RemoteExecutable('chmod')
+    CHOWN = RemoteExecutable('chown')
+    LS = RemoteExecutable('ls')
+    MKDIR = RemoteExecutable('mkdir')
+    MV = RemoteExecutable('mv')
+    RM = RemoteExecutable('rm')
+    SYSCTL = RemoteExecutable('sysctl')
+    TOUCH = RemoteExecutable('touch')
+    TRUE = RemoteExecutable('true')
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class EventLoopThread(Thread):
@@ -152,24 +224,27 @@ class SSHManager:
 
     async def _execute_command(self,
                                host: str,
-                               cmd_components: List[str],
+                               cmd_components: RemoteCommand,
                                stdin: Optional[str] = None,
                                addr: Optional[str] = None,
                                log_command: Optional[bool] = True,
                                ) -> Tuple[str, str, int]:
 
         conn = await self._remote_connection(host, addr)
-        sudo_prefix = "sudo " if self.mgr.ssh_user != 'root' else ""
-        cmd = sudo_prefix + " ".join(quote(x) for x in cmd_components)
+        use_sudo = (self.mgr.ssh_user != 'root')
+        rcmd = RemoteSudoCommand.wrap(cmd_components, use_sudo=use_sudo)
         try:
             address = addr or self.mgr.inventory.get_addr(host)
         except Exception:
             address = host
         if log_command:
-            logger.debug(f'Running command: {cmd}')
+            logger.debug(f'Running command: {rcmd}')
         try:
-            r = await conn.run(f'{sudo_prefix}true', check=True, timeout=5)  # host quick check
-            r = await conn.run(cmd, input=stdin)
+            test_cmd = RemoteSudoCommand(
+                Executables.TRUE, [], use_sudo=use_sudo
+            )
+            r = await conn.run(str(test_cmd), check=True, timeout=5)  # host quick check
+            r = await conn.run(str(rcmd), input=stdin)
         # handle these Exceptions otherwise you might get a weird error like
         # TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
         except asyncssh.ChannelOpenError as e:
@@ -179,13 +254,13 @@ class SSHManager:
             self.mgr.offline_hosts.add(host)
             raise HostConnectionError(f'Unable to reach remote host {host}. {str(e)}', host, address)
         except asyncssh.ProcessError as e:
-            msg = f"Cannot execute the command '{cmd}' on the {host}. {str(e.stderr)}."
+            msg = f"Cannot execute the command '{rcmd}' on the {host}. {str(e.stderr)}."
             logger.debug(msg)
             await self._reset_con(host)
             self.mgr.offline_hosts.add(host)
             raise HostConnectionError(msg, host, address)
         except Exception as e:
-            msg = f"Generic error while executing command '{cmd}' on the host {host}. {str(e)}."
+            msg = f"Generic error while executing command '{rcmd}' on the host {host}. {str(e)}."
             logger.debug(msg)
             await self._reset_con(host)
             self.mgr.offline_hosts.add(host)
@@ -209,7 +284,7 @@ class SSHManager:
 
     def execute_command(self,
                         host: str,
-                        cmd: List[str],
+                        cmd: RemoteCommand,
                         stdin: Optional[str] = None,
                         addr: Optional[str] = None,
                         log_command: Optional[bool] = True
@@ -219,7 +294,7 @@ class SSHManager:
 
     async def _check_execute_command(self,
                                      host: str,
-                                     cmd: List[str],
+                                     cmd: RemoteCommand,
                                      stdin: Optional[str] = None,
                                      addr: Optional[str] = None,
                                      log_command: Optional[bool] = True
@@ -233,7 +308,7 @@ class SSHManager:
 
     def check_execute_command(self,
                               host: str,
-                              cmd: List[str],
+                              cmd: RemoteCommand,
                               stdin: Optional[str] = None,
                               addr: Optional[str] = None,
                               log_command: Optional[bool] = True,
@@ -253,14 +328,22 @@ class SSHManager:
         try:
             cephadm_tmp_dir = f"/tmp/cephadm-{self.mgr._cluster_fsid}"
             dirname = os.path.dirname(path)
-            await self._check_execute_command(host, ['mkdir', '-p', dirname], addr=addr)
-            await self._check_execute_command(host, ['mkdir', '-p', cephadm_tmp_dir + dirname], addr=addr)
+            mkdir = RemoteCommand(Executables.MKDIR, ['-p', dirname])
+            await self._check_execute_command(host, mkdir, addr=addr)
+            mkdir2 = RemoteCommand(Executables.MKDIR, ['-p', cephadm_tmp_dir + dirname])
+            await self._check_execute_command(host, mkdir2, addr=addr)
             tmp_path = cephadm_tmp_dir + path + '.new'
-            await self._check_execute_command(host, ['touch', tmp_path], addr=addr)
+            touch = RemoteCommand(Executables.TOUCH, [tmp_path])
+            await self._check_execute_command(host, touch, addr=addr)
             if self.mgr.ssh_user != 'root':
                 assert self.mgr.ssh_user
-                await self._check_execute_command(host, ['chown', '-R', self.mgr.ssh_user, cephadm_tmp_dir], addr=addr)
-                await self._check_execute_command(host, ['chmod', str(644), tmp_path], addr=addr)
+                chown = RemoteCommand(
+                    Executables.CHOWN,
+                    ['-R', self.mgr.ssh_user, cephadm_tmp_dir]
+                )
+                await self._check_execute_command(host, chown, addr=addr)
+                chmod = RemoteCommand(Executables.CHMOD, [str(644), tmp_path])
+                await self._check_execute_command(host, chmod, addr=addr)
             with NamedTemporaryFile(prefix='cephadm-write-remote-file-') as f:
                 os.fchmod(f.fileno(), 0o600)
                 f.write(content)
@@ -270,9 +353,15 @@ class SSHManager:
                     await sftp.put(f.name, tmp_path)
             if uid is not None and gid is not None and mode is not None:
                 # shlex quote takes str or byte object, not int
-                await self._check_execute_command(host, ['chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
-                await self._check_execute_command(host, ['chmod', oct(mode)[2:], tmp_path], addr=addr)
-            await self._check_execute_command(host, ['mv', tmp_path, path], addr=addr)
+                chown = RemoteCommand(
+                    Executables.CHOWN,
+                    ['-R', str(uid) + ':' + str(gid), tmp_path]
+                )
+                await self._check_execute_command(host, chown, addr=addr)
+                chmod = RemoteCommand(Executables.CHMOD, [oct(mode)[2:], tmp_path])
+                await self._check_execute_command(host, chmod, addr=addr)
+            mv = RemoteCommand(Executables.MV, [tmp_path, path])
+            await self._check_execute_command(host, mv, addr=addr)
         except Exception as e:
             msg = f"Unable to write {host}:{path}: {e}"
             logger.exception(msg)

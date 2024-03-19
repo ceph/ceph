@@ -658,6 +658,51 @@ For example, to distribute configs to hosts with the ``bare_config`` label, run 
 
 (See :ref:`orchestrator-cli-placement-spec` for more information about placement specs.)
 
+
+Limiting Password-less sudo Access
+==================================
+
+By default, the cephadm install guide recommends enabling password-less
+``sudo`` for the cephadm user. This option is the most flexible and
+future-proof but may not be preferred in all environments. An administrator can
+restrict ``sudo`` to only running an exact list of commands without password
+access.  Note that this list may change between Ceph versions and
+administrators choosing this option should read the release notes and review
+this list in the destination version of the Ceph documentation. If the list
+differs one must extend the list of password-less ``sudo`` commands prior to
+upgrade.
+
+Commands requiring password-less sudo support:
+
+  - ``chmod``
+  - ``chown``
+  - ``ls``
+  - ``mkdir``
+  - ``mv``
+  - ``rm``
+  - ``sysctl``
+  - ``touch``
+  - ``true``
+  - ``which`` (see note)
+  - ``/usr/bin/cephadm`` or python executable (see note)
+
+.. note:: Typically cephadm will execute ``which`` to determine what python3
+   command is available and then use the command returned by ``which`` in
+   subsequent commands.
+   Before configuring ``sudo`` run ``which python3`` to determine what
+   python command to add to the ``sudo`` configuration.
+   In some rare configurations ``/usr/bin/cephadm`` will be used instead.
+
+
+Configuring the ``sudoers`` file can be performed using a tool like ``visudo``
+and adding or replacing a user configuration line such as the following:
+
+.. code-block::
+
+  # assuming the cephadm user is named "ceph"
+  ceph ALL=(ALL) NOPASSWD:/usr/bin/chmod,/usr/bin/chown,/usr/bin/ls,/usr/bin/mkdir,/usr/bin/mv,/usr/bin/rm,/usr/sbin/sysctl,/usr/bin/touch,/usr/bin/true,/usr/bin/which,/usr/bin/cephadm,/usr/bin/python3
+
+
 Purging a cluster
 =================
 
