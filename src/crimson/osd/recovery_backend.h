@@ -81,12 +81,13 @@ public:
   virtual interruptible_future<> recover_object(
     const hobject_t& soid,
     eversion_t need) = 0;
-  virtual interruptible_future<> recover_delete(
+
+  interruptible_future<> recover_delete(
     const hobject_t& soid,
-    eversion_t need) = 0;
-  virtual interruptible_future<> push_delete(
+    eversion_t need);
+  interruptible_future<> push_delete(
     const hobject_t& soid,
-    eversion_t need) = 0;
+    eversion_t need);
 
   interruptible_future<PrimaryBackfillInterval> scan_for_backfill_primary(
     const hobject_t from,
@@ -284,6 +285,20 @@ protected:
    */
   std::map<hobject_t, crimson::osd::ObjectContextRef> replica_push_targets;
 private:
+  interruptible_future<> on_local_recover_persist(
+    const hobject_t& soid,
+    const ObjectRecoveryInfo& _recovery_info,
+    bool is_delete,
+    epoch_t epoch_to_freeze);
+  interruptible_future<> local_recover_delete(
+    const hobject_t& soid,
+    eversion_t need,
+    epoch_t epoch_frozen);
+  interruptible_future<> handle_recovery_delete(
+    Ref<MOSDPGRecoveryDelete> m);
+  interruptible_future<> handle_recovery_delete_reply(
+    Ref<MOSDPGRecoveryDeleteReply> m);
+
   void handle_backfill_finish(
     MOSDPGBackfill& m,
     crimson::net::ConnectionXcoreRef conn);
