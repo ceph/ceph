@@ -115,6 +115,10 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
           this.subvolume = value?.split?.('/')?.[3];
         }),
         filter(() => !!this.subvolume && !!this.subvolumeGroup),
+        tap(() => {
+          this.isSubvolume = !!this.subvolume && !!this.subvolumeGroup;
+          this.snapScheduleForm.get('repeatFrequency').setErrors(null);
+        }),
         mergeMap(() =>
           this.subvolumeService
             .exists(
@@ -282,84 +286,92 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
   }
 
   submit() {
-    if (this.snapScheduleForm.invalid) {
-      this.snapScheduleForm.setErrors({ cdSubmitButton: true });
-      return;
-    }
+    this.validateSchedule()(this.snapScheduleForm).subscribe({
+      next: () => {
+        if (this.snapScheduleForm.invalid) {
+          this.snapScheduleForm.setErrors({ cdSubmitButton: true });
+          return;
+        }
 
-    const values = this.snapScheduleForm.value as SnapshotScheduleFormValue;
+        const values = this.snapScheduleForm.value as SnapshotScheduleFormValue;
 
-    if (this.isEdit) {
-      const retentionPoliciesToAdd = (this.snapScheduleForm.get(
-        'retentionPolicies'
-      ) as FormArray).controls
-        ?.filter(
-          (ctrl) =>
-            !ctrl.get('retentionInterval').disabled && !ctrl.get('retentionFrequency').disabled
-        )
-        .map((ctrl) => ({
-          retentionInterval: ctrl.get('retentionInterval').value,
-          retentionFrequency: ctrl.get('retentionFrequency').value
-        }));
+        if (this.isEdit) {
+          const retentionPoliciesToAdd = (this.snapScheduleForm.get(
+            'retentionPolicies'
+          ) as FormArray).controls
+            ?.filter(
+              (ctrl) =>
+                !ctrl.get('retentionInterval').disabled && !ctrl.get('retentionFrequency').disabled
+            )
+            .map((ctrl) => ({
+              retentionInterval: ctrl.get('retentionInterval').value,
+              retentionFrequency: ctrl.get('retentionFrequency').value
+            }));
 
-      const updateObj = {
-        fs: this.fsName,
-        path: this.path,
-        subvol: this.subvol,
-        group: this.group,
-        retention_to_add: this.parseRetentionPolicies(retentionPoliciesToAdd) || null,
-        retention_to_remove: this.parseRetentionPolicies(this.retentionPoliciesToRemove) || null
-      };
+          const updateObj = {
+            fs: this.fsName,
+            path: this.path,
+            subvol: this.subvol,
+            group: this.group,
+            retention_to_add: this.parseRetentionPolicies(retentionPoliciesToAdd) || null,
+            retention_to_remove: this.parseRetentionPolicies(this.retentionPoliciesToRemove) || null
+          };
 
-      this.taskWrapper
-        .wrapTaskAroundCall({
-          task: new FinishedTask('cephfs/snapshot/schedule/' + URLVerbs.EDIT, {
-            path: this.path
-          }),
-          call: this.snapScheduleService.update(updateObj)
-        })
-        .subscribe({
-          error: () => {
-            this.snapScheduleForm.setErrors({ cdSubmitButton: true });
-          },
-          complete: () => {
-            this.activeModal.close();
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('cephfs/snapshot/schedule/' + URLVerbs.EDIT, {
+                path: this.path
+              }),
+              call: this.snapScheduleService.update(updateObj)
+            })
+            .subscribe({
+              error: () => {
+                this.snapScheduleForm.setErrors({ cdSubmitButton: true });
+              },
+              complete: () => {
+                this.activeModal.close();
+              }
+            });
+        } else {
+          const snapScheduleObj = {
+            fs: this.fsName,
+            path: values.directory,
+            snap_schedule: this.parseSchedule(values?.repeatInterval, values?.repeatFrequency),
+            start: this.parseDatetime(values?.startDate, values?.startTime)
+          };
+
+          const retentionPoliciesValues = this.parseRetentionPolicies(values?.retentionPolicies);
+
+          if (retentionPoliciesValues) {
+            snapScheduleObj['retention_policy'] = retentionPoliciesValues;
           }
-        });
-    } else {
-      const snapScheduleObj = {
-        fs: this.fsName,
-        path: values.directory,
-        snap_schedule: this.parseSchedule(values?.repeatInterval, values?.repeatFrequency),
-        start: this.parseDatetime(values?.startDate, values?.startTime)
-      };
 
-      const retentionPoliciesValues = this.parseRetentionPolicies(values?.retentionPolicies);
+          if (this.isSubvolume) {
+            snapScheduleObj['subvol'] = this.subvolume;
+          }
 
-      if (retentionPoliciesValues) snapScheduleObj['retention_policy'] = retentionPoliciesValues;
+          if (this.isSubvolume && !this.isDefaultSubvolumeGroup) {
+            snapScheduleObj['group'] = this.subvolumeGroup;
+          }
 
-      if (this.isSubvolume) snapScheduleObj['subvol'] = this.subvolume;
-
-      if (this.isSubvolume && !this.isDefaultSubvolumeGroup) {
-        snapScheduleObj['group'] = this.subvolumeGroup;
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('cephfs/snapshot/schedule/' + URLVerbs.CREATE, {
+                path: snapScheduleObj.path
+              }),
+              call: this.snapScheduleService.create(snapScheduleObj)
+            })
+            .subscribe({
+              error: () => {
+                this.snapScheduleForm.setErrors({ cdSubmitButton: true });
+              },
+              complete: () => {
+                this.activeModal.close();
+              }
+            });
+        }
       }
-
-      this.taskWrapper
-        .wrapTaskAroundCall({
-          task: new FinishedTask('cephfs/snapshot/schedule/' + URLVerbs.CREATE, {
-            path: snapScheduleObj.path
-          }),
-          call: this.snapScheduleService.create(snapScheduleObj)
-        })
-        .subscribe({
-          error: () => {
-            this.snapScheduleForm.setErrors({ cdSubmitButton: true });
-          },
-          complete: () => {
-            this.activeModal.close();
-          }
-        });
-    }
+    });
   }
 
   validateSchedule() {
@@ -379,11 +391,13 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
               directory?.value,
               this.fsName,
               repeatInterval?.value,
-              repeatFrequency?.value
+              repeatFrequency?.value,
+              this.isSubvolume
             )
             .pipe(
               map((exists: boolean) => {
                 if (exists) {
+                  repeatFrequency?.markAsDirty();
                   repeatFrequency?.setErrors({ notUnique: true }, { emitEvent: true });
                 } else {
                   repeatFrequency?.setErrors(null);
