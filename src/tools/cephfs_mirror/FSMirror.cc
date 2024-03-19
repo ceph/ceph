@@ -462,7 +462,7 @@ void FSMirror::mirror_status(Formatter *f) {
   f->open_object_section("status");
   if (m_init_failed) {
     f->dump_string("state", "failed");
-  } else if (is_blocklisted(locker)) {
+  } else if (is_blocklisted()) {
     f->dump_string("state", "blocklisted");
   } else {
     // dump rados addr for blocklist test

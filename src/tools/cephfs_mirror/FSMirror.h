@@ -66,7 +66,14 @@ public:
 
   bool is_blocklisted() {
     std::scoped_lock locker(m_lock);
-    return is_blocklisted(locker);
+    bool blocklisted = false;
+    if (m_instance_watcher) {
+      blocklisted = m_instance_watcher->is_blocklisted();
+    }
+    if (m_mirror_watcher) {
+      blocklisted |= m_mirror_watcher->is_blocklisted();
+    }
+    return blocklisted;
   }
 
   utime_t get_blocklisted_ts() {
@@ -97,18 +104,6 @@ public:
   void reopen_logs();
 
 private:
-  bool is_blocklisted(const std::scoped_lock<ceph::mutex> &locker) const {
-    bool blocklisted = false;
-    if (m_instance_watcher) {
-      blocklisted = m_instance_watcher->is_blocklisted();
-    }
-    if (m_mirror_watcher) {
-      blocklisted |= m_mirror_watcher->is_blocklisted();
-    }
-
-    return blocklisted;
-  }
-
   struct SnapListener : public InstanceWatcher::Listener {
     FSMirror *fs_mirror;
 
