@@ -149,6 +149,8 @@
   module is now available. Users may run `ceph balancer status detail` to see more
   details about which PGs were updated in the balancer's last optimization.
   See https://docs.ceph.com/en/latest/rados/operations/balancer/ for more information.
+* CephFS: Full support for subvolumes and subvolume groups is now available
+  for snap_schedule Manager module.
 
 >=18.0.0
 
