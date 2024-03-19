@@ -1,0 +1,20 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 smarttab expandtab
+
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+#include <seastar/core/future.hh>
+#include <seastar/core/do_with.hh>
+
+#include "crimson/osd/ec_recovery_backend.h"
+#include "crimson/osd/pg.h"
+#include "crimson/osd/pg_backend.h"
+#include "msg/Message.h"
+#include "osd/osd_types_fmt.h"
+
+namespace {
+  seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_osd);
+  }
+}
+
