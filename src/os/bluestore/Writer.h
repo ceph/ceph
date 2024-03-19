@@ -59,6 +59,13 @@ public:
     bufferlist& data
   );
 
+  void do_write_with_blobs(
+    uint32_t location,
+    uint32_t data_end,
+    uint32_t ref_end,
+    blob_vec& blobs
+  );
+
   void debug_iterate_buffers(
     std::function<void(uint32_t offset, const bufferlist& data)> data_callback
   );

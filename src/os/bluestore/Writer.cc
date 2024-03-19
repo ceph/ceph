@@ -1323,6 +1323,15 @@ void BlueStore::Writer::do_write(
   if (ref_end < onode->onode.size) {
     ref_end = std::min<uint32_t>(data_end, onode->onode.size);
   }
+  do_write_with_blobs(location, data_end, ref_end, bd);
+}
+
+void BlueStore::Writer::do_write_with_blobs(
+  uint32_t location,
+  uint32_t data_end,
+  uint32_t ref_end,
+  blob_vec& bd)
+{
   dout(20) << "blobs to put:" << blob_data_printer(bd, location) << dendl;
   statfs_delta.stored() += ref_end - location;
   exmp_it after_punch_it =
