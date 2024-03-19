@@ -9,6 +9,8 @@
 #include "crimson/osd/ec_recovery_backend.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDPGPushReply.h"
 #include "msg/Message.h"
 #include "osd/osd_types_fmt.h"
 
@@ -33,6 +35,11 @@ ECRecoveryBackend::handle_recovery_op(
   crimson::net::ConnectionXcoreRef conn)
 {
   switch (m->get_header().type) {
+  case MSG_OSD_PG_PUSH:
+    return handle_push(boost::static_pointer_cast<MOSDPGPush>(m));
+  case MSG_OSD_PG_PUSH_REPLY:
+    return handle_push_reply(
+	boost::static_pointer_cast<MOSDPGPushReply>(m));
   default:
     // delegate to parent class for handling backend-agnostic recovery ops.
     return RecoveryBackend::handle_recovery_op(std::move(m), conn);
