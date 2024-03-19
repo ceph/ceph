@@ -576,56 +576,61 @@ void SnapMapper::reset_prefix_itr(snapid_t snap, const char *s)
   prefix_itr      = prefixes.begin();
 }
 
-void SnapMapper::get_objects_by_prefixes(
+vector<hobject_t> SnapMapper::get_objects_by_prefixes(
   snapid_t snap,
-  unsigned max,
-  vector<hobject_t> *out)
+  unsigned max)
 {
+  vector<hobject_t> out;
+
   /// maintain the prefix_itr between calls to avoid searching depleted prefixes
   for ( ; prefix_itr != prefixes.end(); prefix_itr++) {
-    string prefix(get_prefix(pool, snap) + *prefix_itr);
+    const string prefix(get_prefix(pool, snap) + *prefix_itr);
     string pos = prefix;
-    while (out->size() < max) {
+    while (out.size() < max) {
       pair<string, ceph::buffer::list> next;
       // access RocksDB (an expensive operation!)
       int r = backend.get_next(pos, &next);
       dout(20) << __func__ << " get_next(" << pos << ") returns " << r
-	       << " " << next << dendl;
+	       << " " << next.first << dendl;
       if (r != 0) {
-	return; // Done
-      }
-
-      if (next.first.substr(0, prefix.size()) !=
-	  prefix) {
-	// TBD: we access the DB twice for the first object of each iterator...
-	break; // Done with this prefix
+	return out; // Done
       }
 
       ceph_assert(is_mapping(next.first));
+
+      if (auto next_prefix = next.first.substr(0, prefix.size());
+          next_prefix != prefix) {
+	// TBD: we access the DB twice for the first object of each iterator...
+	dout(20) << fmt::format("{}: breaking, prefix expected {} got {}",
+	                        __func__, prefix, next_prefix)
+	         << dendl;
+	break; // Done with this prefix
+      }
 
       dout(20) << __func__ << " " << next.first << dendl;
       pair<snapid_t, hobject_t> next_decoded(from_raw(next));
       ceph_assert(next_decoded.first == snap);
       ceph_assert(check(next_decoded.second));
 
-      out->push_back(next_decoded.second);
+      out.push_back(next_decoded.second);
       pos = next.first;
     }
 
-    if (out->size() >= max) {
-      return;
+    if (out.size() >= max) {
+      dout(20) << fmt::format("{}: reached max of: {} returning",
+                              __func__, out.size())
+               << dendl;
+      return out;
     }
   }
+  return out;
 }
 
-int SnapMapper::get_next_objects_to_trim(
+std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
   snapid_t snap,
-  unsigned max,
-  vector<hobject_t> *out)
+  unsigned max)
 {
   dout(20) << __func__ << "::snapid=" << snap << dendl;
-  ceph_assert(out);
-  ceph_assert(out->empty());
 
   // if max would be 0, we return ENOENT and the caller would mistakenly
   // trim the snaptrim queue
@@ -649,24 +654,25 @@ int SnapMapper::get_next_objects_to_trim(
   // For more info see PG::filter_snapc()
   //
   // We still like to be extra careful and run one extra loop over all prefixes
-  get_objects_by_prefixes(snap, max, out);
-  if (unlikely(out->size() == 0)) {
+  auto objs = get_objects_by_prefixes(snap, max);
+  if (unlikely(objs.size() == 0)) {
     reset_prefix_itr(snap, "Second pass trim");
-    get_objects_by_prefixes(snap, max, out);
+    objs = get_objects_by_prefixes(snap, max);
 
-    if (unlikely(out->size() > 0)) {
+    if (unlikely(objs.size() > 0)) {
       derr << __func__ << "::New Clone-Objects were added to Snap " << snap
 	   << " after trimming was started" << dendl;
     }
     reset_prefix_itr(CEPH_NOSNAP, "Trim was completed successfully");
   }
 
-  if (out->size() == 0) {
-    return -ENOENT;
+  if (objs.size() == 0) {
+    return std::nullopt;
   } else {
-    return 0;
+    return objs;
   }
 }
+
 
 int SnapMapper::remove_oid(
   const hobject_t &oid,
