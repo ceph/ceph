@@ -447,6 +447,12 @@ RecoveryBackend::handle_backfill_op(
   crimson::net::ConnectionXcoreRef conn)
 {
   switch (m->get_header().type) {
+  case MSG_OSD_PG_RECOVERY_DELETE:
+    return handle_recovery_delete(
+	boost::static_pointer_cast<MOSDPGRecoveryDelete>(m));
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    return handle_recovery_delete_reply(
+	boost::static_pointer_cast<MOSDPGRecoveryDeleteReply>(m));
   case MSG_OSD_PG_BACKFILL:
     return handle_backfill(*boost::static_pointer_cast<MOSDPGBackfill>(m), conn);
   case MSG_OSD_PG_BACKFILL_REMOVE:
