@@ -1,8 +1,9 @@
 export enum RetentionFrequency {
+  Minutely = 'm',
   Hourly = 'h',
   Daily = 'd',
   Weekly = 'w',
-  Monthly = 'm',
+  Monthly = 'M',
   Yearly = 'y',
   'lastest snapshots' = 'n'
 }
@@ -11,7 +12,8 @@ export enum RetentionFrequencyCopy {
   h = 'Hourly',
   d = 'Daily',
   w = 'Weekly',
-  m = 'Monthly',
+  M = 'Monthly',
+  m = 'Minutely',
   y = 'Yearly',
   n = 'lastest snapshots'
 }
