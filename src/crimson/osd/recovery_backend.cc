@@ -14,6 +14,8 @@
 #include "crimson/osd/osd_operations/background_recovery.h"
 
 #include "messages/MOSDFastDispatchOp.h"
+#include "messages/MOSDPGRecoveryDelete.h"
+#include "messages/MOSDPGRecoveryDeleteReply.h"
 #include "osd/osd_types.h"
 
 SET_SUBSYS(osd);
