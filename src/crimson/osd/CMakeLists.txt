@@ -1,6 +1,7 @@
 add_executable(crimson-osd
   backfill_state.cc
   ec_backend.cc
+  ec_recovery_backend.cc
   heartbeat.cc
   lsan_suppressions.cc
   main.cc
