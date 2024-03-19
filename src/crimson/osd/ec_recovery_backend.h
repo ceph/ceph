@@ -16,6 +16,8 @@
 
 #include "messages/MOSDPGBackfill.h"
 #include "messages/MOSDPGBackfillRemove.h"
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDPGScan.h"
 #include "osd/recovery_types.h"
 #include "osd/osd_types.h"
@@ -46,4 +48,10 @@ public:
   seastar::future<> on_stop() final {
     return seastar::now();
   }
+
+private:
+  interruptible_future<> handle_push(
+    Ref<MOSDPGPush> m);
+  interruptible_future<> handle_push_reply(
+    Ref<MOSDPGPushReply> m);
 };
