@@ -1,5 +1,11 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  TestBed,
+  discardPeriodicTasks,
+  fakeAsync,
+  tick
+} from '@angular/core/testing';
 
 import { CephfsSnapshotscheduleFormComponent } from './cephfs-snapshotschedule-form.component';
 import {
@@ -13,12 +19,12 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { FormHelper, configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
+import { of } from 'rxjs';
 
 describe('CephfsSnapshotscheduleFormComponent', () => {
   let component: CephfsSnapshotscheduleFormComponent;
   let fixture: ComponentFixture<CephfsSnapshotscheduleFormComponent>;
   let formHelper: FormHelper;
-  let createSpy: jasmine.Spy;
 
   configureTestBed({
     declarations: [CephfsSnapshotscheduleFormComponent],
@@ -40,7 +46,6 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
     component.fsName = 'test_fs';
     component.ngOnInit();
     formHelper = new FormHelper(component.snapScheduleForm);
-    createSpy = spyOn(TestBed.inject(CephfsSnapshotScheduleService), 'create').and.stub();
     fixture.detectChanges();
   });
 
@@ -53,7 +58,12 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
     expect(nativeEl.querySelector('cd-modal')).not.toBe(null);
   });
 
-  it('should submit the form', () => {
+  it('should submit the form', fakeAsync(() => {
+    const createSpy = spyOn(TestBed.inject(CephfsSnapshotScheduleService), 'create').and.stub();
+    const checkScheduleExistsSpy = spyOn(
+      TestBed.inject(CephfsSnapshotScheduleService),
+      'checkScheduleExists'
+    ).and.returnValue(of(false));
     const input = {
       directory: '/test',
       startDate: {
@@ -73,7 +83,10 @@ describe('CephfsSnapshotscheduleFormComponent', () => {
     formHelper.setMultipleValues(input);
     component.snapScheduleForm.get('directory').setValue('/test');
     component.submit();
+    tick(400);
 
+    expect(checkScheduleExistsSpy).toHaveBeenCalled();
     expect(createSpy).toHaveBeenCalled();
-  });
+    discardPeriodicTasks();
+  }));
 });
