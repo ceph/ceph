@@ -232,7 +232,7 @@ Remove an OSD
 
 Removing an OSD from a cluster involves two steps:
 
-#. evacuating all placement groups (PGs) from the cluster
+#. evacuating all placement groups (PGs) from the OSD
 #. removing the PG-free OSD from the cluster
 
 The following command performs these two steps:
