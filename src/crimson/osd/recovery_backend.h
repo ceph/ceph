@@ -43,6 +43,14 @@ public:
       coll{coll},
       backend{backend} {}
   virtual ~RecoveryBackend() {}
+
+  static std::unique_ptr<RecoveryBackend> create(
+    const pg_pool_t& pool,
+    crimson::osd::PG& pg,
+    crimson::osd::ShardServices& shard_services,
+    crimson::os::CollectionRef coll,
+    PGBackend* backend);
+
   std::pair<WaitForObjectRecovery&, bool> add_recovering(const hobject_t& soid) {
     auto [it, added] = recovering.emplace(soid, new WaitForObjectRecovery(pg));
     assert(it->second);

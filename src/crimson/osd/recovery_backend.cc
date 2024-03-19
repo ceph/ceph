@@ -6,7 +6,9 @@
 #include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
 #include "crimson/common/log.h"
+#include "crimson/osd/ec_recovery_backend.h"
 #include "crimson/osd/recovery_backend.h"
+#include "crimson/osd/replicated_recovery_backend.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
@@ -466,4 +468,24 @@ RecoveryBackend::handle_backfill_op(
   }
 }
 
+std::unique_ptr<RecoveryBackend> RecoveryBackend::create(
+  const pg_pool_t& pool,
+  crimson::osd::PG& pg,
+  crimson::osd::ShardServices& shard_services,
+  crimson::os::CollectionRef coll,
+  PGBackend* backend)
+{
+  switch (pool.type) {
+  case pg_pool_t::TYPE_REPLICATED:
+    return std::make_unique<ReplicatedRecoveryBackend>(
+      pg, shard_services, coll, backend);
+  case pg_pool_t::TYPE_ERASURE:
+    return std::make_unique<ECRecoveryBackend>(
+      pg, shard_services, coll, backend);
+  default:
+    ceph_abort_msg(seastar::format(
+      "unsupported pool type '{}'", pool.type));
+  }
 }
+
+} // namespace crimson::osd

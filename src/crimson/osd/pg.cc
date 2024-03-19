@@ -38,6 +38,7 @@
 #include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/ec_backend.h"
+#include "crimson/osd/ec_recovery_backend.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/pg_backend.h"
@@ -120,8 +121,12 @@ PG::PG(
 	*this,
 	*this)),
     recovery_backend(
-      std::make_unique<ReplicatedRecoveryBackend>(
-	*this, shard_services, coll_ref, backend.get())),
+       RecoveryBackend::create(
+	pool,
+	*this,
+        shard_services,
+        coll_ref,
+        backend.get())),
     recovery_handler(
       std::make_unique<PGRecovery>(this)),
     peering_state(
