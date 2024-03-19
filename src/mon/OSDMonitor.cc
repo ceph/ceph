@@ -11305,6 +11305,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  err = 0;
 	  goto reply_no_propose;
 	}
+	bool force_no_fake = false;
+	cmd_getval(cmdmap, "yes_i_really_mean_it", force_no_fake);
 	if (!force) {
 	  err = -EPERM;
 	  ss << "will not override erasure code profile " << name
@@ -11312,6 +11314,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     << existing_profile_map
 	     << " is different from the proposed profile "
 	     << profile_map;
+	  goto reply_no_propose;
+	} else if (!force_no_fake) {
+	  err = -EPERM;
+	  ss << "overriding erasure code profile can be DANGEROUS"
+	     << "; add --yes-i-really-mean-it to do it anyway";
 	  goto reply_no_propose;
 	}
       }
