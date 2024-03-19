@@ -6963,6 +6963,10 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
     *pbs = bs;
   }
 
+  if (target->bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord) {
+    store->reshard_failed_while_logrecord(target->bucket_info, y, dpp);
+  }
+
   return 0;
 }
 
@@ -7656,9 +7660,76 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
     return r;
   }
 
+  if (bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord) {
+    reshard_failed_while_logrecord(bucket_info, y, dpp);
+  }
+
   return 0;
 }
 
+int RGWRados::reshard_failed_while_logrecord(RGWBucketInfo& bucket_info, optional_yield y,
+                                             const DoutPrefixProvider *dpp)
+{
+  real_time now = real_clock::now();
+  double r = rand() / (double)RAND_MAX;
+  double reshard_progress_judge_interval = cct->_conf.get_val<uint64_t>("rgw_reshard_progress_judge_interval");
+  // avoid getting reshard_lock simultaneously by mass differrent operation
+  reshard_progress_judge_interval +=
+    reshard_progress_judge_interval * cct->_conf.get_val<double>("rgw_reshard_progress_judge_ratio") * r;
+  if (now - bucket_info.layout.judge_reshard_lock_time >= make_timespan(reshard_progress_judge_interval)) {
+
+    map<string, bufferlist> bucket_attrs;
+    int ret = get_bucket_info(&svc, bucket_info.bucket.tenant, bucket_info.bucket.name,
+                              bucket_info, nullptr, y, dpp, &bucket_attrs);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ <<
+        " ERROR: failed to refresh bucket info : " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    if (bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord &&
+        now - bucket_info.layout.judge_reshard_lock_time >= make_timespan(reshard_progress_judge_interval))
+      return reshard_failed_while_logrecord(bucket_info, bucket_attrs, y, dpp);
+  }
+  return 0;
+}
+
+int RGWRados::reshard_failed_while_logrecord(RGWBucketInfo& bucket_info,
+                                            map<string, bufferlist>& bucket_attrs,
+                                            optional_yield y,
+                                            const DoutPrefixProvider *dpp)
+{
+  RGWBucketReshardLock reshard_lock(this->driver, bucket_info, true);
+  int ret = reshard_lock.lock(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << __func__ <<
+      " INFO: failed to take reshard lock for bucket " <<
+      bucket_info.bucket.bucket_id << "; expected if resharding underway" << dendl;
+    // update the judge time
+    bucket_info.layout.judge_reshard_lock_time = real_clock::now();
+    ret = put_bucket_instance_info(bucket_info, false, real_time(), &bucket_attrs, dpp, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "RGWReshard::" << __func__ <<
+        " ERROR: error putting bucket instance info: " << cpp_strerror(-ret) << dendl;
+    }
+  } else {
+    ldpp_dout(dpp,20) << __func__ << ": reshard lock success, " <<
+      "that means the reshard has failed for bucekt " << bucket_info.bucket.bucket_id << dendl;
+    // clear the RESHARD_IN_PROGRESS status after reshard failed, also set bucket instance
+    // status to CLS_RGW_RESHARD_NONE
+    ret = RGWBucketReshard::clear_resharding(this->driver, bucket_info, bucket_attrs, dpp, y);
+    reshard_lock.unlock();
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ <<
+        " ERROR: failed to clear resharding flags for bucket " <<
+        bucket_info.bucket.bucket_id << dendl;
+    } else {
+      ldpp_dout(dpp, 5) << __func__ <<
+        " INFO: apparently successfully cleared resharding flags for "
+        "bucket " << bucket_info.bucket.bucket_id << dendl;
+    } // if clear resharding succeeded
+  } // if taking of lock succeeded
+  return 0;
+}
 
 int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
                                      const rgw_obj& obj_instance,

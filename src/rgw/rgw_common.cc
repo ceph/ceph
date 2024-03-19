@@ -2300,7 +2300,6 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
     encode(empty, bl);
   }
   ceph::versioned_variant::encode(owner, bl); // v24
-
   ENCODE_FINISH(bl);
 }
 

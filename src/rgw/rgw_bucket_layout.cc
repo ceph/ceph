@@ -15,6 +15,7 @@
 
 #include <boost/algorithm/string.hpp>
 #include "rgw_bucket_layout.h"
+#include "include/utime.h"
 
 namespace rgw {
 
@@ -335,16 +336,17 @@ void decode_json_obj(BucketReshardState& s, JSONObj *obj)
 // BucketLayout
 void encode(const BucketLayout& l, bufferlist& bl, uint64_t f)
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   encode(l.resharding, bl);
   encode(l.current_index, bl);
   encode(l.target_index, bl);
   encode(l.logs, bl);
+  encode(l.judge_reshard_lock_time, bl);
   ENCODE_FINISH(bl);
 }
 void decode(BucketLayout& l, bufferlist::const_iterator& bl)
 {
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   decode(l.resharding, bl);
   decode(l.current_index, bl);
   decode(l.target_index, bl);
@@ -356,6 +358,9 @@ void decode(BucketLayout& l, bufferlist::const_iterator& bl)
     }
   } else {
     decode(l.logs, bl);
+  }
+  if (struct_v >= 3) {
+    decode(l.judge_reshard_lock_time, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -371,6 +376,8 @@ void encode_json_impl(const char *name, const BucketLayout& l, ceph::Formatter *
   for (const auto& log : l.logs) {
     encode_json("log", log, f);
   }
+  utime_t jt(l.judge_reshard_lock_time);
+  encode_json("judge_reshard_lock_time", jt, f);
   f->close_section(); // logs[]
   f->close_section();
 }
@@ -380,6 +387,9 @@ void decode_json_obj(BucketLayout& l, JSONObj *obj)
   JSONDecoder::decode_json("current_index", l.current_index, obj);
   JSONDecoder::decode_json("target_index", l.target_index, obj);
   JSONDecoder::decode_json("logs", l.logs, obj);
+  utime_t ut;
+  JSONDecoder::decode_json("judge_reshard_lock_time", ut, obj);
+  l.judge_reshard_lock_time = ut.to_real_time();
 }
 
 } // namespace rgw

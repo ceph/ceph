@@ -1472,6 +1472,7 @@ static int bucket_stats(rgw::sal::Driver* driver,
 
   utime_t ut(bucket->get_modification_time());
   utime_t ctime_ut(bucket->get_creation_time());
+  utime_t logrecord_ut(bucket->get_info().layout.judge_reshard_lock_time);
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket->get_name());
@@ -1489,7 +1490,8 @@ static int bucket_stats(rgw::sal::Driver* driver,
   formatter->dump_int("index_generation", bucket_info.layout.current_index.gen);
   formatter->dump_int("num_shards",
 		      bucket_info.layout.current_index.layout.normal.num_shards);
-  formatter->dump_string("reshard_status", to_string(bucket_info.reshard_status));
+  formatter->dump_string("reshard_status", to_string(bucket_info.layout.resharding));
+  logrecord_ut.gmtime(formatter->dump_stream("judge_reshard_lock_time"));
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
   formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
   ::encode_json("owner", bucket_info.owner, formatter);
