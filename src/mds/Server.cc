@@ -8286,14 +8286,25 @@ void Server::handle_client_unlink(const MDRequestRef& mdr)
   // -- create stray dentry? --
   CDentry *straydn = NULL;
   if (dnl->is_primary()) {
+    //Handle race between unlink of secondary hardlink and linkmerge rename
+    //(triggered by unlink of primary) on to the same secondary hardlink.
+    //Cleanup the referent straydn prepared if the linkmerge wins the race.
+    if (mdr->straydn && mdr->referent_straydn) {
+      mdr->unpin(mdr->straydn);
+      mdr->straydn = NULL;
+    }
     straydn = prepare_stray_dentry(mdr, dnl->get_inode());
     if (!straydn)
       return;
+    mdr->referent_straydn = false;
     dout(10) << " straydn is " << *straydn << dendl;
   } else if (dnl->is_referent()) {
+    // Above race is not applicable here since a referent can get converted
+    // to primary but not the otherway.
     straydn = prepare_stray_dentry(mdr, dnl->get_referent_inode());
     if (!straydn)
       return;
+    mdr->referent_straydn = true;
     dout(10) << " referent straydn is " << *straydn << dendl;
   } else if (mdr->straydn) {
     mdr->unpin(mdr->straydn);
@@ -9142,11 +9153,13 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
     straydn = prepare_stray_dentry(mdr, destdnl->get_inode());
     if (!straydn)
       return;
+    mdr->referent_straydn = false;
     dout(10) << " straydn is " << *straydn << dendl;
   } else if (destdnl->is_referent() && linkmerge) {
     straydn = prepare_stray_dentry(mdr, destdnl->get_referent_inode());
     if (!straydn)
       return;
+    mdr->referent_straydn = true;
     dout(10) << " linkmerge referent straydn is " << *straydn << dendl;
   }
   else if (mdr->straydn) {
