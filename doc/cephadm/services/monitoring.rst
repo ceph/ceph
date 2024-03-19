@@ -86,29 +86,33 @@ steps below:
 Enabling security for the monitoring stack
 ----------------------------------------------
 
-By default, in a cephadm managed cluster, the monitoring components are set up and configured without incorporating any security measures.
-While this setup might suffice for certain deployments, other users with stricter security needs may find it necessary to protect their
-monitoring stack against unauthorized access to metrics and data. In such cases, cephadm relies on a specific configuration parameter,
+By default, in a cephadm-managed cluster, the monitoring components are set up and configured without enabling security measures.
+While this suffices for certain deployments, others with strict security needs may find it necessary to protect the
+monitoring stack against unauthorized access. In such cases, cephadm relies on a specific configuration parameter,
 `mgr/cephadm/secure_monitoring_stack`, which toggles the security settings for all monitoring components. To activate security
-measures, users must set this variable to true, as following:
+measures, set this option to ``true`` with a command of the following form:
 
    .. prompt:: bash #
 
      ceph config set mgr mgr/cephadm/secure_monitoring_stack true
 
-This configuration change will trigger a sequence of reconfigurations across all monitoring daemons, typically requiring
+This change will trigger a sequence of reconfigurations across all monitoring daemons, typically requiring
 few minutes until all components are fully operational. The updated secure configuration includes the following modifications:
 
-#. Prometheus: basic authentication is requiered to access the web portal and TLS is enabled for secure communication.
-#. Alertmanager: basic authentication is requiered to access the web portal and TLS is enabled for secure communication.
+#. Prometheus: basic authentication is required to access the web portal and TLS is enabled for secure communication.
+#. Alertmanager: basic authentication is required to access the web portal and TLS is enabled for secure communication.
 #. Node Exporter: TLS is enabled for secure communication.
 #. Grafana: TLS is enabled and authentication is requiered to access the datasource information.
 
-In this secure setup, users will need to setup authentication (username/password) for both Prometheus and Alertmanager. By default user/password are
-set to admin/admin. The user can change these value through the commands `orch prometheus set-credentials` and `orch alertmanager set-credentials`
-respectively. These commands offer the flexibility to input the username/password either as parameters or via a JSON file, which enhances security. Additionally,
-Cephadm provides commands such as `orch prometheus get-credentials` and `orch alertmanager get-credentials` to retrieve the currently configured credentials such
-as default values.
+In this secure setup, users will need to setup authentication
+(username/password) for both Prometheus and Alertmanager. By default the
+username and password are set to ``admin``/``admin``. The user can change these
+value with the commands ``ceph orch prometheus set-credentials`` and ``ceph
+orch alertmanager set-credentials`` respectively. These commands offer the
+flexibility to input the username/password either as parameters or via a JSON
+file, which enhances security. Additionally, Cephadm provides the commands
+`orch prometheus get-credentials` and `orch alertmanager get-credentials` to
+retrieve the current credentials.
 
 .. _cephadm-monitoring-centralized-logs:
 
