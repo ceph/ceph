@@ -14,50 +14,55 @@ namespace crimson::osd {
 
 seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
   spg_t pgid,
-  core_id_t core)
+  core_id_t core_expected)
 {
   LOG_PREFIX(PGShardMapping::get_or_create_pg_mapping);
   auto find_iter = pg_to_core.find(pgid);
   if (find_iter != pg_to_core.end()) {
     ceph_assert_always(find_iter->second != NULL_CORE);
-    if (core != NULL_CORE) {
-      ceph_assert_always(find_iter->second == core);
+    if (core_expected != NULL_CORE) {
+      ceph_assert_always(find_iter->second == core_expected);
     }
     return seastar::make_ready_future<core_id_t>(find_iter->second);
   } else {
-    return container().invoke_on(0,[pgid, core, FNAME]
-      (auto &primary_mapping) {
-      auto [insert_iter, inserted] = primary_mapping.pg_to_core.emplace(pgid, core);
+    return container().invoke_on(
+        0, [pgid, core_expected, FNAME](auto &primary_mapping) {
+      auto [insert_iter, inserted] =
+        primary_mapping.pg_to_core.emplace(pgid, core_expected);
       ceph_assert_always(inserted);
       ceph_assert_always(primary_mapping.core_to_num_pgs.size() > 0);
       std::map<core_id_t, unsigned>::iterator core_iter;
-      if (core == NULL_CORE) {
+      if (core_expected == NULL_CORE) {
         core_iter = std::min_element(
           primary_mapping.core_to_num_pgs.begin(),
           primary_mapping.core_to_num_pgs.end(),
-            [](const auto &left, const auto &right) {
+          [](const auto &left, const auto &right) {
             return left.second < right.second;
-        });
+          }
+        );
+        core_expected = core_iter->first;
       } else {
-        core_iter = primary_mapping.core_to_num_pgs.find(core);
+        core_iter = primary_mapping.core_to_num_pgs.find(core_expected);
       }
+      assert(core_expected != NULL_CORE);
       ceph_assert_always(primary_mapping.core_to_num_pgs.end() != core_iter);
-      insert_iter->second = core_iter->first;
+      insert_iter->second = core_expected;
       core_iter->second++;
-      DEBUG("mapping pg {} to core: {} with num_pgs of: {}",
-            pgid, insert_iter->second, core_iter->second);
+      DEBUG("mapping pg {} to core {} (primary) with num_pgs {}",
+            pgid, core_expected, core_iter->second);
       return primary_mapping.container().invoke_on_others(
-        [pgid = insert_iter->first, core = insert_iter->second, FNAME]
-        (auto &other_mapping) {
-        ceph_assert_always(core != NULL_CORE);
-        auto [insert_iter, inserted] = other_mapping.pg_to_core.emplace(pgid, core);
+          [pgid, core_expected, FNAME](auto &other_mapping) {
+        auto [insert_iter, inserted] =
+          other_mapping.pg_to_core.emplace(pgid, core_expected);
         ceph_assert_always(inserted);
-        DEBUG("mapping pg {} to core: {}", pgid, core);
+        DEBUG("mapping pg {} to core {} (others)",
+              pgid, core_expected);
       });
     }).then([this, pgid, FNAME] {
       auto find_iter = pg_to_core.find(pgid);
       ceph_assert_always(find_iter != pg_to_core.end());
-      DEBUG("returning pg {} mapping to core {}", pgid, find_iter->second);
+      DEBUG("returning pg {} mapping to core {}",
+            pgid, find_iter->second);
       return seastar::make_ready_future<core_id_t>(find_iter->second);
     });
   }
@@ -66,7 +71,8 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
 seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
   LOG_PREFIX(PGShardMapping::remove_pg_mapping);
   DEBUG("{}", pgid);
-  return container().invoke_on(0, [pgid, FNAME](auto &primary_mapping) {
+  return container().invoke_on(
+      0, [pgid, FNAME](auto &primary_mapping) {
     auto iter = primary_mapping.pg_to_core.find(pgid);
     ceph_assert_always(iter != primary_mapping.pg_to_core.end());
     ceph_assert_always(iter->second != NULL_CORE);
@@ -75,14 +81,14 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
     ceph_assert_always(count_iter->second > 0);
     --(count_iter->second);
     primary_mapping.pg_to_core.erase(iter);
-    DEBUG("pg {} mapping erased", pgid);
+    DEBUG("pg {} mapping erased (primary)", pgid);
     return primary_mapping.container().invoke_on_others(
       [pgid, FNAME](auto &other_mapping) {
       auto iter = other_mapping.pg_to_core.find(pgid);
       ceph_assert_always(iter != other_mapping.pg_to_core.end());
       ceph_assert_always(iter->second != NULL_CORE);
       other_mapping.pg_to_core.erase(iter);
-      DEBUG("pg {} mapping erased", pgid);
+      DEBUG("pg {} mapping erased (others)", pgid);
     });
   });
 }
