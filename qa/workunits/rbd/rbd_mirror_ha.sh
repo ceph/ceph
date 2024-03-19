@@ -1,7 +1,9 @@
-#!/bin/sh -ex
+#!/usr/bin/env bash
 #
 # rbd_mirror_ha.sh - test rbd-mirror daemons in HA mode
 #
+
+set -ex
 
 RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-7}
 
