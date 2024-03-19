@@ -558,18 +558,18 @@ public:
   // must be called with lock held to protect access to
   // snap_to_hobject and hobject_to_snap
   int trim_snap(snapid_t snapid, unsigned max_count, vector<hobject_t> & out) {
-    set<hobject_t>&   hobjects = snap_to_hobject[snapid];
-    vector<hobject_t> hoids;
-    int ret = mapper->get_next_objects_to_trim(snapid, max_count, &hoids);
-    if (ret == 0) {
-      out.insert(out.end(), hoids.begin(), hoids.end());
-      for (auto &&hoid: hoids) {
+
+    set<hobject_t>& hobjects = snap_to_hobject[snapid];
+    auto hoids = mapper->get_next_objects_to_trim(snapid, max_count);
+    if (hoids.has_value()) {
+      out.insert(out.end(), hoids->begin(), hoids->end());
+      for (auto &&hoid: *hoids) {
 	ceph_assert(!hoid.is_max());
 	ceph_assert(hobjects.count(hoid));
 	hobjects.erase(hoid);
 
 	map<hobject_t, set<snapid_t>>::iterator j = hobject_to_snap.find(hoid);
-	ceph_assert(j->second.count(snapid));
+	ceph_assert(j->second.contains(snapid));
 	set<snapid_t> old_snaps(j->second);
 	j->second.erase(snapid);
 
@@ -587,9 +587,9 @@ public:
 	}
 	hoid = hobject_t::get_max();
       }
-      hoids.clear();
+      return 0;
     }
-    return ret;
+    return -1;
   }
 
   // must be called with lock held to protect access to
