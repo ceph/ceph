@@ -29,7 +29,7 @@
      data-placement="left"
      [ngbTooltip]="usageTooltipTpl">
   <div class="progress-bar bg-info"
-       [ngClass]="{'bg-warning': (warningThreshold >= 0) && (usedPercentage/100 >= warningThreshold), 'bg-danger': (errorThreshold >= 0) && (usedPercentage/100 >= errorThreshold)}"
+       [ngClass]="{'bg-warning': warningThreshold && (warningThreshold >= 0) && (usedPercentage/100 >= warningThreshold), 'bg-danger': errorThreshold && (errorThreshold >= 0) && (usedPercentage/100 >= errorThreshold)}"
        role="progressbar"
        [attr.aria-label]="{ title }"
        i18n-aria-label="The title of this usage bar is { title }"
