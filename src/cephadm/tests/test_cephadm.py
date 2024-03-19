@@ -1,5 +1,6 @@
 # type: ignore
 
+import copy
 import errno
 import json
 import mock
@@ -783,6 +784,80 @@ class TestCephAdm(object):
         with mock.patch('cephadm.list_daemons', return_value=daemon_list):
             with mock.patch('cephadm.get_container_stats', return_value=container_stats):
                 assert _cephadm.get_container_info(ctx, daemon_filter, by_name) == output
+
+    @mock.patch('cephadm.list_daemons')
+    @mock.patch('cephadm.get_container_stats')
+    @mock.patch('cephadm.get_container_stats_by_image_name')
+    def test_get_container_info_daemon_down(self, _get_stats_by_name, _get_stats, _list_daemons):
+        ctx = _cephadm.CephadmContext()
+        ctx.fsid = '5e39c134-dfc5-11ee-a344-5254000ee071'
+        ctx.container_engine = mock_podman()
+
+        # list_daemons output taken from cephadm ls of an
+        # OSD that was stopped, with subsititutions
+        # true -> True
+        # null -> None
+        down_osd_json = {
+                "style": "cephadm:v1",
+                "name": "osd.2",
+                "fsid": "5e39c134-dfc5-11ee-a344-5254000ee071",
+                "systemd_unit": "ceph-5e39c134-dfc5-11ee-a344-5254000ee071@osd.2",
+                "enabled": True,
+                "state": "stopped",
+                "service_name": "osd.foo",
+                "ports": [],
+                "ip": None,
+                "deployed_by": [
+                    "quay.io/adk3798/ceph@sha256:7da0af22ce45aac97dff00125af590506d8e36ab97d78e5175149643562bfb0b"
+                ],
+                "rank": None,
+                "rank_generation": None,
+                "extra_container_args": None,
+                "extra_entrypoint_args": None,
+                "memory_request": None,
+                "memory_limit": None,
+                "container_id": None,
+                "container_image_name": "quay.io/adk3798/ceph@sha256:7da0af22ce45aac97dff00125af590506d8e36ab97d78e5175149643562bfb0b",
+                "container_image_id": None,
+                "container_image_digests": None,
+                "version": None,
+                "started": None,
+                "created": "2024-03-11T17:17:49.533757Z",
+                "deployed": "2024-03-11T17:37:23.520061Z",
+                "configured": "2024-03-11T17:37:28.494075Z"
+        }
+        _list_daemons.return_value = [down_osd_json]
+        _get_stats_by_name.return_value = (('a03c201ff4080204949932f367545cd381c4acee0d48dbc15f2eac1e35f22318,'
+                                   '2023-11-28 21:34:38.045413692 +0000 UTC,'),
+                                   '', 0)
+
+        expected_container_info = _cephadm.ContainerInfo(
+            container_id='',
+            image_name='quay.io/adk3798/ceph@sha256:7da0af22ce45aac97dff00125af590506d8e36ab97d78e5175149643562bfb0b',
+            image_id='a03c201ff4080204949932f367545cd381c4acee0d48dbc15f2eac1e35f22318',
+            start='2023-11-28 21:34:38.045413692 +0000 UTC',
+            version='')
+
+        assert _cephadm.get_container_info(ctx, 'osd.2', by_name=True) == expected_container_info
+        assert not _get_stats.called, 'only get_container_stats_by_image_name should have been called'
+
+        # If there is one down and one up daemon of the same name, it should use the up one
+        # In this case, we would be using the running container to get the image, so
+        # all the info will come from the return value of get_container_stats, rather
+        # than it partially being taken from the list_daemons output
+        up_osd_json = copy.deepcopy(down_osd_json)
+        up_osd_json['state'] = 'running'
+        _get_stats.return_value = (('container_id,image_name,image_id,the_past,'), '', 0)
+        _list_daemons.return_value = [down_osd_json, up_osd_json]
+
+        expected_container_info = _cephadm.ContainerInfo(
+            container_id='container_id',
+            image_name='image_name',
+            image_id='image_id',
+            start='the_past',
+            version='')
+
+        assert _cephadm.get_container_info(ctx, 'osd.2', by_name=True) == expected_container_info
 
     def test_should_log_to_journald(self):
         from cephadmlib import context_getters
