@@ -18,3 +18,23 @@ namespace {
   }
 }
 
+RecoveryBackend::interruptible_future<>
+ECRecoveryBackend::recover_object(
+  const hobject_t& soid,
+  eversion_t need)
+{
+  logger().debug("{}: {}, {}", __func__, soid, need);
+  return seastar::now();
+}
+
+RecoveryBackend::interruptible_future<>
+ECRecoveryBackend::handle_recovery_op(
+  Ref<MOSDFastDispatchOp> m,
+  crimson::net::ConnectionXcoreRef conn)
+{
+  switch (m->get_header().type) {
+  default:
+    // delegate to parent class for handling backend-agnostic recovery ops.
+    return RecoveryBackend::handle_recovery_op(std::move(m), conn);
+  }
+}
