@@ -776,6 +776,7 @@ TEST_P(object_data_handler_test_t, random_overwrite) {
 
 TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
   run_async([this] {
+    disable_max_extent_size();
     enable_delta_based_overwrite();
     auto t = create_mutate_transaction();
     auto base = 4096 * 4;
@@ -857,14 +858,20 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
     EXPECT_EQ(committed.length(), pending.length());
     EXPECT_NE(committed, pending);
     disable_delta_based_overwrite();
+    enable_max_extent_size();
   });
 }
 
 INSTANTIATE_TEST_SUITE_P(
   object_data_handler_test,
   object_data_handler_test_t,
-  ::testing::Values (
-    "segmented",
-    "circularbounded"
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::FULL_CHECK,
+      integrity_check_t::NONFULL_CHECK)
   )
 );
