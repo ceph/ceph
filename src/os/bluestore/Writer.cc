@@ -967,6 +967,7 @@ void BlueStore::Writer::_try_put_data_on_allocated(
     // check if we have already allocated space to fill
     _try_reuse_allocated_l(after_punch_it, logical_offset, ref_end_offset, bd[0]);
   }
+  dout(25) << "0 real_length=" << std::hex << bd[0].real_length << std::dec << dendl;
   if (bd[0].real_length == 0) {
     bd.erase(bd.begin());
   }
@@ -983,6 +984,8 @@ void BlueStore::Writer::_try_put_data_on_allocated(
       // check if we have some allocated space to fill
       _try_reuse_allocated_r(after_punch_it, end_offset, ref_end_offset, bd_back);
     }
+      dout(25) << "back real_length=" << std::hex << bd_back.real_length << std::dec << dendl;
+
     if (bd_back.real_length == 0) {
       bd.erase(bd.end() - 1);
     }
@@ -1013,6 +1016,8 @@ void BlueStore::Writer::_do_put_new_blobs(
   blob_vec::iterator& bd_it,
   blob_vec::iterator bd_end)
 {
+  dout(20) << __func__ << std::hex <<  " logical_offset=" << logical_offset
+  << " ref_end_offset=" << ref_end_offset << dendl;
   extent_map_t& emap = onode->extent_map.extent_map;
   uint32_t blob_size = wctx->target_blob_size;
   while (bd_it != bd_end) {
@@ -1054,6 +1059,10 @@ void BlueStore::Writer::_do_put_blobs(
   blob_vec& bd,
   exmp_it after_punch_it)
 {
+  dout(10) << __func__ << std::hex
+    << " logical_offset=" << logical_offset
+    << " data_end_offset=" << data_end_offset
+    << " ref_end_offset=" << ref_end_offset << std::dec << dendl;
   Collection* coll = onode->c;
   extent_map_t& emap = onode->extent_map.extent_map;
   uint32_t au_size = bstore->min_alloc_size;
@@ -1445,6 +1454,7 @@ void BlueStore::Writer::do_write_with_blobs(
   // the only non-joined extent is between after_punch_it - 1 and after_punch_it.
   _maybe_meld_with_prev_extent(after_punch_it);
   dout(25) << "result: " << std::endl << onode->print(pp_mode) << dendl;
+
 }
 
 /**
