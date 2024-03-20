@@ -20,7 +20,7 @@ from io import BytesIO, StringIO
 from subprocess import DEVNULL
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
-from tasks.util.rados import cmd_erasure_code_profile
+from tasks.util.rados import cmd_erasure_code_profile, cmd_ec_crush_profile
 from tasks.util import get_remote
 
 from teuthology.contextutil import safe_while
@@ -565,9 +565,26 @@ class OSDThrasher(Thrasher):
         self.live_osds.append(osd)
         if self.random_eio > 0 and osd == self.rerrosd:
             self.ceph_manager.set_config(self.rerrosd,
-                                         filestore_debug_random_read_err = self.random_eio)
-            self.ceph_manager.set_config(self.rerrosd,
                                          bluestore_debug_random_read_err = self.random_eio)
+
+    def out_host(self, host=None):
+        """
+        Make all osds on a host out
+        :param host: Host to be marked.
+        """
+        # check that all osd remotes have a valid console
+        osds = self.ceph_manager.ctx.cluster.only(teuthology.is_type('osd', self.ceph_manager.cluster))
+        if host is None:
+            host = random.choice(list(osds.remotes.keys()))
+        self.log("Removing all osds in host %s" % (host,))
+
+        for role in osds.remotes[host]:
+            if not role.startswith("osd."):
+                continue
+            osdid = int(role.split('.')[1])
+            if self.in_osds.count(osdid) == 0:
+                continue
+            self.out_osd(osdid)
 
 
     def out_osd(self, osd=None):
@@ -1229,13 +1246,19 @@ class OSDThrasher(Thrasher):
         minout = int(self.config.get("min_out", 0))
         minlive = int(self.config.get("min_live", 2))
         mindead = int(self.config.get("min_dead", 0))
+        thrash_hosts = self.config.get("thrash_hosts", False)
 
         self.log('choose_action: min_in %d min_out '
                  '%d min_live %d min_dead %d '
                  'chance_down %.2f' %
                  (minin, minout, minlive, mindead, chance_down))
         actions = []
-        if len(self.in_osds) > minin:
+        if thrash_hosts:
+            self.log("check thrash_hosts")
+            if len(self.in_osds) > minin:
+                self.log("check thrash_hosts: in_osds > minin")
+                actions.append((self.out_host, 1.0,))
+        elif len(self.in_osds) > minin:
             actions.append((self.out_osd, 1.0,))
         if len(self.live_osds) > minlive and chance_down > 0:
             actions.append((self.kill_osd, chance_down,))
@@ -1407,9 +1430,6 @@ class OSDThrasher(Thrasher):
         self.rerrosd = self.live_osds[0]
         if self.random_eio > 0:
             self.ceph_manager.inject_args('osd', self.rerrosd,
-                                          'filestore_debug_random_read_err',
-                                          self.random_eio)
-            self.ceph_manager.inject_args('osd', self.rerrosd,
                                           'bluestore_debug_random_read_err',
                                           self.random_eio)
         self.log("starting do_thrash")
@@ -1442,8 +1462,6 @@ class OSDThrasher(Thrasher):
             time.sleep(delay)
         self.all_up()
         if self.random_eio > 0:
-            self.ceph_manager.inject_args('osd', self.rerrosd,
-                                          'filestore_debug_random_read_err', '0.0')
             self.ceph_manager.inject_args('osd', self.rerrosd,
                                           'bluestore_debug_random_read_err', '0.0')
         for pool in list(self.pools_to_fix_pgp_num):
@@ -2114,8 +2132,18 @@ class CephManager:
             args = cmd_erasure_code_profile(profile_name, profile)
             self.raw_cluster_cmd(*args)
 
+    def create_erasure_code_crush_rule(self, rule_name, profile):
+        """
+        Create an erasure code crush rule that can be used as a parameter
+        when creating an erasure coded pool.
+        """
+        with self.lock:
+            args = cmd_ec_crush_profile(rule_name, profile)
+            self.raw_cluster_cmd(*args)
+
     def create_pool_with_unique_name(self, pg_num=16,
                                      erasure_code_profile_name=None,
+                                     erasure_code_crush_rule_name=None,
                                      min_size=None,
                                      erasure_code_use_overwrites=False):
         """
@@ -2129,6 +2157,7 @@ class CephManager:
                 name,
                 pg_num,
                 erasure_code_profile_name=erasure_code_profile_name,
+                erasure_code_crush_rule_name=erasure_code_crush_rule_name,
                 min_size=min_size,
                 erasure_code_use_overwrites=erasure_code_use_overwrites)
         return name
@@ -2141,6 +2170,7 @@ class CephManager:
 
     def create_pool(self, pool_name, pg_num=16,
                     erasure_code_profile_name=None,
+                    erasure_code_crush_rule_name=None,
                     min_size=None,
                     erasure_code_use_overwrites=False):
         """
@@ -2149,6 +2179,8 @@ class CephManager:
         :param pg_num: initial number of pgs.
         :param erasure_code_profile_name: if set and !None create an
                                           erasure coded pool using the profile
+        :param erasure_code_crush_rule_name: if set and !None create an
+                                             erasure coded pool using the crush rule
         :param erasure_code_use_overwrites: if true, allow overwrites
         """
         with self.lock:
@@ -2157,9 +2189,14 @@ class CephManager:
             assert pool_name not in self.pools
             self.log("creating pool_name %s" % (pool_name,))
             if erasure_code_profile_name:
-                self.raw_cluster_cmd('osd', 'pool', 'create',
-                                     pool_name, str(pg_num), str(pg_num),
-                                     'erasure', erasure_code_profile_name)
+                cmd_args = ['osd', 'pool', 'create', 
+                            pool_name, str(pg_num), 
+                            str(pg_num), 'erasure', 
+                            erasure_code_profile_name]
+
+                if erasure_code_crush_rule_name:
+                    cmd_args.extend([erasure_code_crush_rule_name])
+                self.raw_cluster_cmd(*cmd_args)
             else:
                 self.raw_cluster_cmd('osd', 'pool', 'create',
                                      pool_name, str(pg_num))

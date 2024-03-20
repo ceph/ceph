@@ -1,6 +1,7 @@
 import logging
 
 from teuthology import misc as teuthology
+from teuthology.orchestra.run import Raw
 
 log = logging.getLogger(__name__)
 
@@ -85,3 +86,35 @@ def cmd_erasure_code_profile(profile_name, profile):
         'osd', 'erasure-code-profile', 'set',
         profile_name
         ] + [ str(key) + '=' + str(value) for key, value in profile.items() ]
+
+def cmd_ec_crush_profile(crush_name, profile):
+    """
+    Return the shell command to run to create the erasure code crush rule
+    described by the profile parameter.
+    
+    :param crush_name: a string matching [A-Za-z0-9-_.]+
+    :param profile: a map whose semantic depends on the crush rule syntax
+    :returns: a shell command as an array suitable for Remote.run
+
+    If profile is {}, return an empty list.
+    """
+
+    if profile == {}:
+        return []
+
+    id_value = profile.get('id', 1)
+    ec_type = profile.get('type', 'erasure')
+    min_size = profile.get('min_size', 1)
+    max_size = profile.get('max_size', 10)
+    steps = profile.get('steps', [])
+
+    crush_content = f"rule {crush_name}-{id_value} {{"
+    crush_content += f"    id {id_value}"
+    crush_content += f"    type {ec_type}"
+    crush_content += f"    min_size {min_size}"
+    crush_content += f"    max_size {max_size}"
+    for step in steps:
+        crush_content += f"    step {step}"
+    crush_content += "}"
+
+    return ['osd', 'crush', 'rule', 'create-erasure', crush_name, '-i', '-', Raw("<<<"), crush_content]

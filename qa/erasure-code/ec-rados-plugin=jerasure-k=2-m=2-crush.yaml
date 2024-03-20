@@ -1,0 +1,52 @@
+roles: 
+- [mon.a, mgr.y, osd.0]
+- [mon.b, osd.1] 
+- [mon.c, osd.2] 
+- [mgr.x, osd.3, client.0]
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 400000
+    max_seconds: 600
+    max_in_flight: 64
+    objects: 1024
+    size: 16384
+    ec_pool: true
+    write_append_excl: false
+    erasure_code_crush:
+      name: jerasure22crush
+      id: 22
+      type: erasure
+      min_size: 3
+      max_size: 6
+      steps: [
+        'set_chooseleaf_tries 5',
+        'set_choose_tries 100',
+        'take default class hdd',
+        'step chooseleaf indep 4 type host',
+        'choose indep 1 type osd',
+        'emit'
+      ]
+    erasure_code_profile:
+      name: jerasure22profile
+      plugin: jerasure
+      k: 2
+      m: 2
+      technique: reed_sol_van
+      crush-failure-domain: osd
+    op_weights:
+      read: 100
+      write: 0
+      append: 100
+      delete: 50
+      snap_create: 50
+      snap_remove: 50
+      rollback: 50
+      copy_from: 50
+      setattr: 25
+      rmattr: 25
