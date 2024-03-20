@@ -100,7 +100,7 @@ struct io_queue_t {
 
   virtual int init(std::vector<int> &fds) = 0;
   virtual void shutdown() = 0;
-  virtual int submit_batch(aio_iter begin, aio_iter end, 
+  virtual int submit_batch(aio_iter begin, aio_iter end,
 			   void *priv, int *retries) = 0;
   virtual int get_next_completed(int timeout_ms, aio_t **paio, int max) = 0;
 };

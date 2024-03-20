@@ -29,18 +29,25 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
   struct aio_t *piocb[max_iodepth];
 #endif
   int done = 0;
-  while (cur != end) {
+  int pushed = 0; //used for LIBAIO only
+  int pulled = 0;
+  while (cur != end || pushed < pulled) {
 #if defined(HAVE_LIBAIO)
-    int itemCount = 0;
-    while (cur != end && itemCount < max_iodepth) {
+    while (cur != end && pulled < max_iodepth) {
       cur->priv = priv;
-      piocb[itemCount] = &(*cur);
-      ++itemCount;
+      piocb[pulled] = &(*cur);
+      ++pulled;
       ++cur;
     }
-    r = io_submit(ctx, itemCount, (struct iocb**)piocb);
+    int toSubmit = pulled - pushed;
+    r = io_submit(ctx, toSubmit, (struct iocb**)(piocb + pushed));
+    if (r >= 0 && r < toSubmit) {
+      pushed += r;
+      done += r;
+      r = -EAGAIN;
+    }
 #elif defined(HAVE_POSIXAIO)
-    cur->priv = priv
+    cur->priv = priv;
     if ((cur->n_aiocb == 1) {
       // TODO: consider batching multiple reads together with lio_listio
       cur->aio.aiocb.aio_sigevent.sigev_notify = SIGEV_KEVENT;
@@ -69,6 +76,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
     done += r;
     attempts = 16;
     delay = 125;
+    pushed = pulled = 0;
   }
   return done;
 }
