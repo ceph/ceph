@@ -12,6 +12,7 @@
 #include "rgw_arn.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_bucket.h"
+#include "driver/rados/rgw_notify.h"
 #include "common/errno.h"
 #include "include/function2.hpp"
 #include <regex>
@@ -1078,7 +1079,17 @@ int RGWPubSub::remove_topic_v2(const DoutPrefixProvider* dpp,
                       << dendl;
     return ret;
   }
-  return ret;
+
+  const rgw_pubsub_dest& dest = topic.dest;
+  if (!dest.push_endpoint.empty() && dest.persistent &&
+      !dest.persistent_queue.empty()) {
+    ret = rgw::notify::remove_persistent_topic(topic.name, y);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "WARNING: failed to remove queue for "
+          "persistent topic: " << cpp_strerror(ret) << dendl;
+    } // not fatal
+  }
+  return 0;
 }
 
 int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const
@@ -1104,7 +1115,12 @@ int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& na
       return 0;
   }
 
-  topics.topics.erase(name);
+  auto t = topics.topics.find(name);
+  if (t == topics.topics.end()) {
+    return -ENOENT;
+  }
+  const rgw_pubsub_dest dest = std::move(t->second.dest);
+  topics.topics.erase(t);
 
   ret = write_topics_v1(dpp, topics, &objv_tracker, y);
   if (ret < 0) {
@@ -1112,5 +1128,13 @@ int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& na
     return ret;
   }
 
+  if (!dest.push_endpoint.empty() && dest.persistent &&
+      !dest.persistent_queue.empty()) {
+    ret = rgw::notify::remove_persistent_topic(name, y);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "WARNING: failed to remove queue for "
+          "persistent topic: " << cpp_strerror(ret) << dendl;
+    } // not fatal
+  }
   return 0;
 }
