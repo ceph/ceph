@@ -60,6 +60,8 @@ Possible -op commands::
 * meta-list
 * get-osdmap
 * set-osdmap
+* get-superblock
+* set-superblock
 * get-inc-osdmap
 * set-inc-osdmap
 * mark-complete
@@ -425,7 +427,7 @@ Options
 
 .. option:: --op arg
 
-   Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-export, trim-pg-log]
+   Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-superblock, set-superblock, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-export, trim-pg-log]
 
 .. option:: --epoch arg
 
@@ -433,7 +435,7 @@ Options
 
 .. option:: --file arg             
    
-   path of file to export, export-remove, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap
+   path of file to export, export-remove, import, get-osdmap, set-osdmap, get-superblock, set-superblock, get-inc-osdmap or set-inc-osdmap
 
 .. option:: --mon-store-path arg
 

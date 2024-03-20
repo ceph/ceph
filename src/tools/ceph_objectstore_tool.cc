@@ -3433,11 +3433,12 @@ int main(int argc, char **argv)
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, list-slow-omap, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-export, trim-pg-log, trim-pg-log-dups statfs]")
+     "get-osdmap, set-osdmap, get-superblock, set-superblock, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-export, trim-pg-log, "
+     "trim-pg-log-dups statfs]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
-     "path of file to export, export-remove, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap")
+     "path of file to export, export-remove, import, get-osdmap, set-osdmap, get-superblock, set-superblock, get-inc-osdmap or set-inc-osdmap")
     ("mon-store-path", po::value<string>(&mon_store_path),
      "path of monstore to update-mon-db")
     ("fsid", po::value<string>(&fsid),
@@ -3611,7 +3612,7 @@ int main(int argc, char **argv)
   outistty = isatty(STDOUT_FILENO) || tty;
 
   file_fd = fd_none;
-  if ((op == "export" || op == "export-remove" || op == "get-osdmap" || op == "get-inc-osdmap") && !dry_run) {
+  if ((op == "export" || op == "export-remove" || op == "get-osdmap" || op == "get-inc-osdmap" || op == "get-superblock") && !dry_run) {
     if (!vm.count("file") || file == "-") {
       if (outistty) {
         cerr << "stdout is a tty and no --file filename specified" << std::endl;
@@ -3621,7 +3622,7 @@ int main(int argc, char **argv)
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
-  } else if (op == "import" || op == "dump-export" || op == "set-osdmap" || op == "set-inc-osdmap" || op == "pg-log-inject-dups") {
+  } else if (op == "import" || op == "dump-export" || op == "set-osdmap" || op == "set-inc-osdmap" || op == "pg-log-inject-dups" || op == "set-superblock") {
     if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file filename specified" << std::endl;
@@ -3637,7 +3638,7 @@ int main(int argc, char **argv)
 
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
     cerr << "--file option only applies to import, dump-export, export, export-remove, "
-	 << "get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap" << std::endl;
+	 << "get-osdmap, set-osdmap, get-superblock, set-superblock, get-inc-osdmap or set-inc-osdmap" << std::endl;
     return 1;
   }
 
@@ -4097,6 +4098,36 @@ int main(int argc, char **argv)
       ret = set_inc_osdmap(fs.get(), epoch, bl, force);
     }
     goto out;
+  } else if (op == "get-superblock") {
+    bufferlist bl;
+    ceph_assert(superblock != nullptr);
+    encode(*superblock, bl);
+    ret = bl.write_fd(file_fd);
+    if (ret) {
+      cerr << "Failed to write to " << file << ": " << cpp_strerror(ret) << std::endl;
+      goto out;
+    } else {
+      cout << "superblock exported." << std::endl;
+    }
+    goto out;
+  } else if (op == "set-superblock") {
+    bufferlist bl;
+    ret = get_fd_data(file_fd, bl);
+    if (ret < 0) {
+      cerr << "Failed to read superblock " << cpp_strerror(ret) << std::endl;
+    } else {
+      // OSD::write_superblock
+      ObjectStore::Transaction t;
+      t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
+      auto ch = fs.get()->open_collection(coll_t::meta());
+      ret = fs.get()->queue_transaction(ch, std::move(t));
+      if (ret < 0) {
+        cerr << "Error setting superblock" << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
+      cout << "Superblock was set" << std::endl;
+    }
+    goto out;
   } else if (op == "update-mon-db") {
     if (!vm.count("mon-store-path")) {
       cerr << "Please specify the path to monitor db to update" << std::endl;
@@ -4232,7 +4263,8 @@ int main(int argc, char **argv)
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log" && op != "trim-pg-log-dups" && op != "pg-log-inject-dups") {
     cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log, trim-pg-log-dups statfs)"
+      "get-osdmap, set-osdmap, get-superblock, set-superblock, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-export, trim-pg-log, "
+      "trim-pg-log-dups statfs)"
 	 << std::endl;
     usage(desc);
     ret = 1;
