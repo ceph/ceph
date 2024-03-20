@@ -306,6 +306,12 @@ class RGWPSCreateTopicOp : public RGWOp {
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret == -ENOENT) {
       // topic not present
+
+      // initialize the persistent queue's location. this cannot change for
+      // existing topics. use ':' as the namespace delimiter because its
+      // inclusion in a TopicName would break ARNs
+      dest.persistent_queue = string_cat_reserve(
+          get_account_or_tenant(s->owner.id), ":", topic_name);
     } else if (ret < 0) {
       ldpp_dout(this, 1) << "failed to read topic '" << topic_name
           << "', with error:" << ret << dendl;

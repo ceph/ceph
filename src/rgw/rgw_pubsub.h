@@ -342,12 +342,14 @@ struct rgw_pubsub_dest {
   std::string arn_topic;
   bool stored_secret = false;
   bool persistent = false;
+  // rados object name of the persistent queue in the 'notif' pool
+  std::string persistent_queue;
   uint32_t time_to_live;
   uint32_t max_retries;
   uint32_t retry_sleep_duration;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(7, 1, bl);
     encode("", bl);
     encode("", bl);
     encode(push_endpoint, bl);
@@ -358,6 +360,7 @@ struct rgw_pubsub_dest {
     encode(time_to_live, bl);
     encode(max_retries, bl);
     encode(retry_sleep_duration, bl);
+    encode(persistent_queue, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -383,6 +386,13 @@ struct rgw_pubsub_dest {
       decode(time_to_live, bl);
       decode(max_retries, bl);
       decode(retry_sleep_duration, bl);
+    }
+    if (struct_v >= 7) {
+      decode(persistent_queue, bl);
+    } else if (persistent) {
+      // persistent topics created before v7 did not support tenant namespacing.
+      // continue to use 'arn_topic' alone as the queue's rados object name
+      persistent_queue = arn_topic;
     }
     DECODE_FINISH(bl);
   }

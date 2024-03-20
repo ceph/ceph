@@ -478,6 +478,7 @@ void rgw_pubsub_dest::dump(Formatter *f) const
   encode_json("push_endpoint_topic", arn_topic, f);
   encode_json("stored_secret", stored_secret, f);
   encode_json("persistent", persistent, f);
+  encode_json("persistent_queue", persistent_queue, f);
   encode_json("time_to_live", time_to_live!=DEFAULT_GLOBAL_VALUE? std::to_string(time_to_live): DEFAULT_CONFIG, f);
   encode_json("max_retries", max_retries!=DEFAULT_GLOBAL_VALUE? std::to_string(max_retries): DEFAULT_CONFIG, f);
   encode_json("retry_sleep_duration", retry_sleep_duration!=DEFAULT_GLOBAL_VALUE? std::to_string(retry_sleep_duration): DEFAULT_CONFIG, f);
@@ -525,6 +526,7 @@ void rgw_pubsub_dest::decode_json(JSONObj* f) {
   JSONDecoder::decode_json("push_endpoint_topic", arn_topic, f);
   JSONDecoder::decode_json("stored_secret", stored_secret, f);
   JSONDecoder::decode_json("persistent", persistent, f);
+  JSONDecoder::decode_json("persistent_queue", persistent_queue, f);
   std::string ttl;
   JSONDecoder::decode_json("time_to_live", ttl, f);
   time_to_live = ttl == DEFAULT_CONFIG ? DEFAULT_GLOBAL_VALUE : std::stoul(ttl);
