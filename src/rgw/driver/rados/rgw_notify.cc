@@ -1241,18 +1241,19 @@ int publish_abort(reservation_t& res) {
   return 0;
 }
 
-int get_persistent_queue_stats_by_topic_name(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
-                                             const std::string &topic_name, rgw_topic_stats &stats, optional_yield y)
+int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
+                               const std::string &queue_name, rgw_topic_stats &stats, optional_yield y)
 {
+  // TODO: use optional_yield instead calling rados_ioctx.operate() synchronously
   cls_2pc_reservations reservations;
-  auto ret = cls_2pc_queue_list_reservations(rados_ioctx, topic_name, reservations);
+  auto ret = cls_2pc_queue_list_reservations(rados_ioctx, queue_name, reservations);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to read queue list reservation: " << ret << dendl;
     return ret;
   }
   stats.queue_reservations = reservations.size();
 
-  ret = cls_2pc_queue_get_topic_stats(rados_ioctx, topic_name, stats.queue_entries, stats.queue_size);
+  ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, stats.queue_entries, stats.queue_size);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get the queue size or the number of entries: " << ret << dendl;
     return ret;
