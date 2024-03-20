@@ -49,13 +49,18 @@ int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rado
 struct reservation_t {
   struct topic_t {
     topic_t(const std::string& _configurationId, const rgw_pubsub_topic& _cfg,
-	    cls_2pc_reservation::id_t _res_id) :
-      configurationId(_configurationId), cfg(_cfg), res_id(_res_id) {}
+            cls_2pc_reservation::id_t _res_id,
+            rgw::notify::EventType _event_type)
+        : configurationId(_configurationId),
+          cfg(_cfg),
+          res_id(_res_id),
+          event_type(_event_type) {}
 
     const std::string configurationId;
     const rgw_pubsub_topic cfg;
     // res_id is reset after topic is committed/aborted
     cls_2pc_reservation::id_t res_id;
+    rgw::notify::EventType event_type;
   };
 
   const DoutPrefixProvider* const dpp;
@@ -112,10 +117,10 @@ struct rgw_topic_stats {
 
 // create a reservation on the 2-phase-commit queue
 int publish_reserve(const DoutPrefixProvider *dpp,
-		      const SiteConfig& site,
-		      EventType event_type,
-		      reservation_t& reservation,
-		      const RGWObjTags* req_tags);
+                    const SiteConfig& site,
+                    const EventTypeList& event_types,
+                    reservation_t& reservation,
+                    const RGWObjTags* req_tags);
 
 // commit the reservation to the queue
 int publish_commit(rgw::sal::Object* obj,
@@ -123,7 +128,6 @@ int publish_commit(rgw::sal::Object* obj,
         const ceph::real_time& mtime, 
         const std::string& etag, 
         const std::string& version,
-        EventType event_type,
         reservation_t& reservation,
         const DoutPrefixProvider *dpp);
 
