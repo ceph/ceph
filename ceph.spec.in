@@ -739,6 +739,11 @@ Requires:       python%{python3_pkgversion}-CherryPy
 Requires:       python%{python3_pkgversion}-PyYAML
 Requires:       python%{python3_pkgversion}-Werkzeug
 %endif
+# RHEL8 has python 3.6 and that lacks dataclasses in the stdlib, so pull in the
+# backport dataclasses module instead.
+%if 0%{?rhel} <= 8
+Requires:       python%{python3_pkgversion}-dataclasses
+%endif
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 %endif
@@ -1981,6 +1986,7 @@ fi
 %{_datadir}/ceph/mgr/restful
 %{_datadir}/ceph/mgr/rgw
 %{_datadir}/ceph/mgr/selftest
+%{_datadir}/ceph/mgr/smb
 %{_datadir}/ceph/mgr/snap_schedule
 %{_datadir}/ceph/mgr/stats
 %{_datadir}/ceph/mgr/status
