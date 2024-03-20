@@ -636,18 +636,6 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
 
   list<ec_align_t> to_read = rop.to_read.find(hoid)->second.to_read;
 
-  if (cct->_conf->osd_ec_partial_reads) {
-    // realign the offset and len to make partial reads normal reads.
-    list<ec_align_t> new_to_read;
-    for(const auto& read : to_read) {
-      auto bounds = make_pair(read.offset, read.size);
-      auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
-      new_to_read.push_back(
-          ec_align_t{aligned.first, aligned.second, read.flags});
-    }
-    to_read = new_to_read;
-  }
-
   // (Note cuixf) If we need to read attrs and we read failed, try to read again.
   bool want_attrs =
     rop.to_read.find(hoid)->second.want_attrs &&
@@ -663,9 +651,6 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
 	to_read,
 	shards,
 	want_attrs)));
-  if (cct->_conf->osd_ec_partial_reads) {
-    rop.refresh_complete(hoid);
-  }
   return 0;
 }
 

@@ -376,22 +376,6 @@ struct ECCommon {
     ReadOp() = delete;
     ReadOp(const ReadOp &) = delete; // due to on_complete being unique_ptr
     ReadOp(ReadOp &&) = default;
-
-    void refresh_complete(const hobject_t &hoid) {
-      std::list<
-        boost::tuple<
-          uint64_t, uint64_t, std::map<pg_shard_t, bufferlist>>> new_returned;
-      auto returned = complete[hoid].returned;
-      auto reads = to_read.find(hoid)->second.to_read;
-
-      auto r = returned.begin();
-      for (auto read : reads) {
-        new_returned.push_back(
-            boost::make_tuple(read.offset, read.size, r->get<2>()));
-        ++r;
-      }
-      complete[hoid].returned = new_returned;
-    }
   };
   struct ReadPipeline {
     void objects_read_and_reconstruct(
