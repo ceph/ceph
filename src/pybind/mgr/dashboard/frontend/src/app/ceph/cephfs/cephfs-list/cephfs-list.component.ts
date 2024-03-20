@@ -25,6 +25,7 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { CephfsMountDetailsComponent } from '../cephfs-mount-details/cephfs-mount-details.component';
 import { map, switchMap } from 'rxjs/operators';
 import { HealthService } from '~/app/shared/api/health.service';
+import { CephfsAuthModalComponent } from '~/app/ceph/cephfs/cephfs-auth-modal/cephfs-auth-modal.component';
 
 const BASE_URL = 'cephfs';
 
@@ -94,6 +95,12 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
         icon: Icons.edit,
         click: () =>
           this.router.navigate([this.urlBuilder.getEdit(this.selection.first().mdsmap.fs_name)])
+      },
+      {
+        name: this.actionLabels.AUTHORIZE,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => this.authorizeModal()
       },
       {
         name: this.actionLabels.ATTACH,
@@ -186,5 +193,17 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
     }
 
     return true;
+  }
+
+  authorizeModal() {
+    const selectedFileSystem = this.selection?.selected?.[0];
+    this.modalService.show(
+      CephfsAuthModalComponent,
+      {
+        fsName: selectedFileSystem.mdsmap['fs_name'],
+        id: selectedFileSystem.id
+      },
+      { size: 'lg' }
+    );
   }
 }
