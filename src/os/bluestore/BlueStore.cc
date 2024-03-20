@@ -13000,6 +13000,22 @@ int BlueStore::_do_read(
   return r;
 }
 
+void inline BlueStore::_do_read_and_pad(
+  Collection* c,
+  OnodeRef& o,
+  uint32_t offset,
+  uint32_t length,
+  ceph::buffer::list& bl)
+{
+  int r = _do_read(c, o, offset, length, bl, 0);
+  ceph_assert(r >= 0 && r <= (int)length);
+  size_t zlen = length - r;
+  if (zlen > 0) {
+    bl.append_zero(zlen);
+    logger->inc(l_bluestore_write_pad_bytes, zlen);
+  }
+}
+
 int BlueStore::_verify_csum(OnodeRef& o,
 			    const bluestore_blob_t* blob, uint64_t blob_xoffset,
 			    const bufferlist& bl,
@@ -17698,23 +17714,115 @@ int BlueStore::_do_write_v2(
   if (length == 0) {
     return 0;
   }
-  WriteContext wctx;
-  _choose_write_options(c, o, fadvise_flags, &wctx);
-  if (wctx.compress) {
-    // if we have compression, skip to write_v1
-    return _do_write(txc, c, o, offset, length, bl, fadvise_flags);
-  }
-  if (o->onode.segment_size != 0 && wctx.target_blob_size > o->onode.segment_size) {
-    wctx.target_blob_size = o->onode.segment_size;
-  }
+
   if (bl.length() != length) {
     bl.splice(length, bl.length() - length);
   }
-  uint64_t start = p2align(offset, min_alloc_size);
-  uint64_t end = p2roundup(offset + length, min_alloc_size);
-  o->extent_map.fault_range(db, start, end - start);
-  BlueStore::Writer wr(this, txc, &wctx, o);
-  wr.do_write(offset, bl);
+  WriteContext wctx;
+  _choose_write_options(c, o, fadvise_flags, &wctx);
+  if (wctx.compress) {
+    uint32_t end = offset + length;
+    uint32_t segment_size = o->onode.segment_size;
+    if (segment_size) {
+      // split data into segments
+      // first and last segments will do lookaround scan
+      uint32_t write_offset = offset;
+      while (write_offset != end) {
+        uint32_t this_segment_begin = p2align(write_offset, segment_size);
+        uint32_t this_segment_end = this_segment_begin + segment_size;
+        uint32_t write_length = std::min(this_segment_end, end) - write_offset;
+        _do_write_v2_compressed(txc, c, o, wctx, write_offset, write_length, bl,
+                                this_segment_begin, this_segment_end);
+        write_offset += write_length;
+      };
+    } else {
+      const uint32_t scan_range = 0x20000; //128kB
+      uint32_t scan_left = offset < scan_range ? 0: offset - scan_range;
+      uint32_t scan_right = end + scan_range;
+      _do_write_v2_compressed(txc, c, o, wctx, offset, length, bl,
+                              scan_left, scan_right);
+    }
+  } else {
+    // normal uncompressed path
+    int64_t start = p2align(offset, min_alloc_size);
+    uint64_t end = p2roundup(offset + length, min_alloc_size);
+    o->extent_map.fault_range(db, start, end - start);
+    BlueStore::Writer wr(this, txc, &wctx, o);
+    wr.do_write(offset, bl);
+    // equivalent of wctx_finish
+    // do_write updates allocations itself
+    // update statfs
+    txc->statfs_delta += wr.statfs_delta;
+    o->extent_map.compress_extent_map(start, end - start);
+    o->extent_map.dirty_range(start, end - start);
+    o->extent_map.maybe_reshard(start, end);
+  }
+  return r;
+}
+
+int BlueStore::_do_write_v2_compressed(
+  TransContext *txc,
+  CollectionRef &c,
+  OnodeRef& o,
+  WriteContext& wctx,
+  uint32_t offset, uint32_t length,
+  ceph::buffer::list& input_bl,
+  uint32_t scan_left, uint32_t scan_right)
+{
+  using P = BlueStore::printer;
+  o->extent_map.fault_range(db, scan_left, scan_right - scan_left);
+  Scanner scanner(this);
+  dout(20) << __func__ << " on: " << o->print(P::NICK + P::SDISK + P::SUSE) << dendl;
+  uint32_t max_blob_size = c->pool_opts.value_or(
+    pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, (int64_t)comp_max_blob_size.load());
+  Estimator estimator(this, min_alloc_size, max_blob_size);
+  scanner.write_lookaround(&o->extent_map, offset, length, scan_left,
+                           scan_right, &estimator);
+  std::vector<Estimator::region_t> regions;
+  estimator.get_regions(regions);
+  dout(15) << __func__ << " " << std::hex << offset << "~" << length << " -> ";
+  for (auto i : regions) {
+    *_dout << i.offset << "~" << i.length << " ";
+  }
+  *_dout << std::dec << dendl;
+  int r = 0;
+  CompressorRef compr;
+  compr = c->compression_algorithm.has_value() ?
+    compressors[*(c->compression_algorithm)]:
+    compressors[def_compressor_alg];
+  for (auto i : regions) {
+    ceph::buffer::list data_bl;
+    if (i.offset <= offset && offset < i.offset + i.length) {
+      // the starting point is withing the region, so the end must too
+      ceph_assert(offset + length <= i.offset + i.length);
+      if (i.offset < offset) {
+        _do_read_and_pad(c.get(), o, i.offset, offset - i.offset, data_bl);
+      }
+      data_bl.claim_append(input_bl);
+      if (offset + length < i.offset + i.length) {
+        ceph::buffer::list right_bl;
+        _do_read_and_pad(c.get(), o, offset + length,
+          i.offset + i.length - (offset + length), right_bl);
+        data_bl.claim_append(right_bl);
+      }
+    } else {
+      // the starting point is not within region, so the end is not allowed either
+      ceph_assert(offset + length < i.offset || offset + length >= i.offset + i.length);
+      _do_read_and_pad(c.get(), o, i.offset, i.length, data_bl);
+    }
+    ceph_assert(data_bl.length() == i.length);
+    Writer::blob_vec bd;
+    estimator.split_and_compress(compr, data_bl, bd);
+    BlueStore::Writer wr(this, txc, &wctx, o);
+    wr.do_write_with_blobs(
+      i.offset, i.offset + i.length, i.offset + i.length, bd);
+    txc->statfs_delta += wr.statfs_delta;
+  }
+  uint32_t changes_start = regions.front().offset;
+  uint32_t changes_end = regions.back().offset + regions.back().length;
+  o->extent_map.compress_extent_map(changes_start, changes_end - changes_start);
+  o->extent_map.dirty_range(changes_start, changes_end - changes_start);
+  o->extent_map.maybe_reshard(changes_start, changes_end);
   return r;
 }
 

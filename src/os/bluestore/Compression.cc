@@ -13,6 +13,7 @@
 
 #include "Compression.h"
 #include "BlueStore.h"
+#include "include/intarith.h"
 #include <limits>
 
 
@@ -119,6 +120,46 @@ void Estimator::get_regions(std::vector<region_t>& regions)
         size -= i;
       }
       end = unset;
+    }
+  }
+}
+
+void Estimator::split_and_compress(
+  CompressorRef compr,
+  ceph::buffer::list& data_bl,
+  Writer::blob_vec& bd)
+{
+  uint32_t size = data_bl.length();
+  ceph_assert(size > 0);
+  uint32_t blobs = (size + max_blob_size - 1) / max_blob_size;
+  uint32_t blob_size = p2roundup(size / blobs, min_alloc_size);
+  std::vector<uint32_t> blob_sizes(blobs);
+  for (auto& i: blob_sizes) {
+    i = std::min(size, blob_size);
+    size -= i;
+  }
+
+  for (auto& i: blob_sizes) {
+    bd.emplace_back();
+    bd.back().real_length = i;
+    bd.back().compressed_length = 0;
+    data_bl.splice(0, i, &bd.back().object_data);
+    // FIXME: memory alignment here is bad
+    bufferlist t;
+    std::optional<int32_t> compressor_message;
+    int r = compr->compress(bd.back().object_data, t, compressor_message);
+    ceph_assert(r == 0);
+    bluestore_compression_header_t chdr;
+    chdr.type = compr->get_type();
+    chdr.length = t.length();
+    chdr.compressor_message = compressor_message;
+    encode(chdr, bd.back().disk_data);
+    bd.back().disk_data.claim_append(t);
+    uint32_t len = bd.back().disk_data.length();
+    bd.back().compressed_length = len;
+    uint32_t rem = p2nphase<uint32_t>(len, bluestore->min_alloc_size);
+    if (rem > 0) {
+      bd.back().disk_data.append_zero(rem);
     }
   }
 }
