@@ -318,8 +318,12 @@ TEST_P(fltree_onode_manager_test_t, 2_synthetic)
 INSTANTIATE_TEST_SUITE_P(
   fltree_onode__manager_test,
   fltree_onode_manager_test_t,
-  ::testing::Values (
-    "segmented",
-    "circularbounded"
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::FULL_CHECK)
   )
 );

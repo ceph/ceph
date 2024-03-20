@@ -188,8 +188,12 @@ TEST_P(collection_manager_test_t, update)
 INSTANTIATE_TEST_SUITE_P(
   collection_manager_test,
   collection_manager_test_t,
-  ::testing::Values (
-    "segmented",
-    "circularbounded"
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::FULL_CHECK)
   )
 );
