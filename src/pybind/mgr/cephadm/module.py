@@ -128,13 +128,13 @@ os._exit = os_exit_noop   # type: ignore
 
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.io/ceph/ceph'
-DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.43.0'
-DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.5.0'
+DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.51.0'
+DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.7.0'
 DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:1.2.5'
 DEFAULT_LOKI_IMAGE = 'quay.io/ceph/loki:3.0.0'
 DEFAULT_PROMTAIL_IMAGE = 'quay.io/ceph/promtail:3.0.0'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.25.0'
-DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:9.4.12'
+DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/grafana:10.4.0'
 DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.2.4'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'quay.io/ceph/snmp-notifier:v1.2.1'
