@@ -315,7 +315,7 @@ int remove(const DoutPrefixProvider* dpp,
   if (ret < 0) {
     return ret;
   }
-  if (!users.users.empty()) {
+  if (!roles.roles.empty()) {
     err_msg = "The account cannot be deleted until all roles are removed.";
     return -ENOTEMPTY;
   }
