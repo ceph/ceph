@@ -5,6 +5,13 @@
 # abort on failure
 set -e
 
+# flush local redis server
+pid=`ps -ef | grep "redis-server"  | grep -v grep | awk -F' ' '{print $2}'`
+if [[ -n $pid ]]; then
+    echo "Flushing redis-server."
+    redis-cli FLUSHALL
+fi
+
 quoted_print() {
     for s in "$@"; do
         if [[ "$s" =~ \  ]]; then
