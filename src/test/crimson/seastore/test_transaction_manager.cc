@@ -1736,6 +1736,12 @@ struct tm_single_device_test_t :
   tm_single_device_test_t() : transaction_manager_test_t(1, 0) {}
 };
 
+struct tm_single_device_intergrity_check_test_t :
+  public transaction_manager_test_t {
+
+  tm_single_device_intergrity_check_test_t() : transaction_manager_test_t(1, 0) {}
+};
+
 struct tm_multi_device_test_t :
   public transaction_manager_test_t {
 
@@ -2120,7 +2126,7 @@ TEST_P(tm_single_device_test_t, find_hole_assert_trigger)
   });
 }
 
-TEST_P(tm_single_device_test_t, remap_lazy_read) 
+TEST_P(tm_single_device_intergrity_check_test_t, remap_lazy_read)
 {
   constexpr laddr_t offset = 0;
   constexpr size_t length = 256 << 10;
@@ -2186,12 +2192,12 @@ TEST_P(tm_single_device_test_t, parallel_extent_read)
   test_parallel_extent_read();
 }
 
-TEST_P(tm_single_device_test_t, test_remap_pin)
+TEST_P(tm_single_device_intergrity_check_test_t, test_remap_pin)
 {
   test_remap_pin();
 }
 
-TEST_P(tm_single_device_test_t, test_clone_and_remap_pin)
+TEST_P(tm_single_device_intergrity_check_test_t, test_clone_and_remap_pin)
 {
   test_clone_and_remap_pin();
 }
@@ -2201,7 +2207,7 @@ TEST_P(tm_single_device_test_t, test_overwrite_pin)
   test_overwrite_pin();
 }
 
-TEST_P(tm_single_device_test_t, test_remap_pin_concurrent)
+TEST_P(tm_single_device_intergrity_check_test_t, test_remap_pin_concurrent)
 {
   test_remap_pin_concurrent();
 }
@@ -2214,32 +2220,62 @@ TEST_P(tm_single_device_test_t, test_overwrite_pin_concurrent)
 INSTANTIATE_TEST_SUITE_P(
   transaction_manager_test,
   tm_single_device_test_t,
-  ::testing::Values (
-    "segmented",
-    "circularbounded"
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::NONFULL_CHECK)
+  )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+  transaction_manager_test,
+  tm_single_device_intergrity_check_test_t,
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::FULL_CHECK,
+      integrity_check_t::NONFULL_CHECK)
   )
 );
 
 INSTANTIATE_TEST_SUITE_P(
   transaction_manager_test,
   tm_multi_device_test_t,
-  ::testing::Values (
-    "segmented"
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented"
+    ),
+    ::testing::Values(
+      integrity_check_t::NONFULL_CHECK)
   )
 );
 
 INSTANTIATE_TEST_SUITE_P(
   transaction_manager_test,
   tm_multi_tier_device_test_t,
-  ::testing::Values (
-    "segmented"
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented"
+    ),
+    ::testing::Values(
+      integrity_check_t::NONFULL_CHECK)
   )
 );
 
 INSTANTIATE_TEST_SUITE_P(
   transaction_manager_test,
   tm_random_block_device_test_t,
-  ::testing::Values (
-    "circularbounded"
+  ::testing::Combine(
+    ::testing::Values (
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::NONFULL_CHECK)
   )
 );
