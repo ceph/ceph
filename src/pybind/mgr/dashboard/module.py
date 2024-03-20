@@ -456,6 +456,40 @@ class Module(MgrModule, CherryPyConfig):
         mgr.set_store('custom_login_banner', None)
         return HandleCommandResult(stdout='Login banner removed')
 
+    # allow cors by setting cross_origin_url
+    # the value is a comma separated list of URLs
+    @CLIWriteCommand("dashboard set-cross-origin-url")
+    def set_cross_origin_url(self, value: str):
+        cross_origin_urls = self.get_module_option('cross_origin_url', '')
+        cross_origin_urls_list = [url.strip()
+                                  for url in cross_origin_urls.split(',')]  # type: ignore
+        urls = [v.strip() for v in value.split(',')]
+        for url in urls:
+            if url in cross_origin_urls_list:
+                return -errno.EINVAL, '', 'Cross-origin URL already set'
+            cross_origin_urls_list.append(url)
+        self.set_module_option('cross_origin_url', ','.join(cross_origin_urls_list))
+        configure_cors()
+        return 0, 'Cross-origin URL set', ''
+
+    @CLIReadCommand("dashboard get-cross-origin-url")
+    def get_cross_origin_url(self):
+        urls = self.get_module_option('cross_origin_url', '')
+        if urls:
+            return HandleCommandResult(stdout=urls)  # type: ignore
+        return HandleCommandResult(stdout='No cross-origin URL set')
+
+    @CLIReadCommand("dashboard rm-cross-origin-url")
+    def rm_cross_origin_url(self, value: str):
+        urls = self.get_module_option('cross_origin_url', '')
+        urls_list = [url.strip() for url in urls.split(',')]  # type: ignore
+        if value not in urls_list:
+            return -errno.EINVAL, '', 'Cross-origin URL not set'
+        urls_list.remove(value)
+        self.set_module_option('cross_origin_url', ','.join(urls_list))
+        configure_cors()
+        return 0, 'Cross-origin URL removed', ''
+
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
         res = handle_option_command(cmd, inbuf)
