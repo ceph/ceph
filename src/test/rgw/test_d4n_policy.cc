@@ -119,8 +119,8 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	  } else {
 	    if (!block->hostsList.empty()) { 
 	      block->globalWeight += age;
-	      
-	      if (dir->update_field(block, "globalWeight", std::to_string(block->globalWeight), y) < 0) {
+	      auto globalWeight = std::to_string(block->globalWeight);
+	      if (dir->update_field(block, "globalWeight", globalWeight, y) < 0) {
 		return -1;
 	      } else {
 		return 0;
