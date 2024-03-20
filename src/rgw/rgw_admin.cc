@@ -11194,13 +11194,6 @@ next:
       cerr << "ERROR: could not remove topic: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    
-    ret = rgw::notify::remove_persistent_topic(
-        dpp(), static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_notif_pool_ctx(), topic_name, null_yield);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not remove persistent topic: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
   }
 
   if (opt_cmd == OPT::PUBSUB_NOTIFICATION_RM) {

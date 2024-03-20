@@ -992,15 +992,6 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
     // its not an error if no topics exist, just a no-op
     op_ret = 0;
   }
-  // upon deletion it is not known if topic is persistent or not
-  // will try to delete the persistent topic anyway
-  // doing this regardless of the topic being previously deleted
-  // to allow for cleanup if only the queue deletion failed
-  if (const auto ret = rgw::notify::remove_persistent_topic(topic_name, s->yield); ret < 0 && ret != -ENOENT) {
-    ldpp_dout(this, 1) << "DeleteTopic Action failed to remove queue for "
-                          "persistent topics. error:"
-                       << ret << dendl;
-  }
 }
 
 using op_generator = RGWOp*(*)(bufferlist);
