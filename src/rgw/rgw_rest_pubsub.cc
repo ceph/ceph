@@ -111,6 +111,11 @@ bool topics_has_endpoint_secret(const rgw_pubsub_topics& topics) {
     return false;
 }
 
+static bool topic_needs_queue(const rgw_pubsub_dest& dest)
+{
+  return !dest.push_endpoint.empty() && dest.persistent;
+}
+
 auto get_policy_from_text(req_state* const s, const std::string& policy_text)
   -> boost::optional<rgw::IAM::Policy>
 {
@@ -306,12 +311,6 @@ class RGWPSCreateTopicOp : public RGWOp {
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret == -ENOENT) {
       // topic not present
-
-      // initialize the persistent queue's location. this cannot change for
-      // existing topics. use ':' as the namespace delimiter because its
-      // inclusion in a TopicName would break ARNs
-      dest.persistent_queue = string_cat_reserve(
-          get_account_or_tenant(s->owner.id), ":", topic_name);
     } else if (ret < 0) {
       ldpp_dout(this, 1) << "failed to read topic '" << topic_name
           << "', with error:" << ret << dendl;
@@ -387,8 +386,16 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  if (!dest.push_endpoint.empty() && dest.persistent) {
-    op_ret = rgw::notify::add_persistent_topic(topic_name, s->yield);
+
+  // don't add a persistent queue if we already have one
+  const bool already_persistent = topic && topic_needs_queue(topic->dest);
+  if (!already_persistent && topic_needs_queue(dest)) {
+    // initialize the persistent queue's location, using ':' as the namespace
+    // delimiter because its inclusion in a TopicName would break ARNs
+    dest.persistent_queue = string_cat_reserve(
+        get_account_or_tenant(s->owner.id), ":", topic_name);
+
+    op_ret = rgw::notify::add_persistent_topic(dest.persistent_queue, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "CreateTopic Action failed to create queue for "
                             "persistent topics. error:"
@@ -838,8 +845,15 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
       return;
     }
   }
-  if (!dest.push_endpoint.empty() && dest.persistent) {
-    op_ret = rgw::notify::add_persistent_topic(topic_name, s->yield);
+  // don't add a persistent queue if we already have one
+  const bool already_persistent = topic_needs_queue(result.dest);
+  if (!already_persistent && topic_needs_queue(dest)) {
+    // initialize the persistent queue's location, using ':' as the namespace
+    // delimiter because its inclusion in a TopicName would break ARNs
+    dest.persistent_queue = string_cat_reserve(
+        get_account_or_tenant(s->owner.id), ":", topic_name);
+
+    op_ret = rgw::notify::add_persistent_topic(dest.persistent_queue, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 4)
           << "SetTopicAttributes Action failed to create queue for "
@@ -847,8 +861,9 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
           << op_ret << dendl;
       return;
     }
-  } else {  // changing the persistent topic to non-persistent.
-    op_ret = rgw::notify::remove_persistent_topic(topic_name, s->yield);
+  } else if (already_persistent) {
+    // changing the persistent topic to non-persistent.
+    op_ret = rgw::notify::remove_persistent_topic(result.dest.persistent_queue, s->yield);
     if (op_ret != -ENOENT && op_ret < 0) {
       ldpp_dout(this, 4) << "SetTopicAttributes Action failed to remove queue "
                             "for persistent topics. error:"

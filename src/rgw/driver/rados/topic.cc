@@ -352,11 +352,12 @@ class MetadataHandler : public RGWMetadataHandler {
     if (r < 0) {
       return r;
     }
-    if (!info.dest.push_endpoint.empty() && info.dest.persistent) {
-      r = rgw::notify::add_persistent_topic(info.name, y);
+    if (!info.dest.push_endpoint.empty() && info.dest.persistent &&
+        !info.dest.persistent_queue.empty()) {
+      r = rgw::notify::add_persistent_topic(info.dest.persistent_queue, y);
       if (r < 0) {
         ldpp_dout(dpp, 1) << "ERROR: failed to create queue for persistent topic "
-            << info.name << " with: " << cpp_strerror(r) << dendl;
+            << info.dest.persistent_queue << " with: " << cpp_strerror(r) << dendl;
         return r;
       }
     }
@@ -370,18 +371,29 @@ class MetadataHandler : public RGWMetadataHandler {
     std::string tenant;
     parse_topic_metadata_key(entry, tenant, name);
 
-    int r = topic::remove(dpp, y, sysobj, &mdlog, rados, zone,
-                          tenant, name, objv_tracker);
+    rgw_pubsub_topic info;
+    int r = read(dpp, y, sysobj, cache_svc, zone, entry,
+                 info, cache, nullptr, &objv_tracker);
     if (r < 0) {
       return r;
     }
 
-    // delete persistent topic queue. expect ENOENT for non-persistent topics
-    r = rgw::notify::remove_persistent_topic(name, y);
-    if (r < 0 && r != -ENOENT) {
-      ldpp_dout(dpp, 1) << "Failed to delete queue for persistent topic: "
-                        << name << " with error: " << r << dendl;
-    } // not fatal
+    r = topic::remove(dpp, y, sysobj, &mdlog, rados, zone,
+                      tenant, name, objv_tracker);
+    if (r < 0) {
+      return r;
+    }
+
+    const rgw_pubsub_dest& dest = info.dest;
+    if (!dest.push_endpoint.empty() && dest.persistent &&
+        !dest.persistent_queue.empty()) {
+      // delete persistent topic queue
+      r = rgw::notify::remove_persistent_topic(dest.persistent_queue, y);
+      if (r < 0 && r != -ENOENT) {
+        ldpp_dout(dpp, 1) << "Failed to delete queue for persistent topic: "
+                          << name << " with error: " << r << dendl;
+      } // not fatal
+    }
     return 0;
   }
 
