@@ -15,6 +15,7 @@
 #define COMPRESSION_H_INCLUDED
 
 #include "BlueStore.h"
+#include "Writer.h"
 
 class BlueStore::Estimator {
   BlueStore* bluestore;
@@ -51,6 +52,11 @@ public:
   void mark_main(uint32_t location, uint32_t length);
   void get_regions(std::vector<region_t>& regions);
 
+  void split_and_compress(
+    CompressorRef compr,
+    ceph::buffer::list& data_bl,
+    Writer::blob_vec& bd);
+
   private:
   struct is_less {
     bool operator() (
@@ -75,4 +81,5 @@ public:
     Estimator* estimator);
   class Scan;
 };
+
 #endif
