@@ -237,8 +237,16 @@ def task(ctx, config):
             profile = config.get('erasure_code_profile', {})
             profile_name = profile.get('name', 'teuthologyprofile')
             manager.create_erasure_code_profile(profile_name, profile)
+            crush_prof = config.get('erasure_code_crush', {})
+            crush_name = None
+            if crush_prof:
+                crush_name = crush_prof.get('name', 'teuthologycrush')
+                manager.create_erasure_code_crush_rule(crush_name, crush_prof)
+
         else:
             profile_name = None
+            crush_name = None
+
         for i in range(int(config.get('runs', '1'))):
             log.info("starting run %s out of %s", str(i), config.get('runs', '1'))
             tests = {}
@@ -256,6 +264,7 @@ def task(ctx, config):
                 else:
                     pool = manager.create_pool_with_unique_name(
                         erasure_code_profile_name=profile_name,
+                        erasure_code_crush_rule_name=crush_name,
                         erasure_code_use_overwrites=
                           config.get('erasure_code_use_overwrites', False)
                     )

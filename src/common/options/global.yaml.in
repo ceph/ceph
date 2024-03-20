@@ -5705,12 +5705,6 @@ options:
   level: dev
   default: false
   with_legacy: true
-- name: filestore_debug_random_read_err
-  type: float
-  level: dev
-  default: 0
-  with_legacy: true
-# Expensive debugging check on sync
 - name: filestore_debug_omap_check
   type: bool
   level: dev
