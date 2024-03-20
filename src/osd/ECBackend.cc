@@ -1227,7 +1227,7 @@ void ECBackend::handle_sub_read_reply(
       ceph_assert(req_iter != rop.to_read.find(i->first)->second.to_read.end());
       ceph_assert(riter != rop.complete[i->first].returned.end());
       pair<uint64_t, uint64_t> aligned =
-	sinfo.aligned_offset_len_to_chunk(
+	sinfo.chunk_aligned_offset_len_to_chunk(
 	  make_pair(req_iter->offset, req_iter->size));
       ceph_assert(aligned.first == j->first);
       riter->get<2>()[from] = std::move(j->second);
