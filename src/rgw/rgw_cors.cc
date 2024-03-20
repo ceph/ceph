@@ -121,6 +121,8 @@ static bool is_string_in_set(set<string>& s, string h) {
       
       get_str_list((*it), "* \t", ssplit);
       if (off != 0) {
+        if (ssplit.empty())
+          continue;
         string sl = ssplit.front();
         flen = sl.length();
         dout(10) << "Finding " << sl << ", in " << h << ", at offset 0" << dendl;
@@ -129,6 +131,8 @@ static bool is_string_in_set(set<string>& s, string h) {
         ssplit.pop_front();
       }
       if (off != ((*it).length() - 1)) {
+        if (ssplit.empty())
+          continue;
         string sl = ssplit.front();
         dout(10) << "Finding " << sl << ", in " << h 
           << ", at offset not less than " << flen << dendl;
