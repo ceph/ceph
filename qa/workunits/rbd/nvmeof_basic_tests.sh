@@ -1,11 +1,16 @@
 #!/bin/bash -x
 
+sudo modprobe nvme-fabrics
+sudo modprobe nvme-tcp
+sudo dnf install nvme-cli -y
+sudo lsmod | grep nvme
+
 source /etc/ceph/nvmeof.env
 SPDK_CONTROLLER="SPDK bdev Controller"
 DISCOVERY_PORT="8009"
 
 discovery() {
-    output=$(sudo nvme discover -t tcp -a $NVMEOF_GATEWAY_IP_ADDRESS -s $DISCOVERY_PORT)
+    output=$(sudo nvme discover -t tcp -a $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS -s $DISCOVERY_PORT)
     expected_discovery_stdout="subtype: nvme subsystem"
     if ! echo "$output" | grep -q "$expected_discovery_stdout"; then
         return 1
@@ -13,7 +18,7 @@ discovery() {
 }
 
 connect() {
-    sudo nvme connect -t tcp --traddr $NVMEOF_GATEWAY_IP_ADDRESS -s $NVMEOF_PORT -n $NVMEOF_NQN
+    sudo nvme connect -t tcp --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS -s $NVMEOF_PORT -n $NVMEOF_NQN
     output=$(sudo nvme list)
     if ! echo "$output" | grep -q "$SPDK_CONTROLLER"; then
         return 1
@@ -29,7 +34,7 @@ disconnect_all() {
 }
 
 connect_all() {
-    sudo nvme connect-all --traddr=$NVMEOF_GATEWAY_IP_ADDRESS --transport=tcp
+    sudo nvme connect-all --traddr=$NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --transport=tcp
     output=$(sudo nvme list)
     if ! echo "$output" | grep -q "$SPDK_CONTROLLER"; then
         return 1
@@ -39,7 +44,7 @@ connect_all() {
 list_subsys() {
     expected_count=$1
     output=$(sudo nvme list-subsys --output-format=json)
-    multipath=$(echo $output | grep -c '"tcp"')
+    multipath=$(echo $output | grep -o '"tcp"' | wc -l)
     if [ "$multipath" -ne "$expected_count" ]; then
         return 1
     fi
@@ -65,7 +70,8 @@ test_run list_subsys 1
 test_run disconnect_all
 test_run list_subsys 0
 test_run connect_all
-test_run list_subsys 1
+gateway_count=$(( $(echo "$NVMEOF_GATEWAY_IP_ADDRESSES" | tr -cd ',' | wc -c) + 1))
+test_run list_subsys $gateway_count
 
 
 echo "-------------Test Summary-------------"
