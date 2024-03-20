@@ -5534,12 +5534,11 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, const MConstRef<M
 
   uint64_t size = m->get_size();
   if (in->is_fscrypt_enabled()) {
-    size = std::stoll(std::string(std::rbegin(m->fscrypt_file),
-                                  std::rend(m->fscrypt_file)));
+    size = std::accumulate(m->fscrypt_file.rbegin(), m->fscrypt_file.rend(), 0ll,
+       [](long long acc, unsigned char v) { return (acc << 8) + v; });
   }
-  ldout(cct, 10) << __func__ << " on ino " << *in
-	   << " size " << in->size << " -> " << m->get_size()
-	   << dendl;
+  ldout(cct, 10) << __func__ << " on ino " << *in << " size "
+	         << in->size << " -> " << size << dendl;
 
   int issued;
   in->caps_issued(&issued);
