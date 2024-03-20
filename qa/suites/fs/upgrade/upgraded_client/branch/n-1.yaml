@@ -1,0 +1,46 @@
+teuthology:
+  premerge: |
+            local https = require("ssl.https")
+            https.TIMEOUT = 10
+            local ltn12 = require("ltn12")
+            local url = "https://raw.githubusercontent.com/ceph/ceph/main/src/common/ceph_releases.h"
+    
+            local function fetchContent(url)
+              local response = {}
+              local _, code, _, status = https.request{
+                url = url,
+                sink = ltn12.sink.table(response)
+              }
+    
+              if code == 200 then
+                return table.concat(response)
+              else
+                print("Error: " .. status)
+                return nil
+              end
+            end
+    
+            local function fetchLastCephRelease()
+              local content = fetchContent(url)
+              if content then
+                local enumContent = content:match("enum class ceph_release_t : std::uint8_t {([^}]-)};")
+                local versions = {}
+                for version in enumContent:gmatch("(%w+),") do
+                  table.insert(versions, version)
+                end
+                return versions
+              else
+                print("Unable to fetch Ceph Versions")
+                return nil
+              end
+            end
+    
+            local versions = fetchLastCephRelease()
+            if versions then
+              yaml_fragment['teuthology']['branch'] = tostring(versions[#versions - 1])
+            else
+              print("Could not fetch latest release automatically, falling back to manually setting it.")
+              yaml_fragment['teuthology']['branch'] = "squid"
+            end
+
+  branch: []
