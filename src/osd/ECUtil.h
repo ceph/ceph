@@ -63,11 +63,25 @@ public:
     ceph_assert(offset % stripe_width == 0);
     return (offset / stripe_width) * chunk_size;
   }
+  uint64_t chunk_aligned_logical_offset_to_chunk_offset(uint64_t offset) const {
+    [[maybe_unused]] const auto residue_in_stripe = offset % stripe_width;
+    ceph_assert(residue_in_stripe % chunk_size == 0);
+    ceph_assert(stripe_width % chunk_size == 0);
+    // this rounds down
+    return (offset / stripe_width) * chunk_size;
+  }
+  uint64_t chunk_aligned_logical_size_to_chunk_size(uint64_t len) const {
+    [[maybe_unused]] const auto residue_in_stripe = len % stripe_width;
+    ceph_assert(residue_in_stripe % chunk_size == 0);
+    ceph_assert(stripe_width % chunk_size == 0);
+    // this rounds up
+    return ((len + stripe_width - 1) / stripe_width) * chunk_size;
+  }
   uint64_t aligned_chunk_offset_to_logical_offset(uint64_t offset) const {
     ceph_assert(offset % chunk_size == 0);
     return (offset / chunk_size) * stripe_width;
   }
-  std::pair<uint64_t, uint64_t> aligned_offset_len_to_chunk(
+  std::pair<uint64_t, uint64_t> chunk_aligned_offset_len_to_chunk(
     std::pair<uint64_t, uint64_t> in) const;
   std::pair<uint64_t, uint64_t> offset_len_to_stripe_bounds(
     std::pair<uint64_t, uint64_t> in) const {

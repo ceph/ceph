@@ -11,14 +11,11 @@ using ceph::bufferlist;
 using ceph::ErasureCodeInterfaceRef;
 using ceph::Formatter;
 
-std::pair<uint64_t, uint64_t> ECUtil::stripe_info_t::aligned_offset_len_to_chunk(
+std::pair<uint64_t, uint64_t> ECUtil::stripe_info_t::chunk_aligned_offset_len_to_chunk(
   std::pair<uint64_t, uint64_t> in) const {
-  // we need to align to stripe again to deal with partial chunk read.
-  auto aligned =
-    g_conf()->osd_ec_partial_reads ? offset_len_to_stripe_bounds(in) : in;
   return std::make_pair(
-    aligned_logical_offset_to_chunk_offset(aligned.first),
-    aligned_logical_offset_to_chunk_offset(aligned.second));
+    chunk_aligned_logical_offset_to_chunk_offset(in.first),
+    chunk_aligned_logical_size_to_chunk_size(in.second));
 }
 
 int ECUtil::decode(
@@ -56,9 +53,6 @@ int ECUtil::decode(
     int r = ec_impl->decode_concat(want_to_read, chunks, &bl);
     ceph_assert(r == 0);
     ceph_assert(bl.length() % sinfo.get_chunk_size() == 0);
-    if (!g_conf()->osd_ec_partial_reads) {
-      ceph_assert(bl.length() == sinfo.get_stripe_width());
-    }
     out->claim_append(bl);
   }
   return 0;

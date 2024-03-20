@@ -53,8 +53,21 @@ TEST(ECUtil, stripe_info_t)
   ASSERT_EQ(s.aligned_chunk_offset_to_logical_offset(2*s.get_chunk_size()),
 	    2*s.get_stripe_width());
 
-  ASSERT_EQ(s.aligned_offset_len_to_chunk(make_pair(swidth, 10*swidth)),
+  ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(
+	      make_pair(swidth+s.get_chunk_size(), 10*swidth)),
 	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
+
+  ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(swidth, 10*swidth)),
+	    make_pair(s.get_chunk_size(), 10*s.get_chunk_size()));
+
+  // round down offset if it's under stripe width
+  ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(s.get_chunk_size(), 10*swidth)),
+	    make_pair<uint64_t>(0, 10*s.get_chunk_size()));
+
+  // round up size if above stripe
+  ASSERT_EQ(s.chunk_aligned_offset_len_to_chunk(make_pair(s.get_chunk_size(),
+							  10*swidth + s.get_chunk_size())),
+	    make_pair<uint64_t>(0, 11*s.get_chunk_size()));
 
   ASSERT_EQ(s.offset_len_to_stripe_bounds(make_pair(swidth-10, (uint64_t)20)),
             make_pair((uint64_t)0, 2*swidth));

@@ -439,11 +439,7 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &op)
     }
     for (const auto& read : i->second.to_read) {
       auto p = make_pair(read.offset, read.size);
-      if (g_conf()->osd_ec_partial_reads) {
-        // we need to align to stripe again to deal with partial chunk read.
-        p = sinfo.offset_len_to_stripe_bounds(p);
-      }
-      pair<uint64_t, uint64_t> chunk_off_len = sinfo.aligned_offset_len_to_chunk(p);
+      pair<uint64_t, uint64_t> chunk_off_len = sinfo.chunk_aligned_offset_len_to_chunk(p);
       for (auto k = i->second.need.begin();
 	   k != i->second.need.end();
 	   ++k) {
@@ -518,6 +514,9 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
     ceph_assert(res.errors.empty());
     for (auto &&read: to_read) {
       const auto bounds = make_pair(read.offset, read.size);
+      // the configurable serves only the preservation of old behavior
+      // which will be dropped. ReadPipeline is actually able to handle
+      // reads aligned to chunk size.
       const auto aligned = g_conf()->osd_ec_partial_reads \
         ? read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds)
         : read_pipeline.sinfo.offset_len_to_stripe_bounds(bounds);
