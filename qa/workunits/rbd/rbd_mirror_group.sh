@@ -87,13 +87,12 @@ fi
 testlog "TEST: test group rename"
 new_name="${group}_RENAMED"
 rename_group ${CLUSTER2} ${POOL} ${group} ${new_name}
-# XXXMG: group rename is not supported right now
-# wait_for_group_replay_started ${CLUSTER1} ${POOL} ${new_name} 1
-# wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL} ${new_name} 'up+replaying'
-# admin_daemons ${CLUSTER1} rbd mirror group status ${POOL}/${new_name}
-# admin_daemons ${CLUSTER1} rbd mirror group restart ${POOL}/${new_name}
-# wait_for_group_replay_started ${CLUSTER1} ${POOL} ${new_name} 1
-# wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL} ${new_name} 'up+replaying'
+wait_for_group_replay_started ${CLUSTER1} ${POOL} ${new_name} 1
+wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL} ${new_name} 'up+replaying'
+admin_daemons ${CLUSTER1} rbd mirror group status ${POOL}/${new_name}
+admin_daemons ${CLUSTER1} rbd mirror group restart ${POOL}/${new_name}
+wait_for_group_replay_started ${CLUSTER1} ${POOL} ${new_name} 1
+wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL} ${new_name} 'up+replaying'
 rename_group ${CLUSTER2} ${POOL} ${new_name} ${group}
 wait_for_group_replay_started ${CLUSTER1} ${POOL} ${group} 1
 
