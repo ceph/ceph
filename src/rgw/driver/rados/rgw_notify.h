@@ -33,15 +33,15 @@ bool init(CephContext* cct, rgw::sal::RadosStore* store,
 void shutdown();
 
 // create persistent delivery queue for a topic (endpoint)
-// this operation also add a topic name to the common (to all RGWs) list of all topics
-int add_persistent_topic(const std::string& topic_name, optional_yield y);
+// this operation also add a topic queue to the common (to all RGWs) list of all topics
+int add_persistent_topic(const std::string& topic_queue, optional_yield y);
 
 // remove persistent delivery queue for a topic (endpoint)
-// this operation also remove the topic name from the common (to all RGWs) list of all topics
-int remove_persistent_topic(const std::string& topic_name, optional_yield y);
+// this operation also remove the topic queue from the common (to all RGWs) list of all topics
+int remove_persistent_topic(const std::string& topic_queue, optional_yield y);
 
 // same as the above, expect you need to provide the IoCtx, the above uses rgw::notify::Manager::rados_ioctx
-int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_name, optional_yield y);
+int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_queue, optional_yield y);
 
 // struct holding reservation information
 // populated in the publish_reserve call
