@@ -56,6 +56,7 @@ import { VerticalNavigationComponent } from './vertical-navigation/vertical-navi
 import { CardGroupComponent } from './card-group/card-group.component';
 import { HelpTextComponent } from './help-text/help-text.component';
 import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-advanced-fieldset.component';
+import { UpgradableComponent } from './upgradable/upgradable.component';
 
 @NgModule({
   imports: [
@@ -115,7 +116,8 @@ import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-adv
     VerticalNavigationComponent,
     CardGroupComponent,
     HelpTextComponent,
-    FormAdvancedFieldsetComponent
+    FormAdvancedFieldsetComponent,
+    UpgradableComponent
   ],
   providers: [],
   exports: [
@@ -152,7 +154,8 @@ import { FormAdvancedFieldsetComponent } from './form-advanced-fieldset/form-adv
     VerticalNavigationComponent,
     CardGroupComponent,
     HelpTextComponent,
-    FormAdvancedFieldsetComponent
+    FormAdvancedFieldsetComponent,
+    UpgradableComponent
   ]
 })
 export class ComponentsModule {}
