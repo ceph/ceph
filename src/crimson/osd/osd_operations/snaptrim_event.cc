@@ -421,6 +421,7 @@ SnapTrimObjSubEvent::remove_or_update(
 	//  num_objects_before_trim - delta_stats.num_objects;
 	//add_objects_trimmed_count(num_objects_trimmed);
       }
+      pg->scrubber.handle_op_stats(coid, delta_stats);
     }).si_then(
       [&txn] () mutable {
       return std::move(txn);
