@@ -169,6 +169,12 @@ An existing user can be adopted into an account with ``user modify``::
 .. note:: Account membership is permanent. Once added, users cannot be
    removed from their account.
 
+.. warning:: Ownership of the user's notification topics will not be
+   transferred to the account. Notifications will continue to work, but
+   the topics will no longer be visible to SNS Topic APIs. Topics and
+   their associated bucket notifications should be removed before migration
+   and recreated within the account.
+
 Because account users have no permissions by default, some identity policy must
 be added to restore the user's original permissions.
 
