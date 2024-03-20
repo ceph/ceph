@@ -3,7 +3,17 @@ import { AbstractControl, FormArray, FormControl, FormGroup, Validators } from '
 import { NgbActiveModal, NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
 import { padStart, uniq } from 'lodash';
 import { Observable, OperatorFunction, of, timer } from 'rxjs';
-import { catchError, debounceTime, distinctUntilChanged, map, switchMap } from 'rxjs/operators';
+import {
+  catchError,
+  debounceTime,
+  distinctUntilChanged,
+  filter,
+  map,
+  mergeMap,
+  pluck,
+  switchMap,
+  tap
+} from 'rxjs/operators';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { DirectoryStoreService } from '~/app/shared/api/directory-store.service';
@@ -91,25 +101,51 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
     this.directoryStore.loadDirectories(this.id, '/', 3);
     this.createForm();
     this.isEdit ? this.populateForm() : this.loadingReady();
-    this.snapScheduleForm.get('directory').valueChanges.subscribe({
-      next: (value: string) => {
-        this.subvolumeGroup = value?.split?.('/')?.[2];
-        this.subvolume = value?.split?.('/')?.[3];
-        this.subvolumeService
-          .exists(
-            this.subvolume,
-            this.fsName,
-            this.subvolumeGroup === DEFAULT_SUBVOLUME_GROUP ? '' : this.subvolumeGroup
-          )
-          .subscribe({
-            next: (exists: boolean) => {
-              this.isSubvolume = exists;
-              this.isDefaultSubvolumeGroup =
-                exists && this.subvolumeGroup === DEFAULT_SUBVOLUME_GROUP;
-            }
-          });
-      }
-    });
+
+    this.snapScheduleForm
+      .get('directory')
+      .valueChanges.pipe(
+        filter(() => !this.isEdit),
+        debounceTime(DEBOUNCE_TIMER),
+        tap(() => {
+          this.isSubvolume = false;
+        }),
+        tap((value: string) => {
+          this.subvolumeGroup = value?.split?.('/')?.[2];
+          this.subvolume = value?.split?.('/')?.[3];
+        }),
+        filter(() => !!this.subvolume && !!this.subvolumeGroup),
+        mergeMap(() =>
+          this.subvolumeService
+            .exists(
+              this.subvolume,
+              this.fsName,
+              this.subvolumeGroup === DEFAULT_SUBVOLUME_GROUP ? '' : this.subvolumeGroup
+            )
+            .pipe(
+              tap((exists: boolean) => (this.isSubvolume = exists)),
+              tap(
+                (exists: boolean) =>
+                  (this.isDefaultSubvolumeGroup =
+                    exists && this.subvolumeGroup === DEFAULT_SUBVOLUME_GROUP)
+              )
+            )
+        ),
+        filter((exists: boolean) => exists),
+        mergeMap(() =>
+          this.subvolumeService
+            .info(
+              this.fsName,
+              this.subvolume,
+              this.subvolumeGroup === DEFAULT_SUBVOLUME_GROUP ? '' : this.subvolumeGroup
+            )
+            .pipe(pluck('path'))
+        ),
+        filter((path: string) => path !== this.snapScheduleForm.get('directory').value)
+      )
+      .subscribe({
+        next: (path: string) => this.snapScheduleForm.get('directory').setValue(path)
+      });
   }
 
   get retentionPolicies() {
