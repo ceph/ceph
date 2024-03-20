@@ -120,7 +120,7 @@ export class CRUDTableComponent implements OnInit {
   delete() {
     const selectedKey = this.selection.first()[this.meta.columnKey];
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: $localize`${this.meta.columnKey}`,
+      itemDescription: $localize`${this.meta.resource}`,
       itemNames: [selectedKey],
       submitAction: () => {
         this.taskWrapper
@@ -157,7 +157,9 @@ export class CRUDTableComponent implements OnInit {
     if (this.selection.hasSelection) {
       key = this.selection.first()[this.meta.columnKey];
     }
-    this.router.navigate(['/cluster/user/edit'], { queryParams: { key: key } });
+
+    const editAction = this.meta.actions.find((action) => action.name === 'Edit');
+    this.router.navigate([editAction.routerLink], { queryParams: { key: key } });
   }
 
   authExport() {
