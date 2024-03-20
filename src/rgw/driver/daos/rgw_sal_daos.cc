@@ -2271,16 +2271,22 @@ std::unique_ptr<Lifecycle> DaosStore::get_lifecycle(void) {
 std::unique_ptr<Notification> DaosStore::get_notification(
     rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
     rgw::notify::EventType event_type, const std::string* object_name) {
-  return std::make_unique<DaosNotification>(obj, src_obj, event_type);
+  rgw::notify::EventTypeList event_types = {event_type};
+  return std::make_unique<DaosNotification>(obj, src_obj, event_types);
 }
 
 std::unique_ptr<Notification> DaosStore::get_notification(
-    const DoutPrefixProvider* dpp, Object* obj, Object* src_obj,
-    rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
-    std::string& _user_id, std::string& _user_tenant, std::string& _req_id,
+    const DoutPrefixProvider* dpp,
+    Object* obj,
+    Object* src_obj,
+    const rgw::notify::EventTypeList& event_types,
+    rgw::sal::Bucket* _bucket,
+    std::string& _user_id,
+    std::string& _user_tenant,
+    std::string& _req_id,
     optional_yield y) {
   ldpp_dout(dpp, 20) << "get_notification" << dendl;
-  return std::make_unique<DaosNotification>(obj, src_obj, event_type);
+  return std::make_unique<DaosNotification>(obj, src_obj, event_types);
 }
 
 int DaosStore::log_usage(const DoutPrefixProvider* dpp,

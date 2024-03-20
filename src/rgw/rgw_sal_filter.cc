@@ -228,20 +228,19 @@ std::unique_ptr<Notification> FilterDriver::get_notification(rgw::sal::Object* o
   return std::make_unique<FilterNotification>(std::move(n));
 }
 
-std::unique_ptr<Notification> FilterDriver::get_notification(const DoutPrefixProvider* dpp,
-				rgw::sal::Object* obj, rgw::sal::Object* src_obj,
-				rgw::notify::EventType event_type,
-				rgw::sal::Bucket* _bucket, std::string& _user_id,
-				std::string& _user_tenant, std::string& _req_id,
-				optional_yield y)
-{
-  std::unique_ptr<Notification> n = next->get_notification(dpp, nextObject(obj),
-							   nextObject(src_obj),
-							   event_type,
-							   nextBucket(_bucket),
-							   _user_id,
-							   _user_tenant,
-							   _req_id, y);
+std::unique_ptr<Notification> FilterDriver::get_notification(
+    const DoutPrefixProvider* dpp,
+    rgw::sal::Object* obj,
+    rgw::sal::Object* src_obj,
+    const rgw::notify::EventTypeList& event_types,
+    rgw::sal::Bucket* _bucket,
+    std::string& _user_id,
+    std::string& _user_tenant,
+    std::string& _req_id,
+    optional_yield y) {
+  std::unique_ptr<Notification> n = next->get_notification(
+      dpp, nextObject(obj), nextObject(src_obj), event_types,
+      nextBucket(_bucket), _user_id, _user_tenant, _req_id, y);
   return std::make_unique<FilterNotification>(std::move(n));
 }
 

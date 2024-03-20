@@ -3289,14 +3289,21 @@ std::unique_ptr<Lifecycle> MotrStore::get_lifecycle(void)
 std::unique_ptr<Notification> MotrStore::get_notification(Object* obj, Object* src_obj, req_state* s,
     rgw::notify::EventType event_type, optional_yield y, const string* object_name)
 {
-  return std::make_unique<MotrNotification>(obj, src_obj, event_type);
+  const rgw::notify::EventTypeList event_types = {event_type};
+  return std::make_unique<MotrNotification>(obj, src_obj, event_types);
 }
 
-std::unique_ptr<Notification>  MotrStore::get_notification(const DoutPrefixProvider* dpp, Object* obj,
-        Object* src_obj, rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket,
-        std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y)
-{
-  return std::make_unique<MotrNotification>(obj, src_obj, event_type);
+std::unique_ptr<Notification> MotrStore::get_notification(
+    const DoutPrefixProvider* dpp,
+    Object* obj,
+    Object* src_obj,
+    const rgw::notify::EventTypeList& event_types,
+    rgw::sal::Bucket* _bucket,
+    std::string& _user_id,
+    std::string& _user_tenant,
+    std::string& _req_id,
+    optional_yield y) {
+  return std::make_unique<MotrNotification>(obj, src_obj, event_types);
 }
 
 int MotrStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)

@@ -155,9 +155,15 @@ class RadosStore : public StoreDriver {
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) override;
     virtual std::unique_ptr<Notification> get_notification(
-    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, 
-    rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant,
-    std::string& _req_id, optional_yield y) override;
+        const DoutPrefixProvider* dpp,
+        rgw::sal::Object* obj,
+        rgw::sal::Object* src_obj,
+        const rgw::notify::EventTypeList& event_types,
+        rgw::sal::Bucket* _bucket,
+        std::string& _user_id,
+        std::string& _user_tenant,
+        std::string& _req_id,
+        optional_yield y) override;
     int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) override;
     int stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) override;
@@ -733,13 +739,41 @@ class RadosNotification : public StoreNotification {
   rgw::notify::reservation_t res;
 
   public:
-    RadosNotification(const DoutPrefixProvider* _dpp, RadosStore* _store, Object* _obj, Object* _src_obj, req_state* _s, rgw::notify::EventType _type, optional_yield y, const std::string* object_name) :
-      StoreNotification(_obj, _src_obj, _type), store(_store), res(_dpp, _store, _s, _obj, _src_obj, object_name, y) { }
+  RadosNotification(const DoutPrefixProvider* _dpp,
+                    RadosStore* _store,
+                    Object* _obj,
+                    Object* _src_obj,
+                    req_state* _s,
+                    rgw::notify::EventType _type,
+                    optional_yield y,
+                    const std::string* object_name)
+      : StoreNotification(_obj, _src_obj, {_type}),
+        store(_store),
+        res(_dpp, _store, _s, _obj, _src_obj, object_name, y) {}
 
-    RadosNotification(const DoutPrefixProvider* _dpp, RadosStore* _store, Object* _obj, Object* _src_obj, rgw::notify::EventType _type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant, std::string& _req_id, optional_yield y) :
-      StoreNotification(_obj, _src_obj, _type), store(_store), res(_dpp, _store, _obj, _src_obj, _bucket, _user_id, _user_tenant, _req_id, y) {}
+   RadosNotification(const DoutPrefixProvider* _dpp,
+                     RadosStore* _store,
+                     Object* _obj,
+                     Object* _src_obj,
+                     const rgw::notify::EventTypeList& _types,
+                     rgw::sal::Bucket* _bucket,
+                     std::string& _user_id,
+                     std::string& _user_tenant,
+                     std::string& _req_id,
+                     optional_yield y)
+       : StoreNotification(_obj, _src_obj, _types),
+         store(_store),
+         res(_dpp,
+             _store,
+             _obj,
+             _src_obj,
+             _bucket,
+             _user_id,
+             _user_tenant,
+             _req_id,
+             y) {}
 
-    ~RadosNotification() = default;
+   ~RadosNotification() = default;
 
     rgw::notify::reservation_t& get_reservation(void) {
       return res;
