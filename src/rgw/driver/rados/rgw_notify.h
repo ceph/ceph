@@ -134,8 +134,8 @@ int publish_commit(rgw::sal::Object* obj,
 // cancel the reservation
 int publish_abort(reservation_t& reservation);
 
-int get_persistent_queue_stats_by_topic_name(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
-                                             const std::string &topic_name, rgw_topic_stats &stats, optional_yield y);
+int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
+                               const std::string &queue_name, rgw_topic_stats &stats, optional_yield y);
 
 }
 
