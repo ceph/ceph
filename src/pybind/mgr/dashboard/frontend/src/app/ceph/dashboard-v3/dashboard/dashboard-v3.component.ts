@@ -25,6 +25,9 @@ import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 import { HardwareService } from '~/app/shared/api/hardware.service';
+import { UpgradeService } from '~/app/shared/api/upgrade.service';
+import { UpgradeInfoInterface } from '~/app/shared/models/upgrade.interface';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -76,6 +79,9 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   isHardwareEnabled$: Observable<boolean>;
   hardwareSummary$: Observable<any>;
   hardwareSubject = new BehaviorSubject<any>([]);
+  upgradeInfo$: Observable<UpgradeInfoInterface>;
+  upgradeModalRef: NgbModalRef;
+  orchAvailable: boolean = false;
 
   constructor(
     private summaryService: SummaryService,
@@ -88,7 +94,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     private mgrModuleService: MgrModuleService,
     private refreshIntervalService: RefreshIntervalService,
     public prometheusAlertService: PrometheusAlertService,
-    private hardwareService: HardwareService
+    private hardwareService: HardwareService,
+    private upgradeService: UpgradeService
   ) {
     super(prometheusService);
     this.permissions = this.authStorageService.getPermissions();
@@ -116,6 +123,13 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
     this.getTelemetryReport();
+
+    this.orchestratorService.status().subscribe((status: any) => {
+      this.orchAvailable = status.available;
+      if (this.orchAvailable) {
+        this.upgradeInfo$ = this.upgradeService.listCached();
+      }
+    });
   }
 
   getTelemetryText(): string {
@@ -191,5 +205,9 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
         return of(resp?.hw_monitoring);
       })
     );
+  }
+
+  upgradeModal() {
+    this.upgradeModalRef = this.upgradeService.startUpgradeModal();
   }
 }
