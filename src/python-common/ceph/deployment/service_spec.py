@@ -1267,21 +1267,41 @@ class NvmeofServiceSpec(ServiceSpec):
                  port: Optional[int] = None,
                  pool: Optional[str] = None,
                  enable_auth: bool = False,
-                 min_controller_id: Optional[str] = '1',
-                 max_controller_id: Optional[str] = '65519',
+                 state_update_notify: Optional[bool] = True,
+                 state_update_interval_sec: Optional[int] = 5,
                  enable_spdk_discovery_controller: Optional[bool] = False,
+                 omap_file_lock_duration: Optional[int] = 60,
+                 omap_file_lock_retries: Optional[int] = 15,
+                 omap_file_lock_retry_sleep_interval: Optional[int] = 5,
+                 omap_file_update_reloads: Optional[int] = 10,
+                 enable_prometheus_exporter: Optional[bool] = True,
+                 bdevs_per_cluster: Optional[int] = 32,
+                 verify_nqns: Optional[bool] = True,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
                  client_cert: Optional[str] = None,
                  spdk_path: Optional[str] = None,
                  tgt_path: Optional[str] = None,
-                 timeout: Optional[int] = 60,
+                 spdk_timeout: Optional[float] = 60.0,
+                 spdk_log_level: Optional[str] = 'WARNING',
+                 rpc_socket_dir: Optional[str] = '/var/tmp/',
+                 rpc_socket_name: Optional[str] = 'spdk.sock',
                  conn_retries: Optional[int] = 10,
                  transports: Optional[str] = 'tcp',
                  transport_tcp_options: Optional[Dict[str, int]] =
                  {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
                  tgt_cmd_extra_args: Optional[str] = None,
+                 discovery_port: Optional[int] = None,
+                 log_level: Optional[str] = 'INFO',
+                 log_files_enabled: Optional[bool] = True,
+                 log_files_rotation_enabled: Optional[bool] = True,
+                 verbose_log_messages: Optional[bool] = True,
+                 max_log_file_size_in_mb: Optional[int] = 10,
+                 max_log_files_count: Optional[int] = 20,
+                 max_log_directory_backups: Optional[int] = 10,
+                 log_directory: Optional[str] = '/var/log/ceph/',
+                 monitor_timeout: Optional[float] = 1.0,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -1310,12 +1330,26 @@ class NvmeofServiceSpec(ServiceSpec):
         self.group = group
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
-        #: ``min_controller_id`` minimum controller id used by SPDK, essential for multipath
-        self.min_controller_id = min_controller_id
-        #: ``max_controller_id`` maximum controller id used by SPDK, essential for multipath
-        self.max_controller_id = max_controller_id
+        #: ``state_update_notify`` enables automatic update from OMAP in nvmeof gateway
+        self.state_update_notify = state_update_notify
+        #: ``state_update_interval_sec`` number of seconds to check for updates in OMAP
+        self.state_update_interval_sec = state_update_interval_sec
         #: ``enable_spdk_discovery_controller`` SPDK or ceph-nvmeof discovery service
         self.enable_spdk_discovery_controller = enable_spdk_discovery_controller
+        #: ``enable_prometheus_exporter`` enables Prometheus exporter
+        self.enable_prometheus_exporter = enable_prometheus_exporter
+        #: ``verify_nqns`` enables verification of subsystem and host NQNs for validity
+        self.verify_nqns = verify_nqns
+        #: ``omap_file_lock_duration`` number of seconds before automatically unlock OMAP file lock
+        self.omap_file_lock_duration = omap_file_lock_duration
+        #: ``omap_file_lock_retries`` number of retries to lock OMAP file before giving up
+        self.omap_file_lock_retries = omap_file_lock_retries
+        #: ``omap_file_lock_retry_sleep_interval`` seconds to wait before retrying to lock OMAP
+        self.omap_file_lock_retry_sleep_interval = omap_file_lock_retry_sleep_interval
+        #: ``omap_file_update_reloads`` number of attempt to reload OMAP when it differs from local
+        self.omap_file_update_reloads = omap_file_update_reloads
+        #: ``bdevs_per_cluster`` number of bdevs per cluster
+        self.bdevs_per_cluster = bdevs_per_cluster
         #: ``server_key`` gateway server key
         self.server_key = server_key or './server.key'
         #: ``server_cert`` gateway server certificate
@@ -1328,8 +1362,14 @@ class NvmeofServiceSpec(ServiceSpec):
         self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
         #: ``tgt_path`` nvmeof target path
         self.tgt_path = tgt_path or '/usr/local/bin/nvmf_tgt'
-        #: ``timeout`` ceph connectivity timeout
-        self.timeout = timeout
+        #: ``spdk_timeout`` SPDK connectivity timeout
+        self.spdk_timeout = spdk_timeout
+        #: ``spdk_log_level`` the SPDK log level
+        self.spdk_log_level = spdk_log_level or 'WARNING'
+        #: ``rpc_socket_dir`` the SPDK socket file directory
+        self.rpc_socket_dir = rpc_socket_dir or '/var/tmp/'
+        #: ``rpc_socket_name`` the SPDK socket file name
+        self.rpc_socket_name = rpc_socket_name or 'spdk.sock'
         #: ``conn_retries`` ceph connection retries number
         self.conn_retries = conn_retries
         #: ``transports`` tcp
@@ -1338,6 +1378,26 @@ class NvmeofServiceSpec(ServiceSpec):
         self.transport_tcp_options: Optional[Dict[str, int]] = transport_tcp_options
         #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
+        #: ``discovery_port`` port of the discovery service
+        self.discovery_port = discovery_port or 8009
+        #: ``log_level`` the nvmeof gateway log level
+        self.log_level = log_level or 'INFO'
+        #: ``log_files_enabled`` enables the usage of files to keep the nameof gateway log
+        self.log_files_enabled = log_files_enabled
+        #: ``log_files_rotation_enabled`` enables rotation of log files when pass the size limit
+        self.log_files_rotation_enabled = log_files_rotation_enabled
+        #: ``verbose_log_messages`` add more details to the nvmeof gateway log message
+        self.verbose_log_messages = verbose_log_messages
+        #: ``max_log_file_size_in_mb`` max size in MB before starting a new log file
+        self.max_log_file_size_in_mb = max_log_file_size_in_mb
+        #: ``max_log_files_count`` max log files to keep before overriding them
+        self.max_log_files_count = max_log_files_count
+        #: ``max_log_directory_backups`` max directories for old gateways with same name to keep
+        self.max_log_directory_backups = max_log_directory_backups
+        #: ``log_directory`` directory for keeping nameof gateway log files
+        self.log_directory = log_directory or '/var/log/ceph/'
+        #: ``monitor_timeout`` monitor connectivity timeout
+        self.monitor_timeout = monitor_timeout
 
     def get_port_start(self) -> List[int]:
         return [5500, 4420, 8009]
@@ -1356,6 +1416,24 @@ class NvmeofServiceSpec(ServiceSpec):
 
         if self.transports not in ['tcp']:
             raise SpecValidationError('Invalid transport. Valid values are tcp')
+
+        if self.log_level:
+            if self.log_level not in ['debug', 'DEBUG',
+                                      'info', 'INFO',
+                                      'warning', 'WARNING',
+                                      'error', 'ERROR',
+                                      'critical', 'CRITICAL']:
+                raise SpecValidationError(
+                    'Invalid log level. Valid values are: debug, info, warning, error, critial')
+
+        if self.spdk_log_level:
+            if self.spdk_log_level not in ['debug', 'DEBUG',
+                                           'info', 'INFO',
+                                           'warning', 'WARNING',
+                                           'error', 'ERROR',
+                                           'notice', 'NOTICE']:
+                raise SpecValidationError(
+                    'Invalid SPDK log level. Valid values are: DEBUG, INFO, WARNING, ERROR, NOTICE')
 
 
 yaml.add_representer(NvmeofServiceSpec, ServiceSpec.yaml_representer)
