@@ -221,6 +221,38 @@ struct object_data_handler_test_t:
     return ret;
   }
 
+  using remap_entry = TransactionManager::remap_entry;
+  LBAMappingRef remap_pin(
+    Transaction &t,
+    LBAMappingRef &&opin,
+    extent_len_t new_offset,
+    extent_len_t new_len) {
+    auto pin = with_trans_intr(t, [&](auto& trans) {
+      return tm->remap_pin<ObjectDataBlock>(
+        trans, std::move(opin), std::array{
+          remap_entry(new_offset, new_len)}
+      ).si_then([](auto ret) {
+        return std::move(ret[0]);
+      });
+    }).handle_error(crimson::ct_error::eagain::handle([] {
+      LBAMappingRef t = nullptr;
+      return t;
+    }), crimson::ct_error::pass_further_all{}).unsafe_get0();
+    EXPECT_TRUE(pin);
+    return pin;
+  }
+
+  ObjectDataBlockRef get_extent(
+    Transaction &t,
+    laddr_t addr,
+    extent_len_t len) {
+    auto ext = with_trans_intr(t, [&](auto& trans) {
+	return tm->read_extent<ObjectDataBlock>(trans, addr, len);
+	}).unsafe_get0();
+    EXPECT_EQ(addr, ext->get_laddr());
+    return ext;
+  }
+
   seastar::future<> set_up_fut() final {
     onode = new TestOnode(
       DEFAULT_OBJECT_DATA_RESERVATION,
@@ -709,6 +741,92 @@ TEST_P(object_data_handler_test_t, random_overwrite) {
       logger().info("random_writes: {} done replaying/checking", i);
     }
     read(0, 4<<20);
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
+  run_async([this] {
+    set_overwrite_threshold();
+    auto t = create_mutate_transaction();
+    auto base = 4096 * 4;
+    auto len = 4096 * 6;
+    write(*t, base, len, 'a');
+    submit_transaction(std::move(t));
+
+    t = create_mutate_transaction();
+    { 
+      auto pins = get_mappings(base, len);
+      assert(pins.size() == 1);
+      auto pin1 = remap_pin(*t, std::move(pins.front()), 4096, 8192);
+      auto ext = get_extent(*t, base + 4096, 4096 * 2);
+      ASSERT_TRUE(ext->is_exist_clean());
+      ext = tm->get_mutable_extent(*t, ext)->cast<ObjectDataBlock>();
+
+      auto l = 4096;
+      memset(
+	known_contents.c_str() + base + 4096,
+	'z',
+	l);
+      bufferlist bl;
+      bl.append(
+	bufferptr(
+	  known_contents,
+	  base + 4096,
+	  l));
+
+      ext->overwrite(0, bl);
+      ASSERT_TRUE(ext->is_exist_mutation_pending());
+    }
+    submit_transaction(std::move(t));
+    read(base + 4096, 4096);
+    read(base + 4096, 8192);
+    restart();
+    epm->check_usage();
+    read(base + 4096, 8192);
+
+    t = create_mutate_transaction();
+    base = 0;
+    len = 4096 * 3;
+    write(*t, base, len, 'a');
+    submit_transaction(std::move(t));
+
+    t = create_mutate_transaction();
+    write(*t, base + 4096, 4096, 'b');
+    read(*t, base + 1024, 4096 + 1024);
+    write(*t, base + 8192, 4096, 'c');
+    read(*t, base + 2048, 8192);
+    write(*t, base, 4096, 'd');
+    write(*t, base + 4096, 4096, 'x');
+    submit_transaction(std::move(t));
+    read(base + 1024, 8192 - 1024);
+    read(base, 4096 * 3);
+    restart();
+    epm->check_usage();
+    read(base, 4096 * 3);
+
+    auto t1 = create_mutate_transaction();
+    write(*t1, base + 4096, 4096, 'e');
+    read(*t1, base + 4096, 4096);
+    auto t2 = create_read_transaction();
+    bufferlist committed = with_trans_intr(*t2, [&](auto &t) {
+      return ObjectDataHandler(MAX_OBJECT_SIZE).read(
+        ObjectDataHandler::context_t{
+          *tm,
+          t,
+          *onode
+        },
+        base + 4096,
+        4096);
+    }).unsafe_get0();
+    bufferlist pending;
+    pending.append(
+      bufferptr(
+	known_contents,
+	base + 4096,
+	4096));
+    EXPECT_EQ(committed.length(), pending.length());
+    EXPECT_NE(committed, pending);
     unset_overwrite_threshold();
   });
 }
