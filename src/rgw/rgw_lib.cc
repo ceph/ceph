@@ -218,8 +218,6 @@ namespace rgw {
       goto done;
     }
 
-    s->trace = tracing::rgw::tracer.start_trace(op->name());
-
     /* req is-a RGWOp, currently initialized separately */
     ret = req->op_init();
     if (ret < 0) {

@@ -151,7 +151,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
   }
   constexpr uint64_t id = 0; // unused
   auto c = aio->get(stripe_obj.obj, Aio::librados_op(stripe_obj.ioctx,
-						     std::move(op), y, &trace),
+						     std::move(op), y),
 		    cost, id);
   return process_completed(c, &written);
 }
@@ -167,7 +167,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
 
   constexpr uint64_t id = 0; // unused
   auto c = aio->get(stripe_obj.obj, Aio::librados_op(stripe_obj.ioctx,
-						     std::move(op), y, &trace),
+						     std::move(op), y),
 		    cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
@@ -388,7 +388,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
   read_cloudtier_info_from_attrs(attrs, obj_op.meta.category, manifest);
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
-                        writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
+                        flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0) {
     if (r == -ETIMEDOUT) {
       // The head object write may eventually succeed, clear the set of objects for deletion. if it
@@ -522,7 +522,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.modify_tail = true;
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
-                        writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
+                        flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0)
     return r;
 
@@ -761,7 +761,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   }
   r = obj_op.write_meta(actual_size + cur_size,
 			accounted_size + *cur_accounted_size,
-			attrs, rctx, writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
+			attrs, rctx, flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0) {
     return r;
   }

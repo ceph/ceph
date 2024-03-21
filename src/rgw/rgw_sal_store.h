@@ -187,7 +187,6 @@ class StoreObject : public Object {
     RGWObjState state;
     Bucket* bucket = nullptr;
     bool delete_marker{false};
-    jspan_context trace_ctx{false, false};
 
   public:
     StoreObject() = default;
@@ -260,8 +259,6 @@ class StoreObject : public Object {
        * work with lifecycle */
       return -1;
     }
-    jspan_context& get_trace() override { return trace_ctx; }
-    void set_trace (jspan_context&& _trace_ctx) override { trace_ctx = std::move(_trace_ctx); }
 
     virtual int get_torrent_info(const DoutPrefixProvider* dpp,
                                  optional_yield y, bufferlist& bl) override {
@@ -299,7 +296,7 @@ public:
 
   virtual std::map<uint32_t, std::unique_ptr<MultipartPart>>& get_parts() override { return parts; }
 
-  virtual jspan_context& get_trace() override { return trace_ctx; }
+  virtual const jspan_context& get_trace() override { return trace_ctx; }
 
   virtual void print(std::ostream& out) const override {
     out << get_meta();

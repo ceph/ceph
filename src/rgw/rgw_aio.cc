@@ -50,16 +50,15 @@ void cb(librados::completion_t, void* arg) {
 }
 
 template <typename Op>
-Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, jspan_context* trace_ctx = nullptr) {
-  return [ctx = std::move(ctx), op = std::move(op), trace_ctx] (Aio* aio, AioResult& r) mutable {
+Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op) {
+  return [ctx = std::move(ctx), op = std::move(op)] (Aio* aio, AioResult& r) mutable {
       constexpr bool read = std::is_same_v<std::decay_t<Op>, librados::ObjectReadOperation>;
       // use placement new to construct the rados state inside of user_data
       auto s = new (&r.user_data) state(aio, ctx, r);
       if constexpr (read) {
-        (void)trace_ctx; // suppress unused trace_ctx warning. until we will support the read op trace
         r.result = ctx.aio_operate(r.obj.oid, s->c, &op, &r.data);
       } else {
-        r.result = ctx.aio_operate(r.obj.oid, s->c, &op, 0, trace_ctx);
+        r.result = ctx.aio_operate(r.obj.oid, s->c, &op);
       }
       if (r.result < 0) {
         // cb() won't be called, so release everything here
@@ -90,8 +89,8 @@ struct Handler {
 template <typename Op>
 Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op,
                          boost::asio::io_context& context,
-                         spawn::yield_context yield, jspan_context* trace_ctx = nullptr) {
-  return [ctx = std::move(ctx), op = std::move(op), &context, yield, trace_ctx] (Aio* aio, AioResult& r) mutable {
+                         spawn::yield_context yield) {
+  return [ctx = std::move(ctx), op = std::move(op), &context, yield] (Aio* aio, AioResult& r) mutable {
       // arrange for the completion Handler to run on the yield_context's strand
       // executor so it can safely call back into Aio without locking
       using namespace boost::asio;
@@ -99,7 +98,7 @@ Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op,
       auto ex = get_associated_executor(init.completion_handler);
 
       librados::async_operate(context, ctx, r.obj.oid, &op, 0,
-                              bind_executor(ex, Handler{aio, ctx, r}), trace_ctx);
+                              bind_executor(ex, Handler{aio, ctx, r}));
     };
 }
 
@@ -116,15 +115,15 @@ Aio::OpFunc d3n_cache_aio_abstract(const DoutPrefixProvider *dpp, optional_yield
 
 
 template <typename Op>
-Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, optional_yield y, jspan_context *trace_ctx = nullptr) {
+Aio::OpFunc aio_abstract(librados::IoCtx ctx, Op&& op, optional_yield y) {
   static_assert(std::is_base_of_v<librados::ObjectOperation, std::decay_t<Op>>);
   static_assert(!std::is_lvalue_reference_v<Op>);
   static_assert(!std::is_const_v<Op>);
   if (y) {
     return aio_abstract(std::move(ctx), std::forward<Op>(op),
-                        y.get_io_context(), y.get_yield_context(), trace_ctx);
+                        y.get_io_context(), y.get_yield_context());
   }
-  return aio_abstract(std::move(ctx), std::forward<Op>(op), trace_ctx);
+  return aio_abstract(std::move(ctx), std::forward<Op>(op));
 }
 
 } // anonymous namespace
@@ -136,8 +135,8 @@ Aio::OpFunc Aio::librados_op(librados::IoCtx ctx,
 }
 Aio::OpFunc Aio::librados_op(librados::IoCtx ctx,
                              librados::ObjectWriteOperation&& op,
-                             optional_yield y, jspan_context *trace_ctx) {
-  return aio_abstract(std::move(ctx), std::move(op), y, trace_ctx);
+                             optional_yield y) {
+  return aio_abstract(std::move(ctx), std::move(op), y);
 }
 
 Aio::OpFunc Aio::d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
