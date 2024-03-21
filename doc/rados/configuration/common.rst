@@ -123,11 +123,10 @@ OSD host, run the following commands:
     ssh {osd-host}
     sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}
 
-The ``osd_data`` path ought to lead to a mount point that has mounted on it a
-device that is distinct from the device that contains the operating system and
-the daemons. To use a device distinct from the device that contains the
+The ``osd_data`` path must lead to a device that is not shared with the
+operating system. To use a device other than the device that contains the
 operating system and the daemons, prepare it for use with Ceph and mount it on
-the directory you just created by running the following commands:
+the directory you just created by running commands of the following form:
 
 .. prompt:: bash $
 
