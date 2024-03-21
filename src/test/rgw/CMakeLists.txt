@@ -53,6 +53,7 @@ target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE
   ${rgw_libs}
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  rados_sal
   )
   target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE spawn)
 install(TARGETS ceph_test_rgw_d4n_filter DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -125,7 +126,9 @@ target_link_libraries(ceph_test_rgw_manifest
   ${EXPAT_LIBRARIES}
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
-  ${CRYPTO_LIBS})
+  ${CRYPTO_LIBS}
+  rados_sal
+  )
 
 set(test_rgw_obj_srcs test_rgw_obj.cc)
 add_executable(ceph_test_rgw_obj
@@ -147,6 +150,7 @@ target_link_libraries(ceph_test_rgw_obj
   ${CMAKE_DL_LIBS}
   ${UNITTEST_LIBS}
   ${CRYPTO_LIBS}
+  rados_sal
   )
 install(TARGETS ceph_test_rgw_obj DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -279,7 +283,7 @@ add_executable(unittest_cls_fifo_legacy test_cls_fifo_legacy.cc)
 target_include_directories(unittest_cls_fifo_legacy
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_cls_fifo_legacy radostest-cxx ${UNITTEST_LIBS}
-  ${rgw_libs})
+  ${rgw_libs} rados_sal)
 
 # unittest_log_backing
 add_executable(unittest_log_backing test_log_backing.cc)
@@ -287,7 +291,7 @@ target_include_directories(unittest_log_backing
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
 target_link_libraries(unittest_log_backing radostest-cxx ${UNITTEST_LIBS}
-  ${rgw_libs})
+  ${rgw_libs} rados_sal)
 
 add_executable(unittest_rgw_lua test_rgw_lua.cc)
 add_ceph_unittest(unittest_rgw_lua)

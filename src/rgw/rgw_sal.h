@@ -251,8 +251,10 @@ class ObjectProcessor : public DataProcessor {
  */
 class Driver {
   public:
-    Driver() {}
+    Driver() : dl(nullptr) {}
     virtual ~Driver() = default;
+
+    void *dl;
 
     /** Post-creation initialization of driver */
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) = 0;
@@ -498,6 +500,15 @@ struct BucketList {
   /// The next marker to resume listing, or empty
   std::string next_marker;
 };
+
+// typedef class Driver *(*New_Driver_fn)(const DoutPrefixProvider *,
+//                                        CephContext *,
+//                                        bool,
+//                                        boost::asio::io_context&,
+//                                        const rgw::SiteConfig&,
+//                                        bool, bool, bool, bool,
+//                                        bool, bool, bool, bool);
+using rgw_sal_new_driver_fn = rgw::sal::Driver* (*)(const DoutPrefixProvider *, CephContext *, bool, boost::asio::io_context&, const rgw::SiteConfig&, bool, bool, bool, bool, bool, bool, bool, bool, optional_yield);
 
 /**
  * @brief User abstraction
@@ -1586,6 +1597,8 @@ public:
     std::string store_name;
     /** Name of filter to create or "none" */
     std::string filter_name;
+    /** PluginRegistry */
+    PluginRegistry *plugin_reg;
   };
 
   DriverManager() {}
