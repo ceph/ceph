@@ -529,7 +529,9 @@ ObjectDataHandler::write_ret do_insertions(
 	return ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	  ctx.t,
 	  region.addr,
-	  region.len
+	  region.len,
+	  placement_hint_t::HOT,
+	  true
         ).si_then([&region](auto extents) {
           auto off = region.addr;
           auto left = region.len;
@@ -560,7 +562,8 @@ ObjectDataHandler::write_ret do_insertions(
 	return ctx.tm.reserve_region(
 	  ctx.t,
 	  region.addr,
-	  region.len
+	  region.len,
+	  true
 	).si_then([FNAME, ctx, &region](auto pin) {
 	  ceph_assert(pin->get_length() == region.len);
 	  if (pin->get_key() != region.addr) {
@@ -1032,6 +1035,7 @@ auto with_objects_data(
 ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   context_t ctx,
   object_data_t &object_data,
+  laddr_t hint,
   extent_len_t size)
 {
   LOG_PREFIX(ObjectDataHandler::prepare_data_reservation);
@@ -1044,15 +1048,18 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
            object_data.get_reserved_data_len());
     return write_iertr::now();
   } else {
+    ceph_assert(hint != L_ADDR_NULL);
     DEBUGT("reserving: {}~{}",
            ctx.t,
-           ctx.onode.get_data_hint(),
+	   hint,
            max_object_size);
     return ctx.tm.reserve_region(
       ctx.t,
-      ctx.onode.get_data_hint(),
-      max_object_size
-    ).si_then([max_object_size=max_object_size, &object_data](auto pin) {
+      hint,
+      max_object_size,
+      ctx.determinsitic
+    ).si_then([ctx, max_object_size=max_object_size, &object_data, FNAME](auto pin) {
+      DEBUGT("reserve result: {}~{}", ctx.t, pin->get_key(), pin->get_length());
       ceph_assert(pin->get_length() == max_object_size);
       object_data.update_reserved(
 	pin->get_key(),
@@ -1388,6 +1395,7 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
       return prepare_data_reservation(
 	ctx,
 	object_data,
+	ctx.hint,
 	p2roundup(offset + len, ctx.tm.get_block_size())
       ).si_then([this, ctx, offset, len, &object_data] {
 	auto [logical_offset, length] = laddr_t::get_aligned_range(
@@ -1402,6 +1410,19 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
 	    std::nullopt, std::move(pins));
 	});
       });
+    });
+}
+
+ObjectDataHandler::touch_ret ObjectDataHandler::touch(context_t ctx)
+{
+  return with_object_data(
+    ctx,
+    [this, ctx](auto &obj_data) {
+      return prepare_data_reservation(
+        ctx,
+	obj_data,
+	ctx.hint,
+	max_object_size);
     });
 }
 
@@ -1424,6 +1445,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
       return prepare_data_reservation(
 	ctx,
 	object_data,
+	ctx.hint,
 	p2roundup(offset + bl.length(), ctx.tm.get_block_size())
       ).si_then([this, ctx, offset, &object_data, &bl] {
 	auto base = object_data.get_reserved_data_base();
@@ -1618,6 +1640,7 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
 	return prepare_data_reservation(
 	  ctx,
 	  object_data,
+	  ctx.hint,
 	  p2roundup(offset, ctx.tm.get_block_size()));
       } else {
 	return truncate_iertr::now();
@@ -1672,7 +1695,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	    ::make_ready_future<LBAMappingRef>();
 	  auto addr = object_data.get_reserved_data_base() + offset;
 	  if (pin->get_val().is_zero()) {
-	    fut = ctx.tm.reserve_region(ctx.t, addr, pin->get_length());
+	    fut = ctx.tm.reserve_region(ctx.t, addr, pin->get_length(), true);
 	  } else {
 	    fut = ctx.tm.clone_pin(ctx.t, addr, *pin);
 	  }
@@ -1689,7 +1712,8 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	    return ctx.tm.reserve_region(
 	      ctx.t,
 	      object_data.get_reserved_data_base() + last_pos,
-	      object_data.get_reserved_data_len() - last_pos
+	      object_data.get_reserved_data_len() - last_pos,
+	      true
 	    ).si_then([](auto) {
 	      return seastar::now();
 	    });
@@ -1719,48 +1743,71 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
   return with_objects_data(
     ctx,
     [ctx, this](auto &object_data, auto &d_object_data) {
+    ceph_assert(!object_data.is_null());
     ceph_assert(d_object_data.is_null());
-    if (object_data.is_null()) {
-      return clone_iertr::now();
-    }
+
+    auto base = object_data.get_reserved_data_base();
+    auto len = object_data.get_reserved_data_len();
+    auto is_rollback = (base == ctx.hint);
+    LOG_PREFIX(ObjectDataHandler::clone);
+    DEBUGT("start clone: src_addr={}, src_hint={}, dst_addr={}, dst_hint={}",
+	   ctx.t, base, ctx.hint, d_object_data.get_reserved_data_base(), ctx.d_hint);
     return prepare_data_reservation(
       ctx,
       d_object_data,
+      ctx.d_hint,
       object_data.get_reserved_data_len()
-    ).si_then([&object_data, &d_object_data, ctx, this] {
+    ).si_then([&object_data, &d_object_data, ctx, is_rollback, this] {
       assert(!object_data.is_null());
-      auto base = object_data.get_reserved_data_base();
-      auto len = object_data.get_reserved_data_len();
-      object_data.clear();
       LOG_PREFIX(ObjectDataHandler::clone);
       DEBUGT("cloned obj reserve_data_base: {}, len {}",
 	ctx.t,
 	d_object_data.get_reserved_data_base(),
 	d_object_data.get_reserved_data_len());
-      return prepare_data_reservation(
-	ctx,
-	object_data,
-	d_object_data.get_reserved_data_len()
-      ).si_then([&d_object_data, ctx, &object_data, base, len, this] {
-	LOG_PREFIX("ObjectDataHandler::clone");
-	DEBUGT("head obj reserve_data_base: {}, len {}",
-	  ctx.t,
-	  object_data.get_reserved_data_base(),
-	  object_data.get_reserved_data_len());
-	return ctx.tm.get_pins(ctx.t, base, len
-	).si_then([ctx, &object_data, &d_object_data, base, this](auto pins) {
-	  return seastar::do_with(
-	    std::move(pins),
-	    [ctx, &object_data, &d_object_data, base, this](auto &pins) {
-	    return clone_extents(ctx, object_data, pins, base
-	    ).si_then([ctx, &d_object_data, base, &pins, this] {
-	      return clone_extents(ctx, d_object_data, pins, base);
-	    }).si_then([&pins, ctx] {
-	      return do_removals(ctx, pins);
+      if (is_rollback) {
+	return write_iertr::now();
+      } else {
+	// take snapshot
+	object_data.clear();
+	return prepare_data_reservation(
+	  ctx,
+	  object_data,
+	  ctx.hint,
+	  d_object_data.get_reserved_data_len());
+      }
+    }).si_then([&d_object_data, ctx, &object_data, base, len, is_rollback, this] {
+      LOG_PREFIX(ObjectDataHandler::clone);
+      DEBUGT("head obj reserve_data_base: {}, len {}",
+        ctx.t,
+        object_data.get_reserved_data_base(),
+        object_data.get_reserved_data_len());
+      return ctx.tm.get_pins(ctx.t, base, len
+      ).si_then([ctx, &object_data, &d_object_data, base, is_rollback, this](auto pins) {
+        return seastar::do_with(
+          std::move(pins),
+          [ctx, &object_data, &d_object_data, base, is_rollback, this](auto &pins) {
+            return clone_extents(ctx, d_object_data, pins, base
+	    ).si_then([ctx, &object_data, base, &pins, is_rollback, this] {
+	      if (is_rollback) {
+		return clone_iertr::now();
+	      } else {
+		return clone_extents(ctx, object_data, pins, base
+		).si_then([&pins, ctx] {
+		  return do_removals(ctx, pins);
+		});
+	      }
 	    });
 	  });
-	});
       });
+    }).si_then([ctx, &object_data, &d_object_data] {
+      LOG_PREFIX(ObjectDataHandler::clone);
+      DEBUGT("finish clone, src_onode_base={:d}, src_onode_local_snap_id={}, "
+	     "dst_onode_base={:d}, dst_onode_local_snap_id={}",
+	     ctx.t,
+	     object_data.get_reserved_data_base(),
+	     ctx.onode.get_layout().local_snap_id,
+	     d_object_data.get_reserved_data_base(),
+	     ctx.d_onode->get_layout().local_snap_id);
     });
   });
 }

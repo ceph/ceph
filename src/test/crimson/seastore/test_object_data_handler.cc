@@ -147,6 +147,10 @@ struct object_data_handler_test_t:
 	      *tm,
 	      t,
 	      *onode,
+	      nullptr,
+	      onode->get_data_hint(),
+	      L_ADDR_NULL,
+	      false
 	    },
 	    offset,
 	    bl);
@@ -173,7 +177,9 @@ struct object_data_handler_test_t:
 	    ObjectDataHandler::context_t{
 	      *tm,
 	      t,
-	      *onode
+	      *onode,
+	      nullptr,
+	      onode->get_data_hint()
 	    },
 	    offset);
 	});

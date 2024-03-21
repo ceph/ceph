@@ -95,7 +95,16 @@ public:
     Transaction &t;
     Onode &onode;
     Onode *d_onode = nullptr; // The desination node in case of clone
+    // used in reserve region without invoking get_data_hint() directly
+    laddr_t hint = L_ADDR_NULL;
+    laddr_t d_hint = L_ADDR_NULL;
+    // indicates whether conflict would occur during resering region
+    bool determinsitic = true;
   };
+
+  using touch_iertr = base_iertr;
+  using touch_ret = touch_iertr::future<>;
+  touch_ret touch(context_t ctx);
 
   /// Writes bl to [offset, offset + bl.length())
   using write_iertr = base_iertr;
@@ -160,6 +169,7 @@ private:
   write_ret prepare_data_reservation(
     context_t ctx,
     object_data_t &object_data,
+    laddr_t hint,
     extent_len_t size);
 
   /// Trims data past size
