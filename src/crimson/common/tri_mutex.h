@@ -99,8 +99,8 @@ public:
   }
 
   // for shared writers
-  seastar::future<> lock_for_write(bool greedy);
-  bool try_lock_for_write(bool greedy) noexcept;
+  seastar::future<> lock_for_write();
+  bool try_lock_for_write() noexcept;
   void unlock_for_write();
   void promote_from_write();
   void demote_to_write();
