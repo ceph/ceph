@@ -547,11 +547,11 @@ public:
   }
 
   /// Get ref to raw buffer
-  bufferptr &get_bptr() {
+  virtual bufferptr &get_bptr() {
     assert(ptr.has_value());
     return *ptr;
   }
-  const bufferptr &get_bptr() const {
+  virtual const bufferptr &get_bptr() const {
     assert(ptr.has_value());
     return *ptr;
   }
@@ -646,11 +646,6 @@ private:
 
   bool is_linked() {
     return extent_index_hook.is_linked();
-  }
-
-  /// set bufferptr
-  void set_bptr(ceph::bufferptr &&nptr) {
-    ptr = nptr;
   }
 
   /// hook for intrusive ref list (mainly dirty or lru list)
@@ -797,6 +792,11 @@ protected:
       prior_poffset = poffset;
     }
     poffset = offset;
+  }
+
+  /// set bufferptr
+  void set_bptr(ceph::bufferptr &&nptr) {
+    ptr = nptr;
   }
 
   /**
