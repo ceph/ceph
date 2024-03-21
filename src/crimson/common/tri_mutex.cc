@@ -15,7 +15,7 @@ void read_lock::unlock()
 
 seastar::future<> write_lock::lock()
 {
-  return static_cast<tri_mutex*>(this)->lock_for_write(false);
+  return static_cast<tri_mutex*>(this)->lock_for_write();
 }
 
 void write_lock::unlock()
@@ -110,19 +110,19 @@ void tri_mutex::demote_to_read()
   ++readers;
 }
 
-seastar::future<> tri_mutex::lock_for_write(bool greedy)
+seastar::future<> tri_mutex::lock_for_write()
 {
-  if (try_lock_for_write(greedy)) {
+  if (try_lock_for_write()) {
     return seastar::make_ready_future<>();
   }
   waiters.emplace_back(seastar::promise<>(), type_t::write);
   return waiters.back().pr.get_future();
 }
 
-bool tri_mutex::try_lock_for_write(bool greedy) noexcept
+bool tri_mutex::try_lock_for_write() noexcept
 {
   if (!readers && !exclusively_used) {
-    if (greedy || waiters.empty()) {
+    if (waiters.empty()) {
       ++writers;
       return true;
     }
