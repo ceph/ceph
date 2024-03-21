@@ -424,7 +424,7 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
 
   update:
     getline(ss, rs);
-    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                             get_last_committed() + 1));
     return true;
 }
