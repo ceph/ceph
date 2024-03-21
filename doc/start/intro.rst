@@ -51,11 +51,10 @@ The Ceph Metadata Server is necessary to run Ceph File System clients.
   heartbeat. At least three Ceph OSDs are normally required for 
   redundancy and high availability.
 
-- **MDSs**: A :term:`Ceph Metadata Server` (MDS, ``ceph-mds``) stores
-  metadata on behalf of the :term:`Ceph File System` (i.e., Ceph Block
-  Devices and Ceph Object Storage do not use MDS). Ceph Metadata
-  Servers allow POSIX file system users to execute basic commands (like
-  ``ls``, ``find``, etc.) without placing an enormous burden on the
+- **MDSs**: A :term:`Ceph Metadata Server` (MDS, ``ceph-mds``) stores metadata
+  for the :term:`Ceph File System`. Ceph Block Devices and Ceph Object Storage
+  do not use MDS. Ceph Metadata Servers allow POSIX-file-system users to run
+  basic commands (like ``ls``, ``find``, etc.) without placing a burden on the
   Ceph Storage Cluster.
 
 Ceph stores data as objects within logical storage pools. Using the
