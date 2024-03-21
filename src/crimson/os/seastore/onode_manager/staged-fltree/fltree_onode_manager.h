@@ -302,6 +302,10 @@ public:
     const ghobject_t& end,
     uint64_t limit) final;
 
+  get_latest_snap_ret get_latest_snap(
+    Transaction &trans,
+    const ghobject_t &head) final;
+
   ~FLTreeOnodeManager();
 };
 using FLTreeOnodeManagerRef = std::unique_ptr<FLTreeOnodeManager>;

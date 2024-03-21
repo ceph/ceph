@@ -1251,14 +1251,15 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
         return seastar::do_with(
 	  std::vector<OnodeRef>(ctx.iter.objects.size()),
           std::vector<OnodeRef>(ctx.iter.objects.size()),
-          [this, &ctx](auto& onodes, auto& d_onodes) mutable {
+	  std::map<ghobject_t, laddr_t>(),
+          [this, &ctx](auto& onodes, auto& d_onodes, auto& removed_laddrs) mutable {
           return trans_intr::repeat(
-            [this, &ctx, &onodes, &d_onodes]() mutable
+            [this, &ctx, &onodes, &d_onodes, &removed_laddrs]() mutable
             -> tm_iertr::future<seastar::stop_iteration>
             {
               if (ctx.iter.have_op()) {
                 return _do_transaction_step(
-                  ctx, ctx.ch, onodes, d_onodes, ctx.iter
+                  ctx, ctx.ch, onodes, d_onodes, removed_laddrs, ctx.iter
                 ).si_then([] {
                   return seastar::make_ready_future<seastar::stop_iteration>(
                     seastar::stop_iteration::no);
@@ -1295,6 +1296,7 @@ SeaStore::Shard::_do_transaction_step(
   CollectionRef &col,
   std::vector<OnodeRef> &onodes,
   std::vector<OnodeRef> &d_onodes,
+  std::map<ghobject_t, laddr_t> &removed_laddrs,
   ceph::os::Transaction::iterator &i)
 {
   auto op = i.decode_op();
@@ -1347,9 +1349,9 @@ SeaStore::Shard::_do_transaction_step(
       o = get_onode;
       d_onodes[op->oid] = get_onode;
     }
-    if ((op->op == Transaction::OP_CLONE
-	  || op->op == Transaction::OP_COLL_MOVE_RENAME)
-	&& !d_onodes[op->dest_oid]) {
+    if (op->op == Transaction::OP_CLONE
+	|| op->op == Transaction::OP_COLL_MOVE_RENAME) {
+      ceph_assert(!d_onodes[op->dest_oid]);
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
       return onode_manager->get_or_create_onode(
@@ -1373,6 +1375,9 @@ SeaStore::Shard::_do_transaction_step(
       case Transaction::OP_REMOVE:
       {
 	TRACET("removing {}", *ctx.transaction, i.get_oid(op->oid));
+	auto obj_data = onodes[op->oid]->get_layout().object_data.get();
+	auto laddr = obj_data.get_reserved_data_base();
+	removed_laddrs.emplace(i.get_oid(op->oid), laddr);
         return _remove(ctx, onodes[op->oid]
 	).si_then([&onodes, &d_onodes, op] {
 	  onodes[op->oid].reset();
@@ -1382,7 +1387,29 @@ SeaStore::Shard::_do_transaction_step(
       case Transaction::OP_CREATE:
       case Transaction::OP_TOUCH:
       {
-        return _touch(ctx, onodes[op->oid]);
+	auto r = L_ADDR_NULL;
+	if (auto iter = removed_laddrs.find(i.get_oid(op->oid));
+	    iter != removed_laddrs.end()) {
+	  r = iter->second;
+	}
+	auto &ghobj = i.get_oid(op->oid);
+	if (r == L_ADDR_NULL && ghobj.hobj.is_head()) {
+	  return onode_manager->get_latest_snap(*ctx.transaction, ghobj
+	  ).si_then([this, &ctx, &onodes, op](auto &&onode) {
+	    if (onode) {
+	      const auto &layout = onode->get_layout();
+	      uint32_t local_snap_id = layout.local_snap_id;
+	      object_data_t obj_data = layout.object_data.get();
+	      ceph_assert(!obj_data.is_null());
+	      auto laddr = obj_data.get_reserved_data_base();
+	      auto head_laddr = laddr.with_local_snap_id(local_snap_id + 1);
+	      return _touch(ctx, onodes[op->oid], head_laddr);
+	    }
+	    return _touch(ctx, onodes[op->oid], L_ADDR_NULL);
+	  });
+	} else {
+	  return _touch(ctx, onodes[op->oid], r);
+	}
       }
       case Transaction::OP_WRITE:
       {
@@ -1471,7 +1498,29 @@ SeaStore::Shard::_do_transaction_step(
 	  *ctx.transaction,
 	  i.get_oid(op->oid),
 	  i.get_oid(op->dest_oid));
-	return _clone(ctx, onodes[op->oid], d_onodes[op->dest_oid]);
+	auto r = L_ADDR_NULL;
+	if (auto iter = removed_laddrs.find(i.get_oid(op->dest_oid));
+	    iter != removed_laddrs.end()) {
+	  r = iter->second;
+	}
+	auto &ghobj = i.get_oid(op->dest_oid);
+	if (r == L_ADDR_NULL && ghobj.hobj.is_head()) {
+	  return onode_manager->get_latest_snap(*ctx.transaction, ghobj
+	  ).si_then([this, &ctx, &onodes, &d_onodes, op](auto &&onode) {
+	    if (onode) {
+	      const auto &layout = onode->get_layout();
+	      uint32_t local_snap_id = layout.local_snap_id;
+	      object_data_t obj_data = layout.object_data.get();
+	      ceph_assert(!obj_data.is_null());
+	      auto laddr = layout.object_data.get().get_reserved_data_base();
+	      auto head_laddr = laddr.with_local_snap_id(local_snap_id + 1);
+	      return _clone(ctx, onodes[op->oid], d_onodes[op->dest_oid], head_laddr);
+	    }
+	    return _clone(ctx, onodes[op->oid], d_onodes[op->dest_oid], L_ADDR_NULL);
+	  });
+	} else {
+	  return _clone(ctx, onodes[op->oid], d_onodes[op->dest_oid], r);
+	}
       }
       case Transaction::OP_COLL_MOVE_RENAME:
       {
@@ -1622,10 +1671,14 @@ SeaStore::Shard::_remove(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_touch(
   internal_context_t &ctx,
-  OnodeRef &onode)
+  OnodeRef &onode,
+  laddr_t hint)
 {
   LOG_PREFIX(SeaStore::_touch);
   DEBUGT("onode={}", *ctx.transaction, *onode);
+  if (hint != L_ADDR_NULL) {
+    onode->update_local_snap_id(*ctx.transaction, hint.get_local_snap_id());
+  }
   return tm_iertr::now();
 }
 
@@ -1727,10 +1780,19 @@ SeaStore::Shard::tm_ret
 SeaStore::Shard::_clone(
   internal_context_t &ctx,
   OnodeRef &onode,
-  OnodeRef &d_onode)
+  OnodeRef &d_onode,
+  laddr_t removed_laddr)
 {
   LOG_PREFIX(SeaStore::_clone);
   DEBUGT("onode={} d_onode={}", *ctx.transaction, *onode, *d_onode);
+
+  if (removed_laddr == L_ADDR_NULL) {
+    auto snap_id = onode->get_layout().local_snap_id + 1;
+    d_onode->update_local_snap_id(*ctx.transaction, snap_id);
+  } else {
+    d_onode->update_local_snap_id(*ctx.transaction, removed_laddr.get_local_snap_id());
+  }
+
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [this, &ctx, &onode, &d_onode](auto &objHandler) {

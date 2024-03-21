@@ -282,6 +282,48 @@ FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
   });
 }
 
+FLTreeOnodeManager::get_latest_snap_ret FLTreeOnodeManager::get_latest_snap(
+  Transaction &trans,
+  const ghobject_t& head)
+{
+  LOG_PREFIX(FLTreeOnodeManager::get_latest_snap);
+  DEBUGT("head {}", trans, head);
+  ceph_assert(head.hobj.is_head());
+  return seastar::do_with(
+    head,
+    OnodeRef(nullptr),
+    [this, &trans, &head, FNAME](ghobject_t &start, OnodeRef &ret) {
+      start.hobj.snap = 0;
+      // FIXME: implement get_prev to avoid linear scanning
+      return tree.lower_bound(trans, start
+      ).si_then([this, &trans, &head, &ret, FNAME](auto &&cursor) {
+        return seastar::do_with(
+          std::move(cursor),
+          [this, &trans, &head, &ret, FNAME](auto &cursor) {
+            return trans_intr::repeat([this, &trans, &head, &ret, &cursor, FNAME] {
+              ceph_assert(!cursor.is_end());
+              if (cursor.get_ghobj() >= head) {
+                TRACET("reached head, return", trans);
+                return get_latest_snap_iertr::make_ready_future<
+                  seastar::stop_iteration>(seastar::stop_iteration::yes);
+              }
+              DEBUGT("found onode {}", trans, cursor.get_ghobj());
+              ret.reset(new FLTreeOnode(default_metadata_range, cursor.value()));
+              return tree.get_next(trans, cursor
+              ).si_then([&cursor](auto &&next) {
+                cursor = next;
+                return get_latest_snap_iertr::make_ready_future<
+                  seastar::stop_iteration>(seastar::stop_iteration::no);
+              });
+            });
+          });
+      }).si_then([&ret] {
+        return get_latest_snap_iertr::make_ready_future<
+          OnodeRef>(std::move(ret));
+      });
+    });
+}
+
 FLTreeOnodeManager::~FLTreeOnodeManager() {}
 
 }
