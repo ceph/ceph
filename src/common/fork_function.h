@@ -13,6 +13,9 @@
 #ifndef _WIN32
 #include <sys/wait.h>
 #endif
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
 #include <sys/types.h>
 
 #include "include/ceph_assert.h"
@@ -53,17 +56,23 @@ static inline int fork_function(
   // we are forker (first child)
 
   // close all fds
-  int maxfd = sysconf(_SC_OPEN_MAX);
-  if (maxfd == -1)
-    maxfd = 16384;
-  for (int fd = 0; fd <= maxfd; fd++) {
-    if (fd == STDIN_FILENO)
-      continue;
-    if (fd == STDOUT_FILENO)
-      continue;
-    if (fd == STDERR_FILENO)
-      continue;
-    ::close(fd);
+#if defined(__linux__) && defined(SYS_close_range)
+  if (::syscall(SYS_close_range, STDERR_FILENO + 1, ~0U, 0))
+#endif
+  {
+    // fall back to manually closing
+    int maxfd = sysconf(_SC_OPEN_MAX);
+    if (maxfd == -1)
+      maxfd = 16384;
+    for (int fd = 0; fd <= maxfd; fd++) {
+      if (fd == STDIN_FILENO)
+        continue;
+      if (fd == STDOUT_FILENO)
+        continue;
+      if (fd == STDERR_FILENO)
+        continue;
+      ::close(fd);
+    }
   }
 
   sigset_t mask, oldmask;
