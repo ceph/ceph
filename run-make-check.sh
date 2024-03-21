@@ -80,12 +80,23 @@ function main() {
         return 1
     fi
     # uses run-make.sh to install-deps
+    local start_prepare=$(date +%s)
+    echo "run-make-check: start make check"
     FOR_MAKE_CHECK=1 prepare
+    local end_prepare=$(date +%s)
+    echo "run-make-check: finish prepare, duration $(($end_prepare - $start_prepare)) sec"
     configure "$@"
+    local end_configure=$(date +%s)
+    echo "run-make-check: finish configure, duration $(($end_configure - $end_prepare)) sec"
     in_jenkins && echo "CI_DEBUG: Running 'build tests'"
     build tests
+    local end_build=$(date +%s)
+    echo "run-make-check: finish build, duration $(($end_build - $end_configure)) sec"
     echo "make check: successful build on $(git rev-parse HEAD)"
     FOR_MAKE_CHECK=1 run
+    local end_makecheck=$(date +%s)
+    echo "run-make-check: finish tests, duration $(($end_makecheck - $end_build)) sec"
+    echo "run-make-check: finish make check, duration $(($end_makecheck - $start_prepare)) sec"
 }
 
 if [ "$0" = "$BASH_SOURCE" ]; then
