@@ -36,7 +36,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-static rgw::sal::Driver* driver = NULL;
+static rgw::sal::Driver* driver = nullptr;
 
 class StoreDestructor {
   rgw::sal::Driver* driver;
@@ -54,6 +54,12 @@ static void usage()
 {
   generic_server_usage();
 }
+
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
 
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.

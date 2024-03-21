@@ -892,6 +892,12 @@ TEST(TestRGWAdmin, meta_delete){
   ASSERT_EQ(0, user_rm(uid, display_name));
 }
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
+
 int main(int argc, char *argv[]){
   auto args = argv_to_vec(argc, argv);
 

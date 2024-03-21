@@ -1677,6 +1677,8 @@ rm -rf %{_vpath_builddir}
 %{_libdir}/ceph/extblkdev/libceph_*.so*
 %dir %{_libdir}/ceph/compressor
 %{_libdir}/ceph/compressor/libceph_*.so*
+%dir %{_libdir}/ceph/rgw_sal
+%{_libdir}/ceph/rgw_sal/librgw_sal_*.so
 %{_unitdir}/ceph-crash.service
 %dir %{_libdir}/ceph/crypto
 %{_libdir}/ceph/crypto/libceph_*.so*

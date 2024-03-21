@@ -41,6 +41,12 @@ namespace RCf = rgw::cls::fifo;
 auto cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
 const DoutPrefix dp(cct, 1, "test log backing: ");
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
+
 class LogBacking : public testing::Test {
 protected:
   static constexpr int SHARDS = 3;

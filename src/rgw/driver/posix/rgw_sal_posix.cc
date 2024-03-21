@@ -4113,7 +4113,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 
 extern "C" {
 
-rgw::sal::Driver* newPOSIXDriver(rgw::sal::Driver* next)
+rgw::sal::Driver* newPOSIXDriver(rgw::sal::Driver* next, void* io_context)
 {
   rgw::sal::POSIXDriver* driver = new rgw::sal::POSIXDriver(next);
 

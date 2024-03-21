@@ -1508,7 +1508,7 @@ void FilterLuaManager::set_luarocks_path(const std::string& path) {
 
 extern "C" {
 
-rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next)
+rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next, void* io_context)
 {
   rgw::sal::FilterDriver* driver = new rgw::sal::FilterDriver(next);
 

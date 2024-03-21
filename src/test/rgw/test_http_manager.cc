@@ -24,6 +24,12 @@
 
 using namespace std;
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
+
 namespace {
   using tcp = boost::asio::ip::tcp;
 

@@ -15,6 +15,11 @@
 #include "rgw_reshard.h"
 #include <gtest/gtest.h>
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
 
 TEST(TestRGWReshard, dynamic_reshard_shard_count)
 {

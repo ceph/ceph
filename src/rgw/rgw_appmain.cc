@@ -80,6 +80,9 @@
 
 using namespace std;
 
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
+
 namespace {
   TracepointProvider::Traits rgw_op_tracepoint_traits(
     "librgw_op_tp.so", "rgw_op_tracing");

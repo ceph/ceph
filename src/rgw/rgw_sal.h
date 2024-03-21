@@ -254,8 +254,10 @@ struct TopicList {
  */
 class Driver {
   public:
-    Driver() {}
+    Driver() : dl(nullptr) {}
     virtual ~Driver() = default;
+
+    void *dl;
 
     /** Post-creation initialization of driver */
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) = 0;
@@ -271,7 +273,6 @@ class Driver {
     virtual int get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) = 0;
     /** Lookup a User by swift username.  Queries driver for user info. */
     virtual int get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user) = 0;
-
     /** Lookup RGWAccountInfo by id */
     virtual int load_account_by_id(const DoutPrefixProvider* dpp,
                                    optional_yield y,
@@ -306,7 +307,6 @@ class Driver {
                                optional_yield y,
                                const RGWAccountInfo& info,
                                RGWObjVersionTracker& objv) = 0;
-
     /** Load cumulative bucket storage stats for the given owner */
     virtual int load_stats(const DoutPrefixProvider* dpp,
                            optional_yield y,
@@ -428,10 +428,10 @@ class Driver {
                             std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
     /** List the buckets of a given owner */
     virtual int list_buckets(const DoutPrefixProvider* dpp,
-			     const rgw_owner& owner, const std::string& tenant,
-			     const std::string& marker, const std::string& end_marker,
-			     uint64_t max, bool need_stats, BucketList& buckets,
-			     optional_yield y) = 0;
+                            const rgw_owner& owner, const std::string& tenant,
+                            const std::string& marker, const std::string& end_marker,
+                            uint64_t max, bool need_stats, BucketList& buckets,
+                            optional_yield y) = 0;
     /** For multisite, this driver is the zone's master */
     virtual bool is_meta_master() = 0;
     /** Get zone info for this driver */
@@ -609,12 +609,12 @@ class Driver {
     virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) = 0;
     /** Get all IAM Roles optionally filtered by path */
     virtual int list_roles(const DoutPrefixProvider *dpp,
-			   optional_yield y,
-			   const std::string& tenant,
-			   const std::string& path_prefix,
-			   const std::string& marker,
-			   uint32_t max_items,
-			   RoleList& listing) = 0;
+                          optional_yield y,
+                          const std::string& tenant,
+                          const std::string& path_prefix,
+                          const std::string& marker,
+                          uint32_t max_items,
+                          RoleList& listing) = 0;
     virtual int store_oidc_provider(const DoutPrefixProvider* dpp,
                                     optional_yield y,
                                     const RGWOIDCProviderInfo& info,
@@ -673,6 +673,15 @@ class ReadStatsCB : public boost::intrusive_ref_counter<ReadStatsCB> {
   virtual ~ReadStatsCB() {}
   virtual void handle_response(int r, const RGWStorageStats& stats) = 0;
 };
+
+// typedef class Driver *(*New_Driver_fn)(const DoutPrefixProvider *,
+//                                        CephContext *,
+//                                        bool,
+//                                        boost::asio::io_context&,
+//                                        const rgw::SiteConfig&,
+//                                        bool, bool, bool, bool,
+//                                        bool, bool, bool, bool);
+using rgw_sal_new_driver_fn = rgw::sal::Driver* (*)(const DoutPrefixProvider *, CephContext *, bool, boost::asio::io_context&, const rgw::SiteConfig&, bool, bool, bool, bool, bool, bool, bool, bool, optional_yield);
 
 /**
  * @brief User abstraction
@@ -752,7 +761,7 @@ class User {
     virtual int list_groups(const DoutPrefixProvider* dpp, optional_yield y,
                             std::string_view marker, uint32_t max_items,
                             GroupList& listing) = 0;
-
+ 
     /* dang temporary; will be removed when User is complete */
     virtual RGWUserInfo& get_info() = 0;
 
@@ -1266,7 +1275,7 @@ class Object {
     /** Copy the current version of a swift object to the configured destination bucket*/
     virtual int swift_versioning_copy(const ACLOwner& owner,
                                       const rgw_user& remote_user,
-				      const DoutPrefixProvider* dpp,
+                                     const DoutPrefixProvider* dpp,
 				      optional_yield y) = 0;
 
     /** Get a new ReadOp for this object */
@@ -1779,6 +1788,8 @@ public:
     std::string store_name;
     /** Name of filter to create or "none" */
     std::string filter_name;
+    /** PluginRegistry */
+    PluginRegistry *plugin_reg;
   };
 
   DriverManager() {}

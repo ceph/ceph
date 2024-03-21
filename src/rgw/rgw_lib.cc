@@ -49,6 +49,9 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
 using namespace std;
 
 namespace rgw {

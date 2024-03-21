@@ -87,7 +87,7 @@ extern "C" {
 
 using namespace std;
 
-static rgw::sal::Driver* driver = NULL;
+static rgw::sal::Driver* driver = nullptr;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
 
 static const DoutPrefixProvider* dpp() {
@@ -3340,6 +3340,12 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
     opt_var = var;
   }
 }
+
+class RGWCurlHandles;
+RGWCurlHandles *handles = nullptr;
+
+class RGWHTTPManager;
+RGWHTTPManager *rgw_http_manager = nullptr;
 
 // This has an uncaught exception. Even if the exception is caught, the program
 // would need to be terminated, so the warning is simply suppressed.
