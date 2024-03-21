@@ -43,8 +43,9 @@ class NvmeofService(CephService):
             'name': name,
             'addr': host_ip,
             'port': spec.port,
-            'log_level': 'WARN',
-            'rpc_socket': '/var/tmp/spdk.sock',
+            'spdk_log_level': 'WARNING',
+            'rpc_socket_dir': '/var/tmp/',
+            'rpc_socket_name': 'spdk.sock',
             'transport_tcp_options': transport_tcp_options,
             'rados_id': rados_id
         }
