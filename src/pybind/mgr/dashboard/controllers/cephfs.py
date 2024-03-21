@@ -1029,7 +1029,9 @@ class CephFSSnapshotSchedule(RESTController):
                                                                     path,
                                                                     retention_spec_or_period,
                                                                     retention_count,
-                                                                    fs)
+                                                                    fs,
+                                                                    subvol,
+                                                                    group)
                 if error_code_retention != 0:
                     raise DashboardException(
                         f'Failed to add retention policy for path {path}: {err_retention}'
@@ -1071,7 +1073,36 @@ class CephFSSnapshotSchedule(RESTController):
 
     @RESTController.Resource('DELETE')
     def delete_snapshot(self, fs: str, path: str, schedule: str, start: str,
-                        subvol=None, group=None):
+                        retention_policy=None, subvol=None, group=None):
+        if retention_policy:
+            # check if there are other snap schedules for this exact same path
+            error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
+                                              path, False, fs, subvol, group, 'plain')
+
+            if error_code != 0:
+                raise DashboardException(
+                    f'Failed to get snapshot schedule list for path {path}: {err}'
+                )
+            # only remove the retention policies if there no other snap schedules for this path
+            snapshot_schedule_list = out.split('\n')
+            if len(snapshot_schedule_list) <= 1:
+                retention_policies = retention_policy.split('|')
+                for retention in retention_policies:
+                    retention_count = retention.split('-')[0]
+                    retention_spec_or_period = retention.split('-')[1]
+                    error_code, _, err = mgr.remote('snap_schedule',
+                                                    'snap_schedule_retention_rm',
+                                                    path,
+                                                    retention_spec_or_period,
+                                                    retention_count,
+                                                    fs,
+                                                    subvol,
+                                                    group)
+                    if error_code != 0:
+                        raise DashboardException(
+                            f'Failed to remove retention policy for path {path}: {err}'
+                        )
+        # remove snap schedule
         error_code, _, err = mgr.remote('snap_schedule',
                                         'snap_schedule_rm',
                                         path,

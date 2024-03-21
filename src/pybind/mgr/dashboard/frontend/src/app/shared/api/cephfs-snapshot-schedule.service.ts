@@ -48,10 +48,21 @@ export class CephfsSnapshotScheduleService {
     );
   }
 
-  delete({ fs, path, schedule, start, subvol, group }: Record<string, any>): Observable<any> {
+  delete({
+    fs,
+    path,
+    schedule,
+    start,
+    retentionPolicy,
+    subvol,
+    group
+  }: Record<string, any>): Observable<any> {
     let deleteUrl = `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(
       path
     )}/delete_snapshot?schedule=${schedule}&start=${encodeURIComponent(start)}`;
+    if (retentionPolicy) {
+      deleteUrl += `&retention_policy=${retentionPolicy}`;
+    }
     if (subvol && group) {
       deleteUrl += `&subvol=${encodeURIComponent(subvol)}&group=${encodeURIComponent(group)}`;
     }
@@ -81,13 +92,16 @@ export class CephfsSnapshotScheduleService {
     path: string,
     fs: string,
     retentionFrequencies: string[],
-    retentionFrequenciesRemoved: string[] = []
+    retentionFrequenciesRemoved: string[] = [],
+    isSubvolume = false
   ): Observable<{ exists: boolean; errorIndex: number }> {
     return this.getSnapshotSchedule(path, fs, false).pipe(
       map((response) => {
         let errorIndex = -1;
         let exists = false;
-        const index = response.findIndex((x) => x.path === path);
+        const index = response.findIndex((x) =>
+          isSubvolume ? x.path.startsWith(path) : x.path === path
+        );
         const result = retentionFrequencies?.length
           ? intersection(
               Object.keys(response?.[index]?.retention).filter(
