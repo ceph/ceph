@@ -1,0 +1,23 @@
+overrides:
+  kclient:
+    mntopts: [test_dummy_encryption]
+tasks:
+- parallel:
+   - user-workload
+   - kclient-workload
+user-workload:
+  sequential:
+  - ceph-fuse: [client.0]
+  - workunit:
+      subdir: fscrypt
+      clients:
+        client.0: [fs/fscrypt_protect.sh fuse]
+      timeout: 1h
+kclient-workload:
+  sequential:
+  - kclient: [client.1]
+  - workunit:
+      subdir: fscrypt
+      clients:
+        client.1: [fs/fscrypt_protect.sh kclient]
+      timeout: 1h
