@@ -2190,12 +2190,7 @@ TEST_F(TestLibRBD, RemoveFullTry)
   ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "conf_rbd_default_data_pool",
                                      pool_name.c_str()));
 
-  int order = 0;
   auto image_name = get_temp_image_name();
-  // FIXME: this is a workaround for rbd_trash object being created
-  // on the first remove -- pre-create it to avoid bumping into quota
-  ASSERT_EQ(0, create_image(ioctx, image_name.c_str(), 0, &order));
-  ASSERT_EQ(0, rbd_remove(ioctx, image_name.c_str()));
   remove_full_try(ioctx, image_name, pool_name);
 
   rados_ioctx_destroy(ioctx);
@@ -2213,6 +2208,49 @@ TEST_F(TestLibRBD, RemoveFullTryDataPool)
   ASSERT_EQ(0, rados_ioctx_create(_cluster, pool_name.c_str(), &ioctx));
   ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "conf_rbd_default_data_pool",
                                      data_pool_name.c_str()));
+
+  auto image_name = get_temp_image_name();
+  remove_full_try(ioctx, image_name, data_pool_name);
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, RemoveFullTryNamespace)
+{
+  REQUIRE_FORMAT_V2();
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  rados_ioctx_t ioctx;
+  auto pool_name = create_pool(true);
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, pool_name.c_str(), &ioctx));
+  // cancel out rbd_default_data_pool -- we need an image without
+  // a separate data pool
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "conf_rbd_default_data_pool",
+                                     pool_name.c_str()));
+  ASSERT_EQ(0, rbd_namespace_create(ioctx, "name1"));
+  rados_ioctx_set_namespace(ioctx, "name1");
+
+  auto image_name = get_temp_image_name();
+  remove_full_try(ioctx, image_name, pool_name);
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, RemoveFullTryNamespaceDataPool)
+{
+  REQUIRE_FORMAT_V2();
+  REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  rados_ioctx_t ioctx;
+  auto pool_name = create_pool(true);
+  auto data_pool_name = create_pool(true);
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, pool_name.c_str(), &ioctx));
+  ASSERT_EQ(0, rbd_pool_metadata_set(ioctx, "conf_rbd_default_data_pool",
+                                     data_pool_name.c_str()));
+  ASSERT_EQ(0, rbd_namespace_create(ioctx, "name1"));
+  rados_ioctx_set_namespace(ioctx, "name1");
 
   auto image_name = get_temp_image_name();
   remove_full_try(ioctx, image_name, data_pool_name);

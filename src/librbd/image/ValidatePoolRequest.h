@@ -50,10 +50,13 @@ private:
    * REMOVE SNAPSHOT          .     .
    *    |                     .     .
    *    v                     .     .
-   * OVERWRITE RBD INFO < . . .     .
+   * CREATE RBD TRASH < . . . .     .
    *    |                           .
    *    v                           .
-   * <finish>  < . . . . . .  . . . .`
+   * OVERWRITE RBD INFO             .
+   *    |                           .
+   *    v                           .
+   * <finish> < . . . . . . . . . . .
    *
    * @endverbatim
    */
@@ -80,6 +83,9 @@ private:
 
   void overwrite_rbd_info();
   void handle_overwrite_rbd_info(int r);
+
+  void create_rbd_trash();
+  void handle_create_rbd_trash(int r);
 
   void finish(int r);
 

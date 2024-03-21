@@ -65,6 +65,12 @@ public:
     }
   }
 
+  void expect_create_rbd_info(librados::MockTestMemIoCtxImpl &mock_io_ctx,
+                               int r) {
+    EXPECT_CALL(mock_io_ctx, create(StrEq(RBD_INFO), true, _))
+      .WillOnce(Return(r));
+  }
+
   void expect_write_rbd_info(librados::MockTestMemIoCtxImpl &mock_io_ctx,
                              const std::string& data, int r) {
     bufferlist bl;
@@ -95,6 +101,12 @@ public:
     }
   }
 
+  void expect_create_rbd_trash(librados::MockTestMemIoCtxImpl &mock_io_ctx,
+                               int r) {
+    EXPECT_CALL(mock_io_ctx, create(StrEq(RBD_TRASH), false, _))
+      .WillOnce(Return(r));
+  }
+
   librbd::ImageCtx *image_ctx;
 };
 
@@ -105,8 +117,10 @@ TEST_F(TestMockImageValidatePoolRequest, Success) {
   expect_clone(mock_io_ctx);
   expect_read_rbd_info(mock_io_ctx, "", -ENOENT);
   expect_allocate_snap_id(mock_io_ctx, 0);
+  expect_create_rbd_info(mock_io_ctx, 0);
   expect_write_rbd_info(mock_io_ctx, "validate", 0);
   expect_release_snap_id(mock_io_ctx, 0);
+  expect_create_rbd_trash(mock_io_ctx, 0);
   expect_write_rbd_info(mock_io_ctx, "overwrite validated", 0);
 
   C_SaferCond ctx;
@@ -134,6 +148,7 @@ TEST_F(TestMockImageValidatePoolRequest, SnapshotsValidated) {
   InSequence seq;
   expect_clone(mock_io_ctx);
   expect_read_rbd_info(mock_io_ctx, "validate", 0);
+  expect_create_rbd_trash(mock_io_ctx, 0);
   expect_write_rbd_info(mock_io_ctx, "overwrite validated", 0);
 
   C_SaferCond ctx;
@@ -176,6 +191,7 @@ TEST_F(TestMockImageValidatePoolRequest, WriteError) {
   expect_clone(mock_io_ctx);
   expect_read_rbd_info(mock_io_ctx, "", -ENOENT);
   expect_allocate_snap_id(mock_io_ctx, 0);
+  expect_create_rbd_info(mock_io_ctx, 0);
   expect_write_rbd_info(mock_io_ctx, "validate", -EPERM);
   expect_release_snap_id(mock_io_ctx, -EINVAL);
 
@@ -192,14 +208,34 @@ TEST_F(TestMockImageValidatePoolRequest, RemoveSnapshotError) {
   expect_clone(mock_io_ctx);
   expect_read_rbd_info(mock_io_ctx, "", -ENOENT);
   expect_allocate_snap_id(mock_io_ctx, 0);
+  expect_create_rbd_info(mock_io_ctx, 0);
   expect_write_rbd_info(mock_io_ctx, "validate", 0);
   expect_release_snap_id(mock_io_ctx, -EPERM);
+  expect_create_rbd_trash(mock_io_ctx, 0);
   expect_write_rbd_info(mock_io_ctx, "overwrite validated", 0);
 
   C_SaferCond ctx;
   auto req = new MockValidatePoolRequest(m_ioctx, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageValidatePoolRequest, CreateTrashError) {
+  librados::MockTestMemIoCtxImpl &mock_io_ctx(get_mock_io_ctx(m_ioctx));
+
+  InSequence seq;
+  expect_clone(mock_io_ctx);
+  expect_read_rbd_info(mock_io_ctx, "", -ENOENT);
+  expect_allocate_snap_id(mock_io_ctx, 0);
+  expect_create_rbd_info(mock_io_ctx, 0);
+  expect_write_rbd_info(mock_io_ctx, "validate", 0);
+  expect_release_snap_id(mock_io_ctx, 0);
+  expect_create_rbd_trash(mock_io_ctx, -EPERM);
+
+  C_SaferCond ctx;
+  auto req = new MockValidatePoolRequest(m_ioctx, &ctx);
+  req->send();
+  ASSERT_EQ(-EPERM, ctx.wait());
 }
 
 TEST_F(TestMockImageValidatePoolRequest, OverwriteError) {
@@ -209,8 +245,10 @@ TEST_F(TestMockImageValidatePoolRequest, OverwriteError) {
   expect_clone(mock_io_ctx);
   expect_read_rbd_info(mock_io_ctx, "", -ENOENT);
   expect_allocate_snap_id(mock_io_ctx, 0);
+  expect_create_rbd_info(mock_io_ctx, 0);
   expect_write_rbd_info(mock_io_ctx, "validate", 0);
   expect_release_snap_id(mock_io_ctx, 0);
+  expect_create_rbd_trash(mock_io_ctx, 0);
   expect_write_rbd_info(mock_io_ctx, "overwrite validated", -EOPNOTSUPP);
 
   C_SaferCond ctx;
