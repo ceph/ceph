@@ -389,7 +389,8 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
               frm.get('directory').value,
               this.fsName,
               retentionList,
-              this.retentionPoliciesToRemove?.map?.((rp) => rp.retentionFrequency) || []
+              this.retentionPoliciesToRemove?.map?.((rp) => rp.retentionFrequency) || [],
+              !!this.subvolume
             )
             .pipe(
               map(({ exists, errorIndex }) => {
