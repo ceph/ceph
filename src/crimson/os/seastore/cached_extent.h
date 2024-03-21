@@ -618,6 +618,11 @@ public:
     return last_committed_crc;
   }
 
+  /// Returns true if the extent part of the open transaction
+  bool is_pending_in_trans(transaction_id_t id) const {
+    return is_pending() && pending_for_transaction == id;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -646,11 +651,6 @@ private:
   /// set bufferptr
   void set_bptr(ceph::bufferptr &&nptr) {
     ptr = nptr;
-  }
-
-  /// Returns true if the extent part of the open transaction
-  bool is_pending_in_trans(transaction_id_t id) const {
-    return is_pending() && pending_for_transaction == id;
   }
 
   /// hook for intrusive ref list (mainly dirty or lru list)

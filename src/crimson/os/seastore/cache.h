@@ -443,6 +443,15 @@ public:
     return get_absent_extent<T>(t, offset, length, [](T &){});
   }
 
+  bool is_viewable_extent_stable(
+    Transaction &t,
+    CachedExtentRef extent)
+  {
+    assert(extent);
+    auto view = extent->get_transactional_view(t);
+    return view->is_stable();
+  }
+
   using get_extent_ertr = base_ertr;
   get_extent_ertr::future<CachedExtentRef>
   get_extent_viewable_by_trans(
