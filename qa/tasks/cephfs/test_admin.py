@@ -1387,7 +1387,7 @@ class TestFsAuthorize(CephFSTestCase):
         self.run_cap_test_one_by_one(FS_AUTH_CAPS)
 
     def run_cap_test_one_by_one(self, fs_auth_caps):
-        keyring = self.run_cluster_cmd(f'auth get {self.client_name}')
+        keyring = self.run_ceph_cmd(f'auth get {self.client_name}')
         for i, c in enumerate(fs_auth_caps):
             self.assertIn(i, (0, 1))
             PATH = c[0]
