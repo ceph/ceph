@@ -87,7 +87,8 @@ public:
     laddr_t hint,
     extent_len_t len,
     paddr_t addr,
-    LogicalCachedExtent &nextent) = 0;
+    LogicalCachedExtent &nextent,
+    bool determinsitic) = 0;
 
   virtual alloc_extent_ret clone_mapping(
     Transaction &t,
@@ -100,7 +101,8 @@ public:
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len) = 0;
+    extent_len_t len,
+    bool determinsitic) = 0;
 
   struct ref_update_result_t {
     unsigned refcount = 0;

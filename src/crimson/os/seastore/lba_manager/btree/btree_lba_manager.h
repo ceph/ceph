@@ -217,7 +217,8 @@ public:
   alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len)
+    extent_len_t len,
+    bool determinsitic)
   {
     return _alloc_extent(
       t,
@@ -225,7 +226,8 @@ public:
       len,
       pladdr_t{P_ADDR_ZERO},
       P_ADDR_NULL,
-      nullptr);
+      nullptr,
+      determinsitic);
   }
 
   alloc_extent_ret clone_mapping(
@@ -244,7 +246,8 @@ public:
       len,
       pladdr_t{intermediate_key},
       actual_addr,
-      nullptr
+      nullptr,
+      true
     ).si_then([&t, this, intermediate_base](auto indirect_mapping) {
       assert(indirect_mapping->is_indirect());
       return update_refcount(t, intermediate_base, 1, false
@@ -269,7 +272,8 @@ public:
     laddr_t hint,
     extent_len_t len,
     paddr_t addr,
-    LogicalCachedExtent &ext) final
+    LogicalCachedExtent &ext,
+    bool determinsitic) final
   {
     return _alloc_extent(
       t,
@@ -277,7 +281,8 @@ public:
       len,
       pladdr_t{addr},
       P_ADDR_NULL,
-      &ext);
+      &ext,
+      determinsitic);
   }
 
   ref_ret decref_extent(
@@ -403,7 +408,8 @@ private:
     extent_len_t len,
     pladdr_t addr,
     paddr_t actual_addr,
-    LogicalCachedExtent*);
+    LogicalCachedExtent*,
+    bool determinsitic);
 
   using _get_mapping_ret = get_mapping_iertr::future<BtreeLBAMappingRef>;
   _get_mapping_ret _get_mapping(
@@ -420,6 +426,20 @@ private:
     Transaction &t,
     laddr_t addr,
     extent_len_t len);
+
+  struct insert_pos_t {
+    insert_pos_t(LBABtree::iterator iter, laddr_t laddr)
+      : iter(iter), laddr(laddr) {}
+    LBABtree::iterator iter;
+    laddr_t laddr;
+  };
+  using search_insert_pos_ret = alloc_extent_iertr::future<insert_pos_t>;
+  search_insert_pos_ret search_insert_pos(
+    Transaction &t,
+    LBABtree &btree,
+    laddr_t laddr,
+    extent_len_t length,
+    bool determinsitic);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

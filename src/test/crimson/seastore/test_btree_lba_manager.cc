@@ -423,7 +423,8 @@ struct btree_lba_manager_test : btree_test_base {
   auto alloc_mapping(
     test_transaction_t &t,
     laddr_t hint,
-    size_t len) {
+    size_t len,
+    bool determinsitic = false) {
     auto ret = with_trans_intr(
       *t.t,
       [=, this](auto &t) {
@@ -436,7 +437,7 @@ struct btree_lba_manager_test : btree_test_base {
 	assert(extents.size() == 1);
 	auto extent = extents.front();
 	return lba_manager->alloc_extent(
-	  t, hint, len, extent->get_paddr(), *extent);
+	  t, hint, len, extent->get_paddr(), *extent, determinsitic);
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());
@@ -744,7 +745,7 @@ TEST_F(btree_lba_manager_test, split_merge_multi)
     check_mappings();
     iterate([&](auto &t, auto idx) {
       if ((idx % 32) > 0) {
-	alloc_mapping(t, idx * block_size, block_size);
+	alloc_mapping(t, idx * block_size, block_size, true);
       }
     });
     check_mappings();
