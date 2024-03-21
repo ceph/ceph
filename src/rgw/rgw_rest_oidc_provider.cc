@@ -135,6 +135,7 @@ int RGWCreateOIDCProvider::init_processing(optional_yield y)
 
 void RGWCreateOIDCProvider::execute(optional_yield y)
 {
+  RGWObjVersionTracker objv_tracker;
   constexpr bool exclusive = true;
   op_ret = driver->store_oidc_provider(this, y, info, exclusive);
   if (op_ret == 0) {
@@ -229,8 +230,13 @@ int RGWDeleteOIDCProvider::init_processing(optional_yield y)
 
 void RGWDeleteOIDCProvider::execute(optional_yield y)
 {
-  op_ret = driver->delete_oidc_provider(this, y, resource.account, url);
+  RGWOIDCProviderInfo info;
+  RGWObjVersionTracker objv_tracker;
+  op_ret = driver->delete_oidc_provider(this, y, resource.account, url, objv_tracker, info);
+
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
+    op_ret = ERR_INTERNAL_ERROR;
+  }
   if (op_ret == 0) {
     s->formatter->open_object_section_in_ns("DeleteOpenIDConnectProviderResponse", RGW_REST_IAM_XMLNS);
     s->formatter->open_object_section("ResponseMetadata");
@@ -239,6 +245,7 @@ void RGWDeleteOIDCProvider::execute(optional_yield y)
     s->formatter->close_section();
   }
 }
+
 
 RGWGetOIDCProvider::RGWGetOIDCProvider()
   : RGWRestOIDCProvider(rgw::IAM::iamGetOIDCProvider, RGW_CAP_READ)
@@ -277,7 +284,8 @@ static void dump_oidc_provider(const RGWOIDCProviderInfo& info, Formatter *f)
 void RGWGetOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  op_ret = driver->load_oidc_provider(this, y, resource.account,
+                                      url, nullptr, info);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
@@ -371,7 +379,7 @@ int RGWAddClientIdToOIDCProvider::init_processing(optional_yield y)
 void RGWAddClientIdToOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  op_ret = driver->load_oidc_provider(this, y, resource.account, url, nullptr, info);
 
   if (op_ret < 0) {
     if (op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -443,7 +451,7 @@ int RGWRemoveCientIdFromOIDCProvider::init_processing(optional_yield y)
 void RGWRemoveCientIdFromOIDCProvider::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  op_ret = driver->load_oidc_provider(this, y, resource.account, url, nullptr, info);
 
   if (op_ret < 0) {
     if (op_ret != -ENOENT && op_ret != -EINVAL) {
@@ -520,7 +528,7 @@ int RGWUpdateOIDCProviderThumbprint::init_processing(optional_yield y)
 void RGWUpdateOIDCProviderThumbprint::execute(optional_yield y)
 {
   RGWOIDCProviderInfo info;
-  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+  op_ret = driver->load_oidc_provider(this, y, resource.account, url, nullptr, info);
 
   if (op_ret < 0) {
     if (op_ret != -ENOENT && op_ret != -EINVAL) {

@@ -1076,11 +1076,14 @@ class MotrStore : public StoreDriver {
                            optional_yield y,
                            std::string_view tenant,
                            std::string_view url,
+                           RGWObjVersionTracker* objv_tracker,
                            RGWOIDCProviderInfo& info) override;
-    int delete_oidc_provider(const DoutPrefixProvider* dpp,
+    int delete_oidc_provider(const DoutPrefixProvider *dpp,
                              optional_yield y,
                              std::string_view tenant,
-                             std::string_view url) override;
+                             std::string_view url,
+                             RGWObjVersionTracker& objv_tracker,
+                             RGWOIDCProviderInfo& info) override;
     int get_oidc_providers(const DoutPrefixProvider* dpp,
                            optional_yield y,
                            std::string_view tenant,

@@ -2147,14 +2147,17 @@ int DaosStore::load_oidc_provider(const DoutPrefixProvider* dpp,
                                   optional_yield y,
                                   std::string_view tenant,
                                   std::string_view url,
+                                  RGWObjVersionTracker* objv_tracker,
                                   RGWOIDCProviderInfo& info) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosStore::delete_oidc_provider(const DoutPrefixProvider* dpp,
+int DaosStore::delete_oidc_provider(const DoutPrefixProvider *dpp,
                                     optional_yield y,
                                     std::string_view tenant,
-                                    std::string_view url) {
+                                    std::string_view url,
+                                    RGWObjVersionTracker& objv_tracker,
+                                    RGWOIDCProviderInfo& info) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
