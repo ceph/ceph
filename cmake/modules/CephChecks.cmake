@@ -155,9 +155,9 @@ __attribute__((__symver__ (\"func@v2\"))) void func_v2() {};
 
 int main() {}"
   HAVE_ATTR_SYMVER)
-  if(NOT HAVE_ATTR_SYMVER)
+  if(CMAKE_CXX_COMPILER_ID STREQUAL GNU AND NOT HAVE_ATTR_SYMVER)
     if(CMAKE_CXX_FLAGS MATCHES "-flto" AND NOT CMAKE_CXX_FLAGS MATCHES "-flto-partition=none")
-      # https://tracker.ceph.com/issues/40060
+      # https://tracker.ceph.com/issues/40060, skip for clang
       message(FATAL_ERROR "please pass -flto-partition=none as part of CXXFLAGS")
     endif()
   endif()

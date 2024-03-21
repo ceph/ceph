@@ -14,6 +14,8 @@ ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
 endif
 ifeq (,$(findstring WITH_SEASTAR,$(CEPH_EXTRA_CMAKE_ARGS)))
   export CEPH_OSD_BASENAME = ceph-osd
+  # default to clang for crimson
+  extraopts += -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
 else
   export CEPH_OSD_BASENAME = crimson-osd
 endif
