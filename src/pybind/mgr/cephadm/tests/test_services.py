@@ -390,12 +390,29 @@ port = {default_port}
 enable_auth = False
 state_update_notify = True
 state_update_interval_sec = 5
-min_controller_id = 1
-max_controller_id = 65519
 enable_spdk_discovery_controller = False
 enable_prometheus_exporter = True
 prometheus_exporter_ssl = False
 prometheus_port = 10008
+verify_nqns = True
+omap_file_lock_duration = 60
+omap_file_lock_retries = 15
+omap_file_lock_retry_sleep_interval = 5
+omap_file_update_reloads = 10
+
+[gateway-logs]
+log_level = INFO
+log_files_enabled = True
+log_files_rotation_enabled = True
+verbose_log_messages = True
+max_log_file_size_in_mb = 10
+max_log_files_count = 20
+max_log_directory_backups = 10
+log_directory = /var/log/ceph/
+
+[discovery]
+addr = 192.168.100.100
+port = 8009
 
 [ceph]
 pool = {pool}
@@ -410,13 +427,18 @@ client_cert = ./client.crt
 
 [spdk]
 tgt_path = /usr/local/bin/nvmf_tgt
-rpc_socket = /var/tmp/spdk.sock
-timeout = 60
-log_level = WARN
+rpc_socket_dir = /var/tmp/
+rpc_socket_name = spdk.sock
+timeout = 60.0
+bdevs_per_cluster = 32
+log_level = WARNING
 conn_retries = 10
 transports = tcp
 transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}
-tgt_cmd_extra_args = {tgt_cmd_extra_args}\n"""
+tgt_cmd_extra_args = {tgt_cmd_extra_args}
+
+[monitor]
+timeout = 1.0\n"""
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, NvmeofServiceSpec(service_id=pool,
