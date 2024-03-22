@@ -5121,8 +5121,10 @@ Objecter::Objecter(CephContext *cct,
 
   auto read_policy = cct->_conf.get_val<std::string>("rados_replica_read_policy");
   if (read_policy == "localize") {
+    ldout(cct, 20) << __func__ << ": read policy: localize" << dendl;
     extra_read_flags = CEPH_OSD_FLAG_LOCALIZE_READS;
   } else if (read_policy == "balance") {
+    ldout(cct, 20) << __func__ << ": read policy: balance" << dendl;
     extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
   }
 }
