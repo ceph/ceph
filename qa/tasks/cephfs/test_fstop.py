@@ -97,7 +97,7 @@ class TestFSTop(CephFSTestCase):
                           "--yes-i-really-mean-it")
 
         # create a new filesystem
-        fs_b = self.mds_cluster.newfs(name=newfs_name)
+        fs_b = self.mds_cluster.newfs(name=newfs_name, create=True)
 
         # mount cephfs_b on mount_b
         self.mount_b.mount_wait(cephfs_name=fs_b.name)
