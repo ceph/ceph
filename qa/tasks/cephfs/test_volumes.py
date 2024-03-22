@@ -1950,8 +1950,8 @@ class TestSubvolumeGroups(TestVolumesHelper):
         self.assertEqual(ret.strip('\n'), "no subvolumegroup exists")
 
     def test_subvolume_group_rm_when_its_not_empty(self):
-        group = self._generate_random_group_name()
-        subvolume = self._generate_random_subvolume_name()
+        group = self._gen_subvol_grp_name()
+        subvolume = self._gen_subvol_name()
 
         # create subvolumegroup
         self._fs_cmd("subvolumegroup", "create", self.volname, group)
