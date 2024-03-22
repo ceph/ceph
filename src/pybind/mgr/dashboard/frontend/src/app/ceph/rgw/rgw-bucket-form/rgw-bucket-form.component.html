@@ -385,6 +385,135 @@
           </div>
         </fieldset>
 
+        <!-- Tags -->
+        <legend class="cd-header"
+                i18n>Tags
+          <cd-helper>Tagging gives you a way to categorize storage</cd-helper>
+        </legend>
+        <span *ngFor="let tag of tags; let i=index;">
+          <ng-container *ngTemplateOutlet="tagTpl; context:{index: i, tag: tag}"></ng-container>
+        </span>
+
+        <div class="row">
+          <div class="col-12">
+            <strong *ngIf="tags.length > 19"
+                    class="text-warning"
+                    i18n>Maximum of 20 tags reached</strong>
+            <button type="button"
+                    id="add-tag"
+                    class="btn btn-light float-end my-3"
+                    [disabled]="tags.length > 19"
+                    (click)="showTagModal()">
+              <i [ngClass]="[icons.add]"></i>
+              <ng-container i18n>Add tag</ng-container>
+            </button>
+          </div>
+        </div>
+
+        <!-- Policies -->
+        <legend class="cd-header"
+                i18n>Policies
+        </legend>
+        <div class="row">
+          <div class="col-12">
+            <div class="form-group row">
+
+              <!-- Bucket policy -->
+              <label i18n
+                     class="cd-col-form-label"
+                     for="id">Bucket policy</label>
+              <div class="cd-col-form-input">
+                <textarea #bucketPolicyTextArea
+                          class="form-control resize-vertical"
+                          id="bucket_policy"
+                          formControlName="bucket_policy"
+                          (change)="bucketPolicyOnChange()">
+                </textarea>
+                <span class="invalid-feedback"
+                      *ngIf="bucketForm.showError('bucket_policy', frm, 'invalidJson')"
+                      i18n>Invalid json text</span>
+                <button type="button"
+                        id="clear-bucket-policy"
+                        class="btn btn-light my-3"
+                        (click)="clearBucketPolicy()"
+                        i18n>
+                  <i [ngClass]="[icons.destroy]"></i>
+                  Clear
+                </button>
+                <div class="btn-group float-end"
+                     role="group"
+                     aria-label="bucket-policy-helpers">
+                  <button type="button"
+                          id="example-generator-button"
+                          class="btn btn-light my-3"
+                          (click)="openUrl('https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html?icmpid=docs_amazons3_console')"
+                          i18n>
+                    <i [ngClass]="[icons.externalUrl]"></i>
+                    Policy examples
+                  </button>
+                  <button type="button"
+                          id="example-generator-button"
+                          class="btn btn-light my-3"
+                          (click)="openUrl('https://awspolicygen.s3.amazonaws.com/policygen.html')"
+                          i18n>
+                    <i [ngClass]="[icons.externalUrl]"></i>
+                    Policy generator
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group row">
+
+              <!-- ACL -->
+              <label class="cd-col-form-label"
+                     i18n>ACL
+                <cd-helper>Any changes to the ACL will overwrite previous one.
+                  You can choose any of the available options to modify the spcified user group.</cd-helper>
+              </label>
+              <div class="cd-col-form-input">
+                <div class="input-group">
+                  <span class="input-group-text"
+                        for="grantee"
+                        i18n>Grantee
+                    <cd-helper>Select a grantee (user group) to modify it's permisions</cd-helper>
+                  </span>
+                  <select id="grantee"
+                          name="grantee"
+                          class="form-input form-select"
+                          formControlName="grantee"
+                          (change)="onSelectionFilter()">
+                    <option *ngFor="let item of grantees"
+                            [value]="item"
+                            i18n>{{ item }}</option>
+                  </select>
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('grantee', frm, 'required')"
+                        i18n>This field is required.</span>
+                  <span class="input-group-text"
+                        for="aclPermission"
+                        i18n>Permissions
+                    <cd-helper>Select the permision to give to the selected grantee.
+                        Regardless, the owner of the bucket will always have
+                          FULL CONTROL access</cd-helper>
+                    </span>
+                  <select id="aclPermission"
+                          name="aclPermission"
+                          class="form-input form-select"
+                          formControlName="aclPermission">
+                    <option *ngFor="let permission of aclPermissions"
+                            [value]="permission"
+                            i18n>{{ permission }}</option>
+                  </select>
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('aclPermission', frm, 'required')"
+                        i18n>This field is required.</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
       <div class="card-footer">
         <cd-form-button-panel (submitActionEvent)="submit()"
@@ -395,3 +524,37 @@
     </div>
   </form>
 </div>
+
+<ng-template #tagTpl
+             let-tag="tag"
+             let-index="index">
+  <div class="input-group my-2">
+    <ng-container *ngFor="let config of tagConfig">
+      <input type="text"
+             id="tag-{{config.attribute}}-{{index}}"
+             class="form-control"
+             [ngbTooltip]="config.attribute"
+             [value]="tag[config.attribute]"
+             disabled
+             readonly>
+    </ng-container>
+
+    <!-- Tag actions -->
+    <button type="button"
+            class="btn btn-light"
+            id="tag-edit-{{index}}"
+            i18n-ngbTooltip
+            ngbTooltip="Edit"
+            (click)="showTagModal(index)">
+      <i [ngClass]="[icons.edit]"></i>
+    </button>
+    <button type="button"
+            class="btn btn-light"
+            id="tag-delete-{{index}}"
+            i18n-ngbTooltip
+            ngbTooltip="Delete"
+            (click)="deleteTag(index)">
+      <i [ngClass]="[icons.trash]"></i>
+    </button>
+  </div>
+</ng-template>

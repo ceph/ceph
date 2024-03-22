@@ -9407,6 +9407,10 @@ paths:
               properties:
                 bucket:
                   type: string
+                bucket_policy:
+                  type: string
+                canned_acl:
+                  type: string
                 daemon_name:
                   type: string
                 encryption_state:
@@ -9426,6 +9430,8 @@ paths:
                 lock_retention_period_years:
                   type: string
                 placement_target:
+                  type: string
+                tags:
                   type: string
                 uid:
                   type: string
@@ -9718,6 +9724,10 @@ paths:
               properties:
                 bucket_id:
                   type: string
+                bucket_policy:
+                  type: string
+                canned_acl:
+                  type: string
                 daemon_name:
                   type: string
                 encryption_state:
@@ -9738,6 +9748,8 @@ paths:
                 mfa_token_pin:
                   type: string
                 mfa_token_serial:
+                  type: string
+                tags:
                   type: string
                 uid:
                   type: string

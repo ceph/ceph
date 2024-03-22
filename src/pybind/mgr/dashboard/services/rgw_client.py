@@ -658,6 +658,30 @@ class RgwClient(RestClient):
                                      http_status_code=error.status_code,
                                      component='rgw')
 
+    @RestClient.api_get('/{bucket_name}?acl')
+    def get_acl(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(raw_content=True)  # type: ignore
+            return result.decode("utf-8")
+        except RequestException as error:
+            msg = 'Error getting ACLs'
+            if error.status_code == 404:
+                msg = '{}: {}'.format(msg, str(error))
+            raise DashboardException(msg=msg,
+                                     http_status_code=error.status_code,
+                                     component='rgw')
+
+    @RestClient.api_put('/{bucket_name}?acl')
+    def set_acl(self, bucket_name, acl, request=None):
+        # pylint: disable=unused-argument
+        headers = {'x-amz-acl': acl}
+        try:
+            result = request(headers=headers)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
     @RestClient.api_get('/{bucket_name}?encryption')
     def get_bucket_encryption(self, bucket_name, request=None):
         # pylint: disable=unused-argument
@@ -701,6 +725,19 @@ class RgwClient(RestClient):
             _ = request(data=data)  # type: ignore
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
+
+    @RestClient.api_put('/{bucket_name}?tagging')
+    def set_tags(self, bucket_name, tags, request=None):
+        # pylint: disable=unused-argument
+        try:
+            ET.fromstring(tags)
+        except ET.ParseError:
+            return "Data must be properly formatted"
+        try:
+            result = request(data=tags)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
 
     @RestClient.api_get('/{bucket_name}?object-lock')
     def get_bucket_locking(self, bucket_name, request=None):
@@ -900,6 +937,28 @@ class RgwClient(RestClient):
                         'Code') == 'NoSuchBucketPolicy':
                     return None
             raise e
+
+    @RestClient.api_put('/{bucket_name}?policy')
+    def set_bucket_policy(self, bucket_name: str, policy: str, request=None):
+        """
+        Sets the bucket policy for a bucket.
+        :param bucket_name: The name of the bucket.
+        :type bucket_name: str
+        :param policy: The bucket policy.
+        :type policy: JSON Structured Document
+        :return: The bucket policy.
+        :rtype: Dict
+        """
+        # pylint: disable=unused-argument
+        try:
+            request = request(data=policy)
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get("Code") == "InvalidArgument":
+                    msg = "Invalid JSON document"
+                    raise DashboardException(msg=msg, component='rgw')
+            raise DashboardException(e)
 
     def perform_validations(self, retention_period_days, retention_period_years, mode):
         try:

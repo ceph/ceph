@@ -291,6 +291,22 @@ class RgwBucket(RgwRESTController):
         rgw_client = RgwClient.admin_instance()
         return rgw_client.get_bucket_policy(bucket)
 
+    def _set_policy(self, bucket_name: str, policy: str, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.set_bucket_policy(bucket_name, policy)
+
+    def _set_tags(self, bucket_name, tags, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.set_tags(bucket_name, tags)
+
+    def _get_acl(self, bucket_name, daemon_name, owner):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return str(rgw_client.get_acl(bucket_name))
+
+    def _set_acl(self, bucket_name: str, acl: str, owner, daemon_name):
+        rgw_client = RgwClient.instance(owner, daemon_name)
+        return rgw_client.set_acl(bucket_name, acl)
+
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
         # type (str) -> str
@@ -343,7 +359,8 @@ class RgwBucket(RgwRESTController):
         result['encryption'] = encryption['Status']
         result['versioning'] = versioning['Status']
         result['mfa_delete'] = versioning['MfaDelete']
-        result['policy'] = self._get_policy(bucket_name)
+        result['bucket_policy'] = self._get_policy(bucket_name)
+        result['acl'] = self._get_acl(bucket_name, daemon_name, result['owner'])
 
         # Append the locking configuration.
         locking = self._get_locking(result['owner'], daemon_name, bucket_name)
@@ -356,7 +373,8 @@ class RgwBucket(RgwRESTController):
                lock_enabled='false', lock_mode=None,
                lock_retention_period_days=None,
                lock_retention_period_years=None, encryption_state='false',
-               encryption_type=None, key_id=None, daemon_name=None):
+               encryption_type=None, key_id=None, tags=None,
+               bucket_policy=None, canned_acl=None, daemon_name=None):
         lock_enabled = str_to_bool(lock_enabled)
         encryption_state = str_to_bool(encryption_state)
         try:
@@ -372,6 +390,15 @@ class RgwBucket(RgwRESTController):
             if encryption_state:
                 self._set_encryption(bucket, encryption_type, key_id, daemon_name, uid)
 
+            if tags:
+                self._set_tags(bucket, tags, daemon_name, uid)
+
+            if bucket_policy:
+                self._set_policy(bucket, bucket_policy, daemon_name, uid)
+
+            if canned_acl:
+                self._set_acl(bucket, canned_acl, uid, daemon_name)
+
             return result
         except RequestException as e:  # pragma: no cover - handling is too obvious
             raise DashboardException(e, http_status_code=500, component='rgw')
@@ -381,7 +408,8 @@ class RgwBucket(RgwRESTController):
             encryption_state='false', encryption_type=None, key_id=None,
             mfa_delete=None, mfa_token_serial=None, mfa_token_pin=None,
             lock_mode=None, lock_retention_period_days=None,
-            lock_retention_period_years=None, daemon_name=None):
+            lock_retention_period_years=None, tags=None, bucket_policy=None,
+            canned_acl=None, daemon_name=None):
         encryption_state = str_to_bool(encryption_state)
         # When linking a non-tenant-user owned bucket to a tenanted user, we
         # need to prefix bucket name with '/'. e.g. photos -> /photos
@@ -421,6 +449,12 @@ class RgwBucket(RgwRESTController):
             self._set_encryption(bucket_name, encryption_type, key_id, daemon_name, uid)
         if encryption_status['Status'] == 'Enabled' and (not encryption_state):
             self._delete_encryption(bucket_name, daemon_name, uid)
+        if tags:
+            self._set_tags(bucket_name, tags, daemon_name, uid)
+        if bucket_policy:
+            self._set_policy(bucket_name, bucket_policy, daemon_name, uid)
+        if canned_acl:
+            self._set_acl(bucket_name, canned_acl, uid, daemon_name)
         return self._append_bid(result)
 
     def delete(self, bucket, purge_objects='true', daemon_name=None):

@@ -100,20 +100,63 @@
             </ng-container>
           </tbody>
         </table>
+
+      <!-- Tags -->
+      <ng-container *ngIf="(selection.tagset | keyvalue)?.length">
+        <legend i18n>Tags</legend>
+        <table class="table table-striped table-bordered">
+          <tbody>
+            <tr *ngFor="let tag of selection.tagset | keyvalue">
+              <td i18n
+                  class="bold w-25">{{tag.key}}</td>
+              <td class="w-75">{{ tag.value }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </ng-container>
+
       </ng-template>
     </ng-container>
 
     <ng-container ngbNavItem="permissions">
       <a ngbNavLink
-         i18n>Permissions</a>
+         i18n>Policies</a>
       <ng-template ngbNavContent>
 
         <table class="table table-striped table-bordered">
           <tbody>
             <tr>
               <td i18n
-                  class="bold w-25">Policy</td>
-              <td><pre>{{ selection.policy | json}}</pre></td>
+                  class="bold w-25">Bucket policy</td>
+              <td><pre>{{ selection.bucket_policy | json}}</pre></td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold w-25">ACL</td>
+              <td>
+                <table class="table">
+                  <thead>
+                    <tr i18n>
+                      <th>Grantee</th>
+                      <th>Permissions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr i18n>
+                      <td>Bucket Owner</td>
+                      <td>{{ aclPermissions.Owner || '-'}}</td>
+                    </tr>
+                    <tr i18n>
+                      <td>Everyone</td>
+                      <td>{{ aclPermissions.AllUsers || '-'}}</td>
+                    </tr>
+                    <tr i18n>
+                      <td>Authenticated users group</td>
+                      <td>{{ aclPermissions.AuthenticatedUsers || '-'}}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
             </tr>
           </tbody>
         </table>
