@@ -2,7 +2,10 @@ import json
 import errno
 import logging
 import mgr_util
-from typing import TYPE_CHECKING
+import inspect
+import functools
+from typing import TYPE_CHECKING, Any, Callable, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 import cephfs
 
@@ -86,11 +89,28 @@ class VolumeClient(CephfsClient["Module"]):
             lvl = self.mgr.ClusterLogPrio.WARN
         self.mgr.cluster_log("cluster", lvl, msg)
 
-    def volume_exception_to_retval(self, ve):
+    def volume_exception_to_retval(self_or_method: Any, ve: Optional[VolumeException] = None):
         """
         return a tuple representation from a volume exception
+        OR wrap the decorated method into a try:catch:
+        that will convert VolumeException to the tuple
         """
-        return ve.to_tuple()
+        if ve is None and callable(self_or_method):
+            # used as a decorator
+            method: Callable = self_or_method
+            @functools.wraps(method)
+            def wrapper(self, *args, **kwargs):
+                try:
+                    return method(self, *args, **kwargs)
+                except VolumeException as ve:
+                    return self.volume_exception_to_retval(ve)
+            return wrapper
+        elif ve is not None:
+            # used as a method on self with a VolumeException argument
+            return ve.to_tuple()
+        else:
+            # shouldn't get here, bad call
+            assert(ve is not None)
 
     ### volume operations -- create, rm, ls
 
@@ -430,6 +450,51 @@ class VolumeClient(CephfsClient["Module"]):
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
+
+    @volume_exception_to_retval
+    def quiesce(self, cmd):
+        volname    = cmd['vol_name']
+        default_group_name  = cmd.get('group_name', None)
+        roots = []
+        leader_gid = cmd.get('with_leader', None)
+
+        with open_volume(self, volname) as fs_handle:
+            if leader_gid is None:
+                fscid = fs_handle.get_fscid()
+                leader_gid = self.mgr.get_quiesce_leader_gid(fscid)
+                if leader_gid is None:
+                    return -errno.ENOENT, "", "Couldn't resolve the quiesce leader for volume %s (%s)" % (volname, fscid)
+
+            if cmd.get('leader', False):
+                return (
+                    0,
+                    "mds.%d" % leader_gid,
+                    "Resolved the quiesce leader for volume '{volname}' as gid {gid}".format(volname=volname, gid=leader_gid)
+                )
+
+
+            for member in cmd.get('members', []):
+                try:
+                    member_parts = urlsplit(member)
+                except ValueError as ve:
+                    return -errno.EINVAL, "", str(ve)
+                group_name = default_group_name
+
+                *maybe_group_name, subvol_name = member_parts.path.strip('/').split('/')
+                if len(maybe_group_name) > 1:
+                    return -errno.EINVAL, "", "The `<group>/<subvol>` member syntax is accepted with no more than one group"
+                elif len(maybe_group_name) == 1:
+                    group_name = maybe_group_name[0]
+
+                with open_group(fs_handle, self.volspec, group_name) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvol_name, SubvolumeOpType.GETPATH) as subvol:
+                        member_parts = member_parts._replace(path=subvol.path.decode('utf-8'))
+                        roots.append(urlunsplit(member_parts))
+        
+        cmd['roots'] = roots
+        cmd['prefix'] = 'quiesce db'
+
+        return self.mgr.tell_quiesce_leader(leader_gid, cmd)
 
     def set_user_metadata(self, **kwargs):
         ret        = 0, "", ""

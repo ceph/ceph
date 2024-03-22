@@ -48,6 +48,25 @@
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
 
+template <>
+struct std::hash<mds_gid_t> {
+  size_t operator()(const mds_gid_t& gid) const
+  {
+    return hash<uint64_t> {}(gid);
+  }
+};
+
+inline void encode(const mds_gid_t &v, bufferlist& bl, uint64_t features = 0) {
+  uint64_t vv = v;
+  encode_raw(vv, bl);
+}
+
+inline void decode(mds_gid_t &v, bufferlist::const_iterator& p) {
+  uint64_t vv;
+  decode_raw(vv, p);
+  v = vv;
+}
+
 typedef int32_t fs_cluster_id_t;
 constexpr fs_cluster_id_t FS_CLUSTER_ID_NONE = -1;
 

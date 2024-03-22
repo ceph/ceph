@@ -19,6 +19,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <ranges>
 #include <string_view>
 
 #include <errno.h>
@@ -311,6 +312,34 @@ public:
 
   mds_rank_t get_tableserver() const { return tableserver; }
   mds_rank_t get_root() const { return root; }
+
+  void get_quiesce_db_cluster(mds_gid_t &leader, std::unordered_set<mds_gid_t> &members) const {
+    leader = qdb_cluster_leader;
+    members = qdb_cluster_members; 
+  }
+
+  mds_gid_t get_quiesce_db_cluster_leader() const {
+    return qdb_cluster_leader;
+  }
+
+  std::unordered_set<mds_gid_t> const& get_quiesce_db_cluster_members() const
+  {
+    return qdb_cluster_members;
+  }
+
+  bool update_quiesce_db_cluster(mds_gid_t const& leader, std::same_as<std::unordered_set<mds_gid_t>> auto && members) {
+    if (leader == qdb_cluster_leader && members == qdb_cluster_members) {
+      return false;
+    }
+
+    ceph_assert(leader == MDS_GID_NONE || mds_info.contains(leader));
+    ceph_assert(std::ranges::all_of(members, [this](auto &m) {return mds_info.contains(m);}));
+
+    qdb_cluster_leader = leader;
+    qdb_cluster_members = members;
+
+    return true;
+  }
 
   const std::vector<int64_t> &get_data_pools() const { return data_pools; }
   int64_t get_first_data_pool() const { return *data_pools.begin(); }
@@ -634,6 +663,8 @@ protected:
 
   mds_rank_t tableserver = 0;   // which MDS has snaptable
   mds_rank_t root = 0;          // which MDS has root directory
+  std::unordered_set<mds_gid_t> qdb_cluster_members;
+  mds_gid_t qdb_cluster_leader = MDS_GID_NONE;
 
   __u32 session_timeout = 60;
   __u32 session_autoclose = 300;

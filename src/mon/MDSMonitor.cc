@@ -14,6 +14,8 @@
 
 #include <regex>
 #include <sstream>
+#include <queue>
+#include <ranges>
 #include <boost/utility.hpp>
 
 #include "MDSMonitor.h"
@@ -174,10 +176,60 @@ void MDSMonitor::create_pending()
   dout(10) << "create_pending e" << fsmap.get_epoch() << dendl;
 }
 
+void MDSMonitor::assign_quiesce_db_leader(FSMap &fsmap) {
+
+  // the quiesce leader is the lowest rank with the highest state up to ACTIVE
+  auto less_leader = [](MDSMap::mds_info_t const* l, MDSMap::mds_info_t const* r) {
+    ceph_assert(l->rank != MDS_RANK_NONE);
+    ceph_assert(r->rank != MDS_RANK_NONE);
+    ceph_assert(l->state <= MDSMap::STATE_ACTIVE);
+    ceph_assert(r->state <= MDSMap::STATE_ACTIVE);
+    if (l->rank == r->rank) {
+      return l->state < r->state;
+    } else {
+      return l->rank > r->rank;
+    }
+  };
+
+  for (const auto& [fscid, fs] : std::as_const(fsmap)) {
+    auto &&mdsmap = fs.get_mds_map();
+
+    if (mdsmap.get_epoch() < fsmap.get_epoch()) {
+      // no changes in this fs, we can skip the calculation below
+      // NB! be careful with this clause when updating the leader selection logic.
+      // When the input from outside of this fsmap will affect the decision
+      // this clause will have to be updated, too.
+      continue;
+    }
+
+    std::priority_queue<MDSMap::mds_info_t const*, std::vector<MDSMap::mds_info_t const*>, decltype(less_leader)> 
+      member_info(less_leader);
+    
+    std::unordered_set<mds_gid_t> members;
+
+    for (auto&& [gid, info] : mdsmap.get_mds_info()) {
+      // if it has a rank and state <= ACTIVE, it's good enough
+      // if (info.rank != MDS_RANK_NONE && info.state <= MDSMap::STATE_ACTIVE) {
+      if (info.rank != MDS_RANK_NONE && info.state == MDSMap::STATE_ACTIVE) {
+        member_info.push(&info);
+        members.insert(info.global_id);
+      }
+    }
+
+    auto leader = member_info.empty() ? MDS_GID_NONE : member_info.top()->global_id;
+
+    fsmap.modify_filesystem(fscid, [&leader, &members](auto &writable_fs) -> bool {
+      return writable_fs.get_mds_map().update_quiesce_db_cluster(leader, std::move(members));
+    });
+  }
+}
+
 void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
   auto &pending = get_pending_fsmap_writeable();
   auto epoch = pending.get_epoch();
+
+  assign_quiesce_db_leader(pending);
 
   dout(10) << "encode_pending e" << epoch << dendl;
 
