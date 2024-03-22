@@ -9239,7 +9239,7 @@ int RGWRados::bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_
   return cls_rgw_bi_get(ref.ioctx, ref.obj.oid, index_type, key, entry);
 }
 
-int RGWRados::bi_get_vals(BucketShard& bs, set<string> log_entries_wanted,
+int RGWRados::bi_get_vals(BucketShard& bs, set<string>& log_entries_wanted,
                           list<rgw_cls_bi_entry> *entries, optional_yield y)
 {
   auto& ref = bs.bucket_obj;

@@ -471,12 +471,12 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
 }
 
 int cls_rgw_bi_get_vals(librados::IoCtx& io_ctx, const std::string oid,
-                        std::set<std::string> log_entries_wanted,
+                        std::set<std::string>& log_entries_wanted,
                         std::list<rgw_cls_bi_entry> *entries)
 {
   bufferlist in, out;
   struct rgw_cls_bi_get_vals_op call;
-  call.log_entries_wanted = log_entries_wanted;
+  call.log_entries_wanted = std::move(log_entries_wanted);
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_GET_VALS, in, out);
   if (r < 0)
@@ -490,7 +490,8 @@ int cls_rgw_bi_get_vals(librados::IoCtx& io_ctx, const std::string oid,
     return -EIO;
   }
 
-  entries->swap(op_ret.entries);
+  if (entries)
+    entries->swap(op_ret.entries);
 
   return 0;
 }
