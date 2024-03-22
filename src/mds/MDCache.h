@@ -119,18 +119,19 @@ enum {
 };
 
 // flags for path_traverse();
-static const int MDS_TRAVERSE_DISCOVER		= (1 << 0);
-static const int MDS_TRAVERSE_PATH_LOCKED	= (1 << 1);
-static const int MDS_TRAVERSE_WANT_DENTRY	= (1 << 2);
-static const int MDS_TRAVERSE_WANT_AUTH		= (1 << 3);
-static const int MDS_TRAVERSE_RDLOCK_SNAP	= (1 << 4);
-static const int MDS_TRAVERSE_RDLOCK_SNAP2	= (1 << 5);
-static const int MDS_TRAVERSE_WANT_DIRLAYOUT	= (1 << 6);
-static const int MDS_TRAVERSE_RDLOCK_PATH	= (1 << 7);
-static const int MDS_TRAVERSE_XLOCK_DENTRY	= (1 << 8);
-static const int MDS_TRAVERSE_RDLOCK_AUTHLOCK	= (1 << 9);
-static const int MDS_TRAVERSE_CHECK_LOCKCACHE	= (1 << 10);
-static const int MDS_TRAVERSE_WANT_INODE	= (1 << 11);
+static const int MDS_TRAVERSE_DISCOVER           = (1 << 0);
+static const int MDS_TRAVERSE_PATH_LOCKED        = (1 << 1);
+static const int MDS_TRAVERSE_WANT_DENTRY        = (1 << 2);
+static const int MDS_TRAVERSE_WANT_AUTH          = (1 << 3);
+static const int MDS_TRAVERSE_RDLOCK_SNAP        = (1 << 4);
+static const int MDS_TRAVERSE_RDLOCK_SNAP2       = (1 << 5);
+static const int MDS_TRAVERSE_WANT_DIRLAYOUT     = (1 << 6);
+static const int MDS_TRAVERSE_RDLOCK_PATH        = (1 << 7);
+static const int MDS_TRAVERSE_XLOCK_DENTRY       = (1 << 8);
+static const int MDS_TRAVERSE_RDLOCK_AUTHLOCK    = (1 << 9);
+static const int MDS_TRAVERSE_CHECK_LOCKCACHE    = (1 << 10);
+static const int MDS_TRAVERSE_WANT_INODE         = (1 << 11);
+static const int MDS_TRAVERSE_XLOCK_PARENT_INODE = (1 << 12);
 
 
 // flags for predirty_journal_parents()

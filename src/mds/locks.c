@@ -141,7 +141,7 @@ const struct sm_t sm_filelock = {
 		    CEPH_CAP_GEXCL | 
 		    CEPH_CAP_GCACHE |
 		    CEPH_CAP_GBUFFER),
-	.can_remote_xlock = 0,
+	.can_remote_xlock = 1,
 };
 
 

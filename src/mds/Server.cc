@@ -3785,7 +3785,7 @@ CDentry* Server::rdlock_path_xlock_dentry(const MDRequestRef& mdr,
   CF_MDS_RetryRequestFactory cf(mdcache, mdr, true);
   int flags = MDS_TRAVERSE_RDLOCK_SNAP | MDS_TRAVERSE_RDLOCK_PATH |
 	      MDS_TRAVERSE_WANT_DENTRY | MDS_TRAVERSE_XLOCK_DENTRY |
-	      MDS_TRAVERSE_WANT_AUTH;
+	      MDS_TRAVERSE_WANT_AUTH | MDS_TRAVERSE_XLOCK_PARENT_INODE;
   if (refpath.depth() == 1 && !mdr->lock_cache_disabled)
     flags |= MDS_TRAVERSE_CHECK_LOCKCACHE;
   if (create)
@@ -3930,7 +3930,7 @@ Server::rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn)
 
   MutationImpl::LockOpVec lov;
   if (srcdir->get_inode() == destdir->get_inode()) {
-    lov.add_wrlock(&destdir->inode->filelock);
+    lov.add_xlock(&destdir->inode->filelock);
     lov.add_wrlock(&destdir->inode->nestlock);
     if (xlock_srcdn && srcdir != destdir) {
       mds_rank_t srcdir_auth = srcdir->authority().first;
@@ -3956,7 +3956,7 @@ Server::rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn)
       (cmp < 0 || (cmp == 0 && destdir->ino() < srcdir->ino()));
 
     if (lock_destdir_first) {
-      lov.add_wrlock(&destdir->inode->filelock);
+      lov.add_xlock(&destdir->inode->filelock);
       lov.add_wrlock(&destdir->inode->nestlock);
       lov.add_xlock(&destdn->lock);
     }
@@ -3964,10 +3964,10 @@ Server::rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn)
     if (xlock_srcdn) {
       mds_rank_t srcdir_auth = srcdir->authority().first;
       if (srcdir_auth == mds->get_nodeid()) {
-	lov.add_wrlock(&srcdir->inode->filelock);
+	lov.add_xlock(&srcdir->inode->filelock);
 	lov.add_wrlock(&srcdir->inode->nestlock);
       } else {
-	lov.add_remote_wrlock(&srcdir->inode->filelock, srcdir_auth);
+	lov.add_xlock(&srcdir->inode->filelock, srcdir_auth);
 	lov.add_remote_wrlock(&srcdir->inode->nestlock, srcdir_auth);
       }
       lov.add_xlock(&srcdn->lock);
@@ -3976,7 +3976,7 @@ Server::rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn)
     }
 
     if (!lock_destdir_first) {
-      lov.add_wrlock(&destdir->inode->filelock);
+      lov.add_xlock(&destdir->inode->filelock);
       lov.add_wrlock(&destdir->inode->nestlock);
       lov.add_xlock(&destdn->lock);
     }

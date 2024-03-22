@@ -2156,7 +2156,6 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     pf->version = parent->pre_dirty();
 
     if (do_parent_mtime || linkunlink) {
-      ceph_assert(mut->is_wrlocked(&pin->filelock));
       ceph_assert(mut->is_wrlocked(&pin->nestlock));
       ceph_assert(cfollows == CEPH_NOSNAP);
       
@@ -8254,6 +8253,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
   bool rdlock_path = (flags & MDS_TRAVERSE_RDLOCK_PATH);
   bool xlock_dentry = (flags & MDS_TRAVERSE_XLOCK_DENTRY);
   bool rdlock_authlock = (flags & MDS_TRAVERSE_RDLOCK_AUTHLOCK);
+  bool xlock_dentry_parent = (flags & MDS_TRAVERSE_XLOCK_PARENT_INODE);
 
   if (forward)
     ceph_assert(mdr);  // forward requires a request
@@ -8424,7 +8424,11 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	    depth == path.depth() - 1) {
 	  ceph_assert(dn->is_auth());
 	  if (depth > 0 || !mdr->lock_cache) {
-	    lov.add_wrlock(&cur->filelock);
+            if (xlock_dentry_parent) {
+              lov.add_xlock(&cur->filelock);
+            } else {
+              lov.add_wrlock(&cur->filelock);
+            }
 	    lov.add_wrlock(&cur->nestlock);
 	    if (rdlock_authlock)
 	      lov.add_rdlock(&cur->authlock);
@@ -8432,8 +8436,13 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	  lov.add_xlock(&dn->lock);
 	} else {
 	  // force client to flush async dir operation if necessary
-	  if (cur->filelock.is_cached())
-	    lov.add_wrlock(&cur->filelock);
+	  if (cur->filelock.is_cached()) {
+            if (xlock_dentry_parent) {
+              lov.add_xlock(&cur->filelock);
+            } else {
+              lov.add_wrlock(&cur->filelock);
+            }
+	  }
 	  lov.add_rdlock(&dn->lock);
 	}
 	if (!mds->locker->acquire_locks(mdr, lov)) {
@@ -8545,7 +8554,11 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	      lov.clear();
 	      if (xlock_dentry) {
 		if (depth > 0 || !mdr->lock_cache) {
-		  lov.add_wrlock(&cur->filelock);
+                  if (xlock_dentry_parent) {
+                    lov.add_xlock(&cur->filelock);
+                  } else {
+                    lov.add_wrlock(&cur->filelock);
+                  }
 		  lov.add_wrlock(&cur->nestlock);
 		  if (rdlock_authlock)
 		    lov.add_rdlock(&cur->authlock);
@@ -8553,8 +8566,13 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 		lov.add_xlock(&dn->lock);
 	      } else {
 		// force client to flush async dir operation if necessary
-		if (cur->filelock.is_cached())
-		  lov.add_wrlock(&cur->filelock);
+		if (cur->filelock.is_cached()) {
+                  if (xlock_dentry_parent) {
+                    lov.add_xlock(&cur->filelock);
+                  } else {
+                    lov.add_wrlock(&cur->filelock);
+                  }
+		}
 		lov.add_rdlock(&dn->lock);
 	      }
 	      if (!mds->locker->acquire_locks(mdr, lov)) {
