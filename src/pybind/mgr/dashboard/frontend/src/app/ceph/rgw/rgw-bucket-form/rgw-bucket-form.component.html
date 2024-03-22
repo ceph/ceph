@@ -95,38 +95,30 @@
         </div>
 
         <!-- Placement target -->
-        <div class="form-group row">
+        <div class="form-group row"
+             *ngIf="!editing">
           <label class="cd-col-form-label"
-                 [ngClass]="{required: !editing}"
                  for="placement-target"
                  i18n>Placement target</label>
           <div class="cd-col-form-input">
-            <ng-template #placementTargetSelect>
-              <select id="placement-target"
-                      name="placement-target"
-                      formControlName="placement-target"
-                      class="form-select">
-                <option i18n
-                        *ngIf="placementTargets === null"
-                        [ngValue]="null">Loading...</option>
-                <option i18n
-                        *ngIf="placementTargets !== null"
-                        [ngValue]="null">-- Select a placement target --</option>
-                <option *ngFor="let placementTarget of placementTargets"
-                        [value]="placementTarget.name">{{ placementTarget.description }}</option>
-              </select>
-              <span class="invalid-feedback"
-                    *ngIf="bucketForm.showError('placement-target', frm, 'required')"
-                    i18n>This field is required.</span>
-            </ng-template>
-            <ng-container *ngIf="editing; else placementTargetSelect">
-              <input id="placement-target"
-                     name="placement-target"
-                     formControlName="placement-target"
-                     class="form-control"
-                     type="text"
-                     readonly>
-            </ng-container>
+            <select id="placement-target"
+                    name="placement-target"
+                    formControlName="placement-target"
+                    class="form-select">
+              <option i18n
+                      *ngIf="placementTargets === null"
+                      [ngValue]="null">Loading...</option>
+              <option i18n
+                      *ngIf="placementTargets !== null"
+                      [ngValue]="null">-- Select a placement target --</option>
+              <option *ngFor="let placementTarget of placementTargets"
+                      [value]="placementTarget.name">{{ placementTarget.description }}</option>
+            </select>
+            <cd-help-text>
+              <span i18n>
+                When creating a bucket, a placement target can be provided as part of the LocationConstraint to override the default placement targets from the user and zonegroup.
+              </span>
+            </cd-help-text>
           </div>
         </div>
 
@@ -218,8 +210,8 @@
           <legend class="cd-header"
                   i18n>
             Object Locking
-            <cd-help-text class="bc-legend-help">
-                Store objects using a write-once-read-many (WORM) model to help you prevent objects from being deleted or overwritten for a fixed amount of time or indefinitely.
+            <cd-help-text>
+                Store objects using a write-once-read-many (WORM) model to prevent objects from being deleted or overwritten for a fixed amount of time or indefinitely.
                 Object Locking works only in versioned buckets.
             </cd-help-text>
           </legend>
@@ -316,6 +308,7 @@
           </div>
         </fieldset>
 
+        <!-- Security -->
         <fieldset>
           <legend class="cd-header"
                   i18n>Security</legend>
@@ -423,135 +416,139 @@
         </fieldset>
 
         <!-- Tags -->
-        <legend class="cd-header"
-                i18n>Tags
-          <cd-helper>Tagging gives you a way to categorize storage</cd-helper>
-        </legend>
-        <span *ngFor="let tag of tags; let i=index;">
-          <ng-container *ngTemplateOutlet="tagTpl; context:{index: i, tag: tag}"></ng-container>
-        </span>
+        <fieldset>
+          <legend class="cd-header"
+                  i18n>Tags
+            <cd-helper>Tagging gives you a way to categorize storage</cd-helper>
+          </legend>
+          <span *ngFor="let tag of tags; let i=index;">
+            <ng-container *ngTemplateOutlet="tagTpl; context:{index: i, tag: tag}"></ng-container>
+          </span>
 
-        <div class="row">
-          <div class="col-12">
-            <strong *ngIf="tags.length > 19"
-                    class="text-warning"
-                    i18n>Maximum of 20 tags reached</strong>
-            <button type="button"
-                    id="add-tag"
-                    class="btn btn-light float-end my-3"
-                    [disabled]="tags.length > 19"
-                    (click)="showTagModal()">
-              <i [ngClass]="[icons.add]"></i>
-              <ng-container i18n>Add tag</ng-container>
-            </button>
+          <div class="row">
+            <div class="col-12">
+              <strong *ngIf="tags.length > 19"
+                      class="text-warning"
+                      i18n>Maximum of 20 tags reached</strong>
+              <button type="button"
+                      id="add-tag"
+                      class="btn btn-light float-end my-3"
+                      [disabled]="tags.length > 19"
+                      (click)="showTagModal()">
+                <i [ngClass]="[icons.add]"></i>
+                <ng-container i18n>Add tag</ng-container>
+              </button>
+            </div>
           </div>
-        </div>
+        </fieldset>
 
         <!-- Policies -->
-        <legend class="cd-header"
-                i18n>Policies
-        </legend>
-        <div class="row">
-          <div class="col-12">
-            <div class="form-group row">
+        <fieldset>
+          <legend class="cd-header"
+                  i18n>Policies
+          </legend>
+          <div class="row">
+            <div class="col-12">
+              <div class="form-group row">
 
-              <!-- Bucket policy -->
-              <label i18n
-                     class="cd-col-form-label"
-                     for="id">Bucket policy</label>
-              <div class="cd-col-form-input">
-                <textarea #bucketPolicyTextArea
-                          class="form-control resize-vertical"
-                          id="bucket_policy"
-                          formControlName="bucket_policy"
-                          (change)="bucketPolicyOnChange()">
-                </textarea>
-                <span class="invalid-feedback"
-                      *ngIf="bucketForm.showError('bucket_policy', frm, 'invalidJson')"
-                      i18n>Invalid json text</span>
-                <button type="button"
-                        id="clear-bucket-policy"
-                        class="btn btn-light my-3"
-                        (click)="clearBucketPolicy()"
-                        i18n>
-                  <i [ngClass]="[icons.destroy]"></i>
-                  Clear
-                </button>
-                <div class="btn-group float-end"
-                     role="group"
-                     aria-label="bucket-policy-helpers">
+                <!-- Bucket policy -->
+                <label i18n
+                       class="cd-col-form-label"
+                       for="id">Bucket policy</label>
+                <div class="cd-col-form-input">
+                  <textarea #bucketPolicyTextArea
+                            class="form-control resize-vertical"
+                            id="bucket_policy"
+                            formControlName="bucket_policy"
+                            (change)="bucketPolicyOnChange()">
+                  </textarea>
+                  <span class="invalid-feedback"
+                        *ngIf="bucketForm.showError('bucket_policy', frm, 'invalidJson')"
+                        i18n>Invalid json text</span>
                   <button type="button"
-                          id="example-generator-button"
+                          id="clear-bucket-policy"
                           class="btn btn-light my-3"
-                          (click)="openUrl('https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html?icmpid=docs_amazons3_console')"
+                          (click)="clearBucketPolicy()"
                           i18n>
-                    <i [ngClass]="[icons.externalUrl]"></i>
-                    Policy examples
+                    <i [ngClass]="[icons.destroy]"></i>
+                    Clear
                   </button>
-                  <button type="button"
-                          id="example-generator-button"
-                          class="btn btn-light my-3"
-                          (click)="openUrl('https://awspolicygen.s3.amazonaws.com/policygen.html')"
-                          i18n>
-                    <i [ngClass]="[icons.externalUrl]"></i>
-                    Policy generator
-                  </button>
+                  <div class="btn-group float-end"
+                       role="group"
+                       aria-label="bucket-policy-helpers">
+                    <button type="button"
+                            id="example-generator-button"
+                            class="btn btn-light my-3"
+                            (click)="openUrl('https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html?icmpid=docs_amazons3_console')"
+                            i18n>
+                      <i [ngClass]="[icons.externalUrl]"></i>
+                      Policy examples
+                    </button>
+                    <button type="button"
+                            id="example-generator-button"
+                            class="btn btn-light my-3"
+                            (click)="openUrl('https://awspolicygen.s3.amazonaws.com/policygen.html')"
+                            i18n>
+                      <i [ngClass]="[icons.externalUrl]"></i>
+                      Policy generator
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div class="form-group row">
+              <div class="form-group row">
 
-              <!-- ACL -->
-              <label class="cd-col-form-label"
-                     i18n>ACL
-                <cd-helper>Any changes to the ACL will overwrite previous one.
-                  You can choose any of the available options to modify the spcified user group.</cd-helper>
-              </label>
-              <div class="cd-col-form-input">
-                <div class="input-group">
-                  <span class="input-group-text"
-                        for="grantee"
-                        i18n>Grantee
-                    <cd-helper>Select a grantee (user group) to modify it's permisions</cd-helper>
-                  </span>
-                  <select id="grantee"
-                          name="grantee"
-                          class="form-input form-select"
-                          formControlName="grantee"
-                          (change)="onSelectionFilter()">
-                    <option *ngFor="let item of grantees"
-                            [value]="item"
-                            i18n>{{ item }}</option>
-                  </select>
-                  <span class="invalid-feedback"
-                        *ngIf="bucketForm.showError('grantee', frm, 'required')"
-                        i18n>This field is required.</span>
-                  <span class="input-group-text"
-                        for="aclPermission"
-                        i18n>Permissions
-                    <cd-helper>Select the permision to give to the selected grantee.
-                        Regardless, the owner of the bucket will always have
-                          FULL CONTROL access</cd-helper>
+                <!-- ACL -->
+                <label class="cd-col-form-label"
+                       i18n>ACL
+                  <cd-helper>Any changes to the ACL will overwrite previous one.
+                    You can choose any of the available options to modify the spcified user group.</cd-helper>
+                </label>
+                <div class="cd-col-form-input">
+                  <div class="input-group">
+                    <span class="input-group-text"
+                          for="grantee"
+                          i18n>Grantee
+                      <cd-helper>Select a grantee (user group) to modify it's permisions</cd-helper>
                     </span>
-                  <select id="aclPermission"
-                          name="aclPermission"
-                          class="form-input form-select"
-                          formControlName="aclPermission">
-                    <option *ngFor="let permission of aclPermissions"
-                            [value]="permission"
-                            i18n>{{ permission }}</option>
-                  </select>
-                  <span class="invalid-feedback"
-                        *ngIf="bucketForm.showError('aclPermission', frm, 'required')"
-                        i18n>This field is required.</span>
+                    <select id="grantee"
+                            name="grantee"
+                            class="form-input form-select"
+                            formControlName="grantee"
+                            (change)="onSelectionFilter()">
+                      <option *ngFor="let item of grantees"
+                              [value]="item"
+                              i18n>{{ item }}</option>
+                    </select>
+                    <span class="invalid-feedback"
+                          *ngIf="bucketForm.showError('grantee', frm, 'required')"
+                          i18n>This field is required.</span>
+                    <span class="input-group-text"
+                          for="aclPermission"
+                          i18n>Permissions
+                      <cd-helper>Select the permision to give to the selected grantee.
+                          Regardless, the owner of the bucket will always have
+                            FULL CONTROL access</cd-helper>
+                      </span>
+                    <select id="aclPermission"
+                            name="aclPermission"
+                            class="form-input form-select"
+                            formControlName="aclPermission">
+                      <option *ngFor="let permission of aclPermissions"
+                              [value]="permission"
+                              i18n>{{ permission }}</option>
+                    </select>
+                    <span class="invalid-feedback"
+                          *ngIf="bucketForm.showError('aclPermission', frm, 'required')"
+                          i18n>This field is required.</span>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-
+        </fieldset>
       </div>
+
       <div class="card-footer">
         <cd-form-button-panel (submitActionEvent)="submit()"
                               [form]="bucketForm"
