@@ -386,12 +386,13 @@ RGWBucketReshard::RGWBucketReshard(rgw::sal::RadosStore* _store,
 static int set_resharding_status(const DoutPrefixProvider *dpp,
 				 rgw::sal::RadosStore* store,
 				 const RGWBucketInfo& bucket_info,
-                                 cls_rgw_reshard_status status)
+                                 cls_rgw_reshard_status status,
+                                 bool judge_support_logrecord = false)
 {
   cls_rgw_bucket_instance_entry instance_entry;
   instance_entry.set_status(status);
 
-  int ret = store->getRados()->bucket_set_reshard(dpp, bucket_info, instance_entry);
+  int ret = store->getRados()->bucket_set_reshard(dpp, bucket_info, instance_entry, judge_support_logrecord);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "RGWReshard::" << __func__ << " ERROR: error setting bucket resharding flag on bucket index: "
 		  << cpp_strerror(-ret) << dendl;
@@ -421,9 +422,15 @@ static int remove_old_reshard_instance(rgw::sal::RadosStore* store,
 static int init_target_index(rgw::sal::RadosStore* store,
                              RGWBucketInfo& bucket_info,
                              const rgw::bucket_index_layout_generation& index,
+                             bool& support_logrecord,
                              const DoutPrefixProvider* dpp)
 {
-  int ret = store->svc()->bi->init_index(dpp, bucket_info, index);
+  int ret = store->svc()->bi->init_index(dpp, bucket_info, index, true);
+  if (ret == -EOPNOTSUPP) {
+    ldpp_dout(dpp, 0) << "WARNING: " << "init_index() does not supported logrecord" << dendl;
+    support_logrecord = false;
+    ret = store->svc()->bi->init_index(dpp, bucket_info, index, false);
+  }
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to initialize "
        "target index shard objects: " << cpp_strerror(ret) << dendl;
@@ -453,6 +460,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
 			      std::map<std::string, bufferlist>& bucket_attrs,
                               ReshardFaultInjector& fault,
                               const uint32_t new_num_shards,
+                              bool& support_logrecord,
                               const DoutPrefixProvider* dpp, optional_yield y)
 {
   auto prev = bucket_info.layout; // make a copy for cleanup
@@ -490,7 +498,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
   }
 
   // create the index shard objects
-  int ret = init_target_index(store, bucket_info, target, dpp);
+  int ret = init_target_index(store, bucket_info, target, support_logrecord, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -503,7 +511,11 @@ static int init_target_layout(rgw::sal::RadosStore* store,
 
     // update resharding state
     bucket_info.layout.target_index = target;
-    bucket_info.layout.resharding = rgw::BucketReshardState::InLogrecord;
+    if (support_logrecord) {
+      bucket_info.layout.resharding = rgw::BucketReshardState::InLogrecord;
+    } else {
+      bucket_info.layout.resharding = rgw::BucketReshardState::InProgress;
+    }
 
     // update the judge time meanwhile
     bucket_info.layout.judge_reshard_lock_time = ceph::real_clock::now();
@@ -633,6 +645,7 @@ static int init_reshard(rgw::sal::RadosStore* store,
 			std::map<std::string, bufferlist>& bucket_attrs,
                         ReshardFaultInjector& fault,
                         const uint32_t new_num_shards,
+                        bool& support_logrecord,
                         const DoutPrefixProvider *dpp, optional_yield y)
 {
   if (new_num_shards == 0) {
@@ -640,17 +653,31 @@ static int init_reshard(rgw::sal::RadosStore* store,
     return -EINVAL;
   }
 
-  int ret = init_target_layout(store, bucket_info, bucket_attrs, fault, new_num_shards, dpp, y);
+  int ret = init_target_layout(store, bucket_info, bucket_attrs, fault, new_num_shards,
+                               support_logrecord, dpp, y);
   if (ret < 0) {
     return ret;
   }
 
-  if (ret = fault.check("logrecord_writes");
-      ret == 0) { // no fault injected, record log with writing to the current index shards
-    ret = set_resharding_status(dpp, store, bucket_info,
-                                cls_rgw_reshard_status::IN_LOGRECORD);
+  if (support_logrecord) {
+    if (ret = fault.check("logrecord_writes");
+        ret == 0) { // no fault injected, record log with writing to the current index shards
+      ret = set_resharding_status(dpp, store, bucket_info,
+                                  cls_rgw_reshard_status::IN_LOGRECORD,
+                                  true);
+    }
+    if (ret == -EOPNOTSUPP) {
+      ldpp_dout(dpp, 0) << "WARNING: " << "set_resharding_status()"
+                        << " doesn't support logrecords" << dendl;
+      support_logrecord = false;
+    }
   }
 
+  if (!support_logrecord) {
+    ret = set_resharding_status(dpp, store, bucket_info,
+                                cls_rgw_reshard_status::IN_PROGRESS,
+                                false);
+  }
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " failed to pause "
         "writes to the current index: " << cpp_strerror(ret) << dendl;
@@ -1154,6 +1181,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
 int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& current,
                                  const rgw::bucket_index_layout_generation& target,
                                  int max_op_entries, // max num to process per op
+                                 bool support_logrecord,
 				 bool verbose,
 				 ostream *out,
 				 Formatter *formatter,
@@ -1175,24 +1203,26 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
 
   bool verbose_json_out = verbose && (formatter != nullptr) && (out != nullptr);
 
-  // a log is written to shard going with client op at this state
-  ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord);
-  int ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
-                            formatter, bucket_info.layout.resharding, dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << __func__ << ": failed in logrecord state of reshard ret = " << ret << dendl;
-    return ret;
-  }
+  if (support_logrecord) {
+    // a log is written to shard going with client op at this state
+    ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InLogrecord);
+    int ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
+                              formatter, bucket_info.layout.resharding, dpp, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ << ": failed in logrecord state of reshard ret = " << ret << dendl;
+      return ret;
+    }
 
-  ret = change_reshard_state(store, bucket_info, bucket_attrs, fault, dpp, y);
-  if (ret < 0) {
-    return ret;
+    ret = change_reshard_state(store, bucket_info, bucket_attrs, fault, dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   // block the client op and complete the resharding
   ceph_assert(bucket_info.layout.resharding == rgw::BucketReshardState::InProgress);
-  ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
-                        formatter, bucket_info.layout.resharding, dpp, y);
+  int ret = reshard_process(current, max_op_entries, target_shards_mgr, verbose_json_out, out,
+                            formatter, bucket_info.layout.resharding, dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << __func__ << ": failed in progress state of reshard ret = " << ret << dendl;
     return ret;
@@ -1231,8 +1261,10 @@ int RGWBucketReshard::execute(int num_shards,
     }
   }
 
+  bool support_logrecord = true;
   // prepare the target index and add its layout the bucket info
-  ret = init_reshard(store, bucket_info, bucket_attrs, fault, num_shards, dpp, y);
+  ret = init_reshard(store, bucket_info, bucket_attrs, fault, num_shards,
+                     support_logrecord, dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -1241,7 +1273,8 @@ int RGWBucketReshard::execute(int num_shards,
       ret == 0) { // no fault injected, do the reshard
     ret = do_reshard(bucket_info.layout.current_index,
                      *bucket_info.layout.target_index,
-                     max_op_entries, verbose, out, formatter, fault, dpp, y);
+                     max_op_entries, support_logrecord,
+                     verbose, out, formatter, fault, dpp, y);
   }
 
   if (ret < 0) {

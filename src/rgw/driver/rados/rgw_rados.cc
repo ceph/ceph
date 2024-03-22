@@ -5593,7 +5593,10 @@ int RGWRados::bucket_resync_encrypted_multipart(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int RGWRados::bucket_set_reshard(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry)
+int RGWRados::bucket_set_reshard(const DoutPrefixProvider *dpp,
+                                 const RGWBucketInfo& bucket_info,
+                                 const cls_rgw_bucket_instance_entry& entry,
+                                 bool judge_support_logrecord)
 {
   librados::IoCtx index_pool;
   map<int, string> bucket_objs;
@@ -5606,7 +5609,10 @@ int RGWRados::bucket_set_reshard(const DoutPrefixProvider *dpp, const RGWBucketI
     return r;
   }
 
-  r = CLSRGWIssueSetBucketResharding(index_pool, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
+  if (judge_support_logrecord)
+    r = CLSRGWIssueSetBucketResharding2(index_pool, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
+  else
+    r = CLSRGWIssueSetBucketResharding(index_pool, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
       ": unable to issue set bucket resharding, r=" << r << " (" <<

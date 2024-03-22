@@ -93,7 +93,7 @@ class RGWBucketReshard {
                       const DoutPrefixProvider *dpp, optional_yield y);
   int do_reshard(const rgw::bucket_index_layout_generation& current,
                  const rgw::bucket_index_layout_generation& target,
-                 int max_entries,
+                 int max_entries, bool support_logrecord,
                  bool verbose,
                  std::ostream *os,
 		 Formatter *formatter,

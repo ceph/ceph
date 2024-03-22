@@ -736,9 +736,9 @@ inline bool operator!=(const rgw_bucket_category_stats& lhs,
 
 enum class cls_rgw_reshard_status : uint8_t {
   NOT_RESHARDING  = 0,
-  IN_LOGRECORD    = 1,
-  IN_PROGRESS     = 2,
-  DONE            = 3
+  IN_PROGRESS     = 1,
+  DONE            = 2,
+  IN_LOGRECORD    = 3
 };
 std::ostream& operator<<(std::ostream&, cls_rgw_reshard_status);
 

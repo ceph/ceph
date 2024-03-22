@@ -219,8 +219,8 @@ inline bucket_index_layout_generation log_to_index_layout(const bucket_log_layou
 
 enum class BucketReshardState : uint8_t {
   None,
-  InLogrecord,
   InProgress,
+  InLogrecord,
 };
 std::string_view to_string(const BucketReshardState& s);
 bool parse(std::string_view str, BucketReshardState& s);

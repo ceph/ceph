@@ -1346,7 +1346,7 @@ void set_reshard_status(librados::IoCtx& ioctx, const std::string& oid,
 {
   map<int, string> bucket_objs;
   bucket_objs[0] = oid;
-  int r = CLSRGWIssueSetBucketResharding(ioctx, bucket_objs, entry, 1)();
+  int r = CLSRGWIssueSetBucketResharding2(ioctx, bucket_objs, entry, 1)();
   ASSERT_EQ(0, r);
 }
 

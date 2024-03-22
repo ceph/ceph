@@ -204,6 +204,17 @@ static bool issue_bucket_index_init_op(librados::IoCtx& io_ctx,
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 
+static bool issue_bucket_index_init_op2(librados::IoCtx& io_ctx,
+				       const int shard_id,
+				       const string& oid,
+				       BucketIndexAioManager *manager) {
+  bufferlist in;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  op.exec(RGW_CLASS, RGW_BUCKET_INIT_INDEX2, in);
+  return manager->aio_operate(io_ctx, shard_id, oid, &op);
+}
+
 static bool issue_bucket_index_clean_op(librados::IoCtx& io_ctx,
 					const int shard_id,
 					const string& oid,
@@ -233,7 +244,20 @@ int CLSRGWIssueBucketIndexInit::issue_op(const int shard_id, const string& oid)
   return issue_bucket_index_init_op(io_ctx, shard_id, oid, &manager);
 }
 
+int CLSRGWIssueBucketIndexInit2::issue_op(const int shard_id, const string& oid)
+{
+  return issue_bucket_index_init_op2(io_ctx, shard_id, oid, &manager);
+}
+
 void CLSRGWIssueBucketIndexInit::cleanup()
+{
+  // Do best effort removal
+  for (auto citer = objs_container.begin(); citer != iter; ++citer) {
+    io_ctx.remove(citer->second);
+  }
+}
+
+void CLSRGWIssueBucketIndexInit2::cleanup()
 {
   // Do best effort removal
   for (auto citer = objs_container.begin(); citer != iter; ++citer) {
@@ -1251,7 +1275,26 @@ static bool issue_set_bucket_resharding(librados::IoCtx& io_ctx,
   return manager->aio_operate(io_ctx, shard_id, oid, &op);
 }
 
+static bool issue_set_bucket_resharding2(librados::IoCtx& io_ctx,
+					const int shard_id, const string& oid,
+                                        const cls_rgw_bucket_instance_entry& entry,
+                                        BucketIndexAioManager *manager) {
+  bufferlist in;
+  cls_rgw_set_bucket_resharding_op call;
+  call.entry = entry;
+  encode(call, in);
+  librados::ObjectWriteOperation op;
+  op.assert_exists(); // the shard must exist; if not fail rather than recreate
+  op.exec(RGW_CLASS, RGW_SET_BUCKET_RESHARDING2, in);
+  return manager->aio_operate(io_ctx, shard_id, oid, &op);
+}
+
 int CLSRGWIssueSetBucketResharding::issue_op(const int shard_id, const string& oid)
 {
   return issue_set_bucket_resharding(io_ctx, shard_id, oid, entry, &manager);
+}
+
+int CLSRGWIssueSetBucketResharding2::issue_op(const int shard_id, const string& oid)
+{
+  return issue_set_bucket_resharding2(io_ctx, shard_id, oid, entry, &manager);
 }

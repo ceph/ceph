@@ -316,6 +316,20 @@ public:
 };
 
 
+class CLSRGWIssueBucketIndexInit2 : public CLSRGWConcurrentIO {
+protected:
+  int issue_op(int shard_id, const std::string& oid) override;
+  int valid_ret_code() override { return -EEXIST; }
+  void cleanup() override;
+public:
+  CLSRGWIssueBucketIndexInit2(librados::IoCtx& ioc,
+			     std::map<int, std::string>& _bucket_objs,
+			     uint32_t _max_aio) :
+    CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio) {}
+  virtual ~CLSRGWIssueBucketIndexInit2() override {}
+};
+
+
 class CLSRGWIssueBucketIndexClean : public CLSRGWConcurrentIO {
 protected:
   int issue_op(int shard_id, const std::string& oid) override;
@@ -558,6 +572,17 @@ public:
                                  const cls_rgw_bucket_instance_entry& _entry,
                                  uint32_t _max_aio) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio), entry(_entry) {}
   virtual ~CLSRGWIssueSetBucketResharding() override {}
+};
+
+class CLSRGWIssueSetBucketResharding2 : public CLSRGWConcurrentIO {
+  cls_rgw_bucket_instance_entry entry;
+protected:
+  int issue_op(int shard_id, const std::string& oid) override;
+public:
+  CLSRGWIssueSetBucketResharding2(librados::IoCtx& ioc, std::map<int, std::string>& _bucket_objs,
+                                 const cls_rgw_bucket_instance_entry& _entry,
+                                 uint32_t _max_aio) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio), entry(_entry) {}
+  virtual ~CLSRGWIssueSetBucketResharding2() override {}
 };
 
 class CLSRGWIssueResyncBucketBILog : public CLSRGWConcurrentIO {
