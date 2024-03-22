@@ -146,7 +146,6 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
     const gid = this.subvolumegroupForm.getValue('gid');
     const mode = this.formatter.toOctalPermission(this.subvolumegroupForm.getValue('mode'));
     if (this.isEdit) {
-      const editSize = size === 0 ? 'infinite' : size;
       this.taskWrapper
         .wrapTaskAroundCall({
           task: new FinishedTask('cephfs/subvolume/group/' + URLVerbs.EDIT, {
@@ -156,7 +155,7 @@ export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit 
             this.fsName,
             subvolumegroupName,
             pool,
-            String(editSize),
+            String(size),
             uid,
             gid,
             mode
