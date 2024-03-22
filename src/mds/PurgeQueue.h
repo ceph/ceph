@@ -61,6 +61,7 @@ public:
     fragtree.dump(f);
     f->close_section();
   }
+  static void generate_test_instances(std::list<PurgeItem*>& ls);
 
   std::string_view get_type_str() const;
 

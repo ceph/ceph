@@ -43,6 +43,13 @@ void SimpleLock::dump(ceph::Formatter *f) const {
   f->close_section();
 }
 
+void SimpleLock::generate_test_instances(std::list<SimpleLock*>& ls) {
+  ls.push_back(new SimpleLock);
+  ls.push_back(new SimpleLock);
+  ls.back()->set_state(LOCK_SYNC);
+}
+
+
 int SimpleLock::get_wait_shift() const {
   switch (get_type()) {
     case CEPH_LOCK_DN:       return 8;

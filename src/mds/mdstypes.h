@@ -346,6 +346,7 @@ public:
   void decode(ceph::buffer::list::const_iterator &p);
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
+  static void generate_test_instances(std::list<feature_bitset_t*>& ls);
 private:
   std::vector<block_type> _vec;
 };
@@ -387,6 +388,7 @@ struct metric_spec_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<metric_spec_t*>& ls);
   void print(std::ostream& out) const;
 
   // set of metrics that a client is capable of forwarding
@@ -438,6 +440,7 @@ struct client_metadata_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<client_metadata_t*>& ls);
 
   kv_map_t kv_map;
   feature_bitset_t features;
@@ -622,7 +625,10 @@ struct metareqid_t {
     decode(tid, p);
   }
   void dump(ceph::Formatter *f) const;
-
+  static void generate_test_instances(std::list<metareqid_t*>& ls) {
+    ls.push_back(new metareqid_t);
+    ls.push_back(new metareqid_t(entity_name_t::CLIENT(123), 456));
+  }
   entity_name_t name;
   uint64_t tid = 0;
 };
@@ -770,6 +776,15 @@ struct dirfrag_t {
     using ceph::decode;
     decode(ino, bl);
     decode(frag, bl);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("ino", ino);
+    f->dump_unsigned("frag", frag);
+  }
+  static void generate_test_instances(std::list<dirfrag_t*>& ls) {
+    ls.push_back(new dirfrag_t);
+    ls.push_back(new dirfrag_t(1, frag_t()));
+    ls.push_back(new dirfrag_t(2, frag_t(3)));
   }
 
   inodeno_t ino = 0;
