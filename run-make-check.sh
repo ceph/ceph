@@ -20,7 +20,7 @@
 
 source src/script/run-make.sh
 
-set -e
+set -ex
 
 function gen_ctest_resource_file() {
     local file_name=$(mktemp /tmp/ctest-resource-XXXXXX)

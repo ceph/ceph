@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -78,16 +78,23 @@ EOM
     $DRY_RUN export SOURCE_DATE_EPOCH="946684800"
     $DRY_RUN ccache -o sloppiness=time_macros
     $DRY_RUN ccache -o run_second_cpp=true
+    $DRY_RUN ccache -o depend_mode=true
+    $DRY_RUN date '+%s'
+    $DRY_RUN ccache -o max_size=80G
+    $DRY_RUN ccache -svv
+    $DRY_RUN ccache -c
+    $DRY_RUN date '+%s'
     if in_jenkins; then
         # Build host has plenty of space available, let's use it to keep
         # various versions of the built objects. This could increase the cache hit
         # if the same or similar PRs are running several times
         $DRY_RUN ccache -o max_size=100G
+        $DRY_RUN ccache -p
     else
         echo "Current ccache max_size setting:"
         ccache -p | grep max_size
     fi
-    $DRY_RUN ccache -sz # Reset the ccache statistics and show the current configuration
+    $DRY_RUN ccache -svvz # Reset the ccache statistics and show the current configuration
 
     if ! discover_compiler ci-build ; then
         ci_debug "Failed to discover a compiler"
@@ -140,7 +147,7 @@ function build() {
     # older cmake does not support --parallel or -j, so pass it to underlying generator
     ci_debug "Running cmake"
     $DRY_RUN cmake --build . $targets -- $BUILD_MAKEOPTS || return 1
-    $DRY_RUN ccache -s # print the ccache statistics to evaluate the efficiency
+    $DRY_RUN ccache -svv # print the ccache statistics to evaluate the efficiency
 }
 
 DEFAULT_MAKEOPTS=${DEFAULT_MAKEOPTS:--j$(get_processors)}
