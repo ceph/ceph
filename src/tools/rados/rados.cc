@@ -101,7 +101,8 @@ void usage(ostream& out)
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
 "\n"
 "OBJECT COMMANDS\n"
-"   get <obj-name> <outfile>         fetch object\n"
+"   get <obj-name> <outfile> [--offset offset]\n"
+"                                    fetch object with start offset (default:0)\n"
 "   put <obj-name> <infile> [--offset offset]\n"
 "                                    write object with start offset (default:0)\n"
 "   append <obj-name> <infile>       append object\n"
@@ -482,7 +483,7 @@ static int dump_data(std::string const &filename, bufferlist const &data)
 }
 
 
-static int do_get(IoCtx& io_ctx, const std::string& oid, const char *outfile, unsigned op_size, [[maybe_unused]] const bool use_striper)
+static int do_get(IoCtx& io_ctx, const std::string& oid, const char *outfile, uint64_t offset, unsigned op_size, [[maybe_unused]] const bool use_striper)
 {
   int fd;
   if (strcmp(outfile, "-") == 0) {
@@ -496,7 +497,6 @@ static int do_get(IoCtx& io_ctx, const std::string& oid, const char *outfile, un
     }
   }
 
-  uint64_t offset = 0;
   int ret;
   while (true) {
     bufferlist outdata;
@@ -2623,7 +2623,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       obj_name = nargs[1];
       out_filename = nargs[2];
     }
-    ret = do_get(io_ctx, *obj_name, out_filename, op_size, use_striper);
+    ret = do_get(io_ctx, *obj_name, out_filename, obj_offset, op_size, use_striper);
     if (ret < 0) {
       cerr << "error getting " << pool_name << "/" << prettify(*obj_name) << ": " << cpp_strerror(ret) << std::endl;
       return 1;
