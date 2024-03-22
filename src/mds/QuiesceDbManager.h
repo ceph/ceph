@@ -204,6 +204,7 @@ class QuiesceDbManager {
     std::queue<QuiesceDbPeerAck> pending_acks;
     std::deque<RequestContext*> pending_requests;
     bool db_thread_should_exit = false;
+    bool db_thread_should_clear_db = true;
 
     class QuiesceDbThread : public Thread {
       public:
