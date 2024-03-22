@@ -595,7 +595,7 @@ class RgwUser(RgwRESTController):
 
     @allow_empty_body
     def create(self, uid, display_name, email=None, max_buckets=None,
-               suspended=None, generate_key=None, access_key=None,
+               system=None, suspended=None, generate_key=None, access_key=None,
                secret_key=None, daemon_name=None):
         params = {'uid': uid}
         if display_name is not None:
@@ -604,6 +604,8 @@ class RgwUser(RgwRESTController):
             params['email'] = email
         if max_buckets is not None:
             params['max-buckets'] = max_buckets
+        if system is not None:
+            params['system'] = system
         if suspended is not None:
             params['suspended'] = suspended
         if generate_key is not None:
@@ -617,7 +619,7 @@ class RgwUser(RgwRESTController):
 
     @allow_empty_body
     def set(self, uid, display_name=None, email=None, max_buckets=None,
-            suspended=None, daemon_name=None):
+            system=None, suspended=None, daemon_name=None):
         params = {'uid': uid}
         if display_name is not None:
             params['display-name'] = display_name
@@ -625,6 +627,8 @@ class RgwUser(RgwRESTController):
             params['email'] = email
         if max_buckets is not None:
             params['max-buckets'] = max_buckets
+        if system is not None:
+            params['system'] = system
         if suspended is not None:
             params['suspended'] = suspended
         result = self.proxy(daemon_name, 'POST', 'user', params)

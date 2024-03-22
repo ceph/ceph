@@ -109,6 +109,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
         1000,
         [CdValidators.requiredIf({ max_buckets_mode: '1' }), CdValidators.number(false)]
       ],
+      system: [false],
       suspended: [false],
       // S3 key
       generate_key: [true],
@@ -577,7 +578,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    * @return {Boolean} Returns TRUE if the general user settings have been modified.
    */
   private _isGeneralDirty(): boolean {
-    return ['display_name', 'email', 'max_buckets_mode', 'max_buckets', 'suspended'].some(
+    return ['display_name', 'email', 'max_buckets_mode', 'max_buckets', 'system', 'suspended'].some(
       (path) => {
         return this.userForm.get(path).dirty;
       }
@@ -624,6 +625,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     const result = {
       uid: this.getUID(),
       display_name: this.userForm.getValue('display_name'),
+      system: this.userForm.getValue('system'),
       suspended: this.userForm.getValue('suspended'),
       email: '',
       max_buckets: this.userForm.getValue('max_buckets'),
@@ -658,7 +660,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   private _getUpdateArgs() {
     const result: Record<string, any> = {};
-    const keys = ['display_name', 'email', 'max_buckets', 'suspended'];
+    const keys = ['display_name', 'email', 'max_buckets', 'system', 'suspended'];
     for (const key of keys) {
       result[key] = this.userForm.getValue(key);
     }
