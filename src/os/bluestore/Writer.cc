@@ -155,6 +155,15 @@ inline void bluestore_blob_use_tracker_t::init_and_ref(
   }
 }
 
+inline void bluestore_blob_use_tracker_t::init_and_ref_compressed(
+  uint32_t logical_length)
+{
+  au_size = logical_length;
+  num_au = 0;
+  alloc_au = 0;
+  total_bytes = logical_length;
+}
+
 inline void bluestore_blob_t::allocated_full(
   uint32_t length,
   PExtentVector&& allocs)
@@ -514,8 +523,6 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
   uint32_t blob_length = disk_data.length();
   ceph_assert(p2phase<uint32_t>(blob_length, bstore->min_alloc_size) == 0);
   BlobRef blob = onode->c->new_blob();
-
-  //uint32_t in_blob_end = disk_data.length();
   bluestore_blob_t &bblob = blob->dirty_blob();
   uint32_t tracked_unit = min_alloc_size;
   uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow
@@ -525,13 +532,45 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
     bblob.calc_csum(0, disk_data);
     tracked_unit = std::max(1u << csum_order, min_alloc_size);
   }
-  //std::cout << "blob_length=" << blob_length << std::endl;
   blob->dirty_blob_use_tracker().init_and_ref(blob_length, tracked_unit);
   PExtentVector blob_allocs;
   _get_disk_space(blob_length, blob_allocs);
   _schedule_io(blob_allocs, disk_data); //have to do before move()
   bblob.allocated_full(blob_length, std::move(blob_allocs));
   bblob.mark_used(0, blob_length); //todo - optimize; this obviously clears it
+  return blob;
+}
+
+BlueStore::BlobRef BlueStore::Writer::_blob_create_full_compressed(
+  bufferlist& disk_data,
+  uint32_t compressed_length,
+  bufferlist& object_data)
+{
+  uint32_t disk_length = disk_data.length();
+  uint32_t object_length = object_data.length();
+  ceph_assert(p2phase<uint32_t>(disk_length, bstore->min_alloc_size) == 0);
+  BlobRef blob = onode->c->new_blob();
+
+  bluestore_blob_t &bblob = blob->dirty_blob();
+  uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow
+    std::min<uint32_t>(wctx->csum_order, std::countr_zero(disk_length));
+  if (wctx->csum_type != Checksummer::CSUM_NONE) {
+    bblob.init_csum(wctx->csum_type, csum_order, disk_length);
+    bblob.calc_csum(0, disk_data);
+  }
+  bblob.set_compressed(object_length, compressed_length);
+  blob->dirty_blob_use_tracker().init_and_ref_compressed(object_length);
+  PExtentVector blob_allocs;
+  _get_disk_space(disk_length, blob_allocs);
+  _schedule_io(blob_allocs, 0, disk_data); //have to do before move()
+  //todo: we are setting blob's logical length twice
+  bblob.allocated_full(object_length, std::move(blob_allocs));
+  //no unused in compressed //bblob.mark_used(0, disk_length);
+  bstore->_buffer_cache_write(txc, blob, 0, object_data,
+    wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+  statfs_delta.compressed_allocated() += disk_length;
+  statfs_delta.compressed_original() += object_length;
+  statfs_delta.compressed() += compressed_length;
   return blob;
 }
 
@@ -977,7 +1016,13 @@ void BlueStore::Writer::_do_put_new_blobs(
       logical_offset = ref_end;
     } else {
       // compressed
-      ceph_assert(false);
+      BlobRef new_blob = _blob_create_full_compressed(
+        bd_it->disk_data, bd_it->compressed_length, bd_it->object_data);
+      le = new Extent(
+        logical_offset, 0, bd_it->real_length, new_blob);
+      dout(20) << __func__ << " new compressed extent+blob " << le->print(pp_mode) << dendl;
+      emap.insert(*le);
+      logical_offset += bd_it->real_length;
     }
     bstore->logger->inc(l_bluestore_write_big);
     bstore->logger->inc(l_bluestore_write_big_bytes, le->length);
@@ -1367,10 +1412,13 @@ void BlueStore::Writer::do_write_with_blobs(
     uint32_t location_tmp = location;
     for (auto& i : bd) {
       uint32_t location_end = location_tmp + i.real_length;
-      need_size += p2roundup(location_end, au_size) - p2align(location_tmp, au_size);
+      if (i.is_compressed()) {
+        need_size += p2roundup(i.disk_data.length(), au_size);
+      } else {
+        need_size += p2roundup(location_end, au_size) - p2align(location_tmp, au_size);
+      }
       location_tmp = location_end;
     }
-
     _defer_or_allocate(need_size);
     _do_put_blobs(location, data_end, ref_end, bd, after_punch_it);
   } else {
