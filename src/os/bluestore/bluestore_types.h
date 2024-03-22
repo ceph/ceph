@@ -393,6 +393,9 @@ struct bluestore_blob_use_tracker_t {
     uint32_t full_length,
     uint32_t tracked_chunk);
 
+  inline void init_and_ref_compressed(
+    uint32_t logical_length);
+
   void get(
     uint32_t offset,
     uint32_t len);
