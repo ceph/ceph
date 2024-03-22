@@ -194,7 +194,7 @@ class CephFSTestCase(CephTestCase):
         # Load an config settings of interest
         for setting in self.LOAD_SETTINGS:
             setattr(self, setting, float(self.fs.mds_asok(
-                ['config', 'get', setting], list(self.mds_cluster.mds_ids)[0]
+                ['config', 'get', setting], mds_id=list(self.mds_cluster.mds_ids)[0]
             )[setting]))
 
         self.configs_set = set()
@@ -339,6 +339,7 @@ class CephFSTestCase(CephTestCase):
                             subtrees = []
                             for r in self.fs.get_ranks(status=status):
                                 s = self.fs.rank_asok(["get", "subtrees"], status=status, rank=r['rank'])
+                                log.debug(f"{json.dumps(s, indent=2)}")
                                 s = filter(lambda s: s['auth_first'] == r['rank'] and s['auth_second'] == -2, s)
                                 subtrees += s
                         else:
@@ -384,11 +385,15 @@ class CephFSTestCase(CephTestCase):
             with contextutil.safe_while(sleep=5, tries=20) as proceed:
                 while proceed():
                     subtrees = self._get_subtrees(status=status, rank=rank, path=path)
-                    subtrees = list(filter(lambda s: s['distributed_ephemeral_pin'] == True and
-                                                     s['auth_first'] == s['export_pin_target'],
-                                           subtrees))
-                    log.info(f"len={len(subtrees)} {subtrees}")
+                    dist = list(filter(lambda s: s['distributed_ephemeral_pin'] == True and
+                                                 s['auth_first'] == s['export_pin_target'],
+                                       subtrees))
+                    log.info(f"len={len(dist)}\n{json.dumps(dist, indent=2)}")
+
                     if len(subtrees) >= count:
+                        if len(subtrees) > len(dist):
+                            # partial migration
+                            continue
                         return subtrees
         except contextutil.MaxWhileTries as e:
             raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e

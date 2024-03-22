@@ -182,10 +182,11 @@ public:
   static const uint64_t WAIT_COMPLETE     = (1<<1);  // wait for complete dir contents
   static const uint64_t WAIT_FROZEN       = (1<<2);  // auth pins removed
   static const uint64_t WAIT_CREATED	  = (1<<3);  // new dirfrag is logged
+  static const uint64_t WAIT_BITS         = 4;
 
   static const int WAIT_DNLOCK_OFFSET = 4;
 
-  static const uint64_t WAIT_ANY_MASK = (uint64_t)(-1);
+  static const uint64_t WAIT_ANY_MASK = ((1ul << WAIT_BITS) - 1);
   static const uint64_t WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
   // -- dump flags --
@@ -526,7 +527,7 @@ public:
   void abort_import();
 
   // -- auth pins --
-  bool can_auth_pin(int *err_ret=nullptr) const override;
+  bool can_auth_pin(int *err_ret=nullptr, bool bypassfreezing=false) const override;
   int get_auth_pins() const { return auth_pins; }
   int get_dir_auth_pins() const { return dir_auth_pins; }
   void auth_pin(void *who) override;

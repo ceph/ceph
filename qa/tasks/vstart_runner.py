@@ -1002,6 +1002,7 @@ class LocalContext(object):
                           stdout=StringIO()).stdout.getvalue()
 
         cluster_name = 'ceph'
+        self.archive = "./"
         self.config = {'cluster': cluster_name}
         self.ceph = {cluster_name: Namespace()}
         self.ceph[cluster_name].fsid = FSID
