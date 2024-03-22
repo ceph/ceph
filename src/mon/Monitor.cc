@@ -2672,6 +2672,7 @@ void Monitor::get_mon_status(Formatter *f)
   f->dump_int("rank", rank);
   f->dump_string("state", get_state_name());
   f->dump_int("election_epoch", get_epoch());
+  f->dump_int("uptime", get_uptime().count());
 
   f->open_array_section("quorum");
   for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p) {
