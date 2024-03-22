@@ -226,27 +226,24 @@ struct FixedKVNode : ChildableCachedExtent {
     set_child_ptracker(child);
   }
 
-  virtual get_child_ret_t<LogicalCachedExtent>
-  get_logical_child(op_context_t<node_key_t> c, uint16_t pos) = 0;
-
   virtual bool is_child_stable(op_context_t<node_key_t>, uint16_t pos) const = 0;
 
-  template <typename T, typename iter_t>
-  get_child_ret_t<T> get_child(op_context_t<node_key_t> c, iter_t iter) {
-    auto pos = iter.get_offset();
+  template <typename T>
+  get_child_ret_t<T> get_child(
+    op_context_t<node_key_t> c,
+    uint16_t pos,
+    node_key_t key)
+  {
     assert(children.capacity());
     auto child = children[pos];
     ceph_assert(!is_reserved_ptr(child));
     if (is_valid_child_ptr(child)) {
-      ceph_assert(child->get_type() == T::TYPE);
       return c.cache.template get_extent_viewable_by_trans<T>(c.trans, (T*)child);
     } else if (is_pending()) {
-      auto key = iter.get_key();
       auto &sparent = get_stable_for_key(key);
       auto spos = sparent.child_pos_for_key(key);
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
-	ceph_assert(child->get_type() == T::TYPE);
 	return c.cache.template get_extent_viewable_by_trans<T>(c.trans, (T*)child);
       } else {
 	return child_pos_t(&sparent, spos);
@@ -254,6 +251,11 @@ struct FixedKVNode : ChildableCachedExtent {
     } else {
       return child_pos_t(this, pos);
     }
+  }
+
+  template <typename T, typename iter_t>
+  get_child_ret_t<T> get_child(op_context_t<node_key_t> c, iter_t iter) {
+    return get_child<T>(c, iter.get_offset(), iter.get_key());
   }
 
   void split_child_ptrs(
@@ -589,12 +591,6 @@ struct FixedKVInternalNode
       assert(this->validate_stable_children());
       this->copy_sources.clear();
     }
-  }
-
-  get_child_ret_t<LogicalCachedExtent>
-  get_logical_child(op_context_t<NODE_KEY>, uint16_t pos) final {
-    ceph_abort("impossible");
-    return get_child_ret_t<LogicalCachedExtent>(child_pos_t(nullptr, 0));
   }
 
   bool is_child_stable(op_context_t<NODE_KEY>, uint16_t pos) const final {
@@ -968,31 +964,6 @@ struct FixedKVLeafNode
 
   uint16_t get_node_split_pivot() final {
     return this->get_split_pivot().get_offset();
-  }
-
-  get_child_ret_t<LogicalCachedExtent>
-  get_logical_child(op_context_t<NODE_KEY> c, uint16_t pos) final {
-    auto child = this->children[pos];
-    ceph_assert(!is_reserved_ptr(child));
-    if (is_valid_child_ptr(child)) {
-      ceph_assert(child->is_logical());
-      return c.cache.template get_extent_viewable_by_trans<
-	LogicalCachedExtent>(c.trans, (LogicalCachedExtent*)child);
-    } else if (this->is_pending()) {
-      auto key = this->iter_idx(pos).get_key();
-      auto &sparent = this->get_stable_for_key(key);
-      auto spos = sparent.child_pos_for_key(key);
-      auto child = sparent.children[spos];
-      if (is_valid_child_ptr(child)) {
-	ceph_assert(child->is_logical());
-	return c.cache.template get_extent_viewable_by_trans<
-	  LogicalCachedExtent>(c.trans, (LogicalCachedExtent*)child);
-      } else {
-	return child_pos_t(&sparent, spos);
-      }
-    } else {
-      return child_pos_t(this, pos);
-    }
   }
 
   // children are considered stable if any of the following case is true:
