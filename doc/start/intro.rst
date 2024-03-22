@@ -27,13 +27,13 @@ The Ceph Metadata Server is necessary to run Ceph File System clients.
             |      OSDs     | | Monitors   | |  Managers  | |      MDSs     |
             +---------------+ +------------+ +------------+ +---------------+
 
-- **Monitors**: A :term:`Ceph Monitor` (``ceph-mon``) maintains maps
-  of the cluster state, including the monitor map, manager map, the
-  OSD map, the MDS map, and the CRUSH map.  These maps are critical 
-  cluster state required for Ceph daemons to coordinate with each other.  
-  Monitors are also responsible for managing authentication between 
-  daemons and clients.  At least three monitors are normally required 
-  for redundancy and high availability.
+- **Monitors**: A :term:`Ceph Monitor` (``ceph-mon``) maintains maps of the
+  cluster state, including the :ref:`monitor map<display-mon-map>`, manager
+  map, the OSD map, the MDS map, and the CRUSH map.  These maps are critical
+  cluster state required for Ceph daemons to coordinate with each other.
+  Monitors are also responsible for managing authentication between daemons and
+  clients.  At least three monitors are normally required for redundancy and
+  high availability.
 
 - **Managers**: A :term:`Ceph Manager` daemon (``ceph-mgr``) is
   responsible for keeping track of runtime metrics and the current
