@@ -619,6 +619,7 @@ public:
                                   const std::string& frontend_prefix,
                                   const std::string& uri,
                                   std::string* out_uri) final {
+    ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": frontedn_prefix is: " << frontend_prefix << dendl;
     return get_resource_mgr(s, frontend_prefix + uri, out_uri);
   }
 

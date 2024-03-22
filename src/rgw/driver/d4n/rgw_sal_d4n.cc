@@ -14,6 +14,7 @@
  */
 
 #include "rgw_sal_d4n.h"
+#include "rgw_rest_remoted4n.h"
 
 namespace rgw { namespace sal {
 
@@ -96,12 +97,26 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   return 0;
 }
 
+void D4NFilterDriver::register_admin_apis(RGWRESTMgr* mgr)
+{
+  mgr->register_resource("remoted4n", new RGWRESTMgr_RemoteD4N);
+}
+
+
 std::unique_ptr<User> D4NFilterDriver::get_user(const rgw_user &u)
 {
   std::unique_ptr<User> user = next->get_user(u);
 
   return std::make_unique<D4NFilterUser>(std::move(user), this);
 }
+
+const std::string D4NFilterDriver::get_name() const
+{
+  std::string name = "filter< D4NFilterDriver >";
+  return name;
+}
+
+
 
 std::unique_ptr<Object> D4NFilterBucket::get_object(const rgw_obj_key& k)
 {

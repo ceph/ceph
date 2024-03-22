@@ -53,7 +53,9 @@ class D4NFilterDriver : public FilterDriver {
     virtual ~D4NFilterDriver();
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
+    virtual void register_admin_apis(RGWRESTMgr* mgr) override;
     virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
+    virtual const std::string get_name() const override;
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
 

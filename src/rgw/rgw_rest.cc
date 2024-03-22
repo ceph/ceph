@@ -1976,6 +1976,7 @@ RGWRESTMgr* RGWRESTMgr::get_resource_mgr(req_state* const s,
 
   for (iter = resources_by_size.rbegin(); iter != resources_by_size.rend(); ++iter) {
     string& resource = iter->second;
+    ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": resource is: " << resource << dendl;
     if (uri.compare(0, iter->first, resource) == 0 &&
 	(uri.size() == iter->first ||
 	 uri[iter->first] == '/')) {
@@ -1984,9 +1985,11 @@ RGWRESTMgr* RGWRESTMgr::get_resource_mgr(req_state* const s,
     }
   }
 
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": uri is: " << uri << dendl;
   if (default_mgr) {
     return default_mgr->get_resource_mgr_as_default(s, uri, out_uri);
   }
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": uri is: " << uri << dendl;
 
   return this;
 }
@@ -2287,22 +2290,27 @@ RGWHandler_REST* RGWREST::get_handler(
     return nullptr;
   }
 
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": frontedn_prefix is: " << frontend_prefix << dendl;
   RGWRESTMgr *m = mgr.get_manager(s, frontend_prefix, s->decoded_uri,
                                   &s->relative_uri);
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": frontedn_prefix is: " << frontend_prefix << dendl;
   if (! m) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return nullptr;
   }
 
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": frontedn_prefix is: " << frontend_prefix << dendl;
   if (pmgr) {
     *pmgr = m;
   }
 
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": frontedn_prefix is: " << frontend_prefix << dendl;
   RGWHandler_REST* handler = m->get_handler(driver, s, auth_registry, frontend_prefix);
   if (! handler) {
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
   }
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": frontedn_prefix is: " << frontend_prefix << dendl;
 
   ldpp_dout(s, 20) << __func__ << " handler=" << typeid(*handler).name() << dendl;
   
@@ -2312,6 +2320,7 @@ RGWHandler_REST* RGWREST::get_handler(
     return nullptr;
   }
 
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": frontedn_prefix is: " << frontend_prefix << dendl;
   s->info.init_meta_info(s, &s->has_bad_meta, s->prot_flags);
 
   return handler;

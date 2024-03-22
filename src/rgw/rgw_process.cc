@@ -218,6 +218,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     }
   }
 
+  /* AMIN: FIXME: uncomment
   ldpp_dout(op, 2) << "verifying op permissions" << dendl;
   {
     auto span = tracing::rgw::tracer.add_span("verify_permission", s->trace);
@@ -240,6 +241,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   if (ret < 0) {
     return ret;
   }
+  */
 
   ldpp_dout(op, 2) << "pre-executing" << dendl;
   op->pre_exec();
@@ -288,6 +290,7 @@ int process_request(const RGWProcessEnv& penv,
   std::unique_ptr<rgw::sal::User> u = driver->get_user(rgw_user());
   s->set_user(u);
 
+
   if (ret < 0) {
     s->cio = client_io;
     abort_early(s, nullptr, ret, nullptr, yield);
@@ -301,6 +304,9 @@ int process_request(const RGWProcessEnv& penv,
 
   ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;
 
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": reuqest_uri is: " << s->info.request_uri << dendl;
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": driver is: " << driver->get_name() << dendl;
+  ldpp_dout(s, 1) << "AMIN: " << __func__ << ": " << __LINE__ << ": frontedn_prefix is: " << frontend_prefix << dendl;
   RGWOp* op = nullptr;
   int init_error = 0;
   bool should_log = false;
