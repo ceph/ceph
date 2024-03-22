@@ -212,6 +212,15 @@ pg_stat_t PG::get_stats() const
   return pg_stats.value_or(pg_stat_t{});
 }
 
+void PG::apply_stats(
+  const hobject_t &soid,
+  const object_stat_sum_t &delta_stats)
+{
+  peering_state.apply_op_stats(soid, delta_stats);
+  scrubber.handle_op_stats(soid, delta_stats);
+  publish_stats_to_osd();
+}
+
 void PG::queue_check_readable(epoch_t last_peering_reset, ceph::timespan delay)
 {
   // handle the peering event in the background

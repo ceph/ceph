@@ -664,6 +664,9 @@ public:
   void publish_stats_to_osd() final;
   void clear_publish_stats() final;
   pg_stat_t get_stats() const;
+  void apply_stats(
+    const hobject_t &soid,
+    const object_stat_sum_t &delta_stats);
 
 private:
   std::optional<pg_stat_t> pg_stats;
