@@ -134,7 +134,7 @@ struct FixedKVNode : ChildableCachedExtent {
       // copy sources when committing this lba node, because
       // we rely on pointers' "nullness" to avoid copying
       // pointers for updated values
-      children[offset] = RESERVATION_PTR;
+      children[offset] = get_reserved_ptr();
     }
   }
 
@@ -229,13 +229,14 @@ struct FixedKVNode : ChildableCachedExtent {
   virtual get_child_ret_t<LogicalCachedExtent>
   get_logical_child(op_context_t<node_key_t> c, uint16_t pos) = 0;
 
-  virtual bool is_child_stable(uint16_t pos) const = 0;
+  virtual bool is_child_stable(op_context_t<node_key_t>, uint16_t pos) const = 0;
 
   template <typename T, typename iter_t>
   get_child_ret_t<T> get_child(op_context_t<node_key_t> c, iter_t iter) {
     auto pos = iter.get_offset();
     assert(children.capacity());
     auto child = children[pos];
+    ceph_assert(!is_reserved_ptr(child));
     if (is_valid_child_ptr(child)) {
       ceph_assert(child->get_type() == T::TYPE);
       return c.cache.template get_extent_viewable_by_trans<T>(c.trans, (T*)child);
@@ -431,7 +432,7 @@ struct FixedKVNode : ChildableCachedExtent {
 	if (!child) {
 	  child = source.children[foreign_it.get_offset()];
 	  // child can be either valid if present, nullptr if absent,
-	  // or RESERVATION_PTR.
+	  // or reserved ptr.
 	}
 	foreign_it++;
 	local_it++;
@@ -596,7 +597,7 @@ struct FixedKVInternalNode
     return get_child_ret_t<LogicalCachedExtent>(child_pos_t(nullptr, 0));
   }
 
-  bool is_child_stable(uint16_t pos) const final {
+  bool is_child_stable(op_context_t<NODE_KEY>, uint16_t pos) const final {
     ceph_abort("impossible");
     return false;
   }
@@ -972,6 +973,7 @@ struct FixedKVLeafNode
   get_child_ret_t<LogicalCachedExtent>
   get_logical_child(op_context_t<NODE_KEY> c, uint16_t pos) final {
     auto child = this->children[pos];
+    ceph_assert(!is_reserved_ptr(child));
     if (is_valid_child_ptr(child)) {
       ceph_assert(child->is_logical());
       return c.cache.template get_extent_viewable_by_trans<
@@ -996,11 +998,18 @@ struct FixedKVLeafNode
   // children are considered stable if any of the following case is true:
   // 1. The child extent is absent in cache
   // 2. The child extent is stable
-  bool is_child_stable(uint16_t pos) const final {
+  //
+  // For reserved mappings, the return values are undefined.
+  bool is_child_stable(op_context_t<NODE_KEY> c, uint16_t pos) const final {
     auto child = this->children[pos];
-    if (is_valid_child_ptr(child)) {
+    if (is_reserved_ptr(child)) {
+      return true;
+    } else if (is_valid_child_ptr(child)) {
       ceph_assert(child->is_logical());
-      return child->is_stable();
+      ceph_assert(
+	child->is_pending_in_trans(c.trans.get_trans_id())
+	|| this->is_stable_written());
+      return c.cache.is_viewable_extent_stable(c.trans, child);
     } else if (this->is_pending()) {
       auto key = this->iter_idx(pos).get_key();
       auto &sparent = this->get_stable_for_key(key);
@@ -1008,7 +1017,7 @@ struct FixedKVLeafNode
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
 	ceph_assert(child->is_logical());
-	return child->is_stable();
+	return c.cache.is_viewable_extent_stable(c.trans, child);
       } else {
 	return true;
       }

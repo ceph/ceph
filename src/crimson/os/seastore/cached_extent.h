@@ -426,6 +426,9 @@ public:
   /// Returns true if extent is stable and shared among transactions
   bool is_stable() const {
     return is_stable_written() ||
+	   // MUTATION_PENDING and under-io extents are to-be-stable extents,
+	   // for the sake of caveats that checks the correctness of extents
+	   // states, we consider them stable.
            (is_mutation_pending() &&
             is_pending_io());
   }
@@ -615,6 +618,11 @@ public:
     return last_committed_crc;
   }
 
+  /// Returns true if the extent part of the open transaction
+  bool is_pending_in_trans(transaction_id_t id) const {
+    return is_pending() && pending_for_transaction == id;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -643,11 +651,6 @@ private:
   /// set bufferptr
   void set_bptr(ceph::bufferptr &&nptr) {
     ptr = nptr;
-  }
-
-  /// Returns true if the extent part of the open transaction
-  bool is_pending_in_trans(transaction_id_t id) const {
-    return is_pending() && pending_for_transaction == id;
   }
 
   /// hook for intrusive ref list (mainly dirty or lru list)
@@ -1062,6 +1065,8 @@ public:
     child_pos->link_child(c);
   }
 
+  // For reserved mappings, the return values are
+  // undefined although it won't crash
   virtual bool is_stable() const = 0;
   virtual bool is_clone() const = 0;
   bool is_zero_reserved() const {
