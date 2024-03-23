@@ -159,6 +159,7 @@ class MonCapTester:
         fs is any fs object so that ceph commands can be exceuted.
         """
         keyring = fs.get_ceph_cmd_stdout(args=f'auth get client.{client_id}')
+        keyring += '\n'
         moncap = get_mon_cap_from_keyring(keyring)
         keyring_path = fs.admin_remote.mktemp(data=keyring)
 

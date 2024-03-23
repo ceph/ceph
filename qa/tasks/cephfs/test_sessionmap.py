@@ -163,7 +163,7 @@ class TestSessionMap(CephFSTestCase):
             "mds", mds_caps,
             "osd", osd_caps,
             "mon", mon_caps
-        )
+        ) + '\n'
         mount.client_id = id_name
         mount.client_remote.write_file(mount.get_keyring_path(), out, sudo=True)
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())

@@ -1792,8 +1792,10 @@ class FilesystemBase(MDSClusterBase):
             caps = tuple(x)
 
         client_name = 'client.' + client_id
-        return self.get_ceph_cmd_stdout('fs', 'authorize', self.name,
-                                        client_name, *caps)
+        keyring = self.get_ceph_cmd_stdout('fs', 'authorize', self.name,
+                                           client_name, *caps)
+        keyring += '\n'
+        return keyring
 
     def grow(self, new_max_mds, status=None):
         oldmax = self.get_var('max_mds', status=status)
