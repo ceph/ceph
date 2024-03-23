@@ -313,14 +313,16 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   return 0;
 }
 
+// a static for the sake of unittesting
 void ECCommon::ReadPipeline::get_min_want_to_read_shards(
   const uint64_t offset,
   const uint64_t length,
+  const ECUtil::stripe_info_t& sinfo,
+  const vector<int>& chunk_mapping,
   set<int> *want_to_read)
 {
   const auto [left_chunk_index, right_chunk_index] =
     sinfo.offset_length_to_data_chunk_indices(offset, length);
-  const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
   for(uint64_t i = left_chunk_index; i < right_chunk_index; i++) {
     auto raw_chunk = i % sinfo.get_data_chunk_count();
     auto chunk = chunk_mapping.size() > raw_chunk ?
@@ -331,6 +333,15 @@ void ECCommon::ReadPipeline::get_min_want_to_read_shards(
       break;
     }
   }
+}
+
+void ECCommon::ReadPipeline::get_min_want_to_read_shards(
+  const uint64_t offset,
+  const uint64_t length,
+  set<int> *want_to_read)
+{
+  get_min_want_to_read_shards(
+    offset, length, sinfo, ec_impl->get_chunk_mapping(), want_to_read);
   dout(30) << __func__ << ": offset " << offset << " length " << length
 	   << " want_to_read " << *want_to_read << dendl;
 }
