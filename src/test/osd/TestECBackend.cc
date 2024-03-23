@@ -16,6 +16,7 @@
 #include <sstream>
 #include <errno.h>
 #include <signal.h>
+#include "osd/ECCommon.h"
 #include "osd/ECBackend.h"
 #include "gtest/gtest.h"
 
@@ -73,3 +74,83 @@ TEST(ECUtil, stripe_info_t)
             make_pair((uint64_t)0, 2*swidth));
 }
 
+TEST(ECCommon, get_min_want_to_read_shards)
+{
+  const uint64_t swidth = 4096;
+  const uint64_t ssize = 4;
+
+  ECUtil::stripe_info_t s(ssize, swidth);
+  ASSERT_EQ(s.get_stripe_width(), swidth);
+  ASSERT_EQ(s.get_chunk_size(), 1024);
+
+  const std::vector<int> chunk_mapping = {}; // no remapping
+
+  // read nothing at the very beginning
+  {
+    std::set<int> want_to_read;
+    ECCommon::ReadPipeline::get_min_want_to_read_shards(
+      0, 0, s, chunk_mapping, &want_to_read);
+    ASSERT_TRUE(want_to_read == std::set<int>{});
+  }
+
+  // read nothing at the middle (0-sized partial read)
+  {
+    std::set<int> want_to_read;
+    ECCommon::ReadPipeline::get_min_want_to_read_shards(
+      2048, 0, s, chunk_mapping, &want_to_read);
+    ASSERT_TRUE(want_to_read == std::set<int>{});
+  }
+
+  // read not-so-many (< chunk_size) bytes at the middle (partial read)
+  {
+    std::set<int> want_to_read;
+    ECCommon::ReadPipeline::get_min_want_to_read_shards(
+      2048, 42, s, chunk_mapping, &want_to_read);
+    ASSERT_TRUE(want_to_read == std::set<int>{2});
+  }
+
+  // read more (> chunk_size) bytes at the middle (partial read)
+  {
+    std::set<int> want_to_read;
+    ECCommon::ReadPipeline::get_min_want_to_read_shards(
+      1024, 1024+42, s, chunk_mapping, &want_to_read);
+    // extra () due to a language / macro limitation
+    ASSERT_TRUE(want_to_read == (std::set<int>{1, 2}));
+  }
+
+  // full stripe except last chunk
+  {
+    std::set<int> want_to_read;
+    ECCommon::ReadPipeline::get_min_want_to_read_shards(
+      0, 3*1024, s, chunk_mapping, &want_to_read);
+    // extra () due to a language / macro limitation
+    ASSERT_TRUE(want_to_read == (std::set<int>{0, 1, 2}));
+  }
+
+  // full stripe except 1st chunk
+  {
+    std::set<int> want_to_read;
+    ECCommon::ReadPipeline::get_min_want_to_read_shards(
+      1024, swidth-1024, s, chunk_mapping, &want_to_read);
+    // extra () due to a language / macro limitation
+    ASSERT_TRUE(want_to_read == (std::set<int>{1, 2, 3}));
+  }
+
+  // large, multi-stripe read starting just after 1st chunk
+  {
+    std::set<int> want_to_read;
+    ECCommon::ReadPipeline::get_min_want_to_read_shards(
+      1024, swidth*42, s, chunk_mapping, &want_to_read);
+    // extra () due to a language / macro limitation
+    ASSERT_TRUE(want_to_read == (std::set<int>{0, 1, 2, 3}));
+  }
+
+  // large read from the beginning
+  {
+    std::set<int> want_to_read;
+    ECCommon::ReadPipeline::get_min_want_to_read_shards(
+      0, swidth*42, s, chunk_mapping, &want_to_read);
+    // extra () due to a language / macro limitation
+    ASSERT_TRUE(want_to_read == (std::set<int>{0, 1, 2, 3}));
+  }
+}
