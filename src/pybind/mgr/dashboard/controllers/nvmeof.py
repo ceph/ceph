@@ -22,8 +22,9 @@ else:
                          'subsystem_nqn': (str, 'NVMeoF subsystem NQN')
                      })
         def list(self, subsystem_nqn: str):
-            response = MessageToJson(NVMeoFClient().list_namespaces(subsystem_nqn))
-            return json.loads(response)
+            with NVMeoFClient() as client:
+                response = MessageToJson(client.list_namespaces(subsystem_nqn))
+                return json.loads(response)
 
         @CreatePermission
         @EndpointDoc('Create a new NVMeoF namespace',
@@ -38,10 +39,11 @@ else:
         def create(self, rbd_pool: str, rbd_image: str, subsystem_nqn: str,
                    create_image: Optional[bool] = True, image_size: Optional[int] = 1024,
                    block_size: int = 512):
-            response = NVMeoFClient().create_namespace(rbd_pool, rbd_image,
-                                                       subsystem_nqn, block_size,
-                                                       create_image, image_size)
-            return json.loads(MessageToJson(response))
+            with NVMeoFClient() as client:
+                response = client.create_namespace(rbd_pool, rbd_image,
+                                                   subsystem_nqn, block_size,
+                                                   create_image, image_size)
+                return json.loads(MessageToJson(response))
 
         @Endpoint('DELETE', path='{subsystem_nqn}')
         @EndpointDoc('Delete an existing NVMeoF namespace',
@@ -50,8 +52,9 @@ else:
                      })
         @DeletePermission
         def delete(self, subsystem_nqn: str):
-            response = NVMeoFClient().delete_namespace(subsystem_nqn)
-            return json.loads(MessageToJson(response))
+            with NVMeoFClient() as client:
+                response = client.delete_namespace(subsystem_nqn)
+                return json.loads(MessageToJson(response))
 
     @APIRouter('/nvmeof/subsystem', Scope.NVME_OF)
     @APIDoc('NVMe-oF Subsystem Management API', 'NVMe-oF')
@@ -61,12 +64,12 @@ else:
                      parameters={
                          'subsystem_nqn': (str, 'NVMeoF subsystem NQN'),
                      })
-        @ReadPermission
         def list(self, subsystem_nqn: Optional[str] = None):
-            response = MessageToJson(NVMeoFClient().list_subsystems(
-                subsystem_nqn=subsystem_nqn))
+            with NVMeoFClient() as client:
+                response = MessageToJson(client.list_subsystems(
+                    subsystem_nqn=subsystem_nqn))
 
-            return json.loads(response)
+                return json.loads(response)
 
         @CreatePermission
         @EndpointDoc('Create a new NVMeoF subsystem',
@@ -76,8 +79,9 @@ else:
                          'max_namespaces': (int, 'Maximum number of namespaces')
                      })
         def create(self, subsystem_nqn: str):
-            response = NVMeoFClient().create_subsystem(subsystem_nqn)
-            return json.loads(MessageToJson(response))
+            with NVMeoFClient() as client:
+                response = client.create_subsystem(subsystem_nqn)
+                return json.loads(MessageToJson(response))
 
         @DeletePermission
         @Endpoint('DELETE', path='{subsystem_nqn}')
@@ -87,8 +91,9 @@ else:
                          'force': (bool, 'Force delete')
                      })
         def delete(self, subsystem_nqn: str, force: Optional[bool] = False):
-            response = NVMeoFClient().delete_subsystem(subsystem_nqn, force)
-            return json.loads(MessageToJson(response))
+            with NVMeoFClient() as client:
+                response = client.delete_subsystem(subsystem_nqn, force)
+                return json.loads(MessageToJson(response))
 
     @APIRouter('/nvmeof/hosts', Scope.NVME_OF)
     @APIDoc('NVMe-oF Host Management API', 'NVMe-oF')
@@ -99,8 +104,9 @@ else:
                          'subsystem_nqn': (str, 'NVMeoF subsystem NQN')
                      })
         def list(self, subsystem_nqn: str):
-            response = MessageToJson(NVMeoFClient().list_hosts(subsystem_nqn))
-            return json.loads(response)
+            with NVMeoFClient() as client:
+                response = MessageToJson(client.list_hosts(subsystem_nqn))
+                return json.loads(response)
 
         @CreatePermission
         @EndpointDoc('Allow hosts to access an NVMeoF subsystem',
@@ -109,8 +115,9 @@ else:
                          'host_nqn': (str, 'NVMeoF host NQN')
                      })
         def create(self, subsystem_nqn: str, host_nqn: str):
-            response = NVMeoFClient().add_host(subsystem_nqn, host_nqn)
-            return json.loads(MessageToJson(response))
+            with NVMeoFClient() as client:
+                response = client.add_host(subsystem_nqn, host_nqn)
+                return json.loads(MessageToJson(response))
 
         @DeletePermission
         @EndpointDoc('Disallow hosts from accessing an NVMeoF subsystem',
@@ -119,8 +126,9 @@ else:
                          'host_nqn': (str, 'NVMeoF host NQN')
                      })
         def delete(self, subsystem_nqn: str, host_nqn: str):
-            response = NVMeoFClient().remove_host(subsystem_nqn, host_nqn)
-            return json.loads(MessageToJson(response))
+            with NVMeoFClient() as client:
+                response = client.remove_host(subsystem_nqn, host_nqn)
+                return json.loads(MessageToJson(response))
 
     @APIRouter('/nvmeof/listener', Scope.NVME_OF)
     @APIDoc('NVMe-oF Listener Management API', 'NVMe-oF')
@@ -131,8 +139,9 @@ else:
                          'subsystem_nqn': (str, 'NVMeoF subsystem NQN')
                      })
         def list(self, subsystem_nqn: str):
-            response = MessageToJson(NVMeoFClient().list_listeners(subsystem_nqn))
-            return json.loads(response)
+            with NVMeoFClient() as client:
+                response = MessageToJson(client.list_listeners(subsystem_nqn))
+                return json.loads(response)
 
         @CreatePermission
         @EndpointDoc('Create a new NVMeoF listener',
@@ -142,8 +151,9 @@ else:
                          'traddr': (str, 'NVMeoF transport address')
                      })
         def create(self, nqn: str, gateway: str, traddr: Optional[str] = None):
-            response = NVMeoFClient().create_listener(nqn, gateway, traddr)
-            return json.loads(MessageToJson(response))
+            with NVMeoFClient() as client:
+                response = client.create_listener(nqn, gateway, traddr)
+                return json.loads(MessageToJson(response))
 
         @DeletePermission
         @EndpointDoc('Delete an existing NVMeoF listener',
@@ -153,8 +163,9 @@ else:
                          'traddr': (str, 'NVMeoF transport address')
                      })
         def delete(self, nqn: str, gateway: str, traddr: Optional[str] = None):
-            response = NVMeoFClient().delete_listener(nqn, gateway, traddr)
-            return json.loads(MessageToJson(response))
+            with NVMeoFClient() as client:
+                response = client.delete_listener(nqn, gateway, traddr)
+                return json.loads(MessageToJson(response))
 
     @APIRouter('/nvmeof/gateway', Scope.NVME_OF)
     @APIDoc('NVMe-oF Gateway Management API', 'NVMe-oF')
@@ -163,5 +174,6 @@ else:
         @Endpoint()
         @EndpointDoc('List all NVMeoF gateways')
         def info(self):
-            response = MessageToJson(NVMeoFClient().gateway_info())
-            return json.loads(response)
+            with NVMeoFClient() as client:
+                response = MessageToJson(client.gateway_info())
+                return json.loads(response)

@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Optional
 
 from .nvmeof_conf import NvmeofGatewaysConfig
@@ -13,17 +14,42 @@ try:
 except ImportError:
     grpc = None
 else:
-    class NVMeoFClient(object):
+    class ChannelPool:
         def __init__(self):
-            logger.info('Initiating nvmeof gateway connection...')
-
             self.gateway_addr = list(NvmeofGatewaysConfig.get_gateways_config()[
                                      'gateways'].values())[0]['service_url']
-            self.channel = grpc.insecure_channel(
-                '{}'.format(self.gateway_addr)
-            )
+            self.pool_lock = threading.Lock()
+            self.channels = []
+
+        def get_channel(self):
+            with self.pool_lock:
+                if self.channels:
+                    return self.channels.pop()
+
+            return self.create_channel()
+
+        def create_channel(self):
             logger.info('Found nvmeof gateway at %s', self.gateway_addr)
+            return grpc.insecure_channel(self.gateway_addr)
+
+        def release_channel(self, channel):
+            with self.pool_lock:
+                self.channels.append(channel)
+
+    class NVMeoFClient:
+        def __init__(self):
+            logger.info('Initiating nvmeof gateway connection...')
+            self.channel_pool = ChannelPool()
+            self.channel = self.channel_pool.get_channel()
             self.stub = pb2_grpc.GatewayStub(self.channel)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):  # noqa pylint: disable=unused-argument
+            if self.channel:
+                self.channel_pool.release_channel(self.channel)
+                self.channel = None
 
         def list_subsystems(self, subsystem_nqn: Optional[str] = None):
             return self.stub.list_subsystems(pb2.list_subsystems_req(
