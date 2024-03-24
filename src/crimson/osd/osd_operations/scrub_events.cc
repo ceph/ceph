@@ -258,9 +258,10 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
   DEBUGDPP("obj: {}", pg, obj);
   using crimson::common::local_conf;
   auto &entry = ret.objects[obj.hobj];
+  auto progress_ref = std::make_unique<obj_scrub_progress_t>();
+  auto &progress = *progress_ref;
   return interruptor::repeat(
-    [FNAME, this, progress = obj_scrub_progress_t(),
-     &obj, &entry, &pg]() mutable
+    [FNAME, this, &progress, &obj, &entry, &pg]()
     -> interruptible_future<seastar::stop_iteration> {
       if (progress.offset) {
 	DEBUGDPP("op: {}, obj: {}, progress: {} scanning data",
@@ -272,7 +273,10 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
 	  obj,
 	  *(progress.offset),
 	  stride
-	).safe_then([stride, &progress, &entry](auto bl) {
+	).safe_then([this, FNAME, stride, &obj, &progress, &entry, &pg](auto bl) {
+	  size_t offset = *progress.offset;
+	  DEBUGDPP("op: {}, obj: {}, progress: {} got offset {}",
+		   pg, *this, obj, progress, offset);
 	  progress.data_hash << bl;
 	  if (bl.length() < stride) {
 	    progress.offset = std::nullopt;
@@ -373,7 +377,7 @@ ScrubScan::ifut<> ScrubScan::deep_scan_object(
 	  seastar::make_ready_future<seastar::stop_iteration>(
 	    seastar::stop_iteration::yes));
       }
-    });
+    }).finally([progress_ref=std::move(progress_ref)] {});
 }
 
 template class ScrubAsyncOpT<ScrubScan>;
