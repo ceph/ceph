@@ -1006,6 +1006,12 @@ void FSMap::erase(mds_gid_t who, epoch_t blocklist_epoch)
         // the rank ever existed so that next time it's handed out
         // to a gid it'll go back into CREATING.
         fs.mds_map.in.erase(info.rank);
+      } else if (info.state == MDSMap::STATE_STARTING) {
+        // If this gid didn't make it past STARTING, then forget
+        // the rank ever existed so that next time it's handed out
+        // to a gid it'll go back into STARTING.
+        fs.mds_map.in.erase(info.rank);
+        fs.mds_map.stopped.insert(info.rank);
       } else {
         // Put this rank into the failed list so that the next available
         // STANDBY will pick it up.
