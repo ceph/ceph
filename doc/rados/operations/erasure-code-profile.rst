@@ -96,7 +96,9 @@ Where:
 ``--force``
 
 :Description: Override an existing profile by the same name, and allow
-              setting a non-4K-aligned stripe_unit.
+              setting a non-4K-aligned stripe_unit. Overriding an existing
+              profile can be dangerous, and thus ``--yes-i-really-mean-it``
+              must be used as well.
 
 :Type: String
 :Required: No.
