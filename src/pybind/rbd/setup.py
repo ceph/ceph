@@ -116,10 +116,15 @@ def check_sanity():
             output_dir=tmp_dir
         )
 
+        if ldflags := os.environ.get('LDFLAGS'):
+            extra_postargs = ldflags.split()
+        else:
+            extra_postargs = None
         compiler.link_executable(
             objects=link_objects,
             output_progname=os.path.join(tmp_dir, 'rbd_dummy'),
             libraries=['rbd', 'rados'],
+            extra_postargs=extra_postargs,
             output_dir=tmp_dir,
         )
 
