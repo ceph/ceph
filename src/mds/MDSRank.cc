@@ -1724,7 +1724,10 @@ void MDSRank::boot_start(BootStep step, int r)
       } else {
         dout(2) << "Booting: " << step << ": positioning at end of old mds log" << dendl;
         mdlog->append();
-        starting_done();
+        auto sle = mdcache->create_subtree_map();
+        mdlog->submit_entry(sle);
+        mdlog->flush();
+        mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::starting_done));
       }
       break;
     case MDS_BOOT_REPLAY_DONE:
@@ -1770,9 +1773,6 @@ void MDSRank::starting_done()
   dout(3) << "starting_done" << dendl;
   ceph_assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
-
-  auto sle = mdcache->create_subtree_map();
-  mdlog->submit_entry(sle);
 
   // sync snaptable cache
   snapclient->sync(new C_MDSInternalNoop);
