@@ -25,6 +25,15 @@ function(add_ceph_test test_name test_path)
       PROPERTY ENVIRONMENT
       UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1)
   endif()
+  if(WITH_ASAN)
+    # AddressSanitizer: odr-violation: global 'ceph::buffer::list::always_empty_bptr' at
+    # /home/jenkins-build/build/workspace/ceph-pull-requests/src/common/buffer.cc:1267:34
+    # see https://tracker.ceph.com/issues/65098
+    set_property(TEST ${test_name}
+      APPEND
+      PROPERTY ENVIRONMENT
+      ASAN_OPTIONS=detect_odr_violation=0)
+  endif()
   set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
   # Crimson seastar unittest always run with --smp N to start N threads. By default, crimson seastar unittest
