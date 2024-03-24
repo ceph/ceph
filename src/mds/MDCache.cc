@@ -628,7 +628,24 @@ void MDCache::open_root_inode(MDSContext *c)
   if (mds->get_nodeid() == mds->mdsmap->get_root()) {
     CInode *in;
     in = create_system_inode(CEPH_INO_ROOT, S_IFDIR|0755);  // initially inaccurate!
-    in->fetch(c);
+    if (mds->is_starting()) {
+      in->fetch(
+          new MDSInternalContextWrapper(mds,
+            new LambdaContext([this, c](int r) {
+              if (r < 0) {
+                c->complete(r);
+                return;
+              }
+              CDir *rootdir = root->get_or_open_dirfrag(this, frag_t());
+              ceph_assert(rootdir);
+              adjust_subtree_auth(rootdir, mds->get_nodeid());
+              rootdir->fetch(c);
+            })
+          )
+        );
+    } else {
+      in->fetch(c);
+    }
   } else {
     discover_base_ino(CEPH_INO_ROOT, c, mds->mdsmap->get_root());
   }
