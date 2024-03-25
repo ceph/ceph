@@ -133,7 +133,10 @@ def respawn_in_path(lib_path, python_paths):
 
 
 def launch_subprocess(args, cwd=None, env=None, shell=True,
-                      executable='/bin/bash'):
+                      executable='/bin/bash', xyz=False):
+    if xyz:
+        return Popen(args, cwd=cwd, env=env, shell=shell,
+                                executable=executable)
     return Popen(args, cwd=cwd, env=env, shell=shell, executable=executable,
                  stdout=subproc_PIPE, stderr=subproc_PIPE, stdin=subproc_PIPE)
 
@@ -467,7 +470,7 @@ sudo() {
     def _do_run(self, args, check_status=True, wait=True, stdout=None,
                 stderr=None, cwd=None, stdin=None, logger=None, label=None,
                 env=None, timeout=None, omit_sudo=True, shell=True,
-                quiet=False, terminate=False):
+                quiet=False, terminate=False, xyz=False):
         '''
         :param termimate: set this to True when the command is expected to be
         terminated at the end of timeout, and yet, th eexecution of the test
@@ -477,7 +480,7 @@ sudo() {
         '''
         args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo)
 
-        subproc = launch_subprocess(args, cwd, env, shell)
+        subproc = launch_subprocess(args, cwd, env, shell, xyz=xyz)
 
         if stdin:
             # Hack: writing to stdin is not deadlock-safe, but it "always" works
