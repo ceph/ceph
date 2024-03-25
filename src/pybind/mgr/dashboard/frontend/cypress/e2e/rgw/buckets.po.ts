@@ -58,7 +58,6 @@ export class BucketsPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.create.url)
   checkForDefaultEncryption() {
-    cy.get("cd-helper[aria-label='toggle encryption helper']").click();
     cy.get("a[aria-label='click here']").click();
     cy.get('cd-modal').within(() => {
       cy.get('input[id=s3Enabled]').should('be.checked');
