@@ -187,6 +187,7 @@ class IngressService(CephService):
                 'monitor_port': daemon_spec.ports[1] if daemon_spec.ports else spec.monitor_port,
                 'local_host_ip': host_ip,
                 'default_server_opts': server_opts,
+                'health_check_interval': spec.health_check_interval or '2s',
             }
         )
         config_files = {
