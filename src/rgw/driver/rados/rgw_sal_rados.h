@@ -215,6 +215,9 @@ class RadosStore : public StoreDriver {
 					std::optional<rgw_bucket> bucket,
 					RGWBucketSyncPolicyHandlerRef* phandler,
 					optional_yield y) override;
+    virtual int get_object_sync_handler(const DoutPrefixProvider* dpp,
+      RGWObjectSyncHandlerRef* phandler,
+      optional_yield y) override;
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
     virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) override { rados->wakeup_meta_sync_shards(shard_ids); }
     virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, boost::container::flat_map<int, boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) override { rados->wakeup_data_sync_shards(dpp, source_zone, shard_ids); }

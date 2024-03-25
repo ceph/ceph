@@ -37,6 +37,8 @@ class RGWUsageBatch;
 class RGWCoroutinesManagerRegistry;
 class RGWBucketSyncPolicyHandler;
 using RGWBucketSyncPolicyHandlerRef = std::shared_ptr<RGWBucketSyncPolicyHandler>;
+class RGWObjectSyncHandler;
+using RGWObjectSyncHandlerRef = std::shared_ptr<RGWObjectSyncHandler>;
 class RGWDataSyncStatusManager;
 class RGWSyncModuleInstance;
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
@@ -390,6 +392,10 @@ class Driver {
 					std::optional<rgw_zone_id> zone,
 					std::optional<rgw_bucket> bucket,
 					RGWBucketSyncPolicyHandlerRef* phandler,
+					optional_yield y) = 0;
+    /** Get sync handler for object. */
+    virtual int get_object_sync_handler(const DoutPrefixProvider* dpp,
+					RGWObjectSyncHandlerRef* phandler,
 					optional_yield y) = 0;
     /** Get a status manager for bucket sync */
     virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) = 0;

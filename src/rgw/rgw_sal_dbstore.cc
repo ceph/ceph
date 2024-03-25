@@ -1758,6 +1758,13 @@ namespace rgw::sal {
     return 0;
   }
 
+  int DBStore::get_object_sync_handler(const DoutPrefixProvider *dpp,
+      RGWObjectSyncHandlerRef* phandler,
+      optional_yield y)
+  {
+    return -ENOTSUP;
+  }
+
   RGWDataSyncStatusManager* DBStore::get_data_sync_manager(const rgw_zone_id& source_zone)
   {
     return 0;

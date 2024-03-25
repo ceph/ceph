@@ -303,6 +303,13 @@ int FilterDriver::get_sync_policy_handler(const DoutPrefixProvider* dpp,
   return next->get_sync_policy_handler(dpp, zone, bucket, phandler, y);
 }
 
+int FilterDriver::get_object_sync_handler(const DoutPrefixProvider* dpp,
+    RGWObjectSyncHandlerRef* phandler,
+    optional_yield y)
+{
+  return -ENOTSUP;
+}
+
 RGWDataSyncStatusManager* FilterDriver::get_data_sync_manager(const rgw_zone_id& source_zone)
 {
   return next->get_data_sync_manager(source_zone);
