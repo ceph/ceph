@@ -968,6 +968,17 @@ class RgwService(CephService):
                 'val': cert_data,
             })
 
+        if spec.zonegroup_hostnames:
+            zg_update_cmd = {
+                'prefix': 'rgw zonegroup modify',
+                'realm_name': spec.rgw_realm,
+                'zonegroup_name': spec.rgw_zonegroup,
+                'zone_name': spec.rgw_zone,
+                'hostnames': spec.zonegroup_hostnames,
+            }
+            logger.debug(f'rgw cmd: {zg_update_cmd}')
+            ret, out, err = self.mgr.check_mon_command(zg_update_cmd)
+
         # TODO: fail, if we don't have a spec
         logger.info('Saving service %s spec with placement %s' % (
             spec.service_name(), spec.placement.pretty_str()))
