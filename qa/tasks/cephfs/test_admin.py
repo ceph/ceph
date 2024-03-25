@@ -2087,3 +2087,35 @@ class TestMDSFail(TestAdminCommands):
                               retval=1, errmsgs=errmsg)
         # test that "fs fail" passes with confirmation flag.
         self.run_ceph_cmd(f'mds fail {self.fs.name} --yes-i-really-mean-it')
+
+
+class LaunchingProcInBackground(CephFSTestCase):
+
+    def _run_proc_in_bg(self):
+        p1 = self.mount_a.run_shell('echo 1 > a; sleep 5; echo 2 >> a',
+                                    wait=False, stdout=StringIO())
+        log.info(p1.stdout.getvalue())
+        p2 = self.mount_a.run_shell('echo 3 > b; sleep 2; echo 4 >> b',
+                                    wait=False, stdout=StringIO())
+        log.info(p2.stdout.getvalue())
+
+        p1.wait()
+        p2.wait()
+        self.mount_a.run_shell('mv a b /home/rishabh/repos/ceph/mds-fail-confirmation/build/')
+
+    def _run_tar_in_bg(self):
+        health_warn = 'MDS_CACHE_OVERSIZED'
+        self.run_ceph_cmd('config set mds mds_cache_memory_limit 10M')
+        self.run_ceph_cmd('config set mds mds_health_cache_threshold 1.00000')
+        tar_link = 'https://download.ceph.com/qa/linux-6.5.11.tar.xz'
+        tar_name = 'linux-6.5.11.tar.xz'
+        #self.mount_a.run_shell(f'wget {tar_link} ')
+        self.mount_a.run_shell(f'cp ~/Downloads/{tar_name} ./')
+
+        import pdb; pdb.set_trace()
+        # ideally this should make happen untarring in background ideally,
+        # but in
+        # praci
+        tar_proc = self.mount_a.run_shell(f'tar -xv -f {tar_name}', wait=False)
+        import pdb; pdb.set_trace()
+        tar_proc.wait()
