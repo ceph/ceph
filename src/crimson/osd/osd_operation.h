@@ -265,6 +265,7 @@ struct OSDOperationRegistry : OperationRegistryT<
 
   size_t dump_historic_client_requests(ceph::Formatter* f) const;
   size_t dump_slowest_historic_client_requests(ceph::Formatter* f) const;
+  void visit_ops_in_flight(std::function<void(const ClientRequest&)>&& visit);
 
 private:
   size_t num_recent_ops = 0;

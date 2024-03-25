@@ -174,10 +174,13 @@ void Client::report()
   });
 }
 
+void Client::update_daemon_health(std::vector<DaemonHealthMetric>&& metrics)
+{
+  daemon_health_metrics = std::move(metrics);
+}
+
 void Client::_send_report()
 {
-  // TODO: implement daemon_health_metrics support
-  // https://tracker.ceph.com/issues/63766
   gates.dispatch_in_background(__func__, *this, [this] {
     if (!conn) {
       logger().warn("cannot send report; no conn available");
@@ -196,6 +199,7 @@ void Client::_send_report()
       report->daemon_name = local_conf()->name.get_id();
     }
     report->service_name = service_name;
+    report->daemon_health_metrics = std::move(daemon_health_metrics);
     local_conf().get_config_bl(last_config_bl_version, &report->config_bl,
 	                      &last_config_bl_version);
     return conn->send(std::move(report));
