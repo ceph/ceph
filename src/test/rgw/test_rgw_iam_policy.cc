@@ -161,7 +161,7 @@ protected:
   static string example7;
 public:
   PolicyTest() {
-    cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_CLIENT), false);
   }
 };
 
@@ -861,7 +861,7 @@ protected:
   const rgw::IAM::MaskedIP allowedIPv6Range = { true, rgw::IAM::Address("00100000000000010000110110111000100001011010001100000000000000000000000000000000100010100010111000000011011100000111001100110000"), 124 };
 public:
   IPPolicyTest() {
-    cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_CLIENT), false);
   }
 };
 const string IPPolicyTest::arbitrary_tenant = "arbitrary_tenant";
