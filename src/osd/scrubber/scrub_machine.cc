@@ -760,8 +760,6 @@ ReplicaActive::ReplicaActive(my_context ctx)
   dout(10) << "-- state -->> ReplicaActive" << dendl;
   m_pg = scrbr->get_pg();
   m_osds = m_pg->get_pg_osd(ScrubberPasskey());
-  clear_shallow_history<ReplicaIdle, 0>();
-  clear_shallow_history<ReplicaActive, 0>();
 }
 
 ReplicaActive::~ReplicaActive()
@@ -1048,7 +1046,6 @@ sc::result ReplicaWaitingReservation::react(const StartReplica& ev)
       "reservation",
       scrbr->get_whoami(), scrbr->get_spgid());
   context<ReplicaActive>().clear_remote_reservation(true);
-  clear_shallow_history<ReplicaIdle, 0>();
   post_event(ReplicaPushesUpd{});
   return transit<ReplicaActiveOp>();
 }
@@ -1153,7 +1150,7 @@ sc::result ReplicaActiveOp::react(const ReplicaRelease& ev)
 {
   dout(10) << "ReplicaActiveOp::react(const ReplicaRelease&)" << dendl;
   post_event(ev);
-  return transit<sc::shallow_history<ReplicaReserved>>();
+  return transit<ReplicaReserved>();
 }
 
 
@@ -1212,7 +1209,7 @@ sc::result ReplicaBuildingMap::react(const SchedReplica&)
     dout(10) << "replica scrub job preempted" << dendl;
 
     scrbr->send_preempted_replica();
-    return transit<sc::shallow_history<ReplicaReserved>>();
+    return transit<ReplicaReserved>();
   }
 
   // start or check progress of build_replica_map_chunk()
@@ -1220,7 +1217,7 @@ sc::result ReplicaBuildingMap::react(const SchedReplica&)
   if (ret_init != -EINPROGRESS) {
     dout(10) << "ReplicaBuildingMap::react(const SchedReplica&): back to idle"
 	     << dendl;
-    return transit<sc::shallow_history<ReplicaReserved>>();
+    return transit<ReplicaReserved>();
   }
 
   dout(20) << "ReplicaBuildingMap::react(const SchedReplica&): discarded"
