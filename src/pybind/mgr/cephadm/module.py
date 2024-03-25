@@ -76,6 +76,7 @@ from .services.monitoring import GrafanaService, AlertmanagerService, Prometheus
     NodeExporterService, SNMPGatewayService, LokiService, PromtailService
 from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCollectorService, JaegerQueryService
 from .services.node_proxy import NodeProxy
+from .services.smb import SMBService
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
     ClientKeyringStore, ClientKeyringSpec, TunedProfileStore, NodeProxyCache
@@ -131,6 +132,7 @@ DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
 DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
 DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
+DEFAULT_SAMBA_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
 # ------------------------------------------------------------------------------
 
 
@@ -286,6 +288,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_jaeger_query',
             default=DEFAULT_JAEGER_QUERY_IMAGE,
             desc='Jaeger query container image',
+        ),
+        Option(
+            'container_image_samba',
+            default=DEFAULT_SAMBA_IMAGE,
+            desc='Samba/SMB container image',
         ),
         Option(
             'warn_on_stray_hosts',
@@ -551,6 +558,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_jaeger_agent = ''
             self.container_image_jaeger_collector = ''
             self.container_image_jaeger_query = ''
+            self.container_image_samba = ''
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
@@ -661,12 +669,34 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.migration = Migrations(self)
 
         _service_classes: Sequence[Type[CephadmService]] = [
-            OSDService, NFSService, MonService, MgrService, MdsService,
-            RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
-            PrometheusService, NodeExporterService, LokiService, PromtailService, CrashService, IscsiService,
-            IngressService, CustomContainerService, CephfsMirrorService, NvmeofService,
-            CephadmAgent, CephExporterService, SNMPGatewayService, ElasticSearchService,
-            JaegerQueryService, JaegerAgentService, JaegerCollectorService, NodeProxy
+            AlertmanagerService,
+            CephExporterService,
+            CephadmAgent,
+            CephfsMirrorService,
+            CrashService,
+            CustomContainerService,
+            ElasticSearchService,
+            GrafanaService,
+            IngressService,
+            IscsiService,
+            JaegerAgentService,
+            JaegerCollectorService,
+            JaegerQueryService,
+            LokiService,
+            MdsService,
+            MgrService,
+            MonService,
+            NFSService,
+            NodeExporterService,
+            NodeProxy,
+            NvmeofService,
+            OSDService,
+            PrometheusService,
+            PromtailService,
+            RbdMirrorService,
+            RgwService,
+            SMBService,
+            SNMPGatewayService,
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -1561,41 +1591,32 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 utils.name_to_config_section(daemon_name),
                 'container_image'
             )).strip()
-        elif daemon_type == 'prometheus':
-            image = self.container_image_prometheus
-        elif daemon_type == 'nvmeof':
-            image = self.container_image_nvmeof
-        elif daemon_type == 'grafana':
-            image = self.container_image_grafana
-        elif daemon_type == 'alertmanager':
-            image = self.container_image_alertmanager
-        elif daemon_type == 'node-exporter':
-            image = self.container_image_node_exporter
-        elif daemon_type == 'loki':
-            image = self.container_image_loki
-        elif daemon_type == 'promtail':
-            image = self.container_image_promtail
-        elif daemon_type == 'haproxy':
-            image = self.container_image_haproxy
-        elif daemon_type == 'keepalived':
-            image = self.container_image_keepalived
-        elif daemon_type == 'elasticsearch':
-            image = self.container_image_elasticsearch
-        elif daemon_type == 'jaeger-agent':
-            image = self.container_image_jaeger_agent
-        elif daemon_type == 'jaeger-collector':
-            image = self.container_image_jaeger_collector
-        elif daemon_type == 'jaeger-query':
-            image = self.container_image_jaeger_query
-        elif daemon_type == CustomContainerService.TYPE:
-            # The image can't be resolved, the necessary information
-            # is only available when a container is deployed (given
-            # via spec).
-            image = None
-        elif daemon_type == 'snmp-gateway':
-            image = self.container_image_snmp_gateway
         else:
-            assert False, daemon_type
+            images = {
+                'alertmanager': self.container_image_alertmanager,
+                'elasticsearch': self.container_image_elasticsearch,
+                'grafana': self.container_image_grafana,
+                'haproxy': self.container_image_haproxy,
+                'jaeger-agent': self.container_image_jaeger_agent,
+                'jaeger-collector': self.container_image_jaeger_collector,
+                'jaeger-query': self.container_image_jaeger_query,
+                'keepalived': self.container_image_keepalived,
+                'loki': self.container_image_loki,
+                'node-exporter': self.container_image_node_exporter,
+                'nvmeof': self.container_image_nvmeof,
+                'prometheus': self.container_image_prometheus,
+                'promtail': self.container_image_promtail,
+                'snmp-gateway': self.container_image_snmp_gateway,
+                # The image can't be resolved here, the necessary information
+                # is only available when a container is deployed (given
+                # via spec).
+                CustomContainerService.TYPE: None,
+                SMBService.TYPE: self.container_image_samba,
+            }
+            try:
+                image = images[daemon_type]
+            except KeyError:
+                raise ValueError(f'no image for {daemon_type}')
 
         self.log.debug('%s container image %s' % (daemon_name, image))
 
@@ -3254,7 +3275,8 @@ Then run the following:
                 'elasticsearch': PlacementSpec(count=1),
                 'jaeger-agent': PlacementSpec(host_pattern='*'),
                 'jaeger-collector': PlacementSpec(count=1),
-                'jaeger-query': PlacementSpec(count=1)
+                'jaeger-query': PlacementSpec(count=1),
+                SMBService.TYPE: PlacementSpec(count=1),
             }
             spec.placement = defaults[spec.service_type]
         elif spec.service_type in ['mon', 'mgr'] and \
@@ -3382,6 +3404,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_snmp_gateway(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_smb(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error
