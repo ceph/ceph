@@ -897,14 +897,6 @@ sc::result ReplicaActive::react(const ReserverGranted& ev)
 }
 
 
-void ReplicaActive::on_release(const ReplicaRelease& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << fmt::format("ReplicaActive::on_release() from {}", ev.m_from)
-	   << dendl;
-  clear_remote_reservation(true);
-}
-
 void ReplicaActive::clear_remote_reservation(bool warn_if_no_reservation)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -917,13 +909,28 @@ void ReplicaActive::clear_remote_reservation(bool warn_if_no_reservation)
     m_osds->get_scrub_reserver().cancel_reservation(pg_id);
     reservation_granted = false;
     pending_reservation_nonce = 0;
+    ceph_assert(m_reservation_status != reservation_status_t::unreserved);
+    m_reservation_status = reservation_status_t::unreserved;
+
   } else if (warn_if_no_reservation) {
     const auto msg =
 	"ReplicaActive::clear_remote_reservation(): "
 	"not reserved!";
     dout(5) << msg << dendl;
-    scrbr->get_clog()->warn() << msg;
+    scrbr->get_clog()->info() << msg;
   }
+}
+
+
+sc::result ReplicaActive::react(const ReplicaRelease& ev)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << fmt::format(
+		  "ReplicaActive::react(const ReplicaRelease&) from {}",
+		  ev.m_from)
+	   << dendl;
+  clear_remote_reservation(true);
+  return discard_event();
 }
 
 
@@ -964,18 +971,6 @@ sc::result ReplicaUnreserved::react(const StartReplica& ev)
   return transit<ReplicaActiveOp>();
 }
 
-sc::result ReplicaUnreserved::react(const ReplicaRelease&)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaUnreserved::react(const ReplicaRelease&)" << dendl;
-  // this is a bug. We should never receive a release request unless we
-  // are reserved or have a pending reservation.
-  scrbr->get_clog()->error() << fmt::format(
-      "osd.{} pg[{}]: reservation released while not reserved",
-      scrbr->get_whoami(), scrbr->get_spgid());
-  return discard_event();
-}
-
 
 // ---------------- ReplicaIdle/ReplicaWaitingReservation ---------------------------
 
@@ -988,16 +983,6 @@ ReplicaWaitingReservation::ReplicaWaitingReservation(my_context ctx)
   dout(10)
       << "-- state -->> ReplicaActive/ReplicaIdle/ReplicaWaitingReservation"
       << dendl;
-}
-
-sc::result ReplicaWaitingReservation::react(const ReplicaRelease& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaWaitingReservation::react(const ReplicaRelease&)"
-	   << dendl;
-  // must cancel the queued reservation request
-  context<ReplicaActive>().on_release(ev);
-  return transit<ReplicaUnreserved>();
 }
 
 sc::result ReplicaWaitingReservation::react(const StartReplica& ev)
@@ -1026,14 +1011,6 @@ ReplicaReserved::ReplicaReserved(my_context ctx)
 {
   dout(10) << "-- state -->> ReplicaActive/ReplicaIdle/ReplicaReserved"
 	   << dendl;
-}
-
-sc::result ReplicaReserved::react(const ReplicaRelease& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaReserved::react(const ReplicaRelease&)" << dendl;
-  context<ReplicaActive>().on_release(ev);
-  return transit<ReplicaUnreserved>();
 }
 
 sc::result ReplicaReserved::react(const StartReplica& ev)
@@ -1098,8 +1075,7 @@ sc::result ReplicaActiveOp::react(const ReplicaReserveReq& ev)
 sc::result ReplicaActiveOp::react(const ReplicaRelease& ev)
 {
   dout(10) << "ReplicaActiveOp::react(const ReplicaRelease&)" << dendl;
-  post_event(ev);
-  return transit<ReplicaReserved>();
+  return transit<ReplicaActive>();
 }
 
 
