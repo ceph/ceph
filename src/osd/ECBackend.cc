@@ -113,15 +113,13 @@ ECBackend::RecoveryBackend::RecoveryBackend(
   ceph::ErasureCodeInterfaceRef ec_impl,
   const ECUtil::stripe_info_t &sinfo,
   ReadPipeline &read_pipeline,
-  ECListener *parent,
-  ECBackend *ecbackend)
+  ECListener *parent)
   : cct(cct),
     coll(coll),
     ec_impl(std::move(ec_impl)),
     sinfo(sinfo),
     read_pipeline(read_pipeline),
-    parent(parent),
-    ecbackend(ecbackend) {}
+    parent(parent) {}
 
 ECCommon::RecoveryBackend::ECRecoveryHandle *ECBackend::RecoveryBackend::open_recovery_op() {
   return new ECRecoveryHandle;
