@@ -1632,11 +1632,6 @@ osd_debug_op_order = true
 osd_debug_misdirected_ops = true
 osd_copyfrom_max_chunk = 524288
 
-[mds]
-mds_debug_frag = true
-mds_debug_auth_pins = true
-mds_debug_subtrees = true
-
 [mgr]
 mgr/telemetry/nag = false
 mgr/telemetry/enable = false
@@ -1673,6 +1668,9 @@ debug_monc = 20
 debug_mgrc = 20
 mds_debug_scatterstat = true
 mds_verify_scatter = true
+mds_debug_frag = true
+mds_debug_auth_pins = true
+mds_debug_subtrees = true
 EOF
     fi
     if [ "$cephadm" -gt 0 ]; then
