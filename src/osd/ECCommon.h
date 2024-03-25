@@ -60,7 +60,6 @@ struct ECListener {
   virtual void cancel_pull(
     const hobject_t &soid) = 0;
 
-#ifndef WITH_SEASTAR
   // XXX
   virtual pg_shard_t primary_shard() const = 0;
   virtual bool pgb_is_primary() const = 0;
@@ -117,20 +116,22 @@ struct ECListener {
      virtual bool check_failsafe_full() = 0;
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
+#ifndef WITH_SEASTAR
      virtual bool pg_is_remote_backfilling() = 0;
      virtual void pg_add_local_num_bytes(int64_t num_bytes) = 0;
      //virtual void pg_sub_local_num_bytes(int64_t num_bytes) = 0;
      virtual void pg_add_num_bytes(int64_t num_bytes) = 0;
      //virtual void pg_sub_num_bytes(int64_t num_bytes) = 0;
-     virtual void inc_osd_stat_repaired() = 0;
+#endif
+   virtual void inc_osd_stat_repaired() = 0;
 
    virtual void add_temp_obj(const hobject_t &oid) = 0;
    virtual void clear_temp_obj(const hobject_t &oid) = 0;
-     virtual epoch_t get_last_peering_reset_epoch() const = 0;
-#endif
 
-  // XXX
+     virtual epoch_t get_last_peering_reset_epoch() const = 0;
+
 #ifndef WITH_SEASTAR
+  // XXX
   virtual GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
     GenContext<ThreadPool::TPHandle&> *c) = 0;
 
