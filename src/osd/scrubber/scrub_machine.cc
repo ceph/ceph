@@ -767,6 +767,12 @@ ReplicaActive::~ReplicaActive()
   clear_remote_reservation(false);
 }
 
+void ReplicaActive::exit()
+{
+  dout(20) << "ReplicaActive::exit()" << dendl;
+}
+
+
 /*
  * Note: we are expected to be in the initial internal state (Idle) when
  * receiving any registration request. ReplicaActiveOp, our other internal
@@ -943,82 +949,30 @@ ReplicaIdle::ReplicaIdle(my_context ctx)
   dout(10) << "-- state -->> ReplicaActive/ReplicaIdle" << dendl;
 }
 
+
+sc::result ReplicaIdle::react(const StartReplica& ev)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "ReplicaIdle::react(const StartReplica&)" << dendl;
+
+  // if we are waiting for a reservation grant from the reserver (an
+  // illegal scenario!), that reservation must be cleared.
+  if (context<ReplicaActive>().pending_reservation_nonce) {
+    scrbr->get_clog()->warn() << fmt::format(
+	"osd.{} pg[{}]: new chunk request while still waiting for "
+	"reservation",
+	scrbr->get_whoami(), scrbr->get_spgid());
+    context<ReplicaActive>().clear_remote_reservation(true);
+  }
+  post_event(ReplicaPushesUpd{});
+  return transit<ReplicaActiveOp>();
+}
+
+
 void ReplicaIdle::reset_ignored(const FullReset&)
 {
   dout(10) << "ReplicaIdle::react(const FullReset&): FullReset ignored"
 	   << dendl;
-}
-
-
-// ---------------- ReplicaIdle/ReplicaUnreserved ---------------------------
-
-ReplicaUnreserved::ReplicaUnreserved(my_context ctx)
-    : my_base(ctx)
-    , NamedSimply(
-	  context<ScrubMachine>().m_scrbr,
-	  "ReplicaActive/ReplicaIdle/ReplicaUnreserved")
-{
-  dout(10) << "-- state -->> ReplicaActive/ReplicaIdle/ReplicaUnreserved"
-	   << dendl;
-}
-
-
-sc::result ReplicaUnreserved::react(const StartReplica& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaUnreserved::react(const StartReplica&)" << dendl;
-  post_event(ReplicaPushesUpd{});
-  return transit<ReplicaActiveOp>();
-}
-
-
-// ---------------- ReplicaIdle/ReplicaWaitingReservation ---------------------------
-
-ReplicaWaitingReservation::ReplicaWaitingReservation(my_context ctx)
-    : my_base(ctx)
-    , NamedSimply(
-	  context<ScrubMachine>().m_scrbr,
-	  "ReplicaActive/ReplicaIdle/ReplicaWaitingReservation")
-{
-  dout(10)
-      << "-- state -->> ReplicaActive/ReplicaIdle/ReplicaWaitingReservation"
-      << dendl;
-}
-
-sc::result ReplicaWaitingReservation::react(const StartReplica& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaWaitingReservation::react(const StartReplica&)" << dendl;
-
-  // this shouldn't happen. We will handle it, but will also log an error.
-  scrbr->get_clog()->error() << fmt::format(
-      "osd.{} pg[{}]: new chunk request while still waiting for "
-      "reservation",
-      scrbr->get_whoami(), scrbr->get_spgid());
-  context<ReplicaActive>().clear_remote_reservation(true);
-  post_event(ReplicaPushesUpd{});
-  return transit<ReplicaActiveOp>();
-}
-
-
-// ---------------- ReplicaIdle/ReplicaReserved ---------------------------
-
-ReplicaReserved::ReplicaReserved(my_context ctx)
-    : my_base(ctx)
-    , NamedSimply(
-	  context<ScrubMachine>().m_scrbr,
-	  "ReplicaActive/ReplicaIdle/ReplicaReserved")
-{
-  dout(10) << "-- state -->> ReplicaActive/ReplicaIdle/ReplicaReserved"
-	   << dendl;
-}
-
-sc::result ReplicaReserved::react(const StartReplica& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaReserved::react(const StartReplica&)" << dendl;
-  post_event(ReplicaPushesUpd{});
-  return transit<ReplicaActiveOp>();
 }
 
 
@@ -1134,20 +1088,22 @@ sc::result ReplicaBuildingMap::react(const SchedReplica&)
     dout(10) << "replica scrub job preempted" << dendl;
 
     scrbr->send_preempted_replica();
-    return transit<ReplicaReserved>();
+    return transit<ReplicaIdle>();
   }
 
   // start or check progress of build_replica_map_chunk()
-  auto ret_init = scrbr->build_replica_map_chunk();
-  if (ret_init != -EINPROGRESS) {
-    dout(10) << "ReplicaBuildingMap::react(const SchedReplica&): back to idle"
-	     << dendl;
-    return transit<ReplicaReserved>();
+  if (scrbr->build_replica_map_chunk() == -EINPROGRESS) {
+    // Must ask the backend for the next stride shortly.
+    // build_replica_map_chunk() has already requeued us.
+    dout(20) << "waiting for the backend..." << dendl;
+    return discard_event();
   }
 
-  dout(20) << "ReplicaBuildingMap::react(const SchedReplica&): discarded"
+  // Note: build_replica_map_chunk() aborts the OSD on any backend retval
+  // which is not -EINPROGRESS or 0 ('done').
+  dout(10) << "ReplicaBuildingMap::react(const SchedReplica&): chunk done"
 	   << dendl;
-  return discard_event();
+  return transit<ReplicaIdle>();
 }
 
 }  // namespace Scrub
