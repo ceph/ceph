@@ -587,7 +587,12 @@ class Filesystem(MDSCluster):
         self.run_ceph_cmd("fs", "reset", str(self.name), '--yes-i-really-mean-it')
 
     def fail(self):
-        self.run_ceph_cmd("fs", "fail", str(self.name))
+        cmd = ["fs", "fail", str(self.name)]
+        try:
+            self.run_ceph_cmd(cmd)
+        except CommandFailedError:
+            cmd.append("--yes-i-really-mean-it")
+            self.run_ceph_cmd(cmd)
 
     def set_flag(self, var, *args):
         a = map(lambda x: str(x).lower(), args)
