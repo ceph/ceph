@@ -1,0 +1,13 @@
+@use './src/styles/vendor/variables' as vv;
+
+.tree-container {
+  height: calc(100vh - vv.$tree-container-height);
+}
+
+.align-inline-btns {
+  margin-left: 5em;
+}
+
+.btn:disabled {
+  pointer-events: none;
+}

@@ -1,0 +1,12 @@
+<div [class]="wrappingClass">
+  <cd-back-button *ngIf="showCancel"
+                  class="m-2"
+                  (backAction)="backAction()"
+                  [name]="cancelText"></cd-back-button>
+  <cd-submit-button *ngIf="showSubmit"
+                    (submitAction)="submitAction()"
+                    [disabled]="disabled"
+                    [form]="form"
+                    [ariaLabel]="submitText"
+                    data-cy="submitBtn">{{ submitText }}</cd-submit-button>
+</div>
