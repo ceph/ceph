@@ -68,7 +68,7 @@ int MetricAggregator::init() {
 							{"id", stringify(mds->get_global_id())}});
   PerfCountersBuilder plb(m_cct, labels, l_mds_client_metrics_start, l_mds_client_metrics_last);
   plb.add_u64(l_mds_client_metrics_num_clients,
-	      "num_clients", "Numer of client sessions", "mcli", PerfCountersBuilder::PRIO_CRITICAL);
+	      "num_clients", "Number of client sessions", "mcli", PerfCountersBuilder::PRIO_CRITICAL);
   m_perf_counters = plb.create_perf_counters();
   m_cct->get_perfcounters_collection()->add(m_perf_counters);
 
