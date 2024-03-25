@@ -49,9 +49,14 @@ def dashboard_exception_handler(handler, *args, **kwargs):
     except (cherrypy.HTTPRedirect, cherrypy.NotFound, cherrypy.HTTPError):
         raise
     except (ViewCacheNoDataException, DashboardException) as error:
-        logger.exception('Dashboard Exception')
+        http_status = getattr(error, 'status', 400)
+        cherrypy.response.status = http_status
         cherrypy.response.headers['Content-Type'] = 'application/json'
-        cherrypy.response.status = getattr(error, 'status', 400)
+
+        if http_status >= 500:
+            logger.exception('Dashboard Exception')
+        else:
+            logger.info('Dashboard Exception: %s', error)
         return json.dumps(serialize_dashboard_exception(error)).encode('utf-8')
     except Exception as error:
         logger.exception('Internal Server Error')

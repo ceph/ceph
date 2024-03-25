@@ -1,121 +1,134 @@
+import functools
 import logging
-from typing import Optional
+from collections.abc import Iterable
+from typing import Any, Callable, Dict, List, NamedTuple, Optional, Type
 
+from ..exceptions import DashboardException
 from .nvmeof_conf import NvmeofGatewaysConfig
 
-logger = logging.getLogger('nvmeof_client')
+logger = logging.getLogger("nvmeof_client")
 
 try:
-    import grpc
+    import grpc  # type: ignore
+    import grpc._channel  # type: ignore
+    from google.protobuf.message import Message  # type: ignore
 
     from .proto import gateway_pb2 as pb2
     from .proto import gateway_pb2_grpc as pb2_grpc
 except ImportError:
     grpc = None
 else:
-    class NVMeoFClient(object):
-        def __init__(self):
-            logger.info('Initiating nvmeof gateway connection...')
 
-            self.gateway_addr = list(NvmeofGatewaysConfig.get_gateways_config()[
-                                     'gateways'].values())[0]['service_url']
-            self.channel = grpc.insecure_channel(
-                '{}'.format(self.gateway_addr)
-            )
-            logger.info('Found nvmeof gateway at %s', self.gateway_addr)
+    class NVMeoFClient(object):
+        pb2 = pb2
+
+        def __init__(self):
+            logger.info("Initiating nvmeof gateway connection...")
+
+            self.gateway_addr = list(
+                NvmeofGatewaysConfig.get_gateways_config()["gateways"].values()
+            )[0]["service_url"]
+            self.channel = grpc.insecure_channel("{}".format(self.gateway_addr))
+            logger.info("Found nvmeof gateway at %s", self.gateway_addr)
             self.stub = pb2_grpc.GatewayStub(self.channel)
 
-        def list_subsystems(self, subsystem_nqn: Optional[str] = None):
-            return self.stub.list_subsystems(pb2.list_subsystems_req(
-                subsystem_nqn=subsystem_nqn
-            ))
+    def make_namedtuple_from_object(cls: Type[NamedTuple], obj: Any) -> NamedTuple:
+        return cls(
+            **{
+                field: getattr(obj, field)
+                for field in cls._fields
+                if hasattr(obj, field)
+            }
+        )  # type: ignore
 
-        def create_subsystem(self, subsystem_nqn: str):
-            return self.stub.create_subsystem(pb2.create_subsystem_req(
-                subsystem_nqn=subsystem_nqn
-            ))
+    Model = Dict[str, Any]
 
-        def delete_subsystem(self, subsystem_nqn: str, force: Optional[bool] = False):
-            return self.stub.delete_subsystem(pb2.delete_subsystem_req(
-                subsystem_nqn=subsystem_nqn,
-                force=force
-            ))
+    def map_model(
+        model: Type[NamedTuple],
+        first: Optional[str] = None,
+    ) -> Callable[..., Callable[..., Model]]:
+        def decorator(func: Callable[..., Message]) -> Callable[..., Model]:
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs) -> Model:
+                message = func(*args, **kwargs)
+                if first:
+                    try:
+                        message = getattr(message, first)[0]
+                    except IndexError:
+                        raise DashboardException(
+                            msg="Not Found", http_status_code=404, component="nvmeof"
+                        )
 
-        def list_namespaces(self, subsystem_nqn: str):
-            return self.stub.list_namespaces(pb2.list_namespaces_req(
-                subsystem=subsystem_nqn
-            ))
+                return make_namedtuple_from_object(model, message)._asdict()
 
-        def create_namespace(self, rbd_pool_name: str, rbd_image_name: str,
-                             subsystem_nqn: str, block_size: int = 512,
-                             create_image: Optional[bool] = True,
-                             size: Optional[int] = 1024):
-            return self.stub.namespace_add(pb2.namespace_add_req(
-                rbd_pool_name=rbd_pool_name,
-                rbd_image_name=rbd_image_name,
-                subsystem_nqn=subsystem_nqn,
-                block_size=block_size,
-                create_image=create_image,
-                size=size
-            ))
+            return wrapper
 
-        def delete_namespace(self, subsystem_nqn: str):
-            return self.stub.namespace_delete(pb2.namespace_delete_req(
-                subsystem_nqn=subsystem_nqn
-            ))
+        return decorator
 
-        def list_hosts(self, subsystem_nqn: str):
-            return self.stub.list_hosts(pb2.list_hosts_req(
-                subsystem=subsystem_nqn
-            ))
+    Collection = List[Model]
 
-        def add_host(self, subsystem_nqn: str, host_nqn: str):
-            return self.stub.add_host(pb2.add_host_req(
-                subsystem_nqn=subsystem_nqn,
-                host_nqn=host_nqn
-            ))
+    def map_collection(
+        model: Type[NamedTuple],
+        pick: str,
+        finalize: Optional[Callable[[Message, Collection], Collection]] = None,
+    ) -> Callable[..., Callable[..., Collection]]:
+        def decorator(func: Callable[..., Message]) -> Callable[..., Collection]:
+            @functools.wraps(func)
+            def wrapper(*args, **kwargs) -> Collection:
+                message = func(*args, **kwargs)
+                collection: Iterable = getattr(message, pick)
+                out = [
+                    make_namedtuple_from_object(model, i)._asdict() for i in collection
+                ]
+                if finalize:
+                    return finalize(message, out)
+                return out
 
-        def remove_host(self, subsystem_nqn: str, host_nqn: str):
-            return self.stub.remove_host(pb2.remove_host_req(
-                subsystem_nqn=subsystem_nqn,
-                host_nqn=host_nqn
-            ))
+            return wrapper
 
-        def list_listeners(self, subsystem_nqn: str):
-            return self.stub.list_listeners(pb2.list_listeners_req(
-                subsystem=subsystem_nqn
-            ))
+        return decorator
 
-        def create_listener(self, nqn: str, gateway: str, traddr: Optional[str] = None):
-            if traddr is None:
-                addr = self.gateway_addr
-                ip_address, _ = addr.split(':')
-                traddr = self._escape_address_if_ipv6(ip_address)
+    import errno
 
-            req = pb2.create_listener_req(
-                nqn=nqn,
-                gateway_name=gateway,
-                traddr=traddr
-            )
-            return self.stub.create_listener(req)
+    NVMeoFError2HTTP = {
+        # errno errors
+        errno.EPERM: 403,  # 1
+        errno.ENOENT: 404,  # 2
+        errno.EACCES: 403,  # 13
+        errno.EEXIST: 409,  # 17
+        errno.ENODEV: 404,  # 19
+        # JSONRPC Spec: https://www.jsonrpc.org/specification#error_object
+        -32602: 422,  # Invalid Params
+        -32603: 500,  # Internal Error
+    }
 
-        def delete_listener(self, nqn: str, gateway: str, traddr: Optional[str] = None):
-            if traddr is None:
-                addr = self.gateway_addr
-                ip_address, _ = addr.split(':')
-                traddr = self._escape_address_if_ipv6(ip_address)
+    def handle_nvmeof_error(func: Callable[..., Message]) -> Callable[..., Message]:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> Message:
+            try:
+                response = func(*args, **kwargs)
+            except grpc._channel._InactiveRpcError as e:  # pylint: disable=protected-access
+                raise DashboardException(
+                    msg=e.details(),
+                    code=e.code(),
+                    http_status_code=504,
+                    component="nvmeof",
+                )
 
-            return self.stub.delete_listener(pb2.delete_listener_req(
-                nqn=nqn,
-                gateway_name=gateway,
-                traddr=traddr
-            ))
+            if response.status != 0:
+                raise DashboardException(
+                    msg=response.error_message,
+                    code=response.status,
+                    http_status_code=NVMeoFError2HTTP.get(response.status, 400),
+                    component="nvmeof",
+                )
+            return response
 
-        def gateway_info(self):
-            return self.stub.get_gateway_info(pb2.get_gateway_info_req())
+        return wrapper
 
-        def _escape_address_if_ipv6(self, addr):
-            ret_addr = addr
-            if ":" in addr and not addr.strip().startswith("["):
-                ret_addr = f"[{addr}]"
-            return ret_addr
+    def empty_response(func: Callable[..., Message]) -> Callable[..., None]:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs) -> None:
+            func(*args, **kwargs)
+
+        return wrapper

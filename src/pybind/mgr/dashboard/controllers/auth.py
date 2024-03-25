@@ -38,6 +38,7 @@ class Auth(RESTController, ControllerAuthMixin):
     Provide authenticates and returns JWT token.
     """
     # pylint: disable=R0912
+
     def create(self, username, password):
         user_data = AuthManager.authenticate(username, password)
         user_perms, pwd_expiration_date, pwd_update_required = None, None, None
