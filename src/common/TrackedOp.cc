@@ -207,14 +207,11 @@ void OpHistory::dump_slow_ops(utime_t now, Formatter *f, set<string> filters)
   f->dump_int("threshold to keep", history_slow_op_threshold.load());
   {
     f->open_array_section("Ops");
-    for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
-	   slow_op.begin();
-	 i != slow_op.end();
-	 ++i) {
-      if (!i->second->filter_out(filters))
+    for ([[maybe_unused]] const auto& [t, op] : slow_op) {
+      if (!op->filter_out(filters))
         continue;
       f->open_object_section("Op");
-      i->second->dump(now, f, OpTracker::default_dumper);
+      op->dump(now, f, OpTracker::default_dumper);
       f->close_section();
     }
     f->close_section();
@@ -391,6 +388,9 @@ bool OpTracker::with_slow_ops_in_flight(utime_t* oldest_secs,
       // no more slow ops in flight
       return false;
     }
+    if (op.is_continuous()) {
+      return true; /* skip reporting */
+    }
     if (!op.warn_interval_multiplier)
       return true;
     slow++;
@@ -505,6 +505,7 @@ void TrackedOp::dump(utime_t now, Formatter *f, OpTracker::dumper lambda) const
   f->dump_stream("initiated_at") << get_initiated();
   f->dump_float("age", now - get_initiated());
   f->dump_float("duration", get_duration());
+  f->dump_bool("continuous", is_continuous());
   {
     f->open_object_section("type_data");
     lambda(*this, f);

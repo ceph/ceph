@@ -38,8 +38,8 @@ ostream& CDentry::print_db_line_prefix(ostream& out) const
   return out << ceph_clock_now() << " mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
 }
 
-LockType CDentry::lock_type(CEPH_LOCK_DN);
-LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
+const LockType CDentry::lock_type(CEPH_LOCK_DN);
+const LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
 
 
 // CDentry
@@ -368,10 +368,10 @@ int CDentry::get_num_dir_auth_pins() const
   return auth_pins;
 }
 
-bool CDentry::can_auth_pin(int *err_ret) const
+bool CDentry::can_auth_pin(int *err_ret, bool bypassfreezing) const
 {
   ceph_assert(dir);
-  return dir->can_auth_pin(err_ret);
+  return dir->can_auth_pin(err_ret, bypassfreezing);
 }
 
 void CDentry::auth_pin(void *by)

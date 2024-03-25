@@ -91,16 +91,17 @@ public:
 
 sr_t* const CInode::projected_inode::UNDEF_SRNODE = (sr_t*)(unsigned long)-1;
 
-LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
-LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
-LockType CInode::linklock_type(CEPH_LOCK_ILINK);
-LockType CInode::dirfragtreelock_type(CEPH_LOCK_IDFT);
-LockType CInode::filelock_type(CEPH_LOCK_IFILE);
-LockType CInode::xattrlock_type(CEPH_LOCK_IXATTR);
-LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
-LockType CInode::nestlock_type(CEPH_LOCK_INEST);
-LockType CInode::flocklock_type(CEPH_LOCK_IFLOCK);
-LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
+const LockType CInode::quiescelock_type(CEPH_LOCK_IQUIESCE);
+const LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
+const LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
+const LockType CInode::linklock_type(CEPH_LOCK_ILINK);
+const LockType CInode::dirfragtreelock_type(CEPH_LOCK_IDFT);
+const LockType CInode::filelock_type(CEPH_LOCK_IFILE);
+const LockType CInode::xattrlock_type(CEPH_LOCK_IXATTR);
+const LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
+const LockType CInode::nestlock_type(CEPH_LOCK_INEST);
+const LockType CInode::flocklock_type(CEPH_LOCK_IFLOCK);
+const LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
 
 std::string_view CInode::pin_name(int p) const
 {
@@ -254,8 +255,10 @@ ostream& operator<<(ostream& out, const CInode& in)
     out << " " << in.filelock;
   if (!in.xattrlock.is_sync_and_unlocked())
     out << " " << in.xattrlock;
-  if (!in.versionlock.is_sync_and_unlocked())  
+  if (in.versionlock.is_locked())
     out << " " << in.versionlock;
+  if (in.quiescelock.is_locked())
+    out << " " << in.quiescelock;
 
   // hack: spit out crap on which clients have caps
   if (in.get_inode()->client_ranges.size())
@@ -307,6 +310,9 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.state_test(CInode::STATE_RANDEPHEMERALPIN)) {
     out << " randepin";
   }
+  if (in.get_inode()->get_quiesce_block()) {
+    out << " qblock";
+  }
 
   out << " " << &in;
   out << "]";
@@ -323,6 +329,7 @@ CInode::CInode(MDCache *c, bool auth, snapid_t f, snapid_t l) :
     item_dirty_dirfrag_nest(this),
     item_dirty_dirfrag_dirfragtree(this),
     pop(c->decayrate),
+    quiescelock(this, &quiescelock_type),
     versionlock(this, &versionlock_type),
     authlock(this, &authlock_type),
     linklock(this, &linklock_type),
@@ -489,8 +496,8 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls, const MutationRef& mu
 
   bool pool_updated = get_inode()->layout.pool_id != front.inode->layout.pool_id;
   bool pin_updated = (get_inode()->export_pin != front.inode->export_pin) ||
-		     (get_inode()->export_ephemeral_distributed_pin !=
-		      front.inode->export_ephemeral_distributed_pin);
+		     (get_inode()->get_ephemeral_distributed_pin() !=
+		      front.inode->get_ephemeral_distributed_pin());
 
   reset_inode(std::move(front.inode));
   if (front.xattrs != get_xattrs())
@@ -1659,6 +1666,7 @@ SimpleLock* CInode::get_lock(int type)
     case CEPH_LOCK_INEST: return &nestlock;
     case CEPH_LOCK_IFLOCK: return &flocklock;
     case CEPH_LOCK_IPOLICY: return &policylock;
+    case CEPH_LOCK_IQUIESCE: return &quiescelock;
   }
   return 0;
 }
@@ -2125,7 +2133,7 @@ void CInode::encode_lock_ipolicy(bufferlist& bl)
     encode(get_inode()->layout, bl, mdcache->mds->mdsmap->get_up_features());
     encode(get_inode()->quota, bl);
     encode(get_inode()->export_pin, bl);
-    encode(get_inode()->export_ephemeral_distributed_pin, bl);
+    encode(get_inode()->flags, bl);
     encode(get_inode()->export_ephemeral_random_pin, bl);
   }
   ENCODE_FINISH(bl);
@@ -2146,15 +2154,15 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
     decode(_inode->quota, p);
     decode(_inode->export_pin, p);
     if (struct_v >= 2) {
-      decode(_inode->export_ephemeral_distributed_pin, p);
+      decode(_inode->flags, p);
       decode(_inode->export_ephemeral_random_pin, p);
     }
   }
   DECODE_FINISH(p);
 
   bool pin_updated = (get_inode()->export_pin != _inode->export_pin) ||
-		     (get_inode()->export_ephemeral_distributed_pin !=
-		      _inode->export_ephemeral_distributed_pin);
+		     (get_inode()->get_ephemeral_distributed_pin() !=
+		      _inode->get_ephemeral_distributed_pin());
   reset_inode(std::move(_inode));
   maybe_export_pin(pin_updated);
 }
@@ -2857,9 +2865,19 @@ bool CInode::freeze_inode(int auth_pin_allowance)
   if (!dir->lock_caches_with_auth_pins.empty())
     mdcache->mds->locker->invalidate_lock_caches(dir);
 
-  const static int lock_types[] = {
-    CEPH_LOCK_IVERSION, CEPH_LOCK_IFILE, CEPH_LOCK_IAUTH, CEPH_LOCK_ILINK, CEPH_LOCK_IDFT,
-    CEPH_LOCK_IXATTR, CEPH_LOCK_ISNAP, CEPH_LOCK_INEST, CEPH_LOCK_IFLOCK, CEPH_LOCK_IPOLICY, 0
+  static const int lock_types[] = {
+    CEPH_LOCK_IQUIESCE,
+    CEPH_LOCK_IVERSION,
+    CEPH_LOCK_IFILE,
+    CEPH_LOCK_IAUTH,
+    CEPH_LOCK_ILINK,
+    CEPH_LOCK_IDFT,
+    CEPH_LOCK_IXATTR,
+    CEPH_LOCK_ISNAP,
+    CEPH_LOCK_INEST,
+    CEPH_LOCK_IFLOCK,
+    CEPH_LOCK_IPOLICY,
+    0
   };
   for (int i = 0; lock_types[i]; ++i) {
     auto lock = get_lock(lock_types[i]);
@@ -2928,11 +2946,18 @@ void CInode::clear_ambiguous_auth()
 }
 
 // auth_pins
-bool CInode::can_auth_pin(int *err_ret) const {
+bool CInode::can_auth_pin(int *err_ret, bool bypassfreezing) const {
   int err;
   if (!is_auth()) {
     err = ERR_NOT_AUTH;
-  } else if (is_freezing_inode() || is_frozen_inode() || is_frozen_auth_pin()) {
+  } else if (is_freezing_inode()) {
+    if (bypassfreezing) {
+      dout(20) << "allowing authpin with freezing" << dendl;
+      err = 0;
+    } else {
+      err = ERR_EXPORTING_INODE;
+    }
+  } else if (is_frozen_inode() || is_frozen_auth_pin()) {
     err = ERR_EXPORTING_INODE;
   } else {
     if (parent)
@@ -3503,13 +3528,23 @@ void CInode::export_client_caps(map<client_t,Capability::Export>& cl)
   }
 }
 
+int CInode::get_caps_quiesce_mask() const
+{
+  if (is_quiesced()) {
+    // what we allow to our clients for a quiesced node
+    return CEPH_CAP_ANY_RD | CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER | CEPH_CAP_PIN;
+  } else {
+    return CEPH_CAP_ANY;
+  }
+}
+
   // caps allowed
 int CInode::get_caps_liked() const
 {
   if (is_dir())
-    return CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED;  // but not, say, FILE_RD|WR|WRBUFFER
+    return get_caps_quiesce_mask() & (CEPH_CAP_PIN | CEPH_CAP_ANY_EXCL | CEPH_CAP_ANY_SHARED); // but not, say, FILE_RD|WR|WRBUFFER
   else
-    return CEPH_CAP_ANY & ~CEPH_CAP_FILE_LAZYIO;
+    return get_caps_quiesce_mask() & (CEPH_CAP_ANY & ~CEPH_CAP_FILE_LAZYIO);
 }
 
 int CInode::get_caps_allowed_ever() const
@@ -3529,30 +3564,33 @@ int CInode::get_caps_allowed_ever() const
 
 int CInode::get_caps_allowed_by_type(int type) const
 {
-  return 
+  return get_caps_quiesce_mask() & (
     CEPH_CAP_PIN |
     (filelock.gcaps_allowed(type) << filelock.get_cap_shift()) |
     (authlock.gcaps_allowed(type) << authlock.get_cap_shift()) |
     (xattrlock.gcaps_allowed(type) << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_allowed(type) << linklock.get_cap_shift());
+    (linklock.gcaps_allowed(type) << linklock.get_cap_shift())
+  );
 }
 
 int CInode::get_caps_careful() const
 {
-  return 
+  return get_caps_quiesce_mask() & (
     (filelock.gcaps_careful() << filelock.get_cap_shift()) |
     (authlock.gcaps_careful() << authlock.get_cap_shift()) |
     (xattrlock.gcaps_careful() << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_careful() << linklock.get_cap_shift());
+    (linklock.gcaps_careful() << linklock.get_cap_shift())
+  );
 }
 
 int CInode::get_xlocker_mask(client_t client) const
 {
-  return 
+  return get_caps_quiesce_mask() & (
     (filelock.gcaps_xlocker_mask(client) << filelock.get_cap_shift()) |
     (authlock.gcaps_xlocker_mask(client) << authlock.get_cap_shift()) |
     (xattrlock.gcaps_xlocker_mask(client) << xattrlock.get_cap_shift()) |
-    (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
+    (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift())
+  );
 }
 
 int CInode::get_caps_allowed_for_client(Session *session, Capability *cap,
@@ -3650,6 +3688,14 @@ int CInode::get_caps_wanted(int *ploner, int *pother, int shift, int mask) const
       other |= p.second;
       //cout << " get_caps_wanted mds " << it->first << " " << cap_string(it->second) << endl;
     }
+
+  // we adjust wanted caps to prevent unnecessary lock transitions
+  // don't worry, when the quiesce lock is dropped
+  // the whole thing will get evaluated again, with a fixed mask
+  loner &= get_caps_quiesce_mask();
+  other &= get_caps_quiesce_mask();
+  w &= get_caps_quiesce_mask();
+
   if (ploner) *ploner = (loner >> shift) & mask;
   if (pother) *pother = (other >> shift) & mask;
   return (w >> shift) & mask;
@@ -4256,7 +4302,6 @@ void CInode::_encode_locks_full(bufferlist& bl)
   encode(nestlock, bl);
   encode(flocklock, bl);
   encode(policylock, bl);
-
   encode(loner_cap, bl);
 }
 void CInode::_decode_locks_full(bufferlist::const_iterator& p)
@@ -4271,7 +4316,6 @@ void CInode::_decode_locks_full(bufferlist::const_iterator& p)
   decode(nestlock, p);
   decode(flocklock, p);
   decode(policylock, p);
-
   decode(loner_cap, p);
   set_loner_cap(loner_cap);
   want_loner_cap = loner_cap;  // for now, we'll eval() shortly.
@@ -4295,6 +4339,7 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl, bool need_recover)
 
 void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
 {
+  // TODO versioning?
   authlock.encode_state_for_replica(bl);
   linklock.encode_state_for_replica(bl);
   dirfragtreelock.encode_state_for_rejoin(bl, rep);
@@ -4321,6 +4366,7 @@ void CInode::_decode_locks_state_for_replica(bufferlist::const_iterator& p, bool
 
   bool need_recover;
   decode(need_recover, p);
+
   if (need_recover && is_new) {
     // Auth mds replicated this inode while it's recovering. Auth mds may take xlock on the lock
     // and change the object when replaying unsafe requests.
@@ -5091,6 +5137,10 @@ void CInode::dump(Formatter *f, int flags) const
     f->open_object_section("policylock");
     policylock.dump(f);
     f->close_section();
+
+    f->open_object_section("quiescelock");
+    quiescelock.dump(f);
+    f->close_section();
   }
 
   if (flags & DUMP_STATE) {
@@ -5403,7 +5453,7 @@ void CInode::setxattr_ephemeral_rand(double probability)
 void CInode::setxattr_ephemeral_dist(bool val)
 {
   ceph_assert(is_dir());
-  _get_projected_inode()->export_ephemeral_distributed_pin = val;
+  _get_projected_inode()->set_ephemeral_distributed_pin(val);
 }
 
 void CInode::set_export_pin(mds_rank_t rank)
@@ -5439,7 +5489,7 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
 
     if (in->get_inode()->export_pin >= 0) {
       return in->get_inode()->export_pin;
-    } else if (in->get_inode()->export_ephemeral_distributed_pin &&
+    } else if (in->get_inode()->get_ephemeral_distributed_pin() &&
 	       mdcache->get_export_ephemeral_distributed_config()) {
       if (in != this)
 	return mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
@@ -5505,7 +5555,7 @@ double CInode::get_ephemeral_rand() const
      * random pin set.
      */
     if (in->get_inode()->export_pin >= 0 ||
-	in->get_inode()->export_ephemeral_distributed_pin)
+	in->get_inode()->get_ephemeral_distributed_pin())
       return 0.0;
 
     in = pdn->get_dir()->inode;

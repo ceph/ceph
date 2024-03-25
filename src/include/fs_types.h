@@ -48,6 +48,7 @@ class JSONObj;
 #define CEPHFS_EFAULT          14
 #define CEPHFS_EISCONN         106
 #define CEPHFS_EMULTIHOP       72
+#define CEPHFS_EINPROGRESS     115
 
 // taken from linux kernel: include/uapi/linux/fcntl.h
 #define CEPHFS_AT_FDCWD        -100    /* Special value used to indicate

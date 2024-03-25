@@ -106,6 +106,7 @@ public:
   static constexpr unsigned FLAG_INTERRUPTED	= 1<<5;
   static constexpr unsigned FLAG_NOTIFYBLOCKING	= 1<<6;
   static constexpr unsigned FLAG_REQBLOCKED	= 1<<7;
+  static constexpr unsigned FLAG_BYPASSFREEZING = 1<<8;
 
   // for locking
   __u16 lock_type;  // lock object type
@@ -160,6 +161,8 @@ public:
   void clear_notify_blocking() const { flags &= ~FLAG_NOTIFYBLOCKING; }
   bool is_req_blocked() const { return (flags & FLAG_REQBLOCKED); }
   void mark_req_blocked() { flags |= FLAG_REQBLOCKED; }
+  bool is_bypassfreezing() const { return (flags & FLAG_BYPASSFREEZING); }
+  void mark_bypassfreezing() { flags |= FLAG_BYPASSFREEZING; }
 
   void set_lock_type(int t) { lock_type = t; }
   const ceph::buffer::list& get_lock_data() const { return inode_export; }

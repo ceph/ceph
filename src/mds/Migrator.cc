@@ -1067,7 +1067,7 @@ void Migrator::dispatch_export_dir(const MDRequestRef& mdr, int count)
     }
     lov.add_rdlock(&dir->get_inode()->dirfragtreelock);
 
-    if (!mds->locker->acquire_locks(mdr, lov, nullptr, true)) {
+    if (!mds->locker->acquire_locks(mdr, lov, nullptr, {}, true)) {
       if (mdr->aborted)
 	export_try_cancel(dir);
       return;
@@ -1223,7 +1223,7 @@ void Migrator::handle_export_discover_ack(const cref_t<MExportDirDiscoverAck> &m
       ceph_assert(g_conf()->mds_kill_export_at != 3);
 
     } else {
-      dout(7) << "peer failed to discover (not active?), canceling" << dendl;
+      dout(7) << "peer failed to discover (not active or quiesced), canceling" << dendl;
       export_try_cancel(dir, false);
     }
   }
@@ -2309,13 +2309,22 @@ void Migrator::handle_export_discover(const cref_t<MExportDirDiscover> &m, bool 
     filepath fpath(m->get_path());
     vector<CDentry*> trace;
     MDRequestRef null_ref;
-    int r = mdcache->path_traverse(null_ref, cf, fpath,
-				   MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_PATH_LOCKED,
-				   &trace);
+    static constexpr int flags = 0
+       | MDS_TRAVERSE_DISCOVER
+       | MDS_TRAVERSE_PATH_LOCKED
+       | MDS_TRAVERSE_IMPORT;
+    int r = mdcache->path_traverse(null_ref, cf, fpath, flags, &trace);
     if (r > 0) return;
     if (r < 0) {
-      dout(7) << "failed to discover or not dir " << m->get_path() << ", NAK" << dendl;
-      ceph_abort();    // this shouldn't happen if the auth pins its path properly!!!!
+      if (r == -CEPHFS_EAGAIN) {
+        dout(5) << "blocking import during quiesce" << dendl;
+        import_reverse_discovering(df);
+        mds->send_message_mds(make_message<MExportDirDiscoverAck>(df, m->get_tid(), false), from);
+        return;
+      } else {
+        dout(7) << "failed to discover or not dir " << m->get_path() << ", NAK" << dendl;
+        ceph_abort();    // this shouldn't happen if the auth pins its path properly!!!!
+      }
     }
 
     ceph_abort(); // this shouldn't happen; the get_inode above would have succeeded.
@@ -3197,6 +3206,14 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 
   DECODE_FINISH(blp);
 
+  // add inode?
+  if (added) {
+    mdcache->add_inode(in);
+    dout(10) << "added " << *in << dendl;
+  } else {
+    dout(10) << "  had " << *in << dendl;
+  }
+
   // link before state  -- or not!  -sage
   if (dn->get_linkage()->get_inode() != in) {
     ceph_assert(!dn->get_linkage()->get_inode());
@@ -3206,14 +3223,6 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   if (in->is_dir())
     dn->dir->pop_lru_subdirs.push_back(&in->item_pop_lru);
  
-  // add inode?
-  if (added) {
-    mdcache->add_inode(in);
-    dout(10) << "added " << *in << dendl;
-  } else {
-    dout(10) << "  had " << *in << dendl;
-  }
-
   if (in->get_inode()->is_dirty_rstat())
     in->mark_dirty_rstat();
 

@@ -287,6 +287,12 @@ MDRequestImpl::More* MDRequestImpl::more()
   return _more;
 }
 
+MDRequestImpl::More const* MDRequestImpl::more() const
+{
+  ceph_assert(_more);
+  return _more;
+}
+
 bool MDRequestImpl::has_more() const
 {
   return _more != nullptr;
@@ -358,9 +364,9 @@ void MDRequestImpl::clear_ambiguous_auth()
   more()->is_ambiguous_auth = false;
 }
 
-bool MDRequestImpl::can_auth_pin(MDSCacheObject *object)
+bool MDRequestImpl::can_auth_pin(MDSCacheObject *object, bool bypassfreezing)
 {
-  return object->can_auth_pin() ||
+  return object->can_auth_pin(nullptr, bypassfreezing) ||
          (is_auth_pinned(object) && has_more() &&
 	  more()->is_freeze_authpin &&
 	  more()->rename_inode == object);
@@ -373,14 +379,14 @@ void MDRequestImpl::drop_local_auth_pins()
   MutationImpl::drop_local_auth_pins();
 }
 
-const filepath& MDRequestImpl::get_filepath()
+const filepath& MDRequestImpl::get_filepath() const
 {
   if (client_request)
     return client_request->get_filepath();
   return more()->filepath1;
 }
 
-const filepath& MDRequestImpl::get_filepath2()
+const filepath& MDRequestImpl::get_filepath2() const
 {
   if (client_request)
     return client_request->get_filepath2();
@@ -472,6 +478,7 @@ void MDRequestImpl::print(ostream &out) const
 void MDRequestImpl::_dump(Formatter *f, bool has_mds_lock) const
 {
   std::lock_guard l(lock);
+  f->dump_int("result", result);
   f->dump_string("flag_point", _get_state_string());
   f->dump_object("reqid", reqid);
   if (client_request) {
@@ -548,6 +555,16 @@ void MDRequestImpl::_dump_op_descriptor(ostream& os) const
     os << "peer_request:" << reqid;
   } else if (internal_op >= 0) {
     os << "internal op " << ceph_mds_op_name(internal_op) << ":" << reqid;
+    if (has_more()) {
+      auto& fp = get_filepath();
+      if (!fp.empty()) {
+        os << " fp=" << fp;
+      }
+      auto& fp2 = get_filepath2();
+      if (!fp2.empty()) {
+        os << " fp2=" << fp2;
+      }
+    }
   } else {
     // drat, it's triggered by a peer request, but we don't have a message
     // FIXME
@@ -606,4 +623,32 @@ void MDLockCache::detach_dirfrags()
     ++i;
   }
   items_dir.reset();
+}
+
+void MDLockCache::print(std::ostream& out) const {
+  out << "MDLockCache(o=" << ceph_mds_op_name(opcode)
+      << " diri=" << diri->ino();
+  if (client_cap) {
+    out << " c=" << client_cap->get_client();
+  } else {
+    out << " c=(nil)";
+  }
+  out << " r=" << ref;
+  if (invalidating) {
+    out << " invalidating";
+  }
+  out << ")";
+}
+
+int MDLockCache::get_cap_bit_for_lock_cache(int opcode)
+{
+  switch(opcode) {
+    case CEPH_MDS_OP_CREATE:
+      return CEPH_CAP_DIR_CREATE;
+    case CEPH_MDS_OP_UNLINK:
+      return CEPH_CAP_DIR_UNLINK;
+    default:
+      ceph_abort("unsupported opcode");
+      return 0;
+  }
 }

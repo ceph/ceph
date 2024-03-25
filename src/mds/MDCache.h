@@ -108,6 +108,8 @@ enum {
   // How many inodes ever completed size recovery
   l_mdc_recovery_completed,
 
+  l_mdss_ireq_quiesce_path,
+  l_mdss_ireq_quiesce_inode,
   l_mdss_ireq_enqueue_scrub,
   l_mdss_ireq_exportdir,
   l_mdss_ireq_flush,
@@ -131,6 +133,7 @@ static const int MDS_TRAVERSE_XLOCK_DENTRY	= (1 << 8);
 static const int MDS_TRAVERSE_RDLOCK_AUTHLOCK	= (1 << 9);
 static const int MDS_TRAVERSE_CHECK_LOCKCACHE	= (1 << 10);
 static const int MDS_TRAVERSE_WANT_INODE	= (1 << 11);
+static const int MDS_TRAVERSE_IMPORT            = (1 << 12);
 
 
 // flags for predirty_journal_parents()
@@ -418,7 +421,6 @@ class MDCache {
     return active_requests.count(rid);
   }
   MDRequestRef request_get(metareqid_t rid);
-  void request_pin_ref(const MDRequestRef& r, CInode *ref, std::vector<CDentry*>& trace);
   void request_finish(const MDRequestRef& mdr);
   void request_forward(const MDRequestRef& mdr, mds_rank_t mds, int port=0);
   void dispatch_request(const MDRequestRef& mdr);
@@ -536,11 +538,23 @@ public:
     void inc_inodes_quiesced() {
       inodes_quiesced++;
     }
+    uint64_t inc_heartbeat_count() {
+      return ++heartbeat_count;
+    }
+    void inc_inodes_blocked() {
+      inodes_blocked++;
+    }
+    void inc_inodes_dropped() {
+      inodes_dropped++;
+    }
     uint64_t get_inodes() const {
       return inodes;
     }
     uint64_t get_inodes_quiesced() const {
       return inodes_quiesced;
+    }
+    uint64_t get_inodes_blocked() const {
+      return inodes_blocked;
     }
     void add_failed(const MDRequestRef& mdr, int rc) {
       failed[mdr] = rc;
@@ -555,6 +569,8 @@ public:
     void dump(Formatter* f) const {
       f->dump_unsigned("inodes", inodes);
       f->dump_unsigned("inodes_quiesced", inodes_quiesced);
+      f->dump_unsigned("inodes_blocked", inodes_blocked);
+      f->dump_unsigned("inodes_dropped", inodes_dropped);
       f->open_array_section("failed");
       for (auto& [mdr, rc] : failed) {
         f->open_object_section("failure");
@@ -565,8 +581,11 @@ public:
       f->close_section();
     }
 private:
+    uint64_t heartbeat_count = 0;
     uint64_t inodes = 0;
     uint64_t inodes_quiesced = 0;
+    uint64_t inodes_blocked = 0;
+    uint64_t inodes_dropped = 0;
     std::map<MDRequestRef, int> failed;
   };
   class C_MDS_QuiescePath : public MDSInternalContext {
@@ -575,7 +594,7 @@ private:
       MDSInternalContext(c->mds), cache(c), finisher(_finisher) {}
     ~C_MDS_QuiescePath() {
       if (finisher) {
-        finisher->complete(-ECANCELED);
+        finisher->complete(-CEPHFS_ECANCELED);
         finisher = nullptr;
       }
     }
@@ -588,12 +607,25 @@ private:
         finisher = nullptr;
       }
     }
-    QuiesceStatistics qs;
+    std::shared_ptr<QuiesceStatistics> qs = std::make_shared<QuiesceStatistics>();
     MDCache *cache;
     MDRequestRef mdr;
     Context* finisher = nullptr;
   };
-  MDRequestRef quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *f = nullptr, std::chrono::milliseconds delay = 0ms) { c->complete(-ENOTSUP); return nullptr; }
+  MDRequestRef quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *f = nullptr, std::chrono::milliseconds delay = 0ms);
+  MDRequestRef get_quiesce_inode_op(CInode* in) {
+    if (in->is_quiesced()) {
+      auto mut = in->quiescelock.get_xlock_by();
+      ceph_assert(mut); /* that would be weird */
+      auto* mdr = dynamic_cast<MDRequestImpl*>(mut.get());
+      ceph_assert(mdr); /* also would be weird */
+      ceph_assert(mdr->internal_op == CEPH_MDS_OP_QUIESCE_INODE);
+      return MDRequestRef(mdr);
+    } else {
+      return MDRequestRef();
+    }
+  }
+  void add_quiesce(CInode* parent, CInode* in);
 
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
@@ -1436,8 +1468,8 @@ private:
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 
-  void dispatch_quiesce_path(const MDRequestRef& mdr) { }
-  void dispatch_quiesce_inode(const MDRequestRef& mdr) { }
+  void dispatch_quiesce_path(const MDRequestRef& mdr);
+  void dispatch_quiesce_inode(const MDRequestRef& mdr);
 
   void upkeep_main(void);
 
@@ -1480,6 +1512,10 @@ private:
   std::atomic<bool> upkeep_trim_shutdown{false};
 
   uint64_t kill_shutdown_at = 0;
+
+  DecayCounter quiesce_counter;
+  uint64_t quiesce_threshold;
+  std::chrono::milliseconds quiesce_sleep;
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {
