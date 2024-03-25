@@ -1073,7 +1073,7 @@ public:
 
     void bound_encode_spanning_blobs(size_t& p);
     void encode_spanning_blobs(ceph::buffer::list::contiguous_appender& p);
-    BlobRef get_spanning_blob(int id) {
+    BlobRef& get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
       ceph_assert(p != spanning_blob_map.end());
       return p->second;
@@ -1479,19 +1479,19 @@ private:
       _trim_to(0);
     }
 
-    virtual void shift_bins() {
+    void shift_bins() {
       std::lock_guard l(lock);
       age_bins.push_front(std::make_shared<int64_t>(0));
     }
-    virtual uint32_t get_bin_count() {
+    uint32_t get_bin_count() {
       std::lock_guard l(lock);
       return age_bins.capacity();
     }
-    virtual void set_bin_count(uint32_t count) {
+    void set_bin_count(uint32_t count) {
       std::lock_guard l(lock);
       age_bins.set_capacity(count);
     }
-    virtual uint64_t sum_bins(uint32_t start, uint32_t end) {
+    uint64_t sum_bins(uint32_t start, uint32_t end) {
       std::lock_guard l(lock);
       auto size = age_bins.size();
       if (size < start) {
