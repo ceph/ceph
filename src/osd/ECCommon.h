@@ -677,7 +677,6 @@ struct ECCommon {
     ReadPipeline &read_pipeline;
     // TODO: lay an interface down here
     ECListener *parent;
-    ECBackend *ecbackend;
 
     ECListener *get_parent() const { return parent; }
 
@@ -701,8 +700,7 @@ struct ECCommon {
                     ceph::ErasureCodeInterfaceRef ec_impl,
                     const ECUtil::stripe_info_t &sinfo,
                     ReadPipeline &read_pipeline,
-                    ECListener *parent,
-                    ECBackend *ecbackend);
+                    ECListener *parent);
 
     struct RecoveryOp {
       hobject_t hoid;
