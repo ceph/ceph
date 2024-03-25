@@ -3213,6 +3213,14 @@ class CephManager:
         j = json.loads(out)
         return j['quorum']
 
+    def get_mon_quorum_names(self):
+        """
+        Extract monitor quorum names from the cluster
+        """
+        out = self.raw_cluster_cmd('quorum_status')
+        j = json.loads(out)
+        return j['quorum_names']
+
     def wait_for_mon_quorum_size(self, size, timeout=300):
         """
         Loop until quorum size is reached.
