@@ -188,10 +188,9 @@ class ECBackend : public ECCommon {
                       ReadPipeline &read_pipeline,
                       UnstableHashInfoRegistry &unstable_hashinfo_registry,
                       PGBackend::Listener *parent,
-                      ECBackend *ecbackend)
+                      ECBackend *)
       : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline,
-                        unstable_hashinfo_registry, parent->get_eclistener(),
-                        ecbackend),
+                        unstable_hashinfo_registry, parent->get_eclistener()),
         parent(parent) {}
 
     void commit_txn_send_replies(

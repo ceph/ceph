@@ -115,16 +115,14 @@ ECBackend::RecoveryBackend::RecoveryBackend(
   const ECUtil::stripe_info_t &sinfo,
   ReadPipeline &read_pipeline,
   UnstableHashInfoRegistry &unstable_hashinfo_registry,
-  ECListener *parent,
-  ECBackend *ecbackend)
+  ECListener *parent)
   : cct(cct),
     coll(coll),
     ec_impl(std::move(ec_impl)),
     sinfo(sinfo),
     read_pipeline(read_pipeline),
     unstable_hashinfo_registry(unstable_hashinfo_registry),
-    parent(parent),
-    ecbackend(ecbackend) {}
+    parent(parent) {}
 
 ECCommon::RecoveryBackend::ECRecoveryHandle *ECBackend::RecoveryBackend::open_recovery_op() {
   return new ECRecoveryHandle;
@@ -547,15 +545,10 @@ void ECBackend::RecoveryBackend::continue_recovery_op(
       if (op.recovery_progress.first && op.obc) {
         op.xattrs = op.obc->attr_cache;
         if (sinfo.require_hinfo()) {
-          if (auto [r, attrs, size] = ecbackend->get_attrs_n_size_from_disk(
-              op.hoid);
-            r >= 0 || r == -ENOENT) {
-            op.hinfo = unstable_hashinfo_registry.get_hash_info(
-              op.hoid, false, attrs, size);
-          } else {
-            derr << __func__ << ": can't stat-or-getattr on " << op.hoid <<
-          dendl;
-          }
+          // need to use the `xattrs` instead of the `obc::attr_cache` as
+          // the key for hinfo gets filtered out. grep for `sanitized_attrs`
+          op.hinfo = unstable_hashinfo_registry.get_hash_info(
+            op.hoid, false, op.xattrs, op.recovery_info.size);
           if (!op.hinfo) {
             derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
                << dendl;
