@@ -13,9 +13,9 @@ export class UsageBarComponent implements OnChanges {
   @Input()
   used: any;
   @Input()
-  warningThreshold: number;
+  warningThreshold?: number;
   @Input()
-  errorThreshold: number;
+  errorThreshold?: number;
   @Input()
   isBinary = true;
   @Input()
