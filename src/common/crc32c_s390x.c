@@ -1,3 +1,14 @@
+/*
+ * CRC-32 algorithm implemented with the z/Architecture
+ * Vector Extension Facility.
+ *
+ * Copyright IBM Corp. 2024
+ * Author(s): Hendrik Brueckner <brueckner@linux.vnet.ibm.com>
+ *            Anton Blanchard <anton@au.ibm.com>
+ *            Bryan Chan <bryan.chan@ca.ibm.com>
+ *            Chris Zou <chriszou@ca.ibm.com>
+ *            Aliaksei Makarau <aliaksei.makarau@ibm.com>
+ */
 #include <sys/types.h>
 #include <endian.h>
 #include "crc32c_s390x.h"
