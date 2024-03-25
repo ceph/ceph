@@ -224,6 +224,7 @@ void MDCache::log_stat()
     mds->logger->set(l_mds_root_rbytes, root->get_inode()->rstat.rbytes);
     mds->logger->set(l_mds_root_rsnaps, root->get_inode()->rstat.rsnaps);
   }
+  logger->set(l_mdc_size, cache_size());
 }
 
 
@@ -13363,6 +13364,9 @@ void MDCache::register_perfcounters()
                         "Internal Request type frag stats");
     pcb.add_u64_counter(l_mdss_ireq_inodestats, "ireq_inodestats",
                         "Internal Request type inode stats");
+
+    pcb.add_u64_counter(l_mdc_size, "size",
+                        "Cache size");
 
     logger.reset(pcb.create_perf_counters());
     g_ceph_context->get_perfcounters_collection()->add(logger.get());

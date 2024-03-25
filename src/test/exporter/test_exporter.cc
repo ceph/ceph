@@ -255,6 +255,7 @@ static std::vector<std::pair<std::string, std::string>> promethize_data = {
   {"mds_cache.strays_enqueued", "ceph_mds_cache_strays_enqueued"},
   {"mds_cache.strays_migrated", "ceph_mds_cache_strays_migrated"},
   {"mds_cache.strays_reintegrated", "ceph_mds_cache_strays_reintegrated"},
+  {"mds_cache.size", "ceph_mds_cache_size"},
   {"mds_log.ev", "ceph_mds_log_ev"},
   {"mds_log.evadd", "ceph_mds_log_evadd"},
   {"mds_log.evex", "ceph_mds_log_evex"},

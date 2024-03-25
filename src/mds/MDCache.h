@@ -115,6 +115,9 @@ enum {
   l_mdss_ireq_fragstats,
   l_mdss_ireq_inodestats,
 
+  // cache size
+  l_mdc_size,
+
   l_mdc_last,
 };
 
