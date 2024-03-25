@@ -2279,13 +2279,28 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       /* fetches the entry pointed to by head.bucket */
       ret = sal_lc->get_entry(lc_shard, head->get_marker(), &entry);
       if (ret == -ENOENT) {
-        ret = sal_lc->get_next_entry(lc_shard, head->get_marker(), &entry);
-        if (ret < 0) {
-          ldpp_dout(this, 0) << "RGWLC::process() sal_lc->get_next_entry(lc_shard, "
-                             << "head.marker, entry) returned error ret==" << ret
-                             << dendl;
-          goto exit;
-        }
+        /* skip to next entry */
+	std::unique_ptr<rgw::sal::Lifecycle::LCEntry> tmp_entry = sal_lc->get_entry();
+	tmp_entry->set_bucket(head->get_marker());
+	if (advance_head(lc_shard, *head.get(), *tmp_entry.get(), now) < 0) {
+	  goto exit;
+	}
+	/* done with this shard */
+	if (head->get_marker().empty()) {
+	  ldpp_dout(this, 5) <<
+	      "RGWLC::process() next_entry not found. cycle finished lc_shard="
+			       << lc_shard << " worker=" << worker->ix
+			       << dendl;
+          head->set_shard_rollover_date(ceph_clock_now());
+          ret = sal_lc->put_head(lc_shard, *head.get());
+          if (ret < 0) {
+	    ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
+                               << lc_shard
+			       << dendl;
+	  }
+	  goto exit;
+	}
+	continue;
       }
       if (ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::process() sal_lc->get_entry(lc_shard, head.marker, entry) "
