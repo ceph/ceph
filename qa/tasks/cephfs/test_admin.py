@@ -2028,6 +2028,61 @@ class TestPermErrMsg(CephFSTestCase):
                 errmsgs=self.EXPECTED_ERRMSG)
 
 
+class TestFSFail(TestAdminCommands):
+
+    CLIENTS_REQUIRED = 1
+
+    def test_with_health_warn_oversize_cache(self):
+        health_warn = 'MDS_CACHE_OVERSIZED'
+        self.run_ceph_cmd('config set mds mds_cache_memory_limit 10M')
+        self.run_ceph_cmd('config set mds mds_health_cache_threshold 1.00000')
+        tar_link = 'https://download.ceph.com/qa/linux-6.5.11.tar.xz'
+        tar_name = 'linux-6.5.11.tar.xz'
+        #self.mount_a.run_shell(f'wget {tar_link} ')
+        self.mount_a.run_shell(f'cp ~/Downloads/{tar_name} ./')
+        self.mount_a.run_shell(args=f'tar -xv -f {tar_name}', timeout=10,
+                               terminate=True)
+
+        self.wait_till_health_warn(health_warn)
+        # XXX: run this beforehand because unmounting attempted during
+        # teardown will get stuck after "ceph fs fail --yes-i-really-mean-it"
+        # runs successfully.
+        self.mount_a.umount_wait()
+
+        # actual testing begins now.
+        # test that "fs fail" fails without confirmation flag.
+        errmsg = 'mds_health_cache_oversized'
+        self.negtest_ceph_cmd(args=f'fs fail {self.fs.name}',
+                              retval=1, errmsgs=errmsg)
+        # test that "fs fail" passes with confirmation flag.
+        self.run_ceph_cmd(f'fs fail {self.fs.name} --yes-i-really-mean-it')
+
+    def test_with_health_warn_trim(self):
+        health_warn = 'MDS_TRIM'
+        tar_link = 'https://download.ceph.com/qa/linux-6.5.11.tar.xz'
+        tar_name = 'linux-6.5.11.tar.xz'
+        #self.mount_a.run_shell(f'wget {tar_link} ')
+        # this line is useful when repeatedly running this test locally with
+        # vstart_runner.py
+        self.mount_a.run_shell(f'cp ~/Downloads/{tar_name} ./')
+        self.mount_a.run_shell(args=f'tar -xv -f {tar_name}', timeout=10,
+                               terminate=True)
+
+        self.wait_till_health_warn(health_warn)
+        # XXX: run this beforehand because unmounting attempted during
+        # teardown will get stuck after "ceph fs fail --yes-i-really-mean-it"
+        # runs successfully.
+        self.mount_a.umount_wait()
+
+        # actual testing begins now.
+        # test that "fs fail" fails without confirmation flag.
+        errmsg = 'mds_health_trim'
+        self.negtest_ceph_cmd(args=f'fs fail {self.fs.name}',
+                              retval=1, errmsgs=errmsg)
+        # test that "fs fail" passes with confirmation flag.
+        self.run_ceph_cmd(f'fs fail {self.fs.name} --yes-i-really-mean-it')
+
+
 class TestMDSFail(TestAdminCommands):
 
     CLIENTS_REQUIRED = 1
