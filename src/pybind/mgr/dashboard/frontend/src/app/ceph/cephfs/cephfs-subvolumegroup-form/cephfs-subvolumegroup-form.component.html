@@ -1,0 +1,148 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content"
+                *cdFormLoading="loading">
+    <form name="subvolumegroupForm"
+          #formDir="ngForm"
+          [formGroup]="subvolumegroupForm"
+          novalidate>
+      <div class="modal-body">
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="subvolumegroupName"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="subvolumegroup name..."
+                   id="subvolumegroupName"
+                   name="subvolumegroupName"
+                   formControlName="subvolumegroupName"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'notUnique')"
+                  i18n>The subvolume group already exists.</span>
+            <span *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>Subvolume name can only contain letters, numbers, '.', '-' or '_'</span>
+          </div>
+        </div>
+
+        <!-- Volume name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="volumeName"
+                 i18n>Volume name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   id="volumeName"
+                   name="volumeName"
+                   formControlName="volumeName">
+          </div>
+        </div>
+
+        <!-- Size -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="size"
+                 i18n>Size
+            <cd-helper>The size of the subvolume group is specified by setting a quota on it.
+            If left blank or put 0, then quota will be infinite</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   id="size"
+                   name="size"
+                   formControlName="size"
+                   i18n-placeholder
+                   placeholder="e.g., 10GiB"
+                   defaultUnit="GiB"
+                   cdDimlessBinary>
+            <span *ngIf="subvolumegroupForm.showError('size', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
+          </div>
+        </div>
+
+        <!-- CephFS Pools -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="pool"
+                 i18n>Pool
+            <cd-helper>By default, the data_pool_layout of the parent directory is selected.</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="pool"
+                    name="pool"
+                    formControlName="pool">
+              <option *ngFor="let pool of dataPools"
+                      [value]="pool.pool">{{ pool.pool }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- UID -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="uid"
+                 i18n>UID</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="number"
+                   placeholder="subvolumegroup UID..."
+                   id="uid"
+                   name="uid"
+                   formControlName="uid">
+          </div>
+        </div>
+
+        <!-- GID -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="gid"
+                 i18n>GID</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="number"
+                   placeholder="subvolumegroup GID..."
+                   id="gid"
+                   name="gid"
+                   formControlName="gid">
+          </div>
+        </div>
+
+        <!-- Mode -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="mode"
+                 i18n>Mode
+            <cd-helper>Permissions for the directory. Default mode is 755 which is rwxr-xr-x</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <cd-checked-table-form [data]="scopePermissions"
+                                   [columns]="columns"
+                                   [form]="subvolumegroupForm"
+                                   inputField="mode"
+                                   [isTableForOctalMode]="true"
+                                   [initialValue]="initialMode"
+                                   [scopes]="scopes"
+                                   [isDisabled]="isEdit"></cd-checked-table-form>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="subvolumegroupForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
