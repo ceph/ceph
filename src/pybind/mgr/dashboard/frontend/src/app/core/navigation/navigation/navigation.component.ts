@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import * as _ from 'lodash';
 import { Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
+import { SettingsService } from '~/app/shared/api/settings.service';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { MultiCluster } from '~/app/shared/models/multi-cluster';
@@ -58,7 +59,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
     private telemetryNotificationService: TelemetryNotificationService,
     public prometheusAlertService: PrometheusAlertService,
     private motdNotificationService: MotdNotificationService,
-    private cookieService: CookiesService
+    private cookieService: CookiesService,
+    private settingsService: SettingsService
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -212,6 +214,14 @@ export class NavigationComponent implements OnInit, OnDestroy {
       () => {
         this.multiClusterService.refresh();
         this.summaryService.refresh();
+
+        // force refresh grafana api url to get the correct url for the selected cluster
+        this.settingsService.ifSettingConfigured(
+          'api/grafana/url',
+          () => {},
+          () => {},
+          true
+        );
         const currentRoute = this.router.url.split('?')[0];
         if (currentRoute.includes('dashboard')) {
           this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
