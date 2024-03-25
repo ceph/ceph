@@ -91,6 +91,21 @@ class TestAdminCommands(CephFSTestCase):
         if overwrites:
             self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
+    def wait_till_health_warn(self, health_warn, sleep=3, tries=10):
+        errmsg = (f'Expected health warning "{health_warn}" to eventually '
+                  'show up in output of command "ceph health detail". Tried '
+                  f'{tries} times with interval of {sleep} seconds but the '
+                  'health warning didn\'t turn up.')
+
+        with safe_while(sleep=3, tries=20, action=errmsg) as proceed:
+            while proceed():
+                health_report = self.get_ceph_cmd_stdout('health detail')
+                log.info(f'health_report -\n{health_report}')
+                cache_report = self.get_ceph_cmd_stdout('tell mds.a cache status')
+                log.info(f'cache_report -\n{cache_report}')
+                if health_warn in health_report:
+                    return True
+
 @classhook('_add_valid_tell')
 class TestValidTell(TestAdminCommands):
     @classmethod
@@ -2011,3 +2026,64 @@ class TestPermErrMsg(CephFSTestCase):
                 args=(f'fs authorize {self.fs.name} {self.CLIENT_NAME} / '
                       f'{wrong_perm}'), retval=self.EXPECTED_ERRNO,
                 errmsgs=self.EXPECTED_ERRMSG)
+
+
+class TestMDSFail(TestAdminCommands):
+
+    def test_with_health_warn_oversize_cache(self):
+        self.fs.set_max_mds(1)
+        self.fs.wait_for_daemons()
+        active_mds_id = self.fs.get_active_names()[0]
+
+        health_warn = 'MDS_CACHE_OVERSIZED'
+        self.run_ceph_cmd('config set mds mds_cache_memory_limit 10M')
+        self.run_ceph_cmd('config set mds mds_health_cache_threshold 1.00000')
+        tar_link = 'https://download.ceph.com/qa/linux-6.5.11.tar.xz'
+        tar_name = 'linux-6.5.11.tar.xz'
+        #self.mount_a.run_shell(f'wget {tar_link} ')
+        self.mount_a.run_shell(f'cp ~/Downloads/{tar_name} ./')
+        self.mount_a.run_shell(args=f'tar -xv -f {tar_name}', timeout=10,
+                               terminate=True)
+
+        self.wait_till_health_warn(health_warn)
+        # XXX: run this beforehand because unmounting attempted during
+        # teardown will get stuck after "ceph fs fail --yes-i-really-mean-it"
+        # runs successfully.
+        self.mount_a.umount_wait()
+
+        # actual testing begins now.
+        # test that "fs fail" fails without confirmation flag.
+        errmsg = 'mds_health_cache_oversized'
+        self.negtest_ceph_cmd(args=f'mds fail {active_mds_id}',
+                              retval=1, errmsgs=errmsg)
+        # test that "fs fail" passes with confirmation flag.
+        self.run_ceph_cmd(f'mds fail {self.fs.name} --yes-i-really-mean-it')
+
+    def test_with_health_warn_trim(self):
+        self.fs.set_max_mds(1)
+        self.fs.wait_for_daemons()
+        active_mds_id = self.fs.get_active_names()[0]
+
+        health_warn = 'MDS_TRIM'
+        tar_link = 'https://download.ceph.com/qa/linux-6.5.11.tar.xz'
+        tar_name = 'linux-6.5.11.tar.xz'
+        #self.mount_a.run_shell(f'wget {tar_link} ')
+        # this line is useful when repeatedly running this test locally with
+        # vstart_runner.py
+        self.mount_a.run_shell(f'cp ~/Downloads/{tar_name} ./')
+        self.mount_a.run_shell(args=f'tar -xv -f {tar_name}', timeout=10,
+                               terminate=True)
+
+        self.wait_till_health_warn(health_warn)
+        # XXX: run this beforehand because unmounting attempted during
+        # teardown will get stuck after "ceph fs fail --yes-i-really-mean-it"
+        # runs successfully.
+        self.mount_a.umount_wait()
+
+        # actual testing begins now.
+        # test that "fs fail" fails without confirmation flag.
+        errmsg = 'mds_health_trim'
+        self.negtest_ceph_cmd(args=f'mds fail {active_mds_id}',
+                              retval=1, errmsgs=errmsg)
+        # test that "fs fail" passes with confirmation flag.
+        self.run_ceph_cmd(f'mds fail {self.fs.name} --yes-i-really-mean-it')
