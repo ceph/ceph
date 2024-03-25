@@ -105,10 +105,11 @@ struct ECListener {
      virtual void pg_add_num_bytes(int64_t num_bytes) = 0;
      //virtual void pg_sub_num_bytes(int64_t num_bytes) = 0;
      virtual void inc_osd_stat_repaired() = 0;
-
+#endif
    virtual void add_temp_obj(const hobject_t &oid) = 0;
    virtual void clear_temp_obj(const hobject_t &oid) = 0;
-     virtual epoch_t get_last_peering_reset_epoch() const = 0;
+#ifndef WITH_CRIMSON
+   virtual epoch_t get_last_peering_reset_epoch() const = 0;
 #endif
 
   // XXX
