@@ -173,7 +173,6 @@ The output will resemble the following::
    .. prompt:: bash #
 
       ceph osd pool set .mgr crush_rule replicated-ssd
-      ceph osd pool set pool 1 crush_rule to replicated-ssd
 
    This intervention will result in a small amount of backfill, but
    typically this traffic completes quickly.
