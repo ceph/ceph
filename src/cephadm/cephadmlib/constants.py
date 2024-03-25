@@ -18,6 +18,7 @@ DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
 DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
 DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
+DEFAULT_SMB_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
 DEFAULT_REGISTRY = 'docker.io'  # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 

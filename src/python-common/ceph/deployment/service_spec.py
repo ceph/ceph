@@ -753,12 +753,54 @@ class ServiceSpec(object):
     This structure is supposed to be enough information to
     start the services.
     """
-    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi nvmeof loki promtail mds mgr mon nfs ' \
-                          'node-exporter osd prometheus rbd-mirror rgw agent ceph-exporter ' \
-                          'container ingress cephfs-mirror snmp-gateway jaeger-tracing ' \
-                          'elasticsearch jaeger-agent jaeger-collector jaeger-query ' \
-                          'node-proxy'.split()
-    REQUIRES_SERVICE_ID = 'iscsi nvmeof mds nfs rgw container ingress '.split()
+
+    # list of all service type names that a ServiceSpec can be cast info
+    KNOWN_SERVICE_TYPES = [
+        'agent',
+        'alertmanager',
+        'ceph-exporter',
+        'cephfs-mirror',
+        'container',
+        'crash',
+        'elasticsearch',
+        'grafana',
+        'ingress',
+        'iscsi',
+        'jaeger-agent',
+        'jaeger-collector',
+        'jaeger-query',
+        'jaeger-tracing',
+        'loki',
+        'mds',
+        'mgr',
+        'mon',
+        'nfs',
+        'node-exporter',
+        'node-proxy',
+        'nvmeof',
+        'osd',
+        'prometheus',
+        'promtail',
+        'rbd-mirror',
+        'rgw',
+        'smb',
+        'snmp-gateway',
+    ]
+
+    # list of all service type names that require/get assigned a service_id value.
+    # if a service is not listed here it *will not* be assigned a service_id even
+    # if it is present in the JSON/YAML input
+    REQUIRES_SERVICE_ID = [
+        'container',
+        'ingress',
+        'iscsi',
+        'mds',
+        'nfs',
+        'nvmeof',
+        'rgw',
+        'smb',
+    ]
+
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
@@ -790,6 +832,7 @@ class ServiceSpec(object):
             'jaeger-collector': TracingSpec,
             'jaeger-query': TracingSpec,
             'jaeger-tracing': TracingSpec,
+            SMBSpec.service_type: SMBSpec,
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise SpecValidationError('Spec needs a "service_type" key.')
@@ -2410,3 +2453,85 @@ class CephExporterSpec(ServiceSpec):
 
 
 yaml.add_representer(CephExporterSpec, ServiceSpec.yaml_representer)
+
+
+class SMBSpec(ServiceSpec):
+    service_type = 'smb'
+    _valid_features = {'domain'}
+
+    def __init__(
+        self,
+        # --- common service spec args ---
+        service_type: str = 'smb',
+        service_id: Optional[str] = None,
+        placement: Optional[PlacementSpec] = None,
+        count: Optional[int] = None,
+        config: Optional[Dict[str, str]] = None,
+        unmanaged: bool = False,
+        preview_only: bool = False,
+        networks: Optional[List[str]] = None,
+        # --- smb specific values ---
+        # cluster_id - a name identifying the smb "cluster" this daemon
+        # is part of. A cluster may be made up of one or more services
+        # sharing a common configuration.
+        cluster_id: str = '',
+        # features - a list of terms enabling specific deployment features.
+        # terms include: 'domain' to enable Active Dir. Domain membership.
+        features: Optional[List[str]] = None,
+        # config_uri - a pseudo-uri that resolves to a configuration source
+        # that the samba-container can load. A ceph based samba container will
+        # be typically storing configuration in rados (rados:// prefix)
+        config_uri: str = '',
+        # join_sources - a list of pseudo-uris that resolve to a (JSON) blob
+        # containing data the samba-container can use to join a domain. A ceph
+        # based samba container may typically use a rados uri or a mon
+        # config-key store uri (example:
+        # `rados:mon-config-key:smb/config/mycluster/join1.json`).
+        join_sources: Optional[List[str]] = None,
+        # custom_dns -  a list of IP addresses that will be set up as custom
+        # dns servers for the samba container.
+        custom_dns: Optional[List[str]] = None,
+        # include_ceph_users - A list of ceph auth entity names that will be
+        # automatically added to the ceph keyring provided to the samba
+        # container.
+        include_ceph_users: Optional[List[str]] = None,
+        # --- genearal tweaks ---
+        extra_container_args: Optional[GeneralArgList] = None,
+        extra_entrypoint_args: Optional[GeneralArgList] = None,
+        custom_configs: Optional[List[CustomConfig]] = None,
+    ) -> None:
+        if service_type != self.service_type:
+            raise ValueError(f'invalid service_type: {service_type!r}')
+        super().__init__(
+            self.service_type,
+            service_id=service_id,
+            placement=placement,
+            count=count,
+            config=config,
+            unmanaged=unmanaged,
+            preview_only=preview_only,
+            networks=networks,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs,
+        )
+        self.cluster_id = cluster_id
+        self.features = features or []
+        self.config_uri = config_uri
+        self.join_sources = join_sources or []
+        self.custom_dns = custom_dns or []
+        self.include_ceph_users = include_ceph_users or []
+        self.validate()
+
+    def validate(self) -> None:
+        if not self.cluster_id:
+            raise ValueError('a valid cluster_id is required')
+        if not self.config_uri:
+            raise ValueError('a valid config_uri is required')
+        if self.features:
+            invalid = set(self.features).difference(self._valid_features)
+            if invalid:
+                raise ValueError(f'invalid feature flags: {", ".join(invalid)}')
+
+
+yaml.add_representer(SMBSpec, ServiceSpec.yaml_representer)

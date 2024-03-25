@@ -906,3 +906,65 @@ def test_daemon_sub_id_systemd_names():
     )
     with pytest.raises(ValueError):
         dsi.service_name
+
+
+@pytest.mark.parametrize(
+    "args,new_arg,expected",
+    [
+        (['--foo=77'], '--bar', ['--foo=77', '--bar']),
+        (['--foo=77'], '--foo=12', ['--foo=12']),
+        (
+            ['--foo=77', '--quux=later', '--range=2-5'],
+            '--quux=now',
+            ['--foo=77', '--range=2-5', '--quux=now'],
+        ),
+        (
+            ['--foo=77', '--quux', 'later', '--range=2-5'],
+            '--quux=now',
+            ['--foo=77', '--range=2-5', '--quux=now'],
+        ),
+        (
+            ['--foo=77', '--quux', 'later', '--range=2-5'],
+            '--jiffy',
+            ['--foo=77', '--quux', 'later', '--range=2-5', '--jiffy'],
+        ),
+        (
+            ['--foo=77', '--quux=buff', '--range=2-5'],
+            '--quux',
+            ['--foo=77', '--range=2-5', '--quux'],
+        ),
+    ],
+)
+def test_replace_container_args(args, new_arg, expected):
+    from cephadmlib.container_types import _replace_container_arg
+
+    _args = list(args)  # preserve the input so test input is not mutated
+    _replace_container_arg(_args, new_arg)
+    assert _args == expected
+
+
+
+def test_enable_shared_namespaces():
+    from cephadmlib.container_types import enable_shared_namespaces, Namespace
+
+    args = []
+    enable_shared_namespaces(args, 'c001d00d', {Namespace.ipc})
+    assert args == ['--ipc=container:c001d00d']
+
+    enable_shared_namespaces(
+        args, 'c001d00d', [Namespace.uts, Namespace.network]
+    )
+    assert args == [
+        '--ipc=container:c001d00d',
+        '--uts=container:c001d00d',
+        '--network=container:c001d00d',
+    ]
+
+    enable_shared_namespaces(
+        args, 'badd33d5', [Namespace.network]
+    )
+    assert args == [
+        '--ipc=container:c001d00d',
+        '--uts=container:c001d00d',
+        '--network=container:badd33d5',
+    ]
