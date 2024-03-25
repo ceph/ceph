@@ -769,16 +769,6 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
  *    - No scrubbing is performed in this state, but reservation-related
  *      events are handled.
  *
- *    - sub-states:
- *      * ReplicaUnreserved - not reserved by a primary. In this state we
- *        are waiting for either a reservation request, or a chunk scrub op.
- *
- *      * ReplicaWaitingReservation - a reservation request was received from
- *        our primary. We expect a ' go ahead' from the reserver, or a
- *        cancellation command from the primary (or an interval change).
- *
- *      * ReplicaReserved - we are reserved by a primary.
- *
  *  - ReplicaActiveOp - handling a single map request op
  *      * ReplicaWaitUpdates
  *      * ReplicaBuildingMap
@@ -826,9 +816,6 @@ struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
   explicit ReplicaActive(my_context ctx);
   ~ReplicaActive();
 
-  /// handle a 'release' from a primary
-  void on_release(const ReplicaRelease& ev);
-
   /**
    * cancel a granted or pending reservation
    *
@@ -842,10 +829,17 @@ struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
   using reactions = mpl::list<
       sc::transition<IntervalChanged, NotActive>,
       sc::custom_reaction<ReserverGranted>,
-      sc::custom_reaction<ReplicaReserveReq>>;
+      sc::custom_reaction<ReplicaReserveReq>,
+      sc::custom_reaction<ReplicaRelease>>;
 
   /// handle a reservation request from a primary
   sc::result react(const ReplicaReserveReq& ev);
+
+  /*
+   * the Primary released the reservation.
+   * Note: The ActiveReplicaOp state will handle this event as well.
+   */
+  sc::result react(const ReplicaRelease&);
 
   /**
    * the queued reservation request was granted by the async reserver.
@@ -942,12 +936,9 @@ struct ReplicaUnreserved : sc::state<ReplicaUnreserved, ReplicaIdle>,
   explicit ReplicaUnreserved(my_context ctx);
 
   using reactions = mpl::list<
-      sc::custom_reaction<StartReplica>,
-      // unexpected (bug-induced) events:
-      sc::custom_reaction<ReplicaRelease>>;
+      sc::custom_reaction<StartReplica>>;
 
   sc::result react(const StartReplica& ev);
-  sc::result react(const ReplicaRelease&);
 };
 
 /**
@@ -968,11 +959,8 @@ struct ReplicaWaitingReservation
   explicit ReplicaWaitingReservation(my_context ctx);
 
   using reactions = mpl::list<
-      // the 'normal' (expected) events:
-      sc::custom_reaction<ReplicaRelease>,
       sc::custom_reaction<StartReplica>>;
 
-  sc::result react(const ReplicaRelease& ev);
   sc::result react(const StartReplica& ev);
 };
 
@@ -990,10 +978,8 @@ struct ReplicaReserved : sc::state<ReplicaReserved, ReplicaIdle>, NamedSimply {
   explicit ReplicaReserved(my_context ctx);
 
   using reactions = mpl::list<
-      sc::custom_reaction<StartReplica>,
-      sc::custom_reaction<ReplicaRelease>>;
+      sc::custom_reaction<StartReplica>>;
 
-  sc::result react(const ReplicaRelease&);
   sc::result react(const StartReplica& eq);
 };
 
@@ -1029,10 +1015,8 @@ struct ReplicaActiveOp
 
   /**
    * a 'release' was send by the primary. Possible scenario: 'no-scrub'
-   * abort. Our two-steps reaction:
-   * - we exit the 'ActiveOp' state, and
-   * - we make sure the 'release' is remembered, to be handled by the state
-   *   we would transition into (which should be ReplicaReserved).
+   * abort. We abort the current chunk handling and re-enter ReplicaActive,
+   * releasing the reservation on the way.
    */
   sc::result react(const ReplicaRelease&);
 
