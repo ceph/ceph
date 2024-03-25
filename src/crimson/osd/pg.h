@@ -178,6 +178,12 @@ public:
   DoutPrefixProvider *get_dpp() override {
     return this;
   }
+  void add_temp_obj(const hobject_t &oid) override {
+    get_backend().add_temp_obj(oid);
+  }
+  void clear_temp_obj(const hobject_t &oid) override {
+    get_backend().clear_temp_obj(oid);
+  }
   // ECListener ends
 
   const pg_shard_t& get_pg_whoami() const final {
