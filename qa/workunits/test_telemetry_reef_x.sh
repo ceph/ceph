@@ -12,7 +12,7 @@ fi
 ceph -s
 
 COLLECTIONS=$(ceph telemetry collection ls)
-NEW_COLLECTIONS=("perf_perf" "basic_mds_metadata" "basic_pool_usage" "basic_rook_v01" "perf_memory_metrics")
+NEW_COLLECTIONS=("perf_perf" "basic_mds_metadata" "basic_pool_usage" "basic_rook_v01" "perf_memory_metrics" "basic_pool_flags")
 for col in ${NEW_COLLECTIONS[@]}; do
     if ! [[ $COLLECTIONS == *$col* ]];
     then
@@ -26,8 +26,8 @@ ceph telemetry preview
 ceph telemetry preview-device
 ceph telemetry preview-all
 
-# Opt in to new collections
-# Currently, no new collections between latest reef and squid (dev)
+# Opt in to new collections (basic_pool_flags)
+ceph telemetry on --license sharing-1-0
 
 # Run show commands
 ceph telemetry show
