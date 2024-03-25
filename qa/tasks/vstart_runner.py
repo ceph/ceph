@@ -76,7 +76,8 @@ from argparse import Namespace
 
 from unittest import suite, loader
 
-from teuthology.orchestra.run import quote, PIPE
+from teuthology.orchestra.run import quote
+from teuthology.orchestra.run import PIPE as teuth_PIPE
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.orchestra.remote import RemoteShell
 from teuthology.config import config as teuth_config
@@ -133,9 +134,8 @@ def respawn_in_path(lib_path, python_paths):
 
 def launch_subprocess(args, cwd=None, env=None, shell=True,
                       executable='/bin/bash'):
-    return subprocess.Popen(args, cwd=cwd, env=env, shell=shell,
-                            executable=executable, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, stdin=subprocess.PIPE)
+    return Popen(args, cwd=cwd, env=env, shell=shell, executable=executable,
+                 stdout=subproc_PIPE, stderr=subproc_PIPE, stdin=subproc_PIPE)
 
 
 # Let's use some sensible defaults
@@ -180,7 +180,8 @@ except ImportError:
     raise
 
 # Must import after teuthology because of gevent monkey patching
-import subprocess
+from subprocess import Popen, TimeoutExpired
+from subprocess import PIPE as subproc_PIPE
 
 if os.path.exists("./CMakeCache.txt"):
     # Running in build dir of a cmake build
@@ -233,7 +234,7 @@ class LocalRemoteProcess(object):
         else:
             self.stderr.write(err)
 
-    def wait(self):
+    def wait(self, timeout=None):
         # Null subproc.stdin so communicate() does not try flushing/closing it
         # again.
         if self.stdin is not None and self.stdin.closed:
@@ -249,7 +250,7 @@ class LocalRemoteProcess(object):
             else:
                 return
 
-        out, err = self.subproc.communicate()
+        out, err = self.subproc.communicate(timeout=timeout)
         out, err = rm_nonascii_chars(out), rm_nonascii_chars(err)
         self._write_stdout(out)
         self._write_stderr(err)
@@ -465,7 +466,15 @@ sudo() {
     # the path to binary file.
     def _do_run(self, args, check_status=True, wait=True, stdout=None,
                 stderr=None, cwd=None, stdin=None, logger=None, label=None,
-                env=None, timeout=None, omit_sudo=True, shell=True, quiet=False):
+                env=None, timeout=None, omit_sudo=True, shell=True,
+                quiet=False, terminate=False):
+        '''
+        :param termimate: set this to True when the command is expected to be
+        terminated at the end of timeout, and yet, th eexecution of the test
+        is not to be halted. This is done by suppressing the exception
+        subprocess.TimeoutExpired which is raised by code in subprocess
+        module when the command doesn't finish running before timeout.
+        '''
         args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo)
 
         subproc = launch_subprocess(args, cwd, env, shell)
@@ -475,7 +484,7 @@ sudo() {
             # as long as the input buffer is "small"
             if isinstance(stdin, str):
                 subproc.stdin.write(stdin.encode())
-            elif stdin == subprocess.PIPE or stdin == PIPE:
+            elif stdin == subproc_PIPE or stdin == teuth_PIPE:
                 pass
             elif isinstance(stdin, StringIO):
                 subproc.stdin.write(bytes(stdin.getvalue(),encoding='utf8'))
@@ -487,8 +496,12 @@ sudo() {
             stdout, stderr, usr_args
         )
 
-        if wait:
-            proc.wait()
+        try:
+            if wait:
+                proc.wait(timeout)
+        except TimeoutExpired:
+            if not terminate:
+                raise
 
         return proc
 
