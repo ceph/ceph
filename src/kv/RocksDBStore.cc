@@ -585,6 +585,14 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   if (cct->_conf.get_val<Option::size_t>("rocksdb_metadata_block_size") > 0)
     bbt_opts.metadata_block_size = cct->_conf.get_val<Option::size_t>("rocksdb_metadata_block_size");
 
+  // Set Compact on Deletion Factory
+  if (cct->_conf->rocksdb_cf_compact_on_deletion) {
+    size_t sliding_window = cct->_conf->rocksdb_cf_compact_on_deletion_sliding_window;
+    size_t trigger = cct->_conf->rocksdb_cf_compact_on_deletion_trigger;
+    opt.table_properties_collector_factories.emplace_back(
+        rocksdb::NewCompactOnDeletionCollectorFactory(sliding_window, trigger));
+  }
+
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
   dout(10) << __func__ << " block size " << cct->_conf->rocksdb_block_size
            << ", block_cache size " << byte_u_t(block_cache_size)
@@ -933,14 +941,6 @@ int RocksDBStore::update_column_family_options(const std::string& base_name,
       // apply_block_cache_options already does all necessary douts
       return r;
     }
-  }
-
-  // Set Compact on Deletion Factory
-  if (cct->_conf->rocksdb_cf_compact_on_deletion) {
-    size_t sliding_window = cct->_conf->rocksdb_cf_compact_on_deletion_sliding_window;
-    size_t trigger = cct->_conf->rocksdb_cf_compact_on_deletion_trigger;
-    cf_opt->table_properties_collector_factories.emplace_back(
-        rocksdb::NewCompactOnDeletionCollectorFactory(sliding_window, trigger));
   }
   return 0;
 }
