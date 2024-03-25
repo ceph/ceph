@@ -345,7 +345,11 @@ public:
   }
 
   void print(std::ostream &ostream) const final {
-    ostream << "PrioritizedQueue";
+    ostream << get_op_queue_type_name(get_type());
+  }
+
+  op_queue_type_t get_type() const final {
+    return op_queue_type_t::PrioritizedQueue;
   }
 };
 

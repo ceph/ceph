@@ -346,7 +346,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
     }
 
     void print(std::ostream &ostream) const final {
-      ostream << "WeightedPriorityQueue";
+      ostream << get_op_queue_type_name(get_type());
+    }
+
+    op_queue_type_t get_type() const final {
+      return op_queue_type_t::WeightedPriorityQueue;
     }
 };
 
