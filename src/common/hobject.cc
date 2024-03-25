@@ -94,7 +94,7 @@ string hobject_t::to_str() const
     out = fmt::format(FMT_COMPILE("{:016X}.{:08X}.snapdir."), poolid, revhash);
   } else {
     out = fmt::format(
-	FMT_COMPILE("{:016X}.{:08X}.{:X}."), poolid, revhash,
+	FMT_COMPILE("{:016X}.{:08X}.{:x}."), poolid, revhash,
 	(unsigned long long)snap);
   }
 
