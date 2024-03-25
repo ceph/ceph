@@ -3129,9 +3129,11 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                     ip = meta['ip']
                 if 'ports' in meta and meta['ports']:
                     port = meta['ports'][0]
-            r += [f'--web.listen-address={ip}:{port}']
             if daemon_type == 'prometheus':
                 config = fetch_configs(ctx)
+                ip_to_bind_to = config.get('ip_to_bind_to', '')
+                if ip_to_bind_to:
+                    ip = ip_to_bind_to
                 retention_time = config.get('retention_time', '15d')
                 retention_size = config.get('retention_size', '0')  # default to disabled
                 r += [f'--storage.tsdb.retention.time={retention_time}']
@@ -3146,6 +3148,7 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                     addr = next(iter(ipv4_addrs or ipv6_addrs), None)
                     host = wrap_ipv6(addr) if addr else host
                 r += [f'--web.external-url={scheme}://{host}:{port}']
+            r += [f'--web.listen-address={ip}:{port}']
         if daemon_type == 'alertmanager':
             config = fetch_configs(ctx)
             peers = config.get('peers', list())  # type: ignore

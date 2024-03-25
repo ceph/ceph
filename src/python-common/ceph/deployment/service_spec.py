@@ -1688,6 +1688,7 @@ class GrafanaSpec(MonitoringSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 only_bind_port_on_networks: bool = False,
                  port: Optional[int] = None,
                  protocol: Optional[str] = 'https',
                  initial_admin_password: Optional[str] = None,
@@ -1707,6 +1708,12 @@ class GrafanaSpec(MonitoringSpec):
         self.initial_admin_password = initial_admin_password
         self.anonymous_access = anonymous_access
         self.protocol = protocol
+
+        # whether ports daemons for this service bind to should
+        # bind to only hte networks listed in networks param, or
+        # to all networks. Defaults to false which is saying to bind
+        # on all networks.
+        self.only_bind_port_on_networks = only_bind_port_on_networks
 
     def validate(self) -> None:
         super(GrafanaSpec, self).validate()
@@ -1733,6 +1740,7 @@ class PrometheusSpec(MonitoringSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
+                 only_bind_port_on_networks: bool = False,
                  port: Optional[int] = None,
                  retention_time: Optional[str] = None,
                  retention_size: Optional[str] = None,
@@ -1750,6 +1758,7 @@ class PrometheusSpec(MonitoringSpec):
 
         self.retention_time = retention_time.strip() if retention_time else None
         self.retention_size = retention_size.strip() if retention_size else None
+        self.only_bind_port_on_networks = only_bind_port_on_networks
 
     def validate(self) -> None:
         super(PrometheusSpec, self).validate()
