@@ -30,6 +30,22 @@ ECRecoveryBackend::recover_object(
 }
 
 RecoveryBackend::interruptible_future<>
+ECRecoveryBackend::handle_push(
+  Ref<MOSDPGPush> m)
+{
+  logger().debug("{}: {}", __func__, *m);
+  return seastar::now();
+}
+
+RecoveryBackend::interruptible_future<>
+ECRecoveryBackend::handle_push_reply(
+  Ref<MOSDPGPushReply> m)
+{
+  logger().debug("{}: {}", __func__, *m);
+  return seastar::now();
+}
+
+RecoveryBackend::interruptible_future<>
 ECRecoveryBackend::handle_recovery_op(
   Ref<MOSDFastDispatchOp> m,
   crimson::net::ConnectionXcoreRef conn)
