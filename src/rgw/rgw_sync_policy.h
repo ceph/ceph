@@ -244,6 +244,7 @@ struct rgw_sync_pipe_filter {
   bool check_tag(const std::string& k, const std::string& v) const;
   bool check_tags(const std::vector<std::string>& tags) const;
   bool check_tags(const RGWObjTags::tag_map_t& tags) const;
+  bool check_prefix(const std::string& obj_name);
 };
 WRITE_CLASS_ENCODER(rgw_sync_pipe_filter)
 

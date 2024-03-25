@@ -55,6 +55,8 @@
 #include "services/svc_meta.h"
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_cls.h"
+#include "services/svc_bilog_rados.h"
+#include "services/svc_bi_rados.h"
 #include "services/svc_zone.h"
 #include "services/svc_tier_rados.h"
 #include "services/svc_quota.h"
@@ -1616,6 +1618,42 @@ RadosObject::~RadosObject()
 {
   if (rados_ctx_owned)
     delete rados_ctx;
+}
+
+bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
+   const ceph::real_time& obj_mtime)
+{
+  const auto& bucket_info = get_bucket()->get_info();
+  if (bucket_info.is_indexless()) {
+    ldpp_dout(dpp, 0) << "ERROR: Trying to check object replication status for object in an indexless bucket. obj=" << get_key() << dendl;
+    return false;
+  }
+
+  const auto& log_layout = bucket_info.layout.logs.front();
+  const uint32_t shard_count = num_shards(log_to_index_layout(log_layout));
+
+  std::string marker;
+  bool truncated;
+  list<rgw_bi_log_entry> entries;
+
+  const int shard_id = RGWSI_BucketIndex_RADOS::bucket_shard_index(get_key(), shard_count);
+
+  store->svc()->bilog_rados->log_list(
+    dpp,
+    bucket_info,
+    log_layout,
+    shard_id,
+    marker,
+    1,
+    entries,
+    &truncated);
+
+  if (entries.empty()) {
+    return true;
+  }
+
+  const rgw_bi_log_entry& earliest_marker = entries.front();
+  return earliest_marker.timestamp > obj_mtime;
 }
 
 int RadosObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
