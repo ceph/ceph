@@ -30,7 +30,7 @@ using namespace std;
 
 TEST(CephContext, do_command)
 {
-  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  boost::intrusive_ptr<CephContext> cct{new CephContext(CEPH_ENTITY_TYPE_CLIENT), false};
 
   cct->_conf->cluster = "ceph";
 
@@ -89,12 +89,11 @@ TEST(CephContext, do_command)
     string s(out.c_str(), out.length());
     EXPECT_EQ("<config_diff_get><diff><key><default></default><override>" + value + "</override><final>value</final></key><rbd_default_features><default>61</default><final>61</final></rbd_default_features><rbd_qos_exclude_ops><default>0</default><final>0</final></rbd_qos_exclude_ops></diff></config_diff_get>", s);
   }
-  cct->put();
 }
 
 TEST(CephContext, experimental_features)
 {
-  CephContext *cct = (new CephContext(CEPH_ENTITY_TYPE_CLIENT))->get();
+  boost::intrusive_ptr<CephContext> cct{new CephContext(CEPH_ENTITY_TYPE_CLIENT), false};
 
   cct->_conf->cluster = "ceph";
 

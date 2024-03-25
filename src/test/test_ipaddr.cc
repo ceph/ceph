@@ -703,7 +703,7 @@ TEST(pick_address, find_ip_in_subnet_list)
   ipv4(&a_two, "10.2.1.123");
   ipv6(&a_three, "2001:1234:5678:90ab::cdef");
 
-  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+  boost::intrusive_ptr<CephContext> cct{new CephContext(CEPH_ENTITY_TYPE_OSD), false};
 
   // match by network
   result = find_ip_in_subnet_list(
