@@ -551,6 +551,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.registry_password: Optional[str] = None
             self.registry_insecure: bool = False
             self.use_repo_digest = True
+            self.config_checks_enabled = False
             self.default_registry = ''
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
@@ -1372,7 +1373,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     @orchestrator._cli_read_command('cephadm config-check status')
     def _config_check_status(self) -> HandleCommandResult:
         """Show whether the configuration checker feature is enabled/disabled"""
-        status = self.get_module_option('config_checks_enabled')
+        status = self.config_checks_enabled
         return HandleCommandResult(stdout="Enabled" if status else "Disabled")
 
     @orchestrator._cli_write_command('cephadm config-check enable')
