@@ -702,7 +702,7 @@ bool CDentry::check_corruption(bool load)
 {
   auto&& snapclient = dir->mdcache->mds->snapclient;
   auto next_snap = snapclient->get_last_seq()+1;
-  if (first > last || (snapclient->is_server_ready() && first > next_snap)) {
+  if (first > last || (snapclient->is_synced() && first > next_snap)) {
     if (load) {
       dout(1) << "loaded already corrupt dentry: " << *this << dendl;
       corrupt_first_loaded = true;
