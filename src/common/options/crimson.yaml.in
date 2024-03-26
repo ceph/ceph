@@ -260,6 +260,11 @@ options:
   level: advanced
   desc: Size in bytes per second written to the hot devices, 0 indicates no limit
   default: 0
+- name: seastore_cold_devices_count
+  type: size
+  level: dev
+  desc: create cold devices during mkfs
+  default: 0
 - name: seastore_cold_device_type
   type: str
   level: dev
