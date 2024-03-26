@@ -192,6 +192,14 @@ class ECBackend : public ECCommon {
                         parent->get_eclistener()),
         parent(parent) {}
 
+    struct ECRecoveryHandle;
+
+    ECRecoveryHandle *open_recovery_op();
+
+    void run_recovery_op(
+      ECRecoveryHandle &h,
+      int priority);
+
     void commit_txn_send_replies(
         ceph::os::Transaction &&txn,
         std::map<int, MOSDPGPushReply*> replies) override;
