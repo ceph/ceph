@@ -742,7 +742,7 @@ struct ECCommon {
             << " recovery_info=" << recovery_info
             << " recovery_progress=" << recovery_progress
             << " obc refcount=" << obc.use_count()
-            << " state=" << ECBackend::RecoveryBackend::RecoveryOp::tostr(state)
+            << " state=" << ECCommon::RecoveryBackend::RecoveryOp::tostr(state)
             << " waiting_on_pushes=" << waiting_on_pushes
             << ")";
       }
