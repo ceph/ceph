@@ -183,7 +183,7 @@ seastar::future<> OSDSingletonState::osdmap_subscribe(
   version_t epoch, bool force_request)
 {
   LOG_PREFIX(OSDSingletonState::osdmap_subscribe);
-  INFO("epoch {}");
+  INFO("epoch {}", epoch);
   if (monc.sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
       force_request) {
     return monc.renew_subs();
