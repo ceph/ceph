@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd crush chooseleaf type: 0
+
+roles:
+- - host.a
+  - client.a
