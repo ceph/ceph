@@ -145,17 +145,13 @@ ScrubScan::ifut<> ScrubScan::run(PG &pg)
   ret.valid_through = pg.get_info().last_update;
 
   DEBUGDPP("begin: {}, end: {}", pg, begin, end);
-  auto [objects, _] = co_await interruptor::make_interruptible(
-    pg.shard_services.get_store().list_objects(
-      pg.get_collection_ref(),
-      ghobject_t(begin, ghobject_t::NO_GEN, pg.get_pgid().shard),
-      ghobject_t(end, ghobject_t::NO_GEN, pg.get_pgid().shard),
-      std::numeric_limits<uint64_t>::max())
-  );
+  auto [objects, _] = co_await pg.backend->list_objects(begin, end);
 
   DEBUGDPP("listed {} objects", pg, objects);
   for (const auto &object: objects) {
-    co_await scan_object(pg, object);
+    co_await scan_object(
+      pg,
+      ghobject_t(object, ghobject_t::NO_GEN, pg.get_pgid().shard));
   }
 
   if (local) {
