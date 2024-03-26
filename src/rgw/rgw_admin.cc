@@ -8367,7 +8367,12 @@ next:
 
     formatter->open_object_section("attrs");
     for (iter = other_attrs.begin(); iter != other_attrs.end(); ++iter) {
-      dump_string(iter->first.c_str(), iter->second, formatter.get());
+      bufferlist& bl = iter->second;
+      if (iter->first == RGW_ATTR_OBJ_REPLICATION_TIMESTAMP) {
+        decode_dump<ceph::real_time>("user.rgw.replicated-at", bl, formatter.get());
+      } else {
+        dump_string(iter->first.c_str(), iter->second, formatter.get());
+      }
     }
     formatter->close_section();
     formatter->close_section();

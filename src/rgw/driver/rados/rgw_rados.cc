@@ -21,6 +21,7 @@
 #include "common/Formatter.h"
 #include "common/Throttle.h"
 #include "common/BackTrace.h"
+#include "common/ceph_time.h"
 
 #include "rgw_sal.h"
 #include "rgw_zone.h"
@@ -4419,6 +4420,13 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     bufferlist bl;
     encode(trace, bl);
     cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_TRACE] = std::move(bl);
+  }
+  {
+    // add x-amz-replicated-at
+    bufferlist bl;
+    ceph::real_time timestamp = real_clock::now();
+    encode(timestamp, bl);
+    cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_TIMESTAMP] = std::move(bl);
   }
 
   if (source_zone.empty()) {
