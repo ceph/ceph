@@ -183,35 +183,6 @@ void ECBackend::RecoveryBackend::_failed_push(const hobject_t &hoid, ECCommon::r
   get_parent()->on_failed_pull(fl, hoid, v);
 }
 
-struct RecoveryMessages {
-  std::map<hobject_t,
-      ECCommon::read_request_t> recovery_reads;
-  std::map<hobject_t, std::set<int>> want_to_read;
-
-  void recovery_read(
-    const hobject_t &hoid, uint64_t off, uint64_t len,
-    std::set<int> &&_want_to_read,
-    const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
-    bool attrs)
-  {
-    std::list<ECCommon::ec_align_t> to_read;
-    to_read.emplace_back(ECCommon::ec_align_t{off, len, 0});
-    ceph_assert(!recovery_reads.count(hoid));
-    want_to_read.insert(std::make_pair(hoid, std::move(_want_to_read)));
-    recovery_reads.insert(
-      std::make_pair(
-	hoid,
-	ECCommon::read_request_t(
-	  to_read,
-	  need,
-	  attrs)));
-  }
-
-  std::map<pg_shard_t, std::vector<PushOp> > pushes;
-  std::map<pg_shard_t, std::vector<PushReplyOp> > push_replies;
-  ceph::os::Transaction t;
-};
-
 void ECBackend::handle_recovery_push(
   const PushOp &op,
   RecoveryMessages *m,
