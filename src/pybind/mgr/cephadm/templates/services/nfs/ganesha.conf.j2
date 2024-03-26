@@ -1,6 +1,6 @@
 # {{ cephadm_managed }}
 NFS_CORE_PARAM {
-        Enable_NLM = false;
+        Enable_NLM = {{ enable_nlm }};
         Enable_RQUOTA = false;
         Protocols = 4;
         NFS_Port = {{ port }};

@@ -120,6 +120,7 @@ class NFSService(CephService):
                 "bind_addr": bind_addr,
                 "haproxy_hosts": [],
                 "nfs_idmap_conf": nfs_idmap_conf,
+                "enable_nlm": str(spec.enable_nlm).lower(),
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
