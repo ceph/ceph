@@ -269,6 +269,8 @@ private:
 
   ServiceDaemonStats m_service_daemon_stats;
 
+  PerfCounters *m_perf_counters;
+
   void run(SnapshotReplayerThread *replayer);
 
   boost::optional<std::string> pick_directory();
