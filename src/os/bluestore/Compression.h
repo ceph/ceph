@@ -18,53 +18,51 @@
 #include "Writer.h"
 
 class BlueStore::Estimator {
-  BlueStore* bluestore;
 public:
-  Estimator(BlueStore* bluestore,
-            uint32_t min_alloc_size,
-            uint32_t max_blob_size)
-  :bluestore(bluestore)
-  ,min_alloc_size(min_alloc_size)
-  ,max_blob_size(max_blob_size) {}
+  Estimator(BlueStore* bluestore)
+  :bluestore(bluestore) {}
 
-  // return estimated size if extent gets compressed / recompressed
-  uint32_t estimate(const BlueStore::Extent* recompress_candidate);
+  // Prepare for new write
+  void reset();
   // return estimated size if data gets compressed
   uint32_t estimate(uint32_t new_data);
-  // make a decision about including region to recompression
-  // gain = size on disk (after release or taken if no compression)
-  // cost = size estimated on disk after compression
-  bool is_worth(uint32_t gain, uint32_t cost);
+  // Inform estimator that an extent is a candidate for recompression.
+  // Estimator has to calculate (guess) the cost (size) of the referenced data.
+  // 'gain' is the size that will be released should extent be recompressed.
+  void batch(const BlueStore::Extent* candidate, uint32_t gain);
+  // Lets estimator decide if extents previously passed by batch()
+  // are worth recompressing.
+  // If so (returns true), extents will be added by mark_recompress().
+  bool is_worth();
+  // Lets estimator decide if an uncompressed neighbor should be
+  // recompressed. The extent passed is always uncompressed and
+  // always a direct neighbor to already accepted recompression batch.
+  // If so (returns true), extents will be added by mark_recompress().
+  bool is_worth(const BlueStore::Extent* uncompressed_neighbor);
 
-  double expected_compression_factor = 0.5;
-  uint32_t min_alloc_size;
-  uint32_t max_blob_size;
-
+  void mark_recompress(const BlueStore::Extent* e);
+  void mark_main(uint32_t location, uint32_t length);
   struct region_t {
     uint32_t offset; // offset of region
     uint32_t length; // size of region
-    std::vector<uint32_t> blob_sizes; //sizes of blobs to split into
   };
-
-  void split(uint32_t size);
-  void split(uint32_t raw_size, uint32_t compr_size);
-  void mark_recompress(const BlueStore::Extent* e);
-  void mark_main(uint32_t location, uint32_t length);
   void get_regions(std::vector<region_t>& regions);
 
   void split_and_compress(
     CompressorRef compr,
+    uint32_t max_blob_size,
     ceph::buffer::list& data_bl,
     Writer::blob_vec& bd);
 
-  private:
-  struct is_less {
-    bool operator() (
-    const BlueStore::Extent* l,
-    const BlueStore::Extent* r) const {
-      return l->logical_offset < r->logical_offset;
-    }
-  };
+private:
+  BlueStore* bluestore;
+  double expected_compression_factor = 0.5;
+  uint32_t min_alloc_size;
+  // gain = size on disk (after release or taken if no compression)
+  // cost = size estimated on disk after compression
+  uint32_t cost = 0;
+  uint32_t gain = 0;
+
   std::map<uint32_t, uint32_t> extra_recompress;
 };
 
