@@ -275,14 +275,15 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
           ],
           required: true,
           errors: {
-            pattern: $localize`Allowed characters are letters, numbers, '.', '-', '+', ':' or '_'`
+            pattern: $localize`Allowed characters are letters, numbers, '.', '-', '+', ':' or '_'`,
+            notUnique: $localize`A subvolume or clone with this name already exists.`
           }
         },
         {
           type: 'select',
           name: 'groupName',
           value: this.activeGroupName,
-          label: $localize`Group Name`,
+          label: $localize`Group name`,
           typeConfig: {
             options: allGroups
           }
