@@ -211,6 +211,11 @@ options:
   level: advanced
   desc: Size in bytes per second written to the main devices, 0 incidates no limit
   default: 0
+- name: seastore_secondary_devices_count
+  type: size
+  level: dev
+  desc: create secondary devices during mkfs
+  default: 0
 - name: seastore_secondary_device_type
   type: str
   level: dev
