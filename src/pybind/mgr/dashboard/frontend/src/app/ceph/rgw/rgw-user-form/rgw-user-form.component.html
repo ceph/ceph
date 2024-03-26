@@ -164,6 +164,22 @@
           </div>
         </div>
 
+        <!-- System User -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="system"
+                     type="checkbox"
+                     formControlName="system">
+              <label class="custom-control-label"
+                     for="system"
+                     i18n>System user</label>
+              <cd-helper i18n>System users are distinct from regular users, they are used by the RGW service to perform administrative tasks, manage buckets and objects</cd-helper>
+            </div>
+          </div>
+        </div>
+
         <!-- S3 key -->
         <fieldset *ngIf="!editing">
           <legend i18n>S3 key</legend>
