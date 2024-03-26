@@ -43,7 +43,30 @@ ECRecoveryBackend::recover_object(
   eversion_t need)
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
-  return seastar::now();
+  // always add_recovering(soid) before recover_object(soid)
+  assert(is_recovering(soid));
+  return pg.obc_loader.with_obc<RWState::RWREAD>(soid,
+    [this, soid, need](auto head, auto obc) {
+    logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
+    auto& recovery_waiter = get_recovering(soid);
+    recovery_waiter.obc = obc;
+    recovery_waiter.obc->wait_recovery_read();
+    //logger().info("{}: starting {}", __func__, rop);
+    assert(!recovery_ops.count(soid));
+    recovery_ops[soid] =
+      ECCommon::RecoveryBackend::recover_object(soid, need, head, obc);
+    assert(soid == recovery_ops[soid].hoid);
+    RecoveryMessages m;
+    continue_recovery_op(recovery_ops[soid], &m);
+    dispatch_recovery_messages(m, 0/* FIXME: priority */);
+    return seastar::now();
+  }).handle_error_interruptible(
+    crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
+    // TODO: may need eio handling?
+    logger().error("recover_object saw error code {}, ignoring object {}",
+                   code, soid);
+    return seastar::now();
+  }));
 }
 
 void ECRecoveryBackend::commit_txn_send_replies(
