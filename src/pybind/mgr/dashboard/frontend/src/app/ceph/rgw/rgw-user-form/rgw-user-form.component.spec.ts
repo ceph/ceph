@@ -187,6 +187,7 @@ describe('RgwUserFormComponent', () => {
         max_buckets: -1,
         secret_key: '',
         suspended: false,
+        system: false,
         uid: null
       });
     });
@@ -200,7 +201,8 @@ describe('RgwUserFormComponent', () => {
         display_name: null,
         email: null,
         max_buckets: -1,
-        suspended: false
+        suspended: false,
+        system: false
       });
     });
 
@@ -216,6 +218,7 @@ describe('RgwUserFormComponent', () => {
         max_buckets: 0,
         secret_key: '',
         suspended: false,
+        system: false,
         uid: null
       });
     });
@@ -229,7 +232,8 @@ describe('RgwUserFormComponent', () => {
         display_name: null,
         email: null,
         max_buckets: 0,
-        suspended: false
+        suspended: false,
+        system: false
       });
     });
 
@@ -246,6 +250,7 @@ describe('RgwUserFormComponent', () => {
         max_buckets: 100,
         secret_key: '',
         suspended: false,
+        system: false,
         uid: null
       });
     });
@@ -260,7 +265,8 @@ describe('RgwUserFormComponent', () => {
         display_name: null,
         email: null,
         max_buckets: 100,
-        suspended: false
+        suspended: false,
+        system: false
       });
     });
   });
@@ -283,7 +289,8 @@ describe('RgwUserFormComponent', () => {
         display_name: null,
         email: '',
         max_buckets: 1000,
-        suspended: false
+        suspended: false,
+        system: false
       });
     });
 
