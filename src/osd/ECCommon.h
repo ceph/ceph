@@ -761,17 +761,11 @@ struct ECCommon {
         std::map<int, MOSDPGPushReply*> replies) = 0;
     void dispatch_recovery_messages(RecoveryMessages &m, int priority);
 
-    struct ECRecoveryHandle;
-    ECRecoveryHandle *open_recovery_op();
-    void run_recovery_op(
-        ECRecoveryHandle &h,
-        int priority);
-    int recover_object(
+    RecoveryBackend::RecoveryOp recover_object(
         const hobject_t &hoid,
         eversion_t v,
         ObjectContextRef head,
-        ObjectContextRef obc,
-        ECRecoveryHandle *h);
+        ObjectContextRef obc);
     void continue_recovery_op(
         RecoveryBackend::RecoveryOp &op,
         RecoveryMessages *m);
