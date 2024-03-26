@@ -38,3 +38,7 @@ And('I go to the {string} tab', (names: string) => {
     cy.contains('.nav.nav-tabs a', name).click();
   }
 });
+
+And('I wait for {string} seconds', (seconds: number) => {
+  cy.wait(seconds * 1000);
+});

@@ -113,7 +113,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
         click: () => this.cloneModal()
       },
       {
-        name: this.actionLabels.DELETE,
+        name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
         disable: () => !this.selection.hasSingleSelection,
@@ -224,7 +224,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
     const subVolumeGroupName = this.activeGroupName;
     const fsName = this.fsName;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      actionDescription: 'Delete',
+      actionDescription: this.actionLabels.REMOVE,
       itemNames: [snapshotName],
       itemDescription: 'Snapshot',
       submitAction: () =>
