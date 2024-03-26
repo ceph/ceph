@@ -7720,8 +7720,8 @@ int RGWRados::reshard_failed_while_logrecord(RGWBucketInfo& bucket_info,
   } else {
     ldpp_dout(dpp,20) << __func__ << ": reshard lock success, " <<
       "that means the reshard has failed for bucekt " << bucket_info.bucket.bucket_id << dendl;
-    // clear the RESHARD_IN_PROGRESS status after reshard failed, also set bucket instance
-    // status to CLS_RGW_RESHARD_NONE
+    // clear the RESHARD_IN_PROGRESS status after reshard failed, set bucket instance status
+    // to CLS_RGW_RESHARD_NONE, also clear the reshard log entries
     ret = RGWBucketReshard::clear_resharding(this->driver, bucket_info, bucket_attrs, dpp, y);
     reshard_lock.unlock();
     if (ret < 0) {
@@ -9349,6 +9349,18 @@ int RGWRados::bi_remove(const DoutPrefixProvider *dpp, BucketShard& bs)
   }
 
   return 0;
+}
+
+int RGWRados::trim_reshard_log_entries(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y)
+{
+  librados::IoCtx index_pool;
+  map<int, string> bucket_objs;
+
+  int r = svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt, bucket_info.layout.current_index, &index_pool, &bucket_objs, nullptr);
+  if (r < 0) {
+    return r;
+  }
+  return CLSRGWIssueReshardLogTrim(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 int RGWRados::gc_operate(const DoutPrefixProvider *dpp, string& oid, librados::ObjectWriteOperation *op, optional_yield y)

@@ -317,6 +317,8 @@ void usage()
   cout << "  reshard cancel                   cancel resharding a bucket\n";
   cout << "  reshard stale-instances list     list stale-instances from bucket resharding\n";
   cout << "  reshard stale-instances delete   cleanup stale-instances from bucket resharding\n";
+  cout << "  reshardlog list                  list bucket resharding log\n";
+  cout << "  reshardlog purge                 trim bucket resharding log\n";
   cout << "  sync error list                  list sync error\n";
   cout << "  sync error trim                  trim sync error\n";
   cout << "  mfa create                       create a new MFA TOTP token\n";
@@ -863,6 +865,8 @@ enum class OPT {
   MFA_RESYNC,
   RESHARD_STALE_INSTANCES_LIST,
   RESHARD_STALE_INSTANCES_DELETE,
+  RESHARDLOG_LIST,
+  RESHARDLOG_PURGE,
   PUBSUB_TOPIC_LIST,
   PUBSUB_TOPIC_GET,
   PUBSUB_TOPIC_RM,
@@ -1112,6 +1116,8 @@ static SimpleCmd::Commands all_cmds = {
   { "reshard stale list", OPT::RESHARD_STALE_INSTANCES_LIST },
   { "reshard stale-instances delete", OPT::RESHARD_STALE_INSTANCES_DELETE },
   { "reshard stale delete", OPT::RESHARD_STALE_INSTANCES_DELETE },
+  { "reshardlog list", OPT::RESHARDLOG_LIST},
+  { "reshardlog purge", OPT::RESHARDLOG_PURGE},
   { "topic list", OPT::PUBSUB_TOPIC_LIST },
   { "topic get", OPT::PUBSUB_TOPIC_GET },
   { "topic rm", OPT::PUBSUB_TOPIC_RM },
@@ -11038,6 +11044,90 @@ next:
      cerr << "ERROR: deleting stale instances" << cpp_strerror(-ret) << std::endl;
    }
  }
+
+  if (opt_cmd == OPT::RESHARDLOG_LIST) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    list<rgw_cls_bi_entry> entries;
+    bool is_truncated;
+    if (max_entries < 0)
+      max_entries = 1000;
+
+    const auto& index = bucket->get_info().layout.current_index;
+    if (index.layout.type == rgw::BucketIndexType::Indexless) {
+      cerr << "ERROR: indexless bucket has no index to purge" << std::endl;
+      return EINVAL;
+    }
+
+    int max_shards = rgw::num_shards(index);
+
+    formatter->open_array_section("entries");
+    int i = (specified_shard_id ? shard_id : 0);
+    for (; i < max_shards; i++) {
+      formatter->open_object_section("shard");
+      encode_json("shard_id", i, formatter.get());
+      formatter->open_array_section("single shard entries");
+      RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(driver)->getRados());
+      int ret = bs.init(dpp(), bucket->get_info(), index, i, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << i << "): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      marker.clear();
+      do {
+        entries.clear();
+        ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bi_list(bs, "", marker, max_entries,
+                                                                              &entries, &is_truncated,
+                                                                              true, null_yield);
+        if (ret < 0) {
+          cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+
+        list<rgw_cls_bi_entry>::iterator iter;
+        for (iter = entries.begin(); iter != entries.end(); ++iter) {
+          rgw_cls_bi_entry& entry = *iter;
+          formatter->dump_string("idx", entry.idx);
+          marker = entry.idx;
+        }
+        formatter->flush(cout);
+      } while (is_truncated);
+      formatter->close_section();
+      formatter->close_section();
+      formatter->flush(cout);
+
+      if (specified_shard_id)
+        break;
+    }
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT::RESHARDLOG_PURGE) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->trim_reshard_log_entries(dpp(), bucket->get_info(), null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: trim_reshard_log_entries(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
 
   if (opt_cmd == OPT::PUBSUB_NOTIFICATION_LIST) {
     if (bucket_name.empty()) {

@@ -37,6 +37,8 @@ constexpr int RGWBIAdvanceAndRetryError = -EFBIG;
 #define RGW_BI_PUT "bi_put"
 #define RGW_BI_LIST "bi_list"
 
+#define RGW_RESHARD_LOG_TRIM "reshard_log_trim"
+
 #define RGW_BI_LOG_LIST "bi_log_list"
 #define RGW_BI_LOG_TRIM "bi_log_trim"
 #define RGW_DIR_SUGGEST_CHANGES "dir_suggest_changes"

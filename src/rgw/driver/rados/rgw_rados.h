@@ -1540,6 +1540,8 @@ public:
               std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog, optional_yield y);
   int bi_remove(const DoutPrefixProvider *dpp, BucketShard& bs);
 
+  int trim_reshard_log_entries(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y);
+
   int cls_obj_usage_log_add(const DoutPrefixProvider *dpp, const std::string& oid, rgw_usage_log_info& info, optional_yield y);
   int cls_obj_usage_log_read(const DoutPrefixProvider *dpp, const std::string& oid, const std::string& user, const std::string& bucket, uint64_t start_epoch,
                              uint64_t end_epoch, uint32_t max_entries, std::string& read_iter,

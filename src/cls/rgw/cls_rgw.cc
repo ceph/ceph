@@ -3822,6 +3822,48 @@ static int rgw_bi_log_stop(cls_method_context_t hctx, bufferlist *in, bufferlist
   return write_bucket_header(hctx, &header);
 }
 
+static int rgw_reshard_log_trim_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string key_begin(1, BI_PREFIX_CHAR);
+  key_begin.append(bucket_index_prefixes[BI_BUCKET_RESHARD_LOG_INDEX]);
+
+  string key_end;
+  key_end = BI_PREFIX_CHAR;
+  key_end.append(bucket_index_prefixes[BI_BUCKET_RESHARD_LOG_INDEX + 1]);
+
+  // list a single key to detect whether the range is empty
+  const size_t max_entries = 1;
+  std::set<std::string> keys;
+  bool more = false;
+
+  int rc = cls_cxx_map_get_keys(hctx, key_begin, max_entries, &keys, &more);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_get_keys failed rc=%d", rc);
+    return rc;
+  }
+
+  if (keys.empty()) {
+    CLS_LOG(20, "range is empty key_begin=%s", key_begin.c_str());
+    return -ENODATA;
+  }
+
+  const std::string& first_key = *keys.begin();
+  if (key_end < first_key) {
+    CLS_LOG(20, "listed key %s past key_end=%s", first_key.c_str(), key_end.c_str());
+    return -ENODATA;
+  }
+
+  CLS_LOG(20, "listed key %s, removing through %s",
+          first_key.c_str(), key_end.c_str());
+
+  rc = cls_cxx_map_remove_range(hctx, first_key, key_end);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: cls_cxx_map_remove_range failed rc=%d", rc);
+    return rc;
+  }
+  return 0;
+}
+
 static void usage_record_prefix_by_time(uint64_t epoch, string& key)
 {
   char buf[32];
@@ -4975,6 +5017,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_bi_get_vals_op;
   cls_method_handle_t h_rgw_bi_put_op;
   cls_method_handle_t h_rgw_bi_list_op;
+  cls_method_handle_t h_rgw_reshard_log_trim_op;
   cls_method_handle_t h_rgw_bi_log_list_op;
   cls_method_handle_t h_rgw_bi_log_trim_op;
   cls_method_handle_t h_rgw_bi_log_resync_op;
@@ -5032,6 +5075,7 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_BI_GET_VALS, CLS_METHOD_RD, rgw_bi_get_vals_op, &h_rgw_bi_get_vals_op);
   cls_register_cxx_method(h_class, RGW_BI_PUT, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_put_op, &h_rgw_bi_put_op);
   cls_register_cxx_method(h_class, RGW_BI_LIST, CLS_METHOD_RD, rgw_bi_list_op, &h_rgw_bi_list_op);
+  cls_register_cxx_method(h_class, RGW_RESHARD_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_log_trim_op, &h_rgw_reshard_log_trim_op);
 
   cls_register_cxx_method(h_class, RGW_BI_LOG_LIST, CLS_METHOD_RD, rgw_bi_log_list, &h_rgw_bi_log_list_op);
   cls_register_cxx_method(h_class, RGW_BI_LOG_TRIM, CLS_METHOD_RD | CLS_METHOD_WR, rgw_bi_log_trim, &h_rgw_bi_log_trim_op);

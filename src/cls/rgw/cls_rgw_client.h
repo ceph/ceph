@@ -522,6 +522,23 @@ public:
   virtual ~CLSRGWIssueBILogTrim() override {}
 };
 
+class CLSRGWIssueReshardLogTrim : public CLSRGWConcurrentIO {
+protected:
+  int issue_op(int shard_id, const std::string& oid) override;
+  // Trim until -ENODATA is returned.
+  int valid_ret_code() override { return -ENODATA; }
+  bool need_multiple_rounds() override { return true; }
+  void add_object(int shard, const std::string& oid) override { objs_container[shard] = oid; }
+  void reset_container(std::map<int, std::string>& objs) override {
+    objs_container.swap(objs);
+    iter = objs_container.begin();
+    objs.clear();
+  }
+public:
+  CLSRGWIssueReshardLogTrim(librados::IoCtx& io_ctx, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
+      CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
+};
+
 /**
  * Check the bucket index.
  *

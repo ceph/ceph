@@ -733,6 +733,19 @@ int CLSRGWIssueBILogTrim::issue_op(const int shard_id, const string& oid)
   return issue_bi_log_trim(io_ctx, oid, shard_id, start_marker_mgr, end_marker_mgr, &manager);
 }
 
+static bool issue_reshard_log_trim(librados::IoCtx& io_ctx, const string& oid, int shard_id,
+                                   BucketIndexAioManager *manager) {
+  bufferlist in;
+  ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_RESHARD_LOG_TRIM, in);
+  return manager->aio_operate(io_ctx, shard_id, oid, &op);
+}
+
+int CLSRGWIssueReshardLogTrim::issue_op(int shard_id, const string& oid)
+{
+  return issue_reshard_log_trim(io_ctx, oid, shard_id, &manager);
+}
+
 static bool issue_bucket_check_index_op(IoCtx& io_ctx, const int shard_id, const string& oid, BucketIndexAioManager *manager,
     rgw_cls_check_index_ret *pdata) {
   bufferlist in;
