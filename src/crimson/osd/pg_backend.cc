@@ -1097,6 +1097,8 @@ PGBackend::list_objects(
 	return false;
       } else if (o.hobj.is_temp()) {
 	return false;
+      } else if (o.is_internal_pg_local()) {
+	return false;
       } else {
 	return o.is_no_gen();
       }
