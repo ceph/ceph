@@ -160,7 +160,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
       pseudo: new UntypedFormControl('', {
         validators: [
           CdValidators.requiredIf({ protocolNfsv4: true }),
-          Validators.pattern('^/[^><|&()]*$')
+          Validators.pattern('^/[^><|&()]*$'),
+          Validators.minLength(2)
         ]
       }),
       access_type: new UntypedFormControl('RW'),
