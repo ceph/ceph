@@ -50,7 +50,10 @@ public:
   write_iertr::future<> handle_rep_write_reply(ECSubWriteReply&& op);
   ll_read_ierrorator::future<> handle_rep_read_op(Ref<MOSDECSubOpRead>);
   ll_read_ierrorator::future<> handle_rep_read_reply(Ref<MOSDECSubOpReadReply>);
+
 private:
+  friend class ECRecoveryBackend;
+
   ll_read_ierrorator::future<ceph::bufferlist>
   _read(const hobject_t& hoid, uint64_t off, uint64_t len, uint32_t flags) override;
   rep_op_fut_t
