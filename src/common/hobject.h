@@ -398,10 +398,10 @@ struct formatter<hobject_t> {
     return ctx.out();
   }
 
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  constexpr auto parse(format_parse_context& ctx) const { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const hobject_t& ho, FormatContext& ctx)
+  auto format(const hobject_t& ho, FormatContext& ctx) const
   {
     if (ho == hobject_t{}) {
       return fmt::format_to(ctx.out(), "MIN");
