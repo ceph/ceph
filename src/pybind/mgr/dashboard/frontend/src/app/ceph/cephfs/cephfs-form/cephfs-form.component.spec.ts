@@ -42,7 +42,15 @@ describe('CephfsVolumeFormComponent', () => {
   });
 
   it('should validate proper names', fakeAsync(() => {
-    const validNames = ['test', 'test1234', 'test_1234', 'test-1234', 'test.1234', 'test12test'];
+    const validNames = [
+      'test',
+      'test1234',
+      'test_1234',
+      'test-1234',
+      'test.1234',
+      'test12test',
+      '.test'
+    ];
     const invalidNames = ['1234', 'test@', 'test)'];
 
     for (const validName of validNames) {
