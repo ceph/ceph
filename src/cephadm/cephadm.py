@@ -2776,6 +2776,11 @@ def command_bootstrap(ctx):
             except PermissionError:
                 raise Error(f'Unable to create {dirname} due to permissions failure. Retry with root, or sudo or preallocate the directory.')
 
+    if getattr(ctx, 'custom_prometheus_alerts', None):
+        ctx.custom_prometheus_alerts = os.path.abspath(ctx.custom_prometheus_alerts)
+        if not os.path.isfile(ctx.custom_prometheus_alerts):
+            raise Error(f'No custom prometheus alerts file found at {ctx.custom_prometheus_alerts}')
+
     (user_conf, _) = get_config_and_keyring(ctx)
 
     if ctx.ssh_user != 'root':
@@ -2848,6 +2853,8 @@ def command_bootstrap(ctx):
             admin_keyring.name: '/etc/ceph/ceph.client.admin.keyring:z',
             tmp_config.name: '/etc/ceph/ceph.conf:z',
         }
+        if getattr(ctx, 'custom_prometheus_alerts', None):
+            mounts[ctx.custom_prometheus_alerts] = '/etc/ceph/custom_alerts.yml:z'
         for k, v in extra_mounts.items():
             mounts[k] = v
         timeout = timeout or ctx.timeout
@@ -2991,6 +2998,9 @@ def command_bootstrap(ctx):
 
     if getattr(ctx, 'deploy_cephadm_agent', None):
         cli(['config', 'set', 'mgr', 'mgr/cephadm/use_agent', 'true'])
+
+    if getattr(ctx, 'custom_prometheus_alerts', None):
+        cli(['orch', 'prometheus', 'set-custom-alerts', '-i', '/etc/ceph/custom_alerts.yml'])
 
     return ctx.error_code
 
@@ -5384,6 +5394,9 @@ def _get_parser():
         '--deploy-cephadm-agent',
         action='store_true',
         help='deploy the cephadm-agent')
+    parser_bootstrap.add_argument(
+        '--custom-prometheus-alerts',
+        help='provide a file with custom prometheus alerts')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
