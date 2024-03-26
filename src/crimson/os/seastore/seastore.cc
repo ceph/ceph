@@ -253,7 +253,7 @@ SeaStore::mount_ertr::future<> SeaStore::mount()
   ceph_assert(seastar::this_shard_id() == primary_core);
   return device->mount(
   ).safe_then([this] {
-    auto sec_devices = device->get_sharded_device().get_secondary_devices();
+    auto &sec_devices = device->get_sharded_device().get_secondary_devices();
     return crimson::do_for_each(sec_devices, [this](auto& device_entry) {
       device_id_t id = device_entry.first;
       magic_t magic = device_entry.second.magic;
