@@ -54,13 +54,14 @@ def create_cache_pool(remote, base_name, cache_name, pgnum, size, cluster_name="
         str(size), '--cluster', cluster_name
     ])
 
-def cmd_erasure_code_profile(profile_name, profile):
+def cmd_erasure_code_profile(profile_name, profile, allow_experimental=False):
     """
     Return the shell command to run to create the erasure code profile
     described by the profile parameter.
     
     :param profile_name: a string matching [A-Za-z0-9-_.]+
     :param profile: a map whose semantic depends on the erasure code plugin
+    :param allow_experimental: an optional setting to allow experimental ec profiles
     :returns: a shell command as an array suitable for Remote.run
 
     If profile is {}, it is replaced with 
@@ -81,7 +82,10 @@ def cmd_erasure_code_profile(profile_name, profile):
             'm': '1',
             'crush-failure-domain': 'osd'
         }
-    return [
+    cmd = [
         'osd', 'erasure-code-profile', 'set',
         profile_name
         ] + [ str(key) + '=' + str(value) for key, value in profile.items() ]
+    if allow_experimental:
+        cmd += [ '--allow-experimental-ec-profile']
+    return cmd

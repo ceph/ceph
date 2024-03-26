@@ -2102,8 +2102,13 @@ class CephManager:
         Create an erasure code profile name that can be used as a parameter
         when creating an erasure coded pool.
         """
+        allow_experimental = self.ceph_manager.raw_cluster_cmd('config', 'get', 'mon.*',
+                           'enable_experimental_unrecoverable_data_corrupting_features')
         with self.lock:
-            args = cmd_erasure_code_profile(profile_name, profile)
+            if allow_experimental:
+                args = cmd_erasure_code_profile(profile_name, profile, True)
+            else:
+                args = cmd_erasure_code_profile(profile_name, profile)
             self.raw_cluster_cmd(*args)
 
     def create_pool_with_unique_name(self, pg_num=16,
