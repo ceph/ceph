@@ -506,6 +506,26 @@ struct ghobject_t {
     return hobj.is_internal_pg_local();
   }
 
+  /**
+   * SNAPMAPPER_OID, make_snapmapper, is_snapmapper
+   *
+   * Used exclusively by crimson at this time.
+   * 
+   * Unlike classic, crimson uses a snap mapper object for each pg.
+   * The snapmapper object provides an index for efficient trimming of clones as
+   * snapshots are removed.
+   *
+   * As with the pgmeta object, we pin the hash to the pg hash.
+   */
+  static constexpr std::string_view SNAPMAPPER_OID = "snapmapper";
+  static ghobject_t make_snapmapper(
+    int64_t pool, uint32_t hash, shard_id_t shard) {
+    hobject_t h(object_t(SNAPMAPPER_OID), std::string(),
+		CEPH_NOSNAP, hash, pool,
+		std::string(hobject_t::INTERNAL_PG_LOCAL_NS));
+    return ghobject_t(h, NO_GEN, shard);
+  }
+
   bool match(uint32_t bits, uint32_t match) const {
     return hobj.match_hash(hobj.hash, bits, match);
   }
