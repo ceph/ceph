@@ -63,22 +63,22 @@ describe('DashboardAreaChartComponent', () => {
 
   it('should set label', () => {
     component.ngOnChanges({ dataArray: new SimpleChange(null, component.dataArray, false) });
-    expect(component.chartData.dataset[0].label).toEqual('Read');
+    expect(component.chartData.dataset[0].label).toEqual('Total');
     expect(component.chartData.dataset[1].label).toEqual('Write');
-    expect(component.chartData.dataset[2].label).toEqual('Total');
+    expect(component.chartData.dataset[2].label).toEqual('Read');
   });
 
   it('should transform and update data', () => {
     component.ngOnChanges({ dataArray: new SimpleChange(null, component.dataArray, false) });
     expect(component.chartData.dataset[0].data).toEqual([
-      { x: 1000, y: 110 },
-      { x: 3000, y: 130 }
+      { x: 5000, y: 150 },
+      { x: 6000, y: 160 }
     ]);
   });
 
   it('should set currentData to last value', () => {
     component.ngOnChanges({ dataArray: new SimpleChange(null, component.dataArray, false) });
-    expect(component.currentChartData.dataset[0].currentData).toBe('130');
+    expect(component.currentChartData.dataset[0].currentData).toBe('160');
   });
 
   it('should keep data units consistency', () => {

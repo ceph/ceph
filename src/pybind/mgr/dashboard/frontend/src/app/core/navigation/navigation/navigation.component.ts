@@ -71,6 +71,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
       this.multiClusterService.subscribe((resp: object) => {
         const clustersConfig = resp['config'];
         if (clustersConfig) {
+          this.clustersMap.clear();
           Object.keys(clustersConfig).forEach((clusterKey: string) => {
             const clusterDetailsList = clustersConfig[clusterKey];
             clusterDetailsList.forEach((clusterDetails: MultiCluster) => {
@@ -212,9 +213,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
       },
       () => {},
       () => {
-        this.multiClusterService.refresh();
-        this.summaryService.refresh();
-
         // force refresh grafana api url to get the correct url for the selected cluster
         this.settingsService.ifSettingConfigured(
           'api/grafana/url',
@@ -223,15 +221,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
           true
         );
         const currentRoute = this.router.url.split('?')[0];
-        if (currentRoute.includes('dashboard')) {
-          this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
-            this.router.navigate([currentRoute]);
-          });
-        } else {
-          this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
-            this.router.navigate([currentRoute]);
-          });
-        }
+        this.multiClusterService.refreshMultiCluster(currentRoute);
       }
     );
   }

@@ -42,6 +42,8 @@
         <i class="mx-auto d-block"
            [ngClass]="[icons.large3x, icons.spinner, icons.spin]">
         </i>
+        <p class="text-center mt-3"
+           i18n>Loading data, Please wait...</p>
       </div>
     </div>
   </div>
@@ -50,6 +52,16 @@
 <div class="container-fluid h-100 p-4"
      *ngIf="isMultiCluster; else emptyCluster">
   <ng-container *ngIf="!loading; else loadingTpl">
+    <cd-alert-panel type="info"
+                    spacingClass="mb-3"
+                    [showTitle]="false"
+                    size="slim"
+                    *ngIf="showDeletionMessage"
+                    (dismissed)="onDismissed()"
+                    [dismissible]="true"
+                    i18n>
+      <p>Please note that the data for the disconnected cluster will be visible for a duration of ~ 5 minutes. After this period, it will be automatically removed.</p>
+    </cd-alert-panel>
     <cd-card-group>
       <div class="col-lg-4">
         <div class="row">
@@ -112,7 +124,7 @@
                    i18n-title
                    class="col-sm-6 m-0 p-0 ps-2 pe-2"
                    aria-label="Total number of hosts"
-                   *ngIf="queriesResults['TOTAL_HOSTS'][0][1] !== '0'">
+                   *ngIf="queriesResults['TOTAL_HOSTS'] && queriesResults['TOTAL_HOSTS'][0]">
             <span class="text-center">
               <h3>{{ queriesResults['TOTAL_HOSTS'][0][1] }}</h3>
             </span>
@@ -142,10 +154,11 @@
                  aria-label="Cluster Utilization card"
                  *ngIf="clusters">
           <div class="ms-4 me-4 mt-0">
-            <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
+            <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event, 'clusterUtilization')">
             </cd-dashboard-time-selector>
             <cd-dashboard-area-chart  chartTitle="Capacity"
                                       [labelsArray]="capacityLabels"
+                                      isMultiCluster="true"
                                       dataUnits="B"
                                       [dataArray]="capacityValues"
                                       [truncateLabel]="true"
@@ -155,6 +168,7 @@
                                      [labelsArray]="iopsLabels"
                                      dataUnits=""
                                      decimals="0"
+                                     isMultiCluster="true"
                                      [dataArray]="iopsValues"
                                      [truncateLabel]="true"
                                      *ngIf="iopsLabels && iopsValues">
@@ -163,6 +177,7 @@
                                      [labelsArray]="throughputLabels"
                                      dataUnits="B/s"
                                      decimals="2"
+                                     isMultiCluster="true"
                                      [dataArray]="throughputValues"
                                      [truncateLabel]="true"
                                      *ngIf="throughputLabels && throughputLabels">
@@ -190,11 +205,12 @@
                    aria-label="Pools Utilization card"
                    *ngIf="clusters">
             <div class="ms-4 me-4 mt-0">
-              <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
+              <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event, 'poolUtilization')">
               </cd-dashboard-time-selector>
               <cd-dashboard-area-chart  chartTitle="Capacity"
                                         [labelsArray]="poolCapacityLabels"
                                         dataUnits="B"
+                                        isMultiCluster="true"
                                         [dataArray]="poolCapacityValues"
                                         *ngIf="poolCapacityLabels && poolCapacityValues"
                                         [truncateLabel]="true">
@@ -203,6 +219,7 @@
                                        [labelsArray]="poolIOPSLabels"
                                        dataUnits=""
                                        decimals="0"
+                                       isMultiCluster="true"
                                        [dataArray]="poolIOPSValues"
                                        *ngIf="poolIOPSLabels && poolIOPSValues"
                                        [truncateLabel]="true">
@@ -211,6 +228,7 @@
                                        [labelsArray]="poolThroughputLabels"
                                        dataUnits="B/s"
                                        decimals="2"
+                                       isMultiCluster="true"
                                        [dataArray]="poolThroughputValues"
                                        *ngIf="poolThroughputLabels && poolThroughputValues"
                                        [truncateLabel]="true">
