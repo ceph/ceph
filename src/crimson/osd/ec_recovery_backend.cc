@@ -6,6 +6,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/do_with.hh>
 
+#include "crimson/osd/ec_backend.h"
 #include "crimson/osd/ec_recovery_backend.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
@@ -20,6 +21,22 @@ namespace {
   }
 }
 
+ECRecoveryBackend::ECRecoveryBackend(
+  crimson::osd::PG& pg,
+  crimson::osd::ShardServices& shard_services,
+  crimson::os::CollectionRef coll,
+  ECBackend* backend)
+: ::RecoveryBackend(pg, shard_services, coll, backend),
+  ::ECCommon::RecoveryBackend(
+    shard_services.get_cct(),
+    coll->get_cid(),
+    backend->ec_impl,
+    backend->sinfo,
+    backend->read_pipeline,
+    backend->unstable_hashinfo_registry,
+    &pg)
+{}
+
 RecoveryBackend::interruptible_future<>
 ECRecoveryBackend::recover_object(
   const hobject_t& soid,
@@ -27,6 +44,12 @@ ECRecoveryBackend::recover_object(
 {
   logger().debug("{}: {}, {}", __func__, soid, need);
   return seastar::now();
+}
+
+void ECRecoveryBackend::commit_txn_send_replies(
+  ceph::os::Transaction&& txn,
+  std::map<int, MOSDPGPushReply*> replies)
+{
 }
 
 RecoveryBackend::interruptible_future<>
@@ -55,9 +78,9 @@ ECRecoveryBackend::handle_recovery_op(
     return handle_push(boost::static_pointer_cast<MOSDPGPush>(m));
   case MSG_OSD_PG_PUSH_REPLY:
     return handle_push_reply(
-	boost::static_pointer_cast<MOSDPGPushReply>(m));
+      boost::static_pointer_cast<MOSDPGPushReply>(m));
   default:
     // delegate to parent class for handling backend-agnostic recovery ops.
-    return RecoveryBackend::handle_recovery_op(std::move(m), conn);
+    return ::RecoveryBackend::handle_recovery_op(std::move(m), conn);
   }
 }
