@@ -31,6 +31,8 @@ export class DashboardAreaChartComponent implements OnChanges {
   decimals?: number = 1;
   @Input()
   truncateLabel = false;
+  @Input()
+  isMultiCluster?: boolean = false;
 
   currentDataUnits: string;
   currentData: number;
@@ -214,8 +216,13 @@ export class DashboardAreaChartComponent implements OnChanges {
           [this.maxConvertedValue, this.maxConvertedValueUnits] = this.convertUnits(
             this.maxValue
           ).split(' ');
+          this.currentChartData.dataset[index]['currentDataValue'] = currentDataValue;
         }
       }
+      this.currentChartData.dataset.sort(
+        (a: { currentDataValue: string }, b: { currentDataValue: string }) =>
+          parseFloat(b['currentDataValue']) - parseFloat(a['currentDataValue'])
+      );
     }
 
     if (this.chart) {

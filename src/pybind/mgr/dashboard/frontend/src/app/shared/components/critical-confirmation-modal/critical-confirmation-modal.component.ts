@@ -25,6 +25,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
   itemDescription: 'entry';
   itemNames: string[];
   actionDescription = 'delete';
+  infoMessage: string;
 
   childFormGroup: CdFormGroup;
   childFormGroupTemplate: TemplateRef<any>;

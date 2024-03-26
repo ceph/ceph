@@ -54,50 +54,6 @@ class Auth(RESTController, ControllerAuthMixin):
                 pwd_expiration_date = user_data.get('pwdExpirationDate', None)
                 pwd_update_required = user_data.get('pwdUpdateRequired', False)
 
-            if isinstance(Settings.MULTICLUSTER_CONFIG, str):
-                try:
-                    item_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
-                except json.JSONDecodeError:
-                    item_to_dict = {}
-                multicluster_config = item_to_dict.copy()
-            else:
-                multicluster_config = Settings.MULTICLUSTER_CONFIG.copy()
-            try:
-                if fsid in multicluster_config['config']:
-                    existing_entries = multicluster_config['config'][fsid]
-                    if not any(entry['user'] == username for entry in existing_entries):
-                        existing_entries.append({
-                            "name": fsid,
-                            "url": origin,
-                            "cluster_alias": "local-cluster",
-                            "user": username
-                        })
-                else:
-                    multicluster_config['config'][fsid] = [{
-                        "name": fsid,
-                        "url": origin,
-                        "cluster_alias": "local-cluster",
-                        "user": username
-                    }]
-
-            except KeyError:
-                multicluster_config = {
-                    'current_url': origin,
-                    'current_user': username,
-                    'hub_url': origin,
-                    'config': {
-                        fsid: [
-                            {
-                                "name": fsid,
-                                "url": origin,
-                                "cluster_alias": "local-cluster",
-                                "user": username
-                            }
-                        ]
-                    }
-                }
-            Settings.MULTICLUSTER_CONFIG = multicluster_config
-
             if user_perms is not None:
                 url_prefix = 'https' if mgr.get_localized_module_option('ssl') else 'http'
 
@@ -110,6 +66,49 @@ class Auth(RESTController, ControllerAuthMixin):
                 token = token.decode('utf-8') if isinstance(token, bytes) else token
 
                 self._set_token_cookie(url_prefix, token)
+                if isinstance(Settings.MULTICLUSTER_CONFIG, str):
+                    try:
+                        item_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
+                    except json.JSONDecodeError:
+                        item_to_dict = {}
+                    multicluster_config = item_to_dict.copy()
+                else:
+                    multicluster_config = Settings.MULTICLUSTER_CONFIG.copy()
+                try:
+                    if fsid in multicluster_config['config']:
+                        existing_entries = multicluster_config['config'][fsid]
+                        if not any((entry['user'] == username or entry['cluster_alias'] == 'local-cluster') for entry in existing_entries):  # noqa E501 #pylint: disable=line-too-long
+                            existing_entries.append({
+                                "name": fsid,
+                                "url": origin,
+                                "cluster_alias": "local-cluster",
+                                "user": username
+                            })
+                    else:
+                        multicluster_config['config'][fsid] = [{
+                            "name": fsid,
+                            "url": origin,
+                            "cluster_alias": "local-cluster",
+                            "user": username
+                        }]
+
+                except KeyError:
+                    multicluster_config = {
+                        'current_url': origin,
+                        'current_user': username,
+                        'hub_url': origin,
+                        'config': {
+                            fsid: [
+                                {
+                                    "name": fsid,
+                                    "url": origin,
+                                    "cluster_alias": "local-cluster",
+                                    "user": username
+                                }
+                            ]
+                        }
+                    }
+                Settings.MULTICLUSTER_CONFIG = multicluster_config
                 return {
                     'token': token,
                     'username': username,
