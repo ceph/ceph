@@ -1164,10 +1164,6 @@ static PG::interruptible_future<hobject_t> pgls_filter(
   }
 }
 
-static inline bool is_snapmapper_oid(const hobject_t &obj) {
-  return obj.oid.name == SNAPMAPPER_OID;
-}
-
 static PG::interruptible_future<ceph::bufferlist> do_pgnls_common(
   const hobject_t& pg_start,
   const hobject_t& pg_end,
@@ -1188,13 +1184,6 @@ static PG::interruptible_future<ceph::bufferlist> do_pgnls_common(
     [&backend, filter, nspace](auto&& ret)
     -> PG::interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>> {
       auto& [objects, next] = ret;
-      auto is_snapmapper = [](const hobject_t &obj) {
-	if (is_snapmapper_oid(obj)) {
-	  return false;
-	} else {
-	  return true;
-	}
-      };
       auto in_my_namespace = [&nspace](const hobject_t& obj) {
         using crimson::common::local_conf;
         if (obj.get_namespace() == local_conf()->osd_hit_set_namespace) {
@@ -1222,8 +1211,7 @@ static PG::interruptible_future<ceph::bufferlist> do_pgnls_common(
         }
       };
 
-      auto range = objects | boost::adaptors::filtered(is_snapmapper)
-			   | boost::adaptors::filtered(in_my_namespace)
+      auto range = objects | boost::adaptors::filtered(in_my_namespace)
                            | boost::adaptors::transformed(to_pglsed);
       logger().debug("do_pgnls_common: finishing the 1st stage of pgls");
       return seastar::when_all_succeed(std::begin(range),
@@ -1356,9 +1344,6 @@ static PG::interruptible_future<ceph::bufferlist> do_pgls_common(
         PG::interruptor::map_reduce(std::move(objects),
           [&backend, filter, nspace](const hobject_t& obj)
 	  -> PG::interruptible_future<hobject_t>{
-	    if (is_snapmapper_oid(obj)) {
-	      return seastar::make_ready_future<hobject_t>();
-	    }
             if (obj.get_namespace() == nspace) {
               if (filter) {
                 return pgls_filter(*filter, backend, obj);
