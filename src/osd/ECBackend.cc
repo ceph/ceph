@@ -59,7 +59,7 @@ static ostream &_prefix(std::ostream *_dout, ECBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
-static ostream &_prefix(std::ostream *_dout, ECBackend::RecoveryBackend *pgb) {
+static ostream& _prefix(std::ostream *_dout, ECBackend::RecoveryBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
@@ -67,7 +67,7 @@ struct ECBackend::ECRecoveryBackend::ECRecoveryHandle : public PGBackend::Recove
   list<ECCommon::RecoveryBackend::RecoveryOp> ops;
 };
 
-void ECBackend::RecoveryBackend::RecoveryOp::dump(Formatter *f) const {
+void ECCommon::RecoveryBackend::RecoveryOp::dump(Formatter *f) const {
   f->dump_stream("hoid") << hoid;
   f->dump_stream("v") << v;
   f->dump_stream("missing_on") << missing_on;
@@ -107,7 +107,7 @@ PGBackend::RecoveryHandle *ECBackend::open_recovery_op() {
     recovery_backend.open_recovery_op());
 }
 
-ECBackend::RecoveryBackend::RecoveryBackend(
+ECCommon::RecoveryBackend::RecoveryBackend(
   CephContext *cct,
   const coll_t &coll,
   ceph::ErasureCodeInterfaceRef ec_impl,
@@ -125,8 +125,8 @@ ECBackend::ECRecoveryBackend::ECRecoveryHandle *ECBackend::ECRecoveryBackend::op
   return new ECRecoveryHandle;
 }
 
-void ECBackend::RecoveryBackend::_failed_push(const hobject_t &hoid,
-                                              ECCommon::read_result_t &res) {
+void ECCommon::RecoveryBackend::_failed_push(const hobject_t &hoid,
+                                             ECCommon::read_result_t &res) {
   dout(10) << __func__ << ": Read error " << hoid << " r="
 	   << res.r << " errors=" << res.errors << dendl;
   dout(10) << __func__ << ": canceling recovery op for obj " << hoid
@@ -176,7 +176,7 @@ void ECBackend::handle_recovery_push(
   }
 }
 
-void ECBackend::RecoveryBackend::handle_recovery_push(
+void ECCommon::RecoveryBackend::handle_recovery_push(
   const PushOp &op,
   RecoveryMessages *m,
   bool is_repair) {
@@ -281,7 +281,7 @@ void ECBackend::RecoveryBackend::handle_recovery_push(
   m->push_replies[get_parent()->primary_shard()].back().soid = op.soid;
 }
 
-void ECBackend::RecoveryBackend::handle_recovery_push_reply(
+void ECCommon::RecoveryBackend::handle_recovery_push_reply(
     const PushReplyOp &op,
     pg_shard_t from,
     RecoveryMessages *m) {
@@ -293,7 +293,7 @@ void ECBackend::RecoveryBackend::handle_recovery_push_reply(
   continue_recovery_op(rop, m);
 }
 
-void ECBackend::RecoveryBackend::update_object_size_after_read(
+void ECCommon::RecoveryBackend::update_object_size_after_read(
     uint64_t size,
     read_result_t &res,
     read_request_t &req) {
@@ -342,7 +342,7 @@ void ECBackend::RecoveryBackend::update_object_size_after_read(
            << dendl;
 }
 
-void ECBackend::RecoveryBackend::handle_recovery_read_complete(
+void ECCommon::RecoveryBackend::handle_recovery_read_complete(
     const hobject_t &hoid,
     read_result_t &&res,
     read_request_t &req,
@@ -437,7 +437,7 @@ struct SendPushReplies : public Context {
 };
 
 struct RecoveryReadCompleter : ECCommon::ReadCompleter {
-  RecoveryReadCompleter(ECBackend::RecoveryBackend &backend)
+  RecoveryReadCompleter(ECCommon::RecoveryBackend &backend)
     : backend(backend) {}
 
   void finish_single_request(
@@ -460,7 +460,7 @@ struct RecoveryReadCompleter : ECCommon::ReadCompleter {
     backend.dispatch_recovery_messages(rm, priority);
   }
 
-  ECBackend::RecoveryBackend &backend;
+  ECCommon::RecoveryBackend &backend;
   RecoveryMessages rm;
 };
 
@@ -476,7 +476,7 @@ void ECBackend::ECRecoveryBackend::commit_txn_send_replies(
   get_parent()->queue_transaction(std::move(txn));
 }
 
-void ECBackend::RecoveryBackend::dispatch_recovery_messages(
+void ECCommon::RecoveryBackend::dispatch_recovery_messages(
   RecoveryMessages &m, int priority) {
   for (map<pg_shard_t, vector<PushOp>>::iterator i = m.pushes.begin();
        i != m.pushes.end();
@@ -535,7 +535,7 @@ void ECBackend::RecoveryBackend::dispatch_recovery_messages(
     std::make_unique<RecoveryReadCompleter>(*this));
 }
 
-void ECBackend::RecoveryBackend::continue_recovery_op(
+void ECCommon::RecoveryBackend::continue_recovery_op(
   RecoveryBackend::RecoveryOp &op,
   RecoveryMessages *m) {
   dout(10) << __func__ << ": continuing " << op << dendl;
