@@ -3023,6 +3023,14 @@ Then run the following:
         return 'prometheus credentials updated correctly'
 
     @handle_orch_error
+    def set_custom_prometheus_alerts(self, alerts_file: str) -> str:
+        self.set_store('services/prometheus/alerting/custom_alerts.yml', alerts_file)
+        # need to reconfig prometheus daemon(s) to pick up new alerts file
+        for prometheus_daemon in self.cache.get_daemons_by_type('prometheus'):
+            self._schedule_daemon_action(prometheus_daemon.name(), 'reconfig')
+        return 'Updated alerts file and scheduled reconfig of prometheus daemon(s)'
+
+    @handle_orch_error
     def set_prometheus_target(self, url: str) -> str:
         prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
         if url not in prometheus_spec.targets:
