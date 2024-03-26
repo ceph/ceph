@@ -556,7 +556,9 @@ void Mirror::update_fs_mirrors() {
   {
     std::scoped_lock locker(m_lock);
     for (auto &[filesystem, mirror_action] : m_mirror_actions) {
-      auto failed_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed() &&
+      bool failed = (mirror_action.fs_mirror && mirror_action.fs_mirror->get_init_finished())?
+        mirror_action.fs_mirror->is_failed(): false;
+      auto failed_restart = failed &&
 	(failed_interval > 0 && (mirror_action.fs_mirror->get_failed_ts() - now) > failed_interval);
       auto blocklisted_restart = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted() &&
 	(blocklist_interval > 0 && (mirror_action.fs_mirror->get_blocklisted_ts() - now) > blocklist_interval);
