@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_DAEMON_PLACE_FAIL
 tasks:
 - cephadm.shell:
     host.a:
