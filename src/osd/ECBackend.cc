@@ -63,8 +63,8 @@ static ostream &_prefix(std::ostream *_dout, ECBackend::RecoveryBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
-struct ECCommon::RecoveryBackend::ECRecoveryHandle : public PGBackend::RecoveryHandle {
-  list<ECBackend::RecoveryBackend::RecoveryOp> ops;
+struct ECBackend::ECRecoveryBackend::ECRecoveryHandle : public PGBackend::RecoveryHandle {
+  list<ECCommon::RecoveryBackend::RecoveryOp> ops;
 };
 
 void ECBackend::RecoveryBackend::RecoveryOp::dump(Formatter *f) const {
@@ -121,7 +121,7 @@ ECBackend::RecoveryBackend::RecoveryBackend(
     read_pipeline(read_pipeline),
     parent(parent) {}
 
-ECCommon::RecoveryBackend::ECRecoveryHandle *ECBackend::RecoveryBackend::open_recovery_op() {
+ECBackend::ECRecoveryBackend::ECRecoveryHandle *ECBackend::ECRecoveryBackend::open_recovery_op() {
   return new ECRecoveryHandle;
 }
 
@@ -740,14 +740,14 @@ void ECBackend::run_recovery_op(
   PGBackend::RecoveryHandle *_h,
   int priority) {
   ceph_assert(_h);
-  auto &h = static_cast<ECCommon::RecoveryBackend::ECRecoveryHandle&>(*_h);
+  auto &h = static_cast<ECBackend::ECRecoveryBackend::ECRecoveryHandle&>(*_h);
   recovery_backend.run_recovery_op(h, priority);
   switcher->send_recovery_deletes(priority, h.deletes);
   delete _h;
 }
 
-void ECBackend::RecoveryBackend::run_recovery_op(
-  ECCommon::RecoveryBackend::ECRecoveryHandle &h,
+void ECBackend::ECRecoveryBackend::run_recovery_op(
+  ECBackend::ECRecoveryBackend::ECRecoveryHandle &h,
   int priority) {
   RecoveryMessages m;
   for (list<RecoveryOp>::iterator i = h.ops.begin();
@@ -767,50 +767,51 @@ int ECBackend::recover_object(
   ObjectContextRef head,
   ObjectContextRef obc,
   PGBackend::RecoveryHandle *_h) {
-  auto *h = static_cast<ECCommon::RecoveryBackend::ECRecoveryHandle*>(_h);
-  return recovery_backend.recover_object(hoid, v, head, obc, h);
+  auto *h = static_cast<ECBackend::ECRecoveryBackend::ECRecoveryHandle*>(_h);
+  h->ops.push_back(recovery_backend.recover_object(hoid, v, head, obc));
+  return 0;
 }
 
-int ECBackend::RecoveryBackend::recover_object(
+ECCommon::RecoveryBackend::RecoveryOp
+ECCommon::RecoveryBackend::recover_object(
   const hobject_t &hoid,
   eversion_t v,
   ObjectContextRef head,
-  ObjectContextRef obc,
-  ECCommon::RecoveryBackend::ECRecoveryHandle *h) {
-  h->ops.push_back(RecoveryOp());
-  h->ops.back().v = v;
-  h->ops.back().hoid = hoid;
-  h->ops.back().obc = obc;
-  h->ops.back().recovery_info.soid = hoid;
-  h->ops.back().recovery_info.version = v;
+  ObjectContextRef obc) {
+  RecoveryOp op;
+  op.v = v;
+  op.hoid = hoid;
+  op.obc = obc;
+  op.recovery_info.soid = hoid;
+  op.recovery_info.version = v;
   if (obc) {
-    h->ops.back().recovery_info.size = obc->obs.oi.size;
-    h->ops.back().recovery_info.oi = obc->obs.oi;
+    op.recovery_info.size = obc->obs.oi.size;
+    op.recovery_info.oi = obc->obs.oi;
   }
   if (hoid.is_snap()) {
     if (obc) {
       ceph_assert(obc->ssc);
-      h->ops.back().recovery_info.ss = obc->ssc->snapset;
+      op.recovery_info.ss = obc->ssc->snapset;
     } else if (head) {
       ceph_assert(head->ssc);
-      h->ops.back().recovery_info.ss = head->ssc->snapset;
+      op.recovery_info.ss = head->ssc->snapset;
     } else {
       ceph_abort_msg("neither obc nor head set for a snap object");
     }
   }
-  h->ops.back().recovery_progress.omap_complete = true;
+  op.recovery_progress.omap_complete = true;
   for (set<pg_shard_t>::const_iterator i =
          get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
     dout(10) << "checking " << *i << dendl;
     if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
-      h->ops.back().missing_on.insert(*i);
-      h->ops.back().missing_on_shards.insert(i->shard);
+      op.missing_on.insert(*i);
+      op.missing_on_shards.insert(i->shard);
     }
   }
-  dout(10) << __func__ << ": built op " << h->ops.back() << dendl;
-  return 0;
+  dout(10) << __func__ << ": built op " << op << dendl;
+  return op;
 }
 
 bool ECBackend::can_handle_while_inactive(
