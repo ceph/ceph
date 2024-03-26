@@ -4,6 +4,7 @@
 #include "mon/ConfigMap.h"
 
 #include <iostream>
+#include <memory>
 #include <string>
 #include "crush/CrushWrapper.h"
 #include "common/ceph_context.h"
@@ -90,7 +91,7 @@ TEST(ConfigMap, result_sections)
 {
   ConfigMap cm;
   boost::intrusive_ptr<CephContext> cct{new CephContext(CEPH_ENTITY_TYPE_CLIENT), false};
-  auto crush = new CrushWrapper;
+  auto crush = std::make_unique<CrushWrapper>();
   crush->finalize();
 
   int r;
@@ -124,19 +125,19 @@ TEST(ConfigMap, result_sections)
   EntityName n;
   n.set(CEPH_ENTITY_TYPE_MON, "a");
   auto c = cm.generate_entity_map(
-    n, {}, crush, "none", nullptr);
+    n, {}, crush.get(), "none", nullptr);
   ASSERT_EQ(1, c.size());
   ASSERT_EQ("a", c["foo"]);
 
   n.set(CEPH_ENTITY_TYPE_MON, "b");
   c = cm.generate_entity_map(
-    n, {}, crush, "none", nullptr);
+    n, {}, crush.get(), "none", nullptr);
   ASSERT_EQ(1, c.size());
   ASSERT_EQ("m", c["foo"]);
 
   n.set(CEPH_ENTITY_TYPE_MDS, "c");
   c = cm.generate_entity_map(
-    n, {}, crush, "none", nullptr);
+    n, {}, crush.get(), "none", nullptr);
   ASSERT_EQ(1, c.size());
   ASSERT_EQ("g", c["foo"]);
 }
