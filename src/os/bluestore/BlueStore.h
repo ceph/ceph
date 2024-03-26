@@ -261,7 +261,6 @@ public:
 
   typedef std::map<uint64_t, ceph::buffer::list> ready_regions_t;
 
-
   struct BufferSpace;
   struct Collection;
   struct Onode;
