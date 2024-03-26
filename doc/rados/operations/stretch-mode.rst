@@ -81,6 +81,18 @@ Data Center B. In a situation of this kind, the loss of Data Center A means
 that the data is lost and Ceph will not be able to operate on it. This
 situation is surprisingly difficult to avoid using only standard CRUSH rules.
 
+Individual Stretch Pools
+========================
+Setting individual ``stretch pool`` is an option that allows for the configuration
+of specific pools to be distributed across ``two or more data centers``.
+This is achieved by executing the ``ceph osd pool stretch set`` command on each desired pool,
+as opposed to applying a cluster-wide configuration ``with stretch mode``.
+See :ref:`setting_values_for_a_stretch_pool`
+
+Use ``stretch mode`` when you have exactly ``two data centers`` and require a uniform
+configuration across the entire cluster. Conversely, opt for a ``stretch pool``
+when you need a particular pool to be replicated across ``more than two data centers``,
+providing a more granular level of control and a larger cluster size.
 
 Stretch Mode
 ============
