@@ -1239,8 +1239,9 @@ private:
   // -- superblock --
   OSDSuperblock superblock;
 
-  void write_superblock();
-  void write_superblock(ObjectStore::Transaction& t);
+  static void write_superblock(CephContext* cct,
+                               OSDSuperblock& sb,
+                               ObjectStore::Transaction& t);
   int read_superblock();
 
   void clear_temp_objects();
