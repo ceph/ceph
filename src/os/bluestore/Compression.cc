@@ -44,17 +44,25 @@ struct scan_blob_element_t {
 };
 using object_scan_info_t = std::map<const Blob*, scan_blob_element_t>;
 
-inline uint32_t Estimator::estimate(const BlueStore::Extent* e)
+void Estimator::reset()
 {
+  gain = 0;
+  cost = 0;
+  extra_recompress.clear();
+}
+inline void Estimator::batch(const BlueStore::Extent* e, uint32_t _gain)
+{
+  using P = BlueStore::printer;
   const Blob *h_Blob = &(*e->blob);
   const bluestore_blob_t &h_bblob = h_Blob->get_blob();
-  uint32_t cost;
   if (h_bblob.is_compressed()) {
-    cost = e->length * h_bblob.get_compressed_payload_length() / h_bblob.get_logical_length();
+    cost += e->length * h_bblob.get_compressed_payload_length() / h_bblob.get_logical_length();
   } else {
-    cost = e->length * expected_compression_factor;
+    // for regular blobs we extrapolate from past compression
+    cost += e->length * expected_compression_factor;
   }
-  return cost;
+  gain += _gain;
+  dout(20) << "ire extent=" << e->print(P::NICK) << " gain=" << gain << " cost=" << cost << dendl;
 }
 
 inline uint32_t Estimator::estimate(uint32_t new_data)
@@ -64,9 +72,22 @@ inline uint32_t Estimator::estimate(uint32_t new_data)
   return cost;
 }
 
-inline bool Estimator::is_worth(uint32_t gain, uint32_t cost)
+inline bool Estimator::is_worth()
 {
-  return gain > cost;
+  bool take = gain > cost;
+  gain = 0;
+  cost = 0;
+  return take;
+}
+
+inline bool Estimator::is_worth(const BlueStore::Extent* e)
+{
+  const Blob *h_Blob = &(*e->blob);
+  const bluestore_blob_t &h_bblob = h_Blob->get_blob();
+  ceph_assert(!h_bblob.is_compressed());
+  ceph_assert(!h_bblob.is_shared());
+  // for now assume it always worth
+  return true;
 }
 
 inline void Estimator::mark_recompress(const BlueStore::Extent* e)
@@ -109,16 +130,6 @@ void Estimator::get_regions(std::vector<region_t>& regions)
     }
     ++i;
     if (i == extra_recompress.end() || i->first != end) {
-      // close existing region, propose blob split
-      uint32_t size = r->length;
-      uint32_t blobs = (size + max_blob_size - 1) / max_blob_size;
-      uint32_t blob_size = p2roundup(size / blobs, min_alloc_size);
-      r->blob_sizes.resize(blobs);
-      for (auto& i: r->blob_sizes) {
-        ceph_assert(size > 0);
-        i = std::min(size, blob_size);
-        size -= i;
-      }
       end = unset;
     }
   }
@@ -126,13 +137,14 @@ void Estimator::get_regions(std::vector<region_t>& regions)
 
 void Estimator::split_and_compress(
   CompressorRef compr,
+  uint32_t max_blob_size,
   ceph::buffer::list& data_bl,
   Writer::blob_vec& bd)
 {
   uint32_t size = data_bl.length();
   ceph_assert(size > 0);
   uint32_t blobs = (size + max_blob_size - 1) / max_blob_size;
-  uint32_t blob_size = p2roundup(size / blobs, min_alloc_size);
+  uint32_t blob_size = p2roundup(size / blobs, (uint32_t)bluestore->min_alloc_size);
   std::vector<uint32_t> blob_sizes(blobs);
   for (auto& i: blob_sizes) {
     i = std::min(size, blob_size);
@@ -216,9 +228,9 @@ private:
   void save_consumed();
   void restore_consumed();
   object_scan_info_t::iterator find_least_expanding();
-  void if_recompressed_extent(const Extent *e, gain_cost &gc);
-  void estimate_gain_left(exmp_cit left, uint32_t right, gain_cost &gc);
-  void estimate_gain_right(uint32_t left, exmp_cit right, gain_cost &gc);
+  void if_recompressed_extent(const Extent *e);
+  void estimate_gain_left(exmp_cit left, uint32_t right);
+  void estimate_gain_right(uint32_t left, exmp_cit right);
   void add_compress_left(exmp_cit left, uint32_t right);
   void add_compress_right(uint32_t left, exmp_cit right);
   void walk_left(exmp_cit &it);
@@ -406,13 +418,12 @@ bool Scan::maybe_expand_scan_range(
 
 // Calculate gain and cost of recompressing an extent
 void Scan::if_recompressed_extent(
-  const Extent* e, gain_cost& gc)
+  const Extent* e)
 {
   using P = BlueStore::printer;
   const Blob *h_Blob = &(*e->blob);
   const bluestore_blob_t &h_bblob = h_Blob->get_blob();
   uint32_t gain = 0;
-  uint32_t cost = 0;
   dout(29) << "ire " << e->print(P::NICK + P::SUSE) << dendl;
   if (h_bblob.is_shared()) {
     dout(29) << "ire ignoring shared " << h_Blob->print(P::NICK) << dendl;
@@ -424,8 +435,7 @@ void Scan::if_recompressed_extent(
         // Seen all extents of the blob, can take gain.
         gain = h_bblob.get_ondisk_length();
       }
-      cost = estimator->estimate(e);
-      dout(20) << "ire extent=" << e->print(P::NICK) << " gain=" << gain << " cost=" << cost << dendl;
+      estimator->batch(e, gain);
     } else {
       dout(10) << "ire blob not scanned before! " << h_Blob->print(P::NICK + P::SUSE) << dendl;
       // This blob was seen, but removed as completely consumed?
@@ -435,20 +445,15 @@ void Scan::if_recompressed_extent(
   } else {
     // not compressed
     gain = e->length;
-    // for regular blobs we extrapolate from past compression
-    cost = estimator->estimate(e);
-    dout(20) << "ire extent=" << e->print(P::NICK) << " gain=" << gain << " cost=" << cost << dendl;
+    estimator->batch(e, gain);
   }
-  gc.gain += gain;
-  gc.cost += cost;
-  dout(29) << "ire gain=" << gc.gain << " cost=" << gc.cost << dendl;
 };
 
 // left side variant of estimate
 // 'left' is extent that is the leftmost extent to be analyzed.
 // 'right' is the leftmost logical offset of area already marked for recompression
 void Scan::estimate_gain_left(
-  exmp_cit left, uint32_t right, gain_cost &gc)
+  exmp_cit left, uint32_t right)
 {
   auto i = left;
   uint32_t last_offset = i->logical_offset;
@@ -459,7 +464,7 @@ void Scan::estimate_gain_left(
       // TODO something has to be done with it....
       // Does it influence compression gain/cost?
     }
-    if_recompressed_extent(&(*i), gc);
+    if_recompressed_extent(&(*i));
     last_offset = i->logical_end();
   }
   if (last_offset < right) {
@@ -472,7 +477,7 @@ void Scan::estimate_gain_left(
 // 'left' is the first byte after rightmost logical offset that has already marked for recompression
 // 'right' is extent that is the last that should be analyzed.
 void Scan::estimate_gain_right(
-  uint32_t left, exmp_cit right, gain_cost &gc)
+  uint32_t left, exmp_cit right)
 {
   uint32_t last_offset = left;
   for (auto i = extent_map->seek_lextent(left);;) {
@@ -481,7 +486,7 @@ void Scan::estimate_gain_right(
       // here we have hole
       // TODO something has to be done with it....
     }
-    if_recompressed_extent(&(*i), gc);
+    if_recompressed_extent(&(*i));
     last_offset = i->logical_end();
     if (i == right)
       break; // stop once right is processed
@@ -549,16 +554,15 @@ void Scan::walk_left(exmp_cit& it)
     if (h_bblob.is_shared()) {
       // never recompress shared
       dout(29) << "wl skipping shared" << dendl;
-      continue;
+      ++it; //back out
+      break;
     }
     if (h_bblob.is_compressed()) {
       dout(29) << "wl compressed, stop" << dendl;
       ++it; //back out
       break;
     }
-    gain_cost gc;
-    if_recompressed_extent(&(*it), gc);
-    if (estimator->is_worth(gc.gain, gc.cost)) {
+    if (estimator->is_worth(&(*it))) {
       estimator->mark_recompress(&(*it));
       done_left = it->logical_offset;
     }
@@ -585,15 +589,13 @@ void Scan::walk_right(exmp_cit& it)
     if (h_bblob.is_shared()) {
       // never recompress shared
       dout(29) << "wr skipping shared" << dendl;
-      continue;
+      break;
     }
     if (h_bblob.is_compressed()) {
       dout(29) << "wr compressed, stop" << dendl;
       break;
     }
-    gain_cost gc;
-    if_recompressed_extent(&(*it), gc);
-    if (estimator->is_worth(gc.gain, gc.cost)) {
+    if (estimator->is_worth(&(*it))) {
       estimator->mark_recompress(&(*it));
       done_right = it->logical_end();
     }
@@ -746,7 +748,6 @@ void Scan::on_write_start(
     dout(20) << "on_write #4 scanned_blobs=" << scanned_blobs << dendl;
     object_scan_info_t::iterator b_it;
     while (true) {
-      gain_cost gc;
       b_it = find_least_expanding();
       if (b_it == scanned_blobs.end()) {
         break;
@@ -755,13 +756,12 @@ void Scan::on_write_start(
       save_consumed();
       // now check if we want to merge this blob that requires least expanding
       if (b_it->second.leftmost_extent->logical_offset < done_left) {
-        estimate_gain_left(b_it->second.leftmost_extent, done_left, gc);
+        estimate_gain_left(b_it->second.leftmost_extent, done_left);
       }
       if (done_right < b_it->second.rightmost_extent->logical_end()) {
-        estimate_gain_right(done_right, b_it->second.rightmost_extent, gc);
+        estimate_gain_right(done_right, b_it->second.rightmost_extent);
       }
-      dout(20) << "on_write #4 gain=" << gc.gain << " cost=" << gc.cost << dendl;
-      if (estimator->is_worth(gc.gain, gc.cost)) {
+      if (estimator->is_worth()) {
         // meld this new blob into re-write region
         if (b_it->second.leftmost_extent->logical_offset < done_left) {
           add_compress_left(b_it->second.leftmost_extent, done_left);
@@ -770,7 +770,7 @@ void Scan::on_write_start(
         if (done_right < b_it->second.rightmost_extent->logical_end()) {
           add_compress_right(done_right, b_it->second.rightmost_extent);
           done_right = b_it->second.rightmost_extent->logical_end();
-        }  
+        }
         scanned_blobs.erase(b_it);
       } else {
         // We do not want to recompress this blob yet.
