@@ -41,8 +41,6 @@
 #include "crimson/osd/object_context_loader.h"
 #include "crimson/osd/scrub/pg_scrubber.h"
 
-#define SNAPMAPPER_OID "snapmapper"
-
 class MQuery;
 class OSDMap;
 class PGBackend;
@@ -649,16 +647,6 @@ public:
 private:
   OSDriver osdriver;
   SnapMapper snap_mapper;
-  ghobject_t make_snapmapper_oid() const {
-    return ghobject_t(hobject_t(
-      sobject_t(
-       object_t(SNAPMAPPER_OID),
-       0),
-      std::string(),
-      pgid.ps(),
-      pgid.pool(),
-      std::string()));
-  }
 public:
   // PeeringListener
   void publish_stats_to_osd() final;
