@@ -1080,12 +1080,14 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
 }
 
 PGBackend::interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>>
-PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
+PGBackend::list_objects(
+  const hobject_t& start, const hobject_t &end, uint64_t limit) const
 {
   auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
+  auto gend = end.is_max() ? ghobject_t::get_max() : ghobject_t{end, 0, shard};
   return interruptor::make_interruptible(store->list_objects(coll,
 					 gstart,
-					 ghobject_t::get_max(),
+					 gend,
 					 limit))
     .then_interruptible([](auto ret) {
       auto& [gobjects, next] = ret;
