@@ -11511,6 +11511,8 @@ paths:
                   type: string
                 suspended:
                   type: string
+                system:
+                  type: string
                 uid:
                   type: string
               required:
@@ -11662,6 +11664,8 @@ paths:
                 max_buckets:
                   type: string
                 suspended:
+                  type: string
+                system:
                   type: string
               type: object
       responses:
