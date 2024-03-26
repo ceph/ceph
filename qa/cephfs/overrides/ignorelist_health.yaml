@@ -15,3 +15,4 @@ overrides:
       - overall HEALTH_
       - Replacing daemon
       - deprecated feature inline_data
+      - \(PG_DEGRADED
