@@ -37,7 +37,7 @@ bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
 // make sure that if user/password are passed inside URL, it is over secure connection
 // update rgw_pubsub_dest to indicate that a password is stored in the URL
 bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct,
-                                         const RGWEnv& env, std::string& message)
+                                         const req_info& ri, std::string& message)
 {
   if (dest.push_endpoint.empty()) {
     return true;
@@ -48,11 +48,31 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
     message = "Malformed URL for push-endpoint";
     return false;
   }
+
+  const auto& args=ri.args;
+  auto topic_user_name=args.get_optional("user-name");
+  auto topic_password=args.get_optional("password");
+
+  // check if username/password was already supplied via topic attributes
+  // and if also provided as part of the endpoint URL issue a warning
+  if (topic_user_name.has_value()) {
+    if (!user.empty()) {
+      message = "Username provided via both topic attributes and endpoint URL: using topic attributes";
+    }
+    user = topic_user_name.get();
+  }
+  if (topic_password.has_value()) {
+    if (!password.empty()) {
+      message = "Password provided via both topic attributes and endpoint URL: using topic attributes";
+    }
+    password = topic_password.get();
+  }
+
   // this should be verified inside parse_url()
   ceph_assert(user.empty() == password.empty());
   if (!user.empty()) {
     dest.stored_secret = true;
-    if (!verify_transport_security(cct, env)) {
+    if (!verify_transport_security(cct, *ri.env)) {
       message = "Topic contains secrets that must be transmitted over a secure transport";
       return false;
     }
@@ -241,7 +261,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     s->info.args.get_int("max_retries", reinterpret_cast<int *>(&dest.max_retries), rgw::notify::DEFAULT_GLOBAL_VALUE);
     s->info.args.get_int("retry_sleep_duration", reinterpret_cast<int *>(&dest.retry_sleep_duration), rgw::notify::DEFAULT_GLOBAL_VALUE);
 
-    if (!validate_and_update_endpoint_secret(dest, s->cct, *s->info.env, s->err.message)) {
+    if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
       return -EINVAL;
     }
     // Store topic Policy.
@@ -731,7 +751,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
                            rgw::notify::DEFAULT_GLOBAL_VALUE);
     } else if (attribute_name == "push-endpoint") {
       dest.push_endpoint = s->info.args.get("AttributeValue");
-      if (!validate_and_update_endpoint_secret(dest, s->cct, *s->info.env, s->err.message)) {
+      if (!validate_and_update_endpoint_secret(dest, s->cct, s->info, s->err.message)) {
         return -EINVAL;
       }
     } else if (attribute_name == "Policy") {
