@@ -1056,6 +1056,9 @@ class Object {
     /** Get a unique copy of this object */
     virtual std::unique_ptr<Object> clone() = 0;
 
+    virtual jspan_context& get_trace() = 0;
+    virtual void set_trace (jspan_context&& _trace_ctx) = 0;
+
     /* dang - This is temporary, until the API is completed */
     /** Get the key for this object */
     virtual rgw_obj_key& get_key() = 0;
@@ -1139,7 +1142,7 @@ public:
   virtual std::map<uint32_t, std::unique_ptr<MultipartPart>>& get_parts() = 0;
 
   /** Get the trace context of this upload */
-  virtual const jspan_context& get_trace() = 0;
+  virtual jspan_context& get_trace() = 0;
 
   /** Get the Object that represents this upload */
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() = 0;

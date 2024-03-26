@@ -2897,6 +2897,8 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 
   rgw_zone_id no_zone;
 
+  jspan_context no_trace{false, false};
+
   r = copy_obj(obj_ctx,
                user,
                NULL, /* req_info *info */
@@ -2925,7 +2927,8 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* void (*progress_cb)(off_t, void *) */
                NULL, /* void *progress_data */
                dpp,
-               y);
+               y,
+               no_trace);
   if (r == -ECANCELED || r == -ENOENT) {
     /* Has already been overwritten, meaning another rgw process already
      * copied it out */
@@ -2991,6 +2994,8 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
     obj_ctx.set_atomic(archive_obj);
     obj_ctx.set_atomic(obj);
 
+    jspan_context no_trace{false, false};
+
     int ret = copy_obj(obj_ctx,
                        user,
                        nullptr,       /* req_info *info */
@@ -3019,7 +3024,8 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                        nullptr,       /* void (*progress_cb)(off_t, void *) */
                        nullptr,       /* void *progress_data */
                        dpp,
-                       y);
+                       y,
+                       no_trace);
     if (ret == -ECANCELED || ret == -ENOENT) {
       /* Has already been overwritten, meaning another rgw process already
        * copied it out */
@@ -3049,7 +3055,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
                                            map<string, bufferlist>& attrs,
                                            bool assume_noent, bool modify_tail,
                                            void *_index_op, const req_context& rctx,
-                                           bool log_op)
+                                           jspan_context& trace, bool log_op)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   RGWRados *store = target->get_store();
@@ -3224,7 +3230,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   auto& ioctx = ref.ioctx;
 
   tracepoint(rgw_rados, operate_enter, req_id.c_str());
-  r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, &op, rctx.y);
+  r = rgw_rados_operate(rctx.dpp, ref.ioctx, ref.obj.oid, &op, rctx.y, 0, &trace);
   tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
@@ -3341,7 +3347,7 @@ done_cancel:
 
 int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
                                         map<string, bufferlist>& attrs, const req_context& rctx,
-                                        bool log_op)
+                                        jspan_context& trace, bool log_op)
 {
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
@@ -3352,13 +3358,13 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   int r;
   if (assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, rctx, log_op);
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, rctx, trace, log_op);
     if (r == -EEXIST) {
       assume_noent = false;
     }
   }
   if (!assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, rctx, log_op);
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, rctx, trace, log_op);
   }
   return r;
 }
@@ -4167,9 +4173,10 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
+  jspan_context no_trace{false, false};
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
                                   user_id, obj_ctx, dest_obj, olh_epoch,
-				  tag, rctx.dpp, rctx.y);
+				  tag, rctx.dpp, rctx.y, no_trace);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -4602,7 +4609,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
                const DoutPrefixProvider *dpp,
-               optional_yield y)
+               optional_yield y,
+               jspan_context& trace)
 {
   int ret;
   uint64_t obj_size;
@@ -4883,7 +4891,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   write_op.meta.delete_at = delete_at;
   write_op.meta.modify_tail = !copy_itself;
 
-  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx);
+  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, rctx, trace);
   if (ret < 0) {
     goto done_ret;
   }
@@ -4953,9 +4961,10 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
   using namespace rgw::putobj;
+  jspan_context no_trace{false, false};
   AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info,
                                   &dest_placement, dest_bucket_info.owner,
-                                  obj_ctx, dest_obj, olh_epoch, tag, dpp, y);
+                                  obj_ctx, dest_obj, olh_epoch, tag, dpp, y, no_trace);
   int ret = processor.prepare(y);
   if (ret < 0)
     return ret;

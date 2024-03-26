@@ -1427,7 +1427,7 @@ std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *
 				 this, std::move(aio), owner,
 				 ptail_placement_rule,
 				 unique_tag, position,
-				 cur_accounted_size);
+				 cur_accounted_size, obj->get_trace());
 }
 
 std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *dpp,
@@ -1445,7 +1445,7 @@ std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *
 				 bucket_info, obj_ctx, obj->get_obj(),
 				 this, std::move(aio), owner,
 				 ptail_placement_rule,
-				 olh_epoch, unique_tag);
+				 olh_epoch, unique_tag, obj->get_trace());
 }
 
 const std::string& RadosStore::get_compression_type(const rgw_placement_rule& rule)
@@ -1854,7 +1854,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   attrs.erase(RGW_ATTR_TAIL_TAG);
 
   const req_context rctx{dpp, y, nullptr};
-  return obj_op.write_meta(0, 0, attrs, rctx);
+  return obj_op.write_meta(0, 0, attrs, rctx, head_obj->get_trace());
 }
 
 int RadosObject::get_max_chunk_size(const DoutPrefixProvider* dpp, rgw_placement_rule placement_rule, uint64_t* max_chunk_size, uint64_t* alignment)
@@ -2100,7 +2100,8 @@ int RadosObject::copy_object(User* user,
 				     progress_cb,
 				     progress_data,
 				     dpp,
-				     y);
+				     y,
+                                     dest_object->get_trace());
 }
 
 int RadosObject::RadosReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y)
@@ -2313,7 +2314,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     encode(upload_info, bl);
     obj_op.meta.data = &bl;
 
-    ret = obj_op.write_meta(bl.length(), 0, attrs, rctx, false);
+    ret = obj_op.write_meta(bl.length(), 0, attrs, rctx, get_trace(), false);
   } while (ret == -EEXIST);
 
   return ret;
@@ -2613,7 +2614,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.olh_epoch = olh_epoch;
 
   const req_context rctx{dpp, y, nullptr};
-  ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx);
+  ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
   if (ret < 0)
     return ret;
 
@@ -2712,7 +2713,7 @@ std::unique_ptr<Writer> RadosMultipartUpload::get_writer(
   return std::make_unique<RadosMultipartWriter>(dpp, y, get_upload_id(),
 				 bucket_info, obj_ctx,
 				 obj->get_obj(), store, std::move(aio), owner,
-				 ptail_placement_rule, part_num, part_num_str);
+				 ptail_placement_rule, part_num, part_num_str, obj->get_trace());
 }
 
 MPRadosSerializer::MPRadosSerializer(const DoutPrefixProvider *dpp, RadosStore* store, RadosObject* obj, const std::string& lock_name) :

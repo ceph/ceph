@@ -740,7 +740,8 @@ public:
 		    const rgw_user& owner,
 		    const rgw_placement_rule *ptail_placement_rule,
 		    uint64_t olh_epoch,
-		    const std::string& unique_tag) :
+		    const std::string& unique_tag,
+                    jspan_context& trace) :
 			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
@@ -748,7 +749,7 @@ public:
 			processor(&*aio, store->getRados(), bucket_info,
 				  ptail_placement_rule, owner, obj_ctx,
 				  obj, olh_epoch, unique_tag,
-				  dpp, y)
+				  dpp, y, trace)
   {}
   ~RadosAtomicWriter() = default;
 
@@ -788,7 +789,8 @@ public:
 		    const rgw_placement_rule *ptail_placement_rule,
 		    const std::string& unique_tag,
 		    uint64_t position,
-		    uint64_t *cur_accounted_size) :
+		    uint64_t *cur_accounted_size,
+                    jspan_context& trace) :
 			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
@@ -796,7 +798,7 @@ public:
 			processor(&*aio, store->getRados(), bucket_info,
 				  ptail_placement_rule, owner, obj_ctx,
 				  obj, unique_tag, position,
-				  cur_accounted_size, dpp, y)
+				  cur_accounted_size, dpp, y, trace)
   {}
   ~RadosAppendWriter() = default;
 
@@ -834,7 +836,7 @@ public:
 		       RadosStore* _store, std::unique_ptr<Aio> _aio,
 		       const rgw_user& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
-		       uint64_t part_num, const std::string& part_num_str) :
+		       uint64_t part_num, const std::string& part_num_str, jspan_context& trace) :
 			StoreWriter(dpp, y),
 			store(_store),
 			aio(std::move(_aio)),
@@ -842,7 +844,7 @@ public:
 			processor(&*aio, store->getRados(), bucket_info,
 				  ptail_placement_rule, owner, obj_ctx,
 				  obj, upload_id,
-				  part_num, part_num_str, dpp, y)
+				  part_num, part_num_str, dpp, y, trace)
   {}
   ~RadosMultipartWriter() = default;
 
