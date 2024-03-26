@@ -324,6 +324,9 @@ ClientRequest::do_process(
     return reply_op_error(pg, -ENAMETOOLONG);
   } else if (m->get_hobj().oid.name.empty()) {
     return reply_op_error(pg, -EINVAL);
+  } else if (m->get_hobj().is_internal_pg_local()) {
+    // clients are not allowed to write to hobject_t::INTERNAL_PG_LOCAL_NS
+    return reply_op_error(pg, -EINVAL);
   } else if (pg->get_osdmap()->is_blocklisted(
         get_foreign_connection().get_peer_addr())) {
     DEBUGDPP("{}.{}: {} is blocklisted",
