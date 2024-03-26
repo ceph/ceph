@@ -99,6 +99,7 @@ describe('NfsFormComponent', () => {
       fsal: { fs_name: 'a', name: 'CEPH' },
       path: '/',
       protocolNfsv4: true,
+      protocolNfsv3: true,
       pseudo: '',
       sec_label_xattr: 'security.selinux',
       security_label: false,
@@ -121,8 +122,9 @@ describe('NfsFormComponent', () => {
     expect(component.nfsForm.get('cluster_id').disabled).toBeTruthy();
   });
 
-  it('should mark NFSv4 protocol as enabled always', () => {
+  it('should mark NFSv4 & NFSv3 protocols as enabled always', () => {
     expect(component.nfsForm.get('protocolNfsv4')).toBeTruthy();
+    expect(component.nfsForm.get('protocolNfsv3')).toBeTruthy();
   });
 
   it('should match backend squash values with ui values', () => {
@@ -142,6 +144,7 @@ describe('NfsFormComponent', () => {
         fsal: { name: 'CEPH', fs_name: 1 },
         path: '/foo',
         protocolNfsv4: true,
+        protocolNfsv3: true,
         pseudo: '/baz',
         squash: 'no_root_squash',
         transportTCP: true,
@@ -155,6 +158,31 @@ describe('NfsFormComponent', () => {
       component.cluster_id = 'cluster1';
       component.export_id = '1';
       component.nfsForm.patchValue({ export_id: 1 });
+      component.submitAction();
+
+      const req = httpTesting.expectOne('api/nfs-ganesha/export/cluster1/1');
+      expect(req.request.method).toBe('PUT');
+      expect(req.request.body).toEqual({
+        access_type: 'RW',
+        clients: [],
+        cluster_id: 'cluster1',
+        export_id: 1,
+        fsal: { fs_name: 1, name: 'CEPH', sec_label_xattr: null },
+        path: '/foo',
+        protocols: [3, 4],
+        pseudo: '/baz',
+        security_label: false,
+        squash: 'no_root_squash',
+        transports: ['TCP', 'UDP']
+      });
+    });
+
+    it('should call update with selected nfs protocol', () => {
+      activatedRoute.setParams({ cluster_id: 'cluster1', export_id: '1' });
+      component.isEdit = true;
+      component.cluster_id = 'cluster1';
+      component.export_id = '1';
+      component.nfsForm.patchValue({ export_id: 1, protocolNfsv3: false });
       component.submitAction();
 
       const req = httpTesting.expectOne('api/nfs-ganesha/export/cluster1/1');
@@ -190,7 +218,7 @@ describe('NfsFormComponent', () => {
           sec_label_xattr: null
         },
         path: '/foo',
-        protocols: [4],
+        protocols: [3, 4],
         pseudo: '/baz',
         security_label: false,
         squash: 'no_root_squash',
