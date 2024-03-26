@@ -55,11 +55,11 @@ TEST(ConfigMap, parse_key)
 TEST(ConfigMap, add_option)
 {
   ConfigMap cm;
-  auto cct = new CephContext(CEPH_ENTITY_TYPE_MON);
+  boost::intrusive_ptr<CephContext> cct{new CephContext(CEPH_ENTITY_TYPE_CLIENT), false};
   int r;
 
   r = cm.add_option(
-    cct, "foo", "global", "fooval",
+    cct.get(), "foo", "global", "fooval",
     [&](const std::string& name) {
       return nullptr;
     });
@@ -67,7 +67,7 @@ TEST(ConfigMap, add_option)
   ASSERT_EQ(1, cm.global.options.size());
 
   r = cm.add_option(
-    cct, "foo", "mon", "fooval",
+    cct.get(), "foo", "mon", "fooval",
     [&](const std::string& name) {
       return nullptr;
     });
@@ -76,7 +76,7 @@ TEST(ConfigMap, add_option)
   ASSERT_EQ(1, cm.by_type["mon"].options.size());
   
   r = cm.add_option(
-    cct, "foo", "mon.a", "fooval",
+    cct.get(), "foo", "mon.a", "fooval",
     [&](const std::string& name) {
       return nullptr;
     });
@@ -89,14 +89,14 @@ TEST(ConfigMap, add_option)
 TEST(ConfigMap, result_sections)
 {
   ConfigMap cm;
-  auto cct = new CephContext(CEPH_ENTITY_TYPE_MON);
+  boost::intrusive_ptr<CephContext> cct{new CephContext(CEPH_ENTITY_TYPE_CLIENT), false};
   auto crush = new CrushWrapper;
   crush->finalize();
 
   int r;
 
   r = cm.add_option(
-    cct, "foo", "global", "g",
+    cct.get(), "foo", "global", "g",
     [&](const std::string& name) {
       return nullptr;
     });
@@ -104,7 +104,7 @@ TEST(ConfigMap, result_sections)
   ASSERT_EQ(1, cm.global.options.size());
 
   r = cm.add_option(
-    cct, "foo", "mon", "m",
+    cct.get(), "foo", "mon", "m",
     [&](const std::string& name) {
       return nullptr;
     });
@@ -113,7 +113,7 @@ TEST(ConfigMap, result_sections)
   ASSERT_EQ(1, cm.by_type["mon"].options.size());
 
   r = cm.add_option(
-    cct, "foo", "mon.a", "a",
+    cct.get(), "foo", "mon.a", "a",
     [&](const std::string& name) {
       return nullptr;
     });
