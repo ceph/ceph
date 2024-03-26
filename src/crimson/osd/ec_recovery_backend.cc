@@ -57,6 +57,11 @@ ECRecoveryBackend::handle_push(
   Ref<MOSDPGPush> m)
 {
   logger().debug("{}: {}", __func__, *m);
+  RecoveryMessages rm;
+  for (const auto& push_op : m->pushes) {
+    handle_recovery_push(push_op, &rm, m->is_repair);
+  }
+  dispatch_recovery_messages(rm, m->get_priority());
   return seastar::now();
 }
 
@@ -65,6 +70,11 @@ ECRecoveryBackend::handle_push_reply(
   Ref<MOSDPGPushReply> m)
 {
   logger().debug("{}: {}", __func__, *m);
+  RecoveryMessages rm;
+  for (const auto& push_reply_op : m->replies) {
+    handle_recovery_push_reply(push_reply_op, m->from, &rm);
+  }
+  dispatch_recovery_messages(rm, m->get_priority());
   return seastar::now();
 }
 
