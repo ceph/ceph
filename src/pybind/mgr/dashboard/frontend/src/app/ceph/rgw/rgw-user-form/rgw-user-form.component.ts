@@ -98,7 +98,10 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
               )
             ]
       ],
-      display_name: [null, [Validators.required, Validators.pattern(/^[a-zA-Z0-9!@#%^&*()_ -]+$/)]],
+      display_name: [
+        null,
+        [Validators.required, Validators.pattern(/^[a-zA-Z0-9!@#%^&*()._ -]+$/)]
+      ],
       email: [
         null,
         [CdValidators.email],
