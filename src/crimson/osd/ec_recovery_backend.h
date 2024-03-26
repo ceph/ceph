@@ -19,6 +19,7 @@
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDPGScan.h"
+#include "osd/ECCommon.h"
 #include "osd/recovery_types.h"
 #include "osd/osd_types.h"
 
@@ -28,14 +29,13 @@ namespace crimson::osd{
 
 class PGBackend;
 
-class ECRecoveryBackend : public RecoveryBackend {
+class ECRecoveryBackend : public RecoveryBackend,
+			  private ECCommon::RecoveryBackend {
 public:
   ECRecoveryBackend(crimson::osd::PG& pg,
 		    crimson::osd::ShardServices& shard_services,
 		    crimson::os::CollectionRef coll,
-		    PGBackend* backend)
-    : RecoveryBackend(pg, shard_services, coll, backend)
-  {}
+		    ECBackend* backend);
 
   interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
@@ -50,6 +50,10 @@ public:
   }
 
 private:
+  void commit_txn_send_replies(
+    ceph::os::Transaction&& txn,
+    std::map<int, MOSDPGPushReply*> replies) override;
+
   interruptible_future<> handle_push(
     Ref<MOSDPGPush> m);
   interruptible_future<> handle_push_reply(
