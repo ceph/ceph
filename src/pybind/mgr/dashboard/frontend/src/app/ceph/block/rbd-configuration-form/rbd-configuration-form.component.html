@@ -4,13 +4,13 @@
 
   <div *ngFor="let section of rbdConfigurationService.sections"
        class="col-12">
-    <h4 class="cd-header">
+    <h5 class="cd-header">
       <span (click)="toggleSectionVisibility(section.class)"
             class="collapsible">
         {{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
                                  aria-hidden="true"></i>
       </span>
-    </h4>
+    </h5>
     <div class="{{ section.class }}"
          [hidden]="!sectionVisibility[section.class]">
       <div class="form-group row"

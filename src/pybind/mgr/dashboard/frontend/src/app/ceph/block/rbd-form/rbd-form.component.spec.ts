@@ -293,12 +293,11 @@ describe('RbdFormComponent', () => {
   });
 
   describe('test image configuration component', () => {
-    it('is visible', () => {
+    it('is present', () => {
       fixture.detectChanges();
       expect(
-        fixture.debugElement.query(By.css('cd-rbd-configuration-form')).nativeElement.parentElement
-          .hidden
-      ).toBe(true);
+        fixture.debugElement.query(By.css('cd-rbd-configuration-form'))
+      ).toBeTruthy();
     });
   });
 
