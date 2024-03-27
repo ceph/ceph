@@ -2104,7 +2104,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   }
 
   /* do nothing if no bucket */
-  if (entry->get_bucket().empty()) {
+  if ((! entry) || entry->get_bucket().empty()) {
     return ret;
   }
 
