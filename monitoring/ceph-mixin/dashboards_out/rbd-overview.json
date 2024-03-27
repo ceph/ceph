@@ -55,7 +55,7 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
-         "description": "",
+         "description": "RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.",
          "fieldConfig": {
             "defaults": {
                "custom": {
@@ -157,7 +157,7 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
-         "description": "",
+         "description": "RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.",
          "fieldConfig": {
             "defaults": {
                "custom": {
@@ -259,7 +259,7 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
-         "description": "",
+         "description": "RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.",
          "fieldConfig": {
             "defaults": {
                "custom": {
@@ -357,8 +357,107 @@
       },
       {
          "columns": [ ],
-         "datasource": "$datasource",
-         "description": "",
+         "datasource": "${datasource}",
+         "description": "RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "null",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "pool"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Pool"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "image"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Image"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "IOPS"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "iops"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               }
+            ]
+         },
          "gridPos": {
             "h": 7,
             "w": 8,
@@ -367,80 +466,21 @@
          },
          "id": 5,
          "links": [ ],
-         "sort": {
-            "col": 3,
-            "desc": true
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 1,
+            "showHeader": true
          },
-         "styles": [
-            {
-               "alias": "Pool",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "pool",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Image",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "image",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "IOPS",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "iops",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "/.*/",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            }
-         ],
+         "pluginVersion": "10.4.0",
+         "styles": "",
          "targets": [
             {
                "expr": "topk(10,\n  (\n    sort((\n      rate(ceph_rbd_write_ops{job=~\"$job\"}[$__rate_interval]) +\n        on (image, pool, namespace) rate(ceph_rbd_read_ops{job=~\"$job\"}[$__rate_interval])\n    ))\n  )\n)\n",
@@ -454,13 +494,119 @@
          "timeFrom": null,
          "timeShift": null,
          "title": "Highest IOPS",
-         "transform": "table",
+         "transformations": [
+            {
+               "id": "merge",
+               "options": {
+                  "reducers": [ ]
+               }
+            }
+         ],
          "type": "table"
       },
       {
          "columns": [ ],
-         "datasource": "$datasource",
-         "description": "",
+         "datasource": "${datasource}",
+         "description": "RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "null",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "pool"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Pool"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "image"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Image"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Throughput"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "Bps"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               }
+            ]
+         },
          "gridPos": {
             "h": 7,
             "w": 8,
@@ -469,80 +615,21 @@
          },
          "id": 6,
          "links": [ ],
-         "sort": {
-            "col": 3,
-            "desc": true
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 1,
+            "showHeader": true
          },
-         "styles": [
-            {
-               "alias": "Pool",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "pool",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Image",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "image",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Throughput",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "Bps",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "/.*/",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            }
-         ],
+         "pluginVersion": "10.4.0",
+         "styles": "",
          "targets": [
             {
                "expr": "topk(10,\n  sort(\n    sum(\n      rate(ceph_rbd_read_bytes{job=~\"$job\"}[$__rate_interval]) +\n        rate(ceph_rbd_write_bytes{job=~\"$job\"}[$__rate_interval])\n    ) by (pool, image, namespace)\n  )\n)\n",
@@ -556,13 +643,119 @@
          "timeFrom": null,
          "timeShift": null,
          "title": "Highest Throughput",
-         "transform": "table",
+         "transformations": [
+            {
+               "id": "merge",
+               "options": {
+                  "reducers": [ ]
+               }
+            }
+         ],
          "type": "table"
       },
       {
          "columns": [ ],
-         "datasource": "$datasource",
-         "description": "",
+         "datasource": "${datasource}",
+         "description": "RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "null",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "pool"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Pool"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "image"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Image"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Latency"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "ns"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               }
+            ]
+         },
          "gridPos": {
             "h": 7,
             "w": 8,
@@ -571,80 +764,21 @@
          },
          "id": 7,
          "links": [ ],
-         "sort": {
-            "col": 3,
-            "desc": true
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 1,
+            "showHeader": true
          },
-         "styles": [
-            {
-               "alias": "Pool",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "pool",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Image",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "image",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Latency",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "ns",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "/.*/",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            }
-         ],
+         "pluginVersion": "10.4.0",
+         "styles": "",
          "targets": [
             {
                "expr": "topk(10,\n  sum(\n    rate(ceph_rbd_write_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n      clamp_min(rate(ceph_rbd_write_latency_count{job=~\"$job\"}[$__rate_interval]), 1) +\n      rate(ceph_rbd_read_latency_sum{job=~\"$job\"}[$__rate_interval]) /\n      clamp_min(rate(ceph_rbd_read_latency_count{job=~\"$job\"}[$__rate_interval]), 1)\n  ) by (pool, image, namespace)\n)\n",
@@ -658,7 +792,14 @@
          "timeFrom": null,
          "timeShift": null,
          "title": "Highest Latency",
-         "transform": "table",
+         "transformations": [
+            {
+               "id": "merge",
+               "options": {
+                  "reducers": [ ]
+               }
+            }
+         ],
          "type": "table"
       }
    ],

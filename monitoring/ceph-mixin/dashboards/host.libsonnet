@@ -719,19 +719,70 @@ local g = import 'grafonnet/grafana.libsonnet';
         11,
         9
       ),
-      $.addTableSchema(
-        '$datasource',
-        'This table shows the 10 hosts with the highest number of slow ops',
-        { col: 2, desc: true },
-        [
-          $.overviewStyle('Instance', 'instance', 'string', 'short'),
-          $.overviewStyle('Slow Ops', 'Value', 'number', 'none'),
-          $.overviewStyle('', '/.*/', 'hidden', 'short'),
+
+      $.addTableExtended(
+        datasource='${datasource}',
+        title='Top Slow Ops per Host',
+        gridPosition={ h: 8, w: 6, x: 0, y: 30 },
+        options={
+          footer: {
+            fields: '',
+            reducer: ['sum'],
+            countRows: false,
+            enablePagination: false,
+            show: false,
+          },
+          frameIndex: 1,
+          showHeader: true,
+        },
+        custom={ align: 'null', cellOptions: { type: 'auto' }, filterable: true, inspect: false },
+        thresholds={
+          mode: 'absolute',
+          steps: [
+            { color: 'green', value: null },
+            { color: 'red', value: 80 },
+          ],
+        },
+        overrides=[
+          {
+            matcher: { id: 'byName', options: 'instance' },
+            properties: [
+              { id: 'displayName', value: 'Instance' },
+              { id: 'unit', value: 'short' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
+          {
+            matcher: { id: 'byName', options: 'Value' },
+            properties: [
+              { id: 'displayName', value: 'Slow Ops' },
+              { id: 'unit', value: 'none' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
         ],
-        'Top Slow Ops per Host',
-        'table'
+        pluginVersion='10.4.0'
       )
-      .addTarget(
+      .addTransformations([
+        {
+          id: 'merge',
+          options: { reducers: [] },
+        }
+        {
+          id: 'organize',
+          options: {
+            excludeByName: {
+              Time: true,
+              cluster: true,
+            },
+            indexByName: {},
+            renameByName: {},
+            includeByName: {},
+          },
+        },
+      ]).addTarget(
         $.addTargetSchema(
           |||
             topk(10,
@@ -743,6 +794,6 @@ local g = import 'grafonnet/grafana.libsonnet';
           1,
           true
         )
-      ) + { gridPos: { x: 0, y: 40, w: 4, h: 8 } },
+      ),
     ]),
 }
