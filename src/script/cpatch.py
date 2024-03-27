@@ -467,8 +467,10 @@ class Builder:
     def _container_build(self):
         log.info("Building container image")
         cmd = [self._ctx.engine, "build", "--tag", self._ctx.target, "."]
+        cmd.append('--net=host')
         if self._ctx.root_build:
             cmd.insert(0, "sudo")
+        log.debug("Container build command: %r", cmd)
         _run(cmd, cwd=self._workdir).check_returncode()
 
     def _build_tar(
