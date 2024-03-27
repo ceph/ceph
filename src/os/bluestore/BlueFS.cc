@@ -2429,7 +2429,7 @@ uint64_t BlueFS::_estimate_log_size_N()
   int avg_file_size = 12;
   uint64_t size = 4096 * 2;
   size += nodes.file_map.size() * (1 + sizeof(bluefs_fnode_t));
-  size += nodes.dir_map.size() + (1 + avg_dir_size);
+  size += nodes.dir_map.size() * (1 + avg_dir_size);
   size += nodes.file_map.size() * (1 + avg_dir_size + avg_file_size);
   return round_up_to(size, super.block_size);
 }
