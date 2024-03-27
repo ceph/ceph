@@ -823,11 +823,17 @@ struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
    */
   void clear_remote_reservation(bool warn_if_no_reservation);
 
+  void reset_ignored(const FullReset&);
+
   using reactions = mpl::list<
       sc::transition<IntervalChanged, NotActive>,
       sc::custom_reaction<ReserverGranted>,
       sc::custom_reaction<ReplicaReserveReq>,
-      sc::custom_reaction<ReplicaRelease>>;
+      sc::custom_reaction<ReplicaRelease>,
+      sc::in_state_reaction<
+	  FullReset,
+	  ReplicaActive,
+	  &ReplicaActive::reset_ignored>>;
 
   /// handle a reservation request from a primary
   sc::result react(const ReplicaReserveReq& ev);
@@ -904,15 +910,9 @@ struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
 struct ReplicaIdle : sc::state<ReplicaIdle, ReplicaActive>, NamedSimply {
   explicit ReplicaIdle(my_context ctx);
   ~ReplicaIdle() = default;
-  void reset_ignored(const FullReset&);
-  using reactions = mpl::list<
-      sc::custom_reaction<StartReplica>,
-      sc::in_state_reaction<
-	  FullReset,
-	  ReplicaIdle,
-	  &ReplicaIdle::reset_ignored>>;
+  using reactions = mpl::list<sc::custom_reaction<StartReplica>>;
 
- sc::result react(const StartReplica& ev);
+  sc::result react(const StartReplica& ev);
 };
 
 
@@ -930,8 +930,7 @@ struct ReplicaActiveOp
   using reactions = mpl::list<
       sc::custom_reaction<StartReplica>,
       sc::custom_reaction<ReplicaRelease>,
-      sc::custom_reaction<ReplicaReserveReq>,
-      sc::transition<FullReset, ReplicaIdle>>;
+      sc::custom_reaction<ReplicaReserveReq>>;
 
   /**
    * Handling the unexpected (read - caused by a bug) case of receiving a
