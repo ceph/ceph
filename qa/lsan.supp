@@ -3,6 +3,9 @@
 # LSAN_OPTIONS="suppressions=../qa/lsan.supp"
 # export ASAN_OPTIONS="detect_odr_violation=0"
 
+# gperftools allocates a singleton of MallocExtension and never frees it
+leak:^MallocExtension::Initialize
+
 # from perfglue/heap_profiler.cc
 # gperftools allocates a singleton and never frees it
 leak:^InitModule
