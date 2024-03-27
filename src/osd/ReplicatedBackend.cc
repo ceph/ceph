@@ -990,13 +990,9 @@ Message * ReplicatedBackend::generate_subop(
 
   wr->pg_trim_to = pg_trim_to;
 
-  if (HAVE_FEATURE(parent->min_peer_features(), OSD_REPOP_MLCOD)) {
-    wr->min_last_complete_ondisk = min_last_complete_ondisk;
-  } else {
-    /* Some replicas need this field to be at_version.  New replicas
-     * will ignore it */
-    wr->set_rollback_to(at_version);
-  }
+  // this feature is from 2019 (6f12bf27cb91), assume present
+  ceph_assert(HAVE_FEATURE(parent->min_peer_features(), OSD_REPOP_MLCOD));
+  wr->min_last_complete_ondisk = min_last_complete_ondisk;
 
   wr->new_temp_oid = new_temp_oid;
   wr->discard_temp_oid = discard_temp_oid;
