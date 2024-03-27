@@ -13828,9 +13828,8 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
   }
 
   if (qfinisher) {
-    auto* c = mdr->internal_op_finish;
     mdr->internal_op_finish = nullptr; // prevent ::request_kill recursion
-    c->complete(0);
+    qfinisher->complete(0);
   }
   mdr->result = 0;
 
