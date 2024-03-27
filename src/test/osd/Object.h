@@ -517,9 +517,11 @@ public:
 
   // takes ownership of gen
   void update(ContentsGenerator *gen, const ContDesc &next);
-  bool check(bufferlist &to_check);
+  bool check(bufferlist &to_check,
+	     const std::pair<uint64_t, uint64_t>& offlen);
   bool check_sparse(const std::map<uint64_t, uint64_t>& extends,
-		    bufferlist &to_check);
+		    bufferlist &to_check,
+		    const std::pair<uint64_t, uint64_t>& offlen);
   const ContDesc &most_recent();
   ContentsGenerator *most_recent_gen() {
     return layers.begin()->first.get();
