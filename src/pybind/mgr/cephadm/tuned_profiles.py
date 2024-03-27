@@ -3,6 +3,7 @@ from typing import Dict, List, TYPE_CHECKING
 from ceph.utils import datetime_now
 from .schedule import HostAssignment
 from ceph.deployment.service_spec import ServiceSpec, TunedProfileSpec
+from . import ssh
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -10,6 +11,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 SYSCTL_DIR = '/etc/sysctl.d'
+
+SYSCTL_SYSTEM_CMD = ssh.RemoteCommand(ssh.Executables.SYSCTL, ['--system'])
 
 
 class TunedProfileUtils():
@@ -69,7 +72,7 @@ class TunedProfileUtils():
         """
         if self.mgr.cache.is_host_unreachable(host):
             return
-        cmd = ['ls', SYSCTL_DIR]
+        cmd = ssh.RemoteCommand(ssh.Executables.LS, [SYSCTL_DIR])
         found_files = self.mgr.ssh.check_execute_command(host, cmd, log_command=self.mgr.log_refresh_metadata).split('\n')
         found_files = [s.strip() for s in found_files]
         profile_names: List[str] = sum([[*p] for p in profiles], [])  # extract all profiles names
@@ -81,11 +84,11 @@ class TunedProfileUtils():
                 continue
             if file not in expected_files:
                 logger.info(f'Removing stray tuned profile file {file}')
-                cmd = ['rm', '-f', f'{SYSCTL_DIR}/{file}']
+                cmd = ssh.RemoteCommand(ssh.Executables.RM, ['-f', f'{SYSCTL_DIR}/{file}'])
                 self.mgr.ssh.check_execute_command(host, cmd)
                 updated = True
         if updated:
-            self.mgr.ssh.check_execute_command(host, ['sysctl', '--system'])
+            self.mgr.ssh.check_execute_command(host, SYSCTL_SYSTEM_CMD)
 
     def _write_tuned_profiles(self, host: str, profiles: List[Dict[str, str]]) -> None:
         if self.mgr.cache.is_host_unreachable(host):
@@ -99,5 +102,5 @@ class TunedProfileUtils():
                     self.mgr.ssh.write_remote_file(host, profile_filename, content.encode('utf-8'))
                     updated = True
         if updated:
-            self.mgr.ssh.check_execute_command(host, ['sysctl', '--system'])
+            self.mgr.ssh.check_execute_command(host, SYSCTL_SYSTEM_CMD)
         self.mgr.cache.last_tuned_profile_update[host] = datetime_now()

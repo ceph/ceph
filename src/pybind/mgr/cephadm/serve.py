@@ -34,6 +34,7 @@ from mgr_util import format_bytes, verify_tls, get_cert_issuer_info, ServerConfi
 
 from . import utils
 from . import exchange
+from . import ssh
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -41,6 +42,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw', 'nvmeof']
+
+WHICH = ssh.RemoteExecutable('which')
+CEPHADM_EXE = ssh.RemoteExecutable('/usr/bin/cephadm')
 
 
 class CephadmServe:
@@ -1271,7 +1275,7 @@ class CephadmServe:
             if path == '/etc/ceph/ceph.conf':
                 continue
             self.log.info(f'Removing {host}:{path}')
-            cmd = ['rm', '-f', path]
+            cmd = ssh.RemoteCommand(ssh.Executables.RM, ['-f', path])
             self.mgr.ssh.check_execute_command(host, cmd)
             updated_files = True
             self.mgr.cache.removed_client_file(host, path)
@@ -1620,15 +1624,24 @@ class CephadmServe:
             if stdin and 'agent' not in str(entity):
                 self.log.debug('stdin: %s' % stdin)
 
-            cmd = ['which', 'python3']
+            cmd = ssh.RemoteCommand(WHICH, ['python3'])
             python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
-            cmd = [python, self.mgr.cephadm_binary_path] + final_args
+            # N.B. because the python3 executable is based on the results of the
+            # which command we can not know it ahead of time and must be converted
+            # into a RemoteExecutable.
+            cmd = ssh.RemoteCommand(
+                ssh.RemoteExecutable(python),
+                [self.mgr.cephadm_binary_path] + final_args
+            )
 
             try:
                 out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
                 if code == 2:
-                    ls_cmd = ['ls', self.mgr.cephadm_binary_path]
+                    ls_cmd = ssh.RemoteCommand(
+                        ssh.Executables.LS,
+                        [self.mgr.cephadm_binary_path]
+                    )
                     out_ls, err_ls, code_ls = await self.mgr.ssh._execute_command(host, ls_cmd, addr=addr,
                                                                                   log_command=log_output)
                     if code_ls == 2:
@@ -1649,7 +1662,7 @@ class CephadmServe:
 
         elif self.mgr.mode == 'cephadm-package':
             try:
-                cmd = ['/usr/bin/cephadm'] + final_args
+                cmd = ssh.RemoteCommand(CEPHADM_EXE, final_args)
                 out, err, code = await self.mgr.ssh._execute_command(
                     host, cmd, stdin=stdin, addr=addr)
             except Exception as e:
