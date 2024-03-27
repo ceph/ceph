@@ -88,24 +88,21 @@ ScrubFindRange::ifut<> ScrubFindRange::run(PG &pg)
 {
   LOG_PREFIX(ScrubFindRange::run);
   using crimson::common::local_conf;
-  return interruptor::make_interruptible(
+  auto [_, next] = co_await interruptor::make_interruptible(
     pg.shard_services.get_store().list_objects(
       pg.get_collection_ref(),
       ghobject_t(begin, ghobject_t::NO_GEN, pg.get_pgid().shard),
       ghobject_t::get_max(),
       local_conf().get_val<int64_t>("osd_scrub_chunk_max")
-    )
-  ).then_interruptible([FNAME, this, &pg](auto ret) {
-    auto &[_, next] = ret;
+    ));
 
-    // We rely on seeing an entire set of snapshots in a single chunk
-    auto end = next.hobj.get_max_object_boundary();
+  // We rely on seeing an entire set of snapshots in a single chunk
+  auto end = next.hobj.get_max_object_boundary();
 
-    DEBUGDPP("got next.hobj: {}, returning begin, end: {}, {}",
-	     pg, next.hobj, begin, end);
-    pg.scrubber.machine.process_event(
-      scrub::ScrubContext::request_range_complete_t{begin, end});
-  });
+  DEBUGDPP("got next.hobj: {}, returning begin, end: {}, {}",
+	   pg, next.hobj, begin, end);
+  pg.scrubber.machine.process_event(
+    scrub::ScrubContext::request_range_complete_t{begin, end});
 }
 
 template class ScrubAsyncOpT<ScrubFindRange>;
