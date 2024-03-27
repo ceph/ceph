@@ -110,14 +110,8 @@ public:
     decode(from, p);
     decode(updated_hit_set_history, p);
 
-    if (header.version >= 3) {
-      decode(min_last_complete_ondisk, p);
-    } else {
-      /* This field used to mean pg_roll_foward_to, but ReplicatedBackend
-       * simply assumes that we're rolling foward to version. */
-      eversion_t pg_roll_forward_to;
-      decode(pg_roll_forward_to, p);
-    }
+    ceph_assert(header.version >= 3);
+    decode(min_last_complete_ondisk, p);
     final_decode_needed = false;
   }
 
@@ -164,10 +158,6 @@ public:
     set_tid(rtid);
   }
 
-  void set_rollback_to(const eversion_t &rollback_to) {
-    header.version = 2;
-    min_last_complete_ondisk = rollback_to;
-  }
 private:
   ~MOSDRepOp() final {}
 
@@ -180,11 +170,7 @@ public:
       out << " " << poid << " v " << version;
       if (updated_hit_set_history)
         out << ", has_updated_hit_set_history";
-      if (header.version < 3) {
-	out << ", rollback_to(legacy)=" << min_last_complete_ondisk;
-      } else {
-	out << ", mlcod=" << min_last_complete_ondisk;
-      }
+      out << ", mlcod=" << min_last_complete_ondisk;
     }
     out << ")";
   }
