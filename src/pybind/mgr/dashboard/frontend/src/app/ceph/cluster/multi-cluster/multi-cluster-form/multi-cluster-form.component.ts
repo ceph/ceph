@@ -23,14 +23,10 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
   readonly ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
   readonly ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
   clusterApiUrlCmd = 'ceph mgr services';
-  prometheusApiUrlCmd = 'ceph config get mgr mgr/dashboard/PROMETHEUS_API_HOST';
-  crossOriginCmd = `ceph dashboard set-cross-origin-url ${window.location.origin}`;
   remoteClusterForm: CdFormGroup;
-  showToken = false;
   connectionVerified: boolean;
   connectionMessage = '';
   private subs = new Subscription();
-  showCrossOriginError = false;
   action: string;
   cluster: MultiCluster;
   clustersData: MultiCluster[];
@@ -38,6 +34,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
   clusterUrls: string[];
   clusterUsers: string[];
   clusterUrlUserMap: Map<string, string>;
+  hubUrl: string;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -45,6 +42,11 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     public notificationService: NotificationService,
     private multiClusterService: MultiClusterService
   ) {
+    this.subs.add(
+      this.multiClusterService.subscribe((resp: any) => {
+        this.hubUrl = resp['hub_url'];
+      })
+    );
     this.createForm();
   }
   ngOnInit(): void {
@@ -62,8 +64,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
       this.remoteClusterForm.get('clusterAlias').disable();
       this.remoteClusterForm.get('username').setValue(this.cluster.user);
       this.remoteClusterForm.get('username').disable();
-      this.remoteClusterForm.get('clusterFsid').setValue(this.cluster.name);
-      this.remoteClusterForm.get('clusterFsid').disable();
       this.remoteClusterForm.get('ssl').setValue(this.cluster.ssl_verify);
       this.remoteClusterForm.get('ssl_cert').setValue(this.cluster.ssl_certificate);
     }
@@ -76,7 +76,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
 
   createForm() {
     this.remoteClusterForm = new CdFormGroup({
-      showToken: new FormControl(false),
+      // showToken: new FormControl(false),
       username: new FormControl('', [
         CdValidators.custom('uniqueUrlandUser', (username: string) => {
           let remoteClusterUrl = '';
@@ -96,16 +96,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
           );
         })
       ]),
-      clusterFsid: new FormControl('', [
-        CdValidators.requiredIf({
-          showToken: true
-        })
-      ]),
-      prometheusApiUrl: new FormControl('', [
-        CdValidators.requiredIf({
-          showToken: true
-        })
-      ]),
       password: new FormControl('', []),
       remoteClusterUrl: new FormControl(null, {
         validators: [
@@ -120,14 +110,19 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
               );
             }
           }),
+          CdValidators.custom('hubUrlCheck', (remoteClusterUrl: string) => {
+            return (
+              (this.action === 'connect') && (remoteClusterUrl?.includes(this.hubUrl))
+            );
+          }),
           Validators.required
         ]
       }),
-      apiToken: new FormControl('', [
-        CdValidators.requiredIf({
-          showToken: true
-        })
-      ]),
+      // apiToken: new FormControl('', [
+      //   CdValidators.requiredIf({
+      //     showToken: true
+      //   })
+      // ]),
       clusterAlias: new FormControl(null, {
         validators: [
           Validators.required,
@@ -158,9 +153,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
   handleError(error: any): void {
     if (error.error.code === 'connection_refused') {
       this.connectionVerified = false;
-      this.showCrossOriginError = true;
       this.connectionMessage = error.error.detail;
-      this.crossOriginCmd = `ceph config set mgr mgr/dashboard/cross_origin_url ${window.location.origin} `;
     } else {
       this.connectionVerified = false;
       this.connectionMessage = error.error.detail;
@@ -184,8 +177,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     const clusterAlias = this.remoteClusterForm.getValue('clusterAlias');
     const username = this.remoteClusterForm.getValue('username');
     const password = this.remoteClusterForm.getValue('password');
-    const token = this.remoteClusterForm.getValue('apiToken');
-    const clusterFsid = this.remoteClusterForm.getValue('clusterFsid');
     const ssl = this.remoteClusterForm.getValue('ssl');
     const ssl_certificate = this.remoteClusterForm.getValue('ssl_cert')?.trim();
 
@@ -212,7 +203,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
       case 'reconnect':
         this.subs.add(
           this.multiClusterService
-            .reConnectCluster(updatedUrl, username, password, token, ssl, ssl_certificate)
+            .reConnectCluster(updatedUrl, username, password, ssl, ssl_certificate)
             .subscribe(commonSubscribtion)
         );
         break;
@@ -224,9 +215,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
               clusterAlias,
               username,
               password,
-              token,
               window.location.origin,
-              clusterFsid,
               ssl,
               ssl_certificate
             )
@@ -236,10 +225,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
       default:
         break;
     }
-  }
-
-  toggleToken() {
-    this.showToken = !this.showToken;
   }
 
   fileUpload(files: FileList, controlName: string) {

@@ -103,10 +103,7 @@ export class MultiClusterService {
     clusterAlias: string,
     username: string,
     password: string,
-    token = '',
     hub_url = '',
-    clusterFsid = '',
-    prometheusApiUrl = '',
     ssl = false,
     cert = ''
   ) {
@@ -115,28 +112,17 @@ export class MultiClusterService {
       cluster_alias: clusterAlias,
       username,
       password,
-      token,
       hub_url,
-      cluster_fsid: clusterFsid,
-      prometheus_api_url: prometheusApiUrl,
       ssl_verify: ssl,
       ssl_certificate: cert
     });
   }
 
-  reConnectCluster(
-    url: any,
-    username: string,
-    password: string,
-    token = '',
-    ssl = false,
-    cert = ''
-  ) {
+  reConnectCluster(url: any, username: string, password: string, ssl = false, cert = '') {
     return this.http.put('api/multi-cluster/reconnect_cluster', {
       url,
       username,
       password,
-      token,
       ssl_verify: ssl,
       ssl_certificate: cert
     });
