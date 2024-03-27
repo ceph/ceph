@@ -414,17 +414,21 @@ struct QuiesceDbRequest {
   bool operator==(const QuiesceDbRequest&) const = default;
 
   bool is_valid() const {
-    return control.roots_op < __INVALID && (
-        // Everything goes if a set id is provided
-        set_id
-        // or it's a new set creation, in which case the request should be including roots
-        || includes_roots()
-        // Otherwise, the allowed wildcard operations are: query and cancel all.
-        // Also, one can't await a wildcard
-        || ((is_cancel_all() || is_query()) && !await && !timeout && !expiration && !if_version)
-    );
+    return control.roots_op < __INVALID
+        && (is_awaitable() || !await) 
+        && (
+          // Everything goes if a set id is provided
+          set_id
+          // or it's a new set creation, in which case the request should be including roots
+          || includes_roots()
+          // Otherwise, the allowed wildcard operations are: query and cancel all.
+          // Also, one can't await a wildcard
+          || ((is_cancel_all() || is_query()) && !await && !timeout && !expiration && !if_version)
+        )
+    ;
   }
 
+  bool is_awaitable() const { return !(is_query() || is_cancel()); }
   bool is_mutating() const { return (control.roots_op != INCLUDE_OR_QUERY) || !roots.empty() || timeout || expiration; }
   bool is_cancel_all() const { return !set_id && is_cancel(); }
   bool excludes_roots() const { return control.roots_op == RESET_OR_CANCEL || (control.roots_op == EXCLUDE_OR_RELEASE && !roots.empty()); }
