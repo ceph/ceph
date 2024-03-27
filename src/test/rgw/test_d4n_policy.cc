@@ -130,7 +130,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	    }
 	  }
 	} else if (!exists) { /* No remote copy */
-	  block->hostsList.push_back(dir->cct->_conf->rgw_d4n_l1_datacache_address);
+	  block->hostsList.insert(env->dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
 	  if (dir->set(env->dpp, block, y) < 0)
 	    return -1;
 
@@ -235,8 +235,8 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     block->size = cacheDriver->get_free_space(env->dpp) + 1; /* To trigger eviction */
     block->hostsList.clear();  
     block->cacheObj.hostsList.clear();
-    block->hostsList.push_back("127.0.0.1:6000");
-    block->cacheObj.hostsList.push_back("127.0.0.1:6000");
+    block->hostsList.insert("127.0.0.1:6000");
+    block->cacheObj.hostsList.insert("127.0.0.1:6000");
 
     ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
 
