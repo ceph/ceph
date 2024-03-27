@@ -149,6 +149,13 @@ void MDSDaemon::asok_command(
   if (command == "status") {
     dump_status(f);
     r = 0;
+  } else if (command == "lockup") {
+    int64_t millisecs;
+    cmd_getval(cmdmap, "millisecs", millisecs);
+    derr << "(lockup) sleeping with mds_lock for " << millisecs << dendl;
+    std::lock_guard l(mds_lock);
+    std::this_thread::sleep_for(std::chrono::milliseconds(millisecs));
+    r = 0;
   } else if (command == "exit") {
     outbl.append("Exiting...\n");
     r = 0;
@@ -255,6 +262,11 @@ void MDSDaemon::set_up_admin_socket()
   asok_hook = new MDSSocketHook(this);
   r = admin_socket->register_command("status", asok_hook,
 				     "high-level status of MDS");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("lockup "
+				     "name=millisecs,type=CephInt,req=true,range=0"
+                                     , asok_hook
+				     , "sleep with mds_lock held (dev)");
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_ops_in_flight", asok_hook,
 				     "show the ops currently in flight");
