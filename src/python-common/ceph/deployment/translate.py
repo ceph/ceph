@@ -13,9 +13,7 @@ logger = logging.getLogger(__name__)
 # TODO refactor this to a DriveSelection method
 class to_ceph_volume(object):
 
-    _supported_device_classes = [
-        "hdd", "ssd", "nvme"
-    ]
+    NO_CRUSH = '_NO_CRUSH'
 
     def __init__(self,
                  selection,  # type: DriveSelection
@@ -35,20 +33,6 @@ class to_ceph_volume(object):
         lvcount: Dict[str, List[str]] = dict()
 
         """
-        Default entry for the global crush_device_class definition;
-        if there's no global definition at spec level, we do not want
-        to apply anything to the provided devices, hence we need to run
-        a ceph-volume command without that option, otherwise we init an
-        entry for the globally defined crush_device_class.
-        """
-        if self.spec.crush_device_class:
-            lvcount[self.spec.crush_device_class] = []
-
-        # entry where the drives that don't require a crush_device_class
-        # option are collected
-        lvcount["no_crush"] = []
-
-        """
         for each device, check if it's just a path or it has a crush_device
         class definition, and append an entry to the right crush_device_
         class group
@@ -57,35 +41,16 @@ class to_ceph_volume(object):
             # iterate on List[Device], containing both path and
             # crush_device_class
             path = device.path
-            crush_device_class = device.crush_device_class
+            crush_device_class = (
+                device.crush_device_class
+                or self.spec.crush_device_class
+                or self.NO_CRUSH
+            )
 
             if path is None:
                 raise ValueError("Device path can't be empty")
 
-            """
-            if crush_device_class is specified for the current Device path
-            we should either init the array for this group or append the
-            drive path to the existing entry
-            """
-            if crush_device_class:
-                if crush_device_class in lvcount.keys():
-                    lvcount[crush_device_class].append(path)
-                else:
-                    lvcount[crush_device_class] = [path]
-                continue
-
-            """
-            if no crush_device_class is specified for the current path
-            but a global definition is present in the spec, so we group
-            the drives together
-            """
-            if crush_device_class is None and self.spec.crush_device_class:
-                lvcount[self.spec.crush_device_class].append(path)
-                continue
-            else:
-                # default use case
-                lvcount["no_crush"].append(path)
-                continue
+            lvcount.setdefault(crush_device_class, []).append(path)
 
         return lvcount
 
@@ -136,7 +101,7 @@ class to_ceph_volume(object):
                         cmd += " --block.db {}".format(db_devices.pop())
                     if wal_devices:
                         cmd += " --block.wal {}".format(wal_devices.pop())
-                    if d in self._supported_device_classes:
+                    if d != self.NO_CRUSH:
                         cmd += " --crush-device-class {}".format(d)
 
                     cmds.append(cmd)
@@ -159,7 +124,7 @@ class to_ceph_volume(object):
                 if self.spec.block_db_size:
                     cmd += " --block-db-size {}".format(self.spec.block_db_size)
 
-                if d in self._supported_device_classes:
+                if d != self.NO_CRUSH:
                     cmd += " --crush-device-class {}".format(d)
                 cmds.append(cmd)
 
@@ -179,17 +144,6 @@ class to_ceph_volume(object):
             if self.spec.method != 'raw':
                 cmds[i] += " --yes"
                 cmds[i] += " --no-systemd"
-
-            # set the --crush-device-class option when:
-            # - crush_device_class is specified at spec level (global for all the osds)  # noqa E501
-            # - crush_device_class is allowed
-            # - there's no override at osd level
-            if (
-                    self.spec.crush_device_class and
-                    self.spec.crush_device_class in self._supported_device_classes and  # noqa E501
-                    "crush-device-class" not in cmds[i]
-               ):
-                cmds[i] += " --crush-device-class {}".format(self.spec.crush_device_class)  # noqa E501
 
             if self.preview:
                 cmds[i] += " --report"
