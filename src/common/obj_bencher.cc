@@ -20,6 +20,7 @@
 #include "common/ceph_mutex.h"
 #include "common/Clock.h"
 #include "obj_bencher.h"
+#include <lz4.h>
 
 using std::ostream;
 using std::cerr;
@@ -250,7 +251,7 @@ int ObjBencher::aio_bench(
   uint64_t op_size, uint64_t object_size,
   unsigned max_objects,
   bool cleanup, bool hints,
-  const std::string& run_name, bool reuse_bench, bool no_verify) {
+  const std::string& run_name, bool reuse_bench, int lz4_level, bool no_verify) {
 
   if (concurrentios <= 0)
     return -EINVAL;
@@ -287,6 +288,7 @@ int ObjBencher::aio_bench(
   data.done = false;
   data.hints = hints;
   data.object_size = object_size;
+  data.lz4_level = lz4_level;
   data.op_size = op_size;
   data.in_flight = 0;
   data.started = 0;
@@ -305,7 +307,7 @@ int ObjBencher::aio_bench(
     formatter->open_object_section("bench");
 
   if (OP_WRITE == operation) {
-    r = write_bench(secondsToRun, concurrentios, run_name_meta, max_objects, prev_pid);
+    r = write_bench(secondsToRun, concurrentios, run_name_meta, max_objects, prev_pid, lz4_level);
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
@@ -397,9 +399,26 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
   return 0;
 }
 
+char* generateRandomString(int length) {
+    static const char charset[] =
+        "0123456789"
+        "abcdefghijklmnopqrstuvwxyz"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "!@#$%^&*()_+-=[]{}|;:,.<>?";
+
+    const int charsetSize = sizeof(charset) - 1;
+    char* randomString = new char[length + 1];
+    std::srand(1234);
+    for (int i = 0; i < length; ++i) {
+        randomString[i] = charset[std::rand() % charsetSize];
+    }
+    randomString[length] = '\0';
+    return randomString;
+}
+
 int ObjBencher::write_bench(int secondsToRun,
 			    int concurrentios, const string& run_name_meta,
-			    unsigned max_objects, int prev_pid) {
+          unsigned max_objects, int prev_pid, int lz4_level) {
   if (concurrentios <= 0)
     return -EINVAL;
 
@@ -442,13 +461,41 @@ int ObjBencher::write_bench(int secondsToRun,
 
   r = completions_init(concurrentios);
 
-  //set up writes so I can start them together
-  for (int i = 0; i<concurrentios; ++i) {
-    name[i] = generate_object_name_fast(i / writes_per_object);
-    contents[i] = std::make_unique<bufferlist>();
-    snprintf(data.object_contents, data.op_size, "I'm the %16dth op!", i);
-    contents[i]->append(data.object_contents, data.op_size);
+  if (lz4_level > 10) {
+    lz4_level = 10;
   }
+  if (lz4_level > 0) {
+    std::vector<char> bufferFinal;
+    const int bufferSize = data.op_size;
+    double ratio = lz4_level / 10.0;
+    int uncompressedSize = floor(bufferSize * ratio);
+    while (bufferFinal.size() < uncompressedSize) {
+      char* randomString = generateRandomString(uncompressedSize);
+      const int compress_buffer_size = LZ4_compressBound(uncompressedSize);
+      char* compress_buffer = new char[compress_buffer_size];
+      int compressed_size = LZ4_compress_default(randomString, compress_buffer, uncompressedSize, compress_buffer_size);
+      if (compressed_size > 0) {
+        bufferFinal.insert(bufferFinal.end(), compress_buffer, compress_buffer + compress_buffer_size);
+      }
+      delete[] compress_buffer;
+      delete[] randomString; 
+    }
+    for (int i = 0; i<concurrentios; ++i) {
+      name[i] = generate_object_name_fast(i / writes_per_object);
+      contents[i] = std::make_unique<bufferlist>();
+      contents[i]->append(bufferFinal.data(), uncompressedSize);
+      snprintf(data.object_contents, data.op_size, "I'm the %16dth op!", i);
+      contents[i]->append(data.object_contents, data.op_size - uncompressedSize);
+    }
+  } else {
+    for (int i = 0; i<concurrentios; ++i) {
+      name[i] = generate_object_name_fast(i / writes_per_object);
+      contents[i] = std::make_unique<bufferlist>();
+      snprintf(data.object_contents, data.op_size, "I'm the %16dth op!", i);
+      contents[i]->append(data.object_contents, data.op_size);
+    }
+  }
+  //set up writes so I can start them together
 
   pthread_t print_thread;
 
@@ -541,7 +588,9 @@ int ObjBencher::write_bench(int secondsToRun,
     //create new contents and name on the heap, and fill them
     newName = generate_object_name_fast(data.started / writes_per_object);
     newContents = contents[slot].get();
-    snprintf(newContents->c_str(), data.op_size, "I'm the %16dth op!", data.started);
+    if (lz4_level <= 0) {
+      snprintf(newContents->c_str(), data.op_size, "I'm the %16dth op!", data.started);
+    }
     // we wrote to buffer, going around internal crc cache, so invalidate it now.
     newContents->invalidate_crc();
 

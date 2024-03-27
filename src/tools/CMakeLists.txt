@@ -11,7 +11,7 @@ if(WIN32)
 endif()
 add_executable(rados ${rados_srcs})
 
-target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} lz4)
 if(WITH_LIBRADOSSTRIPER)
   target_link_libraries(rados radosstriper)
 else()
