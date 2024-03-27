@@ -23,7 +23,9 @@
     tooltip={},
     pieType='pie',
     values=[],
-    colorMode='auto'
+    colorMode='auto',
+    overrides=[],
+    reduceOptions={},
   ):: {
     type: 'piechart',
     [if description != null then 'description']: description,
@@ -41,6 +43,7 @@
       pieType: pieType,
       tooltip: tooltip,
       displayLabels: displayLabels,
+      reduceOptions: reduceOptions,
     },
     fieldConfig: {
       defaults: {
@@ -54,7 +57,7 @@
           },
         },
       },
-      overrides: [],
+      overrides: overrides,
     },
     targets: [
     ],
