@@ -1460,6 +1460,7 @@ class IngressSpec(ServiceSpec):
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 health_check_interval: Optional[str] = None,
                  ):
         assert service_type == 'ingress'
 
@@ -1492,6 +1493,8 @@ class IngressSpec(ServiceSpec):
         self.ssl = ssl
         self.keepalive_only = keepalive_only
         self.enable_haproxy_protocol = enable_haproxy_protocol
+        self.health_check_interval = health_check_interval.strip(
+        ) if health_check_interval else None
 
     def get_port_start(self) -> List[int]:
         ports = []
@@ -1522,6 +1525,13 @@ class IngressSpec(ServiceSpec):
         if self.virtual_ip is not None and self.virtual_ips_list is not None:
             raise SpecValidationError(
                 'Cannot add ingress: Single and multiple virtual IPs specified')
+        if self.health_check_interval:
+            valid_units = ['s', 'm', 'h']
+            m = re.search(rf"^(\d+)({'|'.join(valid_units)})$", self.health_check_interval)
+            if not m:
+                raise SpecValidationError(
+                    f'Cannot add ingress: Invalid health_check_interval specified. '
+                    f'Valid units are: {valid_units}')
 
 
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)

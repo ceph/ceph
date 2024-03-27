@@ -1800,7 +1800,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100\n'
+                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
 
@@ -1925,7 +1925,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1::4:443 check weight 100\n'
+                                + haproxy_generated_conf[1][0] + ' 1::4:443 check weight 100 inter 2s\n'
                         }
                 }
 
@@ -2049,7 +2049,7 @@ class TestIngressService:
                                 'balance static-rr\n    '
                                 'option httpchk HEAD / HTTP/1.0\n    '
                                 'server '
-                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100\n'
+                                + haproxy_generated_conf[1][0] + ' 1.2.3.7:80 check weight 100 inter 2s\n'
                         }
                 }
 
