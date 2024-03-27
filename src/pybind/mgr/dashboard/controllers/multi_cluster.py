@@ -54,9 +54,7 @@ class MultiCluster(RESTController):
     @CreatePermission
     @EndpointDoc("Authenticate to a remote cluster")
     def auth(self, url: str, cluster_alias: str, username: str,
-             password=None, token=None, hub_url=None, cluster_fsid=None,
-             prometheus_api_url=None, ssl_verify=False, ssl_certificate=None, ttl=None):
-
+             password=None, hub_url=None, ssl_verify=False, ssl_certificate=None, ttl=None):
         try:
             hub_fsid = mgr.get('config')['fsid']
         except KeyError:
@@ -101,12 +99,7 @@ class MultiCluster(RESTController):
                                           ssl_verify, ssl_certificate)
             return True
 
-        if token and cluster_fsid and prometheus_api_url:
-            _set_prometheus_targets(prometheus_api_url)
-            self.set_multi_cluster_config(cluster_fsid, username, url,
-                                          cluster_alias, token, prometheus_api_url,
-                                          ssl_verify, ssl_certificate)
-        return True
+        return False
 
     def check_cluster_connection(self, url, payload, username, ssl_verify, ssl_certificate):
         try:
@@ -200,7 +193,7 @@ class MultiCluster(RESTController):
     @Endpoint('PUT')
     @UpdatePermission
     # pylint: disable=W0613
-    def reconnect_cluster(self, url: str, username=None, password=None, token=None,
+    def reconnect_cluster(self, url: str, username=None, password=None,
                           ssl_verify=False, ssl_certificate=None, ttl=None):
         multicluster_config = self.load_multi_cluster_config()
         if username and password:
