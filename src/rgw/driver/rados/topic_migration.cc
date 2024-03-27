@@ -63,12 +63,12 @@ int migrate_notification(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   // migrate the notifications
-  rgw_pubsub_bucket_topics bucket_topics;
+  rgw_pubsub_bucket_topics v1_bucket_topics;
   rgw_bucket rgw_bucket_info(tenant, bucket_name);
   rgw_bucket_info.marker = marker;
   rgw::sal::RadosBucket rados_bucket(driver, rgw_bucket_info);
   RGWObjVersionTracker bucket_topics_objv;
-  r = rados_bucket.read_topics(bucket_topics, &bucket_topics_objv, y, dpp);
+  r = rados_bucket.read_topics(v1_bucket_topics, &bucket_topics_objv, y, dpp);
   if (r == -ENOENT) {
     return 0; // ok, someone else already migrated
   }
@@ -83,7 +83,7 @@ int migrate_notification(const DoutPrefixProvider* dpp, optional_yield y,
   // {
   // load the corresponding bucket by name
   // break if marker doesn't match loaded bucket's
-  // break if RGW_ATTR_BUCKET_NOTIFICATION xattr already exists
+  // merge with existing RGW_ATTR_BUCKET_NOTIFICATION topics (don't override existing v2)
   // write RGW_ATTR_BUCKET_NOTIFICATION xattr
   // }
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -100,14 +100,32 @@ int migrate_notification(const DoutPrefixProvider* dpp, optional_yield y,
       return r;
     }
 
-    if (bucket->get_marker() != marker || bucket->get_attrs().contains(RGW_ATTR_BUCKET_NOTIFICATION)) {
+    if (bucket->get_marker() != marker) {
       break;
     }
 
+    rgw::sal::Attrs& attrs = bucket->get_attrs();
+
+    rgw_pubsub_bucket_topics v2_bucket_topics;
+    if (const auto iter = attrs.find(RGW_ATTR_BUCKET_NOTIFICATION); iter != attrs.end()) {
+      // bucket notification v2 already exists
+      try {
+        const auto& bl = iter->second;
+        auto biter = bl.cbegin();
+        v2_bucket_topics.decode(biter);
+      } catch (buffer::error& err) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to decode v2 bucket topics for bucket: "
+                      << bucket->get_name() << dendl;
+        return -EIO;
+      }
+    }
+      
+    v2_bucket_topics.topics.merge(v1_bucket_topics.topics);
     bufferlist bl;
-    bucket_topics.encode(bl);
-    bucket->get_attrs()[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
-    r = bucket->put_info(dpp, false, real_time(), y);
+    v2_bucket_topics.encode(bl);
+    attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
+
+    r = bucket->merge_and_store_attrs(dpp, attrs, y);
     if (r != -ECANCELED && r < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << dendl;
       std::string s = "ERROR: failed writing bucket instance info: " + cpp_strerror(-r);
@@ -162,6 +180,10 @@ int migrate_topics(const DoutPrefixProvider* dpp, optional_yield y,
 
   constexpr bool exclusive = true; // don't overwrite any existing v2 metadata
   for (const auto& [name, topic] : topics.topics) {
+    if (topic.name != topic.dest.arn_topic) {
+      ldpp_dout(dpp, 20) << "INFO: auto-generated topic: " << topic.name << " will not be migrated" << dendl;
+      continue;
+    }
     // write the v2 topic
     RGWObjVersionTracker objv;
     objv.generate_new_write_ver(dpp->get_cct());

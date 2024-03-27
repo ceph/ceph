@@ -4749,84 +4749,90 @@ def test_persistent_ps_s3_data_path_v2_migration():
     time_diff = time.time() - start_time
     print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
-    assert_equal(result[1], 0)
+    http_server = None
+    try:
+        # topic stats
+        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+        parsed_result = json.loads(result[0])
+        assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
+        assert_equal(result[1], 0)
 
-    # create topic to poll on
-    topic_name_1 = topic_name + '_1'
-    topic_conf_1 = PSTopicS3(conn, topic_name_1, zonegroup, endpoint_args=endpoint_args)
+        # create topic to poll on
+        topic_name_1 = topic_name + '_1'
+        topic_conf_1 = PSTopicS3(conn, topic_name_1, zonegroup, endpoint_args=endpoint_args)
 
-    # enable v2 notification
-    result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'update'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'commit'], get_config_cluster())
-    assert_equal(result[1], 0)
+        # enable v2 notification
+        result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
+        assert_equal(result[1], 0)
+        result = admin(['period', 'update'], get_config_cluster())
+        assert_equal(result[1], 0)
+        result = admin(['period', 'commit'], get_config_cluster())
+        assert_equal(result[1], 0)
 
-    # poll on topic_1
-    result = 1
-    while result != 0:
-        time.sleep(1)
-        result = admin(['topic', 'rm', '--topic', topic_name_1], get_config_cluster())[1]
+        # poll on topic_1
+        result = 1
+        while result != 0:
+            time.sleep(1)
+            result = admin(['topic', 'rm', '--topic', topic_name_1], get_config_cluster())[1]
 
-    # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
-    assert_equal(result[1], 0)
+        # topic stats
+        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+        parsed_result = json.loads(result[0])
+        assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
+        assert_equal(result[1], 0)
 
-    # create more objects in the bucket (async)
-    client_threads = []
-    start_time = time.time()
-    for i in range(number_of_objects):
-        key = bucket.new_key('key-'+str(i))
-        content = str(os.urandom(1024*1024))
-        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
-    time_diff = time.time() - start_time
-    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+        # create more objects in the bucket (async)
+        client_threads = []
+        start_time = time.time()
+        for i in range(number_of_objects):
+            key = bucket.new_key('key-'+str(i))
+            content = str(os.urandom(1024*1024))
+            thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
+        time_diff = time.time() - start_time
+        print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], 2*number_of_objects)
-    assert_equal(result[1], 0)
+        # topic stats
+        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+        parsed_result = json.loads(result[0])
+        assert_equal(parsed_result['Topic Stats']['Entries'], 2*number_of_objects)
+        assert_equal(result[1], 0)
 
-    # start an http server in a separate thread
-    http_server = StreamingHTTPServer(host, http_port, num_workers=number_of_objects)
+        # start an http server in a separate thread
+        http_server = StreamingHTTPServer(host, http_port, num_workers=number_of_objects)
 
-    delay = 30
-    print('wait for '+str(delay)+'sec for the messages...')
-    time.sleep(delay)
+        delay = 30
+        print('wait for '+str(delay)+'sec for the messages...')
+        time.sleep(delay)
 
-    # topic stats
-    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
-    assert_equal(result[1], 0)
-    # verify events
-    keys = list(bucket.list())
-    http_server.verify_s3_events(keys, exact_match=False)
+        # topic stats
+        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+        parsed_result = json.loads(result[0])
+        assert_equal(parsed_result['Topic Stats']['Entries'], 0)
+        assert_equal(result[1], 0)
+        # verify events
+        keys = list(bucket.list())
+        http_server.verify_s3_events(keys, exact_match=False)
 
-    # cleanup
-    s3_notification_conf.del_config()
-    topic_conf.del_config()
-    # delete objects from the bucket
-    client_threads = []
-    for key in bucket.list():
-        thr = threading.Thread(target = key.delete, args=())
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
-    # delete the bucket
-    conn.delete_bucket(bucket_name)
-    http_server.close()
+    except Exception as e:
+        assert False, str(e)
+    finally:
+        # cleanup
+        s3_notification_conf.del_config()
+        topic_conf.del_config()
+        # delete objects from the bucket
+        client_threads = []
+        for key in bucket.list():
+            thr = threading.Thread(target = key.delete, args=())
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
+        # delete the bucket
+        conn.delete_bucket(bucket_name)
+        if http_server:
+            http_server.close()
 
 
 @attr('data_path_v2_test')
@@ -4882,60 +4888,66 @@ def test_ps_s3_data_path_v2_migration():
         client_threads.append(thr)
     [thr.join() for thr in client_threads]
     time_diff = time.time() - start_time
-    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    # verify events
-    keys = list(bucket.list())
-    http_server.verify_s3_events(keys, exact_match=False)
+    try:
+        # verify events
+        keys = list(bucket.list())
+        http_server.verify_s3_events(keys, exact_match=False)
 
-    # create topic to poll on
-    topic_name_1 = topic_name + '_1'
-    topic_conf_1 = PSTopicS3(conn, topic_name_1, zonegroup, endpoint_args=endpoint_args)
+        # create topic to poll on
+        topic_name_1 = topic_name + '_1'
+        topic_conf_1 = PSTopicS3(conn, topic_name_1, zonegroup, endpoint_args=endpoint_args)
 
-    # enable v2 notification
-    result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'update'], get_config_cluster())
-    assert_equal(result[1], 0)
-    result = admin(['period', 'commit'], get_config_cluster())
-    assert_equal(result[1], 0)
+        # enable v2 notification
+        result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
+        assert_equal(result[1], 0)
+        result = admin(['period', 'update'], get_config_cluster())
+        assert_equal(result[1], 0)
+        result = admin(['period', 'commit'], get_config_cluster())
+        assert_equal(result[1], 0)
 
-    # poll on topic_1
-    result = 1
-    while result != 0:
-        time.sleep(1)
-        result = admin(['topic', 'rm', '--topic', topic_name_1], get_config_cluster())[1]
 
-    # create more objects in the bucket (async)
-    client_threads = []
-    start_time = time.time()
-    for i in range(number_of_objects):
-        key = bucket.new_key('key-'+str(i))
-        content = str(os.urandom(1024*1024))
-        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
-    time_diff = time.time() - start_time
-    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+        # poll on topic_1
+        result = 1
+        while result != 0:
+            time.sleep(1)
+            result = admin(['topic', 'rm', '--topic', topic_name_1], get_config_cluster())[1]
 
-    # verify events
-    keys = list(bucket.list())
-    http_server.verify_s3_events(keys, exact_match=False)
 
-    # cleanup
-    s3_notification_conf.del_config()
-    topic_conf.del_config()
-    # delete objects from the bucket
-    client_threads = []
-    for key in bucket.list():
-        thr = threading.Thread(target = key.delete, args=())
-        thr.start()
-        client_threads.append(thr)
-    [thr.join() for thr in client_threads]
-    # delete the bucket
-    conn.delete_bucket(bucket_name)
-    http_server.close()
+        # create more objects in the bucket (async)
+        client_threads = []
+        start_time = time.time()
+        for i in range(number_of_objects):
+            key = bucket.new_key('key-'+str(i))
+            content = str(os.urandom(1024*1024))
+            thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
+        time_diff = time.time() - start_time
+        print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+        # verify events
+        keys = list(bucket.list())
+        http_server.verify_s3_events(keys, exact_match=True)
+
+    except Exception as e:
+        assert False, str(e)
+    finally:
+        # cleanup
+        s3_notification_conf.del_config()
+        topic_conf.del_config()
+        # delete objects from the bucket
+        client_threads = []
+        for key in bucket.list():
+            thr = threading.Thread(target = key.delete, args=())
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
+        # delete the bucket
+        conn.delete_bucket(bucket_name)
+        http_server.close()
 
 
 @attr('data_path_v2_test')
@@ -5027,7 +5039,7 @@ def test_ps_s3_data_path_v2_large_migration():
                 result = admin(['topic', 'rm', '--topic', topic_conf.topic_name, '--tenant', tenant], get_config_cluster())
 
             if result[1] != 0:
-                print(result)
+                print('migration in process... error: '+str(result[1]))
             else:
                 break
 
@@ -5061,6 +5073,15 @@ def test_ps_s3_data_path_v2_mixed_migration():
     zonegroup = get_config_zonegroup()
     tenants_list = []
     tenants_list.append('')
+    
+    # make sure that we start at v2
+    result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
     for i in ['1', '2']:
         access_key = str(time.time())
         secret_key = str(time.time())
