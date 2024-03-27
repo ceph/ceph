@@ -125,15 +125,18 @@ void ObjectDesc::update(ContentsGenerator *gen, const ContDesc &next) {
   return;
 }
 
-bool ObjectDesc::check(bufferlist &to_check) {
+bool ObjectDesc::check(bufferlist &to_check,
+		       const std::pair<uint64_t, uint64_t>& offlen) {
   iterator objiter = begin();
+  const auto [offset, size] = offlen;
+  objiter.seek(offset);
+  std::cout << "seeking to " << offset << std::endl;
   uint64_t error_at = 0;
   if (!objiter.check_bl_advance(to_check, &error_at)) {
     std::cout << "incorrect buffer at pos " << error_at << std::endl;
     return false;
   }
 
-  uint64_t size = layers.begin()->first->get_length(layers.begin()->second);
   if (to_check.length() < size) {
     std::cout << "only read " << to_check.length()
 	      << " out of size " << size << std::endl;
@@ -143,11 +146,14 @@ bool ObjectDesc::check(bufferlist &to_check) {
 }
 
 bool ObjectDesc::check_sparse(const std::map<uint64_t, uint64_t>& extents,
-			      bufferlist &to_check)
+			      bufferlist &to_check,
+			      const std::pair<uint64_t, uint64_t>& offlen)
 {
+  const auto [offset_to_skip, _] = offlen;
+  uint64_t pos = offset_to_skip;
   uint64_t off = 0;
-  uint64_t pos = 0;
   auto objiter = begin();
+  objiter.seek(pos);
   for (auto &&extiter : extents) {
     // verify hole
     {
