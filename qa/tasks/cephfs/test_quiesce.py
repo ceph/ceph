@@ -638,6 +638,69 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         op = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'], rank=0)['op']
         self.assertEqual(op['result'], -1) # EPERM
 
+    def test_quiesce_authpin_wait(self):
+        """
+        That a quiesce_inode op with outstanding remote authpin requests can be killed.
+        """
+
+        self.config_set('mds', 'mds_heartbeat_grace', '60')
+        self._configure_subvolume()
+        self.mount_a.setfattr(".", "ceph.dir.pin.distributed", "1")
+        self._client_background_workload()
+        self._wait_distributed_subtrees(2*2, rank="all", path=self.mntpnt)
+        status = self.fs.status()
+
+        p = self.mount_a.run_shell_payload("ls", stdout=StringIO())
+        dirs = p.stdout.getvalue().strip().split()
+
+        # make rank 0 unresponsive to auth pin requests
+        p = self.run_ceph_cmd("tell", f"mds.{self.fs.id}:1", "lockup", "30000", wait=False)
+
+        qops = []
+        for d in dirs:
+            path = os.path.join(self.mntpnt, d)
+            op = self.fs.rank_tell("quiesce", "path", path, rank=0)['op']
+            reqid = self.reqid_tostr(op['reqid'])
+            log.info(f"created {reqid}")
+            qops.append(reqid)
+
+        def find_quiesce(blocked_on_remote_auth_pin):
+            # verify no quiesce ops
+            ops = self.fs.get_ops(locks=False, rank=0, path="/tmp/mds.0-ops", status=status)['ops']
+            for op in ops:
+                type_data = op['type_data']
+                flag_point = type_data['flag_point']
+                op_type = type_data['op_type']
+                if op_type == 'client_request' or op_type == 'peer_request':
+                    continue
+                if type_data['op_name'] == "quiesce_inode":
+                    if blocked_on_remote_auth_pin:
+                        if flag_point == "requesting remote authpins":
+                            return True
+                    else:
+                        return True
+            return False
+
+        with safe_while(sleep=1, tries=30, action='wait for quiesce op with outstanding remote authpin requests') as proceed:
+            while proceed():
+                if find_quiesce(True):
+                    break
+
+        # okay, now kill all quiesce ops
+        for reqid in qops:
+            self.fs.kill_op(reqid, rank=0)
+
+        # verify some quiesce_inode ops still exist because authpin acks have not been received
+        if not find_quiesce(True):
+            self.fail("did not find quiesce_inode op blocked on remote authpins!")
+
+        # wait for sleep to complete
+        p.wait()
+
+        with safe_while(sleep=1, tries=30, action='wait for quiesce kill') as proceed:
+            while proceed():
+                if not find_quiesce(False):
+                    break
 
     def test_quiesce_path_multirank(self):
         """
