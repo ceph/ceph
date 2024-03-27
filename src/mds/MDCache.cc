@@ -13761,6 +13761,7 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
   dout(5) << __func__ << ": dispatching" << dendl;
 
   C_MDS_QuiescePath* qfinisher = static_cast<C_MDS_QuiescePath*>(mdr->internal_op_finish);
+  ceph_assert(qfinisher->mdr == mdr);
   auto& qs = *qfinisher->qs;
   auto delay = g_conf().get_val<std::chrono::milliseconds>("mds_cache_quiesce_delay");
   auto splitauth = g_conf().get_val<bool>("mds_cache_quiesce_splitauth");
@@ -13790,8 +13791,6 @@ void MDCache::dispatch_quiesce_path(const MDRequestRef& mdr)
     mds->server->respond_to_request(mdr, -CEPHFS_ENOTDIR);
     return;
   }
-
-  qfinisher->mdr = mdr;
 
   {
     int myrc = 0;
@@ -13842,6 +13841,7 @@ MDRequestRef MDCache::quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_QUIESCE_PATH);
   mdr->set_filepath(p);
   mdr->internal_op_finish = c;
+  c->mdr = mdr;
 
   if (delay > 0ms) {
     mds->timer.add_event_after(delay, new LambdaContext([cache=this,mdr=mdr](int r) {
