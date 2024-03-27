@@ -532,6 +532,9 @@ else
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
+
+                    # Enable ceph/grpc from copr for el8, this is needed for nvmeof management.
+                    $SUDO dnf copr enable -y ceph/grpc
                 fi
                 ;;
         esac
