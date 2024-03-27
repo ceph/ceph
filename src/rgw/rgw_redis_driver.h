@@ -14,6 +14,7 @@ using boost::redis::config;
 using boost::redis::connection;
 using boost::redis::request;
 using boost::redis::response;
+using boost::redis::ignore_t;
 
 class RedisDriver : public CacheDriver {
   public:
@@ -54,8 +55,8 @@ class RedisDriver : public CacheDriver {
     uint64_t outstanding_write_size;
 
     struct redis_response {
-      boost::redis::request req;
-      boost::redis::response<std::string> resp;
+      request req;
+      boost::redis::generic_response resp;
     };
 
     struct redis_aio_handler { 
@@ -73,7 +74,7 @@ class RedisDriver : public CacheDriver {
 
         /* Only append data for GET call */
         if (s->req.payload().find("HGET") != std::string::npos) {
-	  r.data.append(std::get<0>(s->resp).value());
+	  r.data.append((s->resp).value().at(0).value);
         }
 
 	throttle->put(r);
