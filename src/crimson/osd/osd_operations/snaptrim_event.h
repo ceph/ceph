@@ -134,8 +134,6 @@ public:
   CommonPGPipeline& client_pp();
 
 private:
-  /* TODO: we don't actually update the PG's stats
-   * https://tracker.ceph.com/issues/63307 */
   object_stat_sum_t delta_stats;
 
   snap_trim_obj_subevent_ret_t remove_clone(

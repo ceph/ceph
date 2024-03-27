@@ -1049,9 +1049,7 @@ ObjectContextRef OpsExecuter::prepare_clone(
 
 void OpsExecuter::apply_stats()
 {
-  pg->get_peering_state().apply_op_stats(get_target(), delta_stats);
-  pg->scrubber.handle_op_stats(get_target(), delta_stats);
-  pg->publish_stats_to_osd();
+  pg->apply_stats(get_target(), delta_stats);
 }
 
 OpsExecuter::OpsExecuter(Ref<PG> pg,
