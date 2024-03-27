@@ -768,6 +768,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             else:
                 err_str += (f'(default {self.default_cephadm_command_timeout} second timeout)')
             raise OrchestratorError(err_str)
+        except concurrent.futures.CancelledError as e:
+            err_str = ''
+            if cmd:
+                err_str = f'Command "{cmd}" failed '
+            else:
+                err_str = 'Command failed '
+            if host:
+                err_str += f'on host {host} '
+            err_str += f' - {str(e)}'
+            raise OrchestratorError(err_str)
 
     def set_container_image(self, entity: str, image: str) -> None:
         self.check_mon_command({
