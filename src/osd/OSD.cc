@@ -366,6 +366,14 @@ void OSDService::identify_splits_and_merges(
     queue.pop_front();
     did.insert(cur);
     unsigned pgnum = old_pgnum;
+    // Note: the new_epoch in which the pg_num change was recorded is *not*
+    //       the exact epoch in which the actual change was made.
+    //       The iteration starts from old_map's lower bound epoch up to
+    //       new_map's epoch. Therfore, we don't need the actual epoch
+    //       of the pg num change - as long as it's recorded before the new_map.
+    //       The last statement is true because we record all of the
+    //       changes from old_map's epoch up to new_map's epoch.
+    //       See: OSD::track_pools_and_pg_num_changes
     for (auto map_iter = pool_pg_num_history_map.lower_bound(old_map->get_epoch());
 	 map_iter != pool_pg_num_history_map.end();
 	 ++map_iter) {
