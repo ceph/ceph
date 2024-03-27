@@ -19,6 +19,7 @@ import { MultiCluster } from '~/app/shared/models/multi-cluster';
 import { Router } from '@angular/router';
 import { CookiesService } from '~/app/shared/services/cookie.service';
 import { Observable, Subscription } from 'rxjs';
+import { SettingsService } from '~/app/shared/api/settings.service';
 
 @Component({
   selector: 'cd-multi-cluster-list',
@@ -55,7 +56,8 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
     private notificationService: NotificationService,
     private authStorageService: AuthStorageService,
     private modalService: ModalService,
-    private cookieService: CookiesService
+    private cookieService: CookiesService,
+    private settingsService: SettingsService
   ) {
     this.tableActions = [
       {
@@ -162,6 +164,8 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
         this.checkClusterConnectionStatus();
       })
     );
+
+    this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
   }
 
   ngOnDestroy(): void {
