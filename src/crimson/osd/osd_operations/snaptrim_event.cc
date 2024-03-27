@@ -381,7 +381,6 @@ SnapTrimObjSubEvent::remove_or_update(
   }
 
   return seastar::do_with(ceph::os::Transaction{}, [=, this](auto &txn) {
-    int64_t num_objects_before_trim = delta_stats.num_objects;
     osd_op_p.at_version = pg->get_next_version();
     auto ret = remove_or_update_iertr::now();
     if (new_snaps.empty()) {
@@ -396,8 +395,7 @@ SnapTrimObjSubEvent::remove_or_update(
       ret = adjust_snaps(obc, head_obc, new_snaps, txn);
     }
     return std::move(ret).si_then(
-      [&txn, obc, num_objects_before_trim,
-      head_obc=std::move(head_obc), this]() mutable {
+      [&txn, obc, head_obc=std::move(head_obc), this]() mutable {
       // save head snapset
       logger().debug("{}: {} new snapset {} on {}",
 		     *this, coid, head_obc->ssc->snapset, head_obc->obs.oi);
@@ -407,11 +405,14 @@ SnapTrimObjSubEvent::remove_or_update(
 	update_head(obc, head_obc, txn);
       }
       // Stats reporting - Set number of objects trimmed
-      if (num_objects_before_trim > delta_stats.num_objects) {
-	//int64_t num_objects_trimmed =
-	//  num_objects_before_trim - delta_stats.num_objects;
-	//add_objects_trimmed_count(num_objects_trimmed);
+      if (delta_stats.num_objects < 0) {
+        int64_t num_objects_trimmed = std::abs(delta_stats.num_objects);
+        pg->get_peering_state().update_stats_wo_resched(
+          [num_objects_trimmed](auto &history, auto &stats) {
+          stats.objects_trimmed += num_objects_trimmed;
+        });
       }
+      pg->apply_stats(coid, delta_stats);
     }).si_then(
       [&txn] () mutable {
       return std::move(txn);
