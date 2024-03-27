@@ -684,8 +684,458 @@
       },
       {
          "columns": [ ],
-         "datasource": "$datasource",
-         "description": "",
+         "datasource": "${datasource}",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Time"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "instance"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "job"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "name"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Pool Name"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "pool_id"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Pool ID"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #A"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Compression Factor"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #D"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "% Used"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "percentunit"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.cellOptions",
+                        "value": {
+                           "type": "color-text"
+                        }
+                     },
+                     {
+                        "id": "thresholds",
+                        "value": {
+                           "mode": "absolute",
+                           "steps": [
+                              {
+                                 "color": "rgba(245, 54, 54, 0.9)",
+                                 "value": null
+                              },
+                              {
+                                 "color": "rgba(237, 129, 40, 0.89)",
+                                 "value": 70
+                              },
+                              {
+                                 "color": "rgba(50, 172, 45, 0.97)",
+                                 "value": 85
+                              }
+                           ]
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #B"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Usable Free"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "bytes"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #C"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Compression Eligibility"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "percent"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #E"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Compression Savings"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "bytes"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #F"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Growth (5d)"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "bytes"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.cellOptions",
+                        "value": {
+                           "type": "color-text"
+                        }
+                     },
+                     {
+                        "id": "thresholds",
+                        "value": {
+                           "mode": "absolute",
+                           "steps": [
+                              {
+                                 "color": "rgba(245, 54, 54, 0.9)",
+                                 "value": null
+                              },
+                              {
+                                 "color": "rgba(237, 129, 40, 0.89)",
+                                 "value": 70
+                              },
+                              {
+                                 "color": "rgba(50, 172, 45, 0.97)",
+                                 "value": 85
+                              }
+                           ]
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #G"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "IOPS"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #H"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Bandwidth"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "Bps"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "__name__"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "type"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "compression_mode"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "description"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Type"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #J"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Stored"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "bytes"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #I"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value #K"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Compression"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     }
+                  ]
+               }
+            ]
+         },
          "gridPos": {
             "h": 6,
             "w": 24,
@@ -694,363 +1144,21 @@
          },
          "id": 10,
          "links": [ ],
-         "sort": {
-            "col": 5,
-            "desc": true
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 1,
+            "showHeader": true
          },
-         "styles": [
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Time",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "instance",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "job",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Pool Name",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "name",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Pool ID",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "pool_id",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "none",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Compression Factor",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #A",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "none",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "% Used",
-               "colorMode": "value",
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #D",
-               "thresholds": [
-                  "70",
-                  "85"
-               ],
-               "type": "number",
-               "unit": "percentunit",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Usable Free",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #B",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "bytes",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Compression Eligibility",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #C",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "percent",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Compression Savings",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #E",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "bytes",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Growth (5d)",
-               "colorMode": "value",
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #F",
-               "thresholds": [
-                  "0",
-                  "0"
-               ],
-               "type": "number",
-               "unit": "bytes",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "IOPS",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #G",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "none",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Bandwidth",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #H",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "Bps",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "__name__",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "type",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "compression_mode",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Type",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "description",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Stored",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #J",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "bytes",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #I",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Compression",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value #K",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [
-                  {
-                     "text": "ON",
-                     "value": "1"
-                  }
-               ]
-            }
-         ],
+         "pluginVersion": "10.4.0",
+         "styles": "",
          "targets": [
             {
                "expr": "(\n  ceph_pool_compress_under_bytes{job=~\"$job\"} /\n    ceph_pool_compress_bytes_used{job=~\"$job\"} > 0\n) and on(pool_id) (\n  (\n    (ceph_pool_compress_under_bytes{job=~\"$job\"} > 0) /\n      ceph_pool_stored_raw{job=~\"$job\"}\n  ) * 100 > 0.5\n)\n",
@@ -1151,7 +1259,41 @@
          "timeFrom": null,
          "timeShift": null,
          "title": "Pool Overview",
-         "transform": "table",
+         "transformations": [
+            {
+               "id": "merge",
+               "options": { }
+            },
+            {
+               "id": "seriesToRows",
+               "options": { }
+            },
+            {
+               "id": "organize",
+               "options": {
+                  "excludeByName": {
+                     "Time": true,
+                     "Value #A": true,
+                     "Value #B": false,
+                     "Value #C": true,
+                     "Value #D": false,
+                     "Value #E": true,
+                     "Value #I": true,
+                     "Value #K": true,
+                     "__name__": true,
+                     "cluster": true,
+                     "compression_mode": true,
+                     "instance": true,
+                     "job": true,
+                     "pool_id": true,
+                     "type": true
+                  },
+                  "includeByName": { },
+                  "indexByName": { },
+                  "renameByName": { }
+               }
+            }
+         ],
          "type": "table"
       },
       {
