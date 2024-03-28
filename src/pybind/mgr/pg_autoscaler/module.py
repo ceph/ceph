@@ -171,6 +171,9 @@ class PgAutoscaler(MgrModule):
         osdmap = self.get_osdmap()
         pools = osdmap.get_pools_by_name()
         ps, root_map = self._get_pool_status(osdmap, pools)
+        if self.has_noautoscale_flag():
+            for p in ps:
+                p['pg_autoscale_mode'] = 'false'
 
         if format in ('json', 'json-pretty'):
             return 0, json.dumps(ps, indent=4, sort_keys=True), ''
@@ -231,7 +234,7 @@ class PgAutoscaler(MgrModule):
                     p['pg_num_target'],
 #                    p['pg_num_ideal'],
                     final,
-                    'off' if self.has_noautoscale_flag() else p['pg_autoscale_mode'],
+                    p['pg_autoscale_mode'],
                     str(p['bulk'])
                 ])
             return 0, table.get_string(), ''
