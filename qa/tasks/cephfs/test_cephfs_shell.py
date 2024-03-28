@@ -141,7 +141,7 @@ class TestCephFSShell(CephFSTestCase):
 
         scriptpath = tempfile_mkstemp(prefix='test-cephfs', text=True)[1]
         with open(scriptpath, 'w') as scriptfile:
-            scriptfile.write(script)
+            scriptfile.writelines(script)
         # copy script to the machine running cephfs-shell.
         mount_x.client_remote.put_file(scriptpath, scriptpath)
         mount_x.run_shell_payload(f"chmod 755 {scriptpath}")
@@ -150,6 +150,8 @@ class TestCephFSShell(CephFSTestCase):
         if shell_conf_path:
             args[1:1] = ["-c", shell_conf_path]
         log.info('Running script \"' + scriptpath + '\"')
+        with open(scriptpath, 'w') as scriptfile:
+            log.info('Contents : ' + scriptfile.read())
         return mount_x.client_remote.run(args=args, stdout=stdout,
                                          stderr=stderr, stdin=stdin,
                                          check_status=True)
@@ -346,9 +348,8 @@ class TestLn(TestCephFSShell):
         self.run_cephfs_shell_cmd(f'mkdir -p {self.dir1}/{self.dir2}')
         self.mount_a.write_file(path=f'{self.dir1}/{self.dump_file}',
                                 data=self.s)
-        self.run_cephfs_shell_script(script=dedent(f'''
-                cd /{self.dir1}/{self.dir2}
-                ln -s ../{self.dump_file}'''))
+        script = [f'cd /{self.dir1}/{self.dir2}\n', f'ln -s ../{self.dump_file}\n']
+        self.run_cephfs_shell_script(script)
         o = self.get_cephfs_shell_cmd_output(f'cat /{self.dir1}/{self.dir2}'
                                              f'/{self.dump_file}')
         self.assertEqual(self.s, o)
@@ -367,9 +368,8 @@ class TestLn(TestCephFSShell):
         self.run_cephfs_shell_cmd(f'mkdir -p {self.dir1}/{self.dir2}')
         self.mount_a.write_file(path=f'{self.dir1}/{self.dump_file}',
                                 data=self.s)
-        self.run_cephfs_shell_script(script=dedent(f'''
-                cd /{self.dir1}/{self.dir2}
-                ln ../{self.dump_file}'''))
+        script = [f'cd /{self.dir1}/{self.dir2}\n', f'ln ../{self.dump_file}\n']
+        self.run_cephfs_shell_script(script)
         o = self.get_cephfs_shell_cmd_output(f'cat /{self.dir1}/{self.dir2}'
                                              f'/{self.dump_file}')
         self.assertEqual(self.s, o)
@@ -585,8 +585,11 @@ class TestCD(TestCephFSShell):
         self.mount_a.run_shell_payload(f"mkdir -p {path}")
         expected_cwd = '/'
 
-        script = 'cd {}\ncd\ncwd\n'.format(path)
+        script = [f'cd {path}\n', 'cd\n', 'cwd\n']
         output = self.get_cephfs_shell_script_output(script)
+        # self.get_cephfs_shell_cmd_output(f"cd {path}")
+        # self.get_cephfs_shell_cmd_output("cd")
+        # output = self.get_cephfs_shell_cmd_output("cwd")
         self.assertEqual(output, expected_cwd)
 
     def test_cd_with_args(self):
@@ -598,8 +601,10 @@ class TestCD(TestCephFSShell):
         self.mount_a.run_shell_payload(f"mkdir -p {path}")
         expected_cwd = '/dir1/dir2/dir3'
 
-        script = 'cd {}\ncwd\n'.format(path)
+        script = [f'cd {path}\n', 'cwd\n']
         output = self.get_cephfs_shell_script_output(script)
+        # self.get_cephfs_shell_cmd_output(f"cd {path}")
+        # output = self.get_cephfs_shell_cmd_output("cwd")
         self.assertEqual(output, expected_cwd)
 
 
