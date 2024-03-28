@@ -65,6 +65,7 @@ def create_image(ctx, config):
         size = properties.get('image_size', 10240)
         fmt = properties.get('image_format', 1)
         encryption_format = properties.get('encryption_format', 'none')
+        cluster, _, _ = teuthology.split_role(role)
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Creating image {name} with size {size}'.format(name=name,
                                                                  size=size))
@@ -73,6 +74,7 @@ def create_image(ctx, config):
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'rbd',
+                '--cluster', cluster,
                 '-p', 'rbd',
                 'create',
                 '--size', str(size),
@@ -99,6 +101,7 @@ def create_image(ctx, config):
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'rbd',
+                    '--cluster', cluster,
                     'encryption',
                     'format',
                     name,
@@ -117,6 +120,7 @@ def create_image(ctx, config):
             if properties is None:
                 properties = {}
             name = properties.get('image_name', default_image_name(role))
+            cluster, _, _ = teuthology.split_role(role)
             (remote,) = ctx.cluster.only(role).remotes.keys()
             remote.run(
                 args=[
@@ -124,6 +128,7 @@ def create_image(ctx, config):
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
                     'rbd',
+                    '--cluster', cluster,
                     '-p', 'rbd',
                     'rm',
                     name,
@@ -160,6 +165,7 @@ def clone_image(ctx, config):
             properties = {}
 
         name = properties.get('image_name', default_image_name(role))
+        cluster, _, _ = teuthology.split_role(role)
         parent_name = properties.get('parent_name')
         assert parent_name is not None, \
             "parent_name is required"
@@ -195,7 +201,7 @@ def clone_image(ctx, config):
                     'adjust-ulimits',
                     'ceph-coverage',
                     '{tdir}/archive/coverage'.format(tdir=testdir),
-                    'rbd', '-p', 'rbd'
+                    'rbd', '--cluster', cluster, '-p', 'rbd'
                     ]
             args.extend(cmd)
             remote.run(args=args)
@@ -209,6 +215,7 @@ def clone_image(ctx, config):
             if properties is None:
                 properties = {}
             name = properties.get('image_name', default_image_name(role))
+            cluster, _, _ = teuthology.split_role(role)
             parent_name = properties.get('parent_name')
             parent_spec = '{name}@{snap}'.format(name=parent_name, snap=name)
 
@@ -221,7 +228,7 @@ def clone_image(ctx, config):
                         'adjust-ulimits',
                         'ceph-coverage',
                         '{tdir}/archive/coverage'.format(tdir=testdir),
-                        'rbd', '-p', 'rbd'
+                        'rbd', '--cluster', cluster, '-p', 'rbd'
                         ]
                 args.extend(cmd)
                 remote.run(args=args)
@@ -305,6 +312,7 @@ def dev_create(ctx, config):
         if properties is None:
             properties = {}
         name = properties.get('image_name', default_image_name(role))
+        cluster, _, _ = teuthology.split_role(role)
         parent_encryption_format = properties.get('parent_encryption_format',
                                                   'none')
         encryption_format = properties.get('encryption_format',
@@ -365,6 +373,7 @@ def dev_create(ctx, config):
                 'ceph-coverage',
                 '{tdir}/archive/coverage'.format(tdir=testdir),
                 'rbd',
+                '--cluster', cluster,
                 '--id', role.rsplit('.')[-1],
                 '-p', 'rbd',
                 'map',
@@ -609,7 +618,8 @@ def xfstests(ctx, config):
 
     running_xfstests = {}
     for role, properties in runs:
-        assert role.startswith('client.'), \
+        cluster, typ, _ = teuthology.split_role(role)
+        assert typ == "client", \
             "task xfstests can only run on client nodes"
         for host, roles_for_host in ctx.cluster.remotes.items():
             if role in roles_for_host:

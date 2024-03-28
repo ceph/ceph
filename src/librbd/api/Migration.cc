@@ -1491,7 +1491,7 @@ int Migration<I>::create_dst_image(I** image_ctx) {
   int r;
   C_SaferCond on_create;
   librados::IoCtx parent_io_ctx;
-  if (parent_spec.pool_id == -1) {
+  if (parent_spec.pool_id == -1 || m_flatten) {
     auto *req = image::CreateRequest<I>::create(
       config, m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size,
       m_image_options, image::CREATE_FLAG_SKIP_MIRROR_ENABLE,

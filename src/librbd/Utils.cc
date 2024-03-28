@@ -8,8 +8,13 @@
 #include "include/random.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
+#include "include/rados/librados.hpp"
 #include "include/neorados/RADOS.hpp"
 #include "include/rbd/features.h"
+#include "include/scope_guard.h"
+#include "common/ceph_argparse.h"
+#include "common/code_environment.h"
+#include "common/common_init.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
@@ -17,6 +22,7 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <bitset>
+#include <map>
 #include <random>
 
 #define dout_subsys ceph_subsys_rbd
@@ -239,6 +245,143 @@ int get_config_key(librados::Rados& rados, const std::string& uri,
   }
 
   *value = std::string(out_bl.c_str(), out_bl.length());
+  return 0;
+}
+
+const std::vector<std::string> UNIQUE_PEER_CONFIG_KEYS {
+  {"monmap", "mon_host", "mon_dns_srv_name", "key", "keyfile", "keyring"}};
+
+int init_rados(CephContext *cct,
+               const std::string &cluster_name,
+               const std::string &client_name,
+               const std::string &mon_host,
+               const std::string &key,
+               const std::string &description,
+               const std::vector<const char*>& args,
+               librados::Rados **rados_ref,
+               bool strip_cluster_overrides,
+               const std::string &admin_socket,
+               int preinit_flags) {
+  // NOTE: manually bootstrap a CephContext here instead of via
+  // the librados API to avoid mixing global singletons between
+  // the librados shared library and the daemon
+  // TODO: eliminate intermingling of global singletons within Ceph APIs
+  CephInitParameters iparams(CEPH_ENTITY_TYPE_CLIENT);
+  if (client_name.empty() || !iparams.name.from_str(client_name)) {
+    lderr(cct) << "error initializing cluster handle for " << description << dendl;
+    return -EINVAL;
+  }
+
+  CephContext *new_cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY,
+                                        preinit_flags);
+  new_cct->_conf->cluster = cluster_name;
+
+  auto sg = make_scope_guard([&] {
+      new_cct->put(); });
+
+  // librados::Rados::conf_read_file
+  int r = new_cct->_conf.parse_config_files(nullptr, nullptr, 0);
+  if (r < 0 && r != -ENOENT) {
+    // do not treat this as fatal, it might still be able to connect
+    lderr(cct) << "could not read ceph conf for " << description << ": "
+	             << cpp_strerror(r) << dendl;
+  }
+
+  // preserve cluster-specific config settings before applying environment/cli
+  // overrides
+  std::map<std::string, std::string> config_values;
+  if (strip_cluster_overrides) {
+    // remote peer connections shouldn't apply cluster-specific
+    // configuration settings
+    for (auto& key : UNIQUE_PEER_CONFIG_KEYS) {
+      config_values[key] = new_cct->_conf.get_val<std::string>(key);
+    }
+  }
+
+  new_cct->_conf.parse_env(new_cct->get_module_type());
+
+  // librados::Rados::conf_parse_env
+  std::vector<const char*> tmp_args;
+  r = new_cct->_conf.parse_argv(tmp_args);
+  if (r < 0) {
+    lderr(cct) << "could not parse environment for " << description << ":"
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+  new_cct->_conf.parse_env(new_cct->get_module_type());
+
+  if (!args.empty()) {
+    // librados::Rados::conf_parse_argv
+    tmp_args = args;
+    r = new_cct->_conf.parse_argv(tmp_args);
+    if (r < 0) {
+      lderr(cct) << "could not parse command line args for " << description
+                 << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  if (strip_cluster_overrides) {
+    // remote peer connections shouldn't apply cluster-specific
+    // configuration settings
+    for (auto& pair : config_values) {
+      auto value = new_cct->_conf.get_val<std::string>(pair.first);
+      if (pair.second != value) {
+        ldout(cct, 20) << "reverting global config option override: "
+                       << pair.first << ": " << value << " -> " << pair.second
+                       << dendl;
+        r = new_cct->_conf.set_val(pair.first, pair.second);
+        if (r < 0) {
+          lderr(cct) << "failed to set " << pair.first << " config for "
+                     << description << ": " << cpp_strerror(r) << dendl;
+          return r;
+        }
+      }
+    }
+  }
+
+  if (!admin_socket.empty()) {
+    r = new_cct->_conf.set_val("admin_socket", admin_socket);
+    if (r < 0) {
+      lderr(cct) << "failed to set admin_socket config for " << description
+                 << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  if (!mon_host.empty()) {
+    r = new_cct->_conf.set_val("mon_host", mon_host);
+    if (r < 0) {
+      lderr(cct) << "failed to set mon_host config for " << description << ": "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  if (!key.empty()) {
+    r = new_cct->_conf.set_val("key", key);
+    if (r < 0) {
+      lderr(cct) << "failed to set key config for " << description << ": "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+  
+  new_cct->_conf.apply_changes(nullptr);
+  new_cct->_conf.complain_about_parse_error(new_cct);
+
+  *rados_ref = new librados::Rados();
+
+  r = (*rados_ref)->init_with_context(new_cct);
+  ceph_assert(r == 0);
+
+  r = (*rados_ref)->connect();
+  if (r < 0) {
+    lderr(cct) << "error connecting to " << description << ": "
+	             << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   return 0;
 }
 
