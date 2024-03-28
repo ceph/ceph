@@ -8,28 +8,28 @@
 #include <string>
 #include <string_view>
 
-#include <strings.h>
+#include <boost/asio/strand.hpp>
 
 #include <boost/container/flat_map.hpp>
 #include <boost/system/error_code.hpp>
 
 #include <fmt/format.h>
 
-#include "include/rados/librados.hpp"
+#include "include/neorados/RADOS.hpp"
 #include "include/encoding.h"
-#include "include/expected.hpp"
 #include "include/function2.hpp"
 
 #include "cls/version/cls_version_types.h"
 
-#include "common/async/yield_context.h"
 #include "common/Formatter.h"
 #include "common/strtol.h"
 
-namespace bc = boost::container;
-namespace bs = boost::system;
+#include "neorados/cls/fifo.h"
 
-#include "cls_fifo_legacy.h"
+namespace container = boost::container;
+namespace sys = boost::system;
+namespace asio = boost::asio;
+namespace fifo = neorados::cls::fifo;
 
 /// Type of log backing, stored in the mark used in the quick check,
 /// and passed to checking functions.
@@ -70,25 +70,22 @@ inline std::ostream& operator <<(std::ostream& m, const log_type& t) {
 }
 
 /// Look over the shards in a log and determine the type.
-tl::expected<log_type, bs::error_code>
-log_backing_type(const DoutPrefixProvider *dpp, 
-                 librados::IoCtx& ioctx,
+asio::awaitable<log_type>
+log_backing_type(const DoutPrefixProvider* dpp,
+		 neorados::RADOS& rados,
+                 const neorados::IOContext& loc,
 		 log_type def,
-		 int shards, //< Total number of shards
-		 /// A function taking a shard number and
-		 /// returning an oid.
-		 const fu2::unique_function<std::string(int) const>& get_oid,
-		 optional_yield y);
+		 int shards,
+		 const fu2::unique_function<std::string(int) const>& get_oid);
 
 /// Remove all log shards and associated parts of fifos.
-bs::error_code log_remove(librados::IoCtx& ioctx,
-			  int shards, //< Total number of shards
-			  /// A function taking a shard number and
-			  /// returning an oid.
-			  const fu2::unique_function<std::string(int) const>& get_oid,
-			  bool leave_zero,
-			  optional_yield y);
-
+asio::awaitable<void> log_remove(
+  const DoutPrefixProvider *dpp,
+  neorados::RADOS& rados,
+  const neorados::IOContext& loc,
+  int shards,
+  const fu2::unique_function<std::string(int) const>& get_oid,
+  bool leave_zero);
 
 struct logback_generation {
   uint64_t gen_id = 0;
@@ -117,21 +114,23 @@ inline std::ostream& operator <<(std::ostream& m, const logback_generation& g) {
 	   << (g.pruned ? "PRUNED" : "NOT PRUNED") << "]";
 }
 
-class logback_generations : public librados::WatchCtx2 {
+class logback_generations {
 public:
-  using entries_t = bc::flat_map<uint64_t, logback_generation>;
+  using entries_t = container::flat_map<uint64_t, logback_generation>;
 
 protected:
-  librados::IoCtx& ioctx;
-  logback_generations(librados::IoCtx& ioctx,
-		      std::string oid,
-		      fu2::unique_function<std::string(
-			uint64_t, int) const>&& get_oid,
-		      int shards) noexcept
-    : ioctx(ioctx), oid(oid), get_oid(std::move(get_oid)),
+  neorados::RADOS& rados;
+  neorados::IOContext loc;
+  logback_generations(
+    neorados::RADOS& rados,
+    neorados::Object oid,
+    neorados::IOContext loc,
+    fu2::unique_function<std::string(uint64_t, int) const> get_oid,
+    int shards) noexcept
+    : rados(rados), loc(std::move(loc)), oid(oid), get_oid(std::move(get_oid)),
       shards(shards) {}
 
-    uint64_t my_id = ioctx.get_instance_id();
+  uint64_t my_id = rados.instance_id();
 
 private:
   const std::string oid;
@@ -145,16 +144,15 @@ private:
   uint64_t watchcookie = 0;
 
   obj_version version;
-  std::mutex m;
-  entries_t entries_;
+  asio::strand<neorados::RADOS::executor_type> strand{
+    asio::make_strand(rados.get_executor())};
+  entries_t entries;
 
-  tl::expected<std::pair<entries_t, obj_version>, bs::error_code>
-  read(const DoutPrefixProvider *dpp, optional_yield y) noexcept;
-  bs::error_code write(const DoutPrefixProvider *dpp, entries_t&& e, std::unique_lock<std::mutex>&& l_,
-		       optional_yield y) noexcept;
-  bs::error_code setup(const DoutPrefixProvider *dpp, log_type def, optional_yield y) noexcept;
-
-  bs::error_code watch() noexcept;
+  asio::awaitable<std::pair<entries_t, obj_version>>
+  read(const DoutPrefixProvider *dpp);
+  asio::awaitable<bool> write(const DoutPrefixProvider *dpp, entries_t&& e);
+  asio::awaitable<void> setup(const DoutPrefixProvider *dpp, log_type def);
+  asio::awaitable<void> watch();
 
   auto lowest_nomempty(const entries_t& es) {
     return std::find_if(es.begin(), es.end(),
@@ -166,68 +164,65 @@ private:
 public:
 
   /// For the use of watch/notify.
-
-  void handle_notify(uint64_t notify_id,
-		     uint64_t cookie,
-		     uint64_t notifier_id,
-		     bufferlist& bl) override final;
-
-  void handle_error(uint64_t cookie, int err) override final;
+  void operator ()(sys::error_code ec,
+		   uint64_t notify_id,
+		   uint64_t cookie,
+		   uint64_t notifier_id,
+		   bufferlist&& bl);
+  asio::awaitable<void> handle_notify(sys::error_code ec,
+				      uint64_t notify_id,
+				      uint64_t cookie,
+				      uint64_t notifier_id,
+				      bufferlist&& bl);
 
   /// Public interface
-
   virtual ~logback_generations();
 
   template<typename T, typename... Args>
-  static tl::expected<std::unique_ptr<T>, bs::error_code>
-  init(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx_, std::string oid_,
-       fu2::unique_function<std::string(uint64_t, int) const>&& get_oid_,
-       int shards_, log_type def, optional_yield y,
-       Args&& ...args) noexcept {
-    try {
-      T* lgp = new T(ioctx_, std::move(oid_),
-		     std::move(get_oid_),
-		     shards_, std::forward<Args>(args)...);
-      std::unique_ptr<T> lg(lgp);
-      lgp = nullptr;
-      auto ec = lg->setup(dpp, def, y);
-      if (ec)
-	return tl::unexpected(ec);
-      // Obnoxiousness for C++ Compiler in Bionic Beaver
-      return tl::expected<std::unique_ptr<T>, bs::error_code>(std::move(lg));
-    } catch (const std::bad_alloc&) {
-      return tl::unexpected(bs::error_code(ENOMEM, bs::system_category()));
-    }
+  static asio::awaitable<std::unique_ptr<T>> init(
+    const DoutPrefixProvider *dpp,
+    neorados::RADOS& r_,
+    const neorados::Object& oid_,
+    const neorados::IOContext& loc_,
+    fu2::unique_function<std::string(uint64_t, int) const>&& get_oid_,
+    int shards_, log_type def,
+    Args&& ...args) {
+    std::unique_ptr<T> lg{new T(r_, oid_, loc_,
+				std::move(get_oid_),
+				shards_, std::forward<Args>(args)...)};
+    co_await lg->setup(dpp, def);
+    co_return lg;
   }
 
-  bs::error_code update(const DoutPrefixProvider *dpp, optional_yield y) noexcept;
+  asio::awaitable<void> update(const DoutPrefixProvider *dpp);
 
-  entries_t entries() const {
-    return entries_;
+  entries_t get_entries() const {
+    return entries;
   }
 
-  bs::error_code new_backing(const DoutPrefixProvider *dpp, log_type type, optional_yield y) noexcept;
+  asio::awaitable<void> new_backing(const DoutPrefixProvider *dpp,
+				    log_type type);
 
-  bs::error_code empty_to(const DoutPrefixProvider *dpp, uint64_t gen_id, optional_yield y) noexcept;
+  asio::awaitable<void> empty_to(const DoutPrefixProvider *dpp, uint64_t gen_id);
 
-  bs::error_code remove_empty(const DoutPrefixProvider *dpp, optional_yield y) noexcept;
+  asio::awaitable<void> remove_empty(const DoutPrefixProvider *dpp);
 
   // Callbacks, to be defined by descendant.
 
   /// Handle initialization on startup
   ///
   /// @param e All non-empty generations
-  virtual bs::error_code handle_init(entries_t e) noexcept = 0;
+  virtual void handle_init(entries_t e) = 0;
 
   /// Handle new generations.
   ///
   /// @param e Map of generations added since last update
-  virtual bs::error_code handle_new_gens(entries_t e) noexcept = 0;
+  virtual void handle_new_gens(entries_t e) = 0;
 
   /// Handle generations being marked empty
   ///
   /// @param new_tail Lowest non-empty generation
-  virtual bs::error_code handle_empty_to(uint64_t new_tail) noexcept = 0;
+  virtual void handle_empty_to(uint64_t new_tail) = 0;
 };
 
 inline std::string gencursor(uint64_t gen_id, std::string_view cursor) {
@@ -236,171 +231,79 @@ inline std::string gencursor(uint64_t gen_id, std::string_view cursor) {
 	  std::string(cursor));
 }
 
-inline std::pair<uint64_t, std::string_view>
-cursorgen(std::string_view cursor_) {
-  if (cursor_.empty()) {
+inline std::pair<uint64_t, std::string>
+cursorgen(std::optional<std::string> cursor_) {
+  if (!cursor_ || cursor_->empty()) {
     return { 0, "" };
   }
-  std::string_view cursor = cursor_;
+  std::string_view cursor = *cursor_;
   if (cursor[0] != 'G') {
-    return { 0, cursor };
+    return { 0, std::string{cursor} };
   }
   cursor.remove_prefix(1);
   auto gen_id = ceph::consume<uint64_t>(cursor);
   if (!gen_id || cursor[0] != '@') {
-    return { 0, cursor_ };
+    return { 0, *cursor_ };
   }
   cursor.remove_prefix(1);
-  return { *gen_id, cursor };
+  return { *gen_id, std::string{cursor} };
 }
 
 class LazyFIFO {
-  librados::IoCtx& ioctx;
-  std::string oid;
+  neorados::RADOS& r;
+  const std::string oid;
+  const neorados::IOContext loc;
   std::mutex m;
-  std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
+  std::unique_ptr<fifo::FIFO> fifo;
 
-  int lazy_init(const DoutPrefixProvider *dpp, optional_yield y) {
+  asio::awaitable<void> lazy_init(const DoutPrefixProvider *dpp) {
     std::unique_lock l(m);
     if (fifo) {
-      return 0;
+      co_return;
     } else {
       l.unlock();
       // FIFO supports multiple clients by design, so it's safe to
       // race to create them.
-      std::unique_ptr<rgw::cls::fifo::FIFO> fifo_tmp;
-      auto r = rgw::cls::fifo::FIFO::create(dpp, ioctx, oid, &fifo, y);
-      if (r) {
-	return r;
-      }
+      auto fifo_tmp = co_await fifo::FIFO::create(dpp, r, oid, loc,
+						  asio::use_awaitable);
       l.lock();
       if (!fifo) {
 	// We won the race
 	fifo = std::move(fifo_tmp);
       }
     }
-    return 0;
+    l.unlock();
+    co_return;
   }
 
 public:
 
-  LazyFIFO(librados::IoCtx& ioctx, std::string oid)
-    : ioctx(ioctx), oid(std::move(oid)) {}
+  LazyFIFO(neorados::RADOS& r,  std::string oid, neorados::IOContext loc)
+    : r(r), oid(std::move(oid)), loc(std::move(loc)) {}
 
-  int read_meta(const DoutPrefixProvider *dpp, optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    return fifo->read_meta(dpp, y);
+  template <typename... Args>
+  asio::awaitable<void> push(const DoutPrefixProvider *dpp, Args&& ...args) {
+    co_await lazy_init(dpp);
+    co_return co_await fifo->push(dpp, std::forward<Args>(args)...,
+				  asio::use_awaitable);
   }
 
-  int meta(const DoutPrefixProvider *dpp, rados::cls::fifo::info& info, optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    info = fifo->meta();
-    return 0;
+  asio::awaitable<std::tuple<std::span<fifo::entry>, std::optional<std::string>>>
+  list(const DoutPrefixProvider *dpp, std::optional<std::string> markstr,
+       std::span<fifo::entry> entries) {
+    co_await lazy_init(dpp);
+    co_return co_await fifo->list(dpp, markstr, entries, asio::use_awaitable);
   }
 
-  int get_part_layout_info(const DoutPrefixProvider *dpp, 
-                           std::uint32_t& part_header_size,
-			   std::uint32_t& part_entry_overhead,
-			   optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    std::tie(part_header_size, part_entry_overhead)
-      = fifo->get_part_layout_info();
-    return 0;
+  asio::awaitable<void> trim(const DoutPrefixProvider *dpp,
+			     std::string markstr, bool exclusive) {
+    co_await lazy_init(dpp);
+    co_return co_await fifo->trim(dpp, markstr, exclusive, asio::use_awaitable);
   }
 
-  int push(const DoutPrefixProvider *dpp, 
-           const ceph::buffer::list& bl,
-	   optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    return fifo->push(dpp, bl, y);
-  }
-
-  int push(const DoutPrefixProvider *dpp, 
-           ceph::buffer::list& bl,
-	   librados::AioCompletion* c,
-	   optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    fifo->push(dpp, bl, c);
-    return 0;
-  }
-
-  int push(const DoutPrefixProvider *dpp, 
-           const std::vector<ceph::buffer::list>& data_bufs,
-	   optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    return fifo->push(dpp, data_bufs, y);
-  }
-
-  int push(const DoutPrefixProvider *dpp, 
-            const std::vector<ceph::buffer::list>& data_bufs,
-	    librados::AioCompletion* c,
-	    optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    fifo->push(dpp, data_bufs, c);
-    return 0;
-  }
-
-  int list(const DoutPrefixProvider *dpp, 
-           int max_entries, std::optional<std::string_view> markstr,
-	   std::vector<rgw::cls::fifo::list_entry>* out,
-	   bool* more, optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    return fifo->list(dpp, max_entries, markstr, out, more, y);
-  }
-
-  int list(const DoutPrefixProvider *dpp, int max_entries, std::optional<std::string_view> markstr,
-	   std::vector<rgw::cls::fifo::list_entry>* out, bool* more,
-	   librados::AioCompletion* c, optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    fifo->list(dpp, max_entries, markstr, out, more, c);
-    return 0;
-  }
-
-  int trim(const DoutPrefixProvider *dpp, std::string_view markstr, bool exclusive, optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    return fifo->trim(dpp, markstr, exclusive, y);
-  }
-
-  int trim(const DoutPrefixProvider *dpp, std::string_view markstr, bool exclusive, librados::AioCompletion* c,
-	   optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    fifo->trim(dpp, markstr, exclusive, c);
-    return 0;
-  }
-
-  int get_part_info(const DoutPrefixProvider *dpp, int64_t part_num, rados::cls::fifo::part_header* header,
-		    optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    return fifo->get_part_info(dpp, part_num, header, y);
-  }
-
-  int get_part_info(const DoutPrefixProvider *dpp, int64_t part_num, rados::cls::fifo::part_header* header,
-		    librados::AioCompletion* c, optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    fifo->get_part_info(part_num, header, c);
-    return 0;
-  }
-
-  int get_head_info(const DoutPrefixProvider *dpp, fu2::unique_function<
-		      void(int r, rados::cls::fifo::part_header&&)>&& f,
-		    librados::AioCompletion* c,
-		    optional_yield y) {
-    auto r = lazy_init(dpp, y);
-    if (r < 0) return r;
-    fifo->get_head_info(dpp, std::move(f), c);
-    return 0;
+  asio::awaitable<std::tuple<std::string, ceph::real_time>>
+  last_entry_info(const DoutPrefixProvider *dpp) {
+    co_await lazy_init(dpp);
+    co_return co_await fifo->last_entry_info(dpp, asio::use_awaitable);
   }
 };
