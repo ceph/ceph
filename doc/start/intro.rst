@@ -52,10 +52,9 @@ The Ceph Metadata Server is necessary to run Ceph File System clients.
   redundancy and high availability.
 
 - **MDSs**: A :term:`Ceph Metadata Server` (MDS, ``ceph-mds``) stores metadata
-  for the :term:`Ceph File System`. Ceph Block Devices and Ceph Object Storage
-  do not use MDS. Ceph Metadata Servers allow POSIX-file-system users to run
-  basic commands (like ``ls``, ``find``, etc.) without placing a burden on the
-  Ceph Storage Cluster.
+  for the :term:`Ceph File System`. Ceph Metadata Servers allow CephFS users to
+  run basic commands (like ``ls``, ``find``, etc.) without placing a burden on
+  the Ceph Storage Cluster.
 
 Ceph stores data as objects within logical storage pools. Using the
 :term:`CRUSH` algorithm, Ceph calculates which placement group (PG) should
