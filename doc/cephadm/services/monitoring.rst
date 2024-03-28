@@ -423,6 +423,29 @@ In the following example spec we set the retention time to 1 year and the size t
   tell cephadm to redeploy the Prometheus daemon(s) to put this change into effect.
   This can be done with a ``ceph orch redeploy prometheus`` command.
 
+Enabling Web Admin API
+~~~~~~~~~~~~~~~~~~~~~~
+
+Cephadm supports enabling the web admin API by specifying the ``enable_admin_api``
+field as ``true`` in the Prometheus service spec.
+
+.. code-block:: yaml
+
+    service_type: prometheus
+    placement:
+      count: 1
+    spec:
+      enable_admin_api: true
+
+Like with retention time and size, this requires running ``ceph orch redeploy prometheus``
+for the setting to be picked up.
+
+.. note::
+
+  There are security concerns with enabling the admin API where anyone with
+  access to the HTTP endpoint may run arbitrary SQL against the Prometheus database.
+  Please see https://prometheus.io/docs/operating/security/#prometheus for more information
+
 Setting up Grafana
 ------------------
 
