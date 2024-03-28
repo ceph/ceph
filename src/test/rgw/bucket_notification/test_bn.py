@@ -5199,6 +5199,8 @@ def test_ps_s3_data_path_v2_mixed_migration():
         else:
             topics_result = admin(['topic', 'list'], get_config_cluster())
             notifications_result = admin(['notification', 'list', '--bucket', bucket.name, '--tenant', tenant], get_config_cluster())
+        print(notifications_result[0])
+        print(topics_result[0])
         notifications_json = json.loads(notifications_result[0])
         assert_equal(len(notifications_json['notifications']), 2)
         topics_json = json.loads(topics_result[0])

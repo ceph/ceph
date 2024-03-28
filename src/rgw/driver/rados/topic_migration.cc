@@ -55,9 +55,9 @@ int migrate_notification(const DoutPrefixProvider* dpp, optional_yield y,
   std::string marker;
   int r = deconstruct_topics_oid(obj.oid, tenant, bucket_name, marker, dpp);
   if (r < 0) {
-    std::string s = "failed to read tenant, bucket name and marker from " + obj.to_str()
-                  + " with: " + cpp_strerror(r)
-                  + " expected format pubsub.{tenant}.bucket.{name}/{marker}!";
+    const std::string s = fmt::format("failed to read tenant, bucket name and marker from: {}. error: {}. {}",
+        obj.to_str(), cpp_strerror(r), "expected format pubsub.{tenant}.bucket.{name}/{marker}!");
+    ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
     rgw_clog_warn(rados, s);
     return r;
   }
@@ -73,10 +73,29 @@ int migrate_notification(const DoutPrefixProvider* dpp, optional_yield y,
     return 0; // ok, someone else already migrated
   }
   if (r < 0) {
-    std::string s = "failed to read v1 bucket notifications from " + obj.to_str()
-                  + " with: " + cpp_strerror(r);
+    const std::string s = fmt::format("failed to read v1 bucket notifications from: {}. error: {}", 
+        obj.to_str(), cpp_strerror(r));
+    ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
     rgw_clog_warn(rados, s);
     return r;
+  }
+
+  if (v1_bucket_topics.topics.size() == 0) {
+    ldpp_dout(dpp, 20) << "INFO: v1 notifications object is empty, nothing to migrate" << dendl;
+    // delete v1 notification obj with Bucket::remove_topics()
+    r = rados_bucket.remove_topics(&bucket_topics_objv, y, dpp);
+    if (r == -ECANCELED) {
+      ldpp_dout(dpp, 20) << "INFO: v1 notifications object: " << obj.to_str() << " already migrated" << dendl;
+      return 0; // ok, someone else already migrated
+    }
+    if (r < 0) {
+      const std::string s = fmt::format("failed to remove migrated v1 bucket notifications obj: {}. error: {}",
+          obj.to_str(), cpp_strerror(-r));
+      ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
+      rgw_clog_warn(rados, s);
+      return r;
+    }
+    return 0;
   }
 
   // in a for-loop that retries ECANCELED errors:
@@ -94,8 +113,9 @@ int migrate_notification(const DoutPrefixProvider* dpp, optional_yield y,
       break; // bucket is deleted, we should delete the v1 notification
     }
     if (r < 0) {
-      std::string s = "failed to load the bucket from " + obj.to_str()
-                    + " with: " + cpp_strerror(r);
+      const std::string s = fmt::format("failed to load the bucket from: {}. error: {}",
+          obj.to_str(), cpp_strerror(r));
+      ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
       rgw_clog_warn(rados, s);
       return r;
     }
@@ -114,38 +134,54 @@ int migrate_notification(const DoutPrefixProvider* dpp, optional_yield y,
         auto biter = bl.cbegin();
         v2_bucket_topics.decode(biter);
       } catch (buffer::error& err) {
-        ldpp_dout(dpp, 1) << "ERROR: failed to decode v2 bucket topics for bucket: "
-                      << bucket->get_name() << dendl;
+        const std::string s = fmt::format("failed to decode v2 bucket notifications of bucket: {}. error: {}",
+            bucket->get_name(), err.what());
+        ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
+        rgw_clog_warn(rados, s);
         return -EIO;
       }
     }
-      
+    const auto original_size = v2_bucket_topics.topics.size();
     v2_bucket_topics.topics.merge(v1_bucket_topics.topics);
+    if (original_size == v2_bucket_topics.topics.size()) {
+      // nothing changed after the merge
+      break;
+    }
     bufferlist bl;
     v2_bucket_topics.encode(bl);
     attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
 
     r = bucket->merge_and_store_attrs(dpp, attrs, y);
     if (r != -ECANCELED && r < 0) {
-      ldpp_dout(dpp, 1) << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << dendl;
-      std::string s = "ERROR: failed writing bucket instance info: " + cpp_strerror(-r);
+      const std::string s = fmt::format("failed writing migrated notifications to bucket: {}. error: {}", 
+          bucket->get_name(), cpp_strerror(-r));
+      ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
       rgw_clog_warn(rados, s);
       return r;
     }
+  }
+  if (r == -ECANCELED) {
+    // we exhausted the 15 retries
+    ldpp_dout(dpp, 5) << "WARNING: giving up on writing migrated notifications to bucket: " << bucket->get_name() <<
+      ". will retry later" << dendl;
+    return r;
   }
 
   // delete v1 notification obj with Bucket::remove_topics()
   r = rados_bucket.remove_topics(&bucket_topics_objv, y, dpp);
   if (r == -ECANCELED) {
+    ldpp_dout(dpp, 20) << "INFO: v1 notifications object: " << obj.to_str() << " already removed" << dendl;
     return 0; // ok, someone else already migrated
   }
   if (r < 0) {
-    std::string s = "failed to remove migrated v1 bucket topics obj" + obj.to_str() + " with: " + cpp_strerror(-r);
+    const std::string s = fmt::format("failed to remove migrated v1 bucket notifications obj: {}. error: {}",
+        obj.to_str(), cpp_strerror(-r));
+    ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
     rgw_clog_warn(rados, s);
     return r;
   }
 
-  return r;
+  return 0;
 }
 
 // migrate topics for a given tenant
@@ -160,7 +196,9 @@ int migrate_topics(const DoutPrefixProvider* dpp, optional_yield y,
   if (auto pos = topics_obj_oid.find(rgw::sal::pubsub_oid_prefix); pos != std::string::npos) {
     tenant = topics_obj_oid.substr(std::string(rgw::sal::pubsub_oid_prefix).size());
   } else {
-    std::string s = "failed to read tenant from name from oid: " + topics_obj_oid + " with: " + cpp_strerror(-EINVAL);
+    const std::string s = fmt::format("failed to read tenant from name from oid: {}. error: {}",
+        topics_obj_oid, cpp_strerror(-EINVAL));
+    ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
     rgw_clog_warn(rados, s);
     return -EINVAL;
   }
@@ -170,10 +208,13 @@ int migrate_topics(const DoutPrefixProvider* dpp, optional_yield y,
   RGWObjVersionTracker topics_objv;
   int r = driver->read_topics(tenant, topics, &topics_objv, y, dpp);
   if (r == -ENOENT) {
+    ldpp_dout(dpp, 20) << "INFO: v1 topics object: " << topics_obj.to_str() << " does not exists. already migrated" << dendl;
     return 0; // ok, someone else already migrated
   }
   if (r < 0) {
-    std::string s = "failed to read v1 topics from " + topics_obj.to_str() + " error: " + cpp_strerror(-r);
+    const std::string s = fmt::format("failed to read v1 topics from: {}. error: {}",
+        topics_obj.to_str(), cpp_strerror(-r));
+    ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
     rgw_clog_warn(rados, s);
     return r;
   }
@@ -189,10 +230,13 @@ int migrate_topics(const DoutPrefixProvider* dpp, optional_yield y,
     objv.generate_new_write_ver(dpp->get_cct());
     r = driver->write_topic_v2(topic, exclusive, objv, y, dpp);
     if (r == -EEXIST) {
+      ldpp_dout(dpp, 20) << "INFO: v1 topics object: " << topics_obj.to_str() << " already migrated. no need to write v2 object" << dendl;
       continue; // ok, someone else already migrated
     }
     if (r < 0) {
-      std::string s = "v1 topic migration for " + topic.name + " failed with: " + cpp_strerror(r);
+      const std::string s = fmt::format("v1 topic migration for: {}.  failed with: {}",
+          topic.name, cpp_strerror(r));
+      ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
       rgw_clog_warn(rados, s);
       return r;
     }
@@ -201,11 +245,13 @@ int migrate_topics(const DoutPrefixProvider* dpp, optional_yield y,
   // remove the v1 topics metadata (this destroys the lock too)
   r = driver->remove_topics(tenant, &topics_objv, y, dpp);
   if (r == -ECANCELED) {
+    ldpp_dout(dpp, 20) << "INFO: v1 topics object: " << topics_obj.to_str() << " already migrated. no need to remove" << dendl;
     return 0; // ok, someone else already migrated
   }
   if (r < 0) {
-    std::string s = "failed to remove migrated v1 topics obj "
-                  + topics_obj.to_str() + " with: " + cpp_strerror(r);
+    const std::string s = fmt::format("failed to remove migrated v1 topics obj: {}. error: {} ",
+        topics_obj.to_str(), cpp_strerror(r));
+    ldpp_dout(dpp, 1) << "ERROR: " << s << dendl;
     rgw_clog_warn(rados, s);
     return r;
   }
