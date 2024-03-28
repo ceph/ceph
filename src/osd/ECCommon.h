@@ -28,18 +28,10 @@
 #include "osd/OSDMap.h"
 #include "osd/osd_op_util.h"
 
-struct ECTransaction {
-  struct WritePlan {
-    bool invalidates_cache = false; // Yes, both are possible
-    std::map<hobject_t,extent_set> to_read;
-    std::map<hobject_t,extent_set> will_write; // superset of to_read
-
-    std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
-  };
-};
 
 typedef void* OpRequestRef;
 typedef crimson::osd::ObjectContextRef ObjectContextRef;
+#include "ECTransaction.h"
 #else
 #include "common/WorkQueue.h"
 #endif
@@ -709,7 +701,7 @@ void ECCommon::ReadPipeline::check_recovery_sources(
   G&& on_schedule_recovery)
 {
   std::set<ceph_tid_t> tids_to_filter;
-  for (std::map<pg_shard_t, std::set<ceph_tid_t> >::iterator 
+  for (std::map<pg_shard_t, std::set<ceph_tid_t> >::iterator
        i = shard_to_read_map.begin();
        i != shard_to_read_map.end();
        ) {

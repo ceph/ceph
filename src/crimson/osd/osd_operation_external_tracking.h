@@ -7,6 +7,7 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/osd_operations/client_request.h"
+#include "crimson/osd/osd_operations/ecrep_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
@@ -257,6 +258,13 @@ struct HistoricBackend
 } // namespace crimson::osd
 
 namespace crimson {
+
+template <>
+struct EventBackendRegistry<osd::ECRepRequest> {
+  static std::tuple<> get_backends() {
+    return {/* no extenral backends */};
+  }
+};
 
 template <>
 struct EventBackendRegistry<osd::ClientRequest> {

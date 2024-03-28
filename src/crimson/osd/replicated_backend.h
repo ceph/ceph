@@ -33,13 +33,12 @@ private:
     _read(const hobject_t& hoid, uint64_t off,
 	  uint64_t len, uint32_t flags) override;
   rep_op_fut_t _submit_transaction(std::set<pg_shard_t>&& pg_shards,
-    const hobject_t& hoid,
+    crimson::osd::ObjectContextRef &&obc,
     ceph::os::Transaction&& txn,
     osd_op_params_t&& osd_op_p,
     epoch_t min_epoch, epoch_t max_epoch,
     std::vector<pg_log_entry_t>&& log_entries) final;
   const pg_t pgid;
-  const pg_shard_t whoami;
   class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
   public:
     pending_on_t(size_t pending, const eversion_t& at_version)

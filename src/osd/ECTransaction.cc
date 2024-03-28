@@ -13,13 +13,20 @@
  */
 
 #include <iostream>
-#include <vector>
+#include <map>
 #include <sstream>
+#include <vector>
 
 #include "ECTransaction.h"
 #include "ECUtil.h"
 #include "os/ObjectStore.h"
 #include "common/inline_variant.h"
+
+#ifndef WITH_SEASTAR
+#include "osd/osd_internal_types.h"
+#else
+#include "crimson/osd/object_context.h"
+#endif
 
 using std::less;
 using std::make_pair;

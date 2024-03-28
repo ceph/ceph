@@ -18,6 +18,7 @@
 #include "messages/MOSDOpReply.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
+#include "crimson/os/futurized_store.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/osdop_params.h"
@@ -63,18 +64,19 @@ public:
   using rep_op_fut_t =
     std::tuple<interruptible_future<>,
 	       interruptible_future<crimson::osd::acked_peers_t>>;
-  PGBackend(shard_id_t shard, CollectionRef coll,
+  PGBackend(pg_shard_t whoami, CollectionRef coll,
             crimson::osd::ShardServices &shard_services,
             DoutPrefixProvider &dpp);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
-					   const pg_shard_t pg_shard,
+					   const pg_shard_t whoami,
 					   const pg_pool_t& pool,
 					   crimson::osd::PG &pg,
 					   crimson::os::CollectionRef coll,
 					   crimson::osd::ShardServices& shard_services,
 					   const ec_profile_t& ec_profile,
-					   DoutPrefixProvider &dpp);
+					   DoutPrefixProvider &dpp,
+					   struct ECListener &eclistener);
   using attrs_t =
     std::map<std::string, ceph::bufferptr, std::less<>>;
   using read_errorator = ll_read_errorator::extend<
@@ -390,7 +392,7 @@ public:
   virtual seastar::future<> stop() = 0;
   virtual void on_actingset_changed(bool same_primary) = 0;
 protected:
-  const shard_id_t shard;
+  const pg_shard_t whoami;
   CollectionRef coll;
   crimson::osd::ShardServices &shard_services;
   DoutPrefixProvider &dpp; ///< provides log prefix context
@@ -398,10 +400,14 @@ protected:
   virtual seastar::future<> request_committed(
     const osd_reqid_t& reqid,
     const eversion_t& at_version) = 0;
+  const shard_id_t& get_shard() const {
+    return whoami.shard;
+  }
 public:
   struct loaded_object_md_t {
     ObjectState os;
     crimson::osd::SnapSetContextRef ssc;
+    crimson::os::FuturizedStore::Shard::attrs_t attr_cache;
     using ref = std::unique_ptr<loaded_object_md_t>;
   };
   load_metadata_iertr::future<loaded_object_md_t::ref>
@@ -444,7 +450,7 @@ private:
     uint64_t truncate_size);
   virtual rep_op_fut_t
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,
-		      const hobject_t& hoid,
+		      crimson::osd::ObjectContextRef &&obc,
 		      ceph::os::Transaction&& txn,
 		      osd_op_params_t&& osd_op_p,
 		      epoch_t min_epoch, epoch_t max_epoch,

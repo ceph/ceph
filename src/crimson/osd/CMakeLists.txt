@@ -18,6 +18,7 @@ add_executable(crimson-osd
   object_metadata_helper.cc
   ops_executer.cc
   osd_operation.cc
+  osd_operations/ecrep_request.cc
   osd_operations/client_request.cc
   osd_operations/client_request_common.cc
   osd_operations/internal_client_request.cc
@@ -45,7 +46,10 @@ add_executable(crimson-osd
   objclass.cc
   ${PROJECT_SOURCE_DIR}/src/objclass/class_api.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ClassHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECCommon.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECTransaction.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ExtentCache.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_op_util.cc
   ${PROJECT_SOURCE_DIR}/src/osd/OSDCap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PeeringState.cc
@@ -67,6 +71,7 @@ target_link_libraries(crimson-osd
   crimson-common
   crimson-os
   crimson
+  erasure_code
   ${FMT_LIB}
   Boost::MPL
   dmclock::dmclock)
