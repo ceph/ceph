@@ -6,7 +6,7 @@ overrides:
         debug ms: 1
         debug finisher: 20
         debug client: 20
-    log-whitelist:
+    log-ignorelist:
       - OSD full dropping all updates
       - OSD near full
       - pausewr flag
