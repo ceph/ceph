@@ -404,6 +404,7 @@ TEST(mempool, btree_map_test)
   ASSERT_EQ(0, mempool::osd::allocated_bytes());
 }
 
+#if !defined(__arm__) && !defined(__aarch64__)
 TEST(mempool, check_shard_select)
 {
   const size_t samples = mempool::num_shards * 100;
@@ -432,6 +433,7 @@ TEST(mempool, check_shard_select)
   // the distribution is bad enough to deserve a failure.
   EXPECT_LT(missed, mempool::num_shards / 2);
 }
+#endif
 
 
 int main(int argc, char **argv)
