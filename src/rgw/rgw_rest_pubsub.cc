@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <boost/tokenizer.hpp>
 #include <optional>
+#include <regex>
 #include "rgw_iam_policy.h"
 #include "rgw_rest_pubsub.h"
 #include "rgw_pubsub_push.h"
@@ -54,6 +55,23 @@ bool validate_and_update_endpoint_secret(rgw_pubsub_dest& dest, CephContext *cct
         ldout(cct, 1) << "endpoint validation error: sending secrets over insecure transport" << dendl;
         return false;
       }
+  }
+  return true;
+}
+
+bool validate_topic_name(const std::string& name, std::string& message)
+{
+  constexpr size_t max_topic_name_length = 256;
+  if (name.size() > max_topic_name_length) {
+    message = "Name cannot be longer than 256 characters";
+    return false;
+  }
+
+  std::regex pattern("[A-Za-z0-9_-]+");
+  if (!std::regex_match(name, pattern)) {
+    message = "Name must be made up of only uppercase and lowercase "
+        "ASCII letters, numbers, underscores, and hyphens";
+    return false;
   }
   return true;
 }
@@ -135,8 +153,7 @@ class RGWPSCreateTopicOp : public RGWOp {
 
   int get_params() {
     topic_name = s->info.args.get("Name");
-    if (topic_name.empty()) {
-      ldpp_dout(this, 1) << "CreateTopic Action 'Name' argument is missing" << dendl;
+    if (!validate_topic_name(topic_name, s->err.message)) {
       return -EINVAL;
     }
 
