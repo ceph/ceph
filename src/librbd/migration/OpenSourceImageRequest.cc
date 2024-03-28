@@ -47,11 +47,11 @@ void OpenSourceImageRequest<I>::open_source() {
 
   // use default layout values (can be overridden by source layers later)
   src_image_ctx->order = 22;
-  src_image_ctx->layout = file_layout_t();
-  src_image_ctx->layout.stripe_count = 1;
-  src_image_ctx->layout.stripe_unit = 1ULL << src_image_ctx->order;
-  src_image_ctx->layout.object_size = 1Ull << src_image_ctx->order;
-  src_image_ctx->layout.pool_id = -1;
+  src_image_ctx->stripe_unit = 1ULL << src_image_ctx->order;
+  src_image_ctx->stripe_count = 1;
+  src_image_ctx->layout = file_layout_t(src_image_ctx->stripe_unit,
+                                        src_image_ctx->stripe_count,
+                                        src_image_ctx->stripe_unit);
 
   bool import_only = true;
   auto source_spec = m_migration_info.source_spec;

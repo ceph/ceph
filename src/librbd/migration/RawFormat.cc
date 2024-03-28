@@ -9,6 +9,7 @@
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ReadResult.h"
+#include "librbd/io/Utils.h"
 #include "librbd/migration/SnapshotInterface.h"
 #include "librbd/migration/SourceSpecBuilder.h"
 #include "librbd/migration/Utils.h"
@@ -175,6 +176,12 @@ bool RawFormat<I>::read(
   if (snapshot_it == m_snapshots.end()) {
     aio_comp->fail(-ENOENT);
     return true;
+  }
+
+  // remap logical to raw
+  for (auto& extent: image_extents) {
+    extent.first = io::util::area_to_raw_offset(
+            *m_image_ctx, extent.first, io::ImageArea::DATA);
   }
 
   snapshot_it->second->read(aio_comp, std::move(image_extents),
