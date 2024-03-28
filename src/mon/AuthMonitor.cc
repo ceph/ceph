@@ -603,6 +603,13 @@ void AuthMonitor::_set_mon_num_rank(int num, int rank)
   mon_rank = rank;
 }
 
+void AuthMonitor::_reset_last_allocated_id()
+{
+  dout(10) << __func__ << " last_allocated_id " << last_allocated_id << " max_global_id " << max_global_id << dendl;
+  ceph_assert(ceph_mutex_is_locked(mon.auth_lock));
+  last_allocated_id = 0;
+}
+
 uint64_t AuthMonitor::_assign_global_id()
 {
   ceph_assert(ceph_mutex_is_locked(mon.auth_lock));
