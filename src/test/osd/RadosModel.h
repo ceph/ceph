@@ -171,6 +171,7 @@ public:
   std::set<std::string> oid_redirect_not_in_use;
   std::set<std::string> oid_redirect_in_use;
   std::set<std::string> oid_set_chunk_tgt_pool;
+  std::map<std::string, std::map<uint64_t, uint64_t> > oid_chunk_info;
   SharedPtrRegistry<int, int> snaps_in_use;
   int current_snap;
   std::string pool_name;
@@ -2463,20 +2464,35 @@ public:
       snap(0)
   {}
 
-  std::pair<uint64_t, uint64_t> get_rand_off_len(uint32_t max_len) {
-    std::pair<uint64_t, uint64_t> r (0, 0);
-    r.first = rand() % max_len;
-    r.second = rand() % max_len;
-    r.first = r.first - (r.first % 512);
-    r.second = r.second - (r.second % 512);
+  std::pair<uint64_t, uint64_t> get_rand_off_len(uint64_t max_len, const std::map<uint64_t, uint64_t>& existingChunks) {
+    std::random_device rd;
+    std::mt19937 gen(rd());
 
-    while (r.first + r.second > max_len || r.second == 0) {
-      r.first = rand() % max_len;
-      r.second = rand() % max_len;
-      r.first = r.first - (r.first % 512);
-      r.second = r.second - (r.second % 512);
+    std::vector<std::pair<uint64_t, uint64_t>> gaps;
+    uint64_t lastEnd = 0;
+    for (const auto& chunk : existingChunks) {
+      if (chunk.first > lastEnd) {
+        gaps.emplace_back(lastEnd, chunk.first - lastEnd);
+      }
+      lastEnd = chunk.first + chunk.second;
     }
-    return r;
+    if (lastEnd < max_len) {
+      gaps.emplace_back(lastEnd, max_len - lastEnd);
+    }
+
+    if (gaps.empty()) {
+      return std::make_pair(0, 0);
+    }
+
+    std::uniform_int_distribution<size_t> gapDist(0, gaps.size() - 1);
+    auto& selectedGap = gaps[gapDist(gen)];
+
+    std::uniform_int_distribution<uint64_t> offsetDist(selectedGap.first, selectedGap.first + selectedGap.second - 1);
+    uint64_t offset = offsetDist(gen);
+    std::uniform_int_distribution<uint64_t> lengthDist(1, selectedGap.second - (offset - selectedGap.first));
+    uint64_t length = lengthDist(gen);
+
+    return std::make_pair(offset, length);
   }
 
   void _begin() override
@@ -2491,7 +2507,7 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
-    context->find_object(oid, &src_value, snap); 
+    context->find_object(oid, &src_value, snap);
     context->find_object(oid_tgt, &tgt_value);
 
     uint32_t max_len = 0;
@@ -2504,10 +2520,12 @@ public:
     std::pair<uint64_t, uint64_t> off_len; // first: offset, second: length
     if (snap >= 0) {
       context->io_ctx.snap_set_read(context->snaps[snap]);
-      off_len = get_rand_off_len(max_len);
+      off_len = get_rand_off_len(max_len, context->oid_chunk_info[oid]);
+      context->oid_chunk_info[oid][off_len.first] = off_len.second;
     } else if (src_value.version != 0 && !src_value.deleted()) {
       op.assert_version(src_value.version);
-      off_len = get_rand_off_len(max_len);
+      off_len = get_rand_off_len(max_len, context->oid_chunk_info[oid]);
+      context->oid_chunk_info[oid][off_len.first] = off_len.second;
     } else if (src_value.deleted()) {
       off_len.first = 0;
       off_len.second = max_len;
