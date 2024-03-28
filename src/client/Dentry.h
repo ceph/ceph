@@ -77,6 +77,22 @@ public:
     dir = nullptr;
   }
 
+  bool make_path_string(std::string& s)
+  {
+    bool ret = false;
+
+    if (dir) {
+      ret = dir->parent_inode->make_path_string(s);
+    } else {
+      // Couldn't link all the way to our mount point
+      return false;
+    }
+    s += "/";
+    s.append(name.data(), name.length());
+
+    return ret;
+  }
+
   void dump(Formatter *f) const;
   friend std::ostream &operator<<(std::ostream &oss, const Dentry &Dentry);
 
