@@ -4422,7 +4422,7 @@ void Server::handle_client_open(const MDRequestRef& mdr)
     respond_to_request(mdr, -CEPHFS_EINVAL);
     return;
   }
-  
+
   bool need_auth = !file_mode_is_readonly(cmode) ||
 		   (flags & (CEPH_O_TRUNC | CEPH_O_DIRECTORY));
 
@@ -4431,13 +4431,14 @@ void Server::handle_client_open(const MDRequestRef& mdr)
     respond_to_request(mdr, -CEPHFS_EROFS);
     return;
   }
-  
+
   CInode *cur = rdlock_path_pin_ref(mdr, need_auth);
   if (!cur)
     return;
 
-  if (cur->is_frozen() || cur->state_test(CInode::STATE_EXPORTINGCAPS)) {
-    ceph_assert(!need_auth);
+  // In case the _open() is called from _openc() the previous rdlock_path_pin_ref()
+  // will fail to forward the request to auth MDS, we need to retry it here.
+  if (need_auth || cur->is_frozen() || cur->state_test(CInode::STATE_EXPORTINGCAPS)) {
     mdr->locking_state &= ~(MutationImpl::PATH_LOCKED | MutationImpl::ALL_LOCKED);
     CInode *cur = rdlock_path_pin_ref(mdr, true);
     if (!cur)
@@ -4456,7 +4457,7 @@ void Server::handle_client_open(const MDRequestRef& mdr)
 	   << ", filemode = " << cmode
 	   << ", need_auth = " << need_auth
 	   << dendl;
-  
+
   // regular file?
   /*if (!cur->inode.is_file() && !cur->inode.is_dir()) {
     dout(7) << "not a file or dir " << *cur << dendl;
@@ -4482,7 +4483,7 @@ void Server::handle_client_open(const MDRequestRef& mdr)
     respond_to_request(mdr, -CEPHFS_EPERM);
     return;
   }
-  
+
   // snapped data is read only
   if (mdr->snapid != CEPH_NOSNAP &&
       ((cmode & CEPH_FILE_MODE_WR) || req->may_write())) {
