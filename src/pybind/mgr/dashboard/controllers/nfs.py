@@ -268,12 +268,19 @@ class NFSGaneshaUi(BaseController):
     @Endpoint()
     @ReadPermission
     def status(self):
-        status = {'available': True, 'message': None}
         try:
-            mgr.remote('nfs', 'cluster_ls')
+            available = mgr.remote('nfs', 'available')
         except (ImportError, RuntimeError) as error:
             logger.exception(error)
-            status['available'] = False
-            status['message'] = str(error)  # type: ignore
+            return {'available': False, 'message': str(error)}
 
-        return status
+        return {
+            'available': available,
+            'message': (
+                '' if available
+                else (
+                    'NFS-Ganesha is unavailable, '
+                    'or Orchestrator is not configured.'
+                )
+            )
+        }
