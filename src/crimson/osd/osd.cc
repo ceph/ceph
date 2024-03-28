@@ -104,6 +104,7 @@ OSD::OSD(int id, uint32_t nonce,
       std::ignore = update_heartbeat_peers(
       ).then([this] {
 	update_stats();
+        mgrc->update_daemon_health(get_health_metrics());
 	tick_timer.arm(
 	  std::chrono::seconds(TICK_INTERVAL));
       });
@@ -1290,6 +1291,11 @@ seastar::future<> OSD::handle_recovery_subreq(
 {
   return pg_shard_manager.start_pg_operation<RecoverySubRequest>(
     conn, std::move(m)).second;
+}
+
+vector<DaemonHealthMetric> OSD::get_health_metrics()
+{
+  return std::vector<DaemonHealthMetric>(0);
 }
 
 bool OSD::should_restart() const
