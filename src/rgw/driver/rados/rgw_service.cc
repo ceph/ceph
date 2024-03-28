@@ -39,6 +39,7 @@
 #include "rgw_role.h"
 #include "rgw_pubsub.h"
 #include "topic.h"
+#include "oidc.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -392,6 +393,9 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver, const DoutPrefix
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
   meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(driver, svc.role);
 
+  meta.oidc = rgwrados::oidc::create_metadata_handler(
+      *svc.sysobj, *svc.mdlog, svc.zone->get_zone_params());
+
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,
                                 svc.bucket,
@@ -446,6 +450,7 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixPr
   meta.role = _ctl.meta.role.get();
   meta.topic = _ctl.meta.topic.get();
   meta.topic_cache = _ctl.meta.topic_cache.get();
+  meta.oidc = _ctl.meta.oidc.get();
 
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
@@ -481,6 +486,12 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixPr
     return r;
   }
   r = meta.topic->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init topic ctl ("
+                  << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  r = meta.oidc->attach(meta.mgr);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start init topic ctl ("
                   << cpp_strerror(-r) << dendl;
