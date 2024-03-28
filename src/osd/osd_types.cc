@@ -1952,21 +1952,25 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 30;
+  uint8_t v = 31;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
-  if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
-    // this was the first post-hammer thing we added; if it's missing, encode
-    // like hammer.
-    v = 21;
-  } else if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
-    v = 24;
-  } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
-    v = 26;
-  } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
-    v = 27;
-  } else if (!is_stretch_pool()) {
-    v = 29;
+  if (!HAVE_FEATURE(features, SERVER_SQUID)) {
+    if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
+      // this was the first post-hammer thing we added; if it's missing, encode
+      // like hammer.
+      v = 21;
+    } else if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+      v = 24;
+    } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+      v = 26;
+    } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      v = 27;
+    } else if (!is_stretch_pool()) {
+      v = 29;
+    } else {
+      v = 30;
+    }
   }
 
   ENCODE_START(v, 5, bl);
@@ -2057,18 +2061,22 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   if (v >= 29) {
     encode(last_pg_merge_meta, bl);
   }
-  if (v >= 30) {
+  if (v == 30) {
     encode(peering_crush_bucket_count, bl);
     encode(peering_crush_bucket_target, bl);
     encode(peering_crush_bucket_barrier, bl);
     encode(peering_crush_mandatory_member, bl);
+  }
+  if (v >= 31) {
+    auto maybe_peering_crush_data1 = maybe_peering_crush_data();
+    encode(maybe_peering_crush_data1, bl);
   }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(30, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(31, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2243,11 +2251,21 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     last_force_op_resend = last_force_op_resend_prenautilus;
     pg_autoscale_mode = pg_autoscale_mode_t::WARN;    // default to warn on upgrade
   }
-  if (struct_v >= 30) {
+  if (struct_v == 30) {
     decode(peering_crush_bucket_count, bl);
     decode(peering_crush_bucket_target, bl);
     decode(peering_crush_bucket_barrier, bl);
     decode(peering_crush_mandatory_member, bl);
+  }
+  if (struct_v >= 31) {
+    std::optional<std::tuple<uint32_t,uint32_t,uint32_t,uint32_t>> peering_crush_data;
+    decode(peering_crush_data, bl);
+    if (peering_crush_data) {
+        std::tie(peering_crush_bucket_count,
+                 peering_crush_bucket_target,
+                 peering_crush_bucket_barrier,
+                 peering_crush_mandatory_member) = *peering_crush_data;
+    }
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -2351,6 +2369,13 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.expected_num_objects = 123456;
   a.fast_read = false;
   a.application_metadata = {{"rbd", {{"key", "value"}}}};
+  o.push_back(new pg_pool_t(a));
+
+  // test stretch CRUSH buckets
+  a.peering_crush_bucket_count = 10;
+  a.peering_crush_bucket_barrier = 11;
+  a.peering_crush_mandatory_member = 12;
+  a.peering_crush_bucket_target = 13;
   o.push_back(new pg_pool_t(a));
 }
 

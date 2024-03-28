@@ -1552,6 +1552,18 @@ public:
   bool is_stretch_pool() const {
     return peering_crush_bucket_count != 0;
   }
+  
+  std::optional<std::tuple<uint32_t,uint32_t,uint32_t,uint32_t>> maybe_peering_crush_data() const {
+    if (!is_stretch_pool()) {
+        return std::nullopt;
+    } else {
+        return std::make_optional(std::tuple<uint32_t,uint32_t,uint32_t,uint32_t>(peering_crush_bucket_count,
+                                                                    peering_crush_bucket_target ,
+                                                                    peering_crush_bucket_barrier,
+                                                                    peering_crush_mandatory_member
+                                                                    ));
+    }
+  }
 
   bool stretch_set_can_peer(const std::set<int>& want, const OSDMap& osdmap,
 			    std::ostream *out) const;
