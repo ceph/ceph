@@ -41,10 +41,15 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
     : LogicalCachedExtent(std::move(ptr)) {}
   explicit ObjectDataBlock(const ObjectDataBlock &other)
     : LogicalCachedExtent(other), modified_region(other.modified_region) {}
+  explicit ObjectDataBlock(const ObjectDataBlock &other, share_buffer_t s)
+    : LogicalCachedExtent(other, s), modified_region(other.modified_region) {}
   explicit ObjectDataBlock(extent_len_t length)
     : LogicalCachedExtent(length) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
+    if (get_paddr().get_addr_type() == paddr_types_t::RANDOM_BLOCK) {
+      return CachedExtentRef(new ObjectDataBlock(*this, share_buffer_t{}));
+    }
     return CachedExtentRef(new ObjectDataBlock(*this));
   };
 
