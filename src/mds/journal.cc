@@ -237,27 +237,29 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 3);
 
-  size_t count = 0;
-  for (elist<CInode*>::iterator it = dirty_parent_inodes.begin(); !it.end(); ++it)
-    count++;
-
-  std::vector<CInodeCommitOperations> ops_vec;
-  ops_vec.reserve(count);
+  std::map<int64_t, std::vector<CInodeCommitOperations>> ops_vec_map;
   // backtraces to be stored/updated
   for (elist<CInode*>::iterator p = dirty_parent_inodes.begin(); !p.end(); ++p) {
     CInode *in = *p;
     ceph_assert(in->is_auth());
     if (in->can_auth_pin()) {
       dout(15) << "try_to_expire waiting for storing backtrace on " << *in << dendl;
-      ops_vec.resize(ops_vec.size() + 1);
-      in->store_backtrace(ops_vec.back(), op_prio);
+      auto pool_id = in->get_backtrace_pool();
+      ops_vec_map[pool_id].push_back(CInodeCommitOperations());
+      // dispatch separate ops for backtrace updates for old pools
+      in->store_backtrace(ops_vec_map[pool_id].back(), op_prio, true);
+      for (auto p : in->get_inode()->old_pools) {
+	in->store_backtrace(ops_vec_map[p].back(), op_prio, true);
+      }
     } else {
       dout(15) << "try_to_expire waiting for unfreeze on " << *in << dendl;
       in->add_waiter(CInode::WAIT_UNFREEZE, gather_bld.new_sub());
     }
   }
-  if (!ops_vec.empty())
+
+  for (auto [pool_id, ops_vec] : ops_vec_map) {
     mds->finisher->queue(new BatchCommitBacktrace(mds, gather_bld.new_sub(), std::move(ops_vec)));
+  }
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 4);
 

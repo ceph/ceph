@@ -1354,7 +1354,7 @@ void CInode::_commit_ops(int r, C_GatherBuilder &gather_bld,
 }
 
 void CInode::_store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
-                              inode_backtrace_t &bt, int op_prio)
+                              inode_backtrace_t &bt, int op_prio, bool ignore_old_pools)
 {
   dout(10) << __func__ << " on " << *this << dendl;
   ceph_assert(is_dirty_parent());
@@ -1380,16 +1380,18 @@ void CInode::_store_backtrace(std::vector<CInodeCommitOperation> &ops_vec,
     return;
   }
 
-  // In the case where DIRTYPOOL is set, we update all old pools backtraces
-  // such that anyone reading them will see the new pool ID in
-  // inode_backtrace_t::pool and go read everything else from there.
-  for (const auto &p : get_inode()->old_pools) {
-    if (p == pool)
-      continue;
+  if (!ignore_old_pools) {
+    // In the case where DIRTYPOOL is set, we update all old pools backtraces
+    // such that anyone reading them will see the new pool ID in
+    // inode_backtrace_t::pool and go read everything else from there.
+    for (const auto &p : get_inode()->old_pools) {
+      if (p == pool)
+	continue;
 
-    dout(20) << __func__ << ": updating old pool " << p << dendl;
+      dout(20) << __func__ << ": updating old pool " << p << dendl;
 
-    ops_vec.emplace_back(op_prio, p);
+      ops_vec.emplace_back(op_prio, p);
+    }
   }
 }
 
@@ -1399,7 +1401,7 @@ void CInode::store_backtrace(MDSContext *fin, int op_prio)
   inode_backtrace_t bt;
   auto version = get_inode()->backtrace_version;
 
-  _store_backtrace(ops_vec, bt, op_prio);
+  _store_backtrace(ops_vec, bt, op_prio, false);
 
   C_GatherBuilder gather(g_ceph_context,
 			 new C_OnFinisher(
@@ -1410,12 +1412,14 @@ void CInode::store_backtrace(MDSContext *fin, int op_prio)
   gather.activate();
 }
 
-void CInode::store_backtrace(CInodeCommitOperations &op, int op_prio)
+void CInode::store_backtrace(CInodeCommitOperations &op, int op_prio,
+			     bool ignore_old_pools)
 {
   op.version = get_inode()->backtrace_version;
   op.in = this;
 
-  _store_backtrace(op.ops_vec, op.bt, op_prio);
+  // update backtraces in old pools
+  _store_backtrace(op.ops_vec, op.bt, op_prio, ignore_old_pools);
 }
 
 void CInode::_stored_backtrace(int r, version_t v, Context *fin)
