@@ -16,6 +16,16 @@
 * Tracing: The blkin tracing feature (see https://docs.ceph.com/en/reef/dev/blkin/)
   is now deprecated in favor of Opentracing (https://docs.ceph.com/en/reef/dev/developer_guide/jaegertracing/)
   and will be removed in a later release.
+* RGW: Introducing a new data layout for the Topic metadata associated with S3
+  Bucket Notifications, where each Topic is stored as a separate RADOS object
+  and the bucket notification configuration is stored in a bucket attribute.
+  This new representation supports multisite replication via metadata sync and
+  can scale to many topics. This is on by default for new deployments, but is
+  is not enabled by default on upgrade. Once all radosgws have upgraded (on all
+  zones in a multisite configuration), the ``notification_v2`` zone feature can
+  be enabled to migrate to the new format. See
+  https://docs.ceph.com/en/squid/radosgw/zone-features for details. The "v1"
+  format is now considered deprecated and may be removed after 2 major releases.
 * CEPHFS: MDS evicts clients which are not advancing their request tids which causes
   a large buildup of session metadata resulting in the MDS going read-only due to
   the RADOS operation exceeding the size threshold. `mds_session_metadata_threshold`

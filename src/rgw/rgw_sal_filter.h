@@ -186,6 +186,9 @@ public:
       optional_yield y, const DoutPrefixProvider *dpp) override {
     return next->read_topics(tenant, topics, objv_tracker, y, dpp);
   }
+  int stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) override {
+    return next->stat_topics_v1(tenant, y, dpp);
+  }
   int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
       optional_yield y, const DoutPrefixProvider *dpp) override {
     return next->write_topics(tenant, topics, objv_tracker, y, dpp);
@@ -194,7 +197,49 @@ public:
       optional_yield y, const DoutPrefixProvider *dpp) override {
     return next->remove_topics(tenant, objv_tracker, y, dpp);
   }
-
+  int read_topic_v2(const std::string& topic_name,
+                    const std::string& tenant,
+                    rgw_pubsub_topic& topic,
+                    RGWObjVersionTracker* objv_tracker,
+                    optional_yield y,
+                    const DoutPrefixProvider* dpp) override {
+    return next->read_topic_v2(topic_name, tenant, topic, objv_tracker, y, dpp);
+  }
+  int write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+                     RGWObjVersionTracker& objv_tracker,
+                     optional_yield y,
+                     const DoutPrefixProvider* dpp) override {
+    return next->write_topic_v2(topic, exclusive, objv_tracker, y, dpp);
+  }
+  int remove_topic_v2(const std::string& topic_name,
+                      const std::string& tenant,
+                      RGWObjVersionTracker& objv_tracker,
+                      optional_yield y,
+                      const DoutPrefixProvider* dpp) override {
+    return next->remove_topic_v2(topic_name, tenant, objv_tracker, y, dpp);
+  }
+  int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                  const std::string& bucket_key,
+                                  bool add_mapping,
+                                  optional_yield y,
+                                  const DoutPrefixProvider* dpp) override {
+    return next->update_bucket_topic_mapping(topic, bucket_key, add_mapping, y,
+                                             dpp);
+  }
+  int remove_bucket_mapping_from_topics(
+      const rgw_pubsub_bucket_topics& bucket_topics,
+      const std::string& bucket_key,
+      optional_yield y,
+      const DoutPrefixProvider* dpp) override {
+    return next->remove_bucket_mapping_from_topics(bucket_topics, bucket_key, y,
+                                                   dpp);
+  }
+  int get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                               std::set<std::string>& bucket_keys,
+                               optional_yield y,
+                               const DoutPrefixProvider* dpp) override {
+    return next->get_bucket_topic_mapping(topic, bucket_keys, y, dpp);
+  }
   virtual RGWLC* get_rgwlc(void) override;
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override;
 

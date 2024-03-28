@@ -5,14 +5,41 @@
 #include "rgw_b64.h"
 #include "rgw_sal.h"
 #include "rgw_pubsub.h"
+#include "rgw_string.h"
 #include "rgw_tools.h"
 #include "rgw_xml.h"
 #include "rgw_arn.h"
 #include "rgw_pubsub_push.h"
+#include "rgw_bucket.h"
+#include "common/errno.h"
 #include <regex>
 #include <algorithm>
 
 #define dout_subsys ceph_subsys_rgw
+
+static constexpr std::string_view topic_tenant_delim = ":";
+
+// format and parse topic metadata keys as tenant:name
+std::string get_topic_metadata_key(std::string_view tenant,
+                                   std::string_view topic_name)
+{
+  return string_cat_reserve(tenant, topic_tenant_delim, topic_name);
+}
+
+void parse_topic_metadata_key(const std::string& key,
+                              std::string& tenant,
+                              std::string& name)
+{
+  // expected format: tenant_name:topic_name*
+  auto pos = key.find(topic_tenant_delim);
+  if (pos != std::string::npos) {
+    tenant = key.substr(0, pos);
+    name = key.substr(pos + 1);
+  } else {
+    tenant.clear();
+    name = key;
+  }
+}
 
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts) {
   char buf[64];
@@ -368,7 +395,17 @@ void rgw_pubsub_topic::dump_xml_as_attributes(Formatter *f) const
   encode_xml_key_value_entry("TopicArn", arn, f);
   encode_xml_key_value_entry("OpaqueData", opaque_data, f);
   encode_xml_key_value_entry("Policy", policy_text, f);
+  std::ostringstream stream;
   f->close_section(); // Attributes
+}
+
+void rgw_pubsub_topic::decode_json(JSONObj* f) {
+  JSONDecoder::decode_json("user", user, f);
+  JSONDecoder::decode_json("name", name, f);
+  JSONDecoder::decode_json("dest", dest, f);
+  JSONDecoder::decode_json("arn", arn, f);
+  JSONDecoder::decode_json("opaqueData", opaque_data, f);
+  JSONDecoder::decode_json("policy", policy_text, f);
 }
 
 void encode_json(const char *name, const rgw::notify::EventTypeList& l, Formatter *f)
@@ -462,12 +499,96 @@ std::string rgw_pubsub_dest::to_json_str() const
   return ss.str();
 }
 
+void rgw_pubsub_dest::decode_json(JSONObj* f) {
+  using rgw::notify::DEFAULT_CONFIG;
+  using rgw::notify::DEFAULT_GLOBAL_VALUE;
+  JSONDecoder::decode_json("push_endpoint", push_endpoint, f);
+  JSONDecoder::decode_json("push_endpoint_args", push_endpoint_args, f);
+  JSONDecoder::decode_json("push_endpoint_topic", arn_topic, f);
+  JSONDecoder::decode_json("stored_secret", stored_secret, f);
+  JSONDecoder::decode_json("persistent", persistent, f);
+  std::string ttl;
+  JSONDecoder::decode_json("time_to_live", ttl, f);
+  time_to_live = ttl == DEFAULT_CONFIG ? DEFAULT_GLOBAL_VALUE : std::stoul(ttl);
+
+  std::string max_retry;
+  JSONDecoder::decode_json("max_retries", max_retry, f);
+  max_retries = max_retry == DEFAULT_CONFIG ? DEFAULT_GLOBAL_VALUE
+                                            : std::stoul(max_retry);
+
+  std::string sleep_dur;
+  JSONDecoder::decode_json("retry_sleep_duration", sleep_dur, f);
+  retry_sleep_duration = sleep_dur == DEFAULT_CONFIG ? DEFAULT_GLOBAL_VALUE
+                                                     : std::stoul(sleep_dur);
+}
+
 RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver, const std::string& _tenant)
   : driver(_driver), tenant(_tenant)
 {}
 
-int RGWPubSub::read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result, 
-    RGWObjVersionTracker *objv_tracker, optional_yield y) const
+RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver,
+                     const std::string& _tenant,
+                     const rgw::SiteConfig& site)
+    : driver(_driver), tenant(_tenant),
+      use_notification_v2(rgw::all_zonegroups_support(site, rgw::zone_features::notification_v2))
+{
+}
+
+int RGWPubSub::get_topics(const DoutPrefixProvider* dpp,
+                          const std::string& start_marker, int max_items,
+                          rgw_pubsub_topics& result, std::string& next_marker,
+                          optional_yield y) const
+{
+  if (!use_notification_v2 || driver->stat_topics_v1(tenant, y, dpp) != -ENOENT) {
+    // in case of v1 or during migration we use v1 topics
+    // v1 returns all topics, ignoring marker/max_items
+    return read_topics_v1(dpp, result, nullptr, y);
+  }
+ 
+  // TODO: prefix filter on 'tenant:'
+  void* handle = NULL;
+  int ret = driver->meta_list_keys_init(dpp, "topic", start_marker, &handle);
+  if (ret < 0) {
+    return ret;
+  }
+  auto g = make_scope_guard(
+      [this, handle] { driver->meta_list_keys_complete(handle); });
+
+  if (max_items > 1000) {
+    max_items = 1000;
+  }
+  std::list<std::string> topics;
+  bool truncated = false;
+  ret = driver->meta_list_keys_next(dpp, handle, max_items, topics, &truncated);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1)
+        << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+  for (const auto& key : topics) {
+    std::string topic_name;
+    std::string topic_tenant;
+    parse_topic_metadata_key(key, topic_tenant, topic_name);
+    if (tenant != topic_tenant) {
+      continue;
+    }
+    rgw_pubsub_topic topic;
+    int r = get_topic(dpp, topic_name, topic, y, nullptr);
+    if (r < 0) {
+      continue;
+    }
+    result.topics[topic_name] = std::move(topic);
+  }
+  if (truncated) {
+    next_marker = driver->meta_get_marker(handle);
+  } else {
+    next_marker.clear();
+  }
+  return ret;
+}
+
+int RGWPubSub::read_topics_v1(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result,
+                              RGWObjVersionTracker *objv_tracker, optional_yield y) const
 {
   const int ret = driver->read_topics(tenant, result, objv_tracker, y, dpp);
   if (ret < 0) {
@@ -477,8 +598,8 @@ int RGWPubSub::read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& res
   return 0;
 }
 
-int RGWPubSub::write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
-				     RGWObjVersionTracker *objv_tracker, optional_yield y) const
+int RGWPubSub::write_topics_v1(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
+                               RGWObjVersionTracker *objv_tracker, optional_yield y) const
 {
   const int ret = driver->write_topics(tenant, topics, objv_tracker, y, dpp);
   if (ret < 0 && ret != -ENOENT) {
@@ -503,6 +624,13 @@ int RGWPubSub::Bucket::write_topics(const DoutPrefixProvider *dpp, const rgw_pub
 					RGWObjVersionTracker *objv_tracker,
 					optional_yield y) const
 {
+  if (ps.use_notification_v2) { 
+    if (const auto ret = ps.driver->stat_topics_v1(bucket->get_tenant(), y, dpp); ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+        << ". please try again later" << dendl; 
+      return -ERR_SERVICE_UNAVAILABLE;
+    }
+  }
   const int ret = bucket->write_topics(topics, objv_tracker, y, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
@@ -512,10 +640,32 @@ int RGWPubSub::Bucket::write_topics(const DoutPrefixProvider *dpp, const rgw_pub
   return 0;
 }
 
-int RGWPubSub::get_topic(const DoutPrefixProvider *dpp, const std::string& name, rgw_pubsub_topic& result, optional_yield y) const
-{
+int RGWPubSub::get_topic(const DoutPrefixProvider* dpp,
+                         const std::string& name,
+                         rgw_pubsub_topic& result,
+                         optional_yield y,
+                         std::set<std::string>* subscribed_buckets) const {
+  if (use_notification_v2 && driver->stat_topics_v1(tenant, y, dpp) == -ENOENT) {
+    // in case of v1 or during migration we use v1 topics
+    int ret = driver->read_topic_v2(name, tenant, result, nullptr, y, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "failed to read topic info for name: " << name
+                        << " tenant: " << tenant << ", ret=" << ret << dendl;
+      return ret;
+    }
+    if (subscribed_buckets) {
+      ret =
+          driver->get_bucket_topic_mapping(result, *subscribed_buckets, y, dpp);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1)
+            << "failed to fetch bucket topic mapping info for topic: " << name
+            << " tenant: " << tenant << ", ret=" << ret << dendl;
+      }
+    }
+    return ret;
+  }
   rgw_pubsub_topics topics;
-  const int ret = read_topics(dpp, topics, nullptr, y);
+  const int ret = read_topics_v1(dpp, topics, nullptr, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
@@ -531,45 +681,150 @@ int RGWPubSub::get_topic(const DoutPrefixProvider *dpp, const std::string& name,
   return 0;
 }
 
-// from list of bucket topics, find the one that was auto-generated by a notification
-auto find_unique_topic(const rgw_pubsub_bucket_topics &bucket_topics, const std::string &notification_id) {
-  auto it = std::find_if(bucket_topics.topics.begin(), bucket_topics.topics.end(),
-                         [&](const auto& val) { return notification_id == val.second.s3_id; });
-  return it != bucket_topics.topics.end() ?
-         std::optional<std::reference_wrapper<const rgw_pubsub_topic_filter>>(it->second):
-         std::nullopt;
-}
-
-int RGWPubSub::Bucket::get_notification_by_id(const DoutPrefixProvider *dpp, const std::string& notification_id,
-                                              rgw_pubsub_topic_filter& result, optional_yield y) const {
-  rgw_pubsub_bucket_topics bucket_topics;
-  const int ret = read_topics(dpp, bucket_topics, nullptr, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to read bucket_topics info: ret=" << ret << dendl;
-    return ret;
+int get_bucket_notifications(const DoutPrefixProvider* dpp,
+                             rgw::sal::Bucket* bucket,
+                             rgw_pubsub_bucket_topics& bucket_topics) {
+  const rgw::sal::Attrs& attrs = bucket->get_attrs();
+  auto iter = attrs.find(RGW_ATTR_BUCKET_NOTIFICATION);
+  if (iter == attrs.end()) {
+    return 0;
   }
-
-  auto iter = find_unique_topic(bucket_topics, notification_id);
-  if (!iter) {
-    ldpp_dout(dpp, 1) << "ERROR: notification was not found" << dendl;
-    return -ENOENT;
+  try {
+    const auto& bl = iter->second;
+    auto biter = bl.cbegin();
+    bucket_topics.decode(biter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to decode bucket topics for bucket: "
+                      << bucket->get_name() << dendl;
+    return -EIO;
   }
-
-  result = iter->get();
   return 0;
 }
 
-
-int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, 
-    const rgw::notify::EventTypeList& events, optional_yield y) const {
-  return create_notification(dpp, topic_name, events, std::nullopt, "", y);
+std::string topic_to_unique(const std::string& topic,
+                            const std::string& notification) {
+  return notification + "_" + topic;
 }
 
-int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, 
+// from list of bucket topics, find the one that was auto-generated by a notification
+std::optional<rgw_pubsub_topic_filter> find_unique_topic(
+    const rgw_pubsub_bucket_topics& bucket_topics,
+    const std::string& notification_id) {
+  auto it = std::find_if(bucket_topics.topics.begin(), bucket_topics.topics.end(),
+                         [&](const auto& val) { return notification_id == val.second.s3_id; });
+  if (it != bucket_topics.topics.end())
+    return it->second;
+  return std::nullopt;
+}
+
+int store_bucket_attrs_and_update_mapping(
+    const DoutPrefixProvider* dpp,
+    rgw::sal::Driver* driver,
+    rgw::sal::Bucket* bucket,
+    rgw_pubsub_bucket_topics& bucket_topics,
+    const rgw_pubsub_topic& topic,
+    optional_yield y) {
+  rgw::sal::Attrs& attrs = bucket->get_attrs();
+  if (!bucket_topics.topics.empty()) {
+    bufferlist bl;
+    bucket_topics.encode(bl);
+    attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
+  } else {
+    auto it = attrs.find(RGW_ATTR_BUCKET_NOTIFICATION);
+    if (it != attrs.end()) {
+      attrs.erase(it);
+    }
+  }
+  auto ret = bucket->merge_and_store_attrs(dpp, attrs, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1)
+        << "Failed to store RGW_ATTR_BUCKET_NOTIFICATION on bucket="
+        << bucket->get_name() << " returned err= " << ret << dendl;
+    return ret;
+  }
+  if (bucket_topics.topics.empty()) {
+    // remove the bucket name from  the topic-bucket omap
+    auto op_ret = driver->update_bucket_topic_mapping(
+        topic,
+        rgw_make_bucket_entry_name(bucket->get_tenant(), bucket->get_name()),
+        /*add_mapping=*/false, y, dpp);
+    if (op_ret < 0) {
+      // TODO: should the error be reported, as attrs are already deleted.
+      // ret = op_ret;
+    }
+  }
+  return ret;
+}
+
+int delete_notification_attrs(const DoutPrefixProvider* dpp,
+                              rgw::sal::Bucket* bucket,
+                              optional_yield y) {
+  auto& attrs = bucket->get_attrs();
+  auto iter = attrs.find(RGW_ATTR_BUCKET_NOTIFICATION);
+  if (iter == attrs.end()) {
+    return 0;
+  }
+  // delete all notifications of on a bucket
+  attrs.erase(iter);
+  auto ret = bucket->merge_and_store_attrs(dpp, attrs, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1)
+        << "Failed to remove RGW_ATTR_BUCKET_NOTIFICATION attr on bucket="
+        << bucket->get_name() << " ret= " << ret << dendl;
+  }
+  return ret;
+}
+
+int remove_notification_v2(const DoutPrefixProvider* dpp,
+                           rgw::sal::Driver* driver,
+                           rgw::sal::Bucket* bucket,
+                           const std::string& notification_id,
+                           optional_yield y) {
+  rgw_pubsub_bucket_topics bucket_topics;
+  auto ret = get_bucket_notifications(dpp, bucket, bucket_topics);
+  if (ret < 0) {
+    return -ret;
+  }
+  // no notifications on the bucket.
+  if (bucket_topics.topics.empty()) {
+    return 0;
+  }
+  // delete all notifications
+  if (notification_id.empty()) {
+    ret = delete_notification_attrs(dpp, bucket, y);
+    if (ret < 0) {
+      return ret;
+    }
+    int op_ret = driver->remove_bucket_mapping_from_topics(
+        bucket_topics,
+        rgw_make_bucket_entry_name(bucket->get_tenant(), bucket->get_name()), y,
+        dpp);
+    if (op_ret < 0) {
+      // TODO: should the error be reported, as attrs are already deleted.
+      // ret = op_ret;
+    }
+    return ret;
+  }
+
+  // delete a specific notification
+  const auto unique_topic = find_unique_topic(bucket_topics, notification_id);
+  if (!unique_topic) {
+    // notification to be removed is not found - considered success
+    ldpp_dout(dpp, 20) << "notification '" << notification_id
+                       << "' already removed" << dendl;
+    return 0;
+  }
+  const auto& topic_name = unique_topic->topic.name;
+  bucket_topics.topics.erase(topic_to_unique(topic_name, notification_id));
+  return store_bucket_attrs_and_update_mapping(
+      dpp, driver, bucket, bucket_topics, unique_topic->topic, y);
+}
+
+int RGWPubSub::Bucket::create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name,
     const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y) const {
   rgw_pubsub_topic topic_info;
 
-  int ret = ps.get_topic(dpp, topic_name, topic_info, y);
+  int ret = ps.get_topic(dpp, topic_name, topic_info, y, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to read topic '" << topic_name << "' info: ret=" << ret << dendl;
     return ret;
@@ -632,7 +887,7 @@ int RGWPubSub::Bucket::remove_notification_inner(const DoutPrefixProvider *dpp, 
       ldpp_dout(dpp, 1) << "ERROR: notification was not found" << dendl;
       return -ENOENT;
     }
-    topic_name = std::make_unique<std::string>(iter->get().topic.name);
+    topic_name = std::make_unique<std::string>(iter->topic.name);
   }
 
   if (bucket_topics.topics.erase(*topic_name) == 0) {
@@ -695,16 +950,45 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
 }
 
 int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
+                            const rgw_pubsub_topic& topic,
+                            optional_yield y) const {
+  RGWObjVersionTracker objv_tracker;
+  objv_tracker.generate_new_write_ver(dpp->get_cct());
+  constexpr bool exclusive = false;
+  auto ret = driver->write_topic_v2(topic, exclusive, objv_tracker, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to write topic info: ret=" << ret
+                      << dendl;
+  }
+  return ret;
+}
+
+int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
                             const std::string& name,
                             const rgw_pubsub_dest& dest, const std::string& arn,
                             const std::string& opaque_data,
                             const rgw_user& user,
                             const std::string& policy_text,
                             optional_yield y) const {
+  if (use_notification_v2) {
+    if (const auto ret = driver->stat_topics_v1(tenant, y, dpp); ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+        << ". please try again later" << dendl; 
+      return -ERR_SERVICE_UNAVAILABLE;
+    }
+    rgw_pubsub_topic new_topic;
+    new_topic.user = user;
+    new_topic.name = name;
+    new_topic.dest = dest;
+    new_topic.arn = arn;
+    new_topic.opaque_data = opaque_data;
+    new_topic.policy_text = policy_text;
+    return create_topic(dpp, new_topic, y);
+  }
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
 
-  int ret = read_topics(dpp, topics, &objv_tracker, y);
+  int ret = read_topics_v1(dpp, topics, &objv_tracker, y);
   if (ret < 0 && ret != -ENOENT) {
     // its not an error if not topics exist, we create one
     ldpp_dout(dpp, 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
@@ -719,21 +1003,54 @@ int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
   new_topic.opaque_data = opaque_data;
   new_topic.policy_text = policy_text;
 
-  ret = write_topics(dpp, topics, &objv_tracker, y);
+  ret = write_topics_v1(dpp, topics, &objv_tracker, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
   }
+  ldpp_dout(dpp, 1) << "INFO: successfully created v1 topic" << dendl;
 
   return 0;
 }
 
+int RGWPubSub::remove_topic_v2(const DoutPrefixProvider* dpp,
+                               const std::string& name,
+                               optional_yield y) const {
+  RGWObjVersionTracker objv_tracker;
+  rgw_pubsub_topic topic;
+  int ret = get_topic(dpp, name, topic, y, nullptr);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  } else if (ret == -ENOENT) {
+    // it's not an error if no topics exist, just a no-op
+    ldpp_dout(dpp, 10) << "WARNING: topic name:" << name
+                       << " does not exist, deletion is a no-op: ret=" << ret
+                       << dendl;
+    return 0;
+  }
+  ret = driver->remove_topic_v2(name, tenant, objv_tracker, y, dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove topic info: ret=" << ret
+                      << dendl;
+    return ret;
+  }
+  return ret;
+}
+
 int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const
 {
+  if (use_notification_v2) {
+    if (const auto ret = driver->stat_topics_v1(tenant, y, dpp); ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
+        << ". please try again later" << dendl; 
+      return -ERR_SERVICE_UNAVAILABLE;
+    }
+    return remove_topic_v2(dpp, name, y);
+  }
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
 
-  int ret = read_topics(dpp, topics, &objv_tracker, y);
+  int ret = read_topics_v1(dpp, topics, &objv_tracker, y);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
@@ -745,7 +1062,7 @@ int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& na
 
   topics.topics.erase(name);
 
-  ret = write_topics(dpp, topics, &objv_tracker, y);
+  ret = write_topics_v1(dpp, topics, &objv_tracker, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to remove topics info: ret=" << ret << dendl;
     return ret;
@@ -753,4 +1070,3 @@ int RGWPubSub::remove_topic(const DoutPrefixProvider *dpp, const std::string& na
 
   return 0;
 }
-

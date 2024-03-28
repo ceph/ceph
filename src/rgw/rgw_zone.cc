@@ -296,12 +296,12 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("user_swift_pool", user_swift_pool, obj);
   JSONDecoder::decode_json("user_uid_pool", user_uid_pool, obj);
   JSONDecoder::decode_json("otp_pool", otp_pool, obj);
+  JSONDecoder::decode_json("notif_pool", notif_pool, obj);
+  JSONDecoder::decode_json("topics_pool", topics_pool, obj);
   JSONDecoder::decode_json("system_key", system_key, obj);
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
   JSONDecoder::decode_json("tier_config", tier_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
-  JSONDecoder::decode_json("notif_pool", notif_pool, obj);
-
 }
 
 void RGWZoneParams::dump(Formatter *f) const
@@ -321,11 +321,12 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("user_swift_pool", user_swift_pool, f);
   encode_json("user_uid_pool", user_uid_pool, f);
   encode_json("otp_pool", otp_pool, f);
+  encode_json("notif_pool", notif_pool, f);
+  encode_json("topics_pool", topics_pool, f);
   encode_json_plain("system_key", system_key, f);
   encode_json("placement_pools", placement_pools, f);
   encode_json("tier_config", tier_config, f);
   encode_json("realm_id", realm_id, f);
-  encode_json("notif_pool", notif_pool, f);
 }
 
 int RGWZoneParams::init(const DoutPrefixProvider *dpp, 
@@ -480,6 +481,7 @@ void add_zone_pools(const RGWZoneParams& info,
   pools.insert(info.reshard_pool);
   pools.insert(info.oidc_pool);
   pools.insert(info.notif_pool);
+  pools.insert(info.topics_pool);
 
   for (const auto& [pname, placement] : info.placement_pools) {
     pools.insert(placement.index_pool);
@@ -584,6 +586,7 @@ int RGWZoneParams::fix_pool_names(const DoutPrefixProvider *dpp, optional_yield 
   otp_pool = fix_zone_pool_dup(pools, name, ".rgw.otp", otp_pool);
   oidc_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:oidc", oidc_pool);
   notif_pool = fix_zone_pool_dup(pools, name ,".rgw.log:notif", notif_pool);
+  topics_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:topics", topics_pool);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
@@ -1245,6 +1248,8 @@ int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
   info.otp_pool = fix_zone_pool_dup(pools, info.name, ".rgw.otp", info.otp_pool);
   info.oidc_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:oidc", info.oidc_pool);
   info.notif_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:notif", info.notif_pool);
+  info.topics_pool =
+      fix_zone_pool_dup(pools, info.name, ".rgw.meta:topics", info.topics_pool);
 
   for (auto& [pname, placement] : info.placement_pools) {
     placement.index_pool = fix_zone_pool_dup(pools, info.name, "." + default_bucket_index_pool_suffix, placement.index_pool);

@@ -886,6 +886,7 @@ public:
     append_section_from_set(all_sections, "bucket.instance");
     append_section_from_set(all_sections, "bucket");
     append_section_from_set(all_sections, "roles");
+    append_section_from_set(all_sections, "topic");
 
     std::move(all_sections.begin(), all_sections.end(),
               std::back_inserter(sections));
