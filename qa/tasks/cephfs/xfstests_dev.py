@@ -51,8 +51,8 @@ class XFSTestsDev(CephFSTestCase):
         import configparser
 
         cp = configparser.ConfigParser()
-        cp.read_string(self.fs.mon_manager.raw_cluster_cmd(
-            'auth', 'get-or-create', 'client.admin'))
+        cp.read_string(self.get_ceph_cmd_stdout('auth', 'get-or-create',
+                                                'client.admin'))
 
         return cp['client.admin']['key']
 
