@@ -493,6 +493,19 @@ void ElectionLogic::receive_ack(int from, epoch_t from_epoch)
       // if yes, shortcut to election finish
       declare_victory();
     }
+    // Special case for netsplit or DR scenario
+    else if (strategy == CONNECTIVITY &&
+      acked_me.size()  > (elector->get_quorum().size() / 2)) {
+      std::set<int> acks_needed;
+      std::set<int> quorum = elector->get_quorum();
+      std::set_difference(acked_me.begin(), acked_me.end(),
+                          quorum.begin(), quorum.end(),
+                          std::inserter(acks_needed, acks_needed.begin()));
+      if (acks_needed == elector->get_dead_pinging()) {
+        // no need to wait, since the acks we need are dead.
+        declare_victory();
+      }
+    }
   } else {
     // ignore, i'm deferring already.
     ceph_assert(leader_acked >= 0);
@@ -511,14 +524,15 @@ bool ElectionLogic::victory_makes_sense(int from)
       elector->get_disallowed_leaders().count(elector->get_my_rank());
     break;
   case CONNECTIVITY:
-    double my_score, leader_score;
+    double my_score, from_score, leader_score;
+    if (leader_acked >= 0) {
+      leader_score = connectivity_election_score(leader_acked);
+    } else {leader_score = -1;}
     my_score = connectivity_election_score(elector->get_my_rank());
-    leader_score = connectivity_election_score(from);
-    ldout(cct, 5) << "victory from " << from << " makes sense? lscore:"
-		  << leader_score
-		  << "; my score:" << my_score << dendl;
-
-    makes_sense = (leader_score >= my_score);
+    from_score = connectivity_election_score(from);
+    ldout(cct, 5) << "victory from " << from << " makes sense? " << from << " score:"
+		  << from_score << "; my score:" << my_score << dendl;
+    makes_sense = (from_score >= my_score && (leader_acked == from || from_score >= leader_score));
     break;
   default:
     ceph_assert(0 == "how did you get a nonsense election strategy assigned?");
@@ -528,6 +542,23 @@ bool ElectionLogic::victory_makes_sense(int from)
 
 bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
 {
+
+  // We already decided a winner in the last election.
+  // This is for the case of netsplit between 2 datacenters
+  // and the arbiter participates in both election
+  // giving acks to both sides.
+  if (from_epoch <= epoch) {
+    ldout(cct, 5) << " ignoring old victory claim" << dendl;
+    return false;
+  }
+  // i should have seen this election if i'm getting the victory.
+  if (from_epoch > epoch + 1) {
+    ldout(cct, 5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
+    bump_epoch(from_epoch);
+    start();
+    return false;
+  }
+
   bool election_okay = victory_makes_sense(from);
 
   last_election_winner = from;
@@ -537,14 +568,6 @@ bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
   if (!election_okay) {
     ceph_assert(strategy == CONNECTIVITY);
     ldout(cct, 1) << "I should have been elected over this leader; bumping and restarting!" << dendl;
-    bump_epoch(from_epoch);
-    start();
-    return false;
-  }
-
-  // i should have seen this election if i'm getting the victory.
-  if (from_epoch != epoch + 1) { 
-    ldout(cct, 5) << "woah, that's a funny epoch, i must have rebooted.  bumping and re-starting!" << dendl;
     bump_epoch(from_epoch);
     start();
     return false;

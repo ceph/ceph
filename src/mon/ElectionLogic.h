@@ -92,6 +92,13 @@ public:
    */
   virtual unsigned paxos_size() const = 0;
   /**
+  * Obtain quorum from monitor
+  *
+  * @returns quorum.
+  */
+  virtual const std::set<int>& get_quorum() const = 0;
+  virtual const std::set<int>& get_dead_pinging() const = 0;
+  /**
    * Retrieve a set of ranks which are not allowed to become the leader.
    * Like paxos_size(), This set can change between elections, but not
    * during them.
