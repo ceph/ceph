@@ -218,6 +218,8 @@ we may want to exploit.
 The dedup-tool needs to be updated to use ``LIST_SNAPS`` to discover
 clones as part of leak detection.
 
+.. _osd-make-writeable:
+
 An important question is how we deal with the fact that many clones
 will frequently have references to the same backing chunks at the same
 offset.  In particular, ``make_writeable`` will generally create a clone
