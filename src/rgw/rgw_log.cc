@@ -200,21 +200,17 @@ static void log_usage(req_state *s, const string& op_name)
   if (!usage_logger)
     return;
 
-  rgw_user user;
   rgw_user payer;
-  string bucket_name;
-
-  bucket_name = s->bucket_name;
+  rgw_user user = s->user->get_id();
+  string bucket_name = s->bucket_name;
 
   if (!bucket_name.empty()) {
-    bucket_name = s->bucket_name;
     user = s->bucket_owner.id;
+
     if (!rgw::sal::Bucket::empty(s->bucket.get()) &&
-	s->bucket->get_info().requester_pays) {
+        s->bucket->get_info().requester_pays) {
       payer = s->user->get_id();
     }
-  } else {
-    user = s->user->get_id();
   }
 
   bool error = s->err.is_err();
@@ -587,11 +583,7 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
     entry.obj_size = s->obj_size;
   } /* !bucket empty */
 
-  if (s->cct->_conf->rgw_remote_addr_param.length())
-    set_param_str(s, s->cct->_conf->rgw_remote_addr_param.c_str(),
-		  entry.remote_addr);
-  else
-    set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
+  entry.remote_addr = extract_remote_addr(s);
   set_param_str(s, "HTTP_USER_AGENT", entry.user_agent);
   // legacy apps are still using misspelling referer, such as curl -e option
   if (s->info.env->exists("HTTP_REFERRER"))
