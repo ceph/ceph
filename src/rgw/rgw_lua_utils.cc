@@ -3,6 +3,7 @@
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "rgw_lua_utils.h"
+#include "rgw_lua.h"
 #include "rgw_lua_version.h"
 
 #define dout_subsys ceph_subsys_rgw

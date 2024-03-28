@@ -1827,17 +1827,17 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+  int DBLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& meta_key, const std::string& old_script_key, rgw::lua::LuaRuntimeMeta& scripts_meta, rgw::lua::context ctx)
   {
     return -ENOENT;
   }
 
-  int DBLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
+  int DBLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, rgw::lua::LuaScriptMeta& new_script, rgw::lua::LuaRuntimeMeta& scripts_meta)
   {
     return -ENOENT;
   }
 
-  int DBLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key)
+  int DBLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& old_script_key, const std::string& meta_key, const std::optional<std::string> optional_script_name, rgw::lua::LuaRuntimeMeta& scripts_meta)
   {
     return -ENOENT;
   }

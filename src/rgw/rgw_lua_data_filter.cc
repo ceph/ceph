@@ -1,5 +1,6 @@
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua_utils.h"
+#include "rgw_lua.h"
 #include "rgw_lua_request.h"
 #include "rgw_lua_background.h"
 #include "rgw_process_env.h"
@@ -103,11 +104,14 @@ int RGWObjFilter::execute(bufferlist& bl, off_t offset, const char* op_name) con
       s->penv.lua.background->create_background_metatable(L);
     }
 
-    // execute the lua script
-    if (luaL_dostring(L, script.c_str()) != LUA_OK) {
-      const std::string err(lua_tostring(L, -1));
-      ldpp_dout(s, 1) << "Lua ERROR: " << err << dendl;
-      return -EINVAL;
+    // execute the lua scripts
+    for (auto script_meta : scripts_meta.scripts) {
+      if (luaL_dostring(L, script_meta.script.c_str()) != LUA_OK) {
+        std::string script_name = script_meta.name.empty() ? "" : script_meta.name;
+        const std::string err(lua_tostring(L, -1));
+        ldpp_dout(s, 1) << "Lua ERROR: " << err << " in script " << script_name << dendl;
+        return -EINVAL;
+      }
     }
   } catch (const std::runtime_error& e) {
     ldpp_dout(s, 1) << "Lua ERROR: " << e.what() << dendl;

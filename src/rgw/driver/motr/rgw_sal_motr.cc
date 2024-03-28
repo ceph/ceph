@@ -3811,17 +3811,17 @@ int MotrStore::init_metadata_cache(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-  int MotrLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+  int MotrLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& meta_key, const std::string& old_script_key, rgw::lua::LuaRuntimeMeta& scripts_meta, rgw::lua::context ctx)
   {
     return -ENOENT;
   }
 
-  int MotrLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
+  int MotrLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, rgw::lua::LuaScriptMeta& new_script, rgw::lua::LuaRuntimeMeta& scripts_meta)
   {
     return -ENOENT;
   }
 
-  int MotrLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key)
+  int MotrLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& old_script_key, const std::string& meta_key, const std::optional<std::string> optional_script_name, rgw::lua::LuaRuntimeMeta& scripts_meta)
   {
     return -ENOENT;
   }

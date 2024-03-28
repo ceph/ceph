@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <variant>
 #include "rgw_lua_utils.h"
+#include "rgw_lua.h"
 #include "rgw_realm_reloader.h"
 
 namespace rgw::lua {
@@ -154,7 +155,7 @@ private:
   void run();
 
 protected:
-  std::string rgw_script;
+  rgw::lua::LuaRuntimeMeta scripts_meta;
   virtual int read_script();
 
 public:

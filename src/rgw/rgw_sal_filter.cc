@@ -1209,22 +1209,29 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
 			canceled, rctx, flags);
 }
 
-int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
-				const std::string& key, std::string& script)
-{
-  return next->get_script(dpp, y, key, script);
+int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, 
+                                  optional_yield y,
+                                  const std::string& meta_key, 
+                                  const std::string& old_script_key,
+                                  rgw::lua::LuaRuntimeMeta& scripts_meta,
+                                  rgw::lua::context ctx
+) {
+  return next->get_script(dpp, y, meta_key, old_script_key, scripts_meta, ctx);
 }
 
 int FilterLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
-				const std::string& key, const std::string& script)
+				const std::string& key, rgw::lua::LuaScriptMeta& new_script, 
+        rgw::lua::LuaRuntimeMeta& scripts_meta)
 {
-  return next->put_script(dpp, y, key, script);
+  return next->put_script(dpp, y, key, new_script, scripts_meta);
 }
 
-int FilterLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y,
-				const std::string& key)
+int FilterLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, 
+        const std::string& old_script_key, const std::string& meta_key, 
+        const std::optional<std::string> optional_script_name, 
+        rgw::lua::LuaRuntimeMeta& scripts_meta)
 {
-  return next->del_script(dpp, y, key);
+  return next->del_script(dpp, y, old_script_key, meta_key, optional_script_name, scripts_meta);
 }
 
 int FilterLuaManager::add_package(const DoutPrefixProvider* dpp, optional_yield y,
