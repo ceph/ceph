@@ -4705,7 +4705,17 @@ def target_exists(ctx: CephadmContext) -> bool:
 
 
 @infer_fsid
-def command_maintenance(ctx: CephadmContext) -> str:
+def command_maintenance(ctx: CephadmContext) -> int:
+    msg = change_maintenance_mode(ctx)
+    # mgr module reads the string emitted here from stderr
+    sys.stderr.write(msg + '\n')
+    sys.stderr.flush()
+    if msg.startswith('fail'):
+        return 1
+    return 0
+
+
+def change_maintenance_mode(ctx: CephadmContext) -> str:
     if not ctx.fsid:
         raise Error('failed - must pass --fsid to specify cluster')
 
