@@ -53,13 +53,6 @@ Misc
 - [x] update src/tools/monmaptool.cc (`min_mon_release` and corresponding output in `src/test/cli/monmaptool`)
 - [x] update src/cephadm/cephadmlib/constants.py (`DEFAULT_IMAGE_RELEASE` to X)
 
-Docs
-~~~~
-
-- [ ] Remove ``doc/releases/*.rst``. This should leave behind ``doc/releases/releases.yml`` which is used for doc building purposes.
-- [ ] Cherry-pick 8cf9ad62949516666ad0f2c0bb7726ef68e4d666 ("doc: add releases links to toc"). There will be trivial conflicts.
-- [ ] Add redirect for new major release at `RTD <https://readthedocs.org/dashboard/ceph/redirects/>`_.
-
 Feature bits
 ------------
 
@@ -145,7 +138,9 @@ After dev freeze
 ================
 
 - [ ] create branch for new release
-- [ ] remove release notes for release branch: see also 33d63c32cbf81ed81ce2185063011b98846a0d44
+- [ ] remove ``doc/releases/*.rst``. This should leave behind ``doc/releases/releases.yml`` which is used for doc building purposes. See also commit 33d63c3 ("doc: remove release notes for release branch") for details.
+- [ ] cherry-pick 8cf9ad62949516666ad0f2c0bb7726ef68e4d666 ("doc: add releases links to toc"). There will be trivial conflicts.
+- [ ] add redirect for new major release at `RTD <https://readthedocs.org/dashboard/ceph/redirects/>`_.
 - [ ] add release name to redmine (using https://tracker.ceph.com/custom_fields/16/edit)
 - [ ] add release name to .github/milestone.yml for github actions to automatically add milestone to backports (this commit must be backported to the release branch)
 
