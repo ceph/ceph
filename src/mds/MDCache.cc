@@ -9818,6 +9818,11 @@ void MDCache::dispatch_request(const MDRequestRef& mdr)
   } else if (mdr->peer_request) {
     mds->server->dispatch_peer_request(mdr);
   } else {
+    if (mdr->aborted) {
+      mdr->aborted = false;
+      request_kill(mdr);
+      return;
+    }
     switch (mdr->internal_op) {
     case CEPH_MDS_OP_QUIESCE_PATH:
       dispatch_quiesce_path(mdr);
