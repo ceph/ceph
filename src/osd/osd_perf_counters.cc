@@ -338,6 +338,15 @@ PerfCounters *build_osd_logger(CephContext *cct) {
       l_osd_scrub_reservation_dur_hist, "scrub_resrv_repnum_vs_duration",
       rsrv_hist_x_axis_config, rsrv_hist_y_axis_config, "Histogram of scrub replicas reservation duration");
 
+  osd_plb.add_u64_counter(
+    l_osd_heap_size_bytes,
+    "osd_heap_size_bytes",
+    "OSD process Heap size (bytes)");
+  osd_plb.add_u64_counter(
+    l_osd_rss_size_kb,
+    "osd_rss_size_kb",
+    "OSD process RSS size (kb)");
+
   return osd_plb.create_perf_counters();
 }
 
