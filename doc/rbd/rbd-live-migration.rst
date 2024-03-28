@@ -19,7 +19,7 @@ parent.
 
 The live-migration process can also be used in an import-only mode where the
 source image remains unmodified and the target image can be linked to an
-external data source such as a backing file, HTTP(s) file, or S3 object.
+external data source such as a backing file, HTTP(s) file, NBD file, or S3 object.
 
 The live-migration copy process can safely run in the background while the new
 target image is in use. There is currently a requirement to temporarily stop
@@ -144,8 +144,8 @@ The general format for the ``source-spec`` JSON is as follows::
         }
 
 The following formats are currently supported: ``native``, ``qcow``, and
-``raw``. The following streams are currently supported: ``file``, ``http``, and
-``s3``.
+``raw``. The following streams are currently supported: ``file``, ``http``,
+``nbd``, and ``s3``.
 
 Formats
 ~~~~~~~
@@ -300,6 +300,19 @@ as follows::
   followed by the path in the MON config-key store to the value. Values can be
   stored in the config-key store via ``ceph config-key set <key-path> <value>``
   (e.g. ``ceph config-key set rbd/s3/access_key NX5QOQKC6BH2IDN8HC7A``).
+
+The ``nbd`` stream can be used to import from a remote NBD server. Its
+``source-spec`` JSON is encoded as follows::
+
+        {
+            <format unique parameters>
+            "stream": {
+                "type": "nbd",
+                "server": "<server>",
+                "port": "<port>"
+            }
+        }
+
 
 Execute Migration
 =================

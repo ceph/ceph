@@ -1,16 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBRBD_MIGRATION_HTTP_STREAM_H
-#define CEPH_LIBRBD_MIGRATION_HTTP_STREAM_H
+#ifndef CEPH_LIBRBD_MIGRATION_NBD_STREAM_H
+#define CEPH_LIBRBD_MIGRATION_NBD_STREAM_H
 
 #include "include/int_types.h"
 #include "librbd/migration/StreamInterface.h"
-#include <boost/beast/http/message.hpp>
-#include <boost/beast/http/string_body.hpp>
 #include <json_spirit/json_spirit.h>
-#include <memory>
-#include <string>
+#include <libnbd.h>
+#include <boost/asio/strand.hpp>
 
 struct Context;
 
@@ -24,18 +22,18 @@ namespace migration {
 template <typename> class HttpClient;
 
 template <typename ImageCtxT>
-class HttpStream : public StreamInterface {
+class NBDStream : public StreamInterface {
 public:
-  static HttpStream* create(ImageCtxT* image_ctx,
-                            const json_spirit::mObject& json_object) {
-    return new HttpStream(image_ctx, json_object);
+  static NBDStream* create(ImageCtxT* image_ctx,
+                           const json_spirit::mObject& json_object) {
+    return new NBDStream(image_ctx, json_object);
   }
 
-  HttpStream(ImageCtxT* image_ctx, const json_spirit::mObject& json_object);
-  ~HttpStream() override;
+  NBDStream(ImageCtxT* image_ctx, const json_spirit::mObject& json_object);
+  ~NBDStream() override;
 
-  HttpStream(const HttpStream&) = delete;
-  HttpStream& operator=(const HttpStream&) = delete;
+  NBDStream(const NBDStream&) = delete;
+  NBDStream& operator=(const NBDStream&) = delete;
 
   void open(Context* on_finish) override;
   void close(Context* on_finish) override;
@@ -49,23 +47,19 @@ public:
                      io::SparseExtents* sparse_extents,
                      Context* on_finish) override;
 private:
-  using HttpResponse = boost::beast::http::response<
-    boost::beast::http::string_body>;
-
   ImageCtxT* m_image_ctx;
   CephContext* m_cct;
+  struct nbd_handle *nbd;
   std::shared_ptr<AsioEngine> m_asio_engine;
   json_spirit::mObject m_json_object;
-
-  std::string m_url;
-
-  std::unique_ptr<HttpClient<ImageCtxT>> m_http_client;
-
+  boost::asio::strand<boost::asio::io_context::executor_type> m_strand;
+  struct ReadRequest;
+  struct ListRequest;
 };
 
 } // namespace migration
 } // namespace librbd
 
-extern template class librbd::migration::HttpStream<librbd::ImageCtx>;
+extern template class librbd::migration::NBDStream<librbd::ImageCtx>;
 
-#endif // CEPH_LIBRBD_MIGRATION_HTTP_STREAM_H
+#endif // CEPH_LIBRBD_MIGRATION_NBD_STREAM_H

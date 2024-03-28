@@ -21,6 +21,13 @@ struct MockStreamInterface : public StreamInterface {
   void read(io::Extents&& byte_extents, bufferlist* bl, Context* on_finish) {
     read(byte_extents, bl, on_finish);
   }
+
+  MOCK_METHOD3(list_raw_snap, void(const io::Extents&, io::SparseExtents*, Context*));
+  void list_raw_snap(io::Extents&& image_extents,
+                     io::SparseExtents* sparse_extents,
+                     Context* on_finish) {
+    list_raw_snap(image_extents, sparse_extents, on_finish);
+  }
 };
 
 } // namespace migration

@@ -77,6 +77,18 @@ void HttpStream<I>::read(io::Extents&& byte_extents, bufferlist* data,
   m_http_client->read(std::move(byte_extents), data, on_finish);
 }
 
+template <typename I>
+void HttpStream<I>::list_raw_snap(io::Extents&& image_extents,
+                                io::SparseExtents* sparse_extents, 
+                                Context* on_finish) {
+  // raw does support sparse extents so list the full IO extent as a delta
+  for (auto& [image_offset, image_length] : image_extents) {
+    sparse_extents->insert(image_offset, image_length,
+                           {io::SPARSE_EXTENT_STATE_DATA, image_length});
+  }
+  on_finish->complete(0);
+}
+
 } // namespace migration
 } // namespace librbd
 

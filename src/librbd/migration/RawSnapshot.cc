@@ -10,6 +10,9 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/migration/SourceSpecBuilder.h"
 #include "librbd/migration/StreamInterface.h"
+#if defined(HAVE_LIBNBD)
+#include "librbd/migration/NBDStream.h"
+#endif
 
 namespace librbd {
 namespace migration {
@@ -204,14 +207,7 @@ void RawSnapshot<I>::list_snap(io::Extents&& image_extents,
                                Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "image_extents=" << image_extents << dendl;
-
-  // raw does support sparse extents so list the full IO extent as a delta
-  for (auto& [image_offset, image_length] : image_extents) {
-    sparse_extents->insert(image_offset, image_length,
-                           {io::SPARSE_EXTENT_STATE_DATA, image_length});
-  }
-
-  on_finish->complete(0);
+  m_stream->list_raw_snap(std::move(image_extents), sparse_extents, on_finish);
 }
 
 } // namespace migration
