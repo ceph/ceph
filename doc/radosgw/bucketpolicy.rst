@@ -124,6 +124,8 @@ For all requests, condition keys we support are:
 
 We support certain s3 condition keys for bucket and object requests.
 
+Only aws:username sring interpolation is supported for assumerole policies.
+
 .. versionadded:: Mimic
 
 Bucket Related Operations

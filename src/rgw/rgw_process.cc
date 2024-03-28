@@ -365,6 +365,7 @@ int process_request(const RGWProcessEnv& penv,
 
     /* FIXME: remove this after switching all handlers to the new authentication
      * infrastructure. */
+    ldpp_dout(op, 2) << "Transform old auth info" << dendl;
     if (nullptr == s->auth.identity) {
       s->auth.identity = rgw::auth::transform_old_authinfo(s);
     }
