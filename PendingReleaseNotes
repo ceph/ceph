@@ -161,6 +161,7 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
    `ceph config get mgr mgr/volumes/snapshot_clone_no_wait`
   and it can be disabled by using:
    `ceph config set mgr mgr/volumes/snapshot_clone_no_wait false`
+* cls_cxx_gather is marked as deprecated.
 
 >=18.0.0
 
