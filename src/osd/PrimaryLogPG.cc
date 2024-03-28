@@ -12651,7 +12651,8 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
     op_roll_forward_to = m->pg_roll_forward_to;
 
   dout(20) << __func__
-	   << " op_trim_to = " << op_trim_to << " op_roll_forward_to = " << op_roll_forward_to << dendl;
+	   << " op_trim_to = " << op_trim_to << " op_roll_forward_to = "
+	   << op_roll_forward_to << dendl;
 
   recovery_state.append_log_entries_update_missing(
     m->entries, t, op_trim_to, op_roll_forward_to);
