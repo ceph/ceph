@@ -144,6 +144,8 @@ See https://github.com/ceph/ceph-container/pull/2109 as an example for what to d
 After dev freeze
 ================
 
+- [ ] create branch for new release
+- [ ] remove release notes for release branch: see also 33d63c32cbf81ed81ce2185063011b98846a0d44
 - [ ] add release name to redmine (using https://tracker.ceph.com/custom_fields/16/edit)
 - [ ] add release name to .github/milestone.yml for github actions to automatically add milestone to backports (this commit must be backported to the release branch)
 
