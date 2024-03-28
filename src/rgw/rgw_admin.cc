@@ -86,6 +86,8 @@ using namespace std;
 
 static rgw::sal::Driver* driver = NULL;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
+std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
+rgw::SiteConfig site;
 
 static const DoutPrefixProvider* dpp() {
   struct GlobalPrefix : public DoutPrefixProvider {
@@ -8375,6 +8377,10 @@ next:
       if (!handled)
         other_attrs[iter->first] = bl;
     }
+
+    utime_t ut{obj->get_mtime()};
+    ut.gmtime(formatter->dump_stream("mtime"));
+
 
     formatter->open_object_section("attrs");
     for (iter = other_attrs.begin(); iter != other_attrs.end(); ++iter) {

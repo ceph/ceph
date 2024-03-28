@@ -29,6 +29,10 @@
 
 struct D3nGetObjData;
 
+namespace rgw::cache {
+  class CacheDriver;
+}
+
 namespace rgw {
 
 struct AioResult {
