@@ -807,6 +807,10 @@ class LocalCephManager(CephManager):
         # to incompatibility with the method teuthology.orchestra.run's run()
         # since it doesn't accept "shell" as parameter.
         self.run_ceph_w_prefix = ['exec', 'sudo', CEPH_CMD]
+        self.RADOS_CMD = [RADOS_CMD]
+
+    def get_ceph_cmd(self, **kwargs):
+        return [CEPH_CMD]
 
     def find_remote(self, daemon_type, daemon_id):
         """

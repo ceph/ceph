@@ -1568,12 +1568,12 @@ class CephManager:
         self.rook = rook
         self.cephadm = cephadm
         self.testdir = teuthology.get_testdir(self.ctx)
-        self.run_cluster_cmd_prefix = [
-            'sudo', 'adjust-ulimits', 'ceph-coverage',
-            f'{self.testdir}/archive/coverage', 'timeout', '120', 'ceph',
-            '--cluster', self.cluster]
         self.run_ceph_w_prefix = ['sudo', 'daemon-helper', 'kill', 'ceph',
                                   '--cluster', self.cluster]
+        # prefix args for ceph cmds to be executed
+        self.pre = ['adjust-ulimits', 'ceph-coverage',
+                    f'{self.testdir}/archive/coverage']
+        self.RADOS_CMD = self.pre + ['rados', '--cluster', self.cluster]
 
         pools = self.list_pools()
         self.pools = {}
@@ -1583,6 +1583,11 @@ class CephManager:
                 self.pools[pool] = self.get_pool_int_property(pool, 'pg_num')
             except CommandFailedError:
                 self.log('Failed to get pg_num from pool %s, ignoring' % pool)
+
+    def get_ceph_cmd(self, **kwargs):
+        timeout = kwargs.pop('timeout', 120)
+        return ['sudo'] + self.pre + ['timeout', f'{timeout}', 'ceph',
+                                      '--cluster', self.cluster]
 
     def ceph(self, cmd, **kwargs):
         """
@@ -1627,7 +1632,7 @@ class CephManager:
                            stdout=StringIO(),
                            check_status=kwargs.get('check_status', True))
         else:
-            kwargs['args'] = prefixcmd + self.run_cluster_cmd_prefix + kwargs['args']
+            kwargs['args'] = prefixcmd + self.get_ceph_cmd(**kwargs) + kwargs['args']
             return self.controller.run(**kwargs)
 
     def raw_cluster_cmd(self, *args, **kwargs) -> str:
