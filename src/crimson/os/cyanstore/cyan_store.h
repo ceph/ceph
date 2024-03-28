@@ -181,11 +181,10 @@ public:
     return shard_stores.invoke_on_all(
       [](auto &local_store) {
       return local_store.mount().handle_error(
-      crimson::stateful_ec::handle([](const auto& ec) {
+      crimson::stateful_ec::assert_failure([](const auto& ec) {
         crimson::get_logger(ceph_subsys_cyanstore).error(
 	    "error mounting cyanstore: ({}) {}",
             ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
       }));
     });
   }

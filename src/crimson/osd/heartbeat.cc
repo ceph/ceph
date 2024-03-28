@@ -78,10 +78,9 @@ Heartbeat::start_messenger(crimson::net::Messenger& msgr,
 {
   return msgr.bind(addrs).safe_then([this, &msgr]() mutable {
     return msgr.start({this});
-  }, crimson::net::Messenger::bind_ertr::all_same_way(
+  }, crimson::net::Messenger::bind_ertr::assert_all_func(
       [addrs] (const std::error_code& e) {
     logger().error("heartbeat messenger bind({}): {}", addrs, e);
-    ceph_abort();
   }));
 }
 

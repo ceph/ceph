@@ -256,6 +256,7 @@ public:
 	    crimson::ct_error::eagain::pass_further{},
 	    crimson::ct_error::all_same_way([&ctx](auto e) {
 	      on_error(ctx.ext_transaction);
+	      return seastar::now();
 	    })
 	  );
 	}).then([this, op_type, &ctx] {

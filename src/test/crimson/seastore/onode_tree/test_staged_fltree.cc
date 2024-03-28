@@ -209,9 +209,7 @@ struct b_dummy_tree_test_t : public seastar_test_suite_t {
       new UnboundedBtree(NodeExtentManager::create_dummy(IS_DUMMY_SYNC))
     );
     return INTR(tree->mkfs, *ref_t).handle_error(
-      crimson::ct_error::all_same_way([] {
-        ASSERT_FALSE("Unable to mkfs");
-      })
+      crimson::ct_error::assert_all{"Unable to mkfs"}
     );
   }
 

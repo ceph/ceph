@@ -158,9 +158,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
     }).safe_then([this](auto) {
       dummy_tail = journal_seq_t{0,
         paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0)};
-    }, crimson::ct_error::all_same_way([] {
-      ASSERT_FALSE("Unable to mount");
-    }));
+    }, crimson::ct_error::assert_all{"Unable to mount"});
   }
 
   seastar::future<> tear_down_fut() final {
@@ -170,9 +168,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
       sms.reset();
       journal.reset();
     }).handle_error(
-      crimson::ct_error::all_same_way([](auto e) {
-        ASSERT_FALSE("Unable to close");
-      })
+      crimson::ct_error::assert_all{"Unable to close"}
     );
   }
 

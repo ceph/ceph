@@ -199,19 +199,17 @@ seastar::future<> OSD::mkfs(
   LOG_PREFIX(OSD::mkfs);
   return store.start().then([&store, FNAME, osd_uuid] {
     return store.mkfs(osd_uuid).handle_error(
-      crimson::stateful_ec::handle([FNAME] (const auto& ec) {
+      crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
         ERROR("error creating empty object store in {}: ({}) {}",
 	      local_conf().get_val<std::string>("osd_data"),
 	      ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
       }));
   }).then([&store, FNAME] {
     return store.mount().handle_error(
-      crimson::stateful_ec::handle([FNAME](const auto& ec) {
+      crimson::stateful_ec::assert_failure([FNAME](const auto& ec) {
         ERROR("error mounting object store in {}: ({}) {}",
 	      local_conf().get_val<std::string>("osd_data"),
 	      ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
       }));
   }).then([&store] {
     return open_or_create_meta_coll(store);
@@ -391,11 +389,10 @@ seastar::future<> OSD::start()
 	whoami, get_shard_services(),
 	*monc, *hb_front_msgr, *hb_back_msgr});
     return store.mount().handle_error(
-      crimson::stateful_ec::handle([FNAME] (const auto& ec) {
+      crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
         ERROR("error mounting object store in {}: ({}) {}",
 	      local_conf().get_val<std::string>("osd_data"),
 	      ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
       }));
   }).then([this] {
     return open_meta_coll();
@@ -450,18 +447,16 @@ seastar::future<> OSD::start()
       cluster_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER))
         .safe_then([this, dispatchers]() mutable {
 	  return cluster_msgr->start(dispatchers);
-        }, crimson::net::Messenger::bind_ertr::all_same_way(
+        }, crimson::net::Messenger::bind_ertr::assert_all_func(
             [FNAME] (const std::error_code& e) {
           ERROR("cluster messenger bind(): {}", e);
-          ceph_abort();
         })),
       public_msgr->bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC))
         .safe_then([this, dispatchers]() mutable {
 	  return public_msgr->start(dispatchers);
-        }, crimson::net::Messenger::bind_ertr::all_same_way(
+        }, crimson::net::Messenger::bind_ertr::assert_all_func(
             [FNAME] (const std::error_code& e) {
           ERROR("public messenger bind(): {}", e);
-          ceph_abort();
         })));
   }).then_unpack([this] {
     return seastar::when_all_succeed(monc->start(),
