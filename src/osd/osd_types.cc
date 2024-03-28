@@ -1568,6 +1568,7 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("peering_crush_bucket_target", peering_crush_bucket_target);
   f->dump_int("peering_crush_bucket_barrier", peering_crush_bucket_barrier);
   f->dump_int("peering_crush_bucket_mandatory_member", peering_crush_mandatory_member);
+  f->dump_bool("is_stretch_pool", is_stretch_pool());
   f->dump_int("object_hash", get_object_hash());
   f->dump_string("pg_autoscale_mode",
 		 get_pg_autoscale_mode_name(pg_autoscale_mode));

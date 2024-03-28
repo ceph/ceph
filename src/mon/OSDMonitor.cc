@@ -6096,6 +6096,58 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     r = 0;
 
+  } else if (prefix == "osd pool stretch show") {
+    string poolstr;
+    cmd_getval(cmdmap, "pool", poolstr);
+    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (pool < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      r = -ENOENT;
+      goto reply;
+    }
+    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+
+    if (!p->is_stretch_pool()) {
+      ss << poolstr << " " << " is not a stretch pool.";
+      r = -ENOENT;
+      goto reply;
+    } else {
+      if (f) {
+        f->open_object_section("pool");
+        f->dump_string("pool", poolstr);
+        f->dump_int("pool_id", pool);
+        f->dump_bool("is_stretch_pool", p->is_stretch_pool());
+        f->dump_int("peering_crush_bucket_count", p->peering_crush_bucket_count);
+        f->dump_int("peering_crush_bucket_target", p->peering_crush_bucket_target);
+        f->dump_string("peering_crush_bucket_barrier", stringify(osdmap.crush->get_type_name(p->peering_crush_bucket_barrier)));
+        if (osdmap.crush->rule_exists(p->get_crush_rule())) {
+          f->dump_string("crush_rule", osdmap.crush->get_rule_name(p->get_crush_rule()));
+        } else {
+          f->dump_string("crush_rule", stringify(p->get_crush_rule()));
+        }
+        f->dump_int("size", p->get_size());
+        f->dump_int("min_size", p->get_min_size());
+        f->close_section();
+        f->flush(rdata);
+      } else {
+        stringstream ss;
+        ss << "pool: " << poolstr << "\n";
+        ss << "pool_id: " << pool << "\n";
+        ss << "is_stretch_pool: " << p->is_stretch_pool() << "\n";
+        ss << "peering_crush_bucket_count: " << p->peering_crush_bucket_count << "\n";
+        ss << "peering_crush_bucket_target: " << p->peering_crush_bucket_target << "\n";
+        ss << "peering_crush_bucket_barrier: " << osdmap.crush->get_type_name(p->peering_crush_bucket_barrier) << "\n";
+        if (osdmap.crush->rule_exists(p->get_crush_rule())) {
+          ss << "crush_rule: " << osdmap.crush->get_rule_name(p->get_crush_rule()) << "\n";
+        } else {
+          ss << "crush_rule: " << p->get_crush_rule() << "\n";
+        }
+        ss << "size: " << p->get_size() << "\n";
+        ss << "min_size: " << p->get_min_size() << "\n";
+        rdata.append(ss.str());
+      }
+    }
+    r = 0;
   } else if (prefix == "osd pool get") {
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
@@ -9047,6 +9099,103 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
                                                  stringstream& ss)
 {
   return _command_pool_application(prefix, cmdmap, ss, nullptr, true);
+}
+
+int OSDMonitor::prepare_command_pool_stretch_set(const cmdmap_t& cmdmap,
+                                                    stringstream& ss)
+{
+  string pool_name;
+  cmd_getval(cmdmap, "pool", pool_name);
+  int64_t pool = osdmap.lookup_pg_pool_name(pool_name.c_str());
+  if (pool < 0) {
+    ss << "unrecognized pool '" << pool_name << "'";
+    return -ENOENT;
+  }
+
+  pg_pool_t p = *osdmap.get_pg_pool(pool);
+  if (pending_inc.new_pools.count(pool))
+    p = pending_inc.new_pools[pool];
+
+  int64_t bucket_count = cmd_getval_or<int64_t>(cmdmap, "peering_crush_bucket_count", 0);
+  if (bucket_count < 0) {
+    ss << "peering_crush_bucket_count must be non-negative";
+    return -EINVAL;
+  }
+
+  int64_t bucket_target = cmd_getval_or<int64_t>(cmdmap, "peering_crush_bucket_target", 0);
+  if (bucket_target < 0) {
+    ss << "peering_crush_bucket_target must be non-negative";
+    return -EINVAL;
+  }
+
+  int bucket_barrier = 0;
+  string bucket_barrier_str;
+  cmd_getval(cmdmap, "peering_crush_bucket_barrier", bucket_barrier_str);
+  CrushWrapper& crush = _get_stable_crush();
+  if (bucket_barrier_str.empty()) {
+    ss << "peering_crush_bucket_barrier must be provided";
+    return -EINVAL;
+  } else {
+    bucket_barrier = crush.get_type_id(bucket_barrier_str);
+    if (bucket_barrier < 0) {
+      ss << "peering_crush_bucket_barrier " << bucket_barrier_str << " does not exist";
+      return -EINVAL;
+    } else if (bucket_barrier == 0) {
+      ss << "peering_crush_bucket_barrier " << bucket_barrier_str << " is for devices, not buckets";
+      return -EINVAL;
+    }
+  }
+  vector<int> subtrees;
+  crush.get_subtree_of_type(bucket_barrier, &subtrees);
+  if (static_cast<uint32_t>(bucket_count) > subtrees.size()) {
+    ss << "peering_crush_bucket_count=" << bucket_count
+       << " cannot be greater than " << bucket_barrier_str
+       << "=" <<  subtrees.size() << " in the cluster";
+    return -EINVAL;
+  } else if (static_cast<uint32_t>(bucket_target) > subtrees.size()) {
+    ss << "peering_crush_bucket_target=" << bucket_target
+       << " cannot be greater than " << bucket_barrier_str
+       << "=" <<  subtrees.size() << " in the cluster";
+    return -EINVAL;
+  }
+
+  string crush_rule_str;
+  cmd_getval(cmdmap, "crush_rule", crush_rule_str);
+  if (crush_rule_str.empty()) {
+    ss << "crush_rule must be provided";
+    return -EINVAL;
+  }
+  int crush_rule = crush.get_rule_id(crush_rule_str);
+  if (crush_rule < 0) {
+    ss << "crush rule " << crush_rule_str << " does not exist";
+    return -ENOENT;
+  }
+  if (!crush.rule_valid_for_pool_type(crush_rule, p.get_type())) {
+    ss << "crush rule " << crush_rule << " type does not match pool";
+    return -EINVAL;
+  }
+  int64_t pool_size = cmd_getval_or<int64_t>(cmdmap, "size", 0);
+  if (pool_size < 0) {
+    ss << "pool size must be non-negative";
+    return -EINVAL;
+  }
+
+  int64_t pool_min_size = cmd_getval_or<int64_t>(cmdmap, "min_size", 0);
+  if (pool_min_size < 0) {
+    ss << "pool min_size must be non-negative";
+    return -EINVAL;
+  }
+
+  p.peering_crush_bucket_count = static_cast<uint32_t>(bucket_count);
+  p.peering_crush_bucket_target = static_cast<uint32_t>(bucket_target);
+  p.peering_crush_bucket_barrier = static_cast<uint32_t>(bucket_barrier);
+  p.crush_rule = static_cast<__u8>(crush_rule);
+  p.size = static_cast<__u8>(pool_size);
+  p.min_size = static_cast<__u8>(pool_min_size);
+  p.last_change = pending_inc.epoch;
+  pending_inc.new_pools[pool] = p;
+  ss << "pool " << pool_name << " stretch values are set successfully";
+  return 0;
 }
 
 int OSDMonitor::preprocess_command_pool_application(const string &prefix,
@@ -13904,6 +14053,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else {
       goto update;
     }
+  } else if (prefix == "osd pool stretch set") {
+    err = prepare_command_pool_stretch_set(cmdmap, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err < 0)
+      goto reply_no_propose;
+
+    getline(ss, rs);
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+						   get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd force-create-pg") {
     pg_t pgid;
     string pgidstr;
