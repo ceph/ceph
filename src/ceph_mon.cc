@@ -367,6 +367,8 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
+  MonitorDBStore store(g_conf()->mon_data);
+
   // -- mkfs --
   if (mkfs) {
 
@@ -522,7 +524,6 @@ int main(int argc, const char **argv)
     }
 
     // go
-    MonitorDBStore store(g_conf()->mon_data);
     ostringstream oss;
     int r = store.create_and_open(oss);
     if (oss.tellp())
@@ -618,12 +619,10 @@ int main(int argc, const char **argv)
   // set up signal handlers, now that we've daemonized/forked.
   init_async_signal_handler();
 
-  MonitorDBStore *store = new MonitorDBStore(g_conf()->mon_data);
-
   // make sure we aren't upgrading too fast
   {
     string val;
-    int r = store->read_meta("min_mon_release", &val);
+    int r = store.read_meta("min_mon_release", &val);
     if (r >= 0 && val.size()) {
       ceph_release_t from_release = ceph_release_from_name(val);
       ostringstream err;
@@ -636,7 +635,7 @@ int main(int argc, const char **argv)
 
   {
     ostringstream oss;
-    err = store->open(oss);
+    err = store.open(oss);
     if (oss.tellp())
       derr << oss.str() << dendl;
     if (err < 0) {
@@ -647,7 +646,7 @@ int main(int argc, const char **argv)
   }
 
   bufferlist magicbl;
-  err = store->get(Monitor::MONITOR_NAME, "magic", magicbl);
+  err = store.get(Monitor::MONITOR_NAME, "magic", magicbl);
   if (err || !magicbl.length()) {
     derr << "unable to read magic from mon data" << dendl;
     prefork.exit(1);
@@ -658,7 +657,7 @@ int main(int argc, const char **argv)
     prefork.exit(1);
   }
 
-  err = Monitor::check_features(store);
+  err = Monitor::check_features(&store);
   if (err < 0) {
     derr << "error checking features: " << cpp_strerror(err) << dendl;
     prefork.exit(1);
@@ -676,7 +675,7 @@ int main(int argc, const char **argv)
     }
 
     // get next version
-    version_t v = store->get("monmap", "last_committed");
+    version_t v = store.get("monmap", "last_committed");
     dout(0) << "last committed monmap epoch is " << v << ", injected map will be " << (v+1)
             << dendl;
     v++;
@@ -700,7 +699,7 @@ int main(int argc, const char **argv)
     t->put("monmap", v, mapbl);
     t->put("monmap", "latest", final);
     t->put("monmap", "last_committed", v);
-    store->apply_transaction(t);
+    store.apply_transaction(t);
 
     dout(0) << "done." << dendl;
     prefork.exit(0);
@@ -712,7 +711,7 @@ int main(int argc, const char **argv)
     // note that even if we don't find a viable monmap, we should go ahead
     // and try to build it up in the next if-else block.
     bufferlist mapbl;
-    int err = obtain_monmap(*store, mapbl);
+    int err = obtain_monmap(store, mapbl);
     if (err >= 0) {
       try {
         monmap.decode(mapbl);
@@ -819,20 +818,20 @@ int main(int argc, const char **argv)
                    Messenger::Policy::stateless_server(0));
 
   // throttle client traffic
-  Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",
-					    g_conf()->mon_client_bytes);
+  Throttle client_throttler(g_ceph_context, "mon_client_bytes",
+                            g_conf()->mon_client_bytes);
   msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
-				     client_throttler, NULL);
+                              &client_throttler, NULL);
 
   // throttle daemon traffic
   // NOTE: actual usage on the leader may multiply by the number of
   // monitors if they forward large update messages from daemons.
-  Throttle *daemon_throttler = new Throttle(g_ceph_context, "mon_daemon_bytes",
-					    g_conf()->mon_daemon_bytes);
-  msgr->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler,
-				     NULL);
-  msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
-				     NULL);
+  Throttle daemon_throttler(g_ceph_context, "mon_daemon_bytes",
+                            g_conf()->mon_daemon_bytes);
+  msgr->set_policy_throttlers(entity_name_t::TYPE_OSD, &daemon_throttler,
+                              NULL);
+  msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, &daemon_throttler,
+                              NULL);
 
   entity_addrvec_t bind_addrs = ipaddrs;
   entity_addrvec_t public_addrs = ipaddrs;
@@ -857,7 +856,7 @@ int main(int argc, const char **argv)
     prefork.exit(1);
   }
 
-  mon = new Monitor(g_ceph_context, g_conf()->name.get_id(), store,
+  mon = new Monitor(g_ceph_context, g_conf()->name.get_id(), &store,
 		    msgr, mgr_msgr, &monmap);
 
   mon->orig_argc = argc;
@@ -913,7 +912,7 @@ int main(int argc, const char **argv)
   msgr->wait();
   mgr_msgr->wait();
 
-  store->close();
+  store.close();
 
   unregister_async_signal_handler(SIGHUP, handle_mon_signal);
   unregister_async_signal_handler(SIGINT, handle_mon_signal);
@@ -921,11 +920,8 @@ int main(int argc, const char **argv)
   shutdown_async_signal_handler();
 
   delete mon;
-  delete store;
   delete msgr;
   delete mgr_msgr;
-  delete client_throttler;
-  delete daemon_throttler;
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
