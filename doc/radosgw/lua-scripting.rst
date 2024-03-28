@@ -298,6 +298,9 @@ Request Fields
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.HTTP.Domain``                            | string   | domain name                                                  | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
+| ``Request.HTTP.Environment``                       | table    | string-to-string metadata map that holds a list of HTTP      | yes      | yes       | no       |
+|                                                    |          | headers sent in the request                                  |          |           |          |
++----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Time``                                   | time     | request time                                                 | no       | no        | no       |
 +----------------------------------------------------+----------+--------------------------------------------------------------+----------+-----------+----------+
 | ``Request.Dialect``                                | string   | "S3" or "Swift"                                              | no       | no        | no       |
@@ -409,7 +412,7 @@ Lua Code Samples
       print_owner(acl.Owner)
       RGWDebugLog("  there are " .. #acl.Grants .. " grant for owner")
       for k,v in pairs(acl.Grants) do
-        RGWDebugLog("    Grant Key: " .. k)
+        RGWDebugLog("    Grant Key: " .. tostring(k))
         RGWDebugLog("    Grant Type: " .. v.Type)
         RGWDebugLog("    Grant Group Type: " .. v.GroupType)
         RGWDebugLog("    Grant Referer: " .. v.Referer)
@@ -459,7 +462,7 @@ In the ``postrequest`` context we look at the metadata:
 
   RGWDebugLog("number of metadata entries is: " .. #Request.HTTP.Metadata)
   for k, v in pairs(Request.HTTP.Metadata) do
-    RGWDebugLog("key=" .. k .. ", " .. "value=" .. v)
+    RGWDebugLog("key=" .. tostring(k) .. ", " .. "value=" .. v)
   end
  
 - Use modules to create Unix socket based, JSON encoded, "access log":
@@ -539,7 +542,7 @@ in ``postrequest`` context, we can add attributes and events to the request's tr
 
   event_attrs = {}
   for k,v in pairs(Request.GenericAttributes) do
-    event_attrs[k] = v
+    event_attrs[tostring(k)] = v
   end
 
   Request.Trace.AddEvent("second event", event_attrs)
