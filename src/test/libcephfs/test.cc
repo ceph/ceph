@@ -3593,6 +3593,7 @@ TEST(LibCephFS, SnapdirAttrs) {
   Inode *dir, *root;
   struct ceph_statx stx_dir;
   struct ceph_statx stx_snap_dir;
+  struct ceph_statx stx_root_snap_dir;
   UserPerm *perms = ceph_mount_perms(cmount);
 
   ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
@@ -3602,13 +3603,19 @@ TEST(LibCephFS, SnapdirAttrs) {
                        CEPH_STATX_MTIME|CEPH_STATX_ATIME|CEPH_STATX_MODE|CEPH_STATX_MODE|CEPH_STATX_GID|CEPH_STATX_VERSION, 0), 0);
   ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir,
                        CEPH_STATX_MTIME|CEPH_STATX_ATIME|CEPH_STATX_MODE|CEPH_STATX_MODE|CEPH_STATX_GID|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, "/.snap", &stx_root_snap_dir,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME|CEPH_STATX_MODE|CEPH_STATX_MODE|CEPH_STATX_GID|CEPH_STATX_VERSION, 0), 0);
 
-  ASSERT_EQ(utime_t(stx_dir.stx_atime), utime_t(stx_snap_dir.stx_atime));
-  ASSERT_EQ(utime_t(stx_dir.stx_mtime), utime_t(stx_snap_dir.stx_mtime));
+  // these should match the parent directories attrs
   ASSERT_EQ(stx_dir.stx_mode, stx_snap_dir.stx_mode);
   ASSERT_EQ(stx_dir.stx_uid, stx_snap_dir.stx_uid);
   ASSERT_EQ(stx_dir.stx_gid, stx_snap_dir.stx_gid);
-  ASSERT_EQ(stx_dir.stx_version, stx_snap_dir.stx_version);
+  ASSERT_EQ(utime_t(stx_dir.stx_atime), utime_t(stx_snap_dir.stx_atime));
+  // these should match the closest snaprealm ancestor (root in this
+  // case) attrs
+  ASSERT_EQ(utime_t(stx_root_snap_dir.stx_mtime), utime_t(stx_snap_dir.stx_mtime));
+  ASSERT_EQ(utime_t(stx_root_snap_dir.stx_ctime), utime_t(stx_snap_dir.stx_ctime));
+  ASSERT_EQ(stx_root_snap_dir.stx_version, stx_snap_dir.stx_version);
 
   // chown  -- for this we need to be "root"
   UserPerm *rootcred = ceph_userperm_new(0, 0, 0, NULL);
@@ -3625,14 +3632,165 @@ TEST(LibCephFS, SnapdirAttrs) {
   ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir,
                        CEPH_STATX_MTIME|CEPH_STATX_ATIME|CEPH_STATX_MODE|CEPH_STATX_MODE|CEPH_STATX_GID|CEPH_STATX_VERSION, 0), 0);
 
-  ASSERT_EQ(utime_t(stx_dir.stx_atime), utime_t(stx_snap_dir.stx_atime));
-  ASSERT_EQ(utime_t(stx_dir.stx_mtime), utime_t(stx_snap_dir.stx_mtime));
   ASSERT_EQ(stx_dir.stx_mode, stx_snap_dir.stx_mode);
   ASSERT_EQ(stx_dir.stx_uid, stx_snap_dir.stx_uid);
   ASSERT_EQ(stx_dir.stx_gid, stx_snap_dir.stx_gid);
-  ASSERT_EQ(stx_dir.stx_version, stx_snap_dir.stx_version);
+  ASSERT_EQ(utime_t(stx_dir.stx_atime), utime_t(stx_snap_dir.stx_atime));
+  ASSERT_EQ(utime_t(stx_root_snap_dir.stx_mtime), utime_t(stx_snap_dir.stx_mtime));
+  ASSERT_EQ(utime_t(stx_root_snap_dir.stx_ctime), utime_t(stx_snap_dir.stx_ctime));
+  ASSERT_EQ(stx_root_snap_dir.stx_version, stx_snap_dir.stx_version);
 
   ASSERT_EQ(ceph_ll_rmdir(cmount, root, dir_name, rootcred), 0);
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, SnapdirAttrsOnSnapCreate) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char dir_name[128];
+  char dir_path[256];
+  char snap_dir_path[512];
+
+  pid_t mypid = getpid();
+  sprintf(dir_name, "dir_%d", mypid);
+  sprintf(dir_path, "/%s", dir_name);
+  sprintf(snap_dir_path, "%s/.snap", dir_path);
+
+  ASSERT_EQ(ceph_mkdir(cmount, dir_path, 0777), 0);
+
+  struct ceph_statx stx_dir;
+  struct ceph_statx stx_snap_dir;
+  struct ceph_statx stx_root_snap_dir;
+  ASSERT_EQ(ceph_statx(cmount, dir_path, &stx_dir, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, "/.snap", &stx_root_snap_dir, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(utime_t(stx_root_snap_dir.stx_mtime), utime_t(stx_snap_dir.stx_mtime));
+  ASSERT_EQ(utime_t(stx_root_snap_dir.stx_ctime), utime_t(stx_snap_dir.stx_ctime));
+  ASSERT_EQ(stx_root_snap_dir.stx_version, stx_snap_dir.stx_version);
+
+  char snap_path[1024];
+  sprintf(snap_path, "%s/snap_a", snap_dir_path);
+  ASSERT_EQ(ceph_mkdir(cmount, snap_path, 0777), 0);
+
+  struct ceph_statx stx_snap_dir_1;
+  ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir_1, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_LT(utime_t(stx_root_snap_dir.stx_mtime), utime_t(stx_snap_dir_1.stx_mtime));
+  ASSERT_LT(utime_t(stx_root_snap_dir.stx_ctime), utime_t(stx_snap_dir_1.stx_ctime));
+  ASSERT_LT(stx_root_snap_dir.stx_version, stx_snap_dir_1.stx_version);
+
+  ASSERT_EQ(0, ceph_rmdir(cmount, snap_path));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
+
+TEST(LibCephFS, SnapdirAttrsOnSnapDelete) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char dir_name[128];
+  char dir_path[256];
+  char snap_dir_path[512];
+
+  pid_t mypid = getpid();
+  sprintf(dir_name, "dir_%d", mypid);
+  sprintf(dir_path, "/%s", dir_name);
+  sprintf(snap_dir_path, "%s/.snap", dir_path);
+
+  ASSERT_EQ(ceph_mkdir(cmount, dir_path, 0777), 0);
+
+  struct ceph_statx stx_dir;
+  struct ceph_statx stx_snap_dir;
+  struct ceph_statx stx_root_snap_dir;
+  ASSERT_EQ(ceph_statx(cmount, dir_path, &stx_dir, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, "/.snap", &stx_root_snap_dir, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(utime_t(stx_root_snap_dir.stx_mtime), utime_t(stx_snap_dir.stx_mtime));
+  ASSERT_EQ(utime_t(stx_root_snap_dir.stx_ctime), utime_t(stx_snap_dir.stx_mtime));
+  ASSERT_EQ(stx_root_snap_dir.stx_version, stx_snap_dir.stx_version);
+
+  char snap_path[1024];
+  sprintf(snap_path, "%s/snap_a", snap_dir_path);
+  ASSERT_EQ(ceph_mkdir(cmount, snap_path, 0777), 0);
+
+  struct ceph_statx stx_snap_dir_1;
+  ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir_1, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_LT(utime_t(stx_root_snap_dir.stx_mtime), utime_t(stx_snap_dir_1.stx_mtime));
+  ASSERT_LT(utime_t(stx_root_snap_dir.stx_ctime), utime_t(stx_snap_dir_1.stx_ctime));
+  ASSERT_LT(stx_root_snap_dir.stx_version, stx_snap_dir_1.stx_version);
+
+  ASSERT_EQ(0, ceph_rmdir(cmount, snap_path));
+
+  struct ceph_statx stx_snap_dir_2;
+  ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir_2, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_LT(utime_t(stx_snap_dir_1.stx_mtime), utime_t(stx_snap_dir_2.stx_mtime));
+  ASSERT_LT(utime_t(stx_snap_dir_1.stx_ctime), utime_t(stx_snap_dir_2.stx_ctime));
+  ASSERT_LT(stx_snap_dir_1.stx_version, stx_snap_dir_2.stx_version);
+
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, SnapdirAttrsOnSnapRename) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char dir_name[128];
+  char dir_path[256];
+  char snap_dir_path[512];
+
+  pid_t mypid = getpid();
+  sprintf(dir_name, "dir_%d", mypid);
+  sprintf(dir_path, "/%s", dir_name);
+  sprintf(snap_dir_path, "%s/.snap", dir_path);
+
+  ASSERT_EQ(ceph_mkdir(cmount, dir_path, 0777), 0);
+
+  struct ceph_statx stx_dir;
+  struct ceph_statx stx_snap_dir;
+  struct ceph_statx stx_root_snap_dir;
+  ASSERT_EQ(ceph_statx(cmount, dir_path, &stx_dir, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(ceph_statx(cmount, "/.snap", &stx_root_snap_dir, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_EQ(utime_t(stx_root_snap_dir.stx_mtime), utime_t(stx_snap_dir.stx_mtime));
+  ASSERT_EQ(utime_t(stx_root_snap_dir.stx_ctime), utime_t(stx_snap_dir.stx_ctime));
+  ASSERT_EQ(stx_root_snap_dir.stx_version, stx_snap_dir.stx_version);
+
+  char snap_path[1024];
+  sprintf(snap_path, "%s/snap_a", snap_dir_path);
+  ASSERT_EQ(ceph_mkdir(cmount, snap_path, 0777), 0);
+
+  struct ceph_statx stx_snap_dir_1;
+  ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir_1, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_LT(utime_t(stx_root_snap_dir.stx_mtime), utime_t(stx_snap_dir_1.stx_mtime));
+  ASSERT_LT(utime_t(stx_root_snap_dir.stx_ctime), utime_t(stx_snap_dir_1.stx_ctime));
+  ASSERT_LT(stx_root_snap_dir.stx_version, stx_snap_dir_1.stx_version);
+
+  char snap_path_r[1024];
+  sprintf(snap_path_r, "%s/snap_b", snap_dir_path);
+  ASSERT_EQ(ceph_rename(cmount, snap_path, snap_path_r), 0);
+
+  struct ceph_statx stx_snap_dir_2;
+  ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir_2, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  ASSERT_LT(utime_t(stx_snap_dir_1.stx_mtime), utime_t(stx_snap_dir_2.stx_mtime));
+  ASSERT_LT(utime_t(stx_snap_dir_1.stx_ctime), utime_t(stx_snap_dir_2.stx_ctime));
+  ASSERT_LT(stx_snap_dir_1.stx_version, stx_snap_dir_2.stx_version);
+
+  ASSERT_EQ(0, ceph_rmdir(cmount, snap_path_r));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }

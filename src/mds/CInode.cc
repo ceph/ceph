@@ -523,6 +523,10 @@ sr_t *CInode::prepare_new_srnode(snapid_t snapid)
     new_srnode->seq = snapid;
     new_srnode->created = snapid;
     new_srnode->current_parent_since = get_oldest_snap();
+    SnapRealm *sr = find_snaprealm();
+    dout(20) << __func__ << ": inheriting change_attr from " << *sr
+             << dendl;
+    new_srnode->change_attr = sr->srnode.change_attr;
   }
   return new_srnode;
 }

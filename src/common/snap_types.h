@@ -2,6 +2,7 @@
 #define __CEPH_SNAP_TYPES_H
 
 #include "include/types.h"
+#include "include/utime.h"
 #include "include/fs_types.h"
 
 namespace ceph {
@@ -39,6 +40,35 @@ struct SnapRealmInfo {
 };
 WRITE_CLASS_ENCODER(SnapRealmInfo)
 
+// "new* snap realm info - carries additional metadata (last modified,
+// change_attr) and is version encoded.
+struct SnapRealmInfoNew {
+  SnapRealmInfo info;
+  utime_t last_modified;
+  uint64_t change_attr;
+
+  SnapRealmInfoNew() {
+  }
+
+  SnapRealmInfoNew(const SnapRealmInfo &info_, utime_t last_modified_, uint64_t change_attr_) {
+    // FIPS zeroization audit 20191115: this memset is not security related.
+    info = info_;
+    last_modified = last_modified_;
+    change_attr = change_attr_;
+  }
+
+  inodeno_t ino() const { return inodeno_t(info.h.ino); }
+  inodeno_t parent() const { return inodeno_t(info.h.parent); }
+  snapid_t seq() const { return snapid_t(info.h.seq); }
+  snapid_t parent_since() const { return snapid_t(info.h.parent_since); }
+  snapid_t created() const { return snapid_t(info.h.created); }
+
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<SnapRealmInfoNew*>& o);
+};
+WRITE_CLASS_ENCODER(SnapRealmInfoNew)
 
 struct SnapContext {
   snapid_t seq;            // 'time' stamp
