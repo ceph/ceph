@@ -462,7 +462,6 @@ protected:
 
   bool use_cache{false};
   bool use_gc{true};
-  bool use_datacache{false};
 
   int get_obj_head_ioctx(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx);
 
@@ -477,15 +476,6 @@ public:
   RGWRados& set_use_gc(bool status) {
     use_gc = status;
     return *this;
-  }
-
-  RGWRados& set_use_datacache(bool status) {
-    use_datacache = status;
-    return *this;
-  }
-
-  bool get_use_datacache() {
-    return use_datacache;
   }
 
   RGWLC *get_lc() {
@@ -1093,8 +1083,6 @@ public:
     ATTRSMOD_MERGE   = 2
   };
 
-  D3nDataCache* d3n_data_cache{nullptr};
-
   int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp, optional_yield y);
   int reindex_obj(rgw::sal::Driver* driver,
 		  RGWBucketInfo& dest_bucket_info,
@@ -1673,11 +1661,7 @@ struct get_obj_data {
   get_obj_data(RGWRados* rgwrados, RGWGetDataCB* cb, rgw::Aio* aio,
                uint64_t offset, optional_yield yield)
                : rgwrados(rgwrados), client_cb(cb), aio(aio), offset(offset), yield(yield) {}
-  ~get_obj_data() {
-    if (rgwrados->get_use_datacache()) {
-      const std::lock_guard l(d3n_get_data.d3n_lock);
-    }
-  }
+  ~get_obj_data() = default;
 
   D3nGetObjData d3n_get_data;
   std::atomic_bool d3n_bypass_cache_write{false};

@@ -3649,6 +3649,7 @@ options:
   - base
   - d4n
   - posix
+  - d3n
 - name: dbstore_db_dir
   type: str
   level: advanced

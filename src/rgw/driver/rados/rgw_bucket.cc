@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include "common/errno.h"
 #include "rgw_acl_s3.h"
 #include "rgw_tag_s3.h"
 
