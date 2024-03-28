@@ -96,6 +96,7 @@ namespace {
         GlobalParams.op.user.uinfo.display_name = user1;
         GlobalParams.op.user.uinfo.user_id.id = user_id1;
         GlobalParams.op.bucket.info.bucket.name = bucket1;
+        GlobalParams.op.bucket.owner = user_id1;
         GlobalParams.op.obj.state.obj.bucket = GlobalParams.op.bucket.info.bucket;
         GlobalParams.op.obj.state.obj.key.name = object1;
         GlobalParams.op.obj.state.obj.key.instance = "inst1";
@@ -444,7 +445,7 @@ TEST_F(DBStoreTest, GetBucket) {
   ASSERT_EQ(params.op.bucket.info.objv_tracker.read_version.ver, 3);
   ASSERT_EQ(params.op.bucket.info.objv_tracker.read_version.tag, "read_tag");
   ASSERT_EQ(params.op.bucket.mtime, bucket_mtime);
-  ASSERT_EQ(params.op.bucket.info.owner.id, "user_id1");
+  ASSERT_EQ(to_string(params.op.bucket.info.owner), "user_id1");
   bufferlist k, k2;
   string acl;
   map<std::string, bufferlist>::iterator it2 = params.op.bucket.bucket_attrs.begin();
@@ -507,7 +508,7 @@ TEST_F(DBStoreTest, GetBucketQueryByName) {
   ASSERT_EQ(ret, 0);
   ASSERT_EQ(binfo.bucket.name, "bucket2");
   ASSERT_EQ(binfo.bucket.tenant, "tenant");
-  ASSERT_EQ(binfo.owner.id, "user_id1");
+  ASSERT_EQ(to_string(binfo.owner), "user_id1");
   ASSERT_EQ(binfo.objv_tracker.read_version.ver, 1);
   ASSERT_FALSE(binfo.objv_tracker.read_version.tag.empty());
   ASSERT_EQ(binfo.zonegroup, "zid");
@@ -523,13 +524,11 @@ TEST_F(DBStoreTest, GetBucketQueryByName) {
 TEST_F(DBStoreTest, ListUserBuckets) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
-  rgw_user owner;
+  std::string owner = "user_id1";
   int max = 2;
   bool need_stats = true;
   bool is_truncated = false;
   RGWUserBuckets ulist;
-
-  owner.id = "user_id1";
 
   marker1 = "";
   do {
@@ -560,8 +559,7 @@ TEST_F(DBStoreTest, ListUserBuckets) {
 TEST_F(DBStoreTest, BucketChown) {
   int ret = -1;
   RGWBucketInfo info;
-  rgw_user user;
-  user.id = "user_id2";
+  rgw_owner user = rgw_user{"user_id2"};
 
   info.bucket.name = "bucket5";
 
@@ -581,7 +579,7 @@ TEST_F(DBStoreTest, ListAllBuckets) {
 TEST_F(DBStoreTest, ListAllBuckets2) {
   struct DBOpParams params = GlobalParams;
   int ret = -1;
-  rgw_user owner;
+  std::string owner; // empty
   int max = 2;
   bool need_stats = true;
   bool is_truncated = false;
@@ -595,7 +593,7 @@ TEST_F(DBStoreTest, ListAllBuckets2) {
     ASSERT_EQ(ret, 0);
 
     cout << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ \n";
-    cout << "ownerID : " << owner.id << "\n";
+    cout << "ownerID : " << owner << "\n";
     cout << "marker1 :" << marker1 << "\n";
 
     cout << "is_truncated :" << is_truncated << "\n";

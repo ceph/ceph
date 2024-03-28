@@ -22,8 +22,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-static const char* AWS_SNS_NS("https://sns.amazonaws.com/doc/2010-03-31/");
-
 bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
   const auto is_secure = rgw_transport_is_secure(cct, env);
   if (!is_secure && g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
@@ -70,11 +68,10 @@ bool topics_has_endpoint_secret(const rgw_pubsub_topics& topics) {
 }
 
 std::optional<rgw::IAM::Policy> get_policy_from_text(req_state* const s,
-                                                     std::string& policy_text) {
-  const auto bl = bufferlist::static_from_string(policy_text);
+                                                     const std::string& policy_text) {
   try {
     return rgw::IAM::Policy(
-        s->cct, s->owner.id.tenant, bl,
+        s->cct, nullptr, policy_text,
         s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   } catch (rgw::IAM::PolicyParseException& e) {
     ldout(s->cct, 1) << "failed to parse policy: '" << policy_text
@@ -88,7 +85,7 @@ int verify_topic_owner_or_policy(req_state* const s,
                                  const rgw_pubsub_topic& topic,
                                  const std::string& zonegroup_name,
                                  const uint64_t op) {
-  if (topic.user == s->owner.id) {
+  if (s->auth.identity->is_owner_of(topic.owner)) {
     return 0;
   }
   // no policy set.
@@ -97,7 +94,7 @@ int verify_topic_owner_or_policy(req_state* const s,
     if (op == rgw::IAM::snsPublish && !s->cct->_conf->rgw_topic_require_publish_policy) {
       return 0;
     }
-    if (topic.user.empty()) {
+    if (std::visit([] (const auto& o) { return o.empty(); }, topic.owner)) {
       // if we don't know the original user and there is no policy
       // we will not reject the request.
       // this is for compatibility with versions that did not store the user in the topic
@@ -106,9 +103,7 @@ int verify_topic_owner_or_policy(req_state* const s,
     s->err.message = "Topic was created by another user.";
     return -EACCES;
   }
-  // bufferlist::static_from_string wants non const string
-  std::string policy_text(topic.policy_text);
-  const auto p = get_policy_from_text(s, policy_text);
+  const auto p = get_policy_from_text(s, topic.policy_text);
   rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
   const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, zonegroup_name,
                      s->user->get_tenant(), topic.name);
@@ -201,7 +196,7 @@ class RGWPSCreateTopicOp : public RGWOp {
       return ret;
     }
 
-    const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
     rgw_pubsub_topic result;
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret == -ENOENT) {
@@ -247,7 +242,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("CreateTopicResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("CreateTopicResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("CreateTopicResult");
     encode_xml("TopicArn", topic_arn, f); 
     f->close_section(); // CreateTopicResult
@@ -280,7 +275,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            s->owner.id, policy_text, y);
   if (op_ret < 0) {
@@ -323,7 +318,7 @@ public:
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("ListTopicsResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("ListTopicsResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ListTopicsResult");
     encode_xml("Topics", result, f); 
     f->close_section(); // ListTopicsResult
@@ -341,7 +336,7 @@ public:
 void RGWPSListTopicsOp::execute(optional_yield y) {
   const std::string start_token = s->info.args.get("NextToken");
 
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   constexpr int max_items = 100;
   op_ret = ps.get_topics(this, start_token, max_items, result, next_token, y);
   // if there are no topics it is not considered an error
@@ -429,7 +424,7 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -496,7 +491,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("GetTopicAttributesResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("GetTopicAttributesResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("GetTopicAttributesResult");
     result.dump_xml_as_attributes(f);
     f->close_section(); // GetTopicAttributesResult
@@ -513,7 +508,7 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -546,7 +541,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
   std::string opaque_data;
   std::string policy_text;
   rgw_pubsub_dest dest;
-  rgw_user topic_owner;
+  rgw_owner topic_owner;
   std::string attribute_name;
 
   int get_params() {
@@ -645,14 +640,14 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       return ret;
     }
     rgw_pubsub_topic result;
-    const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 1) << "failed to get topic '" << topic_name
                          << "', ret=" << ret << dendl;
       return ret;
     }
-    topic_owner = result.user;
+    topic_owner = result.owner;
     ret = verify_topic_owner_or_policy(
         s, result, driver->get_zone()->get_zonegroup().get_name(),
         rgw::IAM::snsSetTopicAttributes);
@@ -684,7 +679,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("SetTopicAttributesResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("SetTopicAttributesResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f);
     f->close_section();  // ResponseMetadata
@@ -722,7 +717,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            topic_owner, policy_text, y);
   if (op_ret < 0) {
@@ -782,7 +777,7 @@ class RGWPSDeleteTopicOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("DeleteTopicResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("DeleteTopicResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
     f->close_section(); // ResponseMetadata
@@ -806,7 +801,7 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
 
   rgw_pubsub_topic result;
   op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
@@ -1030,7 +1025,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     return;
   }
 
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   const RGWPubSub::Bucket b(ps, bucket.get());
 
   if(configurations.list.empty()) {
@@ -1185,7 +1180,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
         << "' , ret = " << op_ret << dendl;
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   std::unordered_map<std::string, rgw_pubsub_topic> topics;
   for (const auto& c : configurations.list) {
     const auto& notif_name = c.id;
@@ -1335,7 +1330,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     return;
   }
 
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   const RGWPubSub::Bucket b(ps, bucket.get());
 
   // get all topics on a bucket
@@ -1477,7 +1472,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
       driver->stat_topics_v1(s->bucket_tenant, y, this) == -ENOENT) {
     op_ret = get_bucket_notifications(this, bucket.get(), bucket_topics);
   } else {
-    const RGWPubSub ps(driver, s->owner.id.tenant);
+    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
     const RGWPubSub::Bucket b(ps, bucket.get());
     op_ret = b.get_topics(this, bucket_topics, y);
   }

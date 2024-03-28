@@ -124,11 +124,16 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
     throw ret;
   }
 
+  const rgw_user* uid = std::get_if<rgw_user>(&bucket->get_info().owner);
+  if (!uid) {
+    throw -EPERM;
+  }
+
   ldpp_dout(dpp, 20) << "temp url user (bucket owner): " << bucket->get_info().owner
                  << dendl;
 
   std::unique_ptr<rgw::sal::User> user;
-  user = driver->get_user(bucket->get_info().owner);
+  user = driver->get_user(*uid);
   if (user->load_user(dpp, s->yield) < 0) {
     throw -EPERM;
   }
@@ -508,9 +513,18 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     throw ret;
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
-                                           extract_swift_subuser(swift_user),
-                                           std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+  std::optional<RGWAccountInfo> account;
+  std::vector<IAM::Policy> policies;
+  ret = load_account_and_policies(dpp, y, driver, user->get_info(),
+                                  user->get_attrs(), account, policies);
+  if (ret < 0) {
+    return result_t::deny(-EPERM);
+  }
+
+  auto apl = apl_factory->create_apl_local(
+      cct, s, user->get_info(), std::move(account),
+      std::move(policies), extract_swift_subuser(swift_user),
+      std::nullopt, LocalApplier::NO_ACCESS_KEY);
   return result_t::grant(std::move(apl));
 }
 
@@ -628,6 +642,14 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     throw ret;
   }
 
+  std::optional<RGWAccountInfo> account;
+  std::vector<IAM::Policy> policies;
+  ret = load_account_and_policies(dpp, s->yield, driver, user->get_info(),
+                                  user->get_attrs(), account, policies);
+  if (ret < 0) {
+    return result_t::deny(-EPERM);
+  }
+
   ldpp_dout(dpp, 10) << "swift_user=" << swift_user << dendl;
 
   const auto siter = user->get_info().swift_keys.find(swift_user);
@@ -662,9 +684,10 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::deny(-EPERM);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
-                                           extract_swift_subuser(swift_user),
-                                           std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+  auto apl = apl_factory->create_apl_local(
+      cct, s, user->get_info(), std::move(account),
+      std::move(policies), extract_swift_subuser(swift_user),
+      std::nullopt, LocalApplier::NO_ACCESS_KEY);
   return result_t::grant(std::move(apl));
 }
 

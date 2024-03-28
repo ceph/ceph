@@ -41,7 +41,7 @@
 
 namespace rgw::cls::fifo {
 namespace cb = ceph::buffer;
-namespace fifo = rados::cls::fifo;
+namespace fifo = ::rados::cls::fifo;
 namespace lr = librados;
 
 inline constexpr std::uint64_t default_max_part_size = 4 * 1024 * 1024;

@@ -11,8 +11,13 @@ overrides:
         rgw torrent flag: true
         rgw user counters cache: true
         rgw bucket counters cache: true
+        rgw sts key: abcdefghijklmnop
+        rgw s3 auth use sts: true
   rgw:
     compression type: random
     storage classes: LUKEWARM, FROZEN
   s3tests:
     storage classes: LUKEWARM, FROZEN
+    accounts:
+      iam root: RGW88888888888888888
+      iam alt root: RGW99999999999999999

@@ -70,7 +70,7 @@ namespace rgw::auth::registry { class StrategyRegistry; }
 
 int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
-                                  const rgw_user& uid,
+                                  const rgw_owner& effective_owner,
                                   bufferlist* indata, JSONParser* jp,
                                   req_info& req, optional_yield y);
 
@@ -1322,6 +1322,7 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
+  int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -1446,6 +1447,7 @@ public:
       bypass_governance_mode(false) {
   }
 
+  int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -2023,7 +2025,6 @@ protected:
   rgw::sal::Bucket* bucket;
   bool quiet;
   bool status_dumped;
-  bool acl_allowed = false;
   bool bypass_perm;
   bool bypass_governance_mode;
 
@@ -2035,6 +2036,7 @@ public:
     bypass_governance_mode = false;
   }
 
+  int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -2070,9 +2072,6 @@ extern int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Dr
 				     req_state *s, bool prefetch_data, optional_yield y);
 extern void rgw_build_iam_environment(rgw::sal::Driver* driver,
 				      req_state* s);
-extern std::vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
-                        std::map<std::string, bufferlist>& attrs,
-                        const std::string& tenant);
 
 inline int get_system_versioning_params(req_state *s,
 					uint64_t *olh_epoch,

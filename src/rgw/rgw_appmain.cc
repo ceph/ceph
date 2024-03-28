@@ -37,6 +37,7 @@
 #include "rgw_rest_admin.h"
 #include "rgw_rest_info.h"
 #include "rgw_rest_usage.h"
+#include "rgw_rest_account.h"
 #include "rgw_rest_bucket.h"
 #include "rgw_rest_metadata.h"
 #include "rgw_rest_log.h"
@@ -360,6 +361,7 @@ void rgw::AppMain::cond_init_apis()
       RGWRESTMgr_Admin *admin_resource = new RGWRESTMgr_Admin;
       admin_resource->register_resource("info", new RGWRESTMgr_Info);
       admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
+      admin_resource->register_resource("account", new RGWRESTMgr_Account);
       /* Register driver-specific admin APIs */
       env.driver->register_admin_apis(admin_resource);
       rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);

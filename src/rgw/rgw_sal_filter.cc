@@ -155,6 +155,216 @@ int FilterDriver::get_user_by_swift(const DoutPrefixProvider* dpp, const std::st
   return 0;
 }
 
+int FilterDriver::load_account_by_id(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view id,
+                                     RGWAccountInfo& info,
+                                     Attrs& attrs,
+                                     RGWObjVersionTracker& objv)
+{
+  return next->load_account_by_id(dpp, y, id, info, attrs, objv);
+}
+
+int FilterDriver::load_account_by_name(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       std::string_view tenant,
+                                       std::string_view name,
+                                       RGWAccountInfo& info,
+                                       Attrs& attrs,
+                                       RGWObjVersionTracker& objv)
+{
+  return next->load_account_by_name(dpp, y, tenant, name, info, attrs, objv);
+}
+
+int FilterDriver::load_account_by_email(const DoutPrefixProvider* dpp,
+                                        optional_yield y,
+                                        std::string_view email,
+                                        RGWAccountInfo& info,
+                                        Attrs& attrs,
+                                        RGWObjVersionTracker& objv)
+{
+  return next->load_account_by_email(dpp, y, email, info, attrs, objv);
+}
+
+int FilterDriver::store_account(const DoutPrefixProvider* dpp,
+                                optional_yield y, bool exclusive,
+                                const RGWAccountInfo& info,
+                                const RGWAccountInfo* old_info,
+                                const Attrs& attrs,
+                                RGWObjVersionTracker& objv)
+{
+  return next->store_account(dpp, y, exclusive, info, old_info, attrs, objv);
+}
+
+int FilterDriver::delete_account(const DoutPrefixProvider* dpp,
+                                 optional_yield y,
+                                 const RGWAccountInfo& info,
+                                 RGWObjVersionTracker& objv)
+{
+  return next->delete_account(dpp, y, info, objv);
+}
+
+int FilterDriver::load_stats(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             const rgw_owner& owner,
+                             RGWStorageStats& stats,
+                             ceph::real_time& last_synced,
+                             ceph::real_time& last_updated)
+{
+  return next->load_stats(dpp, y, owner, stats, last_synced, last_updated);
+}
+
+int FilterDriver::load_stats_async(const DoutPrefixProvider* dpp,
+                                   const rgw_owner& owner,
+                                   boost::intrusive_ptr<ReadStatsCB> cb)
+{
+  return next->load_stats_async(dpp, owner, std::move(cb));
+}
+
+int FilterDriver::reset_stats(const DoutPrefixProvider *dpp,
+                              optional_yield y,
+                              const rgw_owner& owner)
+{
+  return next->reset_stats(dpp, y, owner);
+}
+
+int FilterDriver::complete_flush_stats(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       const rgw_owner& owner)
+{
+  return next->complete_flush_stats(dpp, y, owner);
+}
+
+int FilterDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view email,
+                                      rgw_owner& owner)
+{
+  return next->load_owner_by_email(dpp, y, email, owner);
+}
+
+int FilterDriver::count_account_roles(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view account_id,
+                                      uint32_t& count)
+{
+  return next->count_account_roles(dpp, y, account_id, count);
+}
+
+int FilterDriver::list_account_roles(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view account_id,
+                                     std::string_view path_prefix,
+                                     std::string_view marker,
+                                     uint32_t max_items,
+                                     RoleList& listing)
+{
+  return next->list_account_roles(dpp, y, account_id, path_prefix,
+                                  marker, max_items, listing);
+}
+
+int FilterDriver::load_account_user_by_name(const DoutPrefixProvider* dpp,
+                                            optional_yield y,
+                                            std::string_view account_id,
+                                            std::string_view tenant,
+                                            std::string_view username,
+                                            std::unique_ptr<User>* user)
+{
+  std::unique_ptr<User> nu;
+  int ret = next->load_account_user_by_name(dpp, y, account_id, tenant,
+                                            username, &nu);
+  if (ret >= 0) {
+    *user = std::make_unique<FilterUser>(std::move(nu));
+  }
+  return ret;
+}
+
+int FilterDriver::count_account_users(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view account_id,
+                                      uint32_t& count)
+{
+  return next->count_account_users(dpp, y, account_id, count);
+}
+
+int FilterDriver::list_account_users(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view account_id,
+                                     std::string_view tenant,
+                                     std::string_view path_prefix,
+                                     std::string_view marker,
+                                     uint32_t max_items,
+                                     UserList& listing)
+{
+  return next->list_account_users(dpp, y, account_id, tenant, path_prefix,
+                                  marker, max_items, listing);
+}
+
+int FilterDriver::load_group_by_id(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view id,
+                                   RGWGroupInfo& info, Attrs& attrs,
+                                   RGWObjVersionTracker& objv)
+{
+  return next->load_group_by_id(dpp, y, id, info, attrs, objv);
+}
+
+int FilterDriver::load_group_by_name(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view account_id,
+                                     std::string_view name,
+                                     RGWGroupInfo& info, Attrs& attrs,
+                                     RGWObjVersionTracker& objv)
+{
+  return next->load_group_by_name(dpp, y, account_id, name, info, attrs, objv);
+}
+
+int FilterDriver::store_group(const DoutPrefixProvider* dpp, optional_yield y,
+                              const RGWGroupInfo& info, const Attrs& attrs,
+                              RGWObjVersionTracker& objv, bool exclusive,
+                              const RGWGroupInfo* old_info)
+{
+  return next->store_group(dpp, y, info, attrs, objv, exclusive, old_info);
+}
+
+int FilterDriver::remove_group(const DoutPrefixProvider* dpp, optional_yield y,
+                               const RGWGroupInfo& info,
+                               RGWObjVersionTracker& objv)
+{
+  return next->remove_group(dpp, y, info, objv);
+}
+
+int FilterDriver::list_group_users(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view tenant,
+                                   std::string_view id,
+                                   std::string_view marker,
+                                   uint32_t max_items,
+                                   UserList& listing)
+{
+  return next->list_group_users(dpp, y, tenant, id, marker, max_items, listing);
+}
+
+int FilterDriver::count_account_groups(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       std::string_view account_id,
+                                       uint32_t& count)
+{
+  return next->count_account_groups(dpp, y, account_id, count);
+}
+
+int FilterDriver::list_account_groups(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view account_id,
+                                      std::string_view path_prefix,
+                                      std::string_view marker,
+                                      uint32_t max_items,
+                                      GroupList& listing)
+{
+  return next->list_account_groups(dpp, y, account_id, path_prefix,
+                                   marker, max_items, listing);
+}
+
 std::unique_ptr<Object> FilterDriver::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
@@ -173,6 +383,15 @@ int FilterDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b
   const int ret = next->load_bucket(dpp, b, &nb, y);
   *bucket = std::make_unique<FilterBucket>(std::move(nb));
   return ret;
+}
+
+int FilterDriver::list_buckets(const DoutPrefixProvider* dpp,
+                               const rgw_owner& owner, const std::string& tenant,
+                               const std::string& marker, const std::string& end_marker,
+                               uint64_t max, bool need_stats, BucketList &buckets, optional_yield y)
+{
+  return next->list_buckets(dpp, owner, tenant, marker, end_marker,
+                            max, need_stats, buckets, y);
 }
 
 bool FilterDriver::is_meta_master()
@@ -389,12 +608,14 @@ std::unique_ptr<LuaManager> FilterDriver::get_lua_manager(const std::string& lua
 
 std::unique_ptr<RGWRole> FilterDriver::get_role(std::string name,
 					      std::string tenant,
+					      rgw_account_id account_id,
 					      std::string path,
 					      std::string trust_policy,
+					      std::string description,
 					      std::string max_session_duration_str,
                 std::multimap<std::string,std::string> tags)
 {
-  return next->get_role(name, tenant, path, trust_policy, max_session_duration_str, tags);
+  return next->get_role(name, tenant, std::move(account_id), path, trust_policy, std::move(description), max_session_duration_str, tags);
 }
 
 std::unique_ptr<RGWRole> FilterDriver::get_role(std::string id)
@@ -407,31 +628,55 @@ std::unique_ptr<RGWRole> FilterDriver::get_role(const RGWRoleInfo& info)
   return next->get_role(info);
 }
 
-int FilterDriver::get_roles(const DoutPrefixProvider *dpp,
-			   optional_yield y,
-			   const std::string& path_prefix,
-			   const std::string& tenant,
-			   std::vector<std::unique_ptr<RGWRole>>& roles)
+int FilterDriver::list_roles(const DoutPrefixProvider *dpp,
+			     optional_yield y,
+			     const std::string& tenant,
+			     const std::string& path_prefix,
+			     const std::string& marker,
+			     uint32_t max_items,
+			     RoleList& listing)
 {
-  return next->get_roles(dpp, y, path_prefix, tenant, roles);
+  return next->list_roles(dpp, y, tenant, path_prefix,
+                          marker, max_items, listing);
 }
 
-std::unique_ptr<RGWOIDCProvider> FilterDriver::get_oidc_provider()
+int FilterDriver::store_oidc_provider(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      const RGWOIDCProviderInfo& info,
+                                      bool exclusive)
 {
-  return next->get_oidc_provider();
+  return next->store_oidc_provider(dpp, y, info, exclusive);
 }
 
-int FilterDriver::get_oidc_providers(const DoutPrefixProvider *dpp,
-				    const std::string& tenant,
-				    std::vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
+int FilterDriver::load_oidc_provider(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view tenant,
+                                     std::string_view url,
+                                     RGWOIDCProviderInfo& info)
 {
-  return next->get_oidc_providers(dpp, tenant, providers, y);
+  return next->load_oidc_provider(dpp, y, tenant, url, info);
+}
+
+int FilterDriver::delete_oidc_provider(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       std::string_view tenant,
+                                       std::string_view url)
+{
+  return next->delete_oidc_provider(dpp, y, tenant, url);
+}
+
+int FilterDriver::get_oidc_providers(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view tenant,
+                                     std::vector<RGWOIDCProviderInfo>& providers)
+{
+  return next->get_oidc_providers(dpp, y, tenant, providers);
 }
 
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -448,7 +693,7 @@ std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider
 std::unique_ptr<Writer> FilterDriver::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
@@ -480,14 +725,6 @@ CephContext* FilterDriver::ctx(void)
   return next->ctx();
 }
 
-int FilterUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
-			     const std::string& end_marker, uint64_t max,
-			     bool need_stats, BucketList &buckets, optional_yield y)
-{
-  return next->list_buckets(dpp, marker, end_marker, max,
-                            need_stats, buckets, y);
-}
-
 int FilterUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 {
   return next->read_attrs(dpp, y);
@@ -497,24 +734,6 @@ int FilterUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 				      Attrs& new_attrs, optional_yield y)
 {
   return next->merge_and_store_attrs(dpp, new_attrs, y);
-}
-
-int FilterUser::read_stats(const DoutPrefixProvider *dpp,
-			   optional_yield y, RGWStorageStats* stats,
-			   ceph::real_time* last_stats_sync,
-			   ceph::real_time* last_stats_update)
-{
-  return next->read_stats(dpp, y, stats, last_stats_sync, last_stats_update);
-}
-
-int FilterUser::read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb)
-{
-  return next->read_stats_async(dpp, cb);
-}
-
-int FilterUser::complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  return next->complete_flush_stats(dpp, y);
 }
 
 int FilterUser::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
@@ -551,6 +770,13 @@ int FilterUser::verify_mfa(const std::string& mfa_str, bool* verified,
 			   const DoutPrefixProvider* dpp, optional_yield y)
 {
   return next->verify_mfa(mfa_str, verified, dpp, y);
+}
+
+int FilterUser::list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                            std::string_view marker, uint32_t max_items,
+                            GroupList& listing)
+{
+  return next->list_groups(dpp, y, marker, max_items, listing);
 }
 
 std::unique_ptr<Object> FilterBucket::get_object(const rgw_obj_key& k)
@@ -617,10 +843,10 @@ int FilterBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return next->read_stats_async(dpp, idx_layout, shard_id, ctx);
 }
 
-int FilterBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                                  RGWBucketEnt* ent)
+int FilterBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                   RGWBucketEnt* ent)
 {
-  return next->sync_user_stats(dpp, y, ent);
+  return next->sync_owner_stats(dpp, y, ent);
 }
 
 int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
@@ -629,7 +855,7 @@ int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return next->check_bucket_shards(dpp, num_objs, y);
 }
 
-int FilterBucket::chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y)
+int FilterBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
 {
   return next->chown(dpp, new_owner, y);
 }
@@ -640,7 +866,7 @@ int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
   return next->put_info(dpp, exclusive, _mtime, y);
 }
 
-const rgw_user& FilterBucket::get_owner() const
+const rgw_owner& FilterBucket::get_owner() const
 {
   return next->get_owner();
 }
@@ -759,7 +985,8 @@ int FilterObject::delete_object(const DoutPrefixProvider* dpp,
   return next->delete_object(dpp, y, flags);
 }
 
-int FilterObject::copy_object(User* user,
+int FilterObject::copy_object(const ACLOwner& owner,
+			      const rgw_user& remote_user,
 			      req_info* info,
 			      const rgw_zone_id& source_zone,
 			      rgw::sal::Object* dest_object,
@@ -787,7 +1014,7 @@ int FilterObject::copy_object(User* user,
 			      const DoutPrefixProvider* dpp,
 			      optional_yield y)
 {
-  return next->copy_object(user, info, source_zone,
+  return next->copy_object(owner, remote_user, info, source_zone,
 			   nextObject(dest_object),
 			   nextBucket(dest_bucket),
 			   nextBucket(src_bucket),
@@ -892,16 +1119,21 @@ void FilterObject::set_bucket(Bucket* b)
   next->set_bucket(nextBucket(b));
 };
 
-int FilterObject::swift_versioning_restore(bool& restored,
-					   const DoutPrefixProvider* dpp, optional_yield y)
+int FilterObject::swift_versioning_restore(const ACLOwner& owner,
+                                           const rgw_user& remote_user,
+                                           bool& restored,
+                                           const DoutPrefixProvider* dpp,
+                                           optional_yield y)
 {
-  return next->swift_versioning_restore(restored, dpp, y);
+  return next->swift_versioning_restore(owner, remote_user, restored, dpp, y);
 }
 
-int FilterObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
-					optional_yield y)
+int FilterObject::swift_versioning_copy(const ACLOwner& owner,
+                                        const rgw_user& remote_user,
+                                        const DoutPrefixProvider* dpp,
+                                        optional_yield y)
 {
-  return next->swift_versioning_copy(dpp, y);
+  return next->swift_versioning_copy(owner, remote_user, dpp, y);
 }
 
 std::unique_ptr<Object::ReadOp> FilterObject::get_read_op()
@@ -1055,7 +1287,7 @@ std::unique_ptr<Writer> FilterMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)

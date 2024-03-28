@@ -35,7 +35,7 @@ struct DBOpUserInfo {
 struct DBOpBucketInfo {
   RGWBucketEnt ent; // maybe not needed. not used in create/get_bucket
   RGWBucketInfo info;
-  RGWUser* owner = nullptr;
+  std::string owner;
   rgw::sal::Attrs bucket_attrs;
   obj_version bucket_version;
   ceph::real_time mtime;
@@ -482,9 +482,7 @@ class DBOp {
       BucketVersion   INTEGER,    \
       BucketVersionTag TEXT,      \
       Mtime   BLOB,   \
-      PRIMARY KEY (BucketName) \
-      FOREIGN KEY (OwnerID) \
-      REFERENCES '{}' (UserID) ON DELETE CASCADE ON UPDATE CASCADE \n);";
+      PRIMARY KEY (BucketName) \n);";
 
     static constexpr std::string_view CreateObjectTableTriggerQ =
       "CREATE TRIGGER IF NOT EXISTS '{}' \
@@ -931,22 +929,20 @@ class RemoveBucketOp: virtual public DBOp {
 class GetBucketOp: virtual public DBOp {
   private:
     static constexpr std::string_view Query = "SELECT  \
-                          BucketName, BucketTable.Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
-                          Count, BucketTable.PlacementName, BucketTable.PlacementStorageClass, OwnerID, Flags, Zonegroup, \
+                          BucketName, Tenant, Marker, BucketID, Size, SizeRounded, CreationTime, \
+                          Count, PlacementName, PlacementStorageClass, OwnerID, Flags, Zonegroup, \
                           HasInstanceObj, Quota, RequesterPays, HasWebsite, WebsiteConf, \
                           SwiftVersioning, SwiftVerLocation, \
                           MdsearchConfig, NewBucketInstanceID, ObjectLock, \
-                          SyncPolicyInfoGroups, BucketAttrs, BucketVersion, BucketVersionTag, Mtime, NS \
-                          from '{}' as BucketTable INNER JOIN '{}' ON OwnerID = UserID where BucketName = {}";
+                          SyncPolicyInfoGroups, BucketAttrs, BucketVersion, BucketVersionTag, Mtime \
+                          from '{}' where BucketName = {}";
 
   public:
     virtual ~GetBucketOp() {}
 
     static std::string Schema(DBOpPrepareParams &params) {
-      //return fmt::format(Query, params.op.bucket.bucket_name,
-      //          params.bucket_table, params.user_table);
       return fmt::format(Query,
-          params.bucket_table, params.user_table,
+          params.bucket_table,
           params.op.bucket.bucket_name);
     }
 };
@@ -1596,7 +1592,7 @@ class DB {
         RGWBucketInfo& info, rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,
         obj_version* pbucket_version);
     int create_bucket(const DoutPrefixProvider *dpp,
-        const rgw_user& owner, const rgw_bucket& bucket,
+        const rgw_owner& owner, const rgw_bucket& bucket,
         const std::string& zonegroup_id,
         const rgw_placement_rule& placement_rule,
         const std::map<std::string, bufferlist>& attrs,
@@ -1611,7 +1607,7 @@ class DB {
 
     int remove_bucket(const DoutPrefixProvider *dpp, const RGWBucketInfo info);
     int list_buckets(const DoutPrefixProvider *dpp, const std::string& query_str,
-        rgw_user& user,
+        std::string& owner,
         const std::string& marker,
         const std::string& end_marker,
         uint64_t max,
@@ -1620,7 +1616,7 @@ class DB {
         bool *is_truncated);
     int update_bucket(const DoutPrefixProvider *dpp, const std::string& query_str,
         RGWBucketInfo& info, bool exclusive,
-        const rgw_user* powner_id, std::map<std::string, bufferlist>* pattrs,
+        const rgw_owner* powner, std::map<std::string, bufferlist>* pattrs,
         ceph::real_time* pmtime, RGWObjVersionTracker* pobjv);
 
     uint64_t get_max_head_size() { return ObjHeadSize; }
@@ -1909,7 +1905,6 @@ class DB {
         DB::Object *target;
 
         struct DeleteParams {
-          rgw_user bucket_owner;
           int versioning_status;
           ACLOwner obj_owner; /* needed for creation of deletion marker */
           uint64_t olh_epoch;

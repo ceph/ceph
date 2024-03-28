@@ -45,10 +45,11 @@ namespace rgw::sal {
 using ::ceph::decode;
 using ::ceph::encode;
 
-int DaosUser::list_buckets(const DoutPrefixProvider* dpp, const string& marker,
-                           const string& end_marker, uint64_t max,
-                           bool need_stats, BucketList& buckets,
-                           optional_yield y) {
+int DaosStore::list_buckets(const DoutPrefixProvider* dpp,
+                            const rgw_owner& owner, const std::string& tenant,
+                            const string& marker, const string& end_marker,
+                            uint64_t max, bool need_stats, BucketList& buckets,
+                            optional_yield y) {
   ldpp_dout(dpp, 20) << "DEBUG: list_user_buckets: marker=" << marker
                      << " end_marker=" << end_marker << " max=" << max << dendl;
   int ret = 0;
@@ -65,7 +66,7 @@ int DaosUser::list_buckets(const DoutPrefixProvider* dpp, const string& marker,
   char daos_marker[DS3_MAX_BUCKET_NAME];
   std::strncpy(daos_marker, marker.c_str(), sizeof(daos_marker));
   ret = ds3_bucket_list(&bcount, bucket_infos.data(), daos_marker,
-                        &is_truncated, store->ds3, nullptr);
+                        &is_truncated, ds3, nullptr);
   ldpp_dout(dpp, 20) << "DEBUG: ds3_bucket_list: bcount=" << bcount
                      << " ret=" << ret << dendl;
   if (ret != 0) {
@@ -82,7 +83,7 @@ int DaosUser::list_buckets(const DoutPrefixProvider* dpp, const string& marker,
     bl.append(reinterpret_cast<char*>(bi.encoded), bi.encoded_length);
     auto iter = bl.cbegin();
     dbinfo.decode(iter);
-    buckets.add(std::make_unique<DaosBucket>(this->store, dbinfo.info, this));
+    buckets.add(std::make_unique<DaosBucket>(this, dbinfo.info, this));
   }
 
   buckets.set_truncated(is_truncated);
@@ -499,8 +500,8 @@ int DaosBucket::read_stats_async(
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::sync_user_stats(const DoutPrefixProvider* dpp,
-                                optional_yield y) {
+int DaosBucket::sync_owner_stats(const DoutPrefixProvider* dpp,
+                                 optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
@@ -508,7 +509,7 @@ int DaosBucket::check_bucket_shards(const DoutPrefixProvider* dpp) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::chown(const DoutPrefixProvider* dpp, User& new_user,
+int DaosBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_user,
                       optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
@@ -1207,7 +1208,8 @@ int DaosObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int DaosObject::copy_object(
-    User* user, req_info* info, const rgw_zone_id& source_zone,
+    const ACLOwner& owner, const rgw_user& remote_user,
+    req_info* info, const rgw_zone_id& source_zone,
     rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
     rgw::sal::Bucket* src_bucket, const rgw_placement_rule& dest_placement,
     ceph::real_time* src_mtime, ceph::real_time* mtime,
@@ -1221,13 +1223,13 @@ int DaosObject::copy_object(
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosObject::swift_versioning_restore(bool& restored,
-                                         const DoutPrefixProvider* dpp) {
+int DaosObject::swift_versioning_restore(const ACLOwner& owner, const rgw_user& remote_user, bool& restored,
+                                         const DoutPrefixProvider* dpp, optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
-                                      optional_yield y) {
+int DaosObject::swift_versioning_copy(const ACLOwner& owner, const rgw_user& remote_user,
+                                      const DoutPrefixProvider* dpp, optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
@@ -1976,7 +1978,7 @@ int DaosMultipartUpload::get_info(const DoutPrefixProvider* dpp,
 
 std::unique_ptr<Writer> DaosMultipartUpload::get_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
-    rgw::sal::Object* obj, const rgw_user& owner,
+    rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule, uint64_t part_num,
     const std::string& part_num_str) {
   ldpp_dout(dpp, 20) << "DaosMultipartUpload::get_writer(): enter part="
@@ -2076,8 +2078,8 @@ int DaosMultipartWriter::complete(
 }
 
 std::unique_ptr<RGWRole> DaosStore::get_role(
-    std::string name, std::string tenant, std::string path,
-    std::string trust_policy, std::string max_session_duration_str,
+    std::string name, std::string tenant, rgw_account_id account_id, std::string path,
+    std::string trust_policy, std::string description, std::string max_session_duration_str,
     std::multimap<std::string, std::string> tags) {
   RGWRole* p = nullptr;
   return std::unique_ptr<RGWRole>(p);
@@ -2093,21 +2095,42 @@ std::unique_ptr<RGWRole> DaosStore::get_role(std::string id) {
   return std::unique_ptr<RGWRole>(p);
 }
 
-int DaosStore::get_roles(const DoutPrefixProvider* dpp, optional_yield y,
-                         const std::string& path_prefix,
-                         const std::string& tenant,
-                         vector<std::unique_ptr<RGWRole>>& roles) {
+int DaosStore::list_roles(const DoutPrefixProvider *dpp,
+                          optional_yield y,
+                          const std::string& tenant,
+                          const std::string& path_prefix,
+                          const std::string& marker,
+                          uint32_t max_items,
+                          RoleList& listing) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-std::unique_ptr<RGWOIDCProvider> DaosStore::get_oidc_provider() {
-  RGWOIDCProvider* p = nullptr;
-  return std::unique_ptr<RGWOIDCProvider>(p);
+int DaosStore::store_oidc_provider(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   const RGWOIDCProviderInfo& info,
+                                   bool exclusive) {
+  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosStore::get_oidc_providers(
-    const DoutPrefixProvider* dpp, const std::string& tenant,
-    vector<std::unique_ptr<RGWOIDCProvider>>& providers) {
+int DaosStore::load_oidc_provider(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view tenant,
+                                  std::string_view url,
+                                  RGWOIDCProviderInfo& info) {
+  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
+}
+
+int DaosStore::delete_oidc_provider(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view tenant,
+                                    std::string_view url) {
+  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
+}
+
+int DaosStore::get_oidc_providers(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view tenant,
+                                  std::vector<RGWOIDCProviderInfo>& providers) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
@@ -2120,7 +2143,7 @@ std::unique_ptr<MultipartUpload> DaosBucket::get_multipart_upload(
 
 std::unique_ptr<Writer> DaosStore::get_append_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
-    rgw::sal::Object* obj, const rgw_user& owner,
+    rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule,
     const std::string& unique_tag, uint64_t position,
     uint64_t* cur_accounted_size) {
@@ -2130,7 +2153,7 @@ std::unique_ptr<Writer> DaosStore::get_append_writer(
 
 std::unique_ptr<Writer> DaosStore::get_atomic_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
-    rgw::sal::Object* obj, const rgw_user& owner,
+    rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule, uint64_t olh_epoch,
     const std::string& unique_tag) {
   ldpp_dout(dpp, 20) << "get_atomic_writer" << dendl;

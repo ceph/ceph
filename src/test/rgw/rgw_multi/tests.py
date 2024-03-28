@@ -545,10 +545,10 @@ def create_role_per_zone(zonegroup_conns, roles_per_zone = 1):
         for i in range(roles_per_zone):
             role_name = gen_role_name()
             log.info('create role zone=%s name=%s', zone.name, role_name)
-            policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/testuser\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
-            role = zone.create_role("", role_name, policy_document, "")
+            policy_document = json.dumps({'Version': '2012-10-17', 'Statement': [{'Effect': 'Allow', 'Principal': {'AWS': 'arn:aws:iam:::user/testuser'}, 'Action': ['sts:AssumeRole']}]})
+            zone.iam_conn.create_role(RoleName=role_name, AssumeRolePolicyDocument=policy_document)
             roles.append(role_name)
-            zone_role.append((zone, role))
+            zone_role.append((zone, role_name))
 
     return roles, zone_role
 
@@ -639,9 +639,131 @@ def check_bucket_eq(zone_conn1, zone_conn2, bucket):
     if zone_conn2.zone.has_buckets():
         zone_conn2.check_bucket_eq(zone_conn1, bucket.name)
 
-def check_role_eq(zone_conn1, zone_conn2, role):
-    if zone_conn2.zone.has_roles():
-        zone_conn2.check_role_eq(zone_conn1, role['create_role_response']['create_role_result']['role']['role_name'])
+def check_role_eq(zone_conn1, zone_conn2, role_name):
+    iam1 = zone_conn1.iam_conn
+    iam2 = zone_conn2.iam_conn
+
+    r1 = iam1.get_role(RoleName=role_name)
+    r2 = iam2.get_role(RoleName=role_name)
+    eq(r1['Role'], r2['Role'])
+
+    # compare inline policies
+    policies1 = iam1.get_paginator('list_role_policies').paginate(RoleName=role_name)
+    policies2 = iam2.get_paginator('list_role_policies').paginate(RoleName=role_name)
+    for p1, p2 in zip(policies1, policies2):
+        eq(p1['PolicyNames'], p2['PolicyNames'])
+
+    # compare managed policies
+    policies1 = iam1.get_paginator('list_attached_role_policies').paginate(RoleName=role_name)
+    policies2 = iam2.get_paginator('list_attached_role_policies').paginate(RoleName=role_name)
+    for p1, p2 in zip(policies1, policies2):
+        eq(p1['AttachedPolicies'], p2['AttachedPolicies'])
+
+def check_roles_eq(zone_conn1, zone_conn2):
+    iam1 = zone_conn1.iam_conn
+    iam2 = zone_conn2.iam_conn
+
+    roles1 = iam1.get_paginator('list_roles').paginate()
+    roles2 = iam2.get_paginator('list_roles').paginate()
+    for r1, r2 in zip(roles1, roles2):
+        eq(r1['Roles'], r2['Roles'])
+
+        for role in r1['Roles']:
+            check_role_eq(zone_conn1, zone_conn2, role['RoleName'])
+
+def check_user_eq(zone_conn1, zone_conn2, user_name):
+    iam1 = zone_conn1.iam_conn
+    iam2 = zone_conn2.iam_conn
+
+    r1 = iam1.get_user(UserName=user_name)
+    r2 = iam2.get_user(UserName=user_name)
+    eq(r1['User'], r2['User'])
+
+    # compare access keys
+    keys1 = iam1.get_paginator('list_access_keys').paginate(UserName=user_name)
+    keys2 = iam2.get_paginator('list_access_keys').paginate(UserName=user_name)
+    for k1, k2 in zip(keys1, keys2):
+        eq(k1['AccessKeyMetadata'], k2['AccessKeyMetadata'])
+
+    # compare group memberships
+    groups1 = iam1.get_paginator('list_groups_for_user').paginate(UserName=user_name)
+    groups2 = iam2.get_paginator('list_groups_for_user').paginate(UserName=user_name)
+    for g1, g2 in zip(groups1, groups2):
+        eq(g1['Groups'], g2['Groups'])
+
+    # compare inline policies
+    policies1 = iam1.get_paginator('list_user_policies').paginate(UserName=user_name)
+    policies2 = iam2.get_paginator('list_user_policies').paginate(UserName=user_name)
+    for p1, p2 in zip(policies1, policies2):
+        eq(p1['PolicyNames'], p2['PolicyNames'])
+
+    # compare managed policies
+    policies1 = iam1.get_paginator('list_attached_user_policies').paginate(UserName=user_name)
+    policies2 = iam2.get_paginator('list_attached_user_policies').paginate(UserName=user_name)
+    for p1, p2 in zip(policies1, policies2):
+        eq(p1['AttachedPolicies'], p2['AttachedPolicies'])
+
+def check_users_eq(zone_conn1, zone_conn2):
+    iam1 = zone_conn1.iam_conn
+    iam2 = zone_conn2.iam_conn
+
+    users1 = iam1.get_paginator('list_users').paginate()
+    users2 = iam2.get_paginator('list_users').paginate()
+    for u1, u2 in zip(users1, users2):
+        eq(u1['Users'], u2['Users'])
+
+        for user in u1['Users']:
+            check_user_eq(zone_conn1, zone_conn2, user['UserName'])
+
+def check_group_eq(zone_conn1, zone_conn2, group_name):
+    iam1 = zone_conn1.iam_conn
+    iam2 = zone_conn2.iam_conn
+
+    r1 = iam1.get_group(GroupName=group_name)
+    r2 = iam2.get_group(GroupName=group_name)
+    eq(r1['Group'], r2['Group'])
+
+    # compare inline policies
+    policies1 = iam1.get_paginator('list_group_policies').paginate(GroupName=group_name)
+    policies2 = iam2.get_paginator('list_group_policies').paginate(GroupName=group_name)
+    for p1, p2 in zip(policies1, policies2):
+        eq(p1['PolicyNames'], p2['PolicyNames'])
+
+    # compare managed policies
+    policies1 = iam1.get_paginator('list_attached_group_policies').paginate(GroupName=group_name)
+    policies2 = iam2.get_paginator('list_attached_group_policies').paginate(GroupName=group_name)
+    for p1, p2 in zip(policies1, policies2):
+        eq(p1['AttachedPolicies'], p2['AttachedPolicies'])
+
+def check_groups_eq(zone_conn1, zone_conn2):
+    iam1 = zone_conn1.iam_conn
+    iam2 = zone_conn2.iam_conn
+
+    groups1 = iam1.get_paginator('list_groups').paginate()
+    groups2 = iam2.get_paginator('list_groups').paginate()
+    for g1, g2 in zip(groups1, groups2):
+        eq(g1['Groups'], g2['Groups'])
+
+        for group in g1['Groups']:
+            check_group_eq(zone_conn1, zone_conn2, group['GroupName'])
+
+def check_oidc_provider_eq(zone_conn1, zone_conn2, arn):
+    iam1 = zone_conn1.iam_conn
+    iam2 = zone_conn2.iam_conn
+
+    p1 = iam1.get_open_id_connect_provider(OpenIDConnectProviderArn=arn)
+    p2 = iam2.get_open_id_connect_provider(OpenIDConnectProviderArn=arn)
+    eq(p1, p2)
+
+def check_oidc_providers_eq(zone_conn1, zone_conn2):
+    iam1 = zone_conn1.iam_conn
+    iam2 = zone_conn2.iam_conn
+
+    providers1 = iam1.list_open_id_connect_providers()['OpenIDConnectProviderList']
+    providers2 = iam2.list_open_id_connect_providers()['OpenIDConnectProviderList']
+    for p1, p2 in zip(providers1, providers2):
+        eq(p1, p2)
+        check_oidc_provider_eq(zone_conn1, zone_conn2, p1['Arn'])
 
 def test_object_sync():
     zonegroup = realm.master_zonegroup()
@@ -1770,34 +1892,33 @@ def test_role_sync():
 
     zonegroup_meta_checkpoint(zonegroup)
 
-    for source_conn, role in zone_role:
-        for target_conn in zonegroup_conns.zones:
-            if source_conn.zone == target_conn.zone:
-                continue
-
-            check_role_eq(source_conn, target_conn, role)
+    for source_conn, target_conn in combinations(zonegroup_conns.zones, 2):
+        if target_conn.zone.has_roles():
+            check_roles_eq(source_conn, target_conn)
 
 def test_role_delete_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
     role_name = gen_role_name()
     log.info('create role zone=%s name=%s', zonegroup_conns.master_zone.name, role_name)
-    zonegroup_conns.master_zone.create_role("", role_name, None, "")
+    policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/testuser\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
+    zonegroup_conns.master_zone.iam_conn.create_role(RoleName=role_name, AssumeRolePolicyDocument=policy_document)
 
     zonegroup_meta_checkpoint(zonegroup)
 
     for zone in zonegroup_conns.zones:
         log.info(f'checking if zone: {zone.name} has role: {role_name}')
-        assert(zone.has_role(role_name))
+        zone.iam_conn.get_role(RoleName=role_name)
         log.info(f'success, zone: {zone.name} has role: {role_name}')
 
     log.info(f"deleting role: {role_name}")
-    zonegroup_conns.master_zone.delete_role(role_name)
+    zonegroup_conns.master_zone.iam_conn.delete_role(RoleName=role_name)
     zonegroup_meta_checkpoint(zonegroup)
 
     for zone in zonegroup_conns.zones:
         log.info(f'checking if zone: {zone.name} does not have role: {role_name}')
-        assert(not zone.has_role(role_name))
+        assert_raises(zone.iam_conn.exceptions.NoSuchEntityException,
+                      zone.iam_conn.get_role, RoleName=role_name)
         log.info(f'success, zone: {zone.name} does not have role: {role_name}')
 
 
@@ -3248,3 +3369,71 @@ def test_topic_notification_sync():
     for conn in zonegroup_conns.zones:
         topic_list = conn.list_topics()
         assert_equal(len(topic_list), 0)
+
+def test_account_metadata_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    inline_policy = json.dumps({'Version': '2012-10-17', 'Statement': [{'Effect': 'Allow', 'Action': 's3:*', 'Resource': '*'}]})
+    managed_policy_arn = 'arn:aws:iam::aws:policy/AmazonS3FullAccess'
+
+    for source_conn in zonegroup_conns.rw_zones:
+        iam = source_conn.iam_conn
+        name = source_conn.name
+        # create user, add access key, user policy, managed policy
+        iam.create_user(UserName=name)
+        iam.create_access_key(UserName=name)
+        iam.put_user_policy(UserName=name, PolicyName='Allow', PolicyDocument=inline_policy)
+        iam.attach_user_policy(UserName=name, PolicyArn=managed_policy_arn)
+        # create group, group policy, managed policy, add user to group
+        iam.create_group(GroupName=name)
+        iam.put_group_policy(GroupName=name, PolicyName='Allow', PolicyDocument=inline_policy)
+        iam.attach_group_policy(GroupName=name, PolicyArn=managed_policy_arn)
+        iam.add_user_to_group(GroupName=name, UserName=name)
+        # create role, role policy, managed policy
+        iam.create_role(RoleName=name, AssumeRolePolicyDocument=json.dumps({'Version': '2012-10-17', 'Statement': [{'Effect': 'Allow', 'Principal': {'AWS': 'arn:aws:iam:::user/testuser'}, 'Action': ['sts:AssumeRole']}]}))
+        iam.put_role_policy(RoleName=name, PolicyName='Allow', PolicyDocument=inline_policy)
+        iam.attach_role_policy(RoleName=name, PolicyArn=managed_policy_arn)
+        # TODO: test oidc provider
+        #iam.create_open_id_connect_provider(ClientIDList=['clientid'], ThumbprintList=['3768084dfb3d2b68b7897bf5f565da8efEXAMPLE'], Url=f'http://{name}.example.com')
+
+    realm_meta_checkpoint(realm)
+
+    # check that all users/groups/roles are equal across all zones
+    for source_conn, target_conn in combinations(zonegroup_conns.zones, 2):
+        if target_conn.zone.has_roles():
+            check_roles_eq(source_conn, target_conn)
+            check_users_eq(source_conn, target_conn)
+            check_groups_eq(source_conn, target_conn)
+            check_oidc_providers_eq(source_conn, target_conn)
+
+    for source_conn in zonegroup_conns.rw_zones:
+        iam = source_conn.iam_conn
+        name = source_conn.name
+
+        #iam.delete_open_id_connect_provider(OpenIDConnectProviderArn=f'arn:aws:iam::RGW11111111111111111:oidc-provider/{name}.example.com')
+
+        iam.detach_role_policy(RoleName=name, PolicyArn=managed_policy_arn)
+        iam.delete_role_policy(RoleName=name, PolicyName='Allow')
+        iam.delete_role(RoleName=name)
+
+        iam.remove_user_from_group(GroupName=name, UserName=name)
+        iam.detach_group_policy(GroupName=name, PolicyArn=managed_policy_arn)
+        iam.delete_group_policy(GroupName=name, PolicyName='Allow')
+        iam.delete_group(GroupName=name)
+
+        iam.detach_user_policy(UserName=name, PolicyArn=managed_policy_arn)
+        iam.delete_user_policy(UserName=name, PolicyName='Allow')
+        key_id = iam.list_access_keys(UserName=name)['AccessKeyMetadata'][0]['AccessKeyId']
+        iam.delete_access_key(UserName=name, AccessKeyId=key_id)
+        iam.delete_user(UserName=name)
+
+    realm_meta_checkpoint(realm)
+
+    # check that all users/groups/roles are equal across all zones
+    for source_conn, target_conn in combinations(zonegroup_conns.zones, 2):
+        if target_conn.zone.has_roles():
+            check_roles_eq(source_conn, target_conn)
+            check_users_eq(source_conn, target_conn)
+            check_groups_eq(source_conn, target_conn)
+            check_oidc_providers_eq(source_conn, target_conn)

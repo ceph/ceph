@@ -127,10 +127,10 @@ public:
   }
   size_t get_endpoint_count() const { return endpoints.size(); }
 
-  virtual void populate_params(param_vec_t& params, const rgw_user *uid, const std::string& zonegroup);
+  virtual void populate_params(param_vec_t& params, const rgw_owner* uid, const std::string& zonegroup);
 
   /* sync request */
-  int forward(const DoutPrefixProvider *dpp, const rgw_user& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
+  int forward(const DoutPrefixProvider *dpp, const rgw_owner& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
 
   /* sync request */
   int forward_iam_request(const DoutPrefixProvider *dpp, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
@@ -138,13 +138,13 @@ public:
 
   /* async requests */
   int put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
-  int put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_user& uid, const rgw_obj& obj,
+  int put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_owner& uid, const rgw_obj& obj,
                          std::map<std::string, bufferlist>& attrs, RGWRESTStreamS3PutObj **req);
   int complete_request(RGWRESTStreamS3PutObj *req, std::string& etag,
                        ceph::real_time *mtime, optional_yield y);
 
   struct get_obj_params {
-    rgw_user uid;
+    rgw_owner uid;
     req_info *info{nullptr};
     const ceph::real_time *mod_ptr{nullptr};
     const ceph::real_time *unmod_ptr{nullptr};
@@ -172,7 +172,7 @@ public:
 
   int get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
 
-  int get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
+  int get_obj(const DoutPrefixProvider *dpp, const rgw_owner& uid, req_info *info /* optional */, const rgw_obj& obj,
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
@@ -221,12 +221,9 @@ private:
       params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", zonegroup));
     }
   }
-  void populate_uid(param_vec_t& params, const rgw_user *uid) {
+  void populate_uid(param_vec_t& params, const rgw_owner* uid) {
     if (uid) {
-      std::string uid_str = uid->to_str();
-      if (!uid->empty()){
-        params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
-      }
+      params.emplace_back(RGW_SYS_PARAM_PREFIX "uid", to_string(*uid));
     }
   }
 };
@@ -241,7 +238,8 @@ public:
     RGWRESTConn(_cct, _remote_id, endpoints, _cred, _zone_group, _api_name, _host_style) {}
   ~S3RESTConn() override = default;
 
-  void populate_params(param_vec_t& params, const rgw_user *uid, const std::string& zonegroup) override {
+  void populate_params(param_vec_t& params, const rgw_owner* uid,
+                       const std::string& zonegroup) override {
     // do not populate any params in S3 REST Connection.
     return;
   }

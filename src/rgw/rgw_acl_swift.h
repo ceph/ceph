@@ -7,6 +7,7 @@
 #include "rgw_sal_fwd.h"
 #include "rgw_user_types.h"
 
+struct ACLOwner;
 class DoutPrefixProvider;
 class RGWAccessControlPolicy;
 
@@ -16,8 +17,7 @@ namespace rgw::swift {
 /// X-Container-Read/X-Container-Write.
 int create_container_policy(const DoutPrefixProvider *dpp,
                             rgw::sal::Driver* driver,
-                            const rgw_user& id,
-                            const std::string& name,
+                            const ACLOwner& owner,
                             const char* read_list,
                             const char* write_list,
                             uint32_t& rw_mask,
@@ -35,8 +35,7 @@ void format_container_acls(const RGWAccessControlPolicy& policy,
 /// Create a policy based on swift account acl header X-Account-Access-Control.
 int create_account_policy(const DoutPrefixProvider* dpp,
                           rgw::sal::Driver* driver,
-                          const rgw_user& id,
-                          const std::string& name,
+                          const ACLOwner& owner,
                           const std::string& acl_str,
                           RGWAccessControlPolicy& policy);
 

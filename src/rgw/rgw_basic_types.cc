@@ -7,6 +7,7 @@
 
 #include "cls/user/cls_user_types.h"
 
+#include "rgw_account.h"
 #include "rgw_basic_types.h"
 #include "rgw_bucket.h"
 #include "rgw_xml.h"
@@ -170,11 +171,63 @@ ostream& operator <<(ostream& m, const Principal& p) {
     return m << "*";
   }
 
-  m << "arn:aws:iam:" << p.get_tenant() << ":";
-  if (p.is_tenant()) {
+  m << "arn:aws:iam:" << p.get_account() << ":";
+  if (p.is_account()) {
     return m << "root";
   }
   return m << (p.is_user() ? "user/" : "role/") << p.get_id();
 }
 }
+}
+
+// rgw_account_id
+void encode_json_impl(const char* name, const rgw_account_id& id, Formatter* f)
+{
+  f->dump_string(name, id);
+}
+
+void decode_json_obj(rgw_account_id& id, JSONObj* obj)
+{
+  decode_json_obj(static_cast<std::string&>(id), obj);
+}
+
+// rgw_owner variant
+rgw_owner parse_owner(const std::string& str)
+{
+  if (rgw::account::validate_id(str)) {
+    return rgw_account_id{str};
+  } else {
+    return rgw_user{str};
+  }
+}
+
+std::string to_string(const rgw_owner& o)
+{
+  struct visitor {
+    std::string operator()(const rgw_account_id& a) { return a; }
+    std::string operator()(const rgw_user& u) { return u.to_str(); }
+  };
+  return std::visit(visitor{}, o);
+}
+
+std::ostream& operator<<(std::ostream& out, const rgw_owner& o)
+{
+  struct visitor {
+    std::ostream& out;
+    std::ostream& operator()(const rgw_account_id& a) { return out << a; }
+    std::ostream& operator()(const rgw_user& u) { return out << u; }
+  };
+  return std::visit(visitor{out}, o);
+}
+
+void encode_json_impl(const char *name, const rgw_owner& o, ceph::Formatter *f)
+{
+  encode_json(name, to_string(o), f);
+}
+
+void decode_json_obj(rgw_owner& o, JSONObj *obj)
+{
+  std::string str;
+  decode_json_obj(str, obj);
+  o = parse_owner(str);
 }

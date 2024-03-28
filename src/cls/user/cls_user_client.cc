@@ -162,3 +162,124 @@ int cls_user_get_header_async(IoCtx& io_ctx, string& oid, RGWGetUserHeader_CB *c
 
   return 0;
 }
+
+
+void cls_user_account_resource_add(librados::ObjectWriteOperation& op,
+                                   const cls_user_account_resource& entry,
+                                   bool exclusive, uint32_t limit)
+{
+  cls_user_account_resource_add_op call;
+  call.entry = entry;
+  call.exclusive = exclusive;
+  call.limit = limit;
+
+  bufferlist inbl;
+  encode(call, inbl);
+  op.exec("user", "account_resource_add", inbl);
+}
+
+class ResourceGetCB : public librados::ObjectOperationCompletion {
+  cls_user_account_resource* entry;
+  int* pret;
+public:
+  ResourceGetCB(cls_user_account_resource* entry, int* pret)
+    : entry(entry), pret(pret)
+  {}
+  void handle_completion(int r, bufferlist& outbl) override {
+    if (r >= 0) {
+      cls_user_account_resource_get_ret ret;
+      try {
+        auto iter = outbl.cbegin();
+        decode(ret, iter);
+        if (entry) {
+          *entry = std::move(ret.entry);
+        }
+      } catch (const ceph::buffer::error& err) {
+        r = -EIO;
+      }
+    }
+    if (pret) {
+      *pret = r;
+    }
+  }
+};
+
+void cls_user_account_resource_get(librados::ObjectReadOperation& op,
+                                   std::string_view name,
+                                   cls_user_account_resource& entry,
+                                   int* pret)
+{
+  cls_user_account_resource_get_op call;
+  call.name = name;
+
+  bufferlist inbl;
+  encode(call, inbl);
+  op.exec("user", "account_resource_get", inbl,
+          new ResourceGetCB(&entry, pret));
+}
+
+void cls_user_account_resource_rm(librados::ObjectWriteOperation& op,
+                                  std::string_view name)
+{
+  cls_user_account_resource_rm_op call;
+  call.name = name;
+
+  bufferlist inbl;
+  encode(call, inbl);
+  op.exec("user", "account_resource_rm", inbl);
+}
+
+class ResourceListCB : public librados::ObjectOperationCompletion {
+  std::vector<cls_user_account_resource>* entries;
+  bool* truncated;
+  std::string* next_marker;
+  int* pret;
+public:
+  ResourceListCB(std::vector<cls_user_account_resource>* entries,
+                 bool* truncated, std::string* next_marker, int* pret)
+    : entries(entries), truncated(truncated),
+      next_marker(next_marker), pret(pret)
+  {}
+  void handle_completion(int r, bufferlist& outbl) override {
+    if (r >= 0) {
+      cls_user_account_resource_list_ret ret;
+      try {
+        auto iter = outbl.cbegin();
+        decode(ret, iter);
+        if (entries) {
+          *entries = std::move(ret.entries);
+        }
+        if (next_marker) {
+          *next_marker = std::move(ret.marker);
+        }
+        if (truncated) {
+          *truncated = ret.truncated;
+        }
+      } catch (const ceph::buffer::error& err) {
+        r = -EIO;
+      }
+    }
+    if (pret) {
+      *pret = r;
+    }
+  }
+};
+
+void cls_user_account_resource_list(librados::ObjectReadOperation& op,
+                                    std::string_view marker,
+                                    std::string_view path_prefix,
+                                    uint32_t max_entries,
+                                    std::vector<cls_user_account_resource>& entries,
+                                    bool* truncated, std::string* next_marker,
+                                    int* pret)
+{
+  cls_user_account_resource_list_op call;
+  call.marker = marker;
+  call.path_prefix = path_prefix;
+  call.max_entries = max_entries;
+
+  bufferlist inbl;
+  encode(call, inbl);
+  op.exec("user", "account_resource_list", inbl,
+          new ResourceListCB(&entries, truncated, next_marker, pret));
+}

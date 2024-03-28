@@ -216,9 +216,57 @@ struct cls_user_header {
 };
 WRITE_CLASS_ENCODER(cls_user_header)
 
+// omap header for an account index object
+struct cls_user_account_header {
+  uint32_t count = 0;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(count, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(count, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_account_header*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_account_header)
+
+// account resource entry
+struct cls_user_account_resource {
+  // index by name for put/delete
+  std::string name;
+  // index by path for listing by PathPrefix
+  std::string path;
+  // additional opaque metadata depending on resource type
+  ceph::buffer::list metadata;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(name, bl);
+    encode(path, bl);
+    encode(metadata, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(name, bl);
+    decode(path, bl);
+    decode(metadata, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_account_resource*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_account_resource)
+
 void cls_user_gen_test_bucket(cls_user_bucket *bucket, int i);
 void cls_user_gen_test_bucket_entry(cls_user_bucket_entry *entry, int i);
 void cls_user_gen_test_stats(cls_user_stats *stats);
 void cls_user_gen_test_header(cls_user_header *h);
+void cls_user_gen_test_resource(cls_user_account_resource& r);
 
 #endif

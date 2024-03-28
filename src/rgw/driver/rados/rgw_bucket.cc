@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include "include/function2.hpp"
 #include "rgw_acl_s3.h"
 #include "rgw_tag_s3.h"
 
@@ -12,6 +13,8 @@
 #include "services/svc_bucket.h"
 #include "services/svc_user.h"
 
+#include "account.h"
+#include "buckets.h"
 #include "rgw_reshard.h"
 #include "rgw_pubsub.h"
 
@@ -90,17 +93,18 @@ static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,
   }
 }
 
-void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& user,
-				   bool fix,
-				   optional_yield y,
-                                   const DoutPrefixProvider *dpp)
+void check_bad_owner_bucket_mapping(rgw::sal::Driver* driver,
+                                    const rgw_owner& owner,
+                                    const std::string& tenant,
+                                    bool fix, optional_yield y,
+                                    const DoutPrefixProvider *dpp)
 {
   size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
 
   rgw::sal::BucketList listing;
   do {
-    int ret = user.list_buckets(dpp, listing.next_marker, string(),
-                                max_entries, false, listing, y);
+    int ret = driver->list_buckets(dpp, owner, tenant, listing.next_marker,
+                                   string(), max_entries, false, listing, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "failed to read user buckets: "
           << cpp_strerror(-ret) << dendl;
@@ -109,7 +113,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& use
 
     for (const auto& ent : listing.buckets) {
       std::unique_ptr<rgw::sal::Bucket> bucket;
-      int r = driver->load_bucket(dpp, rgw_bucket(user.get_tenant(), ent.bucket.name),
+      int r = driver->load_bucket(dpp, rgw_bucket(tenant, ent.bucket.name),
                                   &bucket, y);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket << dendl;
@@ -121,7 +125,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& use
             << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-	  r = bucket->chown(dpp, user.get_id(), y);
+	  r = bucket->chown(dpp, owner, y);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
@@ -983,15 +987,21 @@ int RGWBucketAdminOp::dump_s3_policy(rgw::sal::Driver* driver, RGWBucketAdminOpS
   return 0;
 }
 
-int RGWBucketAdminOp::unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y)
+int RGWBucketAdminOp::unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, string *err)
 {
-  RGWBucket bucket;
+  auto radosdriver = dynamic_cast<rgw::sal::RadosStore*>(driver);
+  if (!radosdriver) {
+    set_err_msg(err, "rados store only");
+    return -ENOTSUP;
+  }
 
+  RGWBucket bucket;
   int ret = bucket.init(driver, op_state, y, dpp);
   if (ret < 0)
     return ret;
 
-  return static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->unlink_bucket(op_state.get_user_id(), op_state.get_bucket()->get_info().bucket, y, dpp, true);
+  auto* rados = radosdriver->getRados()->get_rados_handle();
+  return radosdriver->ctl()->bucket->unlink_bucket(*rados, op_state.get_user_id(), op_state.get_bucket()->get_info().bucket, y, dpp, true);
 }
 
 int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, string *err)
@@ -999,6 +1009,11 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
   if (!op_state.is_user_op()) {
     set_err_msg(err, "empty user id");
     return -EINVAL;
+  }
+  auto radosdriver = dynamic_cast<rgw::sal::RadosStore*>(driver);
+  if (!radosdriver) {
+    set_err_msg(err, "rados store only");
+    return -ENOTSUP;
   }
 
   RGWBucket bucket;
@@ -1057,9 +1072,10 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
     return -EIO;
   }
 
-  int r = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->unlink_bucket(owner.id, old_bucket->get_info().bucket, y, dpp, false);
+  auto* rados = radosdriver->getRados()->get_rados_handle();
+  int r = radosdriver->ctl()->bucket->unlink_bucket(*rados, owner.id, old_bucket->get_info().bucket, y, dpp, false);
   if (r < 0) {
-    set_err_msg(err, "could not unlink policy from user " + owner.id.to_str());
+    set_err_msg(err, "could not unlink bucket from owner " + to_string(owner.id));
     return r;
   }
 
@@ -1098,7 +1114,7 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
   rgw::sal::Attrs ep_attrs;
   rgw_ep_info ep_data{ep, ep_attrs};
 
-  r = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->link_bucket(op_state.get_user_id(), loc_bucket->get_info().bucket, loc_bucket->get_info().creation_time, y, dpp, true, &ep_data);
+  r = radosdriver->ctl()->bucket->link_bucket(*rados, op_state.get_user_id(), loc_bucket->get_info().bucket, loc_bucket->get_info().creation_time, y, dpp, true, &ep_data);
   if (r < 0) {
     set_err_msg(err, "failed to relink bucket");
     return r;
@@ -1106,7 +1122,7 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
 
   if (*loc_bucket != *old_bucket) {
     // like RGWRados::delete_bucket -- excepting no bucket_index work.
-    r = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->remove_bucket_entrypoint_info(
+    r = radosdriver->ctl()->bucket->remove_bucket_entrypoint_info(
 					old_bucket->get_key(), y, dpp,
 					RGWBucketCtl::Bucket::RemoveParams()
 					.set_objv_tracker(&ep_data.ep_objv));
@@ -1114,7 +1130,7 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
       set_err_msg(err, "failed to unlink old bucket " + old_bucket->get_tenant() + "/" + old_bucket->get_name());
       return r;
     }
-    r = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->remove_bucket_instance_info(
+    r = radosdriver->ctl()->bucket->remove_bucket_instance_info(
 					old_bucket->get_key(), old_bucket->get_info(),
 					y, dpp,
 					RGWBucketCtl::BucketInstance::RemoveParams()
@@ -1368,7 +1384,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
   formatter->open_array_section("users");
 
   for (const auto& user_id : user_ids) {
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_id));
+    const auto user = rgw_user{user_id};
 
     formatter->open_object_section("user");
     formatter->dump_string("user_id", user_id);
@@ -1376,8 +1392,8 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 
     rgw::sal::BucketList listing;
     do {
-      ret = user->list_buckets(dpp, listing.next_marker, string(),
-                               max_entries, false, listing, y);
+      ret = driver->list_buckets(dpp, user, user.tenant, listing.next_marker,
+                                 string(), max_entries, false, listing, y);
       if (ret < 0)
         return ret;
 
@@ -1451,6 +1467,47 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
   return ret;
 } /* RGWBucketAdminOp::limit_check */
 
+static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  rgw::sal::Driver* driver,
+                                  const rgw_owner& owner,
+                                  const std::string& tenant,
+                                  const std::string& marker,
+                                  bool show_stats,
+                                  RGWFormatterFlusher& flusher)
+{
+  Formatter* formatter = flusher.get_formatter();
+  formatter->open_array_section("buckets");
+
+  const std::string empty_end_marker;
+  const size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+  constexpr bool no_need_stats = false; // set need_stats to false
+
+  rgw::sal::BucketList listing;
+  listing.next_marker = marker;
+  do {
+    int ret = driver->list_buckets(dpp, owner, tenant, listing.next_marker,
+                                   empty_end_marker, max_entries, no_need_stats,
+                                   listing, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    for (const auto& ent : listing.buckets) {
+      if (show_stats) {
+        bucket_stats(driver, tenant, ent.bucket.name, formatter, dpp, y);
+      } else {
+        formatter->dump_string("bucket", ent.bucket.name);
+      }
+    } // for loop
+
+    flusher.flush();
+  } while (!listing.next_marker.empty());
+
+  formatter->close_section();
+  return 0;
+}
+
 int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 			   RGWBucketAdminOpState& op_state,
 			   RGWFormatterFlusher& flusher,
@@ -1479,34 +1536,43 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       return ret;
     }
   } else if (op_state.is_user_op()) {
-    formatter->open_array_section("buckets");
+    const rgw_user& uid = op_state.get_user_id();
+    auto user = driver->get_user(uid);
+    ret = user->load_user(dpp, y);
+    if (ret < 0) {
+      return ret;
+    }
+    const RGWUserInfo& info = user->get_info();
+    if (!info.account_id.empty()) {
+      ldpp_dout(dpp, 1) << "Listing buckets in user account "
+          << info.account_id << dendl;
+      ret = list_owner_bucket_info(dpp, y, driver, info.account_id, uid.tenant,
+                                   op_state.marker, show_stats, flusher);
+    } else {
+      ret = list_owner_bucket_info(dpp, y, driver, uid, uid.tenant,
+                                   op_state.marker, show_stats, flusher);
+    }
+    if (ret < 0) {
+      return ret;
+    }
+  } else if (op_state.is_account_op()) {
+    // look up the account's tenant
+    const rgw_account_id& account_id = op_state.get_account_id();
+    RGWAccountInfo info;
+    rgw::sal::Attrs attrs; // ignored
+    RGWObjVersionTracker objv; // ignored
+    int ret = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "failed to load account " << account_id
+          << ": " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
 
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(op_state.get_user_id());
-    const std::string empty_end_marker;
-    const size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
-    constexpr bool no_need_stats = false; // set need_stats to false
-
-    rgw::sal::BucketList listing;
-    listing.next_marker = op_state.marker;
-    do {
-      ret = user->list_buckets(dpp, listing.next_marker, empty_end_marker,
-                               max_entries, no_need_stats, listing, y);
-      if (ret < 0) {
-        return ret;
-      }
-
-      for (const auto& ent : listing.buckets) {
-        if (show_stats) {
-          bucket_stats(driver, user_id.tenant, ent.bucket.name, formatter, dpp, y);
-	} else {
-          formatter->dump_string("bucket", ent.bucket.name);
-	}
-      } // for loop
-
-      flusher.flush();
-    } while (!listing.next_marker.empty());
-
-    formatter->close_section();
+    ret = list_owner_bucket_info(dpp, y, driver, account_id, info.tenant,
+                                 op_state.marker, show_stats, flusher);
+    if (ret < 0) {
+      return ret;
+    }
   } else {
     void *handle = nullptr;
     bool truncated = true;
@@ -1934,6 +2000,7 @@ void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
 
 class RGWBucketMetadataHandler : public RGWBucketMetadataHandlerBase {
 public:
+  librados::Rados& rados;
   struct Svc {
     RGWSI_Bucket *bucket{nullptr};
   } svc;
@@ -1942,7 +2009,8 @@ public:
     RGWBucketCtl *bucket{nullptr};
   } ctl;
 
-  RGWBucketMetadataHandler() {}
+  explicit RGWBucketMetadataHandler(librados::Rados& rados)
+    : rados(rados) {}
 
   void init(RGWSI_Bucket *bucket_svc,
             RGWBucketCtl *bucket_ctl) override {
@@ -2010,7 +2078,7 @@ public:
      * it immediately and don't want to invalidate our cached objv_version or the bucket obj removal
      * will incorrectly fail.
      */
-    ret = ctl.bucket->unlink_bucket(be.owner, be.bucket, y, dpp, false);
+    ret = ctl.bucket->unlink_bucket(rados, be.owner, be.bucket, y, dpp, false);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
@@ -2039,17 +2107,19 @@ public:
 class RGWMetadataHandlerPut_Bucket : public RGWMetadataHandlerPut_SObj
 {
   RGWBucketMetadataHandler *bhandler;
+  librados::Rados& rados;
   RGWBucketEntryMetadataObject *obj;
 public:
-  RGWMetadataHandlerPut_Bucket(RGWBucketMetadataHandler *_handler,
+  RGWMetadataHandlerPut_Bucket(RGWBucketMetadataHandler *_handler, librados::Rados& rados,
                                RGWSI_MetaBackend_Handler::Op *op, string& entry,
                                RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
 			       optional_yield y,
-                               RGWMDLogSyncType type, bool from_remote_zone) : RGWMetadataHandlerPut_SObj(_handler, op, entry, _obj, objv_tracker, y, type, from_remote_zone),
-                                                        bhandler(_handler) {
-    obj = static_cast<RGWBucketEntryMetadataObject *>(_obj);
-  }
-  ~RGWMetadataHandlerPut_Bucket() {}
+                               RGWMDLogSyncType type, bool from_remote_zone)
+    : RGWMetadataHandlerPut_SObj(_handler, op, entry, _obj, objv_tracker, y, type, from_remote_zone),
+     bhandler(_handler),
+     rados(rados),
+     obj(static_cast<RGWBucketEntryMetadataObject *>(_obj))
+  {}
 
   void encode_obj(bufferlist *bl) override {
     obj->get_ep().encode(*bl);
@@ -2066,7 +2136,8 @@ int RGWBucketMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op, string& 
                                      const DoutPrefixProvider *dpp,
                                      RGWMDLogSyncType type, bool from_remote_zone)
 {
-  RGWMetadataHandlerPut_Bucket put_op(this, op, entry, obj, objv_tracker, y, type, from_remote_zone);
+  RGWMetadataHandlerPut_Bucket put_op(this, rados, op, entry, obj, objv_tracker,
+                                      y, type, from_remote_zone);
   return do_put_operate(&put_op, dpp);
 }
 
@@ -2096,18 +2167,32 @@ int RGWMetadataHandlerPut_Bucket::put_checked(const DoutPrefixProvider *dpp)
 
 int RGWMetadataHandlerPut_Bucket::put_post(const DoutPrefixProvider *dpp)
 {
-  auto& be = obj->get_ep();
+  auto* orig_obj = static_cast<RGWBucketEntryMetadataObject *>(old_obj);
+  auto* old_be = orig_obj ? &orig_obj->get_ep() : nullptr;
+  auto& new_be = obj->get_ep();
 
-  int ret;
+  RGWBucketCtl& ctl = *bhandler->ctl.bucket;
+  constexpr bool update_entrypoint = false;
 
-  /* link bucket */
-  if (be.linked) {
-    ret = bhandler->ctl.bucket->link_bucket(be.owner, be.bucket, be.creation_time, y, dpp, false);
-  } else {
-    ret = bhandler->ctl.bucket->unlink_bucket(be.owner, be.bucket, y, dpp, false);
+  if (old_be && (old_be->owner != new_be.owner || // owner changed
+      (old_be->linked && !new_be.linked))) { // linked -> false
+    int ret = ctl.unlink_bucket(rados, old_be->owner, old_be->bucket,
+                                y, dpp, update_entrypoint);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
-  return ret;
+  if (new_be.linked && (!old_be || !old_be->linked || // linked -> true
+      old_be->owner != new_be.owner)) { // owner changed
+    int ret = ctl.link_bucket(rados, new_be.owner, new_be.bucket,
+                              new_be.creation_time, y, dpp, update_entrypoint);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  return 0;
 }
 
 int update_bucket_topic_mappings(const DoutPrefixProvider* dpp,
@@ -2261,7 +2346,8 @@ WRITE_CLASS_ENCODER(archive_meta_info)
 
 class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
 public:
-  RGWArchiveBucketMetadataHandler() {}
+  explicit RGWArchiveBucketMetadataHandler(librados::Rados& rados)
+    : RGWBucketMetadataHandler(rados) {}
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
                 optional_yield y, const DoutPrefixProvider *dpp) override {
@@ -2356,7 +2442,7 @@ public:
 
     /* link new bucket */
 
-    ret = ctl.bucket->link_bucket(new_be.owner, new_be.bucket, new_be.creation_time, y, dpp, false);
+    ret = ctl.bucket->link_bucket(rados, new_be.owner, new_be.bucket, new_be.creation_time, y, dpp, false);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to link new bucket for bucket=" << new_be.bucket << " ret=" << ret << dendl;
       return ret;
@@ -2364,7 +2450,7 @@ public:
 
     /* clean up old stuff */
 
-    ret = ctl.bucket->unlink_bucket(be.owner, entry_bucket, y, dpp, false);
+    ret = ctl.bucket->unlink_bucket(rados, be.owner, entry_bucket, y, dpp, false);
     if (ret < 0) {
         ldpp_dout(dpp, -1) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
     }
@@ -3096,7 +3182,8 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
 }
 
 
-int RGWBucketCtl::link_bucket(const rgw_user& user_id,
+int RGWBucketCtl::link_bucket(librados::Rados& rados,
+                              const rgw_owner& owner,
                               const rgw_bucket& bucket,
                               ceph::real_time creation_time,
 			      optional_yield y,
@@ -3105,13 +3192,28 @@ int RGWBucketCtl::link_bucket(const rgw_user& user_id,
                               rgw_ep_info *pinfo)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_link_bucket(ctx, user_id, bucket, creation_time,
+    return do_link_bucket(ctx, rados, owner, bucket, creation_time,
                           update_entrypoint, pinfo, y, dpp);
   });
 }
 
+static rgw_raw_obj get_owner_buckets_obj(RGWSI_User* svc_user,
+                                         RGWSI_Zone* svc_zone,
+                                         const rgw_owner& owner)
+{
+  return std::visit(fu2::overload(
+      [&] (const rgw_user& uid) {
+        return svc_user->get_buckets_obj(uid);
+      },
+      [&] (const rgw_account_id& account_id) {
+        const RGWZoneParams& zone = svc_zone->get_zone_params();
+        return rgwrados::account::get_buckets_obj(zone, account_id);
+      }), owner);
+}
+
 int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                                 const rgw_user& user_id,
+                                 librados::Rados& rados,
+                                 const rgw_owner& owner,
                                  const rgw_bucket& bucket,
                                  ceph::real_time creation_time,
                                  bool update_entrypoint,
@@ -3146,10 +3248,12 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
     }
   }
 
-  ret = svc.user->add_bucket(dpp, user_id, bucket, creation_time, y);
+  const auto& buckets_obj = get_owner_buckets_obj(svc.user, svc.zone, owner);
+  ret = rgwrados::buckets::add(dpp, y, rados, buckets_obj,
+                               bucket, creation_time);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: error adding bucket to user directory:"
-		  << " user=" << user_id
+    ldpp_dout(dpp, 0) << "ERROR: error adding bucket to owner directory:"
+		  << " owner=" << owner
                   << " bucket=" << bucket
 		  << " err=" << cpp_strerror(-ret)
 		  << dendl;
@@ -3160,7 +3264,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
     return 0;
 
   ep.linked = true;
-  ep.owner = user_id;
+  ep.owner = owner;
   ep.bucket = bucket;
   ret = svc.bucket->store_bucket_entrypoint_info(
     ctx, meta_key, ep, false, real_time(), pattrs, &rot, y, dpp);
@@ -3170,7 +3274,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   return 0;
 
 done_err:
-  int r = do_unlink_bucket(ctx, user_id, bucket, true, y, dpp);
+  int r = do_unlink_bucket(ctx, rados, owner, bucket, true, y, dpp);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed unlinking bucket on error cleanup: "
                            << cpp_strerror(-r) << dendl;
@@ -3178,21 +3282,25 @@ done_err:
   return ret;
 }
 
-int RGWBucketCtl::unlink_bucket(const rgw_user& user_id, const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp, bool update_entrypoint)
+int RGWBucketCtl::unlink_bucket(librados::Rados& rados, const rgw_owner& owner,
+                                const rgw_bucket& bucket, optional_yield y,
+                                const DoutPrefixProvider *dpp, bool update_entrypoint)
 {
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
-    return do_unlink_bucket(ctx, user_id, bucket, update_entrypoint, y, dpp);
+    return do_unlink_bucket(ctx, rados, owner, bucket, update_entrypoint, y, dpp);
   });
 }
 
 int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                                   const rgw_user& user_id,
+                                   librados::Rados& rados,
+                                   const rgw_owner& owner,
                                    const rgw_bucket& bucket,
                                    bool update_entrypoint,
 				   optional_yield y,
                                    const DoutPrefixProvider *dpp)
 {
-  int ret = svc.user->remove_bucket(dpp, user_id, bucket, y);
+  const auto& buckets_obj = get_owner_buckets_obj(svc.user, svc.zone, owner);
+  int ret = rgwrados::buckets::remove(dpp, y, rados, buckets_obj, bucket);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: error removing bucket from directory: "
         << cpp_strerror(-ret)<< dendl;
@@ -3214,8 +3322,8 @@ int RGWBucketCtl::do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   if (!ep.linked)
     return 0;
 
-  if (ep.owner != user_id) {
-    ldpp_dout(dpp, 0) << "bucket entry point user mismatch, can't unlink bucket: " << ep.owner << " != " << user_id << dendl;
+  if (ep.owner != owner) {
+    ldpp_dout(dpp, 0) << "bucket entry point owner mismatch, can't unlink bucket: " << ep.owner << " != " << owner << dendl;
     return -EINVAL;
   }
 
@@ -3233,19 +3341,20 @@ int RGWBucketCtl::read_bucket_stats(const rgw_bucket& bucket,
   });
 }
 
-int RGWBucketCtl::read_buckets_stats(map<string, RGWBucketEnt>& m,
+int RGWBucketCtl::read_buckets_stats(std::vector<RGWBucketEnt>& buckets,
                                      optional_yield y, const DoutPrefixProvider *dpp)
 {
   return call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    return svc.bucket->read_buckets_stats(ctx, m, y, dpp);
+    return svc.bucket->read_buckets_stats(ctx, buckets, y, dpp);
   });
 }
 
-int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp, 
-                                  const rgw_user& user_id,
-                                  const RGWBucketInfo& bucket_info,
-				  optional_yield y,
-                                  RGWBucketEnt* pent)
+int RGWBucketCtl::sync_owner_stats(const DoutPrefixProvider *dpp,
+                                   librados::Rados& rados,
+                                   const rgw_owner& owner,
+                                   const RGWBucketInfo& bucket_info,
+                                   optional_yield y,
+                                   RGWBucketEnt* pent)
 {
   RGWBucketEnt ent;
   if (!pent) {
@@ -3257,7 +3366,16 @@ int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  return svc.user->flush_bucket_stats(dpp, user_id, *pent, y);
+  // flush stats to the user/account owner object
+  const rgw_raw_obj& obj = std::visit(fu2::overload(
+      [&] (const rgw_user& user) {
+        return svc.user->get_buckets_obj(user);
+      },
+      [&] (const rgw_account_id& id) {
+        const RGWZoneParams& zone = svc.zone->get_zone_params();
+        return rgwrados::account::get_buckets_obj(zone, id);
+      }), owner);
+  return rgwrados::buckets::write_stats(dpp, y, rados, obj, *pent);
 }
 
 int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,
@@ -3305,9 +3423,9 @@ int RGWBucketCtl::bucket_imports_data(const rgw_bucket& bucket,
   return handler->bucket_imports_data();
 }
 
-RGWBucketMetadataHandlerBase* RGWBucketMetaHandlerAllocator::alloc()
+RGWBucketMetadataHandlerBase* RGWBucketMetaHandlerAllocator::alloc(librados::Rados& rados)
 {
-  return new RGWBucketMetadataHandler();
+  return new RGWBucketMetadataHandler(rados);
 }
 
 RGWBucketInstanceMetadataHandlerBase* RGWBucketInstanceMetaHandlerAllocator::alloc(rgw::sal::Driver* driver)
@@ -3315,9 +3433,9 @@ RGWBucketInstanceMetadataHandlerBase* RGWBucketInstanceMetaHandlerAllocator::all
   return new RGWBucketInstanceMetadataHandler(driver);
 }
 
-RGWBucketMetadataHandlerBase* RGWArchiveBucketMetaHandlerAllocator::alloc()
+RGWBucketMetadataHandlerBase* RGWArchiveBucketMetaHandlerAllocator::alloc(librados::Rados& rados)
 {
-  return new RGWArchiveBucketMetadataHandler();
+  return new RGWArchiveBucketMetadataHandler(rados);
 }
 
 RGWBucketInstanceMetadataHandlerBase* RGWArchiveBucketInstanceMetaHandlerAllocator::alloc(rgw::sal::Driver* driver)

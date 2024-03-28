@@ -18,7 +18,7 @@
 
 // acl grantee types
 struct ACLGranteeCanonicalUser {
-  rgw_user id;
+  rgw_owner id;
   std::string name;
 
   friend auto operator<=>(const ACLGranteeCanonicalUser&,
@@ -90,7 +90,7 @@ public:
     encode(type, bl);
 
     if (const ACLGranteeCanonicalUser* user = get_user(); user) {
-      encode(user->id.to_str(), bl);
+      encode(to_string(user->id), bl);
     } else {
       encode(std::string{}, bl); // encode empty id
     }
@@ -133,7 +133,7 @@ public:
     ACLGranteeCanonicalUser user;
     std::string s;
     decode(s, bl);
-    user.id.from_str(s);
+    user.id = parse_owner(s);
 
     std::string uri;
     decode(uri, bl);
@@ -180,7 +180,7 @@ public:
 
   static ACLGroupTypeEnum uri_to_group(std::string_view uri);
 
-  void set_canon(const rgw_user& id, const std::string& name, uint32_t perm) {
+  void set_canon(const rgw_owner& id, const std::string& name, uint32_t perm) {
     grantee = ACLGranteeCanonicalUser{id, name};
     permission.set_permissions(perm);
   }
@@ -330,13 +330,15 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<RGWAccessControlList*>& o);
 
+  bool empty() const { return grant_map.empty(); }
+
   void add_grant(const ACLGrant& grant);
-  void remove_canon_user_grant(const rgw_user& user_id);
+  void remove_canon_user_grant(const rgw_owner& user_id);
 
   ACLGrantMap& get_grant_map() { return grant_map; }
   const ACLGrantMap& get_grant_map() const { return grant_map; }
 
-  void create_default(const rgw_user& id, const std::string& name) {
+  void create_default(const rgw_owner& id, const std::string& name) {
     acl_user_map.clear();
     acl_group_map.clear();
     referer_list.clear();
@@ -352,13 +354,12 @@ public:
 WRITE_CLASS_ENCODER(RGWAccessControlList)
 
 struct ACLOwner {
-  rgw_user id;
+  rgw_owner id;
   std::string display_name;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 2, bl);
-    std::string s;
-    id.to_str(s);
+    const std::string s = to_string(id);
     encode(s, bl);
     encode(display_name, bl);
     ENCODE_FINISH(bl);
@@ -367,13 +368,15 @@ struct ACLOwner {
     DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     std::string s;
     decode(s, bl);
-    id.from_str(s);
+    id = parse_owner(s);
     decode(display_name, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<ACLOwner*>& o);
+
+  bool empty() const;
 
   auto operator<=>(const ACLOwner&) const = default;
 };
@@ -418,11 +421,13 @@ public:
     DECODE_FINISH(bl);
   }
 
+  bool empty() const { return acl.empty() && owner.empty(); }
+
   void set_owner(const ACLOwner& o) { owner = o; }
   const ACLOwner& get_owner() const { return owner; }
   ACLOwner& get_owner() { return owner; }
 
-  void create_default(const rgw_user& id, const std::string& name) {
+  void create_default(const rgw_owner& id, const std::string& name) {
     acl.create_default(id, name);
     owner.id = id;
     owner.display_name = name;

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <mutex>
+#include <optional>
 #include "rgw_common.h"
 #include "rgw_client_io.h"
 #include "rgw_rest.h"

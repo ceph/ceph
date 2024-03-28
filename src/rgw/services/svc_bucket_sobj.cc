@@ -626,13 +626,11 @@ int RGWSI_Bucket_SObj::read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
 }
 
 int RGWSI_Bucket_SObj::read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
-                                          map<string, RGWBucketEnt>& m,
+                                          std::vector<RGWBucketEnt>& buckets,
                                           optional_yield y,
                                           const DoutPrefixProvider *dpp)
 {
-  map<string, RGWBucketEnt>::iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    RGWBucketEnt& ent = iter->second;
+  for (auto& ent : buckets) {
     int r = read_bucket_stats(ctx, ent.bucket, &ent, y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): read_bucket_stats returned r=" << r << dendl;
@@ -640,5 +638,5 @@ int RGWSI_Bucket_SObj::read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
     }
   }
 
-  return m.size();
+  return buckets.size();
 }

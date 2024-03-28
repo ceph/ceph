@@ -30,32 +30,39 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWUserBuckets;
 
+// generate a random secret access key of SECRET_KEY_LEN=40
+void rgw_generate_secret_key(CephContext* cct,
+                             std::string& secret_key);
+
+// generate a unique random access key id of PUBLIC_ID_LEN=20
+int rgw_generate_access_key(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            rgw::sal::Driver* driver,
+                            std::string& access_key_id);
+
 /**
- * A string wrapper that includes encode/decode functions
- * for easily accessing a UID in all forms
+ * A string wrapper that includes encode/decode functions for easily accessing
+ * a UID in all forms. In some objects, this may refer to an account id instead
+ * of a user.
  */
 struct RGWUID
 {
-  rgw_user user_id;
+  std::string id;
   void encode(bufferlist& bl) const {
-    std::string s;
-    user_id.to_str(s);
     using ceph::encode;
-    encode(s, bl);
+    encode(id, bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    std::string s;
     using ceph::decode;
-    decode(s, bl);
-    user_id.from_str(s);
+    decode(id, bl);
   }
   void dump(Formatter *f) const {
-    f->dump_string("user_id", user_id.to_str());
+    f->dump_string("user_id", id);
   }
   static void generate_test_instances(std::list<RGWUID*>& o) {
     o.push_back(new RGWUID);
     o.push_back(new RGWUID);
-    o.back()->user_id.from_str("test:tester");
+    o.back()->id = "test:tester";
   }
 };
 WRITE_CLASS_ENCODER(RGWUID)
@@ -68,7 +75,9 @@ struct bucket_meta_entry {
   uint64_t count;
 };
 
-extern int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::User* user, optional_yield y);
+int rgw_sync_all_stats(const DoutPrefixProvider *dpp,
+                       optional_yield y, rgw::sal::Driver* driver,
+                       const rgw_owner& owner, const std::string& tenant);
 extern int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
   rgw::sal::Driver* driver, rgw::sal::User* user,
   std::map<std::string, bucket_meta_entry>& buckets_usage_map, optional_yield y);
@@ -116,6 +125,7 @@ struct RGWUserAdminOpState {
   __u8 suspended{0};
   __u8 admin{0};
   __u8 system{0};
+  __u8 account_root{0};
   __u8 exclusive{0};
   __u8 fetch_stats{0};
   __u8 sync_stats{0};
@@ -123,6 +133,9 @@ struct RGWUserAdminOpState {
   RGWObjVersionTracker objv;
   uint32_t op_mask{0};
   std::map<int, std::string> temp_url_keys;
+  std::string account_id;
+  std::string path;
+  std::optional<ceph::real_time> create_date;
 
   // subuser attributes
   std::string subuser;
@@ -163,6 +176,7 @@ struct RGWUserAdminOpState {
   bool suspension_op{false};
   bool admin_specified{false};
   bool system_specified{false};
+  bool account_root_specified{false};
   bool key_op{false};
   bool temp_url_key_specified{false};
   bool found_by_uid{false};
@@ -227,9 +241,7 @@ struct RGWUserAdminOpState {
     overwrite_new_user = b;
   }
 
-  void set_user_email(std::string& email) {
-   /* always lowercase email address */
-    boost::algorithm::to_lower(email);
+  void set_user_email(const std::string& email) {
     user_email = email;
     user_email_specified = true;
   }
@@ -293,6 +305,11 @@ struct RGWUserAdminOpState {
   void set_system(__u8 is_system) {
     system = is_system;
     system_specified = true;
+  }
+
+  void set_account_root(__u8 is_account_root) {
+    account_root = is_account_root;
+    account_root_specified = true;
   }
 
   void set_exclusive(__u8 is_exclusive) {
@@ -875,23 +892,6 @@ public:
   int remove_info(const DoutPrefixProvider *dpp, 
                   const RGWUserInfo& info, optional_yield y,
                   const RemoveParams& params = {});
-
-  int list_buckets(const DoutPrefixProvider *dpp, 
-                   const rgw_user& user,
-                   const std::string& marker,
-                   const std::string& end_marker,
-                   uint64_t max,
-                   bool need_stats,
-                   RGWUserBuckets *buckets,
-                   bool *is_truncated,
-		   optional_yield y,
-                   uint64_t default_max = 1000);
-
-  int read_stats(const DoutPrefixProvider *dpp, 
-                 const rgw_user& user, RGWStorageStats *stats,
-		 optional_yield y,
-		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
-		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
 };
 
 class RGWUserMetaHandlerAllocator {
