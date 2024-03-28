@@ -177,10 +177,31 @@ Limitations
 CSV support
 ~~~~~~~~~~~
 
-At the moment, the Microsoft Failover Cluster can't use WNBD disks as
-Cluster Shared Volumes (CSVs) underlying storage. The main reason is that
-``WNBD`` and ``rbd-wnbd`` don't support the *SCSI Persistent Reservations*
-feature yet.
+Microsoft Failover Cluster requires SCSI Persistent Reservation support.
+
+This ``rbd-wnbd`` feature is currently experimental and can be enabled using
+the ``enable-pr`` flag::
+
+    rbd device map test_image -o enable-pr
+
+The workflow resembles the ``target_core_rbd`` module provided by some SUSE
+distributions and commonly used with the ceph iSCSI gateway. Specifically, the
+persistent reservations are stored as rados extended attributes and are
+verified before every IO operation.
+
+However, there are a few drawbacks:
+
+* the performance can be affected by the additional round-trip performed for
+  every IO request.
+* data consistency concerns - if the node temporarily loses connection, gets
+  preempted and then recovers network connectivity, queued IO operations may
+  submitted, ignoring the current reservations. This might be mitigated
+  by carefully configuring timeouts.
+* only Windows hosts are aware of the scsi reservations
+
+Some of the above limitations may be eventually addressed using features such
+as rbd locks, rados blocklists and compound operations such as "compare and
+write".
 
 Hyper-V disk addressing
 ~~~~~~~~~~~~~~~~~~~~~~~
