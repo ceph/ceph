@@ -420,6 +420,7 @@ class PrometheusService(CephadmService):
         haproxy_sd_url = f'{srv_end_point}service=haproxy' if haproxy_cnt > 0 else None
         mgr_prometheus_sd_url = f'{srv_end_point}service=mgr-prometheus'  # always included
         ceph_exporter_sd_url = f'{srv_end_point}service=ceph-exporter'  # always included
+        nvmeof_sd_url = f'{srv_end_point}service=nvmeof'  # always included
 
         alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
         prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
@@ -435,7 +436,8 @@ class PrometheusService(CephadmService):
             'node_exporter_sd_url': node_exporter_sd_url,
             'alertmanager_sd_url': alertmanager_sd_url,
             'haproxy_sd_url': haproxy_sd_url,
-            'ceph_exporter_sd_url': ceph_exporter_sd_url
+            'ceph_exporter_sd_url': ceph_exporter_sd_url,
+            'nvmeof_sd_url': nvmeof_sd_url,
         }
 
         web_context = {

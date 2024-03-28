@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class NvmeofService(CephService):
     TYPE = 'nvmeof'
+    PROMETHEUS_PORT = 10008
 
     def config(self, spec: NvmeofServiceSpec) -> None:  # type: ignore
         assert self.TYPE == spec.service_type

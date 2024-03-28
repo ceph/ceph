@@ -107,3 +107,23 @@ scrape_configs:
     - url: {{ ceph_exporter_sd_url }}
 {% endif %}
 {% endif %}
+
+{% if nvmeof_sd_url %}
+  - job_name: 'nvmeof'
+{% if secure_monitoring_stack %}
+    honor_labels: true
+    scheme: https
+    tls_config:
+      ca_file: root_cert.pem
+    http_sd_configs:
+    - url: {{ nvmeof_sd_url }}
+      basic_auth:
+        username: {{ service_discovery_username }}
+        password: {{ service_discovery_password }}
+      tls_config:
+        ca_file: root_cert.pem
+{% else %}
+    http_sd_configs:
+    - url: {{ nvmeof_sd_url }}
+{% endif %}
+{% endif %}
