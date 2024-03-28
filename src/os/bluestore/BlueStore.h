@@ -194,6 +194,11 @@ enum {
   l_bluestore_omap_iterator_count,
   l_bluestore_omap_rmkeys_count,
   l_bluestore_omap_rmkey_ranges_count,
+  l_bluestore_omap_setheader_count,
+  l_bluestore_omap_setheader_bytes,
+  l_bluestore_omap_setkeys_count,
+  l_bluestore_omap_setkeys_records,
+  l_bluestore_omap_setkeys_bytes,
   //****************************************
 
   // other client ops latencies
