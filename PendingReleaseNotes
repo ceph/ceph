@@ -161,6 +161,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
    `ceph config get mgr mgr/volumes/snapshot_clone_no_wait`
   and it can be disabled by using:
    `ceph config set mgr mgr/volumes/snapshot_clone_no_wait false`
+* CephFS: Expanded removexattr support for cephfs virtual extended attributes.
+  Previously one had to use setxattr to restore the default in order to "remove".
+  You may now properly use removexattr to remove. You can also now remove layout
+  on root inode, which then will restore layout to default layout.
 
 >=18.0.0
 
