@@ -29,10 +29,9 @@ class Store {
   // and a variant-friendly interface:
   void add_error(int64_t pool, const inconsistent_obj_wrapper& e);
   void add_error(int64_t pool, const inconsistent_snapset_wrapper& e);
-
   bool empty() const;
   void flush(ObjectStore::Transaction*);
-  void cleanup(ObjectStore::Transaction*);
+  void cleanup(ObjectStore::Transaction*,  scrub_level_t level);
 
   std::vector<ceph::buffer::list> get_snap_errors(
     int64_t pool,
@@ -45,18 +44,23 @@ class Store {
     uint64_t max_return) const;
 
  private:
-  Store(const coll_t& coll, const ghobject_t& oid, ObjectStore* store);
+  Store(const coll_t& coll, const ghobject_t& oid, const ghobject_t& deep_oid, ObjectStore* store);
   std::vector<ceph::buffer::list> get_errors(const std::string& start,
 					     const std::string& end,
 					     uint64_t max_return) const;
  private:
   const coll_t coll;
   const ghobject_t hoid;
+  const ghobject_t deep_hoid;
   // a temp object holding mappings from seq-id to inconsistencies found in
   // scrubbing
   OSDriver driver;
+  OSDriver deep_driver;
   mutable MapCacher::MapCacher<std::string, ceph::buffer::list> backend;
+  mutable MapCacher::MapCacher<std::string, ceph::buffer::list> deep_backend;
   std::map<std::string, ceph::buffer::list> results;
+  std::map<std::string, ceph::buffer::list> deep_results;
+
 };
 }  // namespace Scrub
 

@@ -13,10 +13,11 @@ using std::vector;
 using ceph::bufferlist;
 
 namespace {
-ghobject_t make_scrub_object(const spg_t& pgid)
+ghobject_t make_scrub_object(const spg_t& pgid, scrub_level_t level)
 {
+// Creates a scrub object name based on the PG id and scrub level.
   ostringstream ss;
-  ss << "scrub_" << pgid;
+  ss << ((level==scrub_level_t::deep) ? "deep_scrub_" : "scrub_") << pgid;
   return pgid.make_temp_ghobject(ss.str());
 }
 
@@ -107,16 +108,22 @@ Store::create(ObjectStore* store,
 {
   ceph_assert(store);
   ceph_assert(t);
-  ghobject_t oid = make_scrub_object(pgid);
+  ghobject_t oid = make_scrub_object(pgid, scrub_level_t::shallow);
+  ghobject_t deep_oid = make_scrub_object(pgid, scrub_level_t::deep);
   t->touch(coll, oid);
-  return new Store{coll, oid, store};
+  t->touch(coll, deep_oid);
+
+  return new Store{coll, oid, deep_oid, store};
 }
 
-Store::Store(const coll_t& coll, const ghobject_t& oid, ObjectStore* store)
+Store::Store(const coll_t& coll, const ghobject_t& oid, const ghobject_t& deep_oid, ObjectStore* store)
   : coll(coll),
     hoid(oid),
+    deep_hoid(deep_oid),
     driver(store, coll, hoid),
-    backend(&driver)
+    deep_driver(store, coll, deep_oid),
+    backend(&driver),
+    deep_backend(&deep_driver)
 {}
 
 Store::~Store()
@@ -133,7 +140,10 @@ void Store::add_object_error(int64_t pool, const inconsistent_obj_wrapper& e)
 {
   bufferlist bl;
   e.encode(bl);
-  results[to_object_key(pool, e.object)] = bl;
+  if (e.has_deep_errors()) {
+    deep_results[to_object_key(pool, e.object)] = bl;
+  }
+    results[to_object_key(pool, e.object)] = bl;
 }
 
 void Store::add_error(int64_t pool, const inconsistent_snapset_wrapper& e)
@@ -150,21 +160,30 @@ void Store::add_snap_error(int64_t pool, const inconsistent_snapset_wrapper& e)
 
 bool Store::empty() const
 {
-  return results.empty();
+  return results.empty() && deep_results.empty();
 }
 
 void Store::flush(ObjectStore::Transaction* t)
 {
   if (t) {
+
     OSDriver::OSTransaction txn = driver.get_transaction(t);
     backend.set_keys(results, &txn);
+
+    OSDriver::OSTransaction deep_txn = deep_driver.get_transaction(t);
+    deep_backend.set_keys(deep_results, &deep_txn);
+
   }
   results.clear();
+  deep_results.clear();
 }
 
-void Store::cleanup(ObjectStore::Transaction* t)
+void Store::cleanup(ObjectStore::Transaction* t, scrub_level_t level)
 {
-  t->remove(coll, hoid);
+  t->remove(coll, hoid);  // Always clear the shallow+deep (original) error database
+  if (level==scrub_level_t::deep) {
+      t->remove(coll, deep_hoid);  // For deep scrubs, also clear the deep error database
+  }
 }
 
 std::vector<bufferlist>
