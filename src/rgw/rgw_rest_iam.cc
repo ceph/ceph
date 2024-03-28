@@ -30,8 +30,9 @@ void RGWHandler_REST_IAM::rgw_iam_parse_input()
       for (const auto& t : tokens) {
         auto pos = t.find("=");
         if (pos != string::npos) {
+          constexpr bool in_query = true; // replace '+' with ' '
           s->info.args.append(t.substr(0,pos),
-                              url_decode(t.substr(pos+1, t.size() -1)));
+                              url_decode(t.substr(pos+1, t.size() -1), in_query));
         }
       }
     }
