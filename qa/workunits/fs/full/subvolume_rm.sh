@@ -2,8 +2,8 @@
 set -ex
 
 # This testcase tests the scenario of the 'ceph fs subvolume rm' mgr command
-# when the osd is full. The command used to hang. The osd is of the size 1GB.
-# The subvolume is created and 500MB file is written. The full-ratios are
+# when the osd is full. The command used to hang. The osd is of the size 2GiB.
+# The subvolume is created and 1GB file is written. The full-ratios are
 # set below 500MB such that the osd is treated as full. Now the subvolume is
 # is removed. This should be successful with the introduction of FULL
 # capabilities which the mgr holds.
@@ -21,7 +21,7 @@ echo "Before write"
 df -h
 ceph osd df
 
-sudo dd if=/dev/urandom of=$CEPH_MNT$subvol_path/500MB_file-1 status=progress bs=1M count=500
+sudo dd if=/dev/urandom of=$CEPH_MNT$subvol_path/1GB_file-1 status=progress bs=1M count=1000
 
 ceph osd set-full-ratio 0.2
 ceph osd set-nearfull-ratio 0.16
