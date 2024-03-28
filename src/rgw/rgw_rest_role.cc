@@ -327,6 +327,7 @@ void RGWCreateRole::execute(optional_yield y)
     try {
       if (role_obj) {
         RGWXMLDecoder::decode_xml("RoleId", role_id, role_obj, true);
+        RGWXMLDecoder::decode_xml("CreateDate", role->get_info().creation_date, role_obj);
       }
     } catch (RGWXMLDecoder::err& err) {
       ldpp_dout(this, 5) << "ERROR: unexpected xml: RoleId" << dendl;
@@ -407,7 +408,6 @@ void RGWDeleteRole::execute(optional_yield y)
     } else {
       op_ret = -ERR_NO_ROLE_FOUND;
     }
-    return;
   }
   if (!op_ret) {
     s->formatter->open_object_section("DeleteRoleResponse");
@@ -801,7 +801,7 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
     op_ret = _role->update(this, y);
   }
 
-  s->formatter->open_object_section("DeleteRolePoliciesResponse");
+  s->formatter->open_object_section("DeleteRolePolicyResponse");
   s->formatter->open_object_section("ResponseMetadata");
   s->formatter->dump_string("RequestId", s->trans_id);
   s->formatter->close_section();
