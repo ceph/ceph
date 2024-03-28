@@ -226,56 +226,12 @@ void CreateImageRequest<I>::handle_open_remote_parent_image(int r) {
     return;
   }
 
-  LocalPoolMeta local_parent_pool_meta;
-  int err = m_pool_meta_cache->get_local_pool_meta(
-    m_local_parent_io_ctx.get_id(), &local_parent_pool_meta);
-  if (err < 0) {
-    derr << "failed to retrieve local parent mirror uuid for pool "
-         << m_local_parent_io_ctx.get_id() << dendl;
-    m_ret_val = err;
-    close_remote_parent_image();
-    return;
-  }
-  // ensure no image sync snapshots for the local cluster exist in the
-  // remote image
-  bool found_parent_snap = false;
-  bool found_image_sync_snap = false;
-  {
-    auto snap_prefix = image_sync::util::get_snapshot_name_prefix(
-      local_parent_pool_meta.mirror_uuid);
-
-    std::shared_lock remote_image_locker(m_remote_parent_image_ctx->image_lock);
-    for (auto snap_info : m_remote_parent_image_ctx->snap_info) {
-      if (snap_info.first == m_remote_parent_spec.snap_id) {
-        found_parent_snap = true;
-        m_snap_name = snap_info.second.name;
-        m_snap_namespace = snap_info.second.snap_namespace;
-      } else if (boost::starts_with(snap_info.second.name, snap_prefix)) {
-        found_image_sync_snap = true;
-      }
-    }
-  }
-  if (!found_parent_snap) {
-    dout(15) << "remote parent image snapshot not found" << dendl;
-    m_ret_val = -ENOENT;
-    close_remote_parent_image();
-    return;
-  } else if (found_image_sync_snap) {
-    dout(15) << "parent image not synced to local cluster" << dendl;
-    m_ret_val = -ENOENT;
-    close_remote_parent_image();
-    return;
-  }
-
   open_local_parent_image();
+//  clone_image();
 }
 
 template <typename I>
 void CreateImageRequest<I>::open_local_parent_image() {
-  if (m_mirror_image_mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    clone_image();
-    return;
-  }
   dout(10) << dendl;
 
   Context *ctx = create_context_callback<
@@ -293,57 +249,16 @@ void CreateImageRequest<I>::handle_open_local_parent_image(int r) {
   if (r < 0) {
     derr << "failed to open local parent image " << m_parent_pool_name << "/"
          << m_local_parent_spec.image_id << dendl;
-    close_remote_parent_image();
+    finish(r);
     return;
   }
 
-  bool synced = false;
-//  if (m_mirror_image_mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    uint64_t local_snap_id = 0;
-    librbd::snap_mirror_namespace_t mirror_snap;
-
-    std::shared_lock local_image_locker(m_local_parent_image_ctx->image_lock);
-
-    for (auto snap_info : m_local_parent_image_ctx->snap_info) {
-      if(m_snap_name.compare(snap_info.second.name) == 0){
-	local_snap_id = snap_info.first;
-	break;
-      }
-    }
-
-    if (local_snap_id == 0) {
-      dout(15) << "local parent image snapshot not found" << dendl;
-      m_ret_val = -ENOENT;
-      close_local_parent_image();
-      return;
-    }
-    auto local_snap_infos=  m_local_parent_image_ctx->snap_info;
-    for (auto snap_it = local_snap_infos.lower_bound(local_snap_id);
-	 snap_it != local_snap_infos.end(); ++snap_it) {
-      auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
-		  &snap_it->second.snap_namespace);
-      if (mirror_ns == nullptr || !mirror_ns->is_non_primary()) {
-	continue;
-      }
-      if (mirror_ns->complete ){
-	synced = true;
-	break;
-      }
-    }
-    if (!synced) {
-      dout(15) << "remote parent image snapshot not synced" << dendl;
-      m_ret_val = -ENOENT;
-      close_local_parent_image();
-      return;
-    }
- // }
   clone_image();
 }
 
 template <typename I>
 void CreateImageRequest<I>::clone_image() {
   dout(10) << dendl;
-/*
 
   LocalPoolMeta local_parent_pool_meta;
   int r = m_pool_meta_cache->get_local_pool_meta(
@@ -352,7 +267,7 @@ void CreateImageRequest<I>::clone_image() {
     derr << "failed to retrieve local parent mirror uuid for pool "
          << m_local_parent_io_ctx.get_id() << dendl;
     m_ret_val = r;
-    close_remote_parent_image();
+    close_local_parent_image();
     return;
   }
 
@@ -367,12 +282,14 @@ void CreateImageRequest<I>::clone_image() {
     auto snap_prefix = image_sync::util::get_snapshot_name_prefix(
       local_parent_pool_meta.mirror_uuid);
 
+ //   dout(15) << "NITHYA: snap_prefix=" << snap_prefix << dendl;
     std::shared_lock remote_image_locker(m_remote_parent_image_ctx->image_lock);
     for (auto snap_info : m_remote_parent_image_ctx->snap_info) {
       if (snap_info.first == m_remote_parent_spec.snap_id) {
         found_parent_snap = true;
         snap_name = snap_info.second.name;
         snap_namespace = snap_info.second.snap_namespace;
+   // dout(15) << "NITHYA: snap_id = " << m_remote_parent_spec.snap_id << ",snap_name=" << snap_name << ",namespace=" << snap_namespace << dendl;
       } else if (boost::starts_with(snap_info.second.name, snap_prefix)) {
         found_image_sync_snap = true;
       }
@@ -381,54 +298,58 @@ void CreateImageRequest<I>::clone_image() {
   if (!found_parent_snap) {
     dout(15) << "remote parent image snapshot not found" << dendl;
     m_ret_val = -ENOENT;
-    close_remote_parent_image();
+    close_local_parent_image();
     return;
   } else if (found_image_sync_snap) {
     dout(15) << "parent image not synced to local cluster" << dendl;
     m_ret_val = -ENOENT;
-    close_remote_parent_image();
+    close_local_parent_image();
     return;
   }
-  bool synced = false;
-  if (m_mirror_image_mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+  if (m_mirror_image_mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT){ 
     uint64_t local_snap_id = 0;
     librbd::snap_mirror_namespace_t mirror_snap;
 
     std::shared_lock local_image_locker(m_local_parent_image_ctx->image_lock);
 
     for (auto snap_info : m_local_parent_image_ctx->snap_info) {
-      if(m_snap_name.compare(snap_info.second.name) == 0){
+      if(snap_name.compare(snap_info.second.name) == 0){
 	local_snap_id = snap_info.first;
 	break;
       }
     }
-
-    if (local_snap_id == 0) {
-      dout(15) << "local parent image snapshot not found" << dendl;
-      m_ret_val = -ENOENT;
-      close_remote_parent_image();
-      return;
-    }
-
+    dout(15) << "NITHYA: local_snap_id = " << local_snap_id << dendl;
+    //TODO: return if snap not found
+    //
     auto local_snap_infos=  m_local_parent_image_ctx->snap_info;
     for (auto snap_it = local_snap_infos.lower_bound(local_snap_id);
-	 snap_it != local_snap_infos.end(); ++snap_it) {
-      auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
-		  &snap_it->second.snap_namespace);
-      if (mirror_ns == nullptr || !mirror_ns->is_non_primary()) {
-	continue;
-      }
-      if (mirror_ns->complete ){
-	synced = true;
-	break;
-      }
+       snap_it != local_snap_infos.end(); ++snap_it) {
+    auto mirror_ns = std::get_if<cls::rbd::MirrorSnapshotNamespace>(
+      &snap_it->second.snap_namespace);
+    if (mirror_ns == nullptr || !mirror_ns->is_non_primary()) {
+      continue;
+    }   
+    dout(15) << "NITHYA: name = "<< snap_it->second.name << ",complete = " << mirror_ns->complete  << dendl;
+    if (mirror_ns->complete ){
+      synced = true;
+      break;
     }
-    if (!synced) {
-      dout(15) << "remote parent image snapshot not synced" << dendl;
-      m_ret_val = -ENOENT;
-      close_remote_parent_image();
-      return;
-    }
+  }
+  if (!synced) {
+    dout(15) << "remote parent image snapshot not synced" << dendl;
+    m_ret_val = -ENOENT;
+    close_local_parent_image();
+    return;
+  }
+}
+/*
+	  snap_namespace = snap_info.second.snap_namespace;
+      if (snap_namespace == cls::rbd::MirrorSnapshotNamespace) {
+	int r = librbd::api::Snapshot<>::get_mirror_namespace(
+	      m_local_parent_image_ctx, local_snap_id, &mirror_snap);
+	snap_name = snap_info.second.name;
+	dout(15) << "NITHYA: snap_id = " << m_local_parent_spec.snap_id << ",snap_name=" << snap_name << ",namespace=" << snap_namespace << dendl;
+      }
   }
 */
 
@@ -443,8 +364,8 @@ void CreateImageRequest<I>::clone_image() {
     klass, &klass::handle_clone_image>(this);
 
   librbd::image::CloneRequest<I> *req = librbd::image::CloneRequest<I>::create(
-    config, m_local_parent_io_ctx, m_local_parent_spec.image_id, m_snap_name,
-    m_snap_namespace, CEPH_NOSNAP, m_local_io_ctx, m_local_image_name,
+    config, m_local_parent_io_ctx, m_local_parent_spec.image_id, snap_name,
+    snap_namespace, CEPH_NOSNAP, m_local_io_ctx, m_local_image_name,
     m_local_image_id, opts, m_mirror_image_mode, m_global_image_id,
     m_remote_mirror_uuid, m_remote_image_ctx->op_work_queue, ctx);
   req->send();
@@ -468,10 +389,6 @@ void CreateImageRequest<I>::handle_clone_image(int r) {
 
 template <typename I>
 void CreateImageRequest<I>::close_local_parent_image() {
-  if (m_mirror_image_mode != cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
-    close_remote_parent_image();
-    return;
-  }
   dout(10) << dendl;
   Context *ctx = create_context_callback<
     CreateImageRequest<I>,
@@ -488,6 +405,7 @@ void CreateImageRequest<I>::handle_close_local_parent_image(int r) {
     derr << "error encountered closing local parent image: "
          << cpp_strerror(r) << dendl;
   }
+
   close_remote_parent_image();
 }
 
@@ -534,11 +452,13 @@ int CreateImageRequest<I>::validate_parent() {
   std::shared_lock owner_locker{m_remote_image_ctx->owner_lock};
   std::shared_lock image_locker{m_remote_image_ctx->image_lock};
 
+  dout(10) << "NITHYA: m_remote_parent_spec=" << m_remote_parent_spec << dendl;
   m_remote_parent_spec = m_remote_image_ctx->parent_md.spec;
 
   // scan all remote snapshots for a linked parent
   for (auto &snap_info_pair : m_remote_image_ctx->snap_info) {
     auto &parent_spec = snap_info_pair.second.parent.spec;
+  dout(10) << "NITHYA: parent_spec=" << parent_spec << dendl;
     if (parent_spec.pool_id == -1) {
       continue;
     } else if (m_remote_parent_spec.pool_id == -1) {
