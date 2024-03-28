@@ -603,7 +603,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 
     dout(10) << "mon add setting location for " << name << " to " << loc << dendl;
 
-    // TODO: validate location in crush map
     if (monmap.stretch_mode_enabled && !loc.size()) {
       ss << "We are in stretch mode and new monitors must have a location, but "
 	 << "could not parse your input location to anything real; " << locationvec
@@ -611,6 +610,16 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       err = -EINVAL;
       goto reply_no_propose;
     }
+    if (monmap.stretch_mode_enabled) {
+      for (const auto &p : loc) {
+        if (!mon.osdmon()->osdmap.crush->name_exists(p.second)) {
+          ss << "location doesn't belong to any existing crush buckets!"
+          << " Please specify a valid crush bucket.";
+          err = -EINVAL;
+          goto reply_no_propose;
+        }
+      }
+   }
     // TODO: validate location against any existing stretch config
 
     entity_addrvec_t addrs;
