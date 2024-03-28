@@ -233,17 +233,16 @@ def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
 
     return r, outb, ""
 
-def list_volumes(mgr):
+def get_all_volnames(mgr):
     """
-    list all filesystem volumes.
+    Get name of all volumes/filesystems.
 
-    :param: None
-    :return: None
+    :param: mgr
+    :return: list of volume names
     """
     result = []
-    fs_map = mgr.get("fs_map")
-    for f in fs_map['filesystems']:
-        result.append({'name': f['mdsmap']['fs_name']})
+    for fs in mgr.get("fs_map")['filesystems']:
+        result.append(fs['mdsmap']['fs_name'])
     return result
 
 

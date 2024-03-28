@@ -12,11 +12,12 @@ import cephfs
 from mgr_util import CephfsClient
 
 from .fs_util import listdir, has_subdir
+from .stats_util import get_stats
 
 from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
 from .operations.volume import create_volume, delete_volume, rename_volume, \
-    list_volumes, open_volume, get_pool_names, get_pool_ids, \
+    get_all_volnames, open_volume, get_pool_names, get_pool_ids, \
     get_pending_subvol_deletions_count, get_all_pending_clones_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
     create_clone
@@ -27,6 +28,7 @@ from .exception import VolumeException, ClusterError, ClusterTimeout, \
 from .async_cloner import Cloner
 from .purge_queue import ThreadPoolPurgeQueueMixin
 from .operations.template import SubvolumeOpType
+from .stats_util import CloneProgressBar
 
 if TYPE_CHECKING:
     from volumes import Module
@@ -60,6 +62,7 @@ class VolumeClient(CephfsClient["Module"]):
         self.volspec = VolSpec(mgr.rados.conf_get('client_snapdir'))
         self.cloner = Cloner(self, self.mgr.max_concurrent_clones, self.mgr.snapshot_clone_delay,
                              self.mgr.snapshot_clone_no_wait)
+        self.clone_reporter = CloneProgressBar(self, self.volspec)
         self.purge_queue = ThreadPoolPurgeQueueMixin(self, 4)
         # on startup, queue purge job for available volumes to kickstart
         # purge for leftover subvolume entries in trash. note that, if the
@@ -144,7 +147,9 @@ class VolumeClient(CephfsClient["Module"]):
         return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
     def list_fs_volumes(self):
-        volumes = list_volumes(self.mgr)
+        volnames = get_all_volnames(self.mgr)
+        # since we report in json format, make a dict of volnames.
+        volumes = [{'name': vn} for vn in volnames]
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
 
     def rename_fs_volume(self, volname, newvolname, sure):
@@ -796,7 +801,9 @@ class VolumeClient(CephfsClient["Module"]):
                     t_subvolume.attach_snapshot(s_snapname, t_subvolume)
                 else:
                     s_subvolume.attach_snapshot(s_snapname, t_subvolume)
+
                 self.cloner.queue_job(volname)
+                self.clone_reporter.begin_reporting()
             except VolumeException as ve:
                 try:
                     t_subvolume.remove()
@@ -844,6 +851,25 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def _get_clone_status(self, fs_handle, group, subvolume, json_fmt=True):
+        subvol_status = subvolume.status
+        if subvol_status['state'] == 'in-progress':
+            dst_path = subvolume.base_path.decode('utf-8')
+            # TODO: check and handle case vol for src_sv is different
+            #src_vol_name = subvolume._get_clone_source()['volume']
+            src_sv_name = subvolume._get_clone_source()['subvolume']
+            with open_subvol(self.mgr, fs_handle, self.volspec, group,
+                             src_sv_name, SubvolumeOpType.GETPATH) as \
+                    src_subvolume:
+                src_path = src_subvolume.base_path.decode('utf-8')
+            stats = get_stats(src_path, dst_path, fs_handle)
+            subvol_status.update({'progress_report': stats})
+
+        if json_fmt:
+            subvol_status = json.dumps({'status' : subvol_status}, indent=2)
+
+        return subvol_status
+
     def clone_status(self, **kwargs):
         ret       = 0, "", ""
         volname   = kwargs['vol_name']
@@ -854,7 +880,8 @@ class VolumeClient(CephfsClient["Module"]):
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, clonename, SubvolumeOpType.CLONE_STATUS) as subvolume:
-                        ret = 0, json.dumps({'status' : subvolume.status}, indent=2), ""
+                        status = self._get_clone_status(fs_handle, group, subvolume)
+                        ret = 0, status, ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

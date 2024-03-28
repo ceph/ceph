@@ -8,7 +8,7 @@ import cephfs
 
 from .index import Index
 from ..exception import IndexException, VolumeException
-from ..fs_util import list_one_entry_at_a_time
+from ..fs_util import list_one_entry_at_a_time, get_all_dir_entries
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +46,31 @@ class CloneIndex(Index):
             self.fs.unlink(source_path)
         except cephfs.Error as e:
             raise IndexException(-e.args[0], e.args[1])
+
+    def get_all_entries(self):
+        return get_all_dir_entries(self.fs, self.path)
+
+    def get_all_entries_by_ctime_order(self):
+        clone_entries = self.get_all_entries()
+
+        # clone entries with ctime obtained by statig them. basically,
+        # following is a list of tuples where each tuple has 2 memebers.
+        ces_with_ctime = []
+        for ce in clone_entries:
+            d_path = os.path.join(self.path, ce.d_name)
+            stb = self.fs.lstat(d_path)
+
+            # add ctime next to clone entry
+            ces_with_ctime.append((ce, stb.st_ctime))
+
+        ces_with_ctime.sort(key=lambda ctime: ce[1])
+
+        # TODO: remove eventually
+        for ce in ces_with_ctime:
+            log.info(f'ce[0] = {ce[0]}   ctime = {ce[1]}')
+
+        # remove ctime and return list of clone entries sorted by ctime.
+        return [i[0] for i in ces_with_ctime]
 
     def get_oldest_clone_entry(self, exclude=[]):
         min_ctime_entry = None

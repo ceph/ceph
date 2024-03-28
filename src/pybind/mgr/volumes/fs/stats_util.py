@@ -1,0 +1,300 @@
+'''
+Contains helpers that are used to get statistics (specifically number of
+regular files and directories and total size of data present under a given
+directory) and pass, print, log and convert them to human readable format
+conveniently.
+'''
+from os.path import join as os_path_join
+from logging import getLogger
+from uuid import uuid4
+
+from .operations.volume import open_volume_lockless, get_all_volnames
+from .operations.subvolume import open_clone_sv_pair_in_vol
+from .operations.clone_index import open_clone_index
+from .operations.resolver import resolve_grp_and_sv_names
+
+from mgr_util import RTimer, format_bytes, format_dimless
+from cephfs import ObjectNotFound
+
+log = getLogger(__name__)
+
+
+def get_size_ratio_str(size1, size2, human=True):
+    if human:
+        size1, size2 = format_bytes(size1, 4), format_bytes(size2, 4)
+
+    size_string =  f'{size1}/{size2}'
+    size_string = size_string.replace(' ', '')
+    return size_string
+
+
+def get_num_ratio_str(num1, num2, human=True):
+    if human:
+        num1, num2 = format_dimless(num1, 4), format_dimless(num2, 4)
+
+    num_string = f'{num1}/{num2}'
+    num_string = num_string.replace(' ', '')
+    return num_string
+
+
+def get_amount_copied(src_path, dst_path, fsh, human=True):
+    rbytes = 'ceph.dir.rbytes'
+
+    size_t = int(fsh.getxattr(src_path, rbytes))
+    size_c = int(fsh.getxattr(dst_path, rbytes))
+
+    if size_t == 0:
+        return -1 if size_c == 0 else -2
+
+    percent = ((size_c/size_t) * 100)
+    percent = round(percent, 3)
+
+    return size_t, size_c, percent
+
+
+def get_percent_copied(src_path, dst_path, fsh, human=True):
+    _, _, percent = get_amount_copied(src_path, dst_path, fsh)
+    return percent
+
+
+def get_stats(src_path, dst_path, fsh, human=True):
+    rentries = 'ceph.dir.rentries'
+    rentries_t = int(fsh.getxattr(src_path, rentries))
+    rentries_c = int(fsh.getxattr(dst_path, rentries))
+
+    size_t, size_c, percent = get_amount_copied(src_path, dst_path, fsh,
+                                                human)
+
+    return {
+        'percentage cloned': percent,
+        'amount cloned': get_size_ratio_str(size_c, size_t, human),
+        'regfiles cloned': get_num_ratio_str(rentries_c, rentries_t, human),
+    }
+
+
+class CloneInfo:
+
+    def __init__(self, volname=None, src_grp_name=None, src_sv_name=None,
+                 src_path=None, dst_volname=None, dst_grp_name=None,
+                 dst_sv_name=None, dst_path=None):
+        self.volname = volname
+
+        self.src_grp_name = src_grp_name
+        self.src_sv_name = src_sv_name
+        self.src_path = src_path
+
+        self.dst_grp_name = dst_grp_name
+        self.dst_sv_name = dst_sv_name
+        self.dst_path = dst_path
+
+
+class CloneProgressBar:
+
+    def __init__(self, vc, vol_spec):
+        # instance of VolumeClient is needed here so that call to
+        # LibCephFS.getxattr() can be made.
+        self.vc = vc
+        self.vol_spec = vol_spec
+
+        # progress event ID" for ongoing clone jobs
+        self.on_pev_id = str(uuid4())
+        # progress event ID for ongoing clone jobs
+        self.onpen_pev_id = str(uuid4())
+
+        self.update_task = RTimer(1, self.update)
+
+    def _get_clone_dst_info(self, fsh, ci, clone_entry, clone_index_path):
+        ce_path = os_path_join(clone_index_path, clone_entry.d_name)
+        # XXX: This may raise ObjectNotFound exception. As soon as cloning is
+        # finished, clone entry is deleted by cloner thread. This exception is
+        # handled in _get_info_on_all_clones().
+        ci.dst_path = fsh.readlink(ce_path, 4096).decode('utf-8')
+
+        ci.dst_grp_name, ci.dst_sv_name = \
+            resolve_grp_and_sv_names(self.vol_spec, ci.dst_path)
+
+    def _get_clone_src_info(self, fsh, ci):
+        with open_clone_sv_pair_in_vol(
+                self.vc, self.vol_spec, ci.volname, ci.dst_grp_name,
+                ci.dst_sv_name) as (dst_sv, src_sv, snap_name):
+            ci.src_grp_name = src_sv.group_name
+            ci.src_sv_name = src_sv.subvolname
+            ci.src_path = src_sv.snapshot_data_path(snap_name)
+
+    def _get_info_on_all_clones(self):
+        clones = []
+
+        volnames = get_all_volnames(self.vc.mgr)
+        for volname in volnames:
+            with open_volume_lockless(self.vc, volname) as fsh:
+                with open_clone_index(fsh, self.vol_spec) as clone_index:
+                    clone_index_path = clone_index.path
+                    clone_entries = clone_index.get_all_entries_by_ctime_order()
+
+            for ce in clone_entries:
+                ci = CloneInfo()
+                ci.volname = volname
+
+                try:
+                    self._get_clone_dst_info(fsh, ci, ce, clone_index_path)
+                    self._get_clone_src_info(fsh, ci)
+                # clone entry went missing, it was removed because cloning has
+                # finished.
+                except ObjectNotFound as e_onf:
+                    if e_onf.errno != 2:
+                        continue
+
+                clones.append(ci)
+
+        if clones:
+            log.debug(f'num of ongoing+pending clones = {len(clones)}')
+            for c in clones:
+                log.debug(f'dest/clone subvol name = {c.dst_sv_name}')
+            return clones
+        else:
+            return []
+
+    def _update_progress_event(self, ev_id, ev_msg, ev_progress_fraction):
+        # in case this remote call on RTimer fails, its details won't printed,
+        # logged or would cause a crash. therefore, leaving some info for
+        # debugging in logs
+        log.info(f'ev_id = {ev_id} ev_progress_fraction = {ev_progress_fraction}')
+        log.info(f'ev_msg = {ev_msg}')
+
+        self.vc.mgr.remote('progress', 'update', ev_id=ev_id, ev_msg=ev_msg,
+                           ev_progress=ev_progress_fraction,
+                           refs=['mds', 'clone'], add_to_ceph_s=True)
+
+        log.info('update() of mgr/progress executed successfully')
+
+    def _update_onpen_bar(self, clones):
+        '''
+        Update the progress bar for ongoing + pending cloning operations.
+
+        Returns True when all cloning operations have completed.
+        '''
+        assert self.onpen_pev_id is not None
+
+        percent = 0.0
+        avg_percent = 0.0
+        finished_clones = []
+        total_clones = len(clones)
+
+        for clone in clones:
+            with open_volume_lockless(self.vc, clone.volname) as fsh:
+                percent = get_percent_copied(clone.src_path, clone.dst_path,
+                                             fsh)
+            if percent < 100:
+                avg_percent += percent
+            elif percent > 100:
+                log.info('ERROR: percent of progress made by a clone job is '
+                         'more than 100%.')
+            else:
+                finished_clones.append(clone)
+
+        for clone in finished_clones:
+            clones.remove(clone)
+        total_clones = total_clones - len(finished_clones)
+        assert total_clones == len(clones)
+        if not clones:
+            return True
+
+        avg_percent = round(avg_percent / total_clones, 3)
+        # progress module takes progress as a fraction between 0.0 to 1.0.
+        avg_progress_fraction = avg_percent / 100
+        msg = (f'{total_clones} ongoing+pending clones; Avg progress is '
+               f'{avg_percent}%')
+
+        self._update_progress_event(ev_id=self.onpen_pev_id, ev_msg=msg,
+                                    ev_progress_fraction=avg_progress_fraction)
+
+    def _update_ongoing_bar(self, clones):
+        '''
+        Update the progress bar for ongoing cloning operations.
+        '''
+        assert self.on_pev_id is not None
+
+        percent = 0.0
+        sum_percent = 0.0
+        avg_percent = 0.0
+        finished_clones = []
+        total_clones = len(clones) if len(clones) < 4 else 4
+
+        # TODO: clones needs to be sorted in order from oldest to newest
+        # before running code below. lack of this excludes clone which has
+        # made most progress. as a result, make onpen progress > on progress
+        # which is absurd and incorrect.
+        for clone in clones[:4]:
+            with open_volume_lockless(self.vc, clone.volname) as fsh:
+                percent = get_percent_copied(clone.src_path, clone.dst_path,
+                                             fsh)
+            if percent < 100:
+                sum_percent += percent
+            elif percent > 100:
+                log.info('ERROR: percent of progress made by a clone job is '
+                         'more than 100%.')
+            else:
+                finished_clones.append(clone)
+
+        for clone in finished_clones:
+            clones.remove(clone)
+        total_clones = total_clones - len(finished_clones)
+        assert total_clones <= 4
+        if not clones:
+            return True
+
+        avg_percent = round(sum_percent / total_clones, 3)
+        # progress module takes progress as a fraction between 0.0 to 1.0.
+        avg_progress_fraction = avg_percent / 100
+        msg = f'{total_clones} ongoing clones; Avg progress is {avg_percent}%'
+
+        self._update_progress_event(ev_id=self.on_pev_id, ev_msg=msg,
+                                    ev_progress_fraction=avg_progress_fraction)
+
+    def update(self):
+        '''
+        Look for amount of progress made by all cloning operations and prints
+        progress bars, in "ceph -s" output, for average progress made
+        accordingly.
+
+        This method is supposed to be run only by instance of class RTimer
+        present in this class.
+        '''
+        clones = self._get_info_on_all_clones()
+        if not clones:
+            self.finish()
+            return
+        assert len(clones) > 0
+
+        finished = self._update_ongoing_bar(clones)
+        if not finished:
+            finished = self._update_onpen_bar(clones)
+
+        if finished:
+            self.finish()
+
+    def begin_reporting(self):
+        if not self.update_task.is_alive():
+            self.update_task.start()
+
+    def finish(self):
+        '''
+        All cloning has finished, remove progress bars from "ceph -s" output.
+        '''
+        assert self.on_pev_id is not None
+
+        self.vc.mgr.remote('progress', 'complete', self.on_pev_id)
+        if self.onpen_pev_id is not None:
+            self.vc.mgr.remote('progress', 'complete', self.onpen_pev_id)
+
+        self.on_pev_id = None
+        self.onpen_pev_id = None
+
+        self.update_task.cancel()
+
+    def abort(self):
+        assert self.pev_id is not None
+
+        msg = f'Cloning failed for {self.dst_sv_name}'
+        self.vc.mgr.remote('progress', 'fail', self.pev_id, msg)
+        self.pev_id = None

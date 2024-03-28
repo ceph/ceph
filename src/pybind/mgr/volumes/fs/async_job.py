@@ -6,7 +6,7 @@ import traceback
 from collections import deque
 from mgr_util import lock_timeout_log, CephfsClient
 
-from .operations.volume import list_volumes
+from .operations.volume import get_all_volnames
 from .exception import NotImplementedException
 
 log = logging.getLogger(__name__)
@@ -44,8 +44,8 @@ class JobThread(threading.Thread):
                             return
                         timo = self.async_job.wakeup_timeout
                         if timo is not None:
-                            vols = [e['name'] for e in list_volumes(self.vc.mgr)]
-                            missing = set(vols) - set(self.async_job.q)
+                            volnames = get_all_volnames(self.vc.mgr)
+                            missing = set(volnames) - set(self.async_job.q)
                             for m in missing:
                                 self.async_job.jobs[m] = []
                                 self.async_job.q.append(m)
