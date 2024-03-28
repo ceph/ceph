@@ -473,6 +473,7 @@ options:
     to the log.  For example, debug_osd=1/5 will write everything <= 1 to the log
     unconditionally but keep entries at levels 2-5 in memory.  If there is a seg fault
     or assertion failure, all entries will be dumped to the log.
+  min: 1
   default: 500
   daemon_default: 10000
   # default changed by common_preinit()
