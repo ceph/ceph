@@ -847,6 +847,30 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                                       "snapshot '{0}' does not exist".format(snapname))
             raise VolumeException(-e.args[0], e.args[1])
 
+    def check_dangling_clone_index(self, snapname):
+        try:
+            if self.has_pending_clones(snapname):
+                pending_track_id_list = self.metadata_mgr.list_all_keys_with_specified_values_from_section('clone snaps', snapname)
+        except MetadataMgrException as me:
+            if me.errno != -errno.ENOENT:
+                raise VolumeException(-me.args[0], me.args[1])
+
+        try:
+            with open_clone_index(self.fs, self.vol_spec) as index:
+                index_path = index.path.decode('utf-8')
+        except IndexException as e:
+            log.warning("failed to open clone index '{0}' for snapshot '{1}'".format(e, snapname))
+            raise VolumeException(-errno.EINVAL, "failed to open clone index")
+
+        for track_id in pending_track_id_list:
+            try:
+                path = os.path.join(index_path, track_id)
+                if not os.path.exists(self.fs.readlink(path, 4096)):
+                    self.fs.rmdir(path)
+            except cephfs.Error as e:
+                if e.errno != errno.ENOENT:
+                    raise VolumeException(-e.args[0], e.args[1])
+
     def list_snapshots(self):
         try:
             dirpath = self.snapshot_base_path()
