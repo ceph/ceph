@@ -71,11 +71,27 @@ void* QuiesceDbManager::quiesce_db_thread_main()
   dout(5) << "Entering the main thread" << dendl;
   bool keep_working = true;
   while (keep_working) {
+    // QuiesceTimeInterval::max() value of next_event_at_age
+    // may cause an overflow in some stdlib implementations when calling
+    // std::condition_variable::wait_for(ls, next_event_at_age - db_age).
+    // The overflow can make the call timeout immediately,
+    // resulting in a busy-loop.
+    // The solution is to cap the wait duration to a value which can
+    // certainly fit in whichever clock std library is using internally.
+    const auto max_wait = std::chrono::duration_cast<QuiesceTimeInterval>(
+        std::chrono::seconds(10)
+    );
 
-    auto db_age = db.get_age();
-
-    if (!db_thread_has_work() && next_event_at_age > db_age) {
-      submit_condition.wait_for(ls, next_event_at_age - db_age);
+    while (!db_thread_has_work()) {
+      auto db_age = db.get_age();
+      if (next_event_at_age <= db_age) {
+        break;
+      }
+      auto timeout = std::min(max_wait, next_event_at_age - db_age);
+      auto wait_result = submit_condition.wait_for(ls, timeout);
+      if (std::cv_status::timeout == wait_result) {
+        dout(20) << "db idle, age: " << db_age << dendl;
+      }
     }
 
     auto [is_member, should_exit] = membership_upkeep();
