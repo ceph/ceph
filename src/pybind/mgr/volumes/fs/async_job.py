@@ -12,6 +12,12 @@ from .exception import NotImplementedException
 log = logging.getLogger(__name__)
 
 
+def log1(obj, msg):
+    if obj.__class__.__name__ != 'ThreadPoolPurgeQueueMixin':
+        return
+    log.info(msg)
+
+
 class JobThread(threading.Thread):
     # this is "not" configurable and there is no need for it to be
     # configurable. if a thread encounters an exception, we retry
@@ -26,6 +32,7 @@ class JobThread(threading.Thread):
         threading.Thread.__init__(self, name=name)
 
     def run(self):
+        log1(self, 'here123 jobthread beg')
         retries = 0
         thread_id = threading.currentThread()
         assert isinstance(thread_id, JobThread)
@@ -33,15 +40,27 @@ class JobThread(threading.Thread):
         log.debug("thread [{0}] starting".format(thread_name))
 
         while retries < JobThread.MAX_RETRIES_ON_EXCEPTION:
+            log1(self, 'here123 jobthread loop1')
             vol_job = None
             try:
                 # fetch next job to execute
                 with lock_timeout_log(self.async_job.lock):
                     while True:
+                        log1(self, 'here123 jobthread loop2 beg')
                         if self.should_reconfigure_num_threads():
                             log.info("thread [{0}] terminating due to reconfigure".format(thread_name))
                             self.async_job.threads.remove(self)
                             return
+
+                        # the codeblock after this one adds missing jobs. no
+                        # need to add new jobs since purging is disabled.
+                        log1(self, 'here123 jobthread loop2 calling spt')
+                        if not self.async_job.should_purge_trash():
+                            log1(self, 'here123 jobthread spt is false')
+                            self.async_job.threads.clear()
+                            return
+                        log1(self, 'here123 jobthread after spt')
+
                         timo = self.async_job.wakeup_timeout
                         if timo is not None:
                             vols = [e['name'] for e in list_volumes(self.vc.mgr)]
@@ -51,10 +70,21 @@ class JobThread(threading.Thread):
                                 self.async_job.q.append(m)
                         vol_job = self.async_job.get_job()
                         if vol_job:
+                            log1(self, 'here123 jobthread run() breaking out')
                             break
                         self.async_job.cv.wait(timeout=timo)
+                    log1(self, 'here123 exited loop2')
                     self.async_job.register_async_job(vol_job[0], vol_job[1], thread_id)
 
+                log1(self, 'here123 jobthread run() exited with')
+                log1(self, 'here123 jobthread loop2 calling spt')
+                # don't exceute jobs since purging has been disabled.
+                if not self.async_job.should_purge_trash():
+                    log1(self, 'here123 jobthread spt is false')
+                    return
+                log1(self, 'here123 jobthread after spt')
+
+                log1(self, 'here123 jobthread calling execute_job()')
                 # execute the job (outside lock)
                 self.async_job.execute_job(vol_job[0], vol_job[1], should_cancel=lambda: thread_id.should_cancel())
                 retries = 0
@@ -70,9 +100,17 @@ class JobThread(threading.Thread):
                 log.warning("traceback: {0}".format("".join(
                     traceback.format_exception(exc_type, exc_value, exc_traceback))))
             finally:
+                log1(self, 'here123 jobthread finally')
+                if not self.async_job.should_purge_trash():
+                    log1(self, 'here123 jobthread run() finally spt returning')
+                    return
+
                 # when done, unregister the job
                 if vol_job:
                     with lock_timeout_log(self.async_job.lock):
+                        # if purging of trash has been disabled, don't
+                        # unregister the job so that purge jobs can continue
+                        # running when purging of trash is enabled
                         self.async_job.unregister_async_job(vol_job[0], vol_job[1], thread_id)
                 time.sleep(1)
         log.error("thread [{0}] reached exception limit, bailing out...".format(thread_name))
@@ -135,7 +173,13 @@ class AsyncJobs(threading.Thread):
         self.fs_client = CephfsClient(self.vc.mgr)
         self.wakeup_timeout = None
 
+        # rishabh
         self.threads = []
+        log1(self, 'here123 asyncjob init calling spt')
+        if not self.should_purge_trash():
+            log1(self, 'here123 asyncjob init returning')
+            return
+        log1(self, 'here123 asyncjob init creating threads')
         for i in range(self.nr_concurrent_jobs):
             self.threads.append(JobThread(self, volume_client, name="{0}.{1}".format(self.name_pfx, i)))
             self.threads[-1].start()
@@ -153,20 +197,41 @@ class AsyncJobs(threading.Thread):
             self.cv.notifyAll()
 
     def run(self):
+        log1(self, 'here123 asyncjob run() beg')
         log.debug("tick thread {} starting".format(self.name))
+        log1(self, 'here123 run() before with')
         with lock_timeout_log(self.lock):
+            log1(self, 'here123 run() before while')
             while not self.stopping.is_set():
+                # rishabh
+                # don't add any new threads to "self.threads".
+                log1(self, 'here123 asyncjob run() calling spt')
+                if not self.should_purge_trash():
+                    self.threads.clear()
+                    log1(self, 'here123 asyncjob run() spt continuing')
+                    self.cv.wait(timeout=5)
+                    continue
+                log1(self, f'here123 class name = {self.__class__.__name__}')
+
+                log1(self, 'here123 run() before len')
                 c = len(self.threads)
+                log1(self, f'here123 run() after len, c = {c}')
                 if c > self.nr_concurrent_jobs:
+                    log1(self, 'here123 asyncjob run() in if')
                     # Decrease concurrency: notify threads which are waiting for a job to terminate.
                     log.debug("waking threads to terminate due to job reduction")
                     self.cv.notifyAll()
                 elif c < self.nr_concurrent_jobs:
+                    log1(self, 'here123 asyncjob run() in elif')
                     # Increase concurrency: create more threads.
                     log.debug("creating new threads to job increase")
                     for i in range(c, self.nr_concurrent_jobs):
+                        log1(self, 'here123 asyncjob run() creating threads')
+                        # rishabh
                         self.threads.append(JobThread(self, self.vc, name="{0}.{1}.{2}".format(self.name_pfx, time.time(), i)))
                         self.threads[-1].start()
+                else:
+                    log1(self, f'here123 asyncjob run() loop else c = {c}')
                 self.cv.wait(timeout=5)
 
     def shutdown(self):
@@ -222,6 +287,7 @@ class AsyncJobs(threading.Thread):
         self.jobs[volname].append((job, thread_id))
 
     def unregister_async_job(self, volname, job, thread_id):
+        log.debug('here123 jobthread unregistering')
         log.debug("unregistering async job {0}.{1} from thread {2}".format(volname, job, thread_id))
         self.jobs[volname].remove((job, thread_id))
 
@@ -239,10 +305,14 @@ class AsyncJobs(threading.Thread):
         """
         log.info("queuing job for volume '{0}'".format(volname))
         with lock_timeout_log(self.lock):
+            log1(self, 'here123 aj qj in with')
             if volname not in self.q:
+                log1(self, 'here123 aj qj in if')
                 self.q.append(volname)
                 self.jobs[volname] = []
+            log1(self, 'here123 aj qj out if')
             self.cv.notifyAll()
+            log1(self, 'here123 aj qj out with')
 
     def _cancel_jobs(self, volname):
         """

@@ -430,3 +430,6 @@ class Cloner(AsyncJobs):
 
     def execute_job(self, volname, job, should_cancel):
         clone(self.fs_client, self.vc.volspec, volname, job[0].decode('utf-8'), job[1].decode('utf-8'), self.state_table, should_cancel, self.snapshot_clone_delay)
+
+    def should_purge_trash(self):
+        return True
