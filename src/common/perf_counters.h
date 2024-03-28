@@ -239,6 +239,7 @@ public:
   uint64_t get(int idx) const;
 
   void tset(int idx, utime_t v);
+  void tset(int idx, ceph::timespan v);
   void tinc(int idx, utime_t v);
   void tinc(int idx, ceph::timespan v);
   utime_t tget(int idx) const;
