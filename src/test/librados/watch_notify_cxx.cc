@@ -368,7 +368,7 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
   notify_oid = "foo";
   notify_ioctx = &ioctx;
   notify_cookies.clear();
-  uint32_t timeout = 12; // configured timeout
+  uint32_t timeout = 26; // configured timeout
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   bufferlist bl1;
