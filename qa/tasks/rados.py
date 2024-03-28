@@ -130,6 +130,12 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "please list clients to run on"
 
+    log.info("config is {config}".format(config=str(config)))
+    overrides = ctx.config.get('overrides', {})
+    log.info("overrides is {overrides}".format(overrides=str(overrides)))
+    teuthology.deep_merge(config, overrides.get('rados', {}))
+    log.info("config is {config}".format(config=str(config)))
+
     object_size = int(config.get('object_size', 4000000))
     op_weights = config.get('op_weights', {})
     testdir = teuthology.get_testdir(ctx)
@@ -272,6 +278,13 @@ def task(ctx, config):
                     )
                 tests[id_] = proc
             run.wait(tests.values())
+            wait_for_all_active_clean_pgs = config.get("wait_for_all_active_clean_pgs", False)
+            # usually set when we do min_size testing.
+            if  wait_for_all_active_clean_pgs:
+                # Make sure we finish the test first before deleting the pool.
+                # Mainly used for test_pool_min_size
+                manager.wait_for_clean()
+                manager.wait_for_all_osds_up(timeout=1800)
 
             for pool in created_pools:
                 manager.wait_snap_trimming_complete(pool);
