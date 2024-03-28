@@ -55,6 +55,20 @@ typedef boost::mt11213b gen_type;
 const uint64_t DEF_STORE_TEST_BLOCKDEV_SIZE = 10240000000;
 #define dout_context g_ceph_context
 
+static uint64_t get_testing_seed(const char* function) {
+  char* random_seed = getenv("TEST_RANDOM_SEED");
+  uint64_t testing_seed;
+  if (random_seed) {
+    testing_seed = atoi(random_seed);
+  } else {
+    testing_seed = time(NULL);
+  }
+  cout << "seed for " << function << " is " << testing_seed << std::endl;
+  return testing_seed;
+}
+
+#define TEST_RANDOM_SEED get_testing_seed(__func__)
+
 static bool bl_eq(bufferlist& expected, bufferlist& actual)
 {
   if (expected.contents_equal(actual))
@@ -785,7 +799,7 @@ TEST_P(StoreTest, SimpleColPreHashTest) {
   uint32_t pg_num = 128;
 
   boost::uniform_int<> pg_id_range(0, pg_num);
-  gen_type rng(time(NULL));
+  gen_type rng(TEST_RANDOM_SEED);
   int pg_id = pg_id_range(rng);
 
   int objs_per_folder = abs(merge_threshold) * 16 * g_ceph_context->_conf->filestore_split_multiple;
@@ -5175,7 +5189,7 @@ void StoreTest::doSyntheticTest(
   uint64_t max_obj, uint64_t max_wr, uint64_t align)
 {
   MixedGenerator gen(555);
-  gen_type rng(time(NULL));
+  gen_type rng(TEST_RANDOM_SEED);
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
 
   SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
@@ -5232,7 +5246,7 @@ void StoreTest::doSyntheticLimitedTest(
   uint64_t max_obj, uint64_t max_wr, uint64_t align)
 {
   MixedGenerator gen(555);
-  gen_type rng(time(NULL));
+  gen_type rng(TEST_RANDOM_SEED);
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
 
   SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
@@ -5506,7 +5520,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticMatrixPreferDeferred) {
 
 TEST_P(StoreTest, AttrSynthetic) {
   MixedGenerator gen(447);
-  gen_type rng(time(NULL));
+  gen_type rng(TEST_RANDOM_SEED);
   coll_t cid(spg_t(pg_t(0,447),shard_id_t::NO_SHARD));
 
   SyntheticWorkloadState test_obj(store.get(), &gen, &rng, cid, 40*1024, 4*1024, 0);
@@ -7185,7 +7199,7 @@ void doMany4KWritesTest(ObjectStore* store,
                         unsigned write_alignment)
 {
   MixedGenerator gen(555);
-  gen_type rng(time(NULL));
+  gen_type rng(TEST_RANDOM_SEED);
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
   store_statfs_t res_stat;
 
@@ -10464,7 +10478,7 @@ void doManySetAttr(ObjectStore* store,
   std::function<void(ObjectStore*)> do_check_fn)
 {
   MixedGenerator gen(447);
-  gen_type rng(time(NULL));
+  gen_type rng(TEST_RANDOM_SEED);
   coll_t cid(spg_t(pg_t(0, 447), shard_id_t::NO_SHARD));
 
   SyntheticWorkloadState test_obj(store, &gen, &rng, cid, 0, 0, 0);
