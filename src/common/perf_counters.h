@@ -19,6 +19,7 @@
 
 #include <string>
 #include <vector>
+#include <tuple>
 #include <memory>
 #include <atomic>
 #include <cstdint>
@@ -168,12 +169,13 @@ public:
         description(other.description),
         nick(other.nick),
 	 type(other.type),
-	 unit(other.unit),
-	 u64(other.u64.load()) {
-      auto a = other.read_avg();
-      u64 = a.first;
-      avgcount = a.second;
-      avgcount2 = a.second;
+	 unit(other.unit) {
+      std::tuple<uint64_t, uint64_t, uint64_t> a = other.read_avg_ex();
+      u64 = std::get<0>(a);
+      avgcount = std::get<1>(a);
+      avgcount2 = std::get<1>(a);
+      max_u64 = std::get<2>(a);
+
       if (other.histogram) {
         histogram.reset(new PerfHistogram<>(*other.histogram));
       }
@@ -186,6 +188,7 @@ public:
     enum perfcounter_type_d type;
     enum unit_t unit;
     std::atomic<uint64_t> u64 = { 0 };
+    std::atomic<uint64_t> max_u64 = { 0 };
     std::atomic<uint64_t> avgcount = { 0 };
     std::atomic<uint64_t> avgcount2 = { 0 };
     std::unique_ptr<PerfHistogram<>> histogram;
@@ -194,6 +197,7 @@ public:
     {
       if (type != PERFCOUNTER_U64) {
 	    u64 = 0;
+	    max_u64 = 0;
 	    avgcount = 0;
 	    avgcount2 = 0;
       }
@@ -212,6 +216,15 @@ public:
 	sum = u64;
       } while (avgcount != count);
       return { sum, count };
+    }
+    std::tuple<uint64_t,uint64_t, uint64_t> read_avg_ex() const {
+      uint64_t sum, count, _max;
+      do {
+	count = avgcount2;
+	sum = u64;
+	_max = max_u64;
+      } while (avgcount != count);
+      return { sum, count, _max };
     }
   };
 
