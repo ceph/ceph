@@ -117,7 +117,8 @@ def check_sanity():
             extra_preargs=['-iquote{path}'.format(path=os.path.join(CEPH_SRC_DIR, 'include'))]
         )
 
-        if ldflags := os.environ.get('LDFLAGS'):
+        ldflags = os.environ.get('LDFLAGS')
+        if ldflags:
             extra_postargs = ldflags.split()
         else:
             extra_postargs = None
