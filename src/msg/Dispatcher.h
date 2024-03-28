@@ -33,7 +33,7 @@ public:
     : cct(cct_)
   {
   }
-  virtual ~Dispatcher() { }
+  virtual ~Dispatcher() = default;
 
   /**
    * The Messenger calls this function to query if you are capable
@@ -209,12 +209,14 @@ public:
    *
    * Do not acquire locks in this method! It is considered "fast" delivery.
    *
-   * return 1 for success
-   * return 0 for no action (let another Dispatcher handle it)
-   * return <0 for failure (failure to parse caps, for instance)
+   * Note: MonClient is the only caller of this method and it is configured
+   *       to only call a single dispatcher.
+   *
+   * return true for success (auth succeeds for this stage of session construction)
+   * return false for failure (failure to parse caps, for instance)
    */
-  virtual int ms_handle_fast_authentication(Connection *con) {
-    return 0;
+  virtual bool ms_handle_fast_authentication(Connection *con) {
+    return false;
   }
 
   /**
