@@ -11895,7 +11895,7 @@ int BlueStore::_generate_read_result_bl(
       if (buffered) {
         bufferlist region_buffer;
         region_buffer.substr_of(raw_bl, blob_offset, length);
-        o->bc.did_read(o->c->cache, offset, region_buffer.length(), std::move(region_buffer));
+        o->bc.did_read(o->c->cache, offset, std::move(region_buffer));
       }
       for (auto& req : r2r) {
         for (auto& r : req.regs) {
@@ -11917,7 +11917,7 @@ int BlueStore::_generate_read_result_bl(
             bufferlist region_buffer;
             region_buffer.substr_of(req.bl, r.front, r.length);
             // need offset before padding
-            o->bc.did_read(o->c->cache, r.logical_offset, r.length, std::move(region_buffer));
+            o->bc.did_read(o->c->cache, r.logical_offset, std::move(region_buffer));
           }
           ready_regions[r.logical_offset].substr_of(req.bl, r.front, r.length);
         }
