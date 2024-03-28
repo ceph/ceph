@@ -238,7 +238,6 @@ struct FixedKVNode : ChildableCachedExtent {
     auto child = children[pos];
     ceph_assert(!is_reserved_ptr(child));
     if (is_valid_child_ptr(child)) {
-      ceph_assert(child->get_type() == T::TYPE);
       return c.cache.template get_extent_viewable_by_trans<T>(c.trans, (T*)child);
     } else if (is_pending()) {
       auto key = iter.get_key();
@@ -246,7 +245,6 @@ struct FixedKVNode : ChildableCachedExtent {
       auto spos = sparent.child_pos_for_key(key);
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
-	ceph_assert(child->get_type() == T::TYPE);
 	return c.cache.template get_extent_viewable_by_trans<T>(c.trans, (T*)child);
       } else {
 	return child_pos_t(&sparent, spos);
@@ -972,27 +970,7 @@ struct FixedKVLeafNode
 
   get_child_ret_t<LogicalCachedExtent>
   get_logical_child(op_context_t<NODE_KEY> c, uint16_t pos) final {
-    auto child = this->children[pos];
-    ceph_assert(!is_reserved_ptr(child));
-    if (is_valid_child_ptr(child)) {
-      ceph_assert(child->is_logical());
-      return c.cache.template get_extent_viewable_by_trans<
-	LogicalCachedExtent>(c.trans, (LogicalCachedExtent*)child);
-    } else if (this->is_pending()) {
-      auto key = this->iter_idx(pos).get_key();
-      auto &sparent = this->get_stable_for_key(key);
-      auto spos = sparent.child_pos_for_key(key);
-      auto child = sparent.children[spos];
-      if (is_valid_child_ptr(child)) {
-	ceph_assert(child->is_logical());
-	return c.cache.template get_extent_viewable_by_trans<
-	  LogicalCachedExtent>(c.trans, (LogicalCachedExtent*)child);
-      } else {
-	return child_pos_t(&sparent, spos);
-      }
-    } else {
-      return child_pos_t(this, pos);
-    }
+    return this->template get_child<LogicalCachedExtent>(c, this->iter_idx(pos));
   }
 
   // children are considered stable if any of the following case is true:
