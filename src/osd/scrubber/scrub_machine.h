@@ -10,7 +10,6 @@
 #include <boost/statechart/event_base.hpp>
 #include <boost/statechart/in_state_reaction.hpp>
 #include <boost/statechart/simple_state.hpp>
-#include <boost/statechart/shallow_history.hpp>
 #include <boost/statechart/state.hpp>
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
@@ -216,6 +215,10 @@ MEV(SchedReplica)
 /// that is in-flight to the local ObjectStore
 MEV(ReplicaPushesUpd)
 
+/// an internal event to trigger a selection of either ReplicaReserved
+/// or ReplicaUnreserved when re-entering ReplicaIdle
+MEV(InternalOnIdle)
+
 /**
  * IntervalChanged
  * The only path from PrimaryActive or ReplicaActive down to NotActive.
@@ -270,6 +273,10 @@ struct ReplicaIdle;
 struct ReplicaUnreserved;      ///< not reserved by a primary
 struct ReplicaWaitingReservation;  ///< a reservation request was received from
 struct ReplicaReserved;	       ///< we are reserved by our primary
+/// 'ReplicaAfterChunk' is a transitory state reached when returning from
+/// handling a single chunk. It serves as our private history mechanism, to
+/// determine whether to return to 'ReplicaReserved' or 'ReplicaUnreserved'.
+struct ReplicaAfterChunk;
 
 // and when handling a single chunk scrub request op:
 struct ReplicaActiveOp;
@@ -764,8 +771,6 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
  *    - initial state of ReplicaActive
  *    - No scrubbing is performed in this state, but reservation-related
  *      events are handled.
- *    - uses 'shallow history', so that when returning from ReplicaActiveOp, we
- *       return to where we were - either reserved by our primary, or unreserved.
  *
  *    - sub-states:
  *      * ReplicaUnreserved - not reserved by a primary. In this state we
@@ -776,6 +781,13 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
  *        cancellation command from the primary (or an interval change).
  *
  *      * ReplicaReserved - we are reserved by a primary.
+ *
+ *      There is also a transitory sub-state used when re-entering ReplicaIdle
+ *      from handling a single chunk scrub request op: ReplicaAfterChunk.
+ *      ReplicaAfterChunk uses the state of 'reservation_granted' to select an
+ *      internal transition upon entry, so that when returning from
+ *      ReplicaActiveOp, we return to where we were - either reserved by our
+ *      primary, or unreserved.
  *
  *  - ReplicaActiveOp - handling a single map request op
  *      * ReplicaWaitUpdates
@@ -828,11 +840,7 @@ enum class ReplicaReactCode {
   goto_replica_reserved
 };
 
-struct ReplicaActive : sc::state<
-			   ReplicaActive,
-			   ScrubMachine,
-			   mpl::list<sc::shallow_history<ReplicaIdle>>,
-			   sc::has_shallow_history>,
+struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
 		       NamedSimply {
   explicit ReplicaActive(my_context ctx);
   ~ReplicaActive();
@@ -852,6 +860,9 @@ struct ReplicaActive : sc::state<
 
   /// handle a 'release' from a primary
   void on_release(const ReplicaRelease& ev);
+
+  /// sub-states access to the 'being reserved' state
+  [[nodiscard]] bool is_reserved() const { return reservation_granted; }
 
   /**
    * cancel a granted or pending reservation
@@ -934,11 +945,7 @@ struct ReplicaActive : sc::state<
 };
 
 
-struct ReplicaIdle : sc::state<
-			 ReplicaIdle,
-			 ReplicaActive,
-			 ReplicaUnreserved,
-			 sc::has_shallow_history>,
+struct ReplicaIdle : sc::state<ReplicaIdle, ReplicaActive, ReplicaUnreserved>,
 		     NamedSimply {
   explicit ReplicaIdle(my_context ctx);
   ~ReplicaIdle() = default;
@@ -1031,6 +1038,18 @@ struct ReplicaReserved : sc::state<ReplicaReserved, ReplicaIdle>, NamedSimply {
   sc::result react(const ReplicaReserveReq&);
   sc::result react(const ReplicaRelease&);
   sc::result react(const StartReplica& eq);
+};
+
+/**
+ * 'ReplicaAfterChunk' is a transitory state that is transitioned-from
+ * immediately upon entry, based on the current value of 'reservation_granted'.
+ * It serves as our private implementation of a shallow history mechanism.
+ */
+struct ReplicaAfterChunk : sc::state<ReplicaAfterChunk, ReplicaIdle>,
+			   NamedSimply {
+  explicit ReplicaAfterChunk(my_context ctx);
+  using reactions = mpl::list<sc::custom_reaction<InternalOnIdle>>;
+  sc::result react(const InternalOnIdle&);
 };
 
 
