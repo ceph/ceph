@@ -1504,7 +1504,7 @@ void PgScrubber::apply_snap_mapper_fixes(
 
 void PgScrubber::maps_compare_n_cleanup()
 {
-  m_pg->add_objects_scrubbed_count(m_be->get_primary_scrubmap().objects.size());
+  m_pg->add_objects_scrubbed_count(std::ssize(m_be->get_primary_scrubmap().objects));
 
   auto required_fixes =
     m_be->scrub_compare_maps(m_end.is_max(), get_snap_mapper_accessor());
