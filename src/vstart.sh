@@ -5,6 +5,13 @@
 # abort on failure
 set -e
 
+# flush local redis server
+ps cax | grep redis-server > /dev/null
+if [ $? -eq 0 ];
+then
+    redis-cli FLUSHALL
+fi
+
 quoted_print() {
     for s in "$@"; do
         if [[ "$s" =~ \  ]]; then
