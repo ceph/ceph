@@ -592,12 +592,6 @@ Usage::
 
 	ceph mds rmfailed <int[0-]>
 
-Subcommand ``set_state`` sets mds state of <gid> to <numeric-state>.
-
-Usage::
-
-	ceph mds set_state <int[0-]> <int[0-20]>
-
 Subcommand ``stat`` shows MDS status.
 
 Usage::

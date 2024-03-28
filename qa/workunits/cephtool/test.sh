@@ -1137,7 +1137,6 @@ function test_mon_mds()
   # ceph mds tell mds.a getmap
   # ceph mds rm
   # ceph mds rmfailed
-  # ceph mds set_state
 
   ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
   ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it

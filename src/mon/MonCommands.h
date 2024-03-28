@@ -315,10 +315,6 @@ COMMAND_WITH_FLAG("mds freeze name=role_or_gid,type=CephString"
 // arbitrary limit 0-20 below; worth standing on head to make it
 // relate to actual state definitions?
 // #include "include/ceph_fs.h"
-COMMAND_WITH_FLAG("mds set_state "
-	"name=gid,type=CephInt,range=0 "
-	"name=state,type=CephInt,range=0|20",
-	"set mds state of <gid> to <numeric-state>", "mds", "rw", FLAG(HIDDEN))
 COMMAND("mds fail name=role_or_gid,type=CephString",
 	"Mark MDS failed: trigger a failover if a standby is available",
         "mds", "rw")
