@@ -23,7 +23,10 @@
                    name="username"
                    formControlName="username"
                    autocomplete="off"
-                   autofocus>
+                   autofocus
+                   ngbTooltip="White spaces at the beginning and end will be trimmed"
+                   i18n-ngbTooltip
+                   cdTrim>
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('username', formDir, 'required')"
                   i18n>This field is required.</span>
