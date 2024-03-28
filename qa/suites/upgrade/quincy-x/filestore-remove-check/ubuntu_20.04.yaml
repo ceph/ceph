@@ -1,9 +1,0 @@
-os_type: ubuntu
-os_version: "20.04"
-# the normal ubuntu 20.04 kernel (5.4.0-88-generic currently) have a bug that prevents the nvme_loop
-# from behaving.  I think it is this:
-#   https://lkml.org/lkml/2020/9/21/1456
-# (at least, that is the symptom: nvme nvme1: Connect command failed, error wo/DNR bit: 880)
-overrides:
-  kernel:
-    hwe: true
