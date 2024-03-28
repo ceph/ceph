@@ -4627,6 +4627,20 @@ public:
   }
 };
 
+bool Server::is_valid_layout(file_layout_t *layout)
+{
+  if (!layout->is_valid()) {
+    dout(10) << " invalid initial file layout" << dendl;
+    return false;
+  }
+  if (!mds->mdsmap->is_data_pool(layout->pool_id)) {
+    dout(10) << " invalid data pool " << layout->pool_id << dendl;
+    return false;
+  }
+
+  return true;
+}
+
 /* This function takes responsibility for the passed mdr*/
 void Server::handle_client_openc(MDRequestRef& mdr)
 {
@@ -4701,13 +4715,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     access |= MAY_SET_VXATTR;
   }
 
-  if (!layout.is_valid()) {
-    dout(10) << " invalid initial file layout" << dendl;
-    respond_to_request(mdr, -CEPHFS_EINVAL);
-    return;
-  }
-  if (!mds->mdsmap->is_data_pool(layout.pool_id)) {
-    dout(10) << " invalid data pool " << layout.pool_id << dendl;
+  if (!is_valid_layout(&layout)) {
     respond_to_request(mdr, -CEPHFS_EINVAL);
     return;
   }
@@ -5596,13 +5604,7 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
     access |= MAY_SET_VXATTR;
   }
 
-  if (!layout.is_valid()) {
-    dout(10) << "bad layout" << dendl;
-    respond_to_request(mdr, -CEPHFS_EINVAL);
-    return;
-  }
-  if (!mds->mdsmap->is_data_pool(layout.pool_id)) {
-    dout(10) << " invalid data pool " << layout.pool_id << dendl;
+  if (!is_valid_layout(&layout)) {
     respond_to_request(mdr, -CEPHFS_EINVAL);
     return;
   }
@@ -5729,14 +5731,8 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
   if (layout != old_layout) {
     access |= MAY_SET_VXATTR;
   }
-
-  if (!layout.is_valid()) {
-    dout(10) << "bad layout" << dendl;
-    respond_to_request(mdr, -CEPHFS_EINVAL);
-    return;
-  }
-  if (!mds->mdsmap->is_data_pool(layout.pool_id)) {
-    dout(10) << " invalid data pool " << layout.pool_id << dendl;
+  
+  if (!is_valid_layout(&layout)) {
     respond_to_request(mdr, -CEPHFS_EINVAL);
     return;
   }
@@ -5914,15 +5910,11 @@ int Server::parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
   if (r < 0) {
     return r;
   }
-
-  if (validate && !layout->is_valid()) {
-    dout(10) << __func__ << ": bad layout" << dendl;
-    return -CEPHFS_EINVAL;
+  
+  if (!is_valid_layout(layout)) {
+     return -CEPHFS_EINVAL;
   }
-  if (!mds->mdsmap->is_data_pool(layout->pool_id)) {
-    dout(10) << __func__ << ": invalid data pool " << layout->pool_id << dendl;
-    return -CEPHFS_EINVAL;
-  }
+  
   return 0;
 }
 
@@ -7007,6 +6999,11 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
     layout = mdr->dir_layout;
   else
     layout = mdcache->default_file_layout;
+
+  if (!is_valid_layout(&layout)) {
+    respond_to_request(mdr, -CEPHFS_EINVAL);
+    return;
+  }
 
   CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode, &layout);
   ceph_assert(newi);
