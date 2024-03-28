@@ -18,6 +18,7 @@ set(librbd_test
   test_ObjectMap.cc
   test_Operations.cc
   test_Trash.cc
+  test_Utils.cc
   journal/test_Entries.cc
   journal/test_Replay.cc
   journal/test_Stress.cc)
