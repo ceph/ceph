@@ -33,13 +33,15 @@ case "$1" in
 	rm -f /etc/init/ceph.conf
 	[ -x /sbin/start ] && start ceph-all || :
 
-        # adjust file and directory permissions
-	for DIR in /var/lib/ceph/* ; do
-	    if ! dpkg-statoverride --list $DIR >/dev/null
-	    then
-		chown $SERVER_USER:$SERVER_GROUP $DIR
-	    fi
-	done
+	PERM_COMMAND="dpkg-statoverride --list '{}' > /dev/null || chown ${SERVER_USER}:${SERVER_GROUP} '{}'"
+
+	# adjust file and directory permissions
+	find /var/lib/ceph -mindepth 1 -maxdepth 1 -print0 \
+	    | xargs -0 -I '{}' sh -c "${PERM_COMMAND}"
+
+	# adjust permissions so ceph-crash.service can post reports
+	find /var/lib/ceph/crash -print0 \
+	    | xargs -0 -I '{}' sh -c "${PERM_COMMAND}"
     ;;
     abort-upgrade|abort-remove|abort-deconfigure)
 	:
