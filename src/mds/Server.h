@@ -158,7 +158,6 @@ public:
 
   // -- requests --
   void handle_client_request(const cref_t<MClientRequest> &m);
-  void handle_client_reply(const cref_t<MClientReply> &m);
 
   void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
 			 LogEvent *le, MDSLogContextBase *fin);
@@ -235,12 +234,6 @@ public:
   void handle_client_removexattr(MDRequestRef& mdr);
 
   void handle_client_fsync(MDRequestRef& mdr);
-
-  bool is_unlink_pending(CDentry *dn);
-  void wait_for_pending_unlink(CDentry *dn, MDRequestRef& mdr);
-
-  bool is_reintegrate_pending(CDentry *dn);
-  void wait_for_pending_reintegrate(CDentry *dn, MDRequestRef& mdr);
 
   // open
   void handle_client_open(MDRequestRef& mdr);
