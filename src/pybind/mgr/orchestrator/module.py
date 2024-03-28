@@ -1129,6 +1129,17 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
             return HandleCommandResult(stdout=table.get_string())
 
+    @_cli_read_command('orch systemd-unit ls')
+    def _systemd_unit_ls(
+        self,
+        hostname: Optional[str] = None,
+        daemon_type: Optional[str] = None,
+        daemon_id: Optional[str] = None
+    ) -> HandleCommandResult:
+        completion = self.systemd_unit_ls(hostname, daemon_type, daemon_id)
+        daemons = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(daemons, indent=4))
+
     def _get_credentials(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[str, str]:
 
         _username = username
