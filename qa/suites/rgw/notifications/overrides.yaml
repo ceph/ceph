@@ -9,5 +9,7 @@ overrides:
         rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl: false
   rgw:
-    realm: default
+    realm: MyRealm
+    zonegroup: MyZoneGroup
+    zone: MyZone
     storage classes: LUKEWARM, FROZEN
