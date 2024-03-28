@@ -8,25 +8,30 @@ roles:
   - ceph.nvmeof.nvmeof.a
 - - host.b
   - mon.b
-  - mon.c
   - osd.2
   - osd.3
   - osd.4
   - client.1
   - ceph.nvmeof.nvmeof.b
-- - client.2
-- - client.3
+- - host.c
+  - mon.c
+  - osd.5
+  - osd.6
+  - osd.7
+  - client.2
+  - ceph.nvmeof.nvmeof.c
+- - client.3 # initiator
 
 tasks:
 - nvmeof:
     client: client.0
-    gw_image: quay.io/barakda1/nvmeof:qe_ceph_devel_21e59b2 # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
+    gw_image: quay.io/barakda1/nvmeof:qe_ceph_devel_21e59b2  # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
     rbd:
       pool_name: mypool
       image_name_prefix: myimage
     gateway_config:
       subsystems_count: 3
-      namespaces_count: 20
+      namespaces_count: 5
       cli_image: quay.io/barakda1/nvmeof-cli:qe_ceph_devel_21e59b2
 
 - cephadm.wait_for_service:
@@ -35,22 +40,26 @@ tasks:
 - workunit:
     no_coverage_and_limits: true
     clients:
-      client.2:
+      client.3:
         - rbd/nvmeof_setup_subsystem.sh
+        - rbd/nvmeof_basic_tests.sh
     env:
       RBD_POOL: mypool
       RBD_IMAGE_PREFIX: myimage
+
+- nvmeof.thrash:
+
+- mon_thrash:
+    revive_delay: 60
+    thrash_delay: 60
+    thrash_many: true
 
 - workunit:
     no_coverage_and_limits: true
     timeout: 30m
     clients:
-      client.2:
-        - rbd/nvmeof_basic_tests.sh
-        - rbd/nvmeof_fio_test.sh --start_ns 1 --end_ns 30 --rbd_iostat
       client.3:
-        - rbd/nvmeof_basic_tests.sh
-        - rbd/nvmeof_fio_test.sh --start_ns 31 --end_ns 60
+        - rbd/nvmeof_fio_test.sh --rbd_iostat --ha_check
     env:
       RBD_POOL: mypool
       IOSTAT_INTERVAL: '10'

@@ -6,7 +6,7 @@ sudo dnf install nvme-cli -y
 sudo lsmod | grep nvme
 
 source /etc/ceph/nvmeof.env
-SPDK_CONTROLLER="SPDK bdev Controller"
+SPDK_CONTROLLER="Ceph bdev Controller"
 DISCOVERY_PORT="8009"
 
 discovery() {
@@ -18,7 +18,7 @@ discovery() {
 }
 
 connect() {
-    sudo nvme connect -t tcp --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS -s $NVMEOF_PORT -n $NVMEOF_NQN
+    sudo nvme connect -t tcp --traddr $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS -s $NVMEOF_PORT -n "${NVMEOF_SUBSYSTEMS_PREFIX}1"
     output=$(sudo nvme list)
     if ! echo "$output" | grep -q "$SPDK_CONTROLLER"; then
         return 1
@@ -34,7 +34,7 @@ disconnect_all() {
 }
 
 connect_all() {
-    sudo nvme connect-all --traddr=$NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --transport=tcp
+    sudo nvme connect-all --traddr=$NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --transport=tcp -l 3600
     output=$(sudo nvme list)
     if ! echo "$output" | grep -q "$SPDK_CONTROLLER"; then
         return 1
@@ -70,8 +70,9 @@ test_run list_subsys 1
 test_run disconnect_all
 test_run list_subsys 0
 test_run connect_all
-gateway_count=$(( $(echo "$NVMEOF_GATEWAY_IP_ADDRESSES" | tr -cd ',' | wc -c) + 1))
-test_run list_subsys $gateway_count
+gateways_count=$(( $(echo "$NVMEOF_GATEWAY_IP_ADDRESSES" | tr -cd ',' | wc -c) + 1 ))
+multipath_count=$(( $gateways_count * $NVMEOF_SUBSYSTEMS_COUNT)) 
+test_run list_subsys $multipath_count
 
 
 echo "-------------Test Summary-------------"
