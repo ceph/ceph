@@ -186,7 +186,7 @@ TEST(TestLCConfigurationDecoder, XMLDoc5)
 
 struct LCWorkTimeTests : ::testing::Test
 {
-   CephContext* cct;
+   boost::intrusive_ptr<CephContext> cct;
    std::unique_ptr<RGWLC::LCWorker> worker;
 
    // expects input in the form of "%m/%d/%y %H:%M:%S"; e.g., "01/15/23 23:59:01"
@@ -234,15 +234,15 @@ struct LCWorkTimeTests : ::testing::Test
 protected:
 
    void SetUp() override {
-      cct = (new CephContext(CEPH_ENTITY_TYPE_ANY))->get();
+      cct.reset(new CephContext(CEPH_ENTITY_TYPE_ANY), false);
 
       cct->_conf->set_value("rgw_lc_max_wp_worker", 0, 0); // no need to create a real workpool
-      worker = std::make_unique<RGWLC::LCWorker>(nullptr, cct, nullptr, 0);
+      worker = std::make_unique<RGWLC::LCWorker>(nullptr, cct.get(), nullptr, 0);
    }
 
    void TearDown() override {
       worker.reset();
-      cct->put();
+      cct.reset();
    }
 };
 

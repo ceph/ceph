@@ -771,7 +771,7 @@ TEST(pick_address, filtering)
   ipv4(&a_two, "10.2.1.123");
   ipv6(&a_three, "2001:1234:5678:90ab::cdef");
 
-  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_MON);
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_MON), false);
   cct->_conf._clear_safe_to_start_threads();  // so we can set configs
 
   cct->_conf.set_val("public_addr", "");
@@ -943,7 +943,7 @@ TEST(pick_address, ipv4_ipv6_enabled)
 
   ipv4(&a_one, "10.1.1.2");
 
-  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
   cct->_conf._clear_safe_to_start_threads();  // so we can set configs
 
   cct->_conf.set_val("public_addr", "");
@@ -975,7 +975,7 @@ TEST(pick_address, ipv4_ipv6_enabled2)
 
   ipv6(&a_one, "2001:1234:5678:90ab::cdef");
 
-  boost::intrusive_ptr<CephContext> cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
   cct->_conf._clear_safe_to_start_threads();  // so we can set configs
 
   cct->_conf.set_val("public_addr", "");
