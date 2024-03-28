@@ -252,3 +252,11 @@ other daemons, please see :ref:`health-checks`.
     dirty data for cap revokes). If ``defer_client_eviction_on_laggy_osds`` is
     set to true (default true), client eviction will not take place and thus
     this health warning will be generated.
+
+``MDS_ESTIMATED_REPLAY_TIME``
+-----------------------------
+  Message
+    "HEALTH_WARN Replay: x% complete. Estimated time remaining *x* seconds
+
+  Description
+    When an MDS journal replay takes more than 30 seconds, this message indicates the estimated time to completion.
