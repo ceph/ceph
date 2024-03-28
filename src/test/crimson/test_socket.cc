@@ -14,6 +14,7 @@
 #include "crimson/net/Errors.h"
 #include "crimson/net/Fwd.h"
 #include "crimson/net/Socket.h"
+#include "test/crimson/ctest_utils.h"
 
 using crimson::common::local_conf;
 
@@ -552,7 +553,7 @@ seastar::future<int> do_test(seastar::app_template& app)
 
 int main(int argc, char** argv)
 {
-  seastar::app_template app;
+  seastar::app_template app{get_smp_opts_from_ctest()};
   return app.run(argc, argv, [&app] {
     return do_test(app);
   });
