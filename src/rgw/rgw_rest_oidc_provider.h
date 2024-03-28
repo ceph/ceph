@@ -69,3 +69,23 @@ public:
   RGWOpType get_type() override { return RGW_OP_LIST_OIDC_PROVIDERS; }
   uint64_t get_op() override { return rgw::IAM::iamListOIDCProviders; }
 };
+
+class RGWAddClientIdToOIDCProvider : public RGWRestOIDCProviderWrite {
+public:
+  RGWAddClientIdToOIDCProvider() = default;
+  void execute(optional_yield y) override;
+  int get_params();
+  const char* name() const override { return "add_client_id_to_oidc_provider"; }
+  RGWOpType get_type() override { return RGW_OP_ADD_CLIENTID_TO_OIDC_PROVIDER; }
+  uint64_t get_op() override { return rgw::IAM::iamAddClientIdToOIDCProvider; }
+};
+
+class RGWUpdateOIDCProviderThumbprint : public RGWRestOIDCProviderWrite {
+public:
+  RGWUpdateOIDCProviderThumbprint() = default;
+  void execute(optional_yield y) override;
+  int get_params();
+  const char* name() const override { return "update_oidc_provider_thumbprint"; }
+  RGWOpType get_type() override { return RGW_OP_UPDATE_OIDC_PROVIDER_THUMBPRINT; }
+  uint64_t get_op() override { return rgw::IAM::iamUpdateOIDCProviderThumbprint; }
+};

@@ -110,6 +110,7 @@ public:
   int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) = 0;
   int get(const DoutPrefixProvider *dpp, optional_yield y);
+  int update(const DoutPrefixProvider *dpp, optional_yield y);
   void dump(Formatter *f) const;
   void dump_all(Formatter *f) const;
   void decode_json(JSONObj *obj);

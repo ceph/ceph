@@ -488,6 +488,8 @@ bool is_non_s3_op(RGWOpType op_type)
       op_type == RGW_OP_DELETE_OIDC_PROVIDER ||
       op_type == RGW_OP_GET_OIDC_PROVIDER ||
       op_type == RGW_OP_LIST_OIDC_PROVIDERS ||
+      op_type == RGW_OP_ADD_CLIENTID_TO_OIDC_PROVIDER ||
+      op_type == RGW_OP_UPDATE_OIDC_PROVIDER_THUMBPRINT ||
       op_type == RGW_OP_PUBSUB_TOPIC_CREATE ||
       op_type == RGW_OP_PUBSUB_TOPICS_LIST ||
       op_type == RGW_OP_PUBSUB_TOPIC_GET ||
