@@ -12,14 +12,12 @@
  *
  */
 
+#include <thread>
 #include "include/mempool.h"
 #include "include/demangle.h"
 
-#if defined(_GNU_SOURCE) && defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
-#else
-// Thread local variables should save index, not &shard[index],
-// because shard[] is defined in the class
-static thread_local size_t thread_shard_index = mempool::num_shards;
+#if defined(MEMPOOL_SCHED_GETCPU) && defined(__GNUC__) && defined(__x86_64__)
+#include <sys/platform/x86.h>
 #endif
 
 // default to debug_mode off
@@ -27,12 +25,103 @@ bool mempool::debug_mode = false;
 
 // --------------------------------------------------------------
 
+namespace mempool {
+
+static size_t num_shard_bits;
+static size_t num_shards;
+
+std::unique_ptr<shard_t[]> shards = std::make_unique<shard_t[]>(get_num_shards());
+}
+
+size_t mempool::get_num_shards(void) {
+  static std::once_flag once;
+  std::call_once(once,[&]() {
+    unsigned int threads = std::thread::hardware_concurrency();
+    if (threads == 0) {
+      threads = default_shards;
+    }
+    threads = std::clamp<unsigned int>( threads, min_shards, max_shards );
+    threads--;
+    while (threads != 0) {
+      num_shard_bits++;
+      threads>>=1;
+    }
+    num_shards = 1 << num_shard_bits;
+  });
+  return num_shards;
+}
+
+// There are 3 implementations of pick_a_shard_int, THREAD_OWNER is the
+// preferred implementaion, ROUND ROBIN is used if sched_getcpu() is not
+// available.
+int mempool::pick_a_shard_int(void) {
+#if defined(MEMPOOL_THREAD_OWNER)
+  // THREAD_OWNER: Shards are owed by a thread, ownership is updated whenever
+  // a thread uses a shard. Threads call sched_getcpu() to select which shard
+  // to use and cache this value. Threads update their cached value whenever
+  // they access a shard they do not currently own. There is very little cache
+  // line ping pong and minimal calls to sched_getcpu()
+  static int thread_owner_id_next = 1;
+  static std::mutex thread_owner_mtx;
+  struct threadinfo_t {
+    int    owner_id;
+    size_t shard_index;
+  };
+  static thread_local struct threadinfo_t threadinfo = { -1,0 };
+  if (shards[threadinfo.shard_index].owner_id==threadinfo.owner_id) {
+    return threadinfo.shard_index;
+  }
+  if (threadinfo.owner_id == -1) {
+    // Thread has not been assigned an owner yet
+    std::lock_guard<std::mutex> lck (thread_owner_mtx);
+    threadinfo.owner_id = thread_owner_id_next++;
+  }
+  threadinfo.shard_index = sched_getcpu() & ((1 << num_shard_bits) - 1);
+  shards[threadinfo.shard_index].owner_id = threadinfo.owner_id;
+  return threadinfo.shard_index;
+#elif defined(MEMPOOL_SCHED_GETCPU)
+  // SCHED_GETCPU: Shards are assigned to CPU cores. Threads use sched_getcpu()
+  // to query the core before every access to the shard. Other than the (very
+  // rare) situation where a context switch occurs between calling
+  // sched_getcpu() and updating the shard there is no cache line
+  // contention
+  //
+  // For modern x86 platforms (e.g. Intel Icelake and newer) use rdpid to
+  // determine the core.
+#if defined(__GNUC__) && defined(__x86_64__)
+  static bool has_rdpid = CPU_FEATURE_ACTIVE(RDPID);
+  if (has_rdpid) {
+      long shard;
+      asm ("rdpid %0" : "=r" (shard));
+      return shard & ((1 << num_shard_bits) - 1);
+  }
+#endif
+  return sched_getcpu() & ((1 << num_shard_bits) - 1);
+#else
+  // ROUND_ROBIN: Static assignment of threads to shards using a round robin
+  // distribution. This minimizes the number of threads sharing the same shard,
+  // but threads sharing the same shard will cause cache line ping pong when
+  // the threads are running on different cores (likely)
+  static int thread_shard_next;
+  static std::mutex thread_shard_mtx;
+  static thread_local size_t thread_shard_index = max_shards;
+
+  if (thread_shard_index == max_shards) {
+    // Thread has not been assigned to a shard yet
+    std::lock_guard<std::mutex> lck (thread_shard_mtx);
+    thread_shard_index = thread_shard_next++ & ((1 << num_shard_bits) - 1);
+  }
+  return thread_shard_index;
+#endif
+}
+
 mempool::pool_t& mempool::get_pool(mempool::pool_index_t ix)
 {
   // We rely on this array being initialized before any invocation of
   // this function, even if it is called by ctors in other compilation
   // units that are being initialized before this compilation unit.
   static mempool::pool_t table[num_pools];
+  table[ix].pool_index = ix;
   return table[ix];
 }
 
@@ -73,8 +162,8 @@ void mempool::set_debug_mode(bool d)
 size_t mempool::pool_t::allocated_bytes() const
 {
   ssize_t result = 0;
-  for (size_t i = 0; i < num_shards; ++i) {
-    result += shard[i].bytes;
+  for (size_t i = 0; i < get_num_shards(); ++i) {
+    result += shards[i].pool[pool_index].bytes;
   }
   if (result < 0) {
     // we raced with some unbalanced allocations/deallocations
@@ -86,8 +175,8 @@ size_t mempool::pool_t::allocated_bytes() const
 size_t mempool::pool_t::allocated_items() const
 {
   ssize_t result = 0;
-  for (size_t i = 0; i < num_shards; ++i) {
-    result += shard[i].items;
+  for (size_t i = 0; i < get_num_shards(); ++i) {
+    result += shards[i].pool[pool_index].items;
   }
   if (result < 0) {
     // we raced with some unbalanced allocations/deallocations
@@ -98,47 +187,31 @@ size_t mempool::pool_t::allocated_items() const
 
 void mempool::pool_t::adjust_count(ssize_t items, ssize_t bytes)
 {
-#if defined(_GNU_SOURCE) && defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
-  // the expected path: we alway pick the shard for a cpu core
-  // a thread is executing on.
-  const size_t shard_index = pick_a_shard_int();
-#else
-  // fallback for lack of sched_getcpu()
-  const size_t shard_index = []() {
-    if (thread_shard_index == num_shards) {
-      thread_shard_index = pick_a_shard_int();
-    }
-    return thread_shard_index;
-  }();
-#endif
-  shard[shard_index].items += items;
-  shard[shard_index].bytes += bytes;
+  const auto shid = pick_a_shard_int();
+  auto& shard = shards[shid].pool[pool_index];
+  shard.items += items;
+  shard.bytes += bytes;
 }
 
 void mempool::pool_t::get_stats(
   stats_t *total,
   std::map<std::string, stats_t> *by_type) const
 {
-  for (size_t i = 0; i < num_shards; ++i) {
-    total->items += shard[i].items;
-    total->bytes += shard[i].bytes;
+  for (size_t i = 0; i < get_num_shards(); ++i) {
+    total->items += shards[i].pool[pool_index].items;
+    total->bytes += shards[i].pool[pool_index].bytes;
   }
   if (debug_mode) {
     std::lock_guard shard_lock(lock);
     for (auto &p : type_map) {
       std::string n = ceph_demangle(p.second.type_name);
       stats_t &s = (*by_type)[n];
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
       s.bytes = 0;
       s.items = 0;
-      for (size_t i = 0 ; i < num_shards; ++i) {
+      for (size_t i = 0 ; i < get_num_shards(); ++i) {
         s.bytes += p.second.shards[i].items * p.second.item_size;
         s.items += p.second.shards[i].items;
       }
-#else
-      s.bytes = p.second.items * p.second.item_size;
-      s.items = p.second.items;
-#endif
     }
   }
 }
