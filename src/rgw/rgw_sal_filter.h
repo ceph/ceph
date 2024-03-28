@@ -268,6 +268,9 @@ public:
 				      std::optional<rgw_bucket> bucket,
 				      RGWBucketSyncPolicyHandlerRef* phandler,
 				      optional_yield y) override;
+  virtual int get_object_sync_handler(const DoutPrefixProvider* dpp,
+    RGWObjectSyncHandlerRef* phandler,
+    optional_yield y) override;
   virtual RGWDataSyncStatusManager* get_data_sync_manager(const rgw_zone_id& source_zone) override;
   virtual void wakeup_meta_sync_shards(std::set<int>& shard_ids) override;
   virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp,

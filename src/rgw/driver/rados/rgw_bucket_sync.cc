@@ -8,6 +8,8 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_bucket_sync.h"
+#include "services/svc_bilog_rados.h"
+#include "services/svc_bi_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -993,6 +995,19 @@ void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *_sour
   }
 }
 
+bool RGWBucketSyncPolicyHandler::bucket_exports_object(std::string obj_name, RGWObjTags* tags) {
+  if (bucket_exports_data()) {
+    for (auto& entry : target_pipes.pipe_map) {
+      auto& filter = entry.second.params.source.filter;
+      if (filter.check_prefix(obj_name) && filter.check_tags(tags->get_tags())) {
+	return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 bool RGWBucketSyncPolicyHandler::bucket_exports_data() const
 {
   if (!bucket) {
@@ -1016,3 +1031,47 @@ bool RGWBucketSyncPolicyHandler::bucket_imports_data() const
   return bucket_is_sync_target();
 }
 
+
+RGWObjectSyncHandler::RGWObjectSyncHandler(
+  RGWSI_BILog_RADOS *_bilog_rados_svc
+  ):
+  bilog_rados_svc(_bilog_rados_svc) {}
+
+bool RGWObjectSyncHandler::object_is_synced(
+  const DoutPrefixProvider *dpp,
+  rgw::sal::Object *obj,
+  ceph::real_time &obj_mtime)
+{
+  auto bucket_info = obj->get_bucket()->get_info();
+
+  if (bucket_info.is_indexless()) {
+    ldpp_dout(dpp, 0) << "ERROR: Trying to check object replication status for an object in an indexless bucket. obj = " << obj->get_key() << dendl;
+    return false; // Should never happen.
+  }
+
+  auto log_layout = std::reference_wrapper{bucket_info.layout.logs.front()};
+  const uint32_t shard_count = num_shards(log_to_index_layout(log_layout));
+
+  std::string marker;
+  bool truncated;
+  list<rgw_bi_log_entry> entries;
+
+  const int shard_id = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj->get_key(), shard_count);
+
+  bilog_rados_svc->log_list(
+    dpp,
+    bucket_info,
+    log_layout,
+    shard_id,
+    marker,
+    1,
+    entries,
+    &truncated);
+
+  if (entries.empty()) {
+    return true;
+  }
+
+  rgw_bi_log_entry earliest_marker = entries.front();
+  return earliest_marker.timestamp > obj_mtime;
+}

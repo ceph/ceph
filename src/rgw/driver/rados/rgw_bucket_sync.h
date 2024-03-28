@@ -22,6 +22,7 @@
 class RGWSI_Zone;
 class RGWSI_SyncModules;
 class RGWSI_Bucket_Sync;
+class RGWSI_BILog_RADOS;
 
 struct rgw_sync_group_pipe_map;
 struct rgw_sync_bucket_pipes;
@@ -402,6 +403,7 @@ public:
     return target_hints;
   }
 
+  bool bucket_exports_object(std::string obj_name, RGWObjTags* tags);
   bool bucket_exports_data() const;
   bool bucket_imports_data() const;
 
@@ -412,5 +414,16 @@ public:
   bool is_legacy_config() const {
     return legacy_config;
   }
+};
+
+class RGWObjectSyncHandler {
+  RGWSI_BILog_RADOS *bilog_rados_svc;
+
+ public:
+  RGWObjectSyncHandler(RGWSI_BILog_RADOS *_bilog_rados_svc);
+
+  bool object_is_synced(const DoutPrefixProvider *dpp,
+    rgw::sal::Object* obj,
+    ceph::real_time &obj_mtime);
 };
 

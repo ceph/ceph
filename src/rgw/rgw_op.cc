@@ -56,6 +56,7 @@
 #include "rgw_torrent.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
+#include "rgw_bucket_sync.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -961,6 +962,24 @@ void rgw_build_iam_environment(rgw::sal::Driver* driver,
     s->env.emplace("sts:authentication", "true");
   } else {
     s->env.emplace("sts:authentication", "false");
+  }
+}
+
+void handle_replication_status_header(
+    const DoutPrefixProvider *dpp,
+    rgw::sal::Attrs& attrs,
+    rgw::sal::Driver* driver,
+    req_state* s,
+    ceph::real_time &obj_mtime) {
+  auto attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
+  if (attr_iter != attrs.end() && attr_iter->second.to_str() == "PENDING") {
+    RGWObjectSyncHandlerRef sync_handler;
+    int sync_ret = driver->get_object_sync_handler(dpp, &sync_handler, s->yield);
+    if (sync_ret == 0 && sync_handler->object_is_synced(dpp, s->object.get(), obj_mtime)) {
+	attr_iter->second.clear();
+	attr_iter->second.append("COMPLETED");
+	ldpp_dout(dpp, 20) << *s->object << " has amz-replication-status header set to COMPLETED" << dendl;
+    }
   }
 }
 
@@ -2375,6 +2394,8 @@ void RGWGetObj::execute(optional_yield y)
       }
     } catch (const buffer::error&) {}
   }
+
+  handle_replication_status_header(this, attrs, driver, s, lastmod);
 
   if (get_type() == RGW_OP_GET_OBJ && get_data) {
     op_ret = handle_cloudtier_obj(attrs, sync_cloudtiered);
@@ -4488,6 +4509,19 @@ void RGWPutObj::execute(optional_yield y)
       ldpp_dout(this, 0) << "bad user manifest: " << dlo_manifest << dendl;
       return;
     }
+  }
+
+  RGWBucketSyncPolicyHandlerRef policy_handler;
+  op_ret = driver->get_sync_policy_handler(this, std::nullopt, s->bucket->get_key(), &policy_handler, s->yield);
+
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "failed to read sync policy for bucket: " << s->bucket << dendl;
+    return;
+  }
+  if (policy_handler && policy_handler->bucket_exports_object(s->object->get_name(), obj_tags.get())) {
+    bufferlist repl_bl;
+    repl_bl.append("PENDING");
+    emplace_attr(RGW_ATTR_OBJ_REPLICATION_STATUS, std::move(repl_bl));
   }
 
   if (slo_info) {

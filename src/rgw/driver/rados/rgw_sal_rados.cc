@@ -1350,6 +1350,14 @@ int RadosStore::get_sync_policy_handler(const DoutPrefixProvider* dpp,
   return ctl()->bucket->get_sync_policy_handler(zone, bucket, phandler, y, dpp);
 }
 
+int RadosStore::get_object_sync_handler(const DoutPrefixProvider* dpp,
+    RGWObjectSyncHandlerRef* phandler,
+    optional_yield y)
+{
+  *phandler = std::make_shared<RGWObjectSyncHandler>(svc()->bilog_rados);
+  return 0;
+}
+
 RGWDataSyncStatusManager* RadosStore::get_data_sync_manager(const rgw_zone_id& source_zone)
 {
   return rados->get_data_sync_manager(source_zone);
