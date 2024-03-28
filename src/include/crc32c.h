@@ -42,10 +42,10 @@ uint32_t ceph_crc32c_zeros(uint32_t crc, unsigned length);
  */
 static inline uint32_t ceph_crc32c(uint32_t crc, unsigned char const *data, unsigned length)
 {
-#ifndef HAVE_POWER8
+#if !defined(HAVE_POWER8) && !defined(HAVE_S390X)
   if (!data && length > 16)
     return ceph_crc32c_zeros(crc, length);
-#endif /* HAVE_POWER8 */
+#endif /* !HAVE_POWER8 && !HAVE_S390X */
 
   return ceph_crc32c_func(crc, data, length);
 }
