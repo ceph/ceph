@@ -379,10 +379,16 @@ void MirrorStatusUpdater<I>::handle_update_task(int r) {
 
   m_updating_global_image_ids.clear();
 
+  bool unlock = true;
   if (m_update_requested) {
     m_update_requested = false;
-    queue_update_task(std::move(locker));
-  } else {
+    if (r != -ETIMEDOUT) {
+      queue_update_task(std::move(locker));
+      unlock = false;
+    }
+  }
+
+  if (unlock) {
     locker.unlock();
   }
 

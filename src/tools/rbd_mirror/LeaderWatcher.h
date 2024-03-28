@@ -216,6 +216,7 @@ private:
   Context *m_on_finish = nullptr;
   Context *m_on_shut_down_finish = nullptr;
   uint64_t m_acquire_attempts = 0;
+  uint64_t m_retry_attempts = 0;
   int m_ret_val = 0;
   Instances<ImageCtxT> *m_instances = nullptr;
   librbd::managed_lock::Locker m_locker;

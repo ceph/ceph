@@ -51,6 +51,7 @@ private:
 
   ImageCtxT *m_image_ctx;
   uint64_t m_snap_id;
+  uint64_t m_retry_attempts = 0;
   Context *m_on_finish;
 
   bufferlist m_bl;

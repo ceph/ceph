@@ -23,6 +23,7 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void RemoveImageStateRequest<I>::send() {
+  m_retry_attempts = 0;
   get_object_count();
 }
 
@@ -50,6 +51,14 @@ void RemoveImageStateRequest<I>::handle_get_object_count(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << "r=" << r << dendl;
 
+  if (r == -ETIMEDOUT &&
+      m_retry_attempts < cct->_conf.get_val<uint64_t>("rbd_retry_attempts")) {
+    ++m_retry_attempts;
+    ldout(cct, 10) << "retry_attempts=" << m_retry_attempts << dendl;
+    get_object_count();
+    return;
+  }
+
   if (r < 0) {
     lderr(cct) << "failed to read image state object: " << cpp_strerror(r)
                << dendl;
@@ -61,7 +70,7 @@ void RemoveImageStateRequest<I>::handle_get_object_count(int r) {
   auto iter = m_bl.cbegin();
   try {
     using ceph::decode;
-    
+
     decode(header, iter);
   } catch (const buffer::error &err) {
     lderr(cct) << "failed to decode image state object header" << dendl;

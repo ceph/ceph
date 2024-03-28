@@ -47,6 +47,7 @@ void SnapshotRemoveRequest<I>::send_op() {
     }
   }
 
+  m_retry_attempts = 0;
   trash_snap();
 }
 
@@ -69,6 +70,7 @@ void SnapshotRemoveRequest<I>::trash_snap() {
     return;
   } else if (cls::rbd::get_snap_namespace_type(m_snap_namespace) ==
                cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+    m_retry_attempts = 0;
     get_snap();
     return;
   }
@@ -97,6 +99,12 @@ void SnapshotRemoveRequest<I>::handle_trash_snap(int r) {
     // trash / clone v2 not supported
     detach_child();
     return;
+  } else if (r == -ETIMEDOUT  &&
+      m_retry_attempts < cct->_conf.get_val<uint64_t>("rbd_retry_attempts")) {
+    ++m_retry_attempts;
+    ldout(cct, 10) << "retry_attempts=" << m_retry_attempts << dendl;
+    trash_snap();
+    return;
   } else if (r < 0 && r != -EEXIST) {
     lderr(cct) << "failed to move snapshot to trash: " << cpp_strerror(r)
                << dendl;
@@ -105,6 +113,7 @@ void SnapshotRemoveRequest<I>::handle_trash_snap(int r) {
   }
 
   m_trashed_snapshot = true;
+  m_retry_attempts = 0;
   get_snap();
 }
 
@@ -143,6 +152,12 @@ void SnapshotRemoveRequest<I>::handle_get_snap(int r) {
       list_children();
       return;
     }
+  } else if (r == -ETIMEDOUT  &&
+      m_retry_attempts < cct->_conf.get_val<uint64_t>("rbd_retry_attempts")) {
+    ++m_retry_attempts;
+    ldout(cct, 10) << "retry_attempts=" << m_retry_attempts << dendl;
+    get_snap();
+    return;
   }
 
   if (r < 0) {

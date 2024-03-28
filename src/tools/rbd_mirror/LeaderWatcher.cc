@@ -189,6 +189,7 @@ void LeaderWatcher<I>::handle_shut_down_leader_lock(int r) {
     derr << "error shutting down leader lock: " << cpp_strerror(r) << dendl;
   }
 
+  m_retry_attempts = 0;
   unregister_watch();
 }
 
@@ -208,6 +209,15 @@ void LeaderWatcher<I>::unregister_watch() {
 template <typename I>
 void LeaderWatcher<I>::handle_unregister_watch(int r) {
   dout(10) << "r=" << r << dendl;
+
+  if (r == -ETIMEDOUT  && m_retry_attempts < m_cct->_conf.get_val<uint64_t>(
+	"rbd_retry_attempts")) {
+    std::lock_guard locker{m_lock};
+    ++m_retry_attempts;
+    dout(10) << "retry_attempts=" << m_retry_attempts << dendl;
+    unregister_watch();
+    return;
+  }
 
   if (r < 0) {
     derr << "error unregistering leader watcher for " << m_oid << " object: "
@@ -452,6 +462,7 @@ void LeaderWatcher<I>::handle_post_release_leader_lock(int r,
   ceph_assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
 
+  m_retry_attempts = 0;
   notify_lock_released();
 }
 
@@ -497,6 +508,7 @@ void LeaderWatcher<I>::handle_break_leader_lock(int r) {
 
   m_locker = {};
   m_acquire_attempts = 0;
+  m_retry_attempts = 0;
   acquire_leader_lock();
 }
 
@@ -554,6 +566,7 @@ void LeaderWatcher<I>::handle_get_locker(int r,
   if (r == -ENOENT) {
     m_locker = {};
     m_acquire_attempts = 0;
+    m_retry_attempts = 0;
     acquire_leader_lock();
     return;
   } else if (r < 0) {
@@ -608,6 +621,7 @@ void LeaderWatcher<I>::schedule_acquire_leader_lock(uint32_t delay_factor) {
   ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
+  m_retry_attempts = 0;
   schedule_timer_task("acquire leader lock",
                       delay_factor *
                         m_cct->_conf.get_val<uint64_t>("rbd_mirror_leader_max_missed_heartbeats"),
@@ -636,6 +650,20 @@ void LeaderWatcher<I>::handle_acquire_leader_lock(int r) {
   std::scoped_lock locker{m_threads->timer_lock, m_lock};
   ceph_assert(!m_timer_op_tracker.empty());
 
+  if (r == -ETIMEDOUT  && m_retry_attempts < m_cct->_conf.get_val<uint64_t>(
+	"rbd_retry_attempts")) {
+    ++m_retry_attempts;
+    dout(10) << "retry_attempts=" << m_retry_attempts << dendl;
+    if (is_leader(m_lock)) {
+      dout(5) << "releasing lock, error on previous attempt to acquire lock"
+              << cpp_strerror(r) << dendl;
+      release_leader_lock();
+    }
+    --m_acquire_attempts;
+    acquire_leader_lock();
+    return;
+  }
+
   if (m_leader_lock->is_shutdown()) {
     dout(10) << "canceling due to shutdown" << dendl;
     m_timer_op_tracker.finish_op();
@@ -643,7 +671,7 @@ void LeaderWatcher<I>::handle_acquire_leader_lock(int r) {
   }
 
   if (r < 0) {
-    if (r == -EAGAIN) {
+    if (r == -EEXIST) {
       dout(10) << "already locked" << dendl;
     } else {
       derr << "error acquiring lock: " << cpp_strerror(r) << dendl;
@@ -863,6 +891,15 @@ template <typename I>
 void LeaderWatcher<I>::handle_notify_lock_released(int r) {
   dout(10) << "r=" << r << dendl;
 
+  if (r == -EBUSY  && m_retry_attempts < m_cct->_conf.get_val<uint64_t>(
+	"rbd_retry_attempts")) {
+    std::lock_guard locker{m_lock};
+    ++m_retry_attempts;
+    dout(10) << "retry_attempts=" << m_retry_attempts << dendl;
+    notify_lock_released();
+    return;
+  }
+
   Context *on_finish = nullptr;
   {
     std::lock_guard locker{m_lock};
@@ -916,7 +953,7 @@ void LeaderWatcher<I>::handle_notify_heartbeat(int r) {
     return;
   }
 
-  if (r < 0 && r != -ETIMEDOUT) {
+  if (r < 0 && (r != -ETIMEDOUT && r != -EBADMSG)) {
     derr << "error notifying heartbeat: " << cpp_strerror(r)
          <<  ", releasing leader" << dendl;
     release_leader_lock();
