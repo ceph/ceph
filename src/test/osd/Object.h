@@ -431,6 +431,7 @@ public:
 	}
       }
       ceph_assert(pos == _pos);
+      current->iter.seek(pos);
     }
 
     // grab the bytes in the range of [pos, pos+s), and advance @c pos
