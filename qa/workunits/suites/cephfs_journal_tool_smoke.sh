@@ -62,6 +62,7 @@ $BIN header get
 $BIN header set write_pos 123
 $BIN header set expire_pos 123
 $BIN header set trimmed_pos 123
+$BIN header autorepair
 
 echo "Rolling back journal to original state..."
 $BIN journal import $JOURNAL_FILE

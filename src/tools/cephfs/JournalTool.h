@@ -57,6 +57,7 @@ class JournalTool : public MDSUtility
 
     // Header operations
     int header_set();
+    int header_autorepair(bool dry_run);
 
     // I/O handles
     librados::Rados rados;
