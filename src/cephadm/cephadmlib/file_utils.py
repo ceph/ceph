@@ -81,14 +81,13 @@ def write_tmp(s, uid, gid):
     return tmp_f
 
 
-def makedirs(dir, uid, gid, mode):
-    # type: (str, int, int, int) -> None
-    if not os.path.exists(dir):
-        os.makedirs(dir, mode=mode)
+def makedirs(dest: Union[Path, str], uid: int, gid: int, mode: int) -> None:
+    if not os.path.exists(dest):
+        os.makedirs(dest, mode=mode)
     else:
-        os.chmod(dir, mode)
-    os.chown(dir, uid, gid)
-    os.chmod(dir, mode)  # the above is masked by umask...
+        os.chmod(dest, mode)
+    os.chown(dest, uid, gid)
+    os.chmod(dest, mode)  # the above is masked by umask...
 
 
 def recursive_chown(path: str, uid: int, gid: int) -> None:

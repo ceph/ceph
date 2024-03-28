@@ -299,8 +299,6 @@ class CephExporter(ContainerDaemonForm):
         self.prio_limit = config_json.get('prio-limit', 5)
         self.stats_period = config_json.get('stats-period', 5)
 
-        self.validate()
-
     @classmethod
     def init(
         cls, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str]
@@ -370,6 +368,13 @@ class CephExporter(ContainerDaemonForm):
 
     def default_entrypoint(self) -> str:
         return self.entrypoint
+
+    def prepare_data_dir(self, data_dir: str, uid: int, gid: int) -> None:
+        if not os.path.exists(self.sock_dir):
+            os.mkdir(self.sock_dir)
+        # part of validation is for the sock dir, so we postpone
+        # it until now
+        self.validate()
 
 
 def get_ceph_mounts_for_type(
