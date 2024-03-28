@@ -16,7 +16,7 @@ with buckets it owns.
 
 A notification entity must be created in order to send event notifications for
 a specific bucket. A notification entity can be created either for a subset
-of event types or for all event types (which is the default). The
+of event types or for all "Removed" and "Created" event types (which is the default). The
 notification may also filter out events based on matches of the prefixes and
 suffixes of (1) the keys, (2) the metadata attributes attached to the object,
 or (3) the object tags. Regular-expression matching can also be used on these
