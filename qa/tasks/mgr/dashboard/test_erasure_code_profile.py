@@ -73,26 +73,31 @@ class ECPTest(DashboardTestCase):
         self.assertStatus(204)
 
     def test_create_plugin(self):
-        data = {'name': 'lrc', 'k': '2', 'm': '2', 'l': '2', 'plugin': 'lrc'}
+        data = {'name': 'jerasure', 'k': '2', 'm': '2', 'l': '2', 'plugin': 'jerasure'}
         self._post('/api/erasure_code_profile', data)
         self.assertJsonBody(None)
         self.assertStatus(201)
 
-        self._get('/api/erasure_code_profile/lrc')
+        self._get('/api/erasure_code_profile/jerasure')
         self.assertJsonSubset({
             'crush-device-class': '',
-            'crush-failure-domain': 'host',
+            'crush-failure-domain': 'osd',
+            'crush-num-failure-domains': '0',
+            'crush-osds-per-failure-domain': '0',
             'crush-root': 'default',
+            'jerasure-per-chunk-alignment': 'false',
             'k': 2,
             'l': '2',
             'm': 2,
-            'name': 'lrc',
-            'plugin': 'lrc'
+            'name': 'jerasure',
+            'plugin': 'jerasure',
+            'technique': 'reed_sol_van',
+            'w': '8'
         })
 
         self.assertStatus(200)
 
-        self._delete('/api/erasure_code_profile/lrc')
+        self._delete('/api/erasure_code_profile/jerasure')
         self.assertStatus(204)
 
     def test_ecp_info(self):
