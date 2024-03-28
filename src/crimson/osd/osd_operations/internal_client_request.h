@@ -41,7 +41,8 @@ private:
 
   CommonPGPipeline& client_pp();
 
-  seastar::future<> do_process();
+  PG::load_obc_iertr::future<> process_lock_obc(
+      std::vector<OSDOp>&);
 
   Ref<PG> pg;
   OpInfo op_info;
@@ -56,6 +57,7 @@ public:
     PGActivationBlocker::BlockingEvent,
     CommonPGPipeline::RecoverMissing::BlockingEvent,
     CommonPGPipeline::GetOBC::BlockingEvent,
+    CommonPGPipeline::LockOBC::BlockingEvent,
     CommonPGPipeline::Process::BlockingEvent,
     CompletionEvent
   > tracking_events;
