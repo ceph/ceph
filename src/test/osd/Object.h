@@ -431,6 +431,9 @@ public:
 	}
       }
       ceph_assert(pos == _pos);
+      if (current != layers.end()) {
+        current->iter.seek(pos);
+      }
     }
 
     // grab the bytes in the range of [pos, pos+s), and advance @c pos
