@@ -1,0 +1,41 @@
+@startuml
+
+package "MNVMeofGwMap" #DDDDDD {
+
+    class GatewayState {
+        group_id: Decimal
+        ana_info: SubsystemAnaInfo[*]
+    }
+
+    note top
+        The data structure distributed by the Monitors to NVMEoF gateways includes
+        a mapping of the <b>GatewayState</b> objects.
+
+        NVMeoF gateways are segmented into groups identified
+        by <b>(pool, group)</b> pair, with each gateway uniquely
+        identified by a gateway <b>ID</b>.
+    end note
+
+    note right of GatewayState::group_id
+        Identification of this gateway within its group
+    end note
+
+    class SubsystemAnaInfo {
+        nqn: String
+        ana_state: AnaState[0..n]
+    }
+
+    note right of SubsystemAnaInfo
+        Denotes the condition of the ANA groups
+        of the subsystem identified by <b>nqn</b>.
+    end note
+
+    enum AnaState {
+        OPTIMIZED
+        INACCESSIBLE
+    }
+
+    GatewayState "1" *-- "many" SubsystemAnaInfo : contains
+    SubsystemAnaInfo::ana_state "1" *-- "n" AnaState : contains
+}
+@enduml

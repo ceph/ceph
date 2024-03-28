@@ -81,3 +81,8 @@
 [submodule "src/qatzip"]
 	path = src/qatzip
 	url = https://github.com/intel/qatzip.git
+[submodule "src/nvmeof/gateway"]
+	path = src/nvmeof/gateway
+	url = https://github.com/ceph/ceph-nvmeof.git
+	fetchRecurseSubmodules = false
+	shallow = true
