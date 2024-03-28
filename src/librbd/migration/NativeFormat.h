@@ -20,25 +20,24 @@ struct ImageCtx;
 namespace migration {
 
 template <typename ImageCtxT>
-class NativeFormat : public FormatInterface {
+class NativeFormat : public FormatInterface<ImageCtxT> {
 public:
   static std::string build_source_spec(int64_t pool_id,
                                        const std::string& pool_namespace,
                                        const std::string& image_name,
                                        const std::string& image_id);
 
-  static NativeFormat* create(ImageCtxT* image_ctx,
-                              const json_spirit::mObject& json_object,
+  static NativeFormat* create(const json_spirit::mObject& json_object,
                               bool import_only) {
-    return new NativeFormat(image_ctx, json_object, import_only);
+    return new NativeFormat(json_object, import_only);
   }
 
-  NativeFormat(ImageCtxT* image_ctx, const json_spirit::mObject& json_object,
-               bool import_only);
+  NativeFormat(const json_spirit::mObject& json_object, bool import_only);
   NativeFormat(const NativeFormat&) = delete;
   NativeFormat& operator=(const NativeFormat&) = delete;
 
-  void open(Context* on_finish) override;
+  void open(librados::IoCtx& dst_io_ctx, ImageCtxT* dst_image_ctx,
+            ImageCtxT** src_image_ctx, Context* on_finish) override;
   void close(Context* on_finish) override;
 
   void get_snapshots(SnapInfos* snap_infos, Context* on_finish) override;

@@ -52,14 +52,14 @@ std::string NativeFormat<I>::build_source_spec(
 
 template <typename I>
 NativeFormat<I>::NativeFormat(
-    I* image_ctx, const json_spirit::mObject& json_object, bool import_only)
-  : m_image_ctx(image_ctx), m_json_object(json_object),
-    m_import_only(import_only) {
+    const json_spirit::mObject& json_object, bool import_only)
+  : m_json_object(json_object), m_import_only(import_only) {
 }
 
 template <typename I>
-void NativeFormat<I>::open(Context* on_finish) {
-  auto cct = m_image_ctx->cct;
+void NativeFormat<I>::open(librados::IoCtx& dst_io_ctx, I* dst_image_ctx,
+                           I** src_image_ctx, Context* on_finish) {
+  auto cct = reinterpret_cast<CephContext *>(dst_io_ctx.cct());
   ldout(cct, 10) << dendl;
 
   auto& pool_name_val = m_json_object[POOL_NAME_KEY];
@@ -67,7 +67,7 @@ void NativeFormat<I>::open(Context* on_finish) {
     librados::Rados rados(m_image_ctx->md_ctx);
     librados::IoCtx io_ctx;
     int r = rados.ioctx_create(pool_name_val.get_str().c_str(), io_ctx);
-    if (r < 0 ) {
+    if (r < 0) {
       lderr(cct) << "invalid pool name" << dendl;
       on_finish->complete(r);
       return;
@@ -164,23 +164,22 @@ void NativeFormat<I>::open(Context* on_finish) {
   }
 
   // TODO add support for external clusters
-  librados::IoCtx io_ctx;
-  int r = util::create_ioctx(m_image_ctx->md_ctx, "source image",
-                             m_pool_id, m_pool_namespace, &io_ctx);
+  librados::IoCtx src_io_ctx;
+  int r = util::create_ioctx(dst_io_ctx, "source image",
+                             m_pool_id, m_pool_namespace, &src_io_ctx);
   if (r < 0) {
     on_finish->complete(r);
     return;
   }
 
-  m_image_ctx->md_ctx.dup(io_ctx);
-  m_image_ctx->data_ctx.dup(io_ctx);
-  m_image_ctx->name = m_image_name;
+  *src_image_ctx = I::create(m_image_name, m_image_id, CEPH_NOSNAP, src_io_ctx,
+                             true);
+  m_image_ctx = *src_image_ctx;
+  m_image_ctx->child = dst_image_ctx;
 
   uint64_t flags = 0;
   if (m_image_id.empty() && !m_import_only) {
     flags |= OPEN_FLAG_OLD_FORMAT;
-  } else {
-    m_image_ctx->id = m_image_id;
   }
 
   if (m_image_ctx->child != nullptr) {

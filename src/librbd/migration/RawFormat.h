@@ -24,20 +24,21 @@ template <typename> struct SourceSpecBuilder;
 struct SnapshotInterface;
 
 template <typename ImageCtxT>
-class RawFormat : public FormatInterface {
+class RawFormat : public FormatInterface<ImageCtxT> {
 public:
   static RawFormat* create(
-      ImageCtxT* image_ctx, const json_spirit::mObject& json_object,
+      const json_spirit::mObject& json_object,
       const SourceSpecBuilder<ImageCtxT>* source_spec_builder) {
-    return new RawFormat(image_ctx, json_object, source_spec_builder);
+    return new RawFormat(json_object, source_spec_builder);
   }
 
-  RawFormat(ImageCtxT* image_ctx, const json_spirit::mObject& json_object,
+  RawFormat(const json_spirit::mObject& json_object,
             const SourceSpecBuilder<ImageCtxT>* source_spec_builder);
   RawFormat(const RawFormat&) = delete;
   RawFormat& operator=(const RawFormat&) = delete;
 
-  void open(Context* on_finish) override;
+  void open(librados::IoCtx& dst_io_ctx, ImageCtxT* dst_image_ctx,
+            ImageCtxT** src_image_ctx, Context* on_finish) override;
   void close(Context* on_finish) override;
 
   void get_snapshots(SnapInfos* snap_infos, Context* on_finish) override;

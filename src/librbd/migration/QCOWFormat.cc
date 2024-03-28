@@ -688,7 +688,10 @@ public:
       ClusterExtents&& cluster_extents,
       const std::map<uint64_t, const LookupTable*>& snap_id_to_l1_table,
       io::SnapshotDelta* snapshot_delta, Context* on_finish)
-    : qcow_format(qcow_format), l1_table_index(l1_table_index),
+    : qcow_format(qcow_format),
+      m_strand(
+              boost::asio::make_strand(*qcow_format->m_image_ctx->asio_engine)),
+      l1_table_index(l1_table_index),
       cluster_extents(std::move(cluster_extents)),
       snap_id_to_l1_table(snap_id_to_l1_table), snapshot_delta(snapshot_delta),
       on_finish(on_finish) {
@@ -700,6 +703,7 @@ public:
 
 private:
   QCOWFormat* qcow_format;
+  boost::asio::strand<boost::asio::io_context::executor_type> m_strand;
   uint32_t l1_table_index;
   ClusterExtents cluster_extents;
   std::map<uint64_t, const LookupTable*> snap_id_to_l1_table;
@@ -724,7 +728,7 @@ private:
     l2_table.reset();
 
     auto ctx = new LambdaContext([this, snap_id = snap_id](int r) {
-      boost::asio::post(qcow_format->m_strand, [this, snap_id, r]() {
+      boost::asio::post(m_strand, [this, snap_id, r]() {
         handle_get_l2_table(r, snap_id);
         });
     });
@@ -748,7 +752,7 @@ private:
   }
 
   void handle_get_l2_table(int r, uint64_t snap_id) {
-    ceph_assert(qcow_format->m_strand.running_in_this_thread());
+    ceph_assert(m_strand.running_in_this_thread());
 
     auto cct = qcow_format->m_image_ctx->cct;
     ldout(cct, 20) << "r=" << r << ", "
@@ -830,19 +834,33 @@ private:
 
 template <typename I>
 QCOWFormat<I>::QCOWFormat(
-    I* image_ctx, const json_spirit::mObject& json_object,
+    const json_spirit::mObject& json_object,
     const SourceSpecBuilder<I>* source_spec_builder)
-  : m_image_ctx(image_ctx), m_json_object(json_object),
-    m_source_spec_builder(source_spec_builder),
-    m_strand(boost::asio::make_strand(*image_ctx->asio_engine)) {
+  : m_json_object(json_object),
+    m_source_spec_builder(source_spec_builder) {
 }
 
 template <typename I>
-void QCOWFormat<I>::open(Context* on_finish) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+void QCOWFormat<I>::open(librados::IoCtx& dst_io_ctx, I* dst_image_ctx,
+                         I** src_image_ctx, Context* on_finish) {
+  ldout(reinterpret_cast<CephContext *>(dst_io_ctx.cct()), 10) << dendl;
 
-  int r = m_source_spec_builder->build_stream(m_json_object, &m_stream);
+  // create source image context
+  *src_image_ctx = I::create("", "", CEPH_NOSNAP, dst_io_ctx, true);
+  m_image_ctx = *src_image_ctx;
+  m_image_ctx->child = dst_image_ctx;
+  auto cct = m_image_ctx->cct;
+
+  // use default layout values (placeholders)
+  m_image_ctx->order = 22;
+  m_image_ctx->layout = file_layout_t();
+  m_image_ctx->layout.stripe_count = 1;
+  m_image_ctx->layout.stripe_unit = 1ULL << m_image_ctx->order;
+  m_image_ctx->layout.object_size = 1ULL << m_image_ctx->order;
+  m_image_ctx->layout.pool_id = -1;
+
+  int r = m_source_spec_builder->build_stream(*src_image_ctx, m_json_object,
+                                              &m_stream);
   if (r < 0) {
     lderr(cct) << "failed to build migration stream handler" << cpp_strerror(r)
                << dendl;

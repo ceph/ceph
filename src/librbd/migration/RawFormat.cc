@@ -30,23 +30,37 @@ static const std::string SNAPSHOTS_KEY {"snapshots"};
 
 template <typename I>
 RawFormat<I>::RawFormat(
-    I* image_ctx, const json_spirit::mObject& json_object,
+    const json_spirit::mObject& json_object,
     const SourceSpecBuilder<I>* source_spec_builder)
-  : m_image_ctx(image_ctx), m_json_object(json_object),
-    m_source_spec_builder(source_spec_builder) {
+  : m_json_object(json_object), m_source_spec_builder(source_spec_builder) {
 }
 
 template <typename I>
-void RawFormat<I>::open(Context* on_finish) {
+void RawFormat<I>::open(librados::IoCtx& dst_io_ctx, I* dst_image_ctx,
+                        I** src_image_ctx, Context* on_finish) {
+  ldout(reinterpret_cast<CephContext *>(dst_io_ctx.cct()), 10) << dendl;
+
+  // create source image context
+  *src_image_ctx = I::create("", "", CEPH_NOSNAP, dst_io_ctx, true);
+  m_image_ctx = *src_image_ctx;
+  m_image_ctx->child = dst_image_ctx;
   auto cct = m_image_ctx->cct;
-  ldout(cct, 10) << dendl;
+
+  // use default layout values (placeholders)
+  m_image_ctx->order = 22;
+  m_image_ctx->layout = file_layout_t();
+  m_image_ctx->layout.stripe_count = 1;
+  m_image_ctx->layout.stripe_unit = 1ULL << m_image_ctx->order;
+  m_image_ctx->layout.object_size = 1ULL << m_image_ctx->order;
+  m_image_ctx->layout.pool_id = -1;
 
   on_finish = new LambdaContext([this, on_finish](int r) {
     handle_open(r, on_finish); });
 
   // treat the base image as a HEAD-revision snapshot
   Snapshots snapshots;
-  int r = m_source_spec_builder->build_snapshot(m_json_object, CEPH_NOSNAP,
+  int r = m_source_spec_builder->build_snapshot(m_image_ctx, m_json_object,
+                                                CEPH_NOSNAP,
                                                 &snapshots[CEPH_NOSNAP]);
   if (r < 0) {
     lderr(cct) << "failed to build HEAD revision handler: " << cpp_strerror(r)
@@ -68,8 +82,8 @@ void RawFormat<I>::open(Context* on_finish) {
       }
 
       auto& snapshot_obj = snapshot_val.get_obj();
-      r = m_source_spec_builder->build_snapshot(snapshot_obj, index,
-                                                &snapshots[index]);
+      r = m_source_spec_builder->build_snapshot(m_image_ctx, snapshot_obj,
+                                                index, &snapshots[index]);
       if (r < 0) {
         lderr(cct) << "failed to build snapshot " << index << " handler: "
                    << cpp_strerror(r) << dendl;
