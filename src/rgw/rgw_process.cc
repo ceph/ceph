@@ -464,6 +464,12 @@ done:
 	  << " op status=" << op_ret
 	  << " http_status=" << s->err.http_ret
 	  << " latency=" << lat
+	  << " trans_id=" << s->trans_id
+	  << " user=" << (s->user ? s->user->get_id().id : "<none>")
+	  << " tenant=" << (!s->bucket_tenant.empty() ? s->bucket_tenant : "<none>")
+	  << " bucket=" << (s->bucket ? s->bucket->get_name() : "<none>")
+	  << " object=" << (s->object ? s->object->get_name() : "<none>")
+	  << " path=" << s->info.request_uri << (s->info.request_params.empty() ? "" : "?") << s->info.request_params
 	  << " ======"
 	  << dendl;
 
