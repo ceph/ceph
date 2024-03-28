@@ -294,6 +294,16 @@ void add_no_progress_option(boost::program_options::options_description *opt) {
     (NO_PROGRESS.c_str(), po::bool_switch(), "disable progress output");
 }
 
+void add_exclude_parent_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (EXCLUDE_PARENT.c_str(), po::bool_switch(), "exclude parent");
+}
+
+void add_skip_create_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (SKIP_CREATE.c_str(), po::bool_switch(), "skip create");
+}
+
 void add_format_options(boost::program_options::options_description *opt) {
   opt->add_options()
     (FORMAT.c_str(), po::value<Format>(), "output format (plain, json, or xml) [default: plain]")

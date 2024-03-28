@@ -123,7 +123,7 @@ private:
 
 
 int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
-		   const char *endsnapname, bool whole_object,
+		   const char *endsnapname, bool include_parent, bool whole_object,
 		   int fd, bool no_progress, int export_format)
 {
   int r;
@@ -195,7 +195,7 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
   ExportDiffContext edc(&image, fd, info.size,
                         g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
                         no_progress, export_format);
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
+  r = image.diff_iterate2(fromsnapname, 0, info.size, include_parent, whole_object,
                           &C_ExportDiff::export_diff_cb, (void *)&edc);
   if (r < 0) {
     goto out;
@@ -223,7 +223,7 @@ out:
 }
 
 int do_export_diff(librbd::Image& image, const char *fromsnapname,
-                const char *endsnapname, bool whole_object,
+                const char *endsnapname, bool include_parent, bool whole_object,
                 const char *path, bool no_progress)
 {
   int r;
@@ -236,7 +236,7 @@ int do_export_diff(librbd::Image& image, const char *fromsnapname,
   if (fd < 0)
     return -errno;
 
-  r = do_export_diff_fd(image, fromsnapname, endsnapname, whole_object, fd, no_progress, 1);
+  r = do_export_diff_fd(image, fromsnapname, endsnapname, include_parent, whole_object, fd, no_progress, 1);
 
   if (fd != 1)
     close(fd);
@@ -262,6 +262,7 @@ void get_arguments_diff(po::options_description *positional,
      "snapshot starting point")
     (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object");
   at::add_no_progress_option(options);
+  at::add_exclude_parent_option(options);
 }
 
 int execute_diff(const po::variables_map &vm,
@@ -302,6 +303,7 @@ int execute_diff(const po::variables_map &vm,
   r = do_export_diff(image,
                      from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
                      snap_name.empty() ? nullptr : snap_name.c_str(),
+					 !vm[at::EXCLUDE_PARENT].as<bool>(),
                      vm[at::WHOLE_OBJECT].as<bool>(), path.c_str(),
                      vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
@@ -388,7 +390,7 @@ private:
 
 const uint32_t MAX_KEYS = 64;
 
-static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd,
+static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, bool include_parent, int fd,
 		        uint64_t period, int max_concurrent_ops, utils::ProgressContext &pc)
 {
   int r = 0;
@@ -501,7 +503,7 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   const char *last_snap = NULL;
   for (size_t i = 0; i < snaps.size(); ++i) {
     utils::snap_set(image, snaps[i].name.c_str());
-    r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), false, fd, true, 2);
+    r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), include_parent, false, fd, true, 2);
     if (r < 0) {
       return r;
     }
@@ -509,7 +511,7 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
     last_snap = snaps[i].name.c_str();
   }
   utils::snap_set(image, std::string(""));
-  r = do_export_diff_fd(image, last_snap, nullptr, false, fd, true, 2);
+  r = do_export_diff_fd(image, last_snap, nullptr, include_parent, false, fd, true, 2);
   if (r < 0) {
     return r;
   }
@@ -554,12 +556,17 @@ static int do_export_v1(librbd::Image& image, librbd::image_info_t &info,
 }
 
 static int do_export(librbd::Image& image, const char *path, bool no_progress,
-                     int export_format)
+                     int export_format, bool include_parent)
 {
   librbd::image_info_t info;
   int64_t r = image.stat(info, sizeof(info));
   if (r < 0)
     return r;
+
+  if (!include_parent && export_format == 1) {
+    std::cerr << "rbd: export format 1 does not support exclude-parent" << std::endl;
+    return -EINVAL;
+  }
 
   int fd;
   int max_concurrent_ops = g_conf().get_val<uint64_t>("rbd_concurrent_management_ops");
@@ -582,7 +589,7 @@ static int do_export(librbd::Image& image, const char *path, bool no_progress,
   if (export_format == 1)
     r = do_export_v1(image, info, fd, period, max_concurrent_ops, pc);
   else
-    r = do_export_v2(image, info, fd, period, max_concurrent_ops, pc);
+    r = do_export_v2(image, info, include_parent, fd, period, max_concurrent_ops, pc);
 
   if (r < 0)
     pc.fail();
@@ -601,6 +608,7 @@ void get_arguments(po::options_description *positional,
                        "export file (or '-' for stdout)");
   at::add_no_progress_option(options);
   at::add_export_format_option(options);
+  at::add_exclude_parent_option(options);
 }
 
 int execute(const po::variables_map &vm,
@@ -637,7 +645,8 @@ int execute(const po::variables_map &vm,
   if (vm.count("export-format"))
     format = vm["export-format"].as<uint64_t>();
 
-  r = do_export(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>(), format);
+  r = do_export(image, path.c_str(), vm[at::NO_PROGRESS].as<bool>(), format,
+                !vm[at::EXCLUDE_PARENT].as<bool>());
   if (r < 0) {
     std::cerr << "rbd: export error: " << cpp_strerror(r) << std::endl;
     return r;

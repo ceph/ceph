@@ -90,10 +90,13 @@ static const std::string LIMIT("limit");
 static const std::string SKIP_QUIESCE("skip-quiesce");
 static const std::string IGNORE_QUIESCE_ERROR("ignore-quiesce-error");
 
+static const std::string EXCLUDE_PARENT("exclude-parent");
+static const std::string SKIP_CREATE("skip-create");
+
 static const std::set<std::string> SWITCH_ARGUMENTS = {
   WHOLE_OBJECT, IMAGE_SHARED, IMAGE_THICK_PROVISION, IMAGE_FLATTEN,
   NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERR, SKIP_QUIESCE,
-  IGNORE_QUIESCE_ERROR
+  IGNORE_QUIESCE_ERROR, EXCLUDE_PARENT, SKIP_CREATE
 };
 
 struct ImageSize {};
@@ -194,6 +197,10 @@ void add_path_options(boost::program_options::options_description *pos,
 void add_limit_option(boost::program_options::options_description *opt);
 
 void add_no_progress_option(boost::program_options::options_description *opt);
+
+void add_exclude_parent_option(boost::program_options::options_description *opt);
+
+void add_skip_create_option(boost::program_options::options_description *opt);
 
 void add_format_options(boost::program_options::options_description *opt);
 
