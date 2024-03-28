@@ -90,10 +90,6 @@ class ReplicaReservations {
    */
   reservation_nonce_t& m_last_request_sent_nonce;
 
-  /// the 'slow response' timeout (in milliseconds) - as configured.
-  /// Doubles as a 'do once' flag for the warning.
-  std::chrono::milliseconds m_slow_response_warn_timeout;
-
   /// access to the performance counters container relevant to this scrub
   /// parameters
   PerfCounters& m_perf_set;

@@ -60,13 +60,9 @@ ReplicaReservations::ReplicaReservations(
     dout(10) << "high-priority scrub - no reservations needed" << dendl;
     m_perf_set.inc(scrbcnt_resrv_skipped);
   } else {
-    m_process_started_at = ScrubClock::now();
-
     // send out the 1'st request (unless we have no replicas)
+    m_process_started_at = ScrubClock::now();
     send_next_reservation_or_complete();
-    m_slow_response_warn_timeout =
-	m_scrubber.get_pg_cct()->_conf.get_val<milliseconds>(
-	    "osd_scrub_slow_reservation_response");
   }
 }
 
@@ -174,16 +170,6 @@ bool ReplicaReservations::handle_reserve_grant(
   }
 
   auto elapsed = ScrubClock::now() - m_last_request_sent_at;
-
-  // log a warning if the response was slow to arrive
-  if ((m_slow_response_warn_timeout > 0ms) &&
-      (elapsed > m_slow_response_warn_timeout)) {
-    m_osds->clog->warn() << fmt::format(
-	"slow reservation response from {} ({}ms)", from,
-	duration_cast<milliseconds>(elapsed).count());
-    // prevent additional warnings
-    m_slow_response_warn_timeout = 0ms;
-  }
   dout(10) << fmt::format(
 		  "(e:{} nonce:{}) granted by {} ({} of {}) in {}ms",
 		  msg.map_epoch, msg.reservation_nonce, from,

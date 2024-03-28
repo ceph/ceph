@@ -520,17 +520,6 @@ options:
     stats (inc. scrub/block duration) every this many seconds.
   default: 120
   with_legacy: false
-- name: osd_scrub_slow_reservation_response
-  type: millisecs
-  level: advanced
-  desc: Maximum wait (milliseconds) for scrub reservations before issuing a cluster-log warning
-  long_desc: Waiting too long for a replica to respond to scrub resource reservation request.
-    Disable by setting to a very large value.
-  default: 30000
-  min: 500
-  see_also:
-  - osd_scrub_reservation_timeout
-  with_legacy: false
 - name: osd_scrub_reservation_timeout
   type: millisecs
   level: advanced
@@ -540,8 +529,6 @@ options:
     to a very large value.
   default: 300000
   min: 2000
-  see_also:
-  - osd_scrub_slow_reservation_response
   with_legacy: false
 - name: osd_scrub_disable_reservation_queuing
   type: bool
