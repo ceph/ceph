@@ -4076,7 +4076,7 @@ void PeeringState::update_stats_wo_resched(
 bool PeeringState::append_log_entries_update_missing(
   const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t, std::optional<eversion_t> trim_to,
-  std::optional<eversion_t> roll_forward_to)
+  std::optional<eversion_t> pg_committed_to)
 {
   ceph_assert(!entries.empty());
   ceph_assert(entries.begin()->version > info.last_update);
@@ -4088,12 +4088,12 @@ bool PeeringState::append_log_entries_update_missing(
       entries,
       rollbacker.get());
 
-  if (roll_forward_to && entries.rbegin()->soid > info.last_backfill) {
+  if (pg_committed_to && entries.rbegin()->soid > info.last_backfill) {
     pg_log.roll_forward(rollbacker.get());
   }
-  if (roll_forward_to && *roll_forward_to > pg_log.get_can_rollback_to()) {
-    pg_log.roll_forward_to(*roll_forward_to, rollbacker.get());
-    last_rollback_info_trimmed_to_applied = *roll_forward_to;
+  if (pg_committed_to && *pg_committed_to > pg_log.get_can_rollback_to()) {
+    pg_log.roll_forward_to(*pg_committed_to, rollbacker.get());
+    last_rollback_info_trimmed_to_applied = *pg_committed_to;
   }
 
   info.last_update = pg_log.get_head();
@@ -4117,13 +4117,13 @@ void PeeringState::merge_new_log_entries(
   const mempool::osd_pglog::list<pg_log_entry_t> &entries,
   ObjectStore::Transaction &t,
   std::optional<eversion_t> trim_to,
-  std::optional<eversion_t> roll_forward_to)
+  std::optional<eversion_t> pg_committed_to)
 {
   psdout(10) << entries << dendl;
   ceph_assert(is_primary());
 
   bool rebuild_missing = append_log_entries_update_missing(
-    entries, t, trim_to, roll_forward_to);
+    entries, t, trim_to, pg_committed_to);
   for (auto i = acting_recovery_backfill.begin();
        i != acting_recovery_backfill.end();
        ++i) {

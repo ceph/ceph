@@ -1915,7 +1915,7 @@ public:
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,
     std::optional<eversion_t> trim_to,
-    std::optional<eversion_t> roll_forward_to);
+    std::optional<eversion_t> pg_committed_to);
 
   /**
    * Updates local log to reflect new write from primary.
@@ -1942,7 +1942,7 @@ public:
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,
     std::optional<eversion_t> trim_to,
-    std::optional<eversion_t> roll_forward_to);
+    std::optional<eversion_t> pg_committed_to);
 
   /// Update missing set to reflect e (TODOSAM: not sure why this is needed)
   void add_local_next_event(const pg_log_entry_t& e) {

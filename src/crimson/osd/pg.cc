@@ -1387,17 +1387,17 @@ PG::interruptible_future<> PG::do_update_log_missing(
 
   ceph_assert(m->get_type() == MSG_OSD_PG_UPDATE_LOG_MISSING);
   ObjectStore::Transaction t;
-  std::optional<eversion_t> op_trim_to, op_roll_forward_to;
+  std::optional<eversion_t> op_trim_to, op_pg_committed_to;
   if (m->pg_trim_to != eversion_t())
     op_trim_to = m->pg_trim_to;
-  if (m->pg_roll_forward_to != eversion_t())
-    op_roll_forward_to = m->pg_roll_forward_to;
-  logger().debug("op_trim_to = {}, op_roll_forward_to = {}",
+  if (m->pg_committed_to != eversion_t())
+    op_pg_committed_to = m->pg_committed_to;
+  logger().debug("op_trim_to = {}, op_pg_committed_to = {}",
     op_trim_to.has_value() ? *op_trim_to : eversion_t(),
-    op_roll_forward_to.has_value() ? *op_roll_forward_to : eversion_t());
+    op_pg_committed_to.has_value() ? *op_pg_committed_to : eversion_t());
 
   peering_state.append_log_entries_update_missing(
-    m->entries, t, op_trim_to, op_roll_forward_to);
+    m->entries, t, op_trim_to, op_pg_committed_to);
 
   return interruptor::make_interruptible(shard_services.get_store().do_transaction(
     coll_ref, std::move(t))).then_interruptible(

@@ -12644,18 +12644,18 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
     op->get_req());
   ceph_assert(m->get_type() == MSG_OSD_PG_UPDATE_LOG_MISSING);
   ObjectStore::Transaction t;
-  std::optional<eversion_t> op_trim_to, op_roll_forward_to;
+  std::optional<eversion_t> op_trim_to, op_pg_committed_to;
   if (m->pg_trim_to != eversion_t())
     op_trim_to = m->pg_trim_to;
-  if (m->pg_roll_forward_to != eversion_t())
-    op_roll_forward_to = m->pg_roll_forward_to;
+  if (m->pg_committed_to != eversion_t())
+    op_pg_committed_to = m->pg_committed_to;
 
   dout(20) << __func__
-	   << " op_trim_to = " << op_trim_to << " op_roll_forward_to = "
-	   << op_roll_forward_to << dendl;
+	   << " op_trim_to = " << op_trim_to << " op_pg_committed_to = "
+	   << op_pg_committed_to << dendl;
 
   recovery_state.append_log_entries_update_missing(
-    m->entries, t, op_trim_to, op_roll_forward_to);
+    m->entries, t, op_trim_to, op_pg_committed_to);
   eversion_t new_lcod = info.last_complete;
 
   Context *complete = new LambdaContext(
