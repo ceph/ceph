@@ -186,4 +186,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo)
 
     def cluster_ls(self) -> List[str]:
-        return available_clusters(self)
+        try:
+            return available_clusters(self)
+        except Exception as err:
+            log.error(str(err))
+        return []

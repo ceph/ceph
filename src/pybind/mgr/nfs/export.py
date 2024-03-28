@@ -50,10 +50,14 @@ log = logging.getLogger(__name__)
 def known_cluster_ids(mgr: 'Module') -> Set[str]:
     """Return the set of known cluster IDs."""
     try:
-        clusters = set(available_clusters(mgr))
+        return set(available_clusters(mgr))
     except NoOrchestrator:
-        clusters = nfs_rados_configs(mgr.rados)
-    return clusters
+        pass
+    try:
+        return nfs_rados_configs(mgr.rados)
+    except Exception:
+        pass
+    return set()
 
 
 def _check_rados_notify(ioctx: Any, obj: str) -> None:
