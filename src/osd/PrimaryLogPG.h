@@ -502,7 +502,7 @@ public:
     ObjectStore::Transaction &t,
     bool async = false) override {
     if (is_primary()) {
-      ceph_assert(trim_to <= recovery_state.get_last_update_ondisk());
+      ceph_assert(trim_to <= recovery_state.get_pg_committed_to());
     }
     if (hset_history) {
       recovery_state.update_hset(*hset_history);

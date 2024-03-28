@@ -1470,8 +1470,23 @@ public:
 
   epoch_t last_peering_reset = 0;   ///< epoch of last peering reset
 
-  /// last_update that has committed; ONLY DEFINED WHEN is_active()
-  eversion_t  last_update_ondisk;
+  /**
+   * pg_committed_to
+   *
+   * Maintained on the primary while pg is at least peered.
+   *
+   * Forall e <= pg_committed_to, e has been committed on all replicas.
+   *
+   * As a consequence, if the pg is active (and not merely peered):
+   * - No version e <= pg_committed_to can become divergent
+   * - It is safe for replicas to read any object whose most recent update is
+   *   <= pg_committed_to
+   *
+   * Note that if the PG is only peered, it is in fact possible for
+   * pg_committed_to to become divergent.
+   */
+  eversion_t  pg_committed_to;
+
   eversion_t  last_complete_ondisk; ///< last_complete that has committed.
   eversion_t  last_update_applied;  ///< last_update readable
   /// last version to which rollback_info trimming has been applied
@@ -2413,8 +2428,8 @@ public:
     return last_update_applied;
   }
 
-  eversion_t get_last_update_ondisk() const {
-    return last_update_ondisk;
+  eversion_t get_pg_committed_to() const {
+    return pg_committed_to;
   }
 
   bool debug_has_dirty_state() const {

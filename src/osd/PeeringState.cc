@@ -900,7 +900,7 @@ void PeeringState::clear_primary_state()
 
   clear_recovery_state();
 
-  last_update_ondisk = eversion_t();
+  pg_committed_to = eversion_t();
   missing_loc.clear();
   pl->clear_primary_state();
 }
@@ -2678,7 +2678,7 @@ void PeeringState::activate(
 
   min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   if (is_primary()) {
-    last_update_ondisk = info.last_update;
+    pg_committed_to = info.last_update;
   }
   last_update_applied = info.last_update;
   last_rollback_info_trimmed_to_applied = pg_log.get_can_rollback_to();
@@ -4440,7 +4440,7 @@ void PeeringState::recovery_committed_to(eversion_t version)
 
 void PeeringState::complete_write(eversion_t v, eversion_t lc)
 {
-  last_update_ondisk = v;
+  pg_committed_to = v;
   last_complete_ondisk = lc;
   calc_min_last_complete_ondisk();
 }
@@ -4487,7 +4487,7 @@ void PeeringState::calc_trim_to_aggressive()
   eversion_t limit = std::min({
     pg_log.get_head(),
     pg_log.get_can_rollback_to(),
-    last_update_ondisk});
+    pg_committed_to});
   psdout(10) << "limit = " << limit << dendl;
 
   if (limit != eversion_t() &&
@@ -7554,8 +7554,8 @@ ostream &operator<<(ostream &out, const PeeringState &ps) {
   }
 
   if (ps.is_peered()) {
-    if (ps.last_update_ondisk != ps.info.last_update)
-      out << " luod=" << ps.last_update_ondisk;
+    if (ps.pg_committed_to != ps.info.last_update)
+      out << " pct=" << ps.pg_committed_to;
     if (ps.last_update_applied != ps.info.last_update)
       out << " lua=" << ps.last_update_applied;
   }

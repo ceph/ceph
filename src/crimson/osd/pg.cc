@@ -1324,7 +1324,7 @@ void PG::log_operation(
   bool async) {
   logger().debug("{}", __func__);
   if (is_primary()) {
-    ceph_assert(trim_to <= peering_state.get_last_update_ondisk());
+    ceph_assert(trim_to <= peering_state.get_pg_committed_to());
   }
   /* TODO: when we add snap mapper and projected log support,
    * we'll likely want to update them here.
