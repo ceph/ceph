@@ -78,7 +78,7 @@ void ValidatePoolRequest<I>::handle_read_rbd_info(int r) {
       return;
     } else if (m_out_bl.contents_equal(validate_bl)) {
       // implies snapshot was already successfully created
-      overwrite_rbd_info();
+      create_rbd_trash();
       return;
     }
   } else if (r < 0 && r != -ENOENT) {
@@ -179,6 +179,35 @@ void ValidatePoolRequest<I>::handle_remove_snapshot(int r) {
 
   if (m_ret_val < 0) {
     finish(m_ret_val);
+    return;
+  }
+
+  create_rbd_trash();
+}
+
+template <typename I>
+void ValidatePoolRequest<I>::create_rbd_trash() {
+  ldout(m_cct, 5) << dendl;
+
+  librados::ObjectWriteOperation op;
+  op.create(false);
+
+  auto comp = create_rados_callback<
+    ValidatePoolRequest<I>,
+    &ValidatePoolRequest<I>::handle_create_rbd_trash>(this);
+  int r = m_io_ctx.aio_operate(RBD_TRASH, comp, &op);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void ValidatePoolRequest<I>::handle_create_rbd_trash(int r) {
+  ldout(m_cct, 5) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to create rbd trash: " << cpp_strerror(r)
+                 << dendl;
+    finish(r);
     return;
   }
 
