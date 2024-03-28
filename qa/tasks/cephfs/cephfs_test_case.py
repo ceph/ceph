@@ -430,4 +430,6 @@ class CephFSTestCase(CephTestCase):
             cmd += ['mds', mdscap]
 
         self.run_ceph_cmd(*cmd)
-        return self.get_ceph_cmd_stdout(f'auth get {self.client_name}')
+        keyring = self.get_ceph_cmd_stdout(f'auth get {self.client_name}')
+        keyring += '\n'
+        return keyring
