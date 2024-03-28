@@ -4974,6 +4974,7 @@ boost::statechart::result PeeringState::Peering::react(const AdvMap& advmap)
   psdout(10) << "Peering advmap" << dendl;
   if (prior_set.affected_by_map(*(advmap.osdmap), ps->dpp)) {
     psdout(1) << "Peering, affected_by_map, going to Reset" << dendl;
+    ps->clear_primary_state();
     post_event(advmap);
     return transit< Reset >();
   }
@@ -7013,12 +7014,14 @@ PeeringState::GetLog::GetLog(my_context ctx)
 
 boost::statechart::result PeeringState::GetLog::react(const AdvMap& advmap)
 {
+  DECLARE_LOCALS;
   // make sure our log source didn't go down.  we need to check
   // explicitly because it may not be part of the prior set, which
   // means the Peering state check won't catch it going down.
   if (!advmap.osdmap->is_up(auth_log_shard.osd)) {
     psdout(10) << "GetLog: auth_log_shard osd."
 		       << auth_log_shard.osd << " went down" << dendl;
+    ps->clear_primary_state();
     post_event(advmap);
     return transit< Reset >();
   }
@@ -7097,6 +7100,19 @@ boost::statechart::result PeeringState::WaitActingChange::react(const AdvMap& ad
   DECLARE_LOCALS;
   OSDMapRef osdmap = advmap.osdmap;
 
+  if (ps->should_restart_peering(
+	advmap.up_primary,
+	advmap.acting_primary,
+	advmap.newup,
+	advmap.newacting,
+	advmap.lastmap,
+	advmap.osdmap)) {
+    psdout(10) << "should_restart_peering, clearing primary state and transitioning to Reset"
+		       << dendl;
+    ps->clear_primary_state();
+    post_event(advmap);
+    return transit< Reset >();
+  }
   psdout(10) << "verifying no want_acting " << ps->want_acting << " targets didn't go down" << dendl;
   for (auto p = ps->want_acting.begin(); p != ps->want_acting.end(); ++p) {
     if (!osdmap->is_up(*p)) {
@@ -7236,21 +7252,6 @@ PeeringState::Incomplete::Incomplete(my_context ctx)
   ceph_assert(ps->blocked_by.empty());
   ps->blocked_by.insert(prior_set.down.begin(), prior_set.down.end());
   pl->publish_stats_to_osd();
-}
-
-boost::statechart::result PeeringState::Incomplete::react(const AdvMap &advmap) {
-  DECLARE_LOCALS;
-  int64_t poolnum = ps->info.pgid.pool();
-
-  // Reset if min_size turn smaller than previous value, pg might now be able to go active
-  if (!advmap.osdmap->have_pg_pool(poolnum) ||
-      advmap.lastmap->get_pools().find(poolnum)->second.min_size >
-      advmap.osdmap->get_pools().find(poolnum)->second.min_size) {
-    post_event(advmap);
-    return transit< Reset >();
-  }
-
-  return forward_event();
 }
 
 boost::statechart::result PeeringState::Incomplete::react(const MNotifyRec& notevt) {
