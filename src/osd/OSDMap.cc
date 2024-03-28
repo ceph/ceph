@@ -588,9 +588,9 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
       v = 5;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       v = 6;
-    } /* else if (!HAVE_FEATURE(features, SERVER_REEF)) {
+    } else if (!HAVE_FEATURE(features, SERVER_REEF)) {
       v = 8;
-    } */
+    }
     ENCODE_START(v, 1, bl); // client-usable data
     encode(fsid, bl);
     encode(epoch, bl);
@@ -3021,6 +3021,9 @@ bool OSDMap::primary_changed_broken(
 uint64_t OSDMap::get_encoding_features() const
 {
   uint64_t f = SIGNIFICANT_FEATURES;
+  if (require_osd_release < ceph_release_t::reef) {
+    f &= ~CEPH_FEATURE_SERVER_REEF;
+  }
   if (require_osd_release < ceph_release_t::octopus) {
     f &= ~CEPH_FEATURE_SERVER_OCTOPUS;
   }
@@ -3200,9 +3203,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
       v = 6;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       v = 7;
-    } /* else if (!HAVE_FEATURE(features, SERVER_REEF)) {
+    } else if (!HAVE_FEATURE(features, SERVER_REEF)) {
       v = 9;
-    } */
+    }
     ENCODE_START(v, 1, bl); // client-usable data
     // base
     encode(fsid, bl);
