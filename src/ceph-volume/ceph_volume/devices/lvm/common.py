@@ -75,6 +75,8 @@ common_args = {
     '--dmcrypt': {
         'action': arg_validators.DmcryptAction,
         'help': 'Enable device encryption via dm-crypt',
+        'choices': ['block', 'db', 'wal'],
+        'nargs': '*',
     },
     '--no-systemd': {
         'dest': 'no_systemd',

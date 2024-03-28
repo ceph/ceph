@@ -48,6 +48,8 @@ def create_parser(prog, description):
         '--dmcrypt',
         action=arg_validators.DmcryptAction,
         help='Enable device encryption via dm-crypt',
+        choices=['block', 'db', 'wal'],
+        nargs='*',
     )
     parser.add_argument(
         '--osd-id',

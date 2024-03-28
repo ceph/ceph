@@ -258,6 +258,8 @@ class Batch(object):
             '--dmcrypt',
             action=arg_validators.DmcryptAction,
             help='Enable device encryption via dm-crypt',
+            choices=['block', 'db', 'wal'],
+            nargs='*'
         )
         parser.add_argument(
             '--crush-device-class',

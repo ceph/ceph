@@ -24,7 +24,7 @@ def prepare_dmcrypt(key, device, device_type, fsid):
     mapping = 'ceph-{}-{}-{}-dmcrypt'.format(fsid, kname, device_type)
     return encryption_utils.prepare_dmcrypt(key, device, mapping)
 
-def prepare_bluestore(block, wal, db, secrets, osd_id, fsid, tmpfs):
+def prepare_bluestore(block, wal, db, secrets, encrypted_device_types, osd_id, fsid, tmpfs):
     """
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
@@ -37,9 +37,9 @@ def prepare_bluestore(block, wal, db, secrets, osd_id, fsid, tmpfs):
 
     if secrets.get('dmcrypt_key'):
         key = secrets['dmcrypt_key']
-        block = prepare_dmcrypt(key, block, 'block', fsid)
-        wal = prepare_dmcrypt(key, wal, 'wal', fsid)
-        db = prepare_dmcrypt(key, db, 'db', fsid)
+        block = prepare_dmcrypt(key, block, 'block', fsid) if 'block' in encrypted_device_types else block
+        wal = prepare_dmcrypt(key, wal, 'wal', fsid) if 'wal' in encrypted_device_types else wal
+        db = prepare_dmcrypt(key, db, 'db', fsid) if 'db' in encrypted_device_types else db
 
     # create the directory
     prepare_utils.create_osd_path(osd_id, tmpfs=tmpfs)
@@ -90,10 +90,10 @@ class Prepare(object):
     @decorators.needs_root
     def prepare(self):
         secrets = {'cephx_secret': prepare_utils.create_key()}
-        encrypted = 1 if self.args.dmcrypt else 0
-        cephx_lockbox_secret = '' if not encrypted else prepare_utils.create_key()
+        encrypted_device_types = self.args.dmcrypt
+        cephx_lockbox_secret = prepare_utils.create_key() if encrypted_device_types else ''
 
-        if encrypted:
+        if encrypted_device_types:
             secrets['dmcrypt_key'] = os.getenv('CEPH_VOLUME_DMCRYPT_SECRET')
             secrets['cephx_lockbox_secret'] = cephx_lockbox_secret # dummy value to make `ceph osd new` not complaining
 
@@ -120,6 +120,7 @@ class Prepare(object):
             wal,
             db,
             secrets,
+            encrypted_device_types,
             self.osd_id,
             osd_fsid,
             tmpfs,

@@ -44,6 +44,7 @@ def get_osd_device_path(osd_lvs, device_type, dmcrypt_secret=None):
             device_lv = lv
             break
     if device_lv:
+        is_encrypted = device_lv.tags.get('ceph.encrypted', '0') == '1'
         if is_encrypted:
             encryption_utils.luks_open(dmcrypt_secret, device_lv.lv_path, device_uuid)
             return '/dev/mapper/%s' % device_uuid

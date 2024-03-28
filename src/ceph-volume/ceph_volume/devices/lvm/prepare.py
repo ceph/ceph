@@ -25,7 +25,7 @@ def prepare_dmcrypt(key, device, device_type, tags):
     uuid = tags[tag_name]
     return encryption_utils.prepare_dmcrypt(key, device, uuid)
 
-def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
+def prepare_bluestore(block, wal, db, secrets, encrypted_device_types, tags, osd_id, fsid):
     """
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
@@ -43,9 +43,9 @@ def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
         # format and open ('decrypt' devices) and re-assign the device and journal
         # variables so that the rest of the process can use the mapper paths
         key = secrets['dmcrypt_key']
-        block = prepare_dmcrypt(key, block, 'block', tags)
-        wal = prepare_dmcrypt(key, wal, 'wal', tags)
-        db = prepare_dmcrypt(key, db, 'db', tags)
+        block = prepare_dmcrypt(key, block, 'block', tags) if 'block' in encrypted_device_types else block
+        wal = prepare_dmcrypt(key, wal, 'wal', tags) if 'wal' in encrypted_device_types else wal
+        db = prepare_dmcrypt(key, db, 'db', tags) if 'db' in encrypted_device_types else db
 
     # create the directory
     prepare_utils.create_osd_path(osd_id, tmpfs=True)
@@ -218,11 +218,10 @@ class Prepare(object):
         # (!!) or some flags that we would need to compound into a dict so that we
         # can convert to JSON (!!!)
         secrets = {'cephx_secret': prepare_utils.create_key()}
-        cephx_lockbox_secret = ''
-        encrypted = 1 if self.args.dmcrypt else 0
-        cephx_lockbox_secret = '' if not encrypted else prepare_utils.create_key()
+        encrypted_device_types = self.args.dmcrypt
+        cephx_lockbox_secret = prepare_utils.create_key() if encrypted_device_types else ''
 
-        if encrypted:
+        if encrypted_device_types:
             secrets['dmcrypt_key'] = encryption_utils.create_dmcrypt_key()
             secrets['cephx_lockbox_secret'] = cephx_lockbox_secret
 
@@ -256,23 +255,29 @@ class Prepare(object):
             tags['ceph.block_device'] = block_lv.lv_path
             tags['ceph.block_uuid'] = block_lv.lv_uuid
             tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
-            tags['ceph.encrypted'] = encrypted
             tags['ceph.vdo'] = api.is_vdo(block_lv.lv_path)
+
+            def set_encryption_tag(tags, device_type):
+                tags['ceph.encrypted'] = 0
+                if encrypted_device_types:
+                    tags['ceph.encrypted'] = 1 if device_type in encrypted_device_types else 0
+                return tags
 
             wal_device, wal_uuid, tags = self.setup_device(
                 'wal',
                 self.args.block_wal,
-                tags,
+                set_encryption_tag(tags, 'wal'),
                 self.args.block_wal_size,
                 self.args.block_wal_slots)
             db_device, db_uuid, tags = self.setup_device(
                 'db',
                 self.args.block_db,
-                tags,
+                set_encryption_tag(tags, 'db'),
                 self.args.block_db_size,
                 self.args.block_db_slots)
 
             tags['ceph.type'] = 'block'
+            set_encryption_tag(tags, 'block')
             block_lv.set_tags(tags)
 
             prepare_bluestore(
@@ -280,6 +285,7 @@ class Prepare(object):
                 wal_device,
                 db_device,
                 secrets,
+                encrypted_device_types,
                 tags,
                 self.osd_id,
                 osd_fsid,
