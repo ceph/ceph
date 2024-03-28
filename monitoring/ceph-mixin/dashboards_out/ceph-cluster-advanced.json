@@ -70,7 +70,7 @@
       },
       {
          "colors": null,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "fieldConfig": {
             "defaults": {
@@ -148,8 +148,8 @@
          "pluginVersion": "9.4.7",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "ceph_health_status{}",
+               "datasource": "$datasource",
+               "expr": "ceph_health_status{cluster=~\"$cluster\", }",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -164,7 +164,7 @@
          "type": "stat"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "fieldConfig": {
             "defaults": {
@@ -226,8 +226,8 @@
          "pluginVersion": "9.4.7",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "(ceph_cluster_total_bytes{}-ceph_cluster_total_used_bytes{})/ceph_cluster_total_bytes{}",
+               "datasource": "$datasource",
+               "expr": "(ceph_cluster_total_bytes{cluster=~\"$cluster\", }-ceph_cluster_total_used_bytes{cluster=~\"$cluster\", })/ceph_cluster_total_bytes{cluster=~\"$cluster\", }",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -243,7 +243,7 @@
       },
       {
          "colors": null,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "fieldConfig": {
             "defaults": {
@@ -306,8 +306,8 @@
          "pluginVersion": "9.4.7",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "ceph_cluster_total_bytes{}",
+               "datasource": "$datasource",
+               "expr": "ceph_cluster_total_bytes{cluster=~\"$cluster\", }",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -323,7 +323,7 @@
       },
       {
          "colors": null,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "fieldConfig": {
             "defaults": {
@@ -377,8 +377,8 @@
          "pluginVersion": "9.4.7",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(irate(ceph_osd_op_w_in_bytes{}[5m]))",
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_osd_op_w_in_bytes{cluster=~\"$cluster\", }[5m]))",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -393,7 +393,7 @@
       },
       {
          "colors": null,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "fieldConfig": {
             "defaults": {
@@ -455,8 +455,8 @@
          "pluginVersion": "9.4.7",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(irate(ceph_osd_op_r_out_bytes{}[5m]))",
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_osd_op_r_out_bytes{cluster=~\"$cluster\", }[5m]))",
                "format": "time_series",
                "instant": true,
                "interval": "$interval",
@@ -478,7 +478,7 @@
             "warn": "rgba(237, 129, 40, 0.9)"
          },
          "cornerRadius": 0,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "displayName": "",
          "fieldConfig": {
@@ -536,12 +536,12 @@
             {
                "aggregation": "Last",
                "alias": "All",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ceph_osd_metadata)",
+               "expr": "count(ceph_osd_metadata{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -553,12 +553,12 @@
             {
                "aggregation": "Last",
                "alias": "In",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ceph_osd_in)",
+               "expr": "count(ceph_osd_in{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -570,12 +570,12 @@
             {
                "aggregation": "Last",
                "alias": "Out",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Warning / Critical",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "sum(ceph_osd_in == bool 0)",
+               "expr": "sum(ceph_osd_in{cluster=~\"$cluster\", } == bool 0)",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -588,12 +588,12 @@
             {
                "aggregation": "Last",
                "alias": "Up",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "sum(ceph_osd_up)",
+               "expr": "sum(ceph_osd_up{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -605,12 +605,12 @@
             {
                "aggregation": "Last",
                "alias": "Down",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Warning / Critical",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "sum(ceph_osd_up == bool 0)",
+               "expr": "sum(ceph_osd_up{cluster=~\"$cluster\", } == bool 0)",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -634,7 +634,7 @@
             "warn": "rgba(237, 129, 40, 0.9)"
          },
          "cornerRadius": 1,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "displayName": "",
          "fieldConfig": {
@@ -692,12 +692,12 @@
             {
                "aggregation": "Last",
                "alias": "Active",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ceph_mgr_status == 1) or vector(0)",
+               "expr": "count(ceph_mgr_status{cluster=~\"$cluster\", } == 1) or vector(0)",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -709,12 +709,12 @@
             {
                "aggregation": "Last",
                "alias": "Standby",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ceph_mgr_status == 0) or vector(0)",
+               "expr": "count(ceph_mgr_status{cluster=~\"$cluster\", } == 0) or vector(0)",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -737,7 +737,7 @@
             "warn": "rgba(237, 129, 40, 0.9)"
          },
          "cornerRadius": 1,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "displayName": "",
          "fieldConfig": {
@@ -827,12 +827,12 @@
             {
                "aggregation": "Last",
                "alias": "Active",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ALERTS{alertstate=\"firing\",alertname=~\"^Ceph.+\", severity=\"critical\"}) OR vector(0)",
+               "expr": "count(ALERTS{alertstate=\"firing\",alertname=~\"^Ceph.+\", severity=\"critical\", cluster=~\"$cluster\", }) OR vector(0)",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -844,12 +844,12 @@
             {
                "aggregation": "Last",
                "alias": "Standby",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ALERTS{alertstate=\"firing\",alertname=~\"^Ceph.+\", severity=\"warning\"}) OR vector(0)",
+               "expr": "count(ALERTS{alertstate=\"firing\",alertname=~\"^Ceph.+\", severity=\"warning\", cluster=~\"$cluster\", }) OR vector(0)",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -865,7 +865,7 @@
       },
       {
          "colors": null,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "displayName": "",
          "fieldConfig": {
@@ -929,8 +929,8 @@
          "pluginVersion": "9.4.7",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "ceph_cluster_total_used_bytes{}",
+               "datasource": "$datasource",
+               "expr": "ceph_cluster_total_used_bytes{cluster=~\"$cluster\", }",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -944,7 +944,7 @@
       },
       {
          "colors": null,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "displayName": "",
          "fieldConfig": {
@@ -1000,8 +1000,8 @@
          "pluginVersion": "9.4.7",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(irate(ceph_osd_op_w{}[1m]))",
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_osd_op_w{cluster=~\"$cluster\", }[1m]))",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -1015,7 +1015,7 @@
       },
       {
          "colors": null,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "displayName": "",
          "fieldConfig": {
@@ -1079,8 +1079,8 @@
          "pluginVersion": "9.4.7",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(irate(ceph_osd_op_r{}[1m]))",
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_osd_op_r{cluster=~\"$cluster\", }[1m]))",
                "format": "time_series",
                "instant": true,
                "intervalFactor": 1,
@@ -1101,7 +1101,7 @@
             "warn": "rgba(237, 129, 40, 0.9)"
          },
          "cornerRadius": 1,
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "description": "",
          "displayName": "",
          "fieldConfig": {
@@ -1159,12 +1159,12 @@
             {
                "aggregation": "Last",
                "alias": "In Quorum",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "sum(ceph_mon_quorum_status)",
+               "expr": "sum(ceph_mon_quorum_status{cluster=~\"$cluster\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "In Quorum",
@@ -1176,12 +1176,12 @@
                "aggregation": "Last",
                "alias": "Total",
                "crit": 1,
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Always",
                "displayType": "Regular",
                "displayValueWithAlias": "When Alias Displayed",
-               "expr": "count(ceph_mon_quorum_status)",
+               "expr": "count(ceph_mon_quorum_status{cluster=~\"$cluster\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Total",
@@ -1194,12 +1194,12 @@
                "aggregation": "Last",
                "alias": "MONs out of Quorum",
                "crit": 1.6000000000000001,
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "decimals": 2,
                "displayAliasType": "Warning / Critical",
                "displayType": "Annotation",
                "displayValueWithAlias": "Never",
-               "expr": "count(ceph_mon_quorum_status) - sum(ceph_mon_quorum_status)",
+               "expr": "count(ceph_mon_quorum_status{cluster=~\"$cluster\", }) - sum(ceph_mon_quorum_status{cluster=~\"$cluster\", })",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "MONs out of Quorum",
@@ -1248,7 +1248,7 @@
          "limit": 10,
          "onlyAlertsOnDashboard": true,
          "options": {
-            "alertInstanceLabelFilter": "{alertname=~\"^Ceph.+\"}",
+            "alertInstanceLabelFilter": "{alertname=~\"^Ceph.+\", cluster=~\"$cluster\", }",
             "alertName": "",
             "dashboardAlerts": false,
             "groupBy": [ ],
@@ -1271,7 +1271,7 @@
          "type": "alertlist"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1393,8 +1393,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "ceph_cluster_total_bytes{}",
+               "datasource": "$datasource",
+               "expr": "ceph_cluster_total_bytes{cluster=~\"$cluster\", }",
                "format": "time_series",
                "instant": false,
                "interval": "$interval",
@@ -1405,8 +1405,8 @@
                "step": 300
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "ceph_cluster_total_used_bytes{}",
+               "datasource": "$datasource",
+               "expr": "ceph_cluster_total_used_bytes{cluster=~\"$cluster\", }",
                "format": "time_series",
                "instant": false,
                "interval": "$interval",
@@ -1421,7 +1421,7 @@
          "type": "timeseries"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1502,8 +1502,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(irate(ceph_osd_op_w_in_bytes{}[5m]))",
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_osd_op_w_in_bytes{cluster=~\"$cluster\", }[5m]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1513,8 +1513,8 @@
                "step": 300
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(irate(ceph_osd_op_r_out_bytes{}[5m]))",
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_osd_op_r_out_bytes{cluster=~\"$cluster\", }[5m]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1528,7 +1528,7 @@
          "type": "timeseries"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1609,8 +1609,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(irate(ceph_osd_op_w{}[1m]))",
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_osd_op_w{cluster=~\"$cluster\", }[1m]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1620,8 +1620,8 @@
                "step": 300
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(irate(ceph_osd_op_r{}[1m]))",
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_osd_op_r{cluster=~\"$cluster\", }[1m]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1635,7 +1635,7 @@
          "type": "timeseries"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1711,8 +1711,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "(ceph_pool_bytes_used{}) *on (pool_id) group_left(name)(ceph_pool_metadata{})",
+               "datasource": "$datasource",
+               "expr": "(ceph_pool_bytes_used{cluster=~\"$cluster\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -1725,7 +1725,7 @@
          "type": "timeseries"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1813,8 +1813,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "(ceph_pool_stored_raw{}) *on (pool_id) group_left(name)(ceph_pool_metadata{})",
+               "datasource": "$datasource",
+               "expr": "(ceph_pool_stored_raw{cluster=~\"$cluster\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster\", })",
                "format": "time_series",
                "hide": false,
                "interval": "",
@@ -1829,7 +1829,7 @@
          "type": "timeseries"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1905,8 +1905,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "(ceph_pool_quota_objects{}) *on (pool_id) group_left(name)(ceph_pool_metadata{})",
+               "datasource": "$datasource",
+               "expr": "(ceph_pool_quota_objects{cluster=~\"$cluster\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -1919,7 +1919,7 @@
          "type": "timeseries"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -1995,8 +1995,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "(ceph_pool_quota_bytes{}) *on (pool_id) group_left(name)(ceph_pool_metadata{})",
+               "datasource": "$datasource",
+               "expr": "(ceph_pool_quota_bytes{cluster=~\"$cluster\", }) *on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -2009,7 +2009,7 @@
          "type": "timeseries"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2085,8 +2085,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "(ceph_pool_objects{}) *on (pool_id) group_left(name)(ceph_pool_metadata{})",
+               "datasource": "$datasource",
+               "expr": "(ceph_pool_objects{cluster=~\"$cluster\", }) * on (pool_id) group_left(name)(ceph_pool_metadata{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "",
                "intervalFactor": 1,
@@ -2117,7 +2117,7 @@
          "type": "row"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2208,8 +2208,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pool_objects)",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pool_objects{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2223,7 +2223,7 @@
          "type": "timeseries"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2316,8 +2316,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_active{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_active{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2326,8 +2326,8 @@
                "refId": "A"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_clean{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_clean{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2336,8 +2336,8 @@
                "refId": "B"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_peering{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_peering{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2346,8 +2346,8 @@
                "refId": "C"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_degraded{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_degraded{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2357,8 +2357,8 @@
                "step": 300
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_stale{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_stale{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2368,8 +2368,8 @@
                "step": 300
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_unclean_pgs{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_unclean_pgs{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2379,8 +2379,8 @@
                "step": 300
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_undersized{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_undersized{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2390,8 +2390,8 @@
                "step": 300
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_incomplete{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_incomplete{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2400,8 +2400,8 @@
                "refId": "H"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_forced_backfill{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_forced_backfill{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2410,8 +2410,8 @@
                "refId": "I"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_forced_recovery{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_forced_recovery{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2420,8 +2420,8 @@
                "refId": "J"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_creating{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_creating{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2430,8 +2430,8 @@
                "refId": "K"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_wait_backfill{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_wait_backfill{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2440,8 +2440,8 @@
                "refId": "L"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_deep{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_deep{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2450,8 +2450,8 @@
                "refId": "M"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_scrubbing{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_scrubbing{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2460,8 +2460,8 @@
                "refId": "N"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_recovering{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_recovering{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2470,8 +2470,8 @@
                "refId": "O"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_repair{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_repair{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2480,8 +2480,8 @@
                "refId": "P"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_down{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_down{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2490,8 +2490,8 @@
                "refId": "Q"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_peered{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_peered{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2500,8 +2500,8 @@
                "refId": "R"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_backfill{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_backfill{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2510,8 +2510,8 @@
                "refId": "S"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_remapped{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_remapped{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2520,8 +2520,8 @@
                "refId": "T"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_backfill_toofull{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_backfill_toofull{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2534,7 +2534,7 @@
          "type": "timeseries"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2628,8 +2628,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_degraded{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_degraded{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2639,8 +2639,8 @@
                "step": 300
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_stale{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_stale{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2650,8 +2650,8 @@
                "step": 300
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(ceph_pg_undersized{})",
+               "datasource": "$datasource",
+               "expr": "sum(ceph_pg_undersized{cluster=~\"$cluster\", })",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2665,7 +2665,7 @@
          "type": "timeseries"
       },
       {
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -2740,8 +2740,8 @@
          "pluginVersion": "9.1.3",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
-               "expr": "sum(irate(ceph_osd_recovery_ops{}[$interval]))",
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_osd_recovery_ops{cluster=~\"$cluster\", }[$interval]))",
                "format": "time_series",
                "interval": "$interval",
                "intervalFactor": 1,
@@ -2777,7 +2777,7 @@
                   "mode": "opacity"
                },
                "dataFormat": "timeseries",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "fieldConfig": {
                   "defaults": {
                      "custom": {
@@ -2855,8 +2855,8 @@
                "pluginVersion": "9.4.7",
                "targets": [
                   {
-                     "datasource": "${DS_PROMETHEUS}",
-                     "expr": "ceph_osd_apply_latency_ms{}",
+                     "datasource": "$datasource",
+                     "expr": "ceph_osd_apply_latency_ms{cluster=~\"$cluster\", }",
                      "format": "time_series",
                      "instant": false,
                      "interval": "$interval",
@@ -2902,7 +2902,7 @@
                   "mode": "opacity"
                },
                "dataFormat": "timeseries",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "fieldConfig": {
                   "defaults": {
                      "custom": {
@@ -2979,8 +2979,8 @@
                "pluginVersion": "9.4.7",
                "targets": [
                   {
-                     "datasource": "${DS_PROMETHEUS}",
-                     "expr": "ceph_osd_commit_latency_ms{}",
+                     "datasource": "$datasource",
+                     "expr": "ceph_osd_commit_latency_ms{cluster=~\"$cluster\", }",
                      "format": "time_series",
                      "instant": false,
                      "interval": "$interval",
@@ -3026,7 +3026,7 @@
                   "mode": "opacity"
                },
                "dataFormat": "timeseries",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "fieldConfig": {
                   "defaults": {
                      "custom": {
@@ -3104,8 +3104,8 @@
                "pluginVersion": "9.4.7",
                "targets": [
                   {
-                     "datasource": "${DS_PROMETHEUS}",
-                     "expr": "rate(ceph_osd_op_r_latency_sum{}[5m]) / rate(ceph_osd_op_r_latency_count{}[5m]) >= 0",
+                     "datasource": "$datasource",
+                     "expr": "rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[5m]) / rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[5m]) >= 0",
                      "format": "time_series",
                      "instant": false,
                      "interval": "$interval",
@@ -3151,7 +3151,7 @@
                   "mode": "opacity"
                },
                "dataFormat": "timeseries",
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "fieldConfig": {
                   "defaults": {
                      "custom": {
@@ -3229,8 +3229,8 @@
                "pluginVersion": "9.4.7",
                "targets": [
                   {
-                     "datasource": "${DS_PROMETHEUS}",
-                     "expr": "rate(ceph_osd_op_w_latency_sum{}[5m]) / rate(ceph_osd_op_w_latency_count{}[5m]) >= 0",
+                     "datasource": "$datasource",
+                     "expr": "rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[5m]) / rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[5m]) >= 0",
                      "format": "time_series",
                      "instant": false,
                      "interval": "$interval",
@@ -3264,7 +3264,7 @@
                "yBucketSize": null
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "fieldConfig": {
                   "defaults": {
                      "color": {
@@ -3339,16 +3339,16 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "datasource": "${DS_PROMETHEUS}",
-                     "expr": "avg(rate(ceph_osd_op_r_latency_sum{}[5m]) / rate(ceph_osd_op_r_latency_count{}[5m]) >= 0)",
+                     "datasource": "$datasource",
+                     "expr": "avg(rate(ceph_osd_op_r_latency_sum{cluster=~\"$cluster\", }[5m]) / rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[5m]) >= 0)",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "Read",
                      "refId": "A"
                   },
                   {
-                     "datasource": "${DS_PROMETHEUS}",
-                     "expr": "avg(rate(ceph_osd_op_w_latency_sum{}[5m]) / rate(ceph_osd_op_w_latency_count{}[5m]) >= 0)",
+                     "datasource": "$datasource",
+                     "expr": "avg(rate(ceph_osd_op_w_latency_sum{cluster=~\"$cluster\", }[5m]) / rate(ceph_osd_op_w_latency_count{cluster=~\"$cluster\", }[5m]) >= 0)",
                      "format": "time_series",
                      "intervalFactor": 1,
                      "legendFormat": "Write",
@@ -3359,7 +3359,7 @@
                "type": "timeseries"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "fieldConfig": {
                   "defaults": {
                      "color": {
@@ -3437,8 +3437,8 @@
                "pluginVersion": "9.1.3",
                "targets": [
                   {
-                     "datasource": "${DS_PROMETHEUS}",
-                     "expr": "avg(ceph_osd_apply_latency_ms{})",
+                     "datasource": "$datasource",
+                     "expr": "avg(ceph_osd_apply_latency_ms{cluster=~\"$cluster\", })",
                      "format": "time_series",
                      "interval": "$interval",
                      "intervalFactor": 1,
@@ -3448,8 +3448,8 @@
                      "step": 4
                   },
                   {
-                     "datasource": "${DS_PROMETHEUS}",
-                     "expr": "avg(ceph_osd_commit_latency_ms{})",
+                     "datasource": "$datasource",
+                     "expr": "avg(ceph_osd_commit_latency_ms{cluster=~\"$cluster\", })",
                      "format": "time_series",
                      "interval": "$interval",
                      "intervalFactor": 1,
@@ -3492,7 +3492,7 @@
       },
       {
          "columns": [ ],
-         "datasource": "${DS_PROMETHEUS}",
+         "datasource": "$datasource",
          "fieldConfig": {
             "defaults": {
                "custom": {
@@ -3552,9 +3552,9 @@
          "styles": "",
          "targets": [
             {
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "exemplar": false,
-               "expr": "count by (ceph_version)(ceph_osd_metadata{})",
+               "expr": "count by (ceph_version)(ceph_osd_metadata{cluster=~\"$cluster\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -3565,9 +3565,9 @@
                "refId": "A"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "exemplar": false,
-               "expr": "count by (ceph_version)(ceph_mon_metadata{})",
+               "expr": "count by (ceph_version)(ceph_mon_metadata{cluster=~\"$cluster\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -3578,9 +3578,9 @@
                "refId": "B"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "exemplar": false,
-               "expr": "count by (ceph_version)(ceph_mds_metadata{})",
+               "expr": "count by (ceph_version)(ceph_mds_metadata{cluster=~\"$cluster\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -3590,9 +3590,9 @@
                "refId": "C"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "exemplar": false,
-               "expr": "count by (ceph_version)(ceph_rgw_metadata{})",
+               "expr": "count by (ceph_version)(ceph_rgw_metadata{cluster=~\"$cluster\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -3603,9 +3603,9 @@
                "refId": "D"
             },
             {
-               "datasource": "${DS_PROMETHEUS}",
+               "datasource": "$datasource",
                "exemplar": false,
-               "expr": "count by (ceph_version)(ceph_mgr_metadata{})",
+               "expr": "count by (ceph_version)(ceph_mgr_metadata{cluster=~\"$cluster\", })",
                "format": "table",
                "hide": false,
                "instant": true,
@@ -3655,17 +3655,37 @@
       "list": [
          {
             "current": {
-               "text": "Prometheus",
-               "value": "Prometheus"
+               "text": "default",
+               "value": "default"
             },
             "hide": 0,
             "label": "Data Source",
-            "name": "DS_PROMETHEUS",
+            "name": "datasource",
             "options": [ ],
             "query": "prometheus",
             "refresh": 1,
             "regex": "",
             "type": "datasource"
+         },
+         {
+            "allValue": null,
+            "current": { },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": false,
+            "label": "cluster",
+            "multi": false,
+            "name": "cluster",
+            "options": [ ],
+            "query": "label_values(ceph_health_status, cluster)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
          },
          {
             "auto": true,
@@ -3788,5 +3808,6 @@
    },
    "timezone": "",
    "title": "Ceph Cluster - Advanced",
+   "uid": "dn13KBeTv",
    "version": 0
 }
