@@ -1123,6 +1123,13 @@ options:
   see_also:
   - rgw_keystone_verify_ssl
   with_legacy: true
+- name: rgw_verify_ssl_cacert
+  type: str
+  level: advanced
+  desc: Path of custom CA certificate file for ssl client requests.
+  services:
+  - rgw
+  with_legacy: true
 # The following are tunables for caches of RGW NFS (and other file
 # client) objects.
 #
