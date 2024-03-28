@@ -137,8 +137,8 @@ public:
     if (mock_image_ctx.object_map != nullptr) {
       EXPECT_CALL(*mock_image_ctx.object_map,
                   aio_update(CEPH_NOSNAP, start_object, end_object, state,
-                             boost::optional<uint8_t>(current_state), _, false, _))
-        .WillOnce(WithArg<7>(Invoke([&mock_image_ctx, updated, ret_val](Context *ctx) {
+                             boost::optional<uint8_t>(current_state), _, false, false, _))
+        .WillOnce(WithArg<8>(Invoke([&mock_image_ctx, updated, ret_val](Context *ctx) {
                                if (updated) {
                                  mock_image_ctx.op_work_queue->queue(ctx, ret_val);
                                }
