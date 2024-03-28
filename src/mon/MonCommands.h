@@ -262,7 +262,13 @@ COMMAND("tell "
 	"send a command to a specific daemon", "mon", "rw")
 COMMAND_WITH_FLAG("version", "show mon daemon version", "mon", "r",
                   FLAG(TELL))
-
+COMMAND_WITH_FLAG("set_heap_property name=property,type=CephString name=value,type=CephInt",
+    "update malloc extension heap property",
+    "mon","rw",FLAG(TELL))
+COMMAND_WITH_FLAG("get_heap_property name=property,type=CephString",
+    "get malloc extension heap property",
+    "mon","r",FLAG(TELL))
+	
 COMMAND("node ls "
 	"name=type,type=CephChoices,strings=all|osd|mon|mds|mgr,req=false",
 	"list all nodes in cluster [type]", "mon", "r")
