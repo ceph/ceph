@@ -163,6 +163,7 @@ class SnapSchedClient(CephfsClient):
         self.sqlite_connections: Dict[str, DBInfo] = {}
         self.active_timers: Dict[Tuple[str, str], List[Timer]] = {}
         self.conn_lock: Lock = Lock()  # lock to protect add/lookup db connections
+        self.timers_lock: Lock = Lock()
 
         # restart old schedules
         for fs_name in self.get_all_filesystems():
@@ -273,6 +274,33 @@ class SnapSchedClient(CephfsClient):
                     if self._is_allowed_repeat(r, path)][0:1]
             return rows
 
+    def delete_references_to_unavailable_fs(self, available_fs_names: Set[str]) -> None:
+        timers_to_remove: Set[Tuple[str,str]] = set()
+        fs_to_remove: Set[str] = set()
+        self.timers_lock.acquire()
+        for key in iter(self.active_timers):
+            fs = key[0]
+            if fs not in available_fs_names:
+                timers_to_remove.add(key)
+                fs_to_remove.add(fs)
+                log.debug(f'Will remove timers for fs "{key}"')
+
+        for i in timers_to_remove:
+            log.debug(f'Cancelled timer for "{i}"')
+            for t in self.active_timers[i]:
+                t.cancel()
+            log.debug(f'Removed timer for "{i}"')
+            del self.active_timers[i]
+        self.timers_lock.release()
+
+        self.conn_lock.acquire()
+        for fs in fs_to_remove:
+            log.debug(f'Closed DB connection to "{fs}"')
+            self.sqlite_connections[fs].db.close()
+            log.debug(f'Removed DB connection to "{fs}"')
+            del self.sqlite_connections[fs]
+        self.conn_lock.release()
+
     def refresh_snap_timers(self, fs: str, path: str, olddb: Optional[sqlite3.Connection] = None) -> None:
         try:
             log.debug((f'SnapDB on {fs} changed for {path}, '
@@ -286,6 +314,7 @@ class SnapSchedClient(CephfsClient):
                 with self.get_schedule_db(fs) as conn_mgr:
                     db = conn_mgr.dbinfo.db
                     rows = self.fetch_schedules(db, path)
+            self.timers_lock.acquire()
             timers = self.active_timers.get((fs, path), [])
             for timer in timers:
                 timer.cancel()
@@ -299,6 +328,7 @@ class SnapSchedClient(CephfsClient):
                 timers.append(t)
                 log.debug(f'Will snapshot {path} in fs {fs} in {row[1]}s')
             self.active_timers[(fs, path)] = timers
+            self.timers_lock.release()
         except Exception:
             self._log_exception('refresh_snap_timers')
 
