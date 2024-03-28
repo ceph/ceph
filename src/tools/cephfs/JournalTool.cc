@@ -866,8 +866,11 @@ int JournalTool::recover_dentries(
         // Compose: Dentry format is dnfirst, [I|L], InodeStore(bare=true)
         bufferlist dentry_bl;
         encode(fb.dnfirst, dentry_bl);
-        encode('I', dentry_bl);
+        encode('i', dentry_bl);
+        ENCODE_START(2, 1, dentry_bl);
+        encode(fb.alternate_name, dentry_bl);
         encode_fullbit_as_inode(fb, true, &dentry_bl);
+        ENCODE_FINISH(dentry_bl);
 
         // Record for writing to RADOS
         write_vals[key] = dentry_bl;
@@ -925,9 +928,12 @@ int JournalTool::recover_dentries(
         // Compose: Dentry format is dnfirst, [I|L], InodeStore(bare=true)
         bufferlist dentry_bl;
         encode(rb.dnfirst, dentry_bl);
-        encode('L', dentry_bl);
+        encode('l', dentry_bl);
+        ENCODE_START(2, 1, dentry_bl);
         encode(rb.ino, dentry_bl);
         encode(rb.d_type, dentry_bl);
+        encode(rb.alternate_name, dentry_bl);
+        ENCODE_FINISH(dentry_bl);
 
         // Record for writing to RADOS
         write_vals[key] = dentry_bl;
