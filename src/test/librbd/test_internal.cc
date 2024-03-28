@@ -154,19 +154,19 @@ static bool is_sparse_read_supported(librados::IoCtx &ioctx,
                                      const std::string &oid) {
   EXPECT_EQ(0, ioctx.create(oid, true));
   bufferlist inbl;
-  inbl.append(std::string(1, 'X'));
-  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 1));
-  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 3));
+  inbl.append(std::string(4096, 'X'));
+  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 4096));
+  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 4096 * 3));
 
   std::map<uint64_t, uint64_t> m;
   bufferlist outbl;
-  int r = ioctx.sparse_read(oid, m, outbl, 4, 0);
+  int r = ioctx.sparse_read(oid, m, outbl, 4096 * 4, 0);
   ioctx.remove(oid);
 
   int expected_r = 2;
-  std::map<uint64_t, uint64_t> expected_m = {{1, 1}, {3, 1}};
+  std::map<uint64_t, uint64_t> expected_m = {{4096, 4096}, {4096 * 3, 4096}};
   bufferlist expected_outbl;
-  expected_outbl.append(std::string(2, 'X'));
+  expected_outbl.append(std::string(4096 * 2, 'X'));
 
   return (r == expected_r && m == expected_m &&
           outbl.contents_equal(expected_outbl));
@@ -669,9 +669,9 @@ TEST_F(TestInternal, SnapshotCopyup)
       ictx->data_ctx, ictx->get_object_name(10));
 
   bufferlist bl;
-  bl.append(std::string(256, '1'));
-  ASSERT_EQ(256, api::Io<>::write(*ictx, 0, bl.length(), bufferlist{bl}, 0));
-  ASSERT_EQ(256, api::Io<>::write(*ictx, 1024, bl.length(), bufferlist{bl},
+  bl.append(std::string(4096, '1'));
+  ASSERT_EQ(4096, api::Io<>::write(*ictx, 0, bl.length(), bufferlist{bl}, 0));
+  ASSERT_EQ(4096, api::Io<>::write(*ictx, 4096 * 4, bl.length(), bufferlist{bl},
                                   0));
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
@@ -693,8 +693,8 @@ TEST_F(TestInternal, SnapshotCopyup)
   ASSERT_EQ(0, snap_create(*ictx2, "snap1"));
   ASSERT_EQ(0, snap_create(*ictx2, "snap2"));
 
-  ASSERT_EQ(256, api::Io<>::write(*ictx2, 256, bl.length(), bufferlist{bl},
-                                  0));
+  ASSERT_EQ(4096, api::Io<>::write(*ictx2, 4096, bl.length(), bufferlist{bl},
+                                   0));
 
   ASSERT_EQ(0, flush_writeback_cache(ictx2));
   librados::IoCtx snap_ctx;
@@ -704,18 +704,18 @@ TEST_F(TestInternal, SnapshotCopyup)
   librados::snap_set_t snap_set;
   ASSERT_EQ(0, snap_ctx.list_snaps(ictx2->get_object_name(0), &snap_set));
 
-  uint64_t copyup_end = ictx2->enable_sparse_copyup ? 1024 + 256 : 1 << order;
+  uint64_t copyup_end = ictx2->enable_sparse_copyup ? 4096 * 5 : 1 << order;
   std::vector< std::pair<uint64_t,uint64_t> > expected_overlap =
     boost::assign::list_of(
-      std::make_pair(0, 256))(
-      std::make_pair(512, copyup_end - 512));
+      std::make_pair(0, 4096))(
+      std::make_pair(4096 * 2, copyup_end - 4096 * 2));
   ASSERT_EQ(2U, snap_set.clones.size());
   ASSERT_NE(CEPH_NOSNAP, snap_set.clones[0].cloneid);
   ASSERT_EQ(2U, snap_set.clones[0].snaps.size());
   ASSERT_EQ(expected_overlap, snap_set.clones[0].overlap);
   ASSERT_EQ(CEPH_NOSNAP, snap_set.clones[1].cloneid);
 
-  bufferptr read_ptr(256);
+  bufferptr read_ptr(4096);
   bufferlist read_bl;
   read_bl.push_back(read_ptr);
 
@@ -727,18 +727,18 @@ TEST_F(TestInternal, SnapshotCopyup)
     ASSERT_EQ(0, librbd::api::Image<>::snap_set(
                    ictx2, cls::rbd::UserSnapshotNamespace(), snap_name));
 
-    ASSERT_EQ(256,
-              api::Io<>::read(*ictx2, 0, 256,
+    ASSERT_EQ(4096,
+              api::Io<>::read(*ictx2, 0, 4096,
                               librbd::io::ReadResult{read_result}, 0));
     ASSERT_TRUE(bl.contents_equal(read_bl));
 
-    ASSERT_EQ(256,
-              api::Io<>::read(*ictx2, 1024, 256,
+    ASSERT_EQ(4096,
+              api::Io<>::read(*ictx2, 4096 * 4, 4096,
                               librbd::io::ReadResult{read_result}, 0));
     ASSERT_TRUE(bl.contents_equal(read_bl));
 
-    ASSERT_EQ(256,
-              api::Io<>::read(*ictx2, 256, 256,
+    ASSERT_EQ(4096,
+              api::Io<>::read(*ictx2, 4096, 4096,
                               librbd::io::ReadResult{read_result}, 0));
     if (snap_name == NULL) {
       ASSERT_TRUE(bl.contents_equal(read_bl));
@@ -752,7 +752,7 @@ TEST_F(TestInternal, SnapshotCopyup)
       io_ctx.dup(m_ioctx);
       librados::Rados rados(io_ctx);
       EXPECT_EQ(0, rados.conf_set("rbd_cache", "false"));
-      EXPECT_EQ(0, rados.conf_set("rbd_sparse_read_threshold_bytes", "256"));
+      EXPECT_EQ(0, rados.conf_set("rbd_sparse_read_threshold_bytes", "4096"));
       auto ictx3 = new librbd::ImageCtx(clone_name, "", snap_name, io_ctx,
                                         true);
       ASSERT_EQ(0, ictx3->state->open(0));
@@ -763,28 +763,28 @@ TEST_F(TestInternal, SnapshotCopyup)
       bufferlist expected_bl;
       if (ictx3->enable_sparse_copyup && sparse_read_supported) {
         if (snap_name == NULL) {
-          expected_m = {{0, 512}, {1024, 256}};
-          expected_bl.append(std::string(256 * 3, '1'));
+          expected_m = {{0, 4096 * 2}, {4096 * 4, 4096}};
+          expected_bl.append(std::string(4096 * 3, '1'));
         } else {
-          expected_m = {{0, 256}, {1024, 256}};
-          expected_bl.append(std::string(256 * 2, '1'));
+          expected_m = {{0, 4096}, {4096 * 4, 4096}};
+          expected_bl.append(std::string(4096 * 2, '1'));
         }
       } else {
-        expected_m = {{0, 1024 + 256}};
+        expected_m = {{0, 4096 * 5}};
         if (snap_name == NULL) {
-          expected_bl.append(std::string(256 * 2, '1'));
-          expected_bl.append(std::string(256 * 2, '\0'));
-          expected_bl.append(std::string(256 * 1, '1'));
+          expected_bl.append(std::string(4096 * 2, '1'));
+          expected_bl.append(std::string(4096 * 2, '\0'));
+          expected_bl.append(std::string(4096 * 1, '1'));
         } else {
-          expected_bl.append(std::string(256 * 1, '1'));
-          expected_bl.append(std::string(256 * 3, '\0'));
-          expected_bl.append(std::string(256 * 1, '1'));
+          expected_bl.append(std::string(4096 * 1, '1'));
+          expected_bl.append(std::string(4096 * 3, '\0'));
+          expected_bl.append(std::string(4096 * 1, '1'));
         }
       }
       std::vector<std::pair<uint64_t, uint64_t>> read_m;
       librbd::io::ReadResult sparse_read_result{&read_m, &read_bl};
-      EXPECT_EQ(1024 + 256,
-                api::Io<>::read(*ictx3, 0, 1024 + 256,
+      EXPECT_EQ(4096 * 5,
+                api::Io<>::read(*ictx3, 0, 4096 * 5,
                                 librbd::io::ReadResult{sparse_read_result}, 0));
       EXPECT_EQ(expected_m, read_m);
       EXPECT_TRUE(expected_bl.contents_equal(read_bl));
