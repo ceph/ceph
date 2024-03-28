@@ -320,7 +320,7 @@ public:
   }
 
   int push(const DoutPrefixProvider *dpp, 
-           ceph::buffer::list& bl,
+           const ceph::buffer::list& bl,
 	   librados::AioCompletion* c,
 	   optional_yield y) {
     auto r = lazy_init(dpp, y);

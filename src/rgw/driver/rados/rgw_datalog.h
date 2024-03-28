@@ -301,6 +301,9 @@ public:
   int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
 		const rgw::bucket_log_layout_generation& gen, int shard_id,
 		optional_yield y);
+  int add_entry_aio(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+		const rgw::bucket_log_layout_generation& gen, int shard_id,
+		librados::AioCompletion* c, optional_yield y);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int list_entries(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
@@ -378,6 +381,9 @@ public:
   virtual int push(const DoutPrefixProvider *dpp, int index, ceph::real_time now,
 		   const std::string& key, ceph::buffer::list&& bl,
 		   optional_yield y) = 0;
+  virtual int push(const DoutPrefixProvider *dpp, int index, ceph::real_time now,
+       const std::string& key, ceph::buffer::list&& bl,
+       librados::AioCompletion* c, optional_yield y) = 0;
   virtual int list(const DoutPrefixProvider *dpp, int shard, int max_entries,
 		   std::vector<rgw_data_change_log_entry>& entries,
 		   std::optional<std::string_view> marker,

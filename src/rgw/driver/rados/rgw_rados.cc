@@ -738,6 +738,22 @@ int RGWRados::get_max_chunk_size(const rgw_placement_rule& placement_rule, const
   return get_max_chunk_size(pool, max_chunk_size, dpp, palignment);
 }
 
+void add_datalog_entries(const DoutPrefixProvider* dpp,
+                         RGWDataChangesLog* datalog,
+                         const RGWBucketInfo& bucket_info,
+                         std::vector<uint64_t> shards,
+                         optional_yield y)
+{
+  const auto& logs = bucket_info.layout.logs;
+  if (logs.empty()) {
+    return;
+  }
+
+  for (auto shard_id : shards) {
+    // int r = datalog->add_entry_aio(dpp, bucket_info, logs.back(), shard_id, c, y);
+  }
+}
+
 void add_datalog_entry(const DoutPrefixProvider* dpp,
                        RGWDataChangesLog* datalog,
                        const RGWBucketInfo& bucket_info,
@@ -9581,6 +9597,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   rgw_bucket_dir_entry*
     last_entry_visited = nullptr; // to set last_entry (marker)
   std::map<std::string, bufferlist> updates;
+  std::vector<uint64_t> shard_vec;
   uint32_t count = 0;
   while (count < num_entries && !candidates.empty()) {
     r = 0;
@@ -9620,6 +9637,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 	  "\" failed with r=" << r << dendl;
 	return r;
       }
+      shard_vec.push_back(tracker.shard_idx);
     } else {
       r = 0;
     }
@@ -9691,6 +9709,9 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       c->release();
     }
   } // updates loop
+
+  add_datalog_entries(dpp, svc.datalog_rados, bucket_info,
+  shard_vec, y);
 
   // determine truncation by checking if all the returned entries are
   // consumed or not
@@ -9835,6 +9856,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
   uint32_t count = 0u;
   std::map<std::string, bufferlist> updates;
   rgw_obj_index_key last_added_entry;
+  std::vector<uint64_t> shard_vec;
   while (count <= num_entries &&
 	 ((shard_id >= 0 && current_shard == uint32_t(shard_id)) ||
 	  current_shard < num_shards)) {
@@ -9874,6 +9896,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 	    ": error in check_disk_state, r=" << r << dendl;
 	  return r;
 	}
+  shard_vec.push_back(current_shard);
       } else {
         r = 0;
       }
@@ -9925,6 +9948,10 @@ check_updates:
       c->release();
     }
   }
+
+  // add datalog entry
+  add_datalog_entries(dpp, svc.datalog_rados, bucket_info,
+  shard_vec, y);
 
   if (last_entry && !ent_list.empty()) {
     *last_entry = last_added_entry;

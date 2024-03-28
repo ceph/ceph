@@ -149,6 +149,20 @@ public:
     }
     return r;
   }
+  int push(const DoutPrefixProvider *dpp, int index, ceph::real_time now,
+	   const std::string& key, ceph::buffer::list&& bl,
+	   lr::AioCompletion* c, optional_yield y) override {
+    lr::ObjectWriteOperation op;
+    cls_log_add(op, utime_t(now), {}, key, bl);
+    auto r = ioctx.aio_operate(oids[index], c, &op, 0);
+    if (r < 0) {
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+		 << ": failed to push to " << oids[index]
+		 << cpp_strerror(-r) << dendl;
+    }
+    return r;
+  }
+
   int list(const DoutPrefixProvider *dpp, int index, int max_entries,
 	   std::vector<rgw_data_change_log_entry>& entries,
 	   std::optional<std::string_view> marker,
@@ -300,6 +314,19 @@ public:
     }
     return r;
   }
+
+  int push(const DoutPrefixProvider *dpp, int index, ceph::real_time,
+     const std::string&, ceph::buffer::list&& bl,
+     librados::AioCompletion* c, optional_yield y) override {
+     auto r = fifos[index].push(dpp, std::move(bl), c, y);
+      if (r < 0) {
+        ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
+       << ": unable to push to FIFO: " << get_oid(index)
+       << ": " << cpp_strerror(-r) << dendl;
+      }
+      return r;
+  }
+
   int list(const DoutPrefixProvider *dpp, int index, int max_entries,
 	   std::vector<rgw_data_change_log_entry>& entries,
 	   std::optional<std::string_view> marker, std::string* out_marker,
@@ -646,6 +673,18 @@ std::string RGWDataChangesLog::get_oid(uint64_t gen_id, int i) const {
   return (gen_id > 0 ?
 	  fmt::format("{}@G{}.{}", prefix, gen_id, i) :
 	  fmt::format("{}.{}", prefix, i));
+}
+
+int RGWDataChangesLog::add_entry_aio(const DoutPrefixProvider *dpp,
+                                const RGWBucketInfo& bucket_info,
+                                const rgw::bucket_log_layout_generation& gen,
+                                int shard_id,
+                                librados::AioCompletion* c,
+                                optional_yield y)
+{
+ // place holder for datalog async push call
+//ret = be->push(dpp, index, now, change.key, std::move(bl), c);
+
 }
 
 int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
