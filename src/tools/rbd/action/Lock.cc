@@ -26,13 +26,15 @@ void add_id_option(po::options_description *positional) {
 
 int get_id(const po::variables_map &vm, size_t *arg_index,
            std::string *id) {
-  *id = utils::get_positional_argument(vm, *arg_index);
-  if (id->empty()) {
+  if (vm.count(at::POSITIONAL_ARGUMENTS) == 0 ||
+      *arg_index >= boost::any_cast<std::vector<std::string>>(
+        vm[at::POSITIONAL_ARGUMENTS].value()).size()) {
     std::cerr << "rbd: lock id was not specified" << std::endl;
     return -EINVAL;
-  } else {
-    ++(*arg_index);
   }
+
+  *id = utils::get_positional_argument(vm, *arg_index);
+  ++(*arg_index);
   return 0;
 }
 
