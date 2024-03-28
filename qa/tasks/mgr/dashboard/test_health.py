@@ -36,6 +36,7 @@ class HealthTest(DashboardTestCase):
         'failed': JList(int),
         'metadata_pool': int,
         'epoch': int,
+        'btime': str,
         'stopped': JList(int),
         'max_mds': int,
         'compat': JObj({
