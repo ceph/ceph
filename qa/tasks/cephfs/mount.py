@@ -195,10 +195,10 @@ class CephFSMount(object):
         self.fs = Filesystem(self.ctx, name=self.cephfs_name)
 
         try:
-            output = self.fs.mon_manager.raw_cluster_cmd(args='osd blocklist ls')
+            output = self.fs.get_ceph_cmd_stdout('osd blocklist ls')
         except CommandFailedError:
             # Fallback for older Ceph cluster
-            output = self.fs.mon_manager.raw_cluster_cmd(args='osd blacklist ls')
+            output = self.fs.get_ceph_cmd_stdout('osd blacklist ls')
 
         return self.addr in output
 

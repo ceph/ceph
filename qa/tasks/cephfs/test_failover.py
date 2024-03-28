@@ -445,7 +445,7 @@ class TestFailover(CephFSTestCase):
 
         standbys = self.mds_cluster.get_standby_daemons()
         self.assertGreaterEqual(len(standbys), 1)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', str(len(standbys)))
+        self.run_ceph_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', str(len(standbys)))
 
         # Kill a standby and check for warning
         victim = standbys.pop()
@@ -463,11 +463,11 @@ class TestFailover(CephFSTestCase):
         # Set it one greater than standbys ever seen
         standbys = self.mds_cluster.get_standby_daemons()
         self.assertGreaterEqual(len(standbys), 1)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', str(len(standbys)+1))
+        self.run_ceph_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', str(len(standbys)+1))
         self.wait_for_health("MDS_INSUFFICIENT_STANDBY", self.fs.beacon_timeout)
 
         # Set it to 0
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', '0')
+        self.run_ceph_cmd('fs', 'set', self.fs.name, 'standby_count_wanted', '0')
         self.wait_for_health_clear(timeout=30)
 
     def test_discontinuous_mdsmap(self):
@@ -716,9 +716,8 @@ class TestMultiFilesystems(CephFSTestCase):
 
     def setUp(self):
         super(TestMultiFilesystems, self).setUp()
-        self.mds_cluster.mon_manager.raw_cluster_cmd("fs", "flag", "set",
-            "enable_multiple", "true",
-            "--yes-i-really-mean-it")
+        self.run_ceph_cmd("fs", "flag", "set", "enable_multiple",
+                          "true", "--yes-i-really-mean-it")
 
     def _setup_two(self):
         fs_a = self.mds_cluster.newfs(name="alpha")
@@ -732,7 +731,7 @@ class TestMultiFilesystems(CephFSTestCase):
 
         # Reconfigure client auth caps
         for mount in self.mounts:
-            self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+            self.get_ceph_cmd_result(
                 'auth', 'caps', "client.{0}".format(mount.client_id),
                 'mds', 'allow',
                 'mon', 'allow r',
@@ -800,7 +799,7 @@ class TestMultiFilesystems(CephFSTestCase):
 
         # Kill fs_a's active MDS, see a standby take over
         self.mds_cluster.mds_stop(original_a)
-        self.mds_cluster.mon_manager.raw_cluster_cmd("mds", "fail", original_a)
+        self.run_ceph_cmd("mds", "fail", original_a)
         self.wait_until_equal(lambda: len(fs_a.get_active_names()), 1, 30,
                               reject_fn=lambda v: v > 1)
         # Assert that it's a *different* daemon that has now appeared in the map for fs_a
@@ -808,7 +807,7 @@ class TestMultiFilesystems(CephFSTestCase):
 
         # Kill fs_b's active MDS, see a standby take over
         self.mds_cluster.mds_stop(original_b)
-        self.mds_cluster.mon_manager.raw_cluster_cmd("mds", "fail", original_b)
+        self.run_ceph_cmd("mds", "fail", original_b)
         self.wait_until_equal(lambda: len(fs_b.get_active_names()), 1, 30,
                               reject_fn=lambda v: v > 1)
         # Assert that it's a *different* daemon that has now appeared in the map for fs_a
