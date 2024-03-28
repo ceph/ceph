@@ -176,8 +176,8 @@ void NamespaceReplayer<I>::flush()
 
 template <typename I>
 void NamespaceReplayer<I>::handle_update(const std::string &mirror_uuid,
-                                         ImageIds &&added_image_ids,
-                                         ImageIds &&removed_image_ids) {
+                                         MirrorEntities &&added_entities,
+                                         MirrorEntities &&removed_entities) {
   std::lock_guard locker{m_lock};
 
   if (!m_image_map) {
@@ -186,8 +186,8 @@ void NamespaceReplayer<I>::handle_update(const std::string &mirror_uuid,
   }
 
   dout(10) << "mirror_uuid=" << mirror_uuid << ", "
-           << "added_count=" << added_image_ids.size() << ", "
-           << "removed_count=" << removed_image_ids.size() << dendl;
+           << "added_count=" << added_entities.size() << ", "
+           << "removed_count=" << removed_entities.size() << dendl;
 
   m_service_daemon->add_or_update_namespace_attribute(
     m_local_io_ctx.get_id(), m_local_io_ctx.get_namespace(),
@@ -199,19 +199,8 @@ void NamespaceReplayer<I>::handle_update(const std::string &mirror_uuid,
       m_remote_pool_watcher->get_image_count());
   }
 
-  std::set<std::string> added_global_image_ids;
-  for (auto& image_id : added_image_ids) {
-    added_global_image_ids.insert(image_id.global_id);
-  }
-
-  std::set<std::string> removed_global_image_ids;
-  for (auto& image_id : removed_image_ids) {
-    removed_global_image_ids.insert(image_id.global_id);
-  }
-
-  m_image_map->update_images(mirror_uuid,
-                             std::move(added_global_image_ids),
-                             std::move(removed_global_image_ids));
+  m_image_map->update_images(mirror_uuid, std::move(added_entities),
+                             std::move(removed_entities));
 }
 
 template <typename I>
@@ -822,8 +811,8 @@ void NamespaceReplayer<I>::handle_shut_down_image_map(int r, Context *on_finish)
 
 template <typename I>
 void NamespaceReplayer<I>::handle_acquire_image(const std::string &global_image_id,
-                                           const std::string &instance_id,
-                                           Context* on_finish) {
+                                                const std::string &instance_id,
+                                                Context* on_finish) {
   dout(5) << "global_image_id=" << global_image_id << ", "
           << "instance_id=" << instance_id << dendl;
 
@@ -833,8 +822,8 @@ void NamespaceReplayer<I>::handle_acquire_image(const std::string &global_image_
 
 template <typename I>
 void NamespaceReplayer<I>::handle_release_image(const std::string &global_image_id,
-                                           const std::string &instance_id,
-                                           Context* on_finish) {
+                                                const std::string &instance_id,
+                                                Context* on_finish) {
   dout(5) << "global_image_id=" << global_image_id << ", "
           << "instance_id=" << instance_id << dendl;
 
@@ -844,15 +833,50 @@ void NamespaceReplayer<I>::handle_release_image(const std::string &global_image_
 
 template <typename I>
 void NamespaceReplayer<I>::handle_remove_image(const std::string &mirror_uuid,
-                                          const std::string &global_image_id,
-                                          const std::string &instance_id,
-                                          Context* on_finish) {
+                                               const std::string &global_image_id,
+                                               const std::string &instance_id,
+                                               Context* on_finish) {
   ceph_assert(!mirror_uuid.empty());
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "global_image_id=" << global_image_id << ", "
           << "instance_id=" << instance_id << dendl;
 
   m_instance_watcher->notify_peer_image_removed(instance_id, global_image_id,
+                                                mirror_uuid, on_finish);
+}
+
+template <typename I>
+void NamespaceReplayer<I>::handle_acquire_group(const std::string &global_group_id,
+                                                const std::string &instance_id,
+                                                Context* on_finish) {
+  dout(5) << "global_group_id=" << global_group_id << ", "
+          << "instance_id=" << instance_id << dendl;
+
+  m_instance_watcher->notify_group_acquire(instance_id, global_group_id,
+                                           on_finish);
+}
+
+template <typename I>
+void NamespaceReplayer<I>::handle_release_group(const std::string &global_group_id,
+                                                const std::string &instance_id,
+                                                Context* on_finish) {
+  dout(5) << "global_group_id=" << global_group_id << ", "
+          << "instance_id=" << instance_id << dendl;
+
+  m_instance_watcher->notify_group_release(instance_id, global_group_id,
+                                           on_finish);
+}
+
+template <typename I>
+void NamespaceReplayer<I>::handle_remove_group(const std::string &mirror_uuid,
+                                               const std::string &global_group_id,
+                                               const std::string &instance_id,
+                                               Context* on_finish) {
+  dout(5) << "mirror_uuid=" << mirror_uuid << ", "
+          << "global_group_id=" << global_group_id << ", "
+          << "instance_id=" << instance_id << dendl;
+
+  m_instance_watcher->notify_peer_group_removed(instance_id, global_group_id,
                                                 mirror_uuid, on_finish);
 }
 

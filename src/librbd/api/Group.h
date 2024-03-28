@@ -19,19 +19,25 @@ template <typename ImageCtxT = librbd::ImageCtx>
 struct Group {
 
   static int create(librados::IoCtx& io_ctx, const char *group_name);
-  static int remove(librados::IoCtx& io_ctx, const char *group_name);
+  static int remove(librados::IoCtx& io_ctx,
+                    const char *group_name, uint32_t flags);
   static int list(librados::IoCtx& io_ctx, std::vector<std::string> *names);
+  static int list(librados::IoCtx& io_ctx,
+                  std::map<std::string, std::string> *name_to_id_map);
   static int rename(librados::IoCtx& io_ctx, const char *src_group_name,
                     const char *dest_group_name);
 
   static int image_add(librados::IoCtx& group_ioctx, const char *group_name,
-		       librados::IoCtx& image_ioctx, const char *image_name);
+                       librados::IoCtx& image_ioctx, const char *image_name,
+                       uint32_t flags);
   static int image_remove(librados::IoCtx& group_ioctx, const char *group_name,
-		          librados::IoCtx& image_ioctx, const char *image_name);
+                          librados::IoCtx& image_ioctx, const char *image_name,
+                          uint32_t flags);
   static int image_remove_by_id(librados::IoCtx& group_ioctx,
                                 const char *group_name,
                                 librados::IoCtx& image_ioctx,
-                                const char *image_id);
+                                const char *image_id,
+                                uint32_t flags);
   static int image_list(librados::IoCtx& group_ioctx, const char *group_name,
 		        std::vector<group_image_info_t> *images);
 
@@ -49,7 +55,6 @@ struct Group {
   static int snap_rollback(librados::IoCtx& group_ioctx,
                            const char *group_name, const char *snap_name,
                            ProgressContext& pctx);
-
 };
 
 } // namespace api

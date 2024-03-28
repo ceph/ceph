@@ -55,48 +55,112 @@ public:
                       Return(r)));
   }
 
+  void expect_mirror_group_list(
+      librados::IoCtx &io_ctx,
+      const std::map<std::string, cls::rbd::MirrorGroup> &groups, int r) {
+    bufferlist bl;
+    encode(groups, bl);
+
+    EXPECT_CALL(get_mock_io_ctx(io_ctx),
+                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_group_list"),
+                     _, _, _, _))
+      .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
+                                          *out_bl = bl;
+                                        })),
+                      Return(r)));
+  }
+
+  void expect_group_image_list(
+      librados::IoCtx &io_ctx, const std::string &group_id,
+      const std::vector<cls::rbd::GroupImageStatus> &images, int r) {
+    bufferlist bl;
+    encode(images, bl);
+
+    EXPECT_CALL(get_mock_io_ctx(io_ctx),
+                exec(librbd::util::group_header_name(group_id), _, StrEq("rbd"),
+                     StrEq("group_image_list"), _, _, _, _))
+      .WillOnce(DoAll(WithArg<5>(Invoke([bl](bufferlist *out_bl) {
+                                          *out_bl = bl;
+                                        })),
+                      Return(r)));
+  }
 };
 
 TEST_F(TestMockPoolWatcherRefreshImagesRequest, Success) {
   InSequence seq;
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
+  cls::rbd::MirrorGroup mirror_group =
+    {"global id", cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+     cls::rbd::MIRROR_GROUP_STATE_ENABLED};
+  expect_mirror_group_list(m_remote_io_ctx, {{"local id", mirror_group}}, 0);
+  expect_group_image_list(m_remote_io_ctx, "local id", {{}, {}, {}}, 0);
 
   C_SaferCond ctx;
-  ImageIds image_ids;
+  std::map<MirrorEntity, std::string> entities;
   MockRefreshImagesRequest *req = new MockRefreshImagesRequest(
-    m_remote_io_ctx, &image_ids, &ctx);
+    m_remote_io_ctx, &entities, &ctx);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  ImageIds expected_image_ids = {{"global id", "local id"}};
-  ASSERT_EQ(expected_image_ids, image_ids);
+  std::map<MirrorEntity, std::string> expected_entities =
+    {{{MIRROR_ENTITY_TYPE_IMAGE, "global id", 1}, "local id"},
+     {{MIRROR_ENTITY_TYPE_GROUP, "global id", 3}, "local id"}};
+  ASSERT_EQ(expected_entities, entities);
 }
 
 TEST_F(TestMockPoolWatcherRefreshImagesRequest, LargeDirectory) {
   InSequence seq;
-  std::map<std::string, std::string> mirror_list;
-  ImageIds expected_image_ids;
+  std::map<std::string, std::string> mirror_image_list;
+  std::map<MirrorEntity, std::string> expected_entities;
   for (uint32_t idx = 1; idx <= 1024; ++idx) {
-    mirror_list.insert(std::make_pair("local id " + stringify(idx),
-                                      "global id " + stringify(idx)));
-    expected_image_ids.insert({{"global id " + stringify(idx),
-                                "local id " + stringify(idx)}});
+    mirror_image_list.insert({"local id " + stringify(idx),
+                              "global id " + stringify(idx)});
+    expected_entities.insert(
+      {{MIRROR_ENTITY_TYPE_IMAGE, "global id " + stringify(idx), 1},
+       "local id " + stringify(idx)});
   }
 
-  expect_mirror_image_list(m_remote_io_ctx, mirror_list, 0);
+  expect_mirror_image_list(m_remote_io_ctx, mirror_image_list, 0);
   expect_mirror_image_list(m_remote_io_ctx, {{"local id", "global id"}}, 0);
 
+  std::map<std::string, cls::rbd::MirrorGroup> mirror_group_list;
+  for (uint32_t idx = 1; idx <= 1024; ++idx) {
+    cls::rbd::MirrorGroup mirror_group =
+      {"global id " + stringify(idx),
+       cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+       cls::rbd::MIRROR_GROUP_STATE_ENABLED};
+
+    mirror_group_list.insert({"local id " + stringify(idx), mirror_group});
+    expected_entities.insert(
+      {{MIRROR_ENTITY_TYPE_GROUP, "global id " + stringify(idx), 2},
+       "local id " + stringify(idx)});
+  }
+
+  expect_mirror_group_list(m_remote_io_ctx, mirror_group_list, 0);
+  cls::rbd::MirrorGroup mirror_group =
+    {"global id", cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT,
+     cls::rbd::MIRROR_GROUP_STATE_ENABLED};
+  expect_mirror_group_list(m_remote_io_ctx, {{"local id", mirror_group}}, 0);
+
+  expect_group_image_list(m_remote_io_ctx, "local id", {{}, {}}, 0);
+  for (auto &[group_id, _] : mirror_group_list) {
+    expect_group_image_list(m_remote_io_ctx, group_id, {{}, {}}, 0);
+  }
+
   C_SaferCond ctx;
-  ImageIds image_ids;
+  std::map<MirrorEntity, std::string> entities;
   MockRefreshImagesRequest *req = new MockRefreshImagesRequest(
-    m_remote_io_ctx, &image_ids, &ctx);
+    m_remote_io_ctx, &entities, &ctx);
 
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
-  expected_image_ids.insert({"global id", "local id"});
-  ASSERT_EQ(expected_image_ids, image_ids);
+  expected_entities.insert(
+    {{MIRROR_ENTITY_TYPE_IMAGE, "global id", 1}, "local id"});
+  expected_entities.insert(
+    {{MIRROR_ENTITY_TYPE_GROUP, "global id", 2}, "local id"});
+  ASSERT_EQ(expected_entities, entities);
 }
 
 TEST_F(TestMockPoolWatcherRefreshImagesRequest, MirrorImageListError) {
@@ -104,9 +168,9 @@ TEST_F(TestMockPoolWatcherRefreshImagesRequest, MirrorImageListError) {
   expect_mirror_image_list(m_remote_io_ctx, {}, -EINVAL);
 
   C_SaferCond ctx;
-  ImageIds image_ids;
+  std::map<MirrorEntity, std::string> entities;
   MockRefreshImagesRequest *req = new MockRefreshImagesRequest(
-    m_remote_io_ctx, &image_ids, &ctx);
+    m_remote_io_ctx, &entities, &ctx);
 
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());

@@ -280,6 +280,8 @@ bool is_config_key_uri(const std::string& uri);
 int get_config_key(librados::Rados& rados, const std::string& uri,
                    std::string* value);
 
+const std::string generate_uuid(librados::IoCtx& io_ctx);
+
 } // namespace util
 } // namespace librbd
 

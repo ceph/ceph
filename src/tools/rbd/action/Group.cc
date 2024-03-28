@@ -181,6 +181,12 @@ int execute_remove(const po::variables_map &vm,
     return r;
   }
 
+  uint32_t flags;
+  r = utils::get_snap_create_flags(vm, &flags);
+  if (r < 0) {
+    return r;
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
 
@@ -190,7 +196,7 @@ int execute_remove(const po::variables_map &vm,
   }
   librbd::RBD rbd;
 
-  r = rbd.group_remove(io_ctx, group_name.c_str());
+  r = rbd.group_remove(io_ctx, group_name.c_str(), flags);
   if (r < 0) {
     std::cerr << "rbd: remove error: " << cpp_strerror(r) << std::endl;
     return r;
@@ -295,6 +301,12 @@ int execute_add(const po::variables_map &vm,
     return -EINVAL;
   }
 
+  uint32_t flags;
+  r = utils::get_snap_create_flags(vm, &flags);
+  if (r < 0) {
+    return r;
+  }
+
   librados::Rados rados;
   librados::IoCtx cg_io_ctx;
   r = utils::init(group_pool_name, group_namespace_name, &rados, &cg_io_ctx);
@@ -310,7 +322,7 @@ int execute_add(const po::variables_map &vm,
 
   librbd::RBD rbd;
   r = rbd.group_image_add(cg_io_ctx, group_name.c_str(),
-			  image_io_ctx, image_name.c_str());
+			  image_io_ctx, image_name.c_str(), flags);
   if (r < 0) {
     std::cerr << "rbd: add image error: " << cpp_strerror(r) << std::endl;
     return r;
@@ -353,6 +365,12 @@ int execute_remove_image(const po::variables_map &vm,
     return r;
   }
 
+  uint32_t flags;
+  r = utils::get_snap_create_flags(vm, &flags);
+  if (r < 0) {
+    return r;
+  }
+
   if (group_namespace_name != image_namespace_name) {
     std::cerr << "rbd: group and image namespace must match." << std::endl;
     return -EINVAL;
@@ -378,10 +396,10 @@ int execute_remove_image(const po::variables_map &vm,
   librbd::RBD rbd;
   if (image_id.empty()) {
     r = rbd.group_image_remove(cg_io_ctx, group_name.c_str(),
-                               image_io_ctx, image_name.c_str());
+                               image_io_ctx, image_name.c_str(), flags);
   } else {
     r = rbd.group_image_remove_by_id(cg_io_ctx, group_name.c_str(),
-                                     image_io_ctx, image_id.c_str());
+                                     image_io_ctx, image_id.c_str(), flags);
   }
   if (r < 0) {
     std::cerr << "rbd: remove image error: " << cpp_strerror(r) << std::endl;
@@ -755,6 +773,7 @@ void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
   add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
                          false);
+  at::add_snap_create_options(options);
 }
 
 void get_list_arguments(po::options_description *positional,
@@ -793,6 +812,7 @@ void get_add_arguments(po::options_description *positional,
 
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE,
 	       " unless overridden");
+  at::add_snap_create_options(options);
 }
 
 void get_remove_image_arguments(po::options_description *positional,
@@ -818,6 +838,7 @@ void get_remove_image_arguments(po::options_description *positional,
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE,
 	       " unless overridden");
   at::add_image_id_option(options);
+  at::add_snap_create_options(options);
 }
 
 void get_list_images_arguments(po::options_description *positional,

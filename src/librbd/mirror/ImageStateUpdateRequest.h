@@ -54,7 +54,7 @@ private:
    * SET_MIRROR_IMAGE
    *    |
    *    v
-   * NOTIFY_MIRRORING_WATCHER
+   * NOTIFY_MIRRORING_WATCHER (skip if not needed)
    *    |
    *    v
    * <finish>
@@ -70,6 +70,7 @@ private:
 
   CephContext* m_cct;
   bufferlist m_out_bl;
+  librados::IoCtx m_group_io_ctx;
 
   void get_mirror_image();
   void handle_get_mirror_image(int r);
