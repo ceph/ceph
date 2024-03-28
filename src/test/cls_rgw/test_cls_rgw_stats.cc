@@ -105,7 +105,7 @@ int index_complete(librados::IoCtx& ioctx, const std::string& oid,
   constexpr int flags = 0;
   constexpr rgw_zone_set* zones = nullptr;
   cls_rgw_bucket_complete_op(op, type, tag, ver, key, meta,
-                             remove_objs, log_op, flags, zones);
+                             remove_objs, log_op, false, flags, zones);
   return ioctx.operate(oid, &op);
 }
 

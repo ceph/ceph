@@ -286,6 +286,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
                                 const rgw_bucket_dir_entry_meta& dir_meta,
 				const list<cls_rgw_obj_key> *remove_objs, bool log_op,
                                 uint16_t bilog_flags,
+                                bool null_verid,
                                 const rgw_zone_set *zones_trace,
 				const std::string& obj_locator)
 {
@@ -304,6 +305,9 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, const s
     call.remove_objs = *remove_objs;
   if (zones_trace) {
     call.zones_trace = *zones_trace;
+  }
+  if (null_verid) {
+    call.null_verid = null_verid;
   }
   encode(call, in);
   o.exec(RGW_CLASS, RGW_BUCKET_COMPLETE_OP, in);
