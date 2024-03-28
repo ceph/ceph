@@ -1,6 +1,6 @@
 if(WITH_TESTS)
   include(AddCephTest)
-  add_tox_test(cephadm TOX_ENVS py3 mypy flake8)
+  add_tox_test(cephadm TOX_ENVS __tox_defaults__)
 endif()
 
 set(bin_target_file ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/cephadm)
