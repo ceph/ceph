@@ -138,9 +138,9 @@ build_dashboard_frontend() {
   . $TEMP_DIR/bin/activate
   NG_CLI_ANALYTICS=false timeout 1h npm ci
   echo "Building ceph-dashboard frontend with build:localize script";
-  # we need to use "--" because so that "--prod" survives accross all
-  # scripts redirections inside package.json
-  npm run build:localize -- --prod
+  # we need to use "--" because so that "--configuration production"
+  # survives accross all scripts redirections inside package.json
+  DASHBOARD_FRONTEND_LANGS="ALL" npm run build:localize -- --configuration production
   deactivate
   cd $CURR_DIR
   rm -rf $TEMP_DIR
