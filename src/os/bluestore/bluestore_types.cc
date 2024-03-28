@@ -422,6 +422,7 @@ bluestore_blob_use_tracker_t::operator=(const bluestore_blob_use_tracker_t& rhs)
   }
   clear();
   au_size = rhs.au_size;
+  au_size_exponent = std::countr_zero(au_size);
   if (rhs.num_au > 0) {
     allocate( rhs.num_au);
     std::copy(rhs.bytes_per_au, rhs.bytes_per_au + num_au, bytes_per_au);
@@ -462,9 +463,13 @@ void bluestore_blob_use_tracker_t::init(
   ceph_assert(_au_size > 0);
   ceph_assert(full_length > 0);
   clear();  
-  uint32_t _num_au = round_up_to(full_length, _au_size) / _au_size;
+  au_size_exponent = std::countr_zero(_au_size);
+  uint32_t _num_au = round_up_to(full_length, _au_size) >> au_size_exponent;
   au_size = _au_size;
   if ( _num_au > 1 ) {
+    // in case of more than one allocation we assume that allocation unit is a power of 2
+    // so that we can optimize division.
+    ceph_assert((_au_size & (_au_size - 1)) == 0);
     allocate(_num_au);
   }
 }
@@ -477,12 +482,12 @@ void bluestore_blob_use_tracker_t::get(
     total_bytes += length;
   } else {
     auto end = offset + length;
-    if (end / au_size >= num_au) {
+    if (end >> au_size_exponent >= num_au) {
       add_tail(end, au_size);
     }
     while (offset < end) {
-      auto phase = offset % au_size;
-      bytes_per_au[offset / au_size] += 
+      auto phase = offset & (au_size - 1);
+      bytes_per_au[offset >> au_size_exponent] += 
 	std::min(au_size - phase, end - offset);
       offset += (phase ? au_size - phase : au_size);
     }
@@ -506,7 +511,7 @@ bool bluestore_blob_use_tracker_t::put(
     uint64_t next_offs = 0;
     while (offset < end) {
       auto phase = offset % au_size;
-      size_t pos = offset / au_size;
+      size_t pos = offset >> au_size_exponent;
       auto diff = std::min(au_size - phase, end - offset);
       ceph_assert(diff <= bytes_per_au[pos]);
       bytes_per_au[pos] -= diff;
@@ -555,7 +560,7 @@ void bluestore_blob_use_tracker_t::split(
   ceph_assert(can_split_at(blob_offset));
   ceph_assert(r->is_empty());
   
-  uint32_t new_num_au = blob_offset / au_size;
+  uint32_t new_num_au = blob_offset >> au_size_exponent;
   r->init( (num_au - new_num_au) * au_size, au_size);
 
   for (auto i = new_num_au; i < num_au; i++) {
@@ -569,6 +574,7 @@ void bluestore_blob_use_tracker_t::split(
     uint32_t _au_size = au_size;
     clear();
     au_size = _au_size;
+    au_size_exponent = std::countr_zero(au_size);
     total_bytes = tmp;
   } else {
     num_au = new_num_au;
@@ -583,7 +589,7 @@ void bluestore_blob_use_tracker_t::dup(const bluestore_blob_use_tracker_t& from,
   init(end, from.au_size);
   uint32_t* array = dirty_au_array();
   const uint32_t* afrom = from.get_au_array();
-  for (uint32_t i = start / au_size, pos = start; pos < end; i++, pos += au_size) {
+  for (uint32_t i = start >> au_size_exponent, pos = start; pos < end; i++, pos += au_size) {
     array[i] = afrom[i];
   }
 }
