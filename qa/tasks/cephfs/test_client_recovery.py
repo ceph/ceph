@@ -871,3 +871,49 @@ class TestClientOnLaggyOSD(CephFSTestCase):
             self.mount_a.mount_wait()
             self.mount_a.create_destroy()
             self.clear_laggy_params(osd)
+
+    def test_mounting_clients_after_killed(self):
+        """
+        If a client is killed, an OSD is laggy and config option
+        defer_client_eviction_on_laggy_osds is set then test spawning
+        new clients works fine.
+        """
+        self.config_set('mds', 'mds_defer_session_stale', 'true')
+        self.assertEqual(self.config_get('mds', 'mds_defer_session_stale'),
+                         'true')
+        self.config_set('mds', 'defer_client_eviction_on_laggy_osds', 'true')
+        self.assertEqual(self.config_get(
+            'mds', 'defer_client_eviction_on_laggy_osds'), 'true')
+
+        # make an OSD laggy
+        osd = self.get_a_random_osd()
+        self.make_osd_laggy(osd)
+
+        mount_a_gid = self.mount_a.get_global_id()
+        self.mount_a.kill()
+        self.assert_session_state(mount_a_gid, "open")
+
+        time.sleep(self.fs.get_var("session_timeout") * 1.5)
+
+        # it takes time to have laggy clients entries in cluster log,
+        # wait for 6 minutes to see if it is visible, finally restart
+        # the clients
+        with contextutil.safe_while(sleep=5, tries=6) as proceed:
+            while proceed():
+                try:
+                    with self.assert_cluster_log("1 client(s) laggy due to"
+                                                 " laggy OSDs",
+                                                 timeout=55):
+                        # make sure clients weren't evicted
+                        self.assert_session_count(2)
+                        break
+                except (AssertionError, CommandFailedError) as e:
+                    log.debug(f'{e}, retrying')
+
+        self.mount_a.umount_wait()
+        self.mount_a.mount_wait()
+        self.mount_a.create_destroy()
+
+        self.mount_b.umount_wait()
+        self.mount_b.mount_wait()
+        self.mount_b.create_destroy()
