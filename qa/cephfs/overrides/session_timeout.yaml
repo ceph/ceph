@@ -1,0 +1,4 @@
+overrides:
+  ceph:
+    cephfs:
+      session_timeout: 300
