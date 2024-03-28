@@ -44,6 +44,7 @@ struct bench_data {
   int in_flight; //number of reads/writes being waited on
   int started;
   int finished;
+  int lz4_level;
   double min_latency;
   double max_latency;
   double avg_latency;
@@ -77,7 +78,7 @@ protected:
   int fetch_bench_metadata(const std::string& metadata_file, uint64_t* op_size,
 			   uint64_t* object_size, int* num_ops, int* num_objects, int* prev_pid);
 
-  int write_bench(int secondsToRun, int concurrentios, const std::string& run_name_meta, unsigned max_objects, int prev_pid);
+  int write_bench(int secondsToRun, int concurrentios, const std::string& run_name_meta, unsigned max_objects, int prev_pid, int lz4_level);
   int seq_read_bench(int secondsToRun, int num_ops, int num_objects, int concurrentios, int writePid, bool no_verify=false);
   int rand_read_bench(int secondsToRun, int num_ops, int num_objects, int concurrentios, int writePid, bool no_verify=false);
 
@@ -112,7 +113,7 @@ public:
   int aio_bench(
     int operation, int secondsToRun,
     int concurrentios, uint64_t op_size, uint64_t object_size, unsigned max_objects,
-    bool cleanup, bool hints, const std::string& run_name, bool reuse_bench, bool no_verify=false);
+    bool cleanup, bool hints, const std::string& run_name, bool reuse_bench, int lz4_level, bool no_verify=false);
   int clean_up(const std::string& prefix, int concurrentios, const std::string& run_name);
 
   void set_show_time(bool dt) {

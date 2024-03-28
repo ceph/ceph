@@ -1881,6 +1881,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   uint64_t obj_offset = 0;
   bool obj_offset_specified = false;
   bool block_size_specified = false;
+  bool lz4_level_specified = false;
+  int lz4_level = 0;
   int bench_write_dest = 0;
   bool cleanup = true;
   bool hints = true; // for rados bench
@@ -1970,6 +1972,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return -EINVAL;
     }
     block_size_specified = true;
+  }
+  i = opts.find("lz4_level");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &lz4_level)) {
+      return -EINVAL;
+    }
+    lz4_level_specified = true;
   }
   i = opts.find("object-size");
   if (i != opts.end()) {
@@ -3302,6 +3311,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
              << std::endl;
         return 1;
       }
+      if (lz4_level_specified) {
+        cerr << "-l option can be used only with 'write' bench test"
+             << std::endl;
+        return 1;
+      }
     }
     else if (bench_write_dest == 0) {
       bench_write_dest = OP_WRITE_DEST_OBJ;
@@ -3332,7 +3346,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     cout << "hints = " << (int)hints << std::endl;
     ret = bencher.aio_bench(operation, seconds,
 			    concurrent_ios, op_size, object_size,
-			    max_objects, cleanup, hints, run_name, reuse_bench, no_verify);
+			    max_objects, cleanup, hints, run_name, reuse_bench, lz4_level, no_verify);
     if (ret != 0)
       cerr << "error during benchmark: " << cpp_strerror(ret) << std::endl;
     if (formatter && output)
@@ -4147,6 +4161,8 @@ int main(int argc, const char **argv)
       opts["block-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-b", (char*)NULL)) {
       opts["block-size"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-l", (char*)NULL)) {
+      opts["lz4_level"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--object-size", (char*)NULL)) {
       opts["object-size"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*)NULL)) {
