@@ -348,21 +348,29 @@ int ErasureCode::to_string(const std::string &name,
   return 0;
 }
 
-int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
+int ErasureCode::decode_concat(const set<int>& want_to_read,
+			       const map<int, bufferlist> &chunks,
 			       bufferlist *decoded)
 {
-  set<int> want_to_read;
-
-  for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
-    want_to_read.insert(chunk_index(i));
-  }
   map<int, bufferlist> decoded_map;
   int r = _decode(want_to_read, chunks, &decoded_map);
   if (r == 0) {
     for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
-      decoded->claim_append(decoded_map[chunk_index(i)]);
+      if (decoded_map.contains(chunk_index(i))) {
+        decoded->claim_append(decoded_map[chunk_index(i)]);
+      }
     }
   }
   return r;
+}
+
+int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
+			       bufferlist *decoded)
+{
+  set<int> want_to_read;
+  for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
+    want_to_read.insert(chunk_index(i));
+  }
+  return decode_concat(want_to_read, chunks, decoded);
 }
 }
