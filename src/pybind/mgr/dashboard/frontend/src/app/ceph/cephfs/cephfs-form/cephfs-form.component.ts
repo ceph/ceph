@@ -82,7 +82,10 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     });
     this.form = this.formBuilder.group({
       name: new FormControl('', {
-        validators: [Validators.pattern(/^[a-zA-Z][.A-Za-z0-9_-]+$/), Validators.required]
+        validators: [
+          Validators.pattern(/^(?:[.][A-Za-z0-9_-]+|[A-Za-z][.A-Za-z0-9_-]*)$/),
+          Validators.required
+        ]
       }),
       placement: ['hosts'],
       hosts: [[]],
