@@ -1640,8 +1640,6 @@ class CephFSMount(object):
 
         if mount_subvol_num is not None:
             # mount_subvol must be an index into the subvol path array for the fs
-            if not self.cephfs_name:
-                self.cephfs_name = 'cephfs'
             assert(hasattr(self.ctx, "created_subvols"))
             # mount_subvol must be specified under client.[0-9] yaml section
             subvol_paths = self.ctx.created_subvols[self.cephfs_name]

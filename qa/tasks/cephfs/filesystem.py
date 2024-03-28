@@ -297,6 +297,16 @@ class CephCluster(RunCephCmd):
         return False
 
 
+def gen_fsname():
+    '''
+    Let's attach date-time string to CephFS name as a suffix and make
+    the CephFS name unique.
+    '''
+    import datetime
+    return 'testcephfs_' + \
+           datetime.datetime.now().strftime('%Y%b%d_%H_%M_%S')
+
+
 class MDSCluster(CephCluster):
     """
     Collective operations on all the MDS daemons in the Ceph cluster.  These
@@ -396,7 +406,8 @@ class MDSCluster(CephCluster):
     def mds_is_running(self, mds_id):
         return self.mds_daemons[mds_id].running()
 
-    def newfs(self, name='cephfs', create=True):
+    def newfs(self, name=None, create=True):
+        name = gen_fsname() if name is None else name
         return Filesystem(self._ctx, name=name, create=create)
 
     def status(self, epoch=None):
@@ -531,7 +542,7 @@ class Filesystem(MDSCluster):
     def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False):
         super(Filesystem, self).__init__(ctx)
 
-        self.name = name
+        self.name = gen_fsname() if name is None else name
         self.id = None
         self.metadata_pool_name = None
         self.data_pool_name = None
@@ -670,8 +681,7 @@ class Filesystem(MDSCluster):
     target_size_ratio_ec = 0.9
 
     def create(self, recover=False, metadata_overlay=False):
-        if self.name is None:
-            self.name = "cephfs"
+        self.name = gen_fsname() if self.name is None else self.name
         if self.metadata_pool_name is None:
             self.metadata_pool_name = "{0}_metadata".format(self.name)
         if self.data_pool_name is None:
