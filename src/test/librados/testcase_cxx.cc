@@ -405,3 +405,7 @@ void RadosTestECPP::TearDown()
   ioctx.close();
 }
 
+void RadosTestECPP::set_allow_ec_overwrites()
+{
+  ASSERT_EQ("", set_allow_ec_overwrites_pp(pool_name, cluster));
+}
