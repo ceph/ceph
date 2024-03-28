@@ -282,6 +282,7 @@ void get_status_arguments(po::options_description *positional,
 int execute_status(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   at::Format::Formatter formatter;
+  TextTable t;
   int r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
     return r;
@@ -366,7 +367,7 @@ int execute_status(const po::variables_map &vm,
   }
 
   std::vector<librbd::snap_info_t> snaps;
-  if (status.info.primary && status.info.state == RBD_MIRROR_IMAGE_ENABLED) {
+  if (status.info.state == RBD_MIRROR_IMAGE_ENABLED) {
     librbd::mirror_image_mode_t mode = RBD_MIRROR_IMAGE_MODE_JOURNAL;
     r = image.mirror_image_get_mode(&mode);
     if (r < 0) {
@@ -394,6 +395,8 @@ int execute_status(const po::variables_map &vm,
 
   auto mirror_service = daemon_service_info.get_by_instance_id(instance_id);
 
+  struct timespec timestamp;
+  std::string tt_str;
   if (formatter != nullptr) {
     formatter->open_object_section("image");
     formatter->dump_string("name", image_name);
@@ -430,30 +433,67 @@ int execute_status(const po::variables_map &vm,
     if (!snaps.empty()) {
       formatter->open_array_section("snapshots");
       for (auto &snap : snaps) {
-        librbd::snap_mirror_namespace_t info;
-        r = image.snap_get_mirror_namespace(snap.id, &info, sizeof(info));
-        if (r < 0 ||
-            (info.state != RBD_SNAP_MIRROR_STATE_PRIMARY &&
-             info.state != RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)) {
+        librbd::snap_mirror_namespace_t mirror_snap;
+        r = image.snap_get_mirror_namespace(snap.id, &mirror_snap, sizeof(mirror_snap));
+        if (r < 0) {
           continue;
+        }
+        image.snap_get_timestamp(snap.id, &timestamp);
+        tt_str = "";
+        if(timestamp.tv_sec != 0) {
+          time_t tt = timestamp.tv_sec;
+          tt_str = ctime(&tt);
+          tt_str = tt_str.substr(0, tt_str.length() - 1);
+        }
+        std::string mirror_snap_state = "unknown";
+        switch (mirror_snap.state) {
+          case RBD_SNAP_MIRROR_STATE_PRIMARY:
+            mirror_snap_state = "primary";
+            break;
+          case RBD_SNAP_MIRROR_STATE_NON_PRIMARY:
+            mirror_snap_state = "non-primary";
+            break;
+          case RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED:
+          case RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED:
+            mirror_snap_state = "demoted";
+            break;
         }
         formatter->open_object_section("snapshot");
         formatter->dump_unsigned("id", snap.id);
         formatter->dump_string("name", snap.name);
-        formatter->dump_bool("demoted",
-                             info.state == RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED);
+        formatter->dump_string("size", stringify(byte_u_t(snap.size)));
+        formatter->dump_string("timestamp", tt_str);
+        formatter->open_object_section("details");
+        formatter->dump_string("state", mirror_snap_state);
         formatter->open_array_section("mirror_peer_uuids");
-        for (auto &peer : info.mirror_peer_uuids) {
+        for (auto &peer : mirror_snap.mirror_peer_uuids) {
           formatter->dump_string("peer_uuid", peer);
         }
         formatter->close_section(); // mirror_peer_uuids
-        formatter->close_section(); // snapshot
+        formatter->dump_bool("complete", mirror_snap.complete);
+        if (mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY ||
+            mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED) {
+          formatter->dump_string("primary_mirror_uuid",
+              mirror_snap.primary_mirror_uuid);
+          formatter->dump_unsigned("primary_snap_id",
+              mirror_snap.primary_snap_id);
+          formatter->dump_unsigned("last_copied_object_number",
+              mirror_snap.last_copied_object_number);
+        }
+        formatter->close_section(); // namespace
+	formatter->close_section(); // snapshot
       }
       formatter->close_section(); // snapshots
     }
     formatter->close_section(); // image
     formatter->flush(std::cout);
   } else {
+    librbd::image_info_t info;
+    r = image.stat(info, sizeof(info));
+    if (r < 0) {
+      std::cerr << "rbd: unable to get image info" << std::endl;
+      return r;
+    }
     std::cout << image_name << ":\n"
 	      << "  global_id:   " << status.info.global_id << "\n";
     if (local_site_r >= 0) {
@@ -491,28 +531,61 @@ int execute_status(const po::variables_map &vm,
     }
     if (!snaps.empty()) {
       std::cout << "  snapshots:" << std::endl;
-
-      bool first_site = true;
+      t.define_column("  SNAPID", TextTable::LEFT, TextTable::RIGHT);
+      t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+      t.define_column("SIZE", TextTable::LEFT, TextTable::LEFT);
+      t.define_column("TIMESTAMP", TextTable::LEFT, TextTable::LEFT);
+      t.define_column("DETAILS", TextTable::LEFT, TextTable::LEFT);
       for (auto &snap : snaps) {
-        librbd::snap_mirror_namespace_t info;
-        r = image.snap_get_mirror_namespace(snap.id, &info, sizeof(info));
-        if (r < 0 ||
-            (info.state != RBD_SNAP_MIRROR_STATE_PRIMARY &&
-             info.state != RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED)) {
+        librbd::snap_mirror_namespace_t mirror_snap;
+        std::ostringstream oss;
+        r = image.snap_get_mirror_namespace(snap.id, &mirror_snap, sizeof(mirror_snap));
+        if (r < 0) {
           continue;
         }
-
-        if (!first_site) {
-          std::cout << std::endl;
+        image.snap_get_timestamp(snap.id, &timestamp);
+        tt_str = "";
+        if(timestamp.tv_sec != 0) {
+          time_t tt = timestamp.tv_sec;
+          tt_str = ctime(&tt);
+          tt_str = tt_str.substr(0, tt_str.length() - 1);
         }
-
-        first_site = false;
-        std::cout << "    " << snap.id << " " << snap.name << " ("
-                  << (info.state == RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED ?
-                        "demoted " : "")
-                  << "peer_uuids:[" << info.mirror_peer_uuids << "])";
+        std::string mirror_snap_state = "unknown";
+        switch (mirror_snap.state) {
+          case RBD_SNAP_MIRROR_STATE_PRIMARY:
+            mirror_snap_state = "primary";
+            break;
+          case RBD_SNAP_MIRROR_STATE_NON_PRIMARY:
+            mirror_snap_state = "non-primary";
+            break;
+          case RBD_SNAP_MIRROR_STATE_PRIMARY_DEMOTED:
+          case RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED:
+            mirror_snap_state = "demoted";
+            break;
+        }
+        t << snap.id << snap.name << stringify(byte_u_t(snap.size)) << tt_str;
+        oss << "(" << mirror_snap_state << " "
+            << "peer_uuids:[" << mirror_snap.mirror_peer_uuids << "]";
+        if (mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY ||
+            mirror_snap.state == RBD_SNAP_MIRROR_STATE_NON_PRIMARY_DEMOTED) {
+          oss << " " << mirror_snap.primary_mirror_uuid << ":"
+            << mirror_snap.primary_snap_id << " ";
+          if (!mirror_snap.complete) {
+            if (info.num_objs > 0) {
+              auto progress = std::min<uint64_t>(
+                  100, 100 * mirror_snap.last_copied_object_number /
+                  info.num_objs);
+              oss << progress << "% ";
+            } else {
+              oss << "not ";
+            }
+          }
+          oss << "copied";
+        }
+        oss << ")";
+        t << oss.str() << TextTable::endrow;
       }
-      std::cout << std::endl;
+      std::cout << t;
     }
   }
 
