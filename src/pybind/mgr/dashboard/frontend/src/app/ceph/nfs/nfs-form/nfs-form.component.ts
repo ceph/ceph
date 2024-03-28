@@ -156,10 +156,23 @@ export class NfsFormComponent extends CdForm implements OnInit {
         })
       }),
       path: new UntypedFormControl('/'),
-      protocolNfsv4: new UntypedFormControl(true),
+      protocolNfsv3: new UntypedFormControl(true, {
+        validators: [
+          CdValidators.requiredIf({ protocolNfsv4: false }, (value: boolean) => {
+            return !value;
+          })
+        ]
+      }),
+      protocolNfsv4: new UntypedFormControl(true, {
+        validators: [
+          CdValidators.requiredIf({ protocolNfsv3: false }, (value: boolean) => {
+            return !value;
+          })
+        ]
+      }),
       pseudo: new UntypedFormControl('', {
         validators: [
-          CdValidators.requiredIf({ protocolNfsv4: true }),
+          CdValidators.requiredIf({ protocolNfsv4: true, protocolNfsv3: true }),
           Validators.pattern('^/[^><|&()]*$')
         ]
       }),
@@ -194,6 +207,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     }
 
     res.protocolNfsv4 = res.protocols.indexOf(4) !== -1;
+    res.protocolNfsv3 = res.protocols.indexOf(3) !== -1;
     delete res.protocols;
 
     res.transportTCP = res.transports.indexOf('TCP') !== -1;
@@ -471,11 +485,16 @@ export class NfsFormComponent extends CdForm implements OnInit {
     }
 
     requestModel.protocols = [];
+    if (requestModel.protocolNfsv3) {
+      requestModel.protocols.push(3);
+    }
     if (requestModel.protocolNfsv4) {
       requestModel.protocols.push(4);
-    } else {
+    }
+    if (!requestModel.protocolNfsv3 && !requestModel.protocolNfsv4) {
       requestModel.pseudo = null;
     }
+    delete requestModel.protocolNfsv3;
     delete requestModel.protocolNfsv4;
 
     requestModel.transports = [];
