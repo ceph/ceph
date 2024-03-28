@@ -508,6 +508,7 @@ class MDSRank {
     void command_scrub_pause(Formatter *f, Context *on_finish);
     void command_scrub_resume(Formatter *f);
     void command_scrub_status(Formatter *f);
+    void command_scrub_purge_status(std::string_view tag);
 
     void command_flush_path(Formatter *f, std::string_view path);
     void command_flush_journal(Formatter *f);

@@ -3454,23 +3454,29 @@ bool CDir::can_auth_pin(int *err_ret, bool bypassfreezing) const
 {
   int err;
   if (!is_auth()) {
+    dout(20) << __func__ << ": error - no auth" << dendl;
     err = ERR_NOT_AUTH;
   } else if (is_freezing_dir()) {
     if (bypassfreezing) {
       dout(20) << "allowing authpin with freezing" << dendl;
       err = 0;
     } else {
+      dout(20) << __func__ << ": error - fragmenting dir (freezing)" << dendl;
       err = ERR_FRAGMENTING_DIR;
     }
   } else if (is_frozen_dir()) {
+    dout(20) << __func__ << ": error - fragmenting dir (frozen)" << dendl;
     err = ERR_FRAGMENTING_DIR;
   } else {
     auto p = is_freezing_or_frozen_tree();
     if (p.first && !bypassfreezing) {
+      dout(20) << __func__ << ": error - exporting tree" << dendl;
       err = ERR_EXPORTING_TREE;
     } else if (p.second) {
+      dout(20) << __func__ << ": error - exporting tree" << dendl;
       err = ERR_EXPORTING_TREE;
     } else {
+      dout(20) << __func__ << ": auth!" << dendl;
       err = 0;
     }
   }

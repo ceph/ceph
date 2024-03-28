@@ -27,6 +27,7 @@ class Formatter;
 };
 
 class CInode;
+class MDCache;
 
 /**
  * Externally input parameters for a scrub, associated with the root
@@ -64,6 +65,48 @@ public:
   }
   unsigned get_num_pending() const { return num_pending; }
 
+  void record_uninline_status(_inodeno_t ino, int e, std::string_view path) {
+    if (uninline_failed_info.find(e) == uninline_failed_info.end()) {
+      uninline_failed_info[e] = std::vector<_inodeno_t>();
+    }
+    auto& v = uninline_failed_info.at(e);
+    v.push_back(ino);
+    paths[ino] = path;
+  }
+
+  std::unordered_map<int, std::vector<_inodeno_t>>& get_uninline_failed_info() {
+    return uninline_failed_info;
+  }
+
+  std::unordered_map<_inodeno_t, std::string>& get_paths() {
+    return paths;
+  }
+
+  void record_uninline_started() {
+    uninline_started++;
+  }
+  void record_uninline_passed() {
+    uninline_passed++;
+  }
+  void record_uninline_failed() {
+    uninline_failed++;
+  }
+  void record_uninline_skipped() {
+    uninline_skipped++;
+  }
+  uint64_t get_uninline_started() const {
+    return uninline_started;
+  }
+  uint64_t get_uninline_passed() const {
+    return uninline_passed;
+  }
+  uint64_t get_uninline_failed() const {
+    return uninline_failed;
+  }
+  uint64_t get_uninline_skipped() const {
+    return uninline_skipped;
+  }
+
 protected:
   const std::string tag;
   bool is_tag_internal;
@@ -76,6 +119,15 @@ protected:
   bool repaired = false;  // May be set during scrub if repairs happened
   unsigned epoch_last_forwarded = 0;
   unsigned num_pending = 0;
+  // errno -> [ino1, ino2, ino3, ...]
+  std::unordered_map<int, std::vector<_inodeno_t>> uninline_failed_info;
+  std::unordered_map<_inodeno_t, std::string> paths;
+
+  // scrub counters
+  uint64_t uninline_started = 0;
+  uint64_t uninline_passed = 0;
+  uint64_t uninline_failed = 0;
+  uint64_t uninline_skipped = 0;
 };
 
 typedef std::shared_ptr<ScrubHeader> ScrubHeaderRef;
