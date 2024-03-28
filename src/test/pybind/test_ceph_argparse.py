@@ -345,6 +345,10 @@ class TestMonitor(TestArgparse):
             self._assert_valid_command(['tell', name + ".42",
                                         'something',
                                         'something else'])
+            
+    def test_tell_for_unknown_cephname_type(self):
+        with self.assertRaises(ArgumentValid):
+            validate_command(sigdict, ['tell', 'cephfs.c', 'something'])
 
 
 class TestMDS(TestArgparse):
