@@ -1236,9 +1236,17 @@ int RGWRadosList::process_bucket(
 	dendl;
 
       // ignore entries that are not in the filter if there is a filter
-      if (!entries_filter.empty() &&
-	  entries_filter.find(entry.key) == entries_filter.cend()) {
-	continue;
+      {
+	// we also want to match in cases where the name is specified
+	// but the version (instance) is not, so we'll try it both
+	// ways
+	rgw_obj_index_key without_instance(entry.key.name);
+
+	if (!entries_filter.empty() &&
+	    entries_filter.find(entry.key) == entries_filter.cend() &&
+	    entries_filter.find(without_instance) == entries_filter.cend()) {
+	  continue;
+	}
       }
 
       auto bucket = store->get_bucket(bucket_info);
@@ -1335,12 +1343,15 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
   bool truncated = true;
   bool warned_indexless = false;
 
+  // for empty object name and object version
+  static const std::string empty_name;
+
   do {
     std::list<std::string> buckets;
     ret = store->meta_list_keys_next(dpp, handle, max_keys, buckets, &truncated);
 
     for (std::string& bucket_id : buckets) {
-      ret = run(dpp, bucket_id, true);
+      ret = run(dpp, bucket_id, empty_name, empty_name, true);
       if (ret == -ENOENT) {
 	continue;
       } else if (ret == -EINVAL) {
@@ -1373,11 +1384,18 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
 
 int RGWRadosList::run(const DoutPrefixProvider *dpp,
 		      const std::string& start_bucket_name,
+		      const std::string& object_name,
+		      const std::string& object_version,
 		      const bool silent_indexless)
 {
   int ret;
 
-  add_bucket_entire(start_bucket_name);
+  if ( !object_name.empty()) {
+    add_bucket_filter(start_bucket_name,
+		      rgw_obj_key(object_name, object_version));
+  } else {
+    add_bucket_entire(start_bucket_name);
+  }
 
   while (! bucket_process_map.empty()) {
     // pop item from map and capture its key data
