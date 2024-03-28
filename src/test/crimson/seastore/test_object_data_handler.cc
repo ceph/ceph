@@ -26,7 +26,7 @@ class TestOnode final : public Onode {
   bool dirty = false;
 
 public:
-  TestOnode(uint32_t ddr, uint32_t dmr) : Onode(ddr, dmr) {}
+  TestOnode(uint32_t dmr) : Onode(dmr) {}
   const onode_layout_t &get_layout() const final {
     return layout;
   }
@@ -38,12 +38,18 @@ public:
     return true;
   }
   bool is_dirty() const { return dirty; }
-  laddr_t get_hint() const final {return L_ADDR_MIN; }
+  laddr_t get_data_hint_impl() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
 
   void update_onode_size(Transaction &t, uint32_t size) final {
     with_mutable_layout(t, [size](onode_layout_t &mlayout) {
       mlayout.size = size;
+    });
+  }
+
+  void update_local_snap_id(Transaction &t, uint32_t id) final {
+    with_mutable_layout(t, [id](onode_layout_t &mlayout) {
+      mlayout.local_snap_id = id;
     });
   }
 
@@ -141,6 +147,10 @@ struct object_data_handler_test_t:
 	      *tm,
 	      t,
 	      *onode,
+	      nullptr,
+	      onode->get_data_hint(),
+	      L_ADDR_NULL,
+	      false
 	    },
 	    offset,
 	    bl);
@@ -167,7 +177,9 @@ struct object_data_handler_test_t:
 	    ObjectDataHandler::context_t{
 	      *tm,
 	      t,
-	      *onode
+	      *onode,
+	      nullptr,
+	      onode->get_data_hint()
 	    },
 	    offset);
 	});
@@ -216,14 +228,13 @@ struct object_data_handler_test_t:
   std::list<LBAMappingRef> get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
-      return tm->get_pins(t, offset, length);
+      return tm->get_pins(t, laddr_t::get_hint_from_offset(offset), length);
     }).unsafe_get0();
     return ret;
   }
 
   seastar::future<> set_up_fut() final {
     onode = new TestOnode(
-      DEFAULT_OBJECT_DATA_RESERVATION,
       DEFAULT_OBJECT_METADATA_RESERVATION);
     known_contents = buffer::create(4<<20 /* 4MB */);
     memset(known_contents.c_str(), 0, known_contents.length());
@@ -245,9 +256,8 @@ struct object_data_handler_test_t:
     crimson::common::local_conf().set_val("seastore_data_delta_based_overwrite", "0").get();
   }
 
-  laddr_t get_random_laddr(size_t block_size, laddr_t limit) {
-    return block_size *
-      std::uniform_int_distribution<>(0, (limit / block_size) - 1)(gen);
+  size_t get_random_laddr(size_t block_size, size_t limit) {
+    return block_size * std::uniform_int_distribution<>(0, (limit / block_size) - 1)(gen);
   }
 
   void test_multi_write() {

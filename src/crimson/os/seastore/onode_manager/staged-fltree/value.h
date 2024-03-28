@@ -141,7 +141,8 @@ class ValueDeltaRecorder {
   /// Called by DeltaRecorderT to apply user-defined value delta.
   virtual void apply_value_delta(ceph::bufferlist::const_iterator&,
                                  NodeExtentMutable&,
-                                 laddr_t) = 0;
+                                 laddr_t,
+                                 node_offset_t) = 0;
 
  protected:
   ValueDeltaRecorder(ceph::bufferlist& encoded) : encoded{encoded} {}
@@ -201,7 +202,7 @@ class Value {
     return read_value_header()->payload_size;
   }
 
-  laddr_t get_hint() const;
+  laddr_t get_data_hint() const;
 
   bool operator==(const Value& v) const { return p_cursor == v.p_cursor; }
   bool operator!=(const Value& v) const { return !(*this == v); }

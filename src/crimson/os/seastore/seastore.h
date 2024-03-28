@@ -345,6 +345,7 @@ public:
       CollectionRef &col,
       std::vector<OnodeRef> &onodes,
       std::vector<OnodeRef> &d_onodes,
+      std::map<ghobject_t, laddr_t> &removed_laddrs,
       ceph::os::Transaction::iterator &i);
 
     tm_ret _remove_omaps(
@@ -356,7 +357,8 @@ public:
       OnodeRef &onode);
     tm_ret _touch(
       internal_context_t &ctx,
-      OnodeRef &onode);
+      OnodeRef &onode,
+      laddr_t hint);
     tm_ret _write(
       internal_context_t &ctx,
       OnodeRef &onode,
@@ -376,7 +378,8 @@ public:
     tm_ret _clone(
       internal_context_t &ctx,
       OnodeRef &onode,
-      OnodeRef &d_onode);
+      OnodeRef &d_onode,
+      laddr_t removed_laddr);
     tm_ret _rename(
       internal_context_t &ctx,
       OnodeRef &onode,

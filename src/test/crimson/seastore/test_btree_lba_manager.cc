@@ -258,7 +258,10 @@ struct lba_btree_test : btree_test_base {
     return make_fake_paddr(next_off);
   }
 
-  void insert(laddr_t addr, extent_len_t len) {
+  void insert(uint64_t offset, extent_len_t len) {
+    offset <<= laddr_t::UNIT_SHIFT;
+    len <<= laddr_t::UNIT_SHIFT;
+    auto addr = laddr_t::get_hint_from_offset(offset);
     ceph_assert(check.count(addr) == 0);
     check.emplace(addr, get_map_val(len));
     lba_btree_update([=, this](auto &btree, auto &t) {
@@ -299,7 +302,9 @@ struct lba_btree_test : btree_test_base {
     });
   }
 
-  void check_lower_bound(laddr_t addr) {
+  void check_lower_bound(uint64_t offset) {
+    offset <<= laddr_t::UNIT_SHIFT;
+    auto addr = laddr_t::get_hint_from_offset(offset);
     auto iter = check.lower_bound(addr);
     auto result = lba_btree_read([=, this](auto &btree, auto &t) {
       return btree.lower_bound(
@@ -423,7 +428,8 @@ struct btree_lba_manager_test : btree_test_base {
   auto alloc_mapping(
     test_transaction_t &t,
     laddr_t hint,
-    size_t len) {
+    size_t len,
+    bool determinsitic = false) {
     auto ret = with_trans_intr(
       *t.t,
       [=, this](auto &t) {
@@ -436,7 +442,7 @@ struct btree_lba_manager_test : btree_test_base {
 	assert(extents.size() == 1);
 	auto extent = extents.front();
 	return lba_manager->alloc_extent(
-	  t, hint, len, extent->get_paddr(), *extent);
+	  t, hint, len, extent->get_paddr(), *extent, determinsitic);
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());
@@ -569,7 +575,7 @@ struct btree_lba_manager_test : btree_test_base {
       [=, &t, this](auto &) {
 	return lba_manager->scan_mappings(
 	  *t.t,
-	  0,
+	  laddr_t::get_hint_from_offset(0),
 	  L_ADDR_MAX,
 	  [iter=t.mappings.begin(), &t](auto l, auto p, auto len) mutable {
 	    EXPECT_NE(iter, t.mappings.end());
@@ -585,7 +591,7 @@ struct btree_lba_manager_test : btree_test_base {
 TEST_F(btree_lba_manager_test, basic)
 {
   run_async([this] {
-    laddr_t laddr = 0x12345678 * block_size;
+    laddr_t laddr = laddr_t::get_hint_from_offset(0x12345678 * block_size);
     {
       // write initial mapping
       auto t = create_transaction();
@@ -605,7 +611,7 @@ TEST_F(btree_lba_manager_test, force_split)
       auto t = create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 5; ++j) {
-	auto ret = alloc_mapping(t, 0, block_size);
+	auto ret = alloc_mapping(t, laddr_t::get_hint_from_offset((i + 1) * (j + 1) * block_size), block_size);
 	if ((i % 10 == 0) && (j == 3)) {
 	  check_mappings(t);
 	  check_mappings();
@@ -625,7 +631,7 @@ TEST_F(btree_lba_manager_test, force_split_merge)
       auto t = create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 5; ++j) {
-	auto ret = alloc_mapping(t, 0, block_size);
+	auto ret = alloc_mapping(t, laddr_t::get_hint_from_offset((i + 1) * (j + 1) * block_size), block_size);
 	// just to speed things up a bit
 	if ((i % 100 == 0) && (j == 3)) {
 	  check_mappings(t);
@@ -682,7 +688,7 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 400; ++i) {
-	alloc_mapping(t, 0, block_size);
+	alloc_mapping(t, laddr_t::get_hint_from_offset(i * block_size), block_size);
       }
       check_mappings(t);
       submit_test_transaction(std::move(t));
@@ -705,7 +711,7 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 600; ++i) {
-	alloc_mapping(t, 0, block_size);
+	alloc_mapping(t, laddr_t::get_hint_from_offset(i * block_size), block_size);
       }
       auto addresses = get_mapped_addresses(t);
       for (unsigned i = 0; i != addresses.size(); ++i) {
@@ -733,23 +739,24 @@ TEST_F(btree_lba_manager_test, split_merge_multi)
       }
     };
     iterate([&](auto &t, auto idx) {
-      alloc_mapping(t, idx * block_size, block_size);
+      alloc_mapping(t, laddr_t::get_hint_from_offset(idx * block_size),
+		    block_size);
     });
     check_mappings();
     iterate([&](auto &t, auto idx) {
       if ((idx % 32) > 0) {
-	decref_mapping(t, idx * block_size);
+	decref_mapping(t,laddr_t::get_hint_from_offset(idx * block_size));
       }
     });
     check_mappings();
     iterate([&](auto &t, auto idx) {
       if ((idx % 32) > 0) {
-	alloc_mapping(t, idx * block_size, block_size);
+	alloc_mapping(t, laddr_t::get_hint_from_offset(idx * block_size), block_size, true);
       }
     });
     check_mappings();
     iterate([&](auto &t, auto idx) {
-      decref_mapping(t, idx * block_size);
+      decref_mapping(t, laddr_t::get_hint_from_offset(idx * block_size));
     });
     check_mappings();
   });

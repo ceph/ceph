@@ -112,6 +112,7 @@ public:
     extent_len_t length) {
     LOG_PREFIX(TransactionManager::get_pins);
     SUBDEBUGT(seastore_tm, "{}~{}", t, offset, length);
+    assert(length % laddr_t::UNIT_SIZE == 0);
     return lba_manager->get_mappings(
       t, offset, length);
   }
@@ -297,7 +298,6 @@ public:
     LOG_PREFIX(TransactionManager::alloc_non_data_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
-    ceph_assert(is_aligned(laddr_hint, epm->get_block_size()));
     auto ext = cache->alloc_new_non_data_extent<T>(
       t,
       len,
@@ -311,7 +311,11 @@ public:
       laddr_hint,
       len,
       ext->get_paddr(),
-      *ext
+      *ext,
+      // NOTE: setting determinsitic to false is safe here, based on the fact that
+      // all of determinsitic operations are issued from ObjectDataHandler, which
+      // always invoking reserve region before doing alloc_extent.
+      /* determinsitic= */ false
     ).si_then([ext=std::move(ext), laddr_hint, &t](auto &&) mutable {
       LOG_PREFIX(TransactionManager::alloc_non_data_extent);
       SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
@@ -335,11 +339,11 @@ public:
     Transaction &t,
     laddr_t laddr_hint,
     extent_len_t len,
-    placement_hint_t placement_hint = placement_hint_t::HOT) {
+    placement_hint_t placement_hint = placement_hint_t::HOT,
+    bool determinsitic = false) {
     LOG_PREFIX(TransactionManager::alloc_data_extents);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
-    ceph_assert(is_aligned(laddr_hint, epm->get_block_size()));
     auto exts = cache->alloc_new_data_extents<T>(
       t,
       len,
@@ -351,20 +355,21 @@ public:
     return seastar::do_with(
       std::move(exts),
       laddr_hint,
-      [this, &t](auto &exts, auto &laddr_hint) {
+      [this, &t, determinsitic](auto &exts, auto &laddr_hint) {
       return trans_intr::do_for_each(
         exts,
-        [this, &t, &laddr_hint](auto &ext) {
+        [this, &t, &laddr_hint, determinsitic](auto &ext) {
         return lba_manager->alloc_extent(
           t,
           laddr_hint,
           ext->get_length(),
           ext->get_paddr(),
-          *ext
+          *ext,
+	  determinsitic
         ).si_then([&ext, &laddr_hint, &t](auto &&) mutable {
           LOG_PREFIX(TransactionManager::alloc_extents);
           SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
-          laddr_hint += ext->get_length();
+          laddr_hint = laddr_hint + ext->get_length();
           return alloc_extent_iertr::now();
         });
       }).si_then([&exts] {
@@ -505,7 +510,7 @@ public:
 	    auto remapped_intermediate_key = intermediate_key;
 	    if (remapped_intermediate_key != L_ADDR_NULL) {
 	      assert(intermediate_base != L_ADDR_NULL);
-	      remapped_intermediate_key += remap_offset;
+	      remapped_intermediate_key = laddr_t(remapped_intermediate_key + remap_offset);
 	    }
             return alloc_remapped_extent<T>(
               t,
@@ -549,14 +554,15 @@ public:
   reserve_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len) {
+    extent_len_t len,
+    bool determinsitic) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}", t, len, hint);
-    ceph_assert(is_aligned(hint, epm->get_block_size()));
+    SUBDEBUGT(seastore_tm, "len={}, laddr_hint={:d}", t, len, hint);
     return lba_manager->reserve_region(
       t,
       hint,
-      len);
+      len,
+      determinsitic);
   }
 
   /*
@@ -583,9 +589,8 @@ public:
         : mapping.get_key();
 
     LOG_PREFIX(TransactionManager::clone_pin);
-    SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}, clone_offset {}",
+    SUBDEBUGT(seastore_tm, "len={}, laddr_hint={:d}, clone_offset {:d}",
       t, mapping.get_length(), hint, intermediate_key);
-    ceph_assert(is_aligned(hint, epm->get_block_size()));
     return lba_manager->clone_mapping(
       t,
       hint,
@@ -962,8 +967,10 @@ private:
 	remap_length,
 	original_laddr,
 	std::move(original_bptr));
+      // NOTE: remapped extents are always split from an existing extent,
+      // it's safe to set determinsitic to true
       fut = lba_manager->alloc_extent(
-	t, remap_laddr, remap_length, remap_paddr, *ext);
+	t, remap_laddr, remap_length, remap_paddr, *ext, /* determinsitic= */ true);
     } else {
       fut = lba_manager->clone_mapping(
 	t,

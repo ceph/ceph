@@ -73,6 +73,13 @@ public:
     const ghobject_t& end,
     uint64_t limit) = 0;
 
+  using get_latest_snap_iertr = base_iertr;
+  using get_latest_snap_ret = get_latest_snap_iertr::future<
+    OnodeRef>;
+  virtual get_latest_snap_ret get_latest_snap(
+    Transaction &trans,
+    const ghobject_t &head) = 0;
+
   virtual ~OnodeManager() {}
 };
 using OnodeManagerRef = std::unique_ptr<OnodeManager>;

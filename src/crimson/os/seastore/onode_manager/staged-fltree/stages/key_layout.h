@@ -46,9 +46,7 @@ static laddr_t get_lba_hint(shard_t shard, pool_t pool, crush_hash_t crush) {
   // FIXME: It is possible that PGs from different pools share the same prefix
   // if the mask 0xFF is not long enough, result in unexpected transaction
   // conflicts.
-  return ((uint64_t)(shard & 0XFF)<<56 |
-          (uint64_t)(pool  & 0xFF)<<48 |
-          (uint64_t)(crush       )<<16);
+  return laddr_t::get_data_hint(pool, shard, crush);
 }
 
 struct node_offset_packed_t {
@@ -439,7 +437,10 @@ class key_hobj_t {
     // Note: this is the reversed version of the object hash
     return ghobj.hobj.get_bitwise_key_u32();
   }
-  laddr_t get_hint() const {
+  laddr_t get_metadat_hint() const {
+    return laddr_t::get_metadata_hint(get_lba_hint(shard(), pool(), crush()));
+  }
+  laddr_t get_data_hint() const {
     return get_lba_hint(shard(), pool(), crush());
   }
   std::string_view nspace() const {
@@ -532,7 +533,10 @@ class key_view_t {
   inline shard_t shard() const;
   inline pool_t pool() const;
   inline crush_hash_t crush() const;
-  laddr_t get_hint() const {
+  laddr_t get_metadata_hint() const {
+    return laddr_t::get_metadata_hint(get_lba_hint(shard(), pool(), crush()));
+  }
+  laddr_t get_data_hint() const {
     return get_lba_hint(shard(), pool(), crush());
   }
   std::string_view nspace() const {
