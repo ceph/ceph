@@ -113,7 +113,7 @@ protected:
 
   version_t omap_version = 0;
 
-  unsigned omap_num_objs = 0;
+  uint32_t omap_num_objs = 0;
   std::vector<unsigned> omap_num_items;
 
   std::map<inodeno_t, OpenedAnchor> anchor_map;
