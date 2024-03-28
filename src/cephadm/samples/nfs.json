@@ -9,6 +9,7 @@
             "",
             "%url    rados://nfs-ganesha/nfs-ns/conf-nfs.a",
             ""
-        ]
+        ],
+        "idmap.conf": ""
     }
 }
