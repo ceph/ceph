@@ -726,9 +726,19 @@ static int check_index_unlinked(rgw::sal::RadosStore* const rados_store,
           entry.idx << dendl;
         continue;
       }
-      if (dir_entry.versioned_epoch != 0 || dir_entry.meta.mtime > not_after) {
+      if (dir_entry.meta.mtime > not_after) {
         continue;
       }
+      const bool has_pending_delete_op = std::any_of(dir_entry.pending_map.begin(),
+                                                     dir_entry.pending_map.end(),
+                                                     [&](const auto& pi) {
+                                                       return pi.second.op == CLS_RGW_OP_DEL &&
+                                                         pi.second.timestamp < not_after;
+                                                     });
+      if (dir_entry.versioned_epoch != 0 && !has_pending_delete_op) {
+        continue;
+      }
+
       bool listable;
       ret = is_versioned_instance_listable(dpp, bs, dir_entry.key, listable, y);
       if (ret < 0) {

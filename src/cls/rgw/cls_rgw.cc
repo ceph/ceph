@@ -1052,6 +1052,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       CLS_LOG_BITX(bitx_inst, 1,
 		   "ERROR: %s: couldn't find tag for pending operation with tag %s",
 		   __func__, op.tag.c_str());
+      if (op.op == CLS_RGW_OP_DEL || op.op == CLS_RGW_OP_CANCEL) {
+        return 0;
+      }
       return -EINVAL;
     }
     CLS_LOG_BITX(bitx_inst, 20,
@@ -1121,7 +1124,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		   "INFO: %s: key=%s not on disk, no action",
 		   __func__, escape_str(idx).c_str());
       log_op = false;
-    } else if (!entry.pending_map.size()) {
+    } else {
 	CLS_LOG_BITX(bitx_inst, 20,
 		     "INFO: %s: removing map entry with key=%s",
 		     __func__, escape_str(idx).c_str());
@@ -1130,20 +1133,6 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 	  CLS_LOG_BITX(bitx_inst, 1,
 		       "ERROR: %s: unable to remove map key, key=%s, rc=%d",
 		       __func__, escape_str(idx).c_str(), rc);
-        return rc;
-      }
-    } else {
-      entry.exists = false;
-      bufferlist new_key_bl;
-      encode(entry, new_key_bl);
-      CLS_LOG_BITX(bitx_inst, 20,
-		   "INFO: %s: setting map entry at key=%s",
-		   __func__, escape_str(idx).c_str());
-      rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
-      if (rc < 0) {
-	CLS_LOG_BITX(bitx_inst, 1,
-		     "ERROR: %s: unable to set map val, key=%s, rc=%d",
-		     __func__, escape_str(idx).c_str(), rc);
         return rc;
       }
     }
@@ -1921,6 +1910,16 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     olh.set_tag(op.olh_tag);
 
     obj.set_epoch(1);
+  } else {
+    const string& olh_tag = olh.get_tag();
+    if (op.olh_tag != olh_tag) {
+      if (!olh.pending_removal()) {
+        CLS_LOG(5, "NOTICE: op.olh_tag (%s) != olh.tag (%s)", op.olh_tag.c_str(), olh_tag.c_str());
+        return -ECANCELED;
+      }
+      /* if pending removal, this is a new olh instance */
+      olh.set_tag(op.olh_tag);
+    }
   }
 
   if (!olh.start_modify(op.olh_epoch)) {
@@ -2053,7 +2052,7 @@ static int rgw_bucket_read_olh_log(cls_method_context_t hctx, bufferlist *in, bu
     return ret;
   }
 
-  if (olh_data_entry.tag != op.olh_tag) {
+  if (olh_data_entry.tag != op.olh_tag && !olh_data_entry.pending_removal) {
     CLS_LOG(1, "NOTICE: %s: olh_tag_mismatch olh_data_entry.tag=%s op.olh_tag=%s", __func__, olh_data_entry.tag.c_str(), op.olh_tag.c_str());
     return -ECANCELED;
   }
@@ -2160,8 +2159,8 @@ static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, buffe
     return ret;
   }
 
-  if (olh_data_entry.tag != op.olh_tag) {
-    CLS_LOG(1, "NOTICE: %s: olh_tag_mismatch olh_data_entry.tag=%s op.olh_tag=%s", __func__, olh_data_entry.tag.c_str(), op.olh_tag.c_str());
+  if (!olh_data_entry.pending_removal) {
+    CLS_LOG(1, "NOTICE: %s: olh_data_entry.pending_removal=false", __func__);
     return -ECANCELED;
   }
 
