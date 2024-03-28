@@ -398,6 +398,43 @@ created, the mirror daemon will clear the failed state upon successful synchroni
 When mirroring is disabled, the respective `fs mirror status` command for the file system
 will not show up in command help.
 
+Labelled Perf Counters
+----------------------
+Labelled Perf Counters generate metrics that will be consumed by the OCP/ODF Dashboard to provide monitoring of Geo Replication in the OCP and ACM dashboard and elsewhere. This would generate the progress of cephfs_mirror syncing and thus provide the monitoring capability.
+
+The exported metrics enables monitoring based on the following alerts:
+
+
+1. cephfs_mirror_fs_mirror_peers     : Mirroring Peers
+                                       The number of peers involved in mirroring
+
+2. cephfs_mirror_fs_mirror_dir_count     : Directory Count
+                                           The total number of directories being synchronized
+
+3. cephfs_mirror_file_systems_mirrorred     : Filesystems mirrored
+                                              The total number of filesystems which are mirrored
+
+4. cephfs_mirror_file_systems_mirror_enable_failures     : Mirroring enable failures
+                                                           Enable mirroring failures
+
+5. cephfs_mirror_peer_replayer_snaps_synced     : Snapshots Synchronized
+                                                  The total number of snapshots successfully synchronized
+
+6. cephfs_mirror_peer_replayer_snaps_deleted     : Snapshots Deleted
+                                                   The number of snapshots deleted
+
+7. cephfs_mirror_peer_replayer_snaps_renamed     : Snapshots Renamed
+                                                   The number of snapshots renamed
+
+8. cephfs_mirror_peer_replayer_snap_sync_failures    : Snapshot Sync Failures
+                                                       The total number of failed snapshot synchronizations
+
+9. cephfs_mirror_peer_replayer_avg_sync_time     : Average Sync Time
+                                                   The average synchronization time
+
+10. cephfs_mirror_peer_replayer_sync_bytes     : Sync Bytes
+                                                 The total bytes being synchronized
+
 Configuration Options
 ---------------------
 
@@ -410,6 +447,7 @@ Configuration Options
 .. confval:: cephfs_mirror_retry_failed_directories_interval
 .. confval:: cephfs_mirror_restart_mirror_on_failure_interval
 .. confval:: cephfs_mirror_mount_timeout
+.. confval:: cephfs_mirror_perf_stats_prio
 
 Re-adding Peers
 ---------------
