@@ -50,7 +50,8 @@ static std::string default_realm_oid(const ceph::common::ConfigProxy& conf)
 
 int RadosConfigStore::write_default_realm_id(const DoutPrefixProvider* dpp,
                                              optional_yield y, bool exclusive,
-                                             std::string_view realm_id)
+                                             std::string_view realm_id,
+                                             std::string_view realm_name)
 {
   const auto& pool = impl->realm_pool;
   const auto oid = default_realm_oid(dpp->get_cct()->_conf);
@@ -58,13 +59,15 @@ int RadosConfigStore::write_default_realm_id(const DoutPrefixProvider* dpp,
 
   RGWDefaultSystemMetaObjInfo default_info;
   default_info.default_id = realm_id;
+  default_info.default_name = realm_name;
 
   return impl->write(dpp, y, pool, oid, create, default_info, nullptr);
 }
 
 int RadosConfigStore::read_default_realm_id(const DoutPrefixProvider* dpp,
                                             optional_yield y,
-                                            std::string& realm_id)
+                                            std::string& realm_id,
+                                            std::string& realm_name)
 {
   const auto& pool = impl->realm_pool;
   const auto oid = default_realm_oid(dpp->get_cct()->_conf);
@@ -73,6 +76,7 @@ int RadosConfigStore::read_default_realm_id(const DoutPrefixProvider* dpp,
   int r = impl->read(dpp, y, pool, oid, default_info, nullptr);
   if (r >= 0) {
     realm_id = default_info.default_id;
+    realm_name = default_info.default_name;
   }
   return r;
 }

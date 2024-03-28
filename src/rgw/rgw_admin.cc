@@ -4614,7 +4614,7 @@ int main(int argc, const char **argv)
           } else {
             // use default realm_id when none is given
             int ret = cfgstore->read_default_realm_id(dpp(), null_yield,
-                                                      realm_id);
+                                                      realm_id, realm_name);
             if (ret < 0 && ret != -ENOENT) { // on ENOENT, use empty realm_id
               cerr << "ERROR: failed to read default realm: "
                   << cpp_strerror(-ret) << std::endl;
@@ -4712,7 +4712,7 @@ int main(int argc, const char **argv)
           } else {
             // use default realm_id when none is given
             int ret = cfgstore->read_default_realm_id(dpp(), null_yield,
-                                                      realm_id);
+                                                      realm_id, realm_name);
             if (ret < 0 && ret != -ENOENT) { // on ENOENT, use empty realm_id
               cerr << "ERROR: failed to read default realm: "
                   << cpp_strerror(-ret) << std::endl;
@@ -4845,23 +4845,29 @@ int main(int argc, const char **argv)
       break;
     case OPT::REALM_GET_DEFAULT:
       {
-	string default_id;
-	int ret = cfgstore->read_default_realm_id(dpp(), null_yield, default_id);
-	if (ret == -ENOENT) {
-	  cout << "No default realm is set" << std::endl;
-	  return -ret;
+        string default_id;
+        string default_name;
+        int ret = cfgstore->read_default_realm_id(dpp(), null_yield, 
+                                                  default_id, default_name);
+
+  if (ret == -ENOENT) {
+    cout << "No default realm is set" << std::endl;
+    return -ret;
 	} else if (ret < 0) {
 	  cerr << "Error reading default realm: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-	cout << "default realm: " << default_id << std::endl;
+  
+        cout << "default realm: " << default_id << "\n"
+             << "default realm name: " << default_name << std::endl;
       }
       break;
     case OPT::REALM_LIST:
       {
         std::string default_id;
+        std::string default_name;
         int ret = cfgstore->read_default_realm_id(dpp(), null_yield,
-                                                  default_id);
+                                                  default_id, default_name);
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "could not determine default realm: " << cpp_strerror(-ret) << std::endl;
 	}

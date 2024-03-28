@@ -96,14 +96,14 @@ DROP TABLE IF EXISTS DefaultZones;
 // DefaultRealms
 
 static constexpr const char* default_realm_insert1 =
-"INSERT INTO DefaultRealms (ID, Empty) VALUES ({}, '')";
+"INSERT INTO DefaultRealms (ID, Empty, Name) VALUES ({}, '', {})";
 
 static constexpr const char* default_realm_upsert1 =
-R"(INSERT INTO DefaultRealms (ID, Empty) VALUES ({0}, '')
-ON CONFLICT(Empty) DO UPDATE SET ID = {0})";
+R"(INSERT INTO DefaultRealms (ID, Empty, Name) VALUES ({0}, '', {1})
+ON CONFLICT(Empty) DO UPDATE SET ID = {0}, Name = {1})";
 
 static constexpr const char* default_realm_select0 =
-"SELECT ID FROM DefaultRealms LIMIT 1";
+"SELECT ID, Name FROM DefaultRealms LIMIT 1";
 
 static constexpr const char* default_realm_delete0 =
 "DELETE FROM DefaultRealms";

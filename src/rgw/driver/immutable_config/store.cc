@@ -27,14 +27,16 @@ ImmutableConfigStore::ImmutableConfigStore(const RGWZoneGroup& zonegroup,
 // Realm
 int ImmutableConfigStore::write_default_realm_id(const DoutPrefixProvider* dpp,
                                                  optional_yield y, bool exclusive,
-                                                 std::string_view realm_id)
+                                                 std::string_view realm_id,
+                                                 std::string_view realm_name)
 {
   return -EROFS;
 }
 
 int ImmutableConfigStore::read_default_realm_id(const DoutPrefixProvider* dpp,
                                                 optional_yield y,
-                                                std::string& realm_id)
+                                                std::string& realm_id,
+                                                std::string& realm_name)
 {
   return -ENOENT;
 }

@@ -325,7 +325,8 @@ class SQLiteRealmWriter : public sal::RealmWriter {
 
 int SQLiteConfigStore::write_default_realm_id(const DoutPrefixProvider* dpp,
                                               optional_yield y, bool exclusive,
-                                              std::string_view realm_id)
+                                              std::string_view realm_id,
+                                              std::string_view realm_name)
 {
   Prefix prefix{*dpp, "dbconfig:sqlite:write_default_realm_id "}; dpp = &prefix;
 
@@ -340,18 +341,19 @@ int SQLiteConfigStore::write_default_realm_id(const DoutPrefixProvider* dpp,
     if (exclusive) {
       stmt = &conn->statements["def_realm_ins"];
       if (!*stmt) {
-        const std::string sql = fmt::format(schema::default_realm_insert1, P1);
+        const std::string sql = fmt::format(schema::default_realm_insert1, P1, P2);
         *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
       }
     } else {
       stmt = &conn->statements["def_realm_ups"];
       if (!*stmt) {
-        const std::string sql = fmt::format(schema::default_realm_upsert1, P1);
+        const std::string sql = fmt::format(schema::default_realm_upsert1, P1, P2);
         *stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
       }
     }
     auto binding = sqlite::stmt_binding{stmt->get()};
     sqlite::bind_text(dpp, binding, P1, realm_id);
+    sqlite::bind_text(dpp, binding, P2, realm_name);
 
     auto reset = sqlite::stmt_execution{stmt->get()};
     sqlite::eval0(dpp, reset);
@@ -369,7 +371,8 @@ int SQLiteConfigStore::write_default_realm_id(const DoutPrefixProvider* dpp,
 
 int SQLiteConfigStore::read_default_realm_id(const DoutPrefixProvider* dpp,
                                              optional_yield y,
-                                             std::string& realm_id)
+                                             std::string& realm_id,
+                                             std::string& realm_name)
 {
   Prefix prefix{*dpp, "dbconfig:sqlite:read_default_realm_id "}; dpp = &prefix;
 
@@ -384,6 +387,7 @@ int SQLiteConfigStore::read_default_realm_id(const DoutPrefixProvider* dpp,
     sqlite::eval1(dpp, reset);
 
     realm_id = sqlite::column_text(reset, 0);
+    realm_name = sqlite::column_text(reset, 1);
   } catch (const sqlite::error& e) {
     ldpp_dout(dpp, 20) << "default realm select failed: " << e.what() << dendl;
     if (e.code() == sqlite::errc::busy) {

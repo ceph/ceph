@@ -550,7 +550,7 @@ int set_default_realm(const DoutPrefixProvider* dpp, optional_yield y,
                       sal::ConfigStore* cfgstore, const RGWRealm& info,
                       bool exclusive)
 {
-  return cfgstore->write_default_realm_id(dpp, y, exclusive, info.id);
+  return cfgstore->write_default_realm_id(dpp, y, exclusive, info.id, info.name);
 }
 
 int realm_set_current_period(const DoutPrefixProvider* dpp, optional_yield y,
@@ -823,7 +823,8 @@ int read_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   std::string realm_id;
-  int r = cfgstore->read_default_realm_id(dpp, y, realm_id);
+  std::string realm_name;
+  int r = cfgstore->read_default_realm_id(dpp, y, realm_id, realm_name);
   if (r == -ENOENT) {
     return cfgstore->read_zonegroup_by_name(dpp, y, default_zonegroup_name,
                                             info, writer);
@@ -1007,7 +1008,8 @@ int read_zone(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   std::string realm_id;
-  int r = cfgstore->read_default_realm_id(dpp, y, realm_id);
+  std::string realm_name;
+  int r = cfgstore->read_default_realm_id(dpp, y, realm_id, realm_name);
   if (r == -ENOENT) {
     return cfgstore->read_zone_by_name(dpp, y, default_zone_name, info, writer);
   }
