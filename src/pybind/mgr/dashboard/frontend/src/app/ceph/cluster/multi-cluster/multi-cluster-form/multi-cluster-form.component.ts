@@ -141,6 +141,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
         ]
       }),
       ssl: new FormControl(false),
+      ttl: new FormControl(15),
       ssl_cert: new FormControl('', {
         validators: [
           CdValidators.requiredIf({
@@ -155,6 +156,10 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     this.subs.unsubscribe();
   }
 
+  convertToHours(value: number): number {
+    return value * 24; // Convert days to hours
+  }
+
   onSubmit() {
     const url = this.remoteClusterForm.getValue('remoteClusterUrl');
     const updatedUrl = url.endsWith('/') ? url.slice(0, -1) : url;
@@ -165,6 +170,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     const token = this.remoteClusterForm.getValue('apiToken');
     const clusterFsid = this.remoteClusterForm.getValue('clusterFsid');
     const ssl = this.remoteClusterForm.getValue('ssl');
+    const ttl = this.convertToHours(this.remoteClusterForm.getValue('ttl'));
     const ssl_certificate = this.remoteClusterForm.getValue('ssl_cert')?.trim();
 
     if (this.action === 'edit') {
@@ -190,7 +196,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     if (this.action === 'reconnect') {
       this.subs.add(
         this.multiClusterService
-          .reConnectCluster(updatedUrl, username, password, token, ssl, ssl_certificate)
+          .reConnectCluster(updatedUrl, username, password, token, ssl, ssl_certificate, ttl)
           .subscribe({
             error: () => {
               this.remoteClusterForm.setErrors({ cdSubmitButton: true });
@@ -220,7 +226,8 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
             clusterFsid,
             prometheusApiUrl,
             ssl,
-            ssl_certificate
+            ssl_certificate,
+            ttl
           )
           .subscribe({
             error: () => {

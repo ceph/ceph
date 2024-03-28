@@ -55,11 +55,12 @@ class MultiCluster(RESTController):
     @EndpointDoc("Authenticate to a remote cluster")
     def auth(self, url: str, cluster_alias: str, username: str,
              password=None, token=None, hub_url=None, cluster_fsid=None,
-             prometheus_api_url=None, ssl_verify=False, ssl_certificate=None):
+             prometheus_api_url=None, ssl_verify=False, ssl_certificate=None, ttl=None):
         if password:
             payload = {
                 'username': username,
-                'password': password
+                'password': password,
+                'ttl': ttl
             }
             content = self._proxy('POST', url, 'api/auth', payload=payload)
             if 'token' not in content:
@@ -146,12 +147,13 @@ class MultiCluster(RESTController):
     @UpdatePermission
     # pylint: disable=unused-variable
     def reconnect_cluster(self, url: str, username=None, password=None, token=None,
-                          ssl_verify=False, ssl_certificate=None):
+                          ssl_verify=False, ssl_certificate=None, ttl=None):
         multicluster_config = self.load_multi_cluster_config()
         if username and password:
             payload = {
                 'username': username,
-                'password': password
+                'password': password,
+                'ttl': ttl
             }
             content = self._proxy('POST', url, 'api/auth', payload=payload,
                                   verify=ssl_verify, cert=ssl_certificate)
@@ -266,6 +268,15 @@ class MultiCluster(RESTController):
         current_time = time.time()
         return expiration_time < current_time
 
+    def get_time_left(self, jwt_token):
+        split_message = jwt_token.split(".")
+        base64_message = split_message[1]
+        decoded_token = json.loads(base64.urlsafe_b64decode(base64_message + "===="))
+        expiration_time = decoded_token['exp']
+        current_time = time.time()
+        time_left = expiration_time - current_time
+        return max(0, time_left)
+
     def check_token_status_expiration(self, token):
         if self.is_token_expired(token):
             return 1
@@ -279,7 +290,9 @@ class MultiCluster(RESTController):
             token = item['token']
             user = item['user']
             status = self.check_token_status_expiration(token)
-            token_status_map[cluster_name] = {'status': status, 'user': user}
+            time_left = self.get_time_left(token)
+            token_status_map[cluster_name] = {'status': status, 'user': user,
+                                              'time_left': time_left}
 
         return token_status_map
 
