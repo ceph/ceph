@@ -601,22 +601,23 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     if (pending_map.standbys.count(m->get_gid())) {
       drop_standby(m->get_gid(), false);
     }
-    dout(4) << "selecting new active " << m->get_gid()
-	    << " " << m->get_name()
-	    << " (was " << pending_map.active_gid << " "
-	    << pending_map.active_name << ")" << dendl;
-    pending_map.active_gid = m->get_gid();
-    pending_map.active_name = m->get_name();
-    pending_map.active_change = ceph_clock_now();
-    pending_map.active_mgr_features = m->get_mgr_features();
-    pending_map.available_modules = m->get_available_modules();
-    encode(m->get_metadata(), pending_metadata[m->get_name()]);
-    pending_metadata_rm.erase(m->get_name());
+    if (!(pending_map.flags & MgrMap::FLAG_DOWN)) {
+      dout(4) << "selecting new active " << m->get_gid()
+	      << " " << m->get_name()
+	      << " (was " << pending_map.active_gid << " "
+	      << pending_map.active_name << ")" << dendl;
+      pending_map.active_gid = m->get_gid();
+      pending_map.active_name = m->get_name();
+      pending_map.active_change = ceph_clock_now();
+      pending_map.active_mgr_features = m->get_mgr_features();
+      pending_map.available_modules = m->get_available_modules();
+      encode(m->get_metadata(), pending_metadata[m->get_name()]);
+      pending_metadata_rm.erase(m->get_name());
 
-    mon.clog->info() << "Activating manager daemon "
-                      << pending_map.active_name;
-
-    updated = true;
+      mon.clog->info() << "Activating manager daemon "
+                       << pending_map.active_name;
+      updated = true;
+    }
   } else {
     if (pending_map.standbys.count(m->get_gid()) > 0) {
       dout(10) << "from existing standby " << m->get_gid() << dendl;
@@ -891,6 +892,9 @@ void MgrMonitor::on_restart()
 bool MgrMonitor::promote_standby()
 {
   ceph_assert(pending_map.active_gid == 0);
+  if (pending_map.flags & MgrMap::FLAG_DOWN) {
+    return false;
+  }
   if (pending_map.standbys.size()) {
     // Promote a replacement (arbitrary choice of standby)
     auto replacement_gid = pending_map.standbys.begin()->first;
@@ -903,6 +907,9 @@ bool MgrMonitor::promote_standby()
     pending_map.available = false;
     pending_map.active_addrs = entity_addrvec_t();
     pending_map.active_change = ceph_clock_now();
+
+    mon.clog->info() << "Activating manager daemon "
+                     << pending_map.active_name;
 
     drop_standby(replacement_gid, false);
 
@@ -1195,7 +1202,37 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
   int r = 0;
   bool plugged = false;
 
-  if (prefix == "mgr fail") {
+  if (prefix == "mgr set") {
+    std::string var;
+    if (!cmd_getval(cmdmap, "var", var) || var.empty()) {
+      ss << "Invalid variable";
+      return -EINVAL;
+    }
+    string val;
+    if (!cmd_getval(cmdmap, "val", val)) {
+      return -EINVAL;
+    }
+
+    if (var == "down") {
+      bool enable_down = false;
+      int r = parse_bool(val, &enable_down, ss);
+      if (r != 0) {
+        return r;
+      }
+      if (enable_down) {
+        if (!mon.osdmon()->is_writeable()) {
+          mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
+          return false;
+        }
+        pending_map.flags |= MgrMap::FLAG_DOWN;
+        plugged |= drop_active();
+      } else {
+        pending_map.flags &= ~(MgrMap::FLAG_DOWN);
+      }
+    } else {
+      return -EINVAL;
+    }
+  } else if (prefix == "mgr fail") {
     string who;
     if (!cmd_getval(cmdmap, "who", who)) {
       if (!map.active_gid) {
