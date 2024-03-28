@@ -535,17 +535,17 @@ ObjectDataHandler::write_ret do_insertions(
           auto left = region.len;
 	  auto iter = region.bl->cbegin();
           for (auto &extent : extents) {
-            ceph_assert(left >= extent->get_length());
-            if (extent->get_laddr() != off) {
-              logger().debug(
-                "object_data_handler::do_insertions alloc got addr {},"
-                " should have been {}",
-                extent->get_laddr(),
-                off);
-            }
-            iter.copy(extent->get_length(), extent->get_bptr().c_str());
-            off += extent->get_length();
-            left -= extent->get_length();
+	    ceph_assert(left >= extent->get_length());
+	    if (extent->get_laddr() != off) {
+	      logger().debug(
+		"object_data_handler::do_insertions alloc got addr {},"
+		" should have been {}",
+		extent->get_laddr(),
+		off);
+	    }
+	    iter.copy(extent->get_length(), extent->get_bptr().c_str());
+	    off += extent->get_length();
+	    left -= extent->get_length();
           }
 	  return ObjectDataHandler::write_iertr::now();
 	}).handle_error_interruptible(

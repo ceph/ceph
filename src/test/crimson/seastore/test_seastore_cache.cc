@@ -30,6 +30,13 @@ struct cache_test_t : public seastar_test_suite_t {
 
   seastar::future<paddr_t> submit_transaction(
     TransactionRef t) {
+    t->for_each_pre_submit_fresh_block([](auto &extent) {
+      if (!extent->is_logical() ||
+	  !extent->get_last_committed_crc()) {
+	extent->update_checksum();
+      }
+      assert(extent->calc_crc32c() == extent->get_last_committed_crc());
+    });
     auto record = cache->prepare_record(*t, JOURNAL_SEQ_NULL, JOURNAL_SEQ_NULL);
 
     bufferlist bl;
@@ -135,7 +142,7 @@ TEST_F(cache_test_t, test_addr_fixup)
 	placement_hint_t::HOT,
 	0);
       extent->set_contents('c');
-      csum = extent->get_crc32c();
+      csum = extent->calc_crc32c();
       submit_transaction(std::move(t)).get0();
       addr = extent->get_paddr();
     }
@@ -146,7 +153,7 @@ TEST_F(cache_test_t, test_addr_fixup)
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get0();
       ASSERT_EQ(extent->get_paddr(), addr);
-      ASSERT_EQ(extent->get_crc32c(), csum);
+      ASSERT_EQ(extent->calc_crc32c(), csum);
     }
   });
 }
@@ -166,7 +173,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	placement_hint_t::HOT,
 	0);
       extent->set_contents('c');
-      csum = extent->get_crc32c();
+      csum = extent->calc_crc32c();
       auto reladdr = extent->get_paddr();
       ASSERT_TRUE(reladdr.is_relative());
       {
@@ -180,7 +187,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	ASSERT_TRUE(extent->is_pending());
 	ASSERT_TRUE(extent->get_paddr().is_relative());
 	ASSERT_EQ(extent->get_version(), 0);
-	ASSERT_EQ(csum, extent->get_crc32c());
+	ASSERT_EQ(csum, extent->calc_crc32c());
       }
       submit_transaction(std::move(t)).get0();
       addr = extent->get_paddr();
@@ -209,7 +216,7 @@ TEST_F(cache_test_t, test_dirty_extent)
       // duplicate and reset contents
       extent = cache->duplicate_for_write(*t, extent)->cast<TestBlockPhysical>();
       extent->set_contents('c');
-      csum2 = extent->get_crc32c();
+      csum2 = extent->calc_crc32c();
       ASSERT_EQ(extent->get_paddr(), addr);
       {
 	// test that concurrent read with fresh transaction sees old
@@ -223,7 +230,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	ASSERT_FALSE(extent->is_pending());
 	ASSERT_EQ(addr, extent->get_paddr());
 	ASSERT_EQ(extent->get_version(), 0);
-	ASSERT_EQ(csum, extent->get_crc32c());
+	ASSERT_EQ(csum, extent->calc_crc32c());
       }
       {
 	// test that read with same transaction sees new block
@@ -235,14 +242,14 @@ TEST_F(cache_test_t, test_dirty_extent)
 	ASSERT_TRUE(extent->is_pending());
 	ASSERT_EQ(addr, extent->get_paddr());
 	ASSERT_EQ(extent->get_version(), 1);
-	ASSERT_EQ(csum2, extent->get_crc32c());
+	ASSERT_EQ(csum2, extent->calc_crc32c());
       }
       // submit transaction
       submit_transaction(std::move(t)).get0();
       ASSERT_TRUE(extent->is_dirty());
       ASSERT_EQ(addr, extent->get_paddr());
       ASSERT_EQ(extent->get_version(), 1);
-      ASSERT_EQ(extent->get_crc32c(), csum2);
+      ASSERT_EQ(extent->calc_crc32c(), csum2);
     }
     {
       // test that fresh transaction now sees newly dirty block
@@ -254,7 +261,7 @@ TEST_F(cache_test_t, test_dirty_extent)
       ASSERT_TRUE(extent->is_dirty());
       ASSERT_EQ(addr, extent->get_paddr());
       ASSERT_EQ(extent->get_version(), 1);
-      ASSERT_EQ(csum2, extent->get_crc32c());
+      ASSERT_EQ(csum2, extent->calc_crc32c());
     }
   });
 }

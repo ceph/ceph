@@ -26,6 +26,11 @@ using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
 
+enum class integrity_check_t : uint8_t {
+  FULL_CHECK,
+  NONFULL_CHECK
+};
+
 class EphemeralDevices {
 public:
   virtual seastar::future<> setup() = 0;
@@ -172,7 +177,8 @@ public:
 
 class EphemeralTestState 
 #ifdef UNIT_TESTS_BUILT
-  : public ::testing::WithParamInterface<const char*> {
+  : public ::testing::WithParamInterface<
+	      std::tuple<const char*, integrity_check_t>> {
 #else 
   {
 #endif
@@ -220,7 +226,7 @@ protected:
   seastar::future<> tm_setup() {
     LOG_PREFIX(EphemeralTestState::tm_setup);
 #ifdef UNIT_TESTS_BUILT
-    std::string j_type = GetParam();
+    std::string j_type = std::get<0>(GetParam());
 #else
     std::string j_type = "segmented";
 #endif
@@ -277,11 +283,19 @@ protected:
   virtual seastar::future<> _init() override {
     auto sec_devices = devices->get_secondary_devices();
     auto p_dev = devices->get_primary_device();
+    auto fut = seastar::now();
+    if (std::get<1>(GetParam()) == integrity_check_t::FULL_CHECK) {
+      fut = crimson::common::local_conf().set_val(
+	"seastore_full_integrity_check", "true");
+    } else {
+      fut = crimson::common::local_conf().set_val(
+	"seastore_full_integrity_check", "false");
+    }
     tm = make_transaction_manager(p_dev, sec_devices, true);
     epm = tm->get_epm();
     lba_manager = tm->get_lba_manager();
     cache = tm->get_cache();
-    return seastar::now();
+    return fut;
   }
 
   virtual seastar::future<> _destroy() override {
@@ -421,10 +435,19 @@ protected:
   SeaStoreTestState() : EphemeralTestState(1, 0) {}
 
   virtual seastar::future<> _init() final {
+    auto fut = seastar::now();
+    if (std::get<1>(GetParam()) == integrity_check_t::FULL_CHECK) {
+      fut = crimson::common::local_conf().set_val(
+	"seastore_full_integrity_check", "true");
+    } else {
+      fut = crimson::common::local_conf().set_val(
+	"seastore_full_integrity_check", "false");
+    }
     seastore = make_test_seastore(
       std::make_unique<TestMDStoreState::Store>(mdstore_state.get_mdstore()));
-    return seastore->test_start(devices->get_primary_device_ref()
-    ).then([this] {
+    return fut.then([this] {
+      return seastore->test_start(devices->get_primary_device_ref());
+    }).then([this] {
       sharded_seastore = &(seastore->get_sharded_store());
     });
   }

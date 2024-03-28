@@ -17,6 +17,9 @@
 #include "crimson/os/seastore/seastore_types.h"
 
 struct btree_lba_manager_test;
+struct lba_btree_test;
+struct btree_test_base;
+struct cache_test_t;
 
 namespace crimson::os::seastore {
 
@@ -389,6 +392,8 @@ public:
     return complete_load_ertr::now();
   }
 
+  virtual void update_in_extent_chksum_field(uint32_t) {}
+
   /**
    * cast
    *
@@ -539,7 +544,7 @@ public:
   }
 
   /// Returns crc32c of buffer
-  uint32_t get_crc32c() {
+  virtual uint32_t calc_crc32c() const {
     return ceph_crc32c(
       1,
       reinterpret_cast<const unsigned char *>(get_bptr().c_str()),
@@ -600,7 +605,9 @@ public:
   }
 
   paddr_t get_prior_paddr_and_reset() {
-    assert(prior_poffset);
+    if (!prior_poffset) {
+      return poffset;
+    }
     auto ret = *prior_poffset;
     prior_poffset.reset();
     return ret;
@@ -786,6 +793,12 @@ protected:
     prior_instance.reset();
   }
 
+  void update_checksum() {
+    auto crc = calc_crc32c();
+    set_last_committed_crc(crc);
+    update_in_extent_chksum_field(crc);
+  }
+
   /// Sets last_committed_crc
   void set_last_committed_crc(uint32_t crc) {
     last_committed_crc = crc;
@@ -832,6 +845,9 @@ protected:
   template <typename, typename>
   friend class BtreeNodeMapping;
   friend class ::btree_lba_manager_test;
+  friend class ::lba_btree_test;
+  friend class ::btree_test_base;
+  friend class ::cache_test_t;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
@@ -1052,6 +1068,10 @@ public:
   virtual key_t get_intermediate_key() const { return min_max_t<key_t>::null; }
   virtual key_t get_intermediate_base() const { return min_max_t<key_t>::null; }
   virtual extent_len_t get_intermediate_length() const { return 0; }
+  virtual uint32_t get_checksum() const {
+    ceph_abort("impossible");
+    return 0;
+  }
   // The start offset of the pin, must be 0 if the pin is not indirect
   virtual extent_len_t get_intermediate_offset() const {
     return std::numeric_limits<extent_len_t>::max();
@@ -1240,7 +1260,7 @@ public:
   void apply_delta_and_adjust_crc(
     paddr_t base, const ceph::bufferlist &bl) final {
     apply_delta(bl);
-    set_last_committed_crc(get_crc32c());
+    set_last_committed_crc(calc_crc32c());
   }
 
   bool is_logical() const final {

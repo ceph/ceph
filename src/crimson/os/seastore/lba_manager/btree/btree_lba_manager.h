@@ -141,6 +141,10 @@ public:
     return get_map_val().refcount > 1;
   }
 
+  uint32_t get_checksum() const final {
+    return get_map_val().checksum;
+  }
+
 protected:
   std::unique_ptr<BtreeNodeMapping<laddr_t, paddr_t>> _duplicate(
     op_context_t<laddr_t> ctx) const final {
@@ -210,18 +214,42 @@ public:
     Transaction &t,
     laddr_t offset) final;
 
+
+  struct alloc_mapping_info_t {
+    alloc_mapping_info_t(
+      extent_len_t len,
+      pladdr_t val,
+      uint32_t checksum,
+      LogicalCachedExtent* extent)
+      : len(len), val(val), checksum(checksum), extent(extent)
+    {}
+    extent_len_t len = 0;
+    pladdr_t val;
+    uint32_t checksum = 0;
+    LogicalCachedExtent* extent = nullptr;
+  };
+
   alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len)
+    extent_len_t len) final
   {
-    return _alloc_extent(
-      t,
-      hint,
-      len,
-      P_ADDR_ZERO,
-      P_ADDR_NULL,
-      nullptr);
+    std::vector<alloc_mapping_info_t> alloc_infos = {
+      alloc_mapping_info_t{len, P_ADDR_ZERO, 0, nullptr}};
+    return seastar::do_with(
+      std::move(alloc_infos),
+      [&t, len, hint, this](auto &alloc_infos) {
+      return _alloc_extents(
+	t,
+	hint,
+	len,
+	alloc_infos
+      ).si_then([](auto mappings) {
+	assert(mappings.size() == 1);
+	auto mapping = std::move(mappings.front());
+	return mapping;
+      });
+    });
   }
 
   alloc_extent_ret clone_mapping(
@@ -229,51 +257,92 @@ public:
     laddr_t hint,
     extent_len_t len,
     laddr_t intermediate_key,
-    paddr_t actual_addr,
-    laddr_t intermediate_base)
+    laddr_t intermediate_base) final
   {
     assert(intermediate_key != L_ADDR_NULL);
     assert(intermediate_base != L_ADDR_NULL);
-    return _alloc_extent(
-      t,
-      hint,
-      len,
-      intermediate_key,
-      actual_addr,
-      nullptr
-    ).si_then([&t, this, intermediate_base](auto indirect_mapping) {
-      assert(indirect_mapping->is_indirect());
-      return update_refcount(t, intermediate_base, 1, false
-      ).si_then([imapping=std::move(indirect_mapping)](auto p) mutable {
-	auto mapping = std::move(p.second);
-	ceph_assert(mapping->is_stable());
-	mapping->make_indirect(
-	  imapping->get_key(),
-	  imapping->get_length(),
-	  imapping->get_intermediate_key());
-	return seastar::make_ready_future<
-	  LBAMappingRef>(std::move(mapping));
-      });
-    }).handle_error_interruptible(
-      crimson::ct_error::input_output_error::pass_further{},
-      crimson::ct_error::assert_all{"unexpect enoent"}
-    );
+    std::vector<alloc_mapping_info_t> alloc_infos = {
+      alloc_mapping_info_t{
+	len,
+	intermediate_key,
+	0,	// crc will only be used and checked with LBA direct mappings
+		// also see pin_to_extent(_by_type)
+	nullptr}};
+    return seastar::do_with(
+      std::move(alloc_infos),
+      [this, &t, intermediate_base, len, hint](auto &alloc_infos) {
+      return _alloc_extents(
+	t,
+	hint,
+	len,
+	alloc_infos
+      ).si_then([&t, this, intermediate_base](auto mappings) {
+	assert(mappings.size() == 1);
+	auto indirect_mapping = std::move(mappings.front());
+	assert(indirect_mapping->is_indirect());
+	return update_refcount(t, intermediate_base, 1, false
+	).si_then([imapping=std::move(indirect_mapping)](auto p) mutable {
+	  auto mapping = std::move(p.second);
+	  ceph_assert(mapping->is_stable());
+	  mapping->make_indirect(
+	    imapping->get_key(),
+	    imapping->get_length(),
+	    imapping->get_intermediate_key());
+	  return seastar::make_ready_future<
+	    LBAMappingRef>(std::move(mapping));
+	});
+      }).handle_error_interruptible(
+	crimson::ct_error::input_output_error::pass_further{},
+	crimson::ct_error::assert_all{"unexpect enoent"}
+      );
+    });
   }
 
   alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len,
-    paddr_t addr,
     LogicalCachedExtent &ext) final
   {
-    return _alloc_extent(
-      t,
-      hint,
-      len,
-      addr,
-      P_ADDR_NULL,
-      &ext);
+    // The real checksum will be updated upon transaction commit
+    assert(ext.get_last_committed_crc() == 0);
+    std::vector<alloc_mapping_info_t> alloc_infos = {{
+      ext.get_length(), ext.get_paddr(), ext.get_last_committed_crc(), &ext}};
+    return seastar::do_with(
+      std::move(alloc_infos),
+      [this, &t, hint, &ext](auto &alloc_infos) {
+      return _alloc_extents(
+	t,
+	hint,
+	ext.get_length(),
+	alloc_infos
+      ).si_then([](auto mappings) {
+	assert(mappings.size() == 1);
+	auto mapping = std::move(mappings.front());
+	return mapping;
+      });
+    });
+  }
+
+  alloc_extents_ret alloc_extents(
+    Transaction &t,
+    laddr_t hint,
+    std::vector<LogicalCachedExtentRef> extents) final
+  {
+    std::vector<alloc_mapping_info_t> alloc_infos;
+    extent_len_t total_len = 0;
+    for (auto &extent : extents) {
+      alloc_infos.emplace_back(
+	extent->get_length(),
+	pladdr_t(extent->get_paddr()),
+	extent->get_last_committed_crc(),
+	extent.get());
+      total_len += extent->get_length();
+    }
+    return seastar::do_with(
+      std::move(alloc_infos),
+      [this, &t, hint, total_len](auto &alloc_infos) {
+      return _alloc_extents(t, hint, total_len, alloc_infos);
+    });
   }
 
   ref_ret decref_extent(
@@ -337,6 +406,7 @@ public:
     paddr_t prev_addr,
     extent_len_t len,
     paddr_t paddr,
+    uint32_t checksum,
     LogicalCachedExtent*) final;
 
   get_physical_extent_if_live_ret get_physical_extent_if_live(
@@ -393,13 +463,11 @@ private:
     update_func_t &&f,
     LogicalCachedExtent*);
 
-  alloc_extent_ret _alloc_extent(
+  alloc_extents_ret _alloc_extents(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len,
-    pladdr_t addr,
-    paddr_t actual_addr,
-    LogicalCachedExtent*);
+    extent_len_t total_len,
+    std::vector<alloc_mapping_info_t> &alloc_infos);
 
   using _get_mapping_ret = get_mapping_iertr::future<BtreeLBAMappingRef>;
   _get_mapping_ret _get_mapping(

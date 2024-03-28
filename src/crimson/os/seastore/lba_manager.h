@@ -85,16 +85,20 @@ public:
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len,
-    paddr_t addr,
     LogicalCachedExtent &nextent) = 0;
+
+  using alloc_extents_ret = alloc_extent_iertr::future<
+    std::vector<LBAMappingRef>>;
+  virtual alloc_extents_ret alloc_extents(
+    Transaction &t,
+    laddr_t hint,
+    std::vector<LogicalCachedExtentRef> extents) = 0;
 
   virtual alloc_extent_ret clone_mapping(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
     laddr_t intermediate_key,
-    paddr_t actual_addr,
     laddr_t intermediate_base) = 0;
 
   virtual alloc_extent_ret reserve_region(
@@ -195,6 +199,7 @@ public:
     paddr_t prev_addr,
     extent_len_t len,
     paddr_t paddr,
+    uint32_t checksum,
     LogicalCachedExtent *nextent) = 0;
 
   /**
