@@ -955,7 +955,7 @@ void PG::prepare_write(
     ceph_assert(ret == 0);
   }
   pglog.write_log_and_missing(
-    t, &km, coll, pgmeta_oid, pool.info.require_rollback());
+    cct, t, &km, coll, pgmeta_oid, pool.info.require_rollback());
   if (!km.empty())
     t.omap_setkeys(coll, pgmeta_oid, km);
   if (!key_to_remove.empty())
