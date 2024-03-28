@@ -51,7 +51,6 @@ class PyModule
   mutable ceph::mutex lock = ceph::make_mutex("PyModule::lock");
 private:
   const std::string module_name;
-  std::string get_site_packages();
   int load_subclass_of(const char* class_name, PyObject** py_class);
 
   // Did the MgrMap identify this module as one that should run?
