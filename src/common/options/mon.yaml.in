@@ -63,6 +63,14 @@ options:
   default: 30
   services:
   - mon
+- name: mon_nvmeofgw_beacon_grace
+  type: secs
+  level: advanced
+  desc: Period in seconds from last beacon to monitor marking a  NVMeoF gateway as
+    failed
+  default: 10
+  services:
+  - mon
 - name: mon_mgr_inactive_grace
   type: int
   level: advanced
@@ -1338,3 +1346,10 @@ options:
   with_legacy: true
   see_also:
   - osd_heartbeat_use_min_delay_socket
+- name: nvmeof_mon_client_tick_period
+  type: secs
+  level: advanced
+  desc: Period in seconds of nvmeof gateway beacon messages to monitor
+  default: 2
+  services:
+  - mon

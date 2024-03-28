@@ -1354,8 +1354,25 @@ COMMAND("config generate-minimal-conf",
 	"Generate a minimal ceph.conf file",
 	"config", "r")
 
+/* NVMeofGwMon*/
+COMMAND("nvme-gw create"
+    " name=id,type=CephString"
+    " name=pool,type=CephString"
+    " name=group,type=CephString",
+    "create nvmeof gateway id for (pool, group)",
+    "mgr", "rw")
+COMMAND("nvme-gw delete"
+    " name=id,type=CephString"
+    " name=pool,type=CephString"
+    " name=group,type=CephString",
+    "delete nvmeof gateway id for (pool, group)",
+    "mgr", "rw")
 
-
+COMMAND("nvme-gw show"
+   " name=pool,type=CephString"
+   " name=group,type=CephString",
+   " show nvmeof gateways within (pool, group)",
+   "mgr", "rw")
 
 // these are tell commands that were implemented as CLI commands in
 // the broken pre-octopus way that we want to allow to work when a

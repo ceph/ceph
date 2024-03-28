@@ -364,3 +364,11 @@ Relevant tracker: https://tracker.ceph.com/issues/57090
 set using the `fs set` command. This flag prevents using a standby for another
 file system (join_fs = X) when standby for the current filesystem is not available.
 Relevant tracker: https://tracker.ceph.com/issues/61599
+* mon: add NVMe-oF gateway monitor and HA
+  This PR adds high availability support for the nvmeof Ceph service. High availability
+means that even in the case that a certain GW is down, there will be another available
+path for the initiator to be able to continue the IO through another GW.
+It is also adding 2 new mon commands, to notify monitor about the gateway creation/deletion:
+  - nvme-gw create
+  - nvme-gw delete
+Relevant tracker: https://tracker.ceph.com/issues/64777
