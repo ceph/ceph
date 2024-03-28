@@ -154,7 +154,7 @@ generate_rook_ceph_client() {
 
 # clean out old cruft...
 echo "cleanup..."
-rm -f $outfile*
+rm -rf $outfile*
 
 # build new tarball
 echo "building tarball..."
