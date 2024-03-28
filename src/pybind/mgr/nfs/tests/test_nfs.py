@@ -939,7 +939,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/mybucket"
         assert export.access_type == "none"
         assert export.squash == "none"
-        assert export.protocols == [4]
+        assert export.protocols == [3, 4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
         assert export.fsal.user_id == "bucket_owner_user"
@@ -982,7 +982,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/mybucket"
         assert export.access_type == "none"
         assert export.squash == "none"
-        assert export.protocols == [4]
+        assert export.protocols == [3, 4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
         assert export.fsal.access_key_id == "the_access_key"
@@ -1024,7 +1024,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/mybucket"
         assert export.access_type == "none"
         assert export.squash == "none"
-        assert export.protocols == [4]
+        assert export.protocols == [3, 4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "RGW"
         assert export.fsal.access_key_id == "the_access_key"
@@ -1067,7 +1067,7 @@ NFS_CORE_PARAM {
         assert export.pseudo == "/cephfs2"
         assert export.access_type == "none"
         assert export.squash == "none"
-        assert export.protocols == [4]
+        assert export.protocols == [3, 4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "CEPH"
         assert export.fsal.user_id == "nfs.foo.3"
