@@ -11,6 +11,11 @@ import {
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
 import moment from 'moment';
+import {
+  MultiClusterPromqls as allQueries,
+  MultiClusterPromqlsForClusterUtilization as ClusterUltilizationQueries,
+  MultiClusterPromqlsForPoolUtilization as PoolUltilizationQueries
+} from '~/app/shared/enum/dashboard-promqls.enum';
 
 @Injectable({
   providedIn: 'root'
@@ -204,7 +209,8 @@ export class PrometheusService {
     queriesResults: any,
     validQueries: string[],
     validRangeQueries: string[],
-    multiClusterQueries: any
+    multiClusterQueries: any,
+    validSelectedQueries: string[]
   ) {
     return new Observable((observer) => {
       this.ifPrometheusConfigured(() => {
@@ -218,7 +224,10 @@ export class PrometheusService {
 
           Object.entries(multiClusterQueries).forEach(([key, _value]) => {
             for (const queryName in multiClusterQueries[key].queries) {
-              if (multiClusterQueries[key].queries.hasOwnProperty(queryName)) {
+              if (
+                multiClusterQueries[key].queries.hasOwnProperty(queryName) &&
+                validSelectedQueries.includes(queryName)
+              ) {
                 const query = multiClusterQueries[key].queries[queryName];
                 const start = this.updateTimeStamp(multiClusterQueries[key].selectedTime)['start'];
                 const end = this.updateTimeStamp(multiClusterQueries[key].selectedTime)['end'];
@@ -246,6 +255,10 @@ export class PrometheusService {
               }
             }
           });
+
+          validSelectedQueries = Object.keys(allQueries)
+            .concat(Object.keys(ClusterUltilizationQueries))
+            .concat(Object.keys(PoolUltilizationQueries));
 
           forkJoin(requests).subscribe(
             (responses: any[]) => {
