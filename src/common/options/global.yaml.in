@@ -1276,6 +1276,23 @@ options:
   desc: Inject a network congestions that stuck with N times operations
   default: 0
   with_legacy: true
+- name: ms_time_events_min_wait_interval
+  type: uint
+  level: dev
+  desc: In microseconds, msgr-worker's time_events min wait time for epoll_wait timeout
+  default: 1000
+  min: 0
+  max: 60000000
+  with_legacy: true
+- name: ms_client_throttle_retry_time_interval
+  type: uint
+  level: dev
+  desc: In microseconds, user client, the time interval between the next retry
+        when the throttle get_or_fail.
+  default: 5000
+  min: 1000
+  max: 60000000
+  with_legacy: true
 - name: ms_blackhole_osd
   type: bool
   level: dev
