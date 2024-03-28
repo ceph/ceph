@@ -34,7 +34,7 @@ static int cls_2pc_queue_init(cls_method_context_t hctx, bufferlist *in, bufferl
 
   cls_queue_init_op init_op;
 
-  CLS_LOG(20, "INFO: cls_2pc_queue_init: max size is %lu (bytes)", op.queue_size);
+  CLS_LOG(20, "INFO: cls_2pc_queue_init: max size is %" PRIu64 " (bytes)", op.queue_size);
 
   init_op.queue_size = op.queue_size;
   init_op.max_urgent_data_size = 23552; // overall head is 24KB ~ pending 1K reservations ops
@@ -128,9 +128,9 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
 
   if (res_op.size + urgent_data.reserved_size + overhead > remaining_size) {
     CLS_LOG(1, "ERROR: cls_2pc_queue_reserve: reservations exceeded maximum capacity");
-    CLS_LOG(10, "INFO: cls_2pc_queue_reserve: remaining size: %lu (bytes)", remaining_size);
-    CLS_LOG(10, "INFO: cls_2pc_queue_reserve: current reservations: %lu (bytes)", urgent_data.reserved_size);
-    CLS_LOG(10, "INFO: cls_2pc_queue_reserve: requested size: %lu (bytes)", res_op.size);
+    CLS_LOG(10, "INFO: cls_2pc_queue_reserve: remaining size: %" PRIu64 " (bytes)", remaining_size);
+    CLS_LOG(10, "INFO: cls_2pc_queue_reserve: current reservations: %" PRIu64 " (bytes)", urgent_data.reserved_size);
+    CLS_LOG(10, "INFO: cls_2pc_queue_reserve: requested size: %" PRIu64 " (bytes)", res_op.size);
     return -ENOSPC;
   }
 
@@ -157,7 +157,7 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
   const uint64_t urgent_data_length = head.bl_urgent_data.length();
 
   if (head.max_urgent_data_size < urgent_data_length) {
-    CLS_LOG(10, "INFO: cls_2pc_queue_reserve: urgent data size: %lu exceeded maximum: %lu using xattrs", urgent_data_length, head.max_urgent_data_size);
+    CLS_LOG(10, "INFO: cls_2pc_queue_reserve: urgent data size: %" PRIu64 " exceeded maximum: %" PRIu64 " using xattrs", urgent_data_length, head.max_urgent_data_size);
     // add the last reservation to xattrs 
     bufferlist bl_xattrs;
     auto ret = cls_cxx_getxattr(hctx, CLS_QUEUE_URGENT_DATA_XATTR_NAME, &bl_xattrs);
@@ -205,10 +205,10 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
     return ret;
   }
   
-  CLS_LOG(20, "INFO: cls_2pc_queue_reserve: remaining size: %lu (bytes)", remaining_size);
-  CLS_LOG(20, "INFO: cls_2pc_queue_reserve: current reservations: %lu (bytes)", urgent_data.reserved_size);
-  CLS_LOG(20, "INFO: cls_2pc_queue_reserve: requested size: %lu (bytes)", res_op.size);
-  CLS_LOG(20, "INFO: cls_2pc_queue_reserve: urgent data size: %lu (bytes)", urgent_data_length);
+  CLS_LOG(20, "INFO: cls_2pc_queue_reserve: remaining size: %" PRIu64 " (bytes)", remaining_size);
+  CLS_LOG(20, "INFO: cls_2pc_queue_reserve: current reservations: %" PRIu64 " (bytes)", urgent_data.reserved_size);
+  CLS_LOG(20, "INFO: cls_2pc_queue_reserve: requested size: %" PRIu64 " (bytes)", res_op.size);
+  CLS_LOG(20, "INFO: cls_2pc_queue_reserve: urgent data size: %" PRIu64 " (bytes)", urgent_data_length);
 
   cls_2pc_queue_reserve_ret op_ret;
   op_ret.id = urgent_data.last_id;
@@ -283,8 +283,8 @@ static int cls_2pc_queue_commit(cls_method_context_t hctx, bufferlist *in, buffe
           });
    
   if (res.size < actual_size) {
-    CLS_LOG(1, "ERROR: cls_2pc_queue_commit: trying to commit %lu bytes to a %lu bytes reservation", 
-            actual_size,
+    CLS_LOG(1, "ERROR: cls_2pc_queue_commit: trying to commit %" PRIu64 " bytes to a %" PRIu64 " bytes reservation", 
+            (uint64_t)actual_size,
             res.size);
     return -EINVAL;
   }
@@ -315,8 +315,8 @@ static int cls_2pc_queue_commit(cls_method_context_t hctx, bufferlist *in, buffe
     }
   }
   
-  CLS_LOG(20, "INFO: cls_2pc_queue_commit: current reservations: %lu (bytes)", urgent_data.reserved_size);
-  CLS_LOG(20, "INFO: cls_2pc_queue_commit: current reservation entries: %lu", 
+  CLS_LOG(20, "INFO: cls_2pc_queue_commit: current reservations: %" PRIu64 " (bytes)", urgent_data.reserved_size);
+  CLS_LOG(20, "INFO: cls_2pc_queue_commit: current reservation entries: %zu", 
           urgent_data.reservations.size() + xattr_reservations.size());
 
   // write back head
@@ -400,7 +400,7 @@ static int cls_2pc_queue_abort(cls_method_context_t hctx, bufferlist *in, buffer
   // remove the reservation
   urgent_data.reserved_size -= reservation_size;
 
-  CLS_LOG(20, "INFO: cls_2pc_queue_abort: current reservations: %lu (bytes)", urgent_data.reserved_size);
+  CLS_LOG(20, "INFO: cls_2pc_queue_abort: current reservations: %" PRIu64 " (bytes)", urgent_data.reserved_size);
 
   // write back head
   head.bl_urgent_data.clear();
@@ -425,7 +425,7 @@ static int cls_2pc_queue_list_reservations(cls_method_context_t hctx, bufferlist
     return -EINVAL;
   }
   
-  CLS_LOG(20, "INFO: cls_2pc_queue_list_reservations: %lu reservation entries found", urgent_data.reservations.size());
+  CLS_LOG(20, "INFO: cls_2pc_queue_list_reservations: %zu reservation entries found", urgent_data.reservations.size());
   cls_2pc_queue_reservations_ret op_ret;
   op_ret.reservations = std::move(urgent_data.reservations);
   if (urgent_data.has_xattrs) {
@@ -445,7 +445,7 @@ static int cls_2pc_queue_list_reservations(cls_method_context_t hctx, bufferlist
         CLS_LOG(1, "ERROR: cls_2pc_queue_list_reservations: failed to decode xattrs urgent data map");
         return -EINVAL;
       } //end - catch
-      CLS_LOG(20, "INFO: cls_2pc_queue_list_reservations: %lu reservation entries found in xatts", xattr_reservations.size());
+      CLS_LOG(20, "INFO: cls_2pc_queue_list_reservations: %zu reservation entries found in xatts", xattr_reservations.size());
       op_ret.reservations.merge(xattr_reservations);
     }
   }
@@ -480,8 +480,8 @@ static int cls_2pc_queue_expire_reservations(cls_method_context_t hctx, bufferli
     return -EINVAL;
   }
   
-  CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: %lu reservation entries found", urgent_data.reservations.size());
-  CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: current reservations: %lu (bytes)", urgent_data.reserved_size);
+  CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: %zu reservation entries found", urgent_data.reservations.size());
+  CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: current reservations: %" PRIu64 " (bytes)", urgent_data.reserved_size);
 
   uint64_t reservation_size = 0U;
   auto stale_found = false;
@@ -515,7 +515,7 @@ static int cls_2pc_queue_expire_reservations(cls_method_context_t hctx, bufferli
         CLS_LOG(1, "ERROR: cls_2pc_queue_expire_reservations: failed to decode xattrs urgent data map");
         return -EINVAL;
       } //end - catch
-      CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: %lu reservation entries found in xatts", xattr_reservations.size());
+      CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: %zu reservation entries found in xatts", xattr_reservations.size());
       for (auto it = xattr_reservations.begin(); it != xattr_reservations.end();) {
         if (it->second.timestamp < expire_op.stale_time) {
           CLS_LOG(5, "WARNING: cls_2pc_queue_expire_reservations: stale reservation %u will be removed", it->first);
@@ -541,7 +541,7 @@ static int cls_2pc_queue_expire_reservations(cls_method_context_t hctx, bufferli
 
   if (stale_found || xattr_stale_found) { 
     urgent_data.reserved_size -= reservation_size;
-    CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: reservations after cleanup: %lu (bytes)", urgent_data.reserved_size);
+    CLS_LOG(20, "INFO: cls_2pc_queue_expire_reservations: reservations after cleanup: %" PRIu64 " (bytes)", urgent_data.reserved_size);
     // write back head without stale reservations
     head.bl_urgent_data.clear();
     encode(urgent_data, head.bl_urgent_data);

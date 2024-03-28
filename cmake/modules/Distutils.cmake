@@ -76,6 +76,10 @@ function(distutils_add_cython_module target name src)
   string(REPLACE " " ";" PY_LDFLAGS "${CMAKE_SHARED_LINKER_FLAGS}")
   list(APPEND PY_LDFLAGS -L${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
 
+  if(APPLE)
+    set(PY_LDSHARED ${PY_LDSHARED} "-undefined" "dynamic_lookup")
+  endif(APPLE)
+
   execute_process(COMMAND "${Python3_EXECUTABLE}" -c
     "import sysconfig; print(sysconfig.get_config_var('EXT_SUFFIX'))"
     RESULT_VARIABLE result

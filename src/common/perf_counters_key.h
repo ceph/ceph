@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include "convenience.h"
 
 namespace ceph::perf_counters {
 

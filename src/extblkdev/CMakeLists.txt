@@ -6,7 +6,7 @@ add_subdirectory(vdo)
 
 add_library(extblkdev STATIC ExtBlkDevPlugin.cc)
 
-if(NOT WIN32)
+if(NOT WIN32 AND NOT APPLE)
 find_package(cap)
 target_link_libraries(extblkdev cap)
 endif()

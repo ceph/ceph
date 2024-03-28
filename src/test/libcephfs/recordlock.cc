@@ -31,8 +31,9 @@
 #include <dirent.h>
 
 #include <stdlib.h>
-#include <semaphore.h>
 #include <time.h>
+
+#include "test/semaphore_compat.h"
 
 #ifndef _WIN32
 #include <sys/mman.h>

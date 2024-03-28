@@ -298,7 +298,7 @@ static int remove_lock(cls_method_context_t hctx,
   // remove named locker from set
   auto iter = lockers.find(id);
   if (iter == lockers.end()) { // no such key
-    CLS_LOG(10, "locker %s [name: %s.%ld, cookie: %s] does not exist", name.c_str(), 
+    CLS_LOG(10, "locker %s [name: %s.%" PRId64 ", cookie: %s] does not exist", name.c_str(), 
             locker.type_str(), locker.num(), cookie.c_str());
     return -ENOENT;
   }

@@ -18,9 +18,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
-#if defined(__FreeBSD__)
-#include <sys/param.h>
-#include <sys/mount.h>
+#if defined(__FreeBSD__) || defined(__APPLE__)
+#  include <sys/param.h>
+#  include <sys/mount.h>
 #endif
 
 #include "KStore.h"

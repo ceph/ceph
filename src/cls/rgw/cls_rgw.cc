@@ -626,7 +626,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 	    proxy_entry.flags = rgw_bucket_dir_entry::FLAG_COMMON_PREFIX;
 	    name_entry_map[prefix_key] = proxy_entry;
 
-	    CLS_LOG(20, "%s: got common prefix entry %s[%s] num entries=%lu",
+	    CLS_LOG(20, "%s: got common prefix entry %s[%s] num entries=%zu",
 		    __func__, proxy_key.name.c_str(), proxy_key.instance.c_str(),
 		    name_entry_map.size());
 	  }
@@ -2233,7 +2233,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
       (config_op_expiration ?
        config_op_expiration :
        CEPH_RGW_DEFAULT_TAG_TIMEOUT)));
-  CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: tag_timeout=%ld", __func__, tag_timeout.count());
+  CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: tag_timeout=%" PRId64, __func__, tag_timeout.count());
 
   auto in_iter = in->cbegin();
 
@@ -2326,7 +2326,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
       CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: cur_disk.pending_map is empty", __func__);
       if (cur_disk.exists) {
         rgw_bucket_category_stats& old_stats = header.stats[cur_disk.meta.category];
-	CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: stats.num_entries: %ld -> %ld",
+	CLS_LOG_BITX(bitx_inst, 10, "INFO: %s: stats.num_entries: %" PRIu64 " -> %" PRIu64,
 		     __func__, old_stats.num_entries, old_stats.num_entries - 1);
         old_stats.num_entries--;
         old_stats.total_size -= cur_disk.meta.accounted_size;
@@ -2364,11 +2364,11 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         break;
       case CEPH_RGW_UPDATE:
 	CLS_LOG_BITX(bitx_inst, 10,
-		     "INFO: %s: CEPH_RGW_UPDATE name=%s stats.num_entries: %ld -> %ld",
+		     "INFO: %s: CEPH_RGW_UPDATE name=%s stats.num_entries: %" PRIu64 " -> %" PRIu64,
 		     __func__, escape_str(cur_change.key.to_string()).c_str(),
 		     stats.num_entries, stats.num_entries + 1);
 
-        stats.num_entries++;
+	stats.num_entries++;
         stats.total_size += cur_change.meta.accounted_size;
         stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
         stats.actual_size += cur_change.meta.size;
@@ -2730,7 +2730,7 @@ static int list_plain_entries_help(cls_method_context_t hctx,
   std::map<std::string, bufferlist> raw_entries;
   int ret = cls_cxx_map_get_vals(hctx, start_after_key, name_filter, max,
 				 &raw_entries, &more);
-  CLS_LOG(20, "%s: cls_cxx_map_get_vals ret=%d, raw_entries.size()=%lu, more=%d",
+  CLS_LOG(20, "%s: cls_cxx_map_get_vals ret=%d, raw_entries.size()=%zu, more=%d",
 	  __func__, ret, raw_entries.size(), more);
   if (ret < 0) {
     return ret;
@@ -3250,7 +3250,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
     count--;
   }
 
-  CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d", __func__, op_ret.entries.size(), op_ret.is_truncated);
+  CLS_LOG(20, "%s: returning %zu entries, is_truncated=%d", __func__, op_ret.entries.size(), op_ret.is_truncated);
   encode(op_ret, *out);
 
   return 0;

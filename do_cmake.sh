@@ -1,16 +1,36 @@
 #!/usr/bin/env bash
+: ${BUILD_DIR:=build}
+: ${CEPH_GIT_DIR:=..}
+
+cli_args=()
+redo=false
+
+for arg in "$@"; do
+  case "$arg" in
+    --redo)
+      redo=true
+      ;;
+    *)
+      cli_args+=("$arg")
+  esac
+done
+
+if [ -e $BUILD_DIR ]; then
+    echo -n "'$BUILD_DIR' dir already exists; "
+    if $redo; then
+      echo "removing cache and re-running cmake."
+      rm -f "$BUILD_DIR/CMakeCache.txt" || true
+    else
+      echo "either rm -rf '$BUILD_DIR' and re-run, or set BUILD_DIR env var to a different directory name"
+      echo "Alternatively, specify '--redo' on the command line to re-run the CMake atop an existing build dir"
+      exit 1
+    fi
+fi
+
 set -ex
 
 if [ -d .git ]; then
     git submodule update --init --recursive --progress
-fi
-
-: ${BUILD_DIR:=build}
-: ${CEPH_GIT_DIR:=..}
-
-if [ -e $BUILD_DIR ]; then
-    echo "'$BUILD_DIR' dir already exists; either rm -rf '$BUILD_DIR' and re-run, or set BUILD_DIR env var to a different directory name"
-    exit 1
 fi
 
 PYBUILD="3"
@@ -51,6 +71,31 @@ elif [ "$(uname)" == FreeBSD ] ; then
   PYBUILD="3"
   ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
   ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
+elif [ "$(uname)" == Darwin ] ; then
+# macOs build limitations
+  ARGS+=" -DWITH_RDMA=OFF"
+  ARGS+=" -DHAVE_POSIXAIO=OFF"
+  ARGS+=" -DWITH_BLUESTORE=OFF"
+  ARGS+=" -DWITH_LTTNG=OFF"
+  ARGS+=" -DWITH_BABELTRACE=OFF"
+  ARGS+=" -DWITH_KRBD=OFF"
+  ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
+  ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
+  # currently, rgw posix driver requires inotify
+  ARGS+=" -DWITH_RADOSGW_POSIX=OFF"
+  ARGS+=" -DWITH_JAEGER=OFF"
+
+# you should have configured and bootstrapped brew
+  ARGS+=" -DICU_ROOT=$(brew --prefix icu4c)"
+  ARGS+=" -DSQLite3_ROOT=$(brew --prefix sqlite)"
+  ARGS+=" -DOpenLDAP_ROOT=$(brew --prefix openldap)"
+  ARGS+=" -Dthrift_ROOT=$(brew --prefix thrift)"
+
+  # distutils may want to link to some other libraries, like libintl for example
+  ARGS+=" -DPY_CPPFLAGS=-L$(brew --prefix)/lib"
+
+  cxx_compiler="clang++"
+  c_compiler="clang"
 else
   echo Unknown release
   exit 1
@@ -63,27 +108,29 @@ if type ccache > /dev/null 2>&1 ; then
     ARGS+=" -DWITH_CCACHE=ON"
 fi
 
-cxx_compiler="g++"
-c_compiler="gcc"
-# 20 is used for more future-proof
-for i in $(seq 20 -1 11); do
-  if type -t gcc-$i > /dev/null; then
-    cxx_compiler="g++-$i"
-    c_compiler="gcc-$i"
-    break
-  fi
-done
+if [ -z "$cxx_compiler" ]; then
+  cxx_compiler="g++"
+  c_compiler="gcc"
+  # 20 is used for more future-proof
+  for i in $(seq 20 -1 11); do
+    if type -t gcc-$i > /dev/null; then
+      cxx_compiler="g++-$i"
+      c_compiler="gcc-$i"
+      break
+    fi
+  done
+fi
 ARGS+=" -DCMAKE_CXX_COMPILER=$cxx_compiler"
 ARGS+=" -DCMAKE_C_COMPILER=$c_compiler"
 
-mkdir $BUILD_DIR
+mkdir -p $BUILD_DIR
 cd $BUILD_DIR
 if type cmake3 > /dev/null 2>&1 ; then
     CMAKE=cmake3
 else
     CMAKE=cmake
 fi
-${CMAKE} $ARGS "$@" $CEPH_GIT_DIR || exit 1
+${CMAKE} $ARGS "${cli_args[@]}" $CEPH_GIT_DIR || exit 1
 set +x
 
 # minimal config to find plugins
@@ -95,7 +142,7 @@ EOF
 
 echo done.
 
-if [[ ! "$ARGS $@" =~ "-DCMAKE_BUILD_TYPE" ]]; then
+if [[ ! "$ARGS ${cli_args[@]}" =~ "-DCMAKE_BUILD_TYPE" ]]; then
   cat <<EOF
 
 ****

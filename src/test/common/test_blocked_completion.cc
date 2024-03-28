@@ -24,6 +24,8 @@
 #include "common/async/blocked_completion.h"
 #include "common/async/forward_handler.h"
 
+#include <thread>
+
 using namespace std::literals;
 
 namespace ba = boost::asio;

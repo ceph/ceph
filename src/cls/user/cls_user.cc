@@ -404,7 +404,7 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
       CLS_LOG(0, "ERROR: %s failed to retrieve omap key-values", __func__);
       return rc;
     }
-    CLS_LOG(20, "%s: read %lu key-values, truncated=%d",
+    CLS_LOG(20, "%s: read %zu key-values, truncated=%d",
 	    __func__, keys.size(), truncated);
 
     for (const auto& kv : keys) {
@@ -461,7 +461,7 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
     CLS_LOG(0, "ERROR: %s failed to retrieve omap key-values", __func__);
     return rc;
   }
-  CLS_LOG(20, "%s: read %lu key-values, truncated=%d",
+  CLS_LOG(20, "%s: read %zu key-values, truncated=%d",
 	  __func__, keys.size(), ret.truncated);
 
   for (const auto& kv : keys) {

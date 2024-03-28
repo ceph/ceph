@@ -133,4 +133,27 @@ inline void for_each(std::tuple<Ts...>& t, F& f) {
 }
 }
 
+// This template is for the case when the standard library
+// doesn't provide a three way comparison for basic_string
+// e.g. clang with the macOs SDK
+template <typename CharT, typename Traits, typename Alloc>
+  requires (!requires (std::basic_string<CharT, Traits, Alloc> s){ s.operator<=>(s); })
+constexpr auto operator<=>(
+  const std::basic_string<CharT, Traits, Alloc> &__lhs,
+  const std::basic_string<CharT, Traits, Alloc> &__rhs)
+{
+  return __lhs.compare(__rhs) <=> 0;
+}
+
+// despite https://en.cppreference.com/w/cpp/utility/optional/operator_cmp
+// claiming optional's support for three way comparison since C++20
+// as of xcode 15 (clang-1500.1.0.2.5) this is still not the case
+template <typename _Tp, std::three_way_comparable_with<_Tp> _Up>
+  requires(!requires(const std::optional<_Tp>& __x, const std::optional<_Up>& __y) { __x.operator<=>(__y); })
+constexpr std::compare_three_way_result_t<_Tp, _Up>
+operator<=>(const std::optional<_Tp>& __x, const std::optional<_Up>& __y)
+{
+  return __x && __y ? *__x <=> *__y : bool(__x) <=> bool(__y);
+}
+
 #endif // CEPH_COMMON_CONVENIENCE_H
