@@ -257,10 +257,10 @@ int Client::get_fd_inode(int fd, InodeRef *in) {
   return r;
 }
 
-dir_result_t::dir_result_t(Inode *in, const UserPerm& perms)
+dir_result_t::dir_result_t(Inode *in, const UserPerm& perms, int fd)
   : inode(in), offset(0), next_offset(2),
     release_count(0), ordered_count(0), cache_index(0), start_shared_gen(0),
-    perms(perms)
+    perms(perms), fd(fd)
   { }
 
 void Client::_reset_faked_inos()
@@ -9101,7 +9101,9 @@ int Client::fdopendir(int dirfd, dir_result_t **dirpp, const UserPerm &perms) {
       return r;
     }
   }
-  r = _opendir(dirinode.get(), dirpp, perms);
+  // Posix says that closedir will also close the file descriptor passed to fdopendir, so we associate
+  // dirfd to the new dir_result_t so that it can be closed later.
+  r = _opendir(dirinode.get(), dirpp, perms, dirfd);
   /* if ENOTDIR, dirpp will be an uninitialized point and it's very dangerous to access its value */
   if (r != -CEPHFS_ENOTDIR) {
       tout(cct) << (uintptr_t)*dirpp << std::endl;
@@ -9109,11 +9111,11 @@ int Client::fdopendir(int dirfd, dir_result_t **dirpp, const UserPerm &perms) {
   return r;
 }
 
-int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms)
+int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms, int fd)
 {
   if (!in->is_dir())
     return -CEPHFS_ENOTDIR;
-  *dirpp = new dir_result_t(in, perms);
+  *dirpp = new dir_result_t(in, perms, fd);
   opened_dirs.insert(*dirpp);
   ldout(cct, 8) << __func__ << "(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
   return 0;
@@ -9141,6 +9143,12 @@ void Client::_closedir(dir_result_t *dirp)
   }
   _readdir_drop_dirp_buffer(dirp);
   opened_dirs.erase(dirp);
+
+  /* Close the associated fd if this dir_result_t comes from an fdopendir request. */
+  if (dirp->fd >= 0) {
+    _close(dirp->fd);
+  }
+
   delete dirp;
 }
 
