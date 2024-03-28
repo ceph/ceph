@@ -523,6 +523,80 @@ class TestMisc(CephFSTestCase):
 
     def test_client_ls(self):
         self._session_client_ls(['client', 'ls'])
+
+
+class TestSessionClientEvict(CephFSTestCase):
+    CLIENTS_REQUIRED = 3
+
+    def _session_client_evict_without_filter(self, cmd):
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), 3)
+        # without any filter or flags
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_asok(cmd + ['evict'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        # without any filter but with existing flag
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_asok(cmd + ['evict', '--help'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), 3)
+        # without any filter but with non-existing flag
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_asok(cmd + ['evict', '--foo'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        self.assertEqual(len(info), 3)
+
+    def _session_client_evict_with_id_zero(self, cmd):
+        # with id=0
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_tell(cmd + ['evict', 'id=0'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+
+    def _session_client_evict_with_invalid_id(self, cmd):
+        # with invalid id
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_tell(cmd + ['evict', 'id=1'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+
+    def _session_client_evict_with_negative_id(self, cmd):
+        # with negative id
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_tell(cmd + ['evict', 'id=-9'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+
+    def _session_client_evict_with_valid_id(self, cmd):
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), 3)
+        mount_a_client_id = self.mount_a.get_global_id()
+        # with a valid id
+        self.fs.rank_asok(cmd + ['evict', f'id={mount_a_client_id}'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), 2) # client with id provided is evicted
+        self.assertNotIn(mount_a_client_id, [val['id'] for val in info])
+
+    def _session_client_evict_all_clients(self, cmd):
+        # with id=* to evict all clients
+        self.fs.rank_asok(cmd + ['evict', 'id=*'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), 0) # multiple clients are evicted
+    
+    def test_session_evict(self):
+        self._session_client_evict_without_filter(['session'])
+        self._session_client_evict_with_id_zero(['session'])
+        self._session_client_evict_with_invalid_id(['session'])
+        self._session_client_evict_with_negative_id(['session'])
+        self._session_client_evict_with_valid_id(['session'])
+        self._session_client_evict_all_clients(['session'])
+
+    def test_client_evict(self):
+        self._session_client_evict_without_filter(['client'])
+        self._session_client_evict_with_id_zero(['client'])
+        self._session_client_evict_with_invalid_id(['client'])
+        self._session_client_evict_with_negative_id(['client'])
+        self._session_client_evict_with_valid_id(['client'])
+        self._session_client_evict_all_clients(['client'])
+
         
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
