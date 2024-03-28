@@ -299,10 +299,15 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
        * nullptr inside. */
       ldpp_dout(dpp, 5) << "Failed the auth strategy, reason="
                        << result.get_reason() << dendl;
-      //Special handling for expired pre-signed URL
+      // Special handling for expired pre-signed URL
       if (result.get_reason() == ERR_PRESIGNED_URL_EXPIRED) {
         result = result_t::deny(-EPERM);
         set_req_state_err(s, -EPERM, "The pre-signed URL has expired");
+      }
+      // Special handling for disabled presigned URL
+      if (result.get_reason() == ERR_PRESIGNED_URL_DISABLED) {
+        result = result_t::deny(-EPERM);
+        set_req_state_err(s, -EPERM, "Presigned URLs are disabled by admin");
       }
       return result.get_reason();
     }
