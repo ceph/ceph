@@ -130,7 +130,11 @@ public:
   }
 
   eversion_t get_min_last_complete_ondisk() const {
-    return peering_state.get_min_last_complete_ondisk();
+    return peering_state.get_pg_committed_to();
+  }
+
+  eversion_t get_pg_committed_to() const {
+    return peering_state.get_pg_committed_to();
   }
 
   const pg_info_t& get_info() const final {

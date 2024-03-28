@@ -11491,7 +11491,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     ctx->at_version,
     std::move(ctx->op_t),
     recovery_state.get_pg_trim_to(),
-    recovery_state.get_min_last_complete_ondisk(),
+    recovery_state.get_pg_committed_to(),
     std::move(ctx->log),
     ctx->updated_hset_history,
     on_all_commit,

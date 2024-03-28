@@ -2674,6 +2674,10 @@ void PeeringState::activate(
     if (info.last_epoch_started < activation_epoch) {
       info.last_epoch_started = activation_epoch;
       info.last_interval_started = info.history.same_interval_since;
+
+      // updating last_epoch_started ensures that last_update will not
+      // become divergent after activation completes.
+      pg_committed_to = info.last_update;
     }
   }
 
