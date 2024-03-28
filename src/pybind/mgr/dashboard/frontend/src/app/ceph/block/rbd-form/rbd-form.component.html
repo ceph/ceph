@@ -299,92 +299,76 @@
         </div>
 
         <!-- Advanced -->
-        <div class="row">
-          <div class="col-sm-12">
-            <a class="float-end margin-right-md"
-               (click)="advancedEnabled = true; false"
-               *ngIf="!advancedEnabled"
-               href=""
-               i18n>Advanced...</a>
+        <cd-form-advanced-fieldset>
+          <h4 class="cd-header"
+              i18n>Striping</h4>
+
+          <!-- Object Size -->
+          <div class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="size">Object size<cd-helper>Objects in the Ceph Storage Cluster have a maximum configurable size (e.g., 2MB, 4MB, etc.). The object size should be large enough to accommodate many stripe units, and should be a multiple of the stripe unit.</cd-helper></label>
+            <div class="cd-col-form-input">
+              <select id="obj_size"
+                      name="obj_size"
+                      class="form-select"
+                      formControlName="obj_size">
+                <option *ngFor="let objectSize of objectSizes"
+                        [value]="objectSize">{{ objectSize }}</option>
+              </select>
+            </div>
           </div>
-        </div>
 
-        <div [hidden]="!advancedEnabled">
-
-          <legend class="cd-header"
-                  i18n>Advanced</legend>
-
-          <div class="col-md-12">
-            <h4 class="cd-header"
-                i18n>Striping</h4>
-
-            <!-- Object Size -->
-            <div class="form-group row">
-              <label i18n
-                     class="cd-col-form-label"
-                     for="size">Object size<cd-helper>Objects in the Ceph Storage Cluster have a maximum configurable size (e.g., 2MB, 4MB, etc.). The object size should be large enough to accommodate many stripe units, and should be a multiple of the stripe unit.</cd-helper></label>
-              <div class="cd-col-form-input">
-                <select id="obj_size"
-                        name="obj_size"
-                        class="form-select"
-                        formControlName="obj_size">
-                  <option *ngFor="let objectSize of objectSizes"
-                          [value]="objectSize">{{ objectSize }}</option>
-                </select>
-              </div>
+          <!-- stripingUnit -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   [ngClass]="{'required': rbdForm.getValue('stripingCount')}"
+                   for="stripingUnit"
+                   i18n>Stripe unit<cd-helper>Stripes have a configurable unit size (e.g., 64kb). The Ceph Client divides the data it will write to objects into equally sized stripe units, except for the last stripe unit. A stripe width, should be a fraction of the Object Size so that an object may contain many stripe units.</cd-helper></label>
+            <div class="cd-col-form-input">
+              <select id="stripingUnit"
+                      name="stripingUnit"
+                      class="form-select"
+                      formControlName="stripingUnit">
+                <option i18n
+                        [ngValue]="null">-- Select stripe unit --</option>
+                <option *ngFor="let objectSize of objectSizes"
+                        [value]="objectSize">{{ objectSize }}</option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="rbdForm.showError('stripingUnit', formDir, 'required')"
+                    i18n>This field is required because stripe count is defined!</span>
+              <span class="invalid-feedback"
+                    *ngIf="rbdForm.showError('stripingUnit', formDir, 'invalidStripingUnit')"
+                    i18n>Stripe unit is greater than object size.</span>
             </div>
+          </div>
 
-            <!-- stripingUnit -->
-            <div class="form-group row">
-              <label class="cd-col-form-label"
-                     [ngClass]="{'required': rbdForm.getValue('stripingCount')}"
-                     for="stripingUnit"
-                     i18n>Stripe unit<cd-helper>Stripes have a configurable unit size (e.g., 64kb). The Ceph Client divides the data it will write to objects into equally sized stripe units, except for the last stripe unit. A stripe width, should be a fraction of the Object Size so that an object may contain many stripe units.</cd-helper></label>
-              <div class="cd-col-form-input">
-                <select id="stripingUnit"
-                        name="stripingUnit"
-                        class="form-select"
-                        formControlName="stripingUnit">
-                  <option i18n
-                          [ngValue]="null">-- Select stripe unit --</option>
-                  <option *ngFor="let objectSize of objectSizes"
-                          [value]="objectSize">{{ objectSize }}</option>
-                </select>
-                <span class="invalid-feedback"
-                      *ngIf="rbdForm.showError('stripingUnit', formDir, 'required')"
-                      i18n>This field is required because stripe count is defined!</span>
-                <span class="invalid-feedback"
-                      *ngIf="rbdForm.showError('stripingUnit', formDir, 'invalidStripingUnit')"
-                      i18n>Stripe unit is greater than object size.</span>
-              </div>
-            </div>
-
-            <!-- Stripe Count -->
-            <div class="form-group row">
-              <label class="cd-col-form-label"
-                     [ngClass]="{'required': rbdForm.getValue('stripingUnit')}"
-                     for="stripingCount"
-                     i18n>Stripe count<cd-helper>The Ceph Client writes a sequence of stripe units over a series of objects determined by the stripe count. The series of objects is called an object set. After the Ceph Client writes to the last object in the object set, it returns to the first object in the object set.</cd-helper></label>
-              <div class="cd-col-form-input">
-                <input id="stripingCount"
-                       name="stripingCount"
-                       formControlName="stripingCount"
-                       class="form-control"
-                       type="number">
-                <span class="invalid-feedback"
-                      *ngIf="rbdForm.showError('stripingCount', formDir, 'required')"
-                      i18n>This field is required because stripe unit is defined!</span>
-                <span class="invalid-feedback"
-                      *ngIf="rbdForm.showError('stripingCount', formDir, 'min')"
-                      i18n>Stripe count must be greater than 0.</span>
-              </div>
+          <!-- Stripe Count -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   [ngClass]="{'required': rbdForm.getValue('stripingUnit')}"
+                   for="stripingCount"
+                   i18n>Stripe count<cd-helper>The Ceph Client writes a sequence of stripe units over a series of objects determined by the stripe count. The series of objects is called an object set. After the Ceph Client writes to the last object in the object set, it returns to the first object in the object set.</cd-helper></label>
+            <div class="cd-col-form-input">
+              <input id="stripingCount"
+                     name="stripingCount"
+                     formControlName="stripingCount"
+                     class="form-control"
+                     type="number">
+              <span class="invalid-feedback"
+                    *ngIf="rbdForm.showError('stripingCount', formDir, 'required')"
+                    i18n>This field is required because stripe unit is defined!</span>
+              <span class="invalid-feedback"
+                    *ngIf="rbdForm.showError('stripingCount', formDir, 'min')"
+                    i18n>Stripe count must be greater than 0.</span>
             </div>
           </div>
 
           <cd-rbd-configuration-form [form]="rbdForm"
                                      [initializeData]="initializeConfigData"
                                      (changes)="getDirtyConfigurationValues = $event"></cd-rbd-configuration-form>
-        </div>
+        </cd-form-advanced-fieldset>
 
       </div>
       <div class="card-footer">
