@@ -525,6 +525,15 @@ int libradosstriper::RadosStriperImpl::getxattrs(const object_t& soid,
   return rc;
 }
 
+int libradosstriper::RadosStriperImpl::getinternalxattrs(const object_t& soid,
+                                                 map<string, bufferlist>& attrset)
+{
+  std::string firstObjOid = getObjectId(soid, 0);
+  int rc = m_ioCtx.getinternalxattrs(firstObjOid, attrset);
+  if (rc) return rc;
+  return rc;
+}
+
 int libradosstriper::RadosStriperImpl::rmxattr(const object_t& soid,
                                                const char *name)
 {

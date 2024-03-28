@@ -110,6 +110,7 @@ void usage(ostream& out)
 "   rm <obj-name> ... [--force-full] remove object(s), --force-full forces remove when cluster is full\n"
 "   cp <obj-name> [target-obj]       copy object\n"
 "   listxattr <obj-name>             list attrs of this object\n"
+"   getobjinfo <obj-name>            get object info\n"
 "   getxattr <obj-name> <attr>       get the <attr> attribute of this object\n"
 "   setxattr <obj-name> attr val\n"
 "   rmxattr <obj-name> attr\n"
@@ -369,6 +370,16 @@ int getxattrs([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, std::map<s
 #endif
 
   return io_ctx.getxattrs(oid, attrset);
+}
+
+int getinternalxattrs([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, std::map<std::string, buffer::list>& attrset, [[maybe_unused]] const bool use_striper)
+{
+#ifdef WITH_LIBRADOSSTRIPER
+  if (use_striper)
+    return striper().getinternalxattrs(oid, attrset);
+#endif
+
+  return io_ctx.getinternalxattrs(oid, attrset);
 }
 
 int remove([[maybe_unused]] IoCtx& io_ctx, const std::string& oid, const int flags, [[maybe_unused]] const bool use_striper)
@@ -2700,8 +2711,50 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     } else {
       ret = 0;
     }
-  }
-  else if (strcmp(nargs[0], "setxattr") == 0) {
+  } else if (strcmp(nargs[0], "getobjinfo") == 0) {
+    if (!pool_name || (nargs.size() < 2 && !obj_name)) {
+      usage(cerr);
+      return 1;
+    }
+    if (!obj_name) {
+      obj_name = nargs[1];
+    }
+    bufferlist bl;
+    map<std::string, bufferlist> attrset;
+
+    ret = detail::getinternalxattrs(io_ctx, *obj_name, attrset, use_striper);
+
+    if (ret < 0) {
+      cerr << "error getting object info " << pool_name << "/" << prettify(*obj_name) << ": " << cpp_strerror(ret) << std::endl;
+      return 1;
+    }
+
+    auto it = attrset.find(OI_ATTR);
+    if (it != attrset.end()) {
+      ostream *outstream = nullptr;
+      object_info_t oi;
+      bufferlist bl;
+      auto bliter = it->second.cbegin();
+      decode(oi, bliter);
+      if (formatter) {
+        formatter->open_object_section("object_info");
+        oi.dump(formatter.get());
+        formatter->flush(cout);
+      } else {
+        if (output)
+          outstream = new ofstream(output);
+        else
+          outstream = &cout;
+
+        *outstream << oi << std::endl;
+      }
+      if (formatter && output)
+        delete outstream;
+    } else {
+      std::cerr << "object info is corrupted" << std::endl;
+      return 1;
+    }
+  } else if (strcmp(nargs[0], "setxattr") == 0) {
     if (!pool_name || nargs.size() < (obj_name ? 2 : 3) ||
 	nargs.size() > (obj_name ? 3 : 4)) {
       usage(cerr);

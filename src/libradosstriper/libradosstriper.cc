@@ -199,6 +199,12 @@ int libradosstriper::RadosStriper::getxattrs(const std::string& oid,
   return rados_striper_impl->getxattrs(oid, attrset);
 }
 
+int libradosstriper::RadosStriper::getinternalxattrs(const std::string& oid,
+					     std::map<std::string, bufferlist>& attrset)
+{
+  return rados_striper_impl->getinternalxattrs(oid, attrset);
+}
+
 int libradosstriper::RadosStriper::write(const std::string& soid,
 					 const bufferlist& bl,
 					 size_t len,

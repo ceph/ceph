@@ -127,7 +127,13 @@ namespace libradosstriper
      */
     int getxattrs(const std::string& oid,
                   std::map<std::string, ceph::bufferlist>& attrset); 
-    
+
+    /**
+     * Start iterating over inernal xattrs on a striped object.
+     */
+    int getinternalxattrs(const std::string& oid,
+                  std::map<std::string, ceph::bufferlist>& attrset);
+
     /**
      * synchronously write to the striped object at the specified offset.
      * NOTE: this call steals the contents of @param bl.
