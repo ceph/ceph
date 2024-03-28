@@ -1033,8 +1033,49 @@ TEST(BufferListIterator, get_current_ptr) {
     EXPECT_EQ('B', ptr[0]);
     EXPECT_EQ((unsigned)1, ptr.offset());
     EXPECT_EQ((unsigned)2, ptr.length());
-  }  
+  }
 }
+
+TEST(BufferListIterator, get_current_ptr_ext) {
+  bufferlist bl;
+  {
+    bufferlist::iterator i(&bl);
+    EXPECT_THROW(++i, buffer::end_of_buffer);
+  }
+  string s1("ABC");
+  string s2("abcd");
+
+  bufferlist bl0;
+  bl0.append(s1);
+
+  // make bl have two raw ptrs
+  bl = bl0;
+  bl.append(s2);
+  {
+    bufferlist::iterator i(&bl);
+    const buffer::ptr ptr = i.get_current_ptr();
+    EXPECT_TRUE(i.is_pointing_same_raw(ptr));
+    EXPECT_EQ('A', ptr[0]);
+    EXPECT_EQ((unsigned)0, ptr.offset());
+    EXPECT_EQ((unsigned)3, ptr.length());
+
+    i.seek(2);
+    const buffer::ptr ptr1 = i.get_current_ptr();
+    EXPECT_TRUE(i.is_pointing_same_raw(ptr));
+    EXPECT_EQ('C', ptr1[0]);
+    EXPECT_EQ((unsigned)2, ptr1.offset());
+    EXPECT_EQ((unsigned)1, ptr1.length());
+
+    i.seek(4);
+    const buffer::ptr ptr2 = i.get_current_ptr();
+    EXPECT_TRUE(!i.is_pointing_same_raw(ptr));
+    EXPECT_EQ('b', ptr2[0]);
+    EXPECT_EQ((unsigned)1, ptr2.offset());
+    EXPECT_EQ((unsigned)3, ptr2.length());
+  }
+}
+
+
 
 TEST(BufferListIterator, copy) {
   bufferlist bl;

@@ -2161,11 +2161,11 @@ int64_t BlueFS::_read_random(
   logger->inc(l_bluefs_read_random_count, 1);
   logger->inc(l_bluefs_read_random_bytes, len);
 
-  std::shared_lock s_lock(h->lock);
+  std::unique_lock u_lock(h->lock);
   buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
   while (len > 0) {
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
-      s_lock.unlock();
+      u_lock.unlock();
       uint64_t x_off = 0;
       auto p = h->file->fnode.seek(off, &x_off);
       ceph_assert(p != h->file->fnode.extents.end());
@@ -2192,7 +2192,7 @@ int64_t BlueFS::_read_random(
       logger->inc(l_bluefs_read_random_disk_count, 1);
       logger->inc(l_bluefs_read_random_disk_bytes, l);
       if (len > 0) {
-	s_lock.lock();
+	u_lock.lock();
       }
     } else {
       auto left = buf->get_buf_remaining(off);
@@ -2203,10 +2203,13 @@ int64_t BlueFS::_read_random(
 	      << " 0x" << off << "~" << len << std::dec
 	      << dendl;
 
-      auto p = buf->bl.begin();
-      p.seek(off - buf->bl_off);
+      auto p0 = buf->bl.begin();
+      auto p = p0;
+      auto o = off - buf->bl_off;
+      p.seek(o);
       p.copy(r, out);
       out += r;
+      o += r;
 
       dout(30) << __func__ << " result chunk (0x"
 	       << std::hex << r << std::dec << " bytes):\n";
@@ -2215,6 +2218,26 @@ int64_t BlueFS::_read_random(
       t.hexdump(*_dout);
       *_dout << dendl;
 
+      // Trim cache buffer's head if we've passed it.
+      if (p.end()) {
+        buf->bl.clear();
+        buf->bl_off = 0;
+      } else {
+        auto ptr = p.get_current_ptr();
+        // do cheap trimming which requires no data copying only.
+        if(!p0.is_pointing_same_raw(ptr)) {
+          ceph_assert(o >= ptr.offset());
+          o -= ptr.offset();
+          auto remaining = p.get_remaining() + ptr.offset();
+
+          bufferlist bl_tmp;
+          buf->bl.splice(o, remaining, &bl_tmp);
+          ceph_assert(bl_tmp.length());
+          bl_tmp.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
+          buf->bl.swap(bl_tmp);
+          buf->bl_off += o;
+        }
+      }
       off += r;
       len -= r;
       ret += r;
@@ -2243,6 +2266,7 @@ int64_t BlueFS::_read(
   dout(10) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << lock_fnode_print(h->file)
+           << buf->max_prefetch
 	   << (prefetch ? " prefetch" : "")
 	   << dendl;
 
@@ -2275,12 +2299,18 @@ int64_t BlueFS::_read(
       s_lock.unlock();
       std::unique_lock u_lock(h->lock);
       buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
+      // if precondition hasn't changed during locking upgrade.
       if (off < buf->bl_off || off >= buf->get_buf_end()) {
-        // if precondition hasn't changed during locking upgrade.
-        buf->bl.clear();
-        buf->bl_off = off & super.block_mask();
+        uint64_t boff = off & super.block_mask();
+        // append to buffer rather then reset if doing sequential read,
+        // cap with bluefs_max_prefetch
+        if (off != buf->get_buf_end() ||
+            buf->bl.length() >= cct->_conf->bluefs_max_prefetch) {
+          buf->bl.clear();
+          buf->bl_off = boff;
+        }
         uint64_t x_off = 0;
-        auto p = h->file->fnode.seek(buf->bl_off, &x_off);
+        auto p = h->file->fnode.seek(boff, &x_off);
 	if (p == h->file->fnode.extents.end()) {
 	  dout(5) << __func__ << " reading less then required "
 		  << ret << "<" << ret + len << dendl;
@@ -2295,8 +2325,8 @@ int64_t BlueFS::_read(
 	l = std::min(l, uint64_t(1) << 30);
         uint64_t eof_offset = round_up_to(h->file->fnode.size, super.block_size);
         if (!h->ignore_eof &&
-	    buf->bl_off + l > eof_offset) {
-	  l = eof_offset - buf->bl_off;
+	    boff + l > eof_offset) {
+	  l = eof_offset - boff;
         }
         dout(20) << __func__ << " fetching 0x"
                  << std::hex << x_off << "~" << l << std::dec
