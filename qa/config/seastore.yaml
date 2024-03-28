@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    fs: xfs
+    conf:
+      osd:
+        seastore device size: 536870912000
+        osd objectstore: seastore
