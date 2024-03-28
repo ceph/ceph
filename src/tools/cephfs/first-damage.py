@@ -25,7 +25,7 @@
 #
 # 4b) If all good so far, reset the journal:
 #
-#    cephfs-journal-tool --rank=<fs_name>:0 journal reset
+#    cephfs-journal-tool --rank=<fs_name>:0 journal reset --yes-i-really-really-mean-it
 #
 # 5) Run this tool to see list of damaged dentries:
 #

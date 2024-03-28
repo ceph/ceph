@@ -161,6 +161,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
    `ceph config get mgr mgr/volumes/snapshot_clone_no_wait`
   and it can be disabled by using:
    `ceph config set mgr mgr/volumes/snapshot_clone_no_wait false`
+* CephFS: cephfs-journal-tool is guarded against running on an online file system.
+  The 'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset' and
+  'cephfs-journal-tool --rank <fs_name>:<mds_rank> journal reset --force'
+  commands require '--yes-i-really-really-mean-it'.
 
 >=18.0.0
 
