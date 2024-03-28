@@ -11,5 +11,5 @@ pyyaml
 natsort
 setuptools
 jsonpatch
-grpcio==1.46.5
+grpcio==1.53.0
 grpcio-tools==1.46.5
