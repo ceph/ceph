@@ -313,6 +313,26 @@ public:
     return nspace;
   }
 
+  /**
+   * PG_LOCAL_NS
+   *
+   * Used exclusively by crimson at this time.
+   *
+   * Namespace for objects maintained by the local pg instantiation updated
+   * independently of the pg log.  librados IO to this namespace should fail.
+   * Listing operations related to pg objects should exclude objects in this
+   * namespace along with temp objects, ec rollback objects, and the pg
+   * meta object. Such operations include:
+   * - scrub
+   * - backfill
+   * - pgls
+   * See crimson/osd/pg_backend PGBackend::list_objects
+   */
+  static constexpr std::string_view INTERNAL_PG_LOCAL_NS = ".internal_pg_local";
+  bool is_internal_pg_local() const {
+    return nspace == INTERNAL_PG_LOCAL_NS;
+  }
+
   bool parse(const std::string& s);
 
   void encode(ceph::buffer::list& bl) const;
@@ -378,10 +398,10 @@ struct formatter<hobject_t> {
     return ctx.out();
   }
 
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  constexpr auto parse(format_parse_context& ctx) const { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const hobject_t& ho, FormatContext& ctx)
+  auto format(const hobject_t& ho, FormatContext& ctx) const
   {
     if (ho == hobject_t{}) {
       return fmt::format_to(ctx.out(), "MIN");
@@ -480,6 +500,30 @@ struct ghobject_t {
   bool is_pgmeta() const {
     // make sure we are distinct from hobject_t(), which has pool INT64_MIN
     return hobj.pool >= 0 && hobj.oid.name.empty();
+  }
+
+  bool is_internal_pg_local() const {
+    return hobj.is_internal_pg_local();
+  }
+
+  /**
+   * SNAPMAPPER_OID, make_snapmapper, is_snapmapper
+   *
+   * Used exclusively by crimson at this time.
+   * 
+   * Unlike classic, crimson uses a snap mapper object for each pg.
+   * The snapmapper object provides an index for efficient trimming of clones as
+   * snapshots are removed.
+   *
+   * As with the pgmeta object, we pin the hash to the pg hash.
+   */
+  static constexpr std::string_view SNAPMAPPER_OID = "snapmapper";
+  static ghobject_t make_snapmapper(
+    int64_t pool, uint32_t hash, shard_id_t shard) {
+    hobject_t h(object_t(SNAPMAPPER_OID), std::string(),
+		CEPH_NOSNAP, hash, pool,
+		std::string(hobject_t::INTERNAL_PG_LOCAL_NS));
+    return ghobject_t(h, NO_GEN, shard);
   }
 
   bool match(uint32_t bits, uint32_t match) const {
