@@ -8278,6 +8278,27 @@ void MDCache::dispatch(const cref_t<Message> &m)
  *   5. Lock non-directory inodes according to inode numbers, in ascending
  *      order.
  */
+int MDCache::check_fscrypt_access(const MDRequestRef& mdr, CInode *in, bool acquire_lock)
+{
+  const cref_t<MClientRequest> &req = mdr->client_request;
+
+  if (acquire_lock) {
+    MutationImpl::LockOpVec lov;
+    /* We need 'As' caps for the fscrypt context */
+    lov.add_rdlock(&in->authlock);
+    if (!mds->locker->acquire_locks(mdr, lov)) {
+      dout(10) << "traverse: failed to rdlock" << dendl;
+      return 1; /* XXX */
+    }
+  }
+  if (!in->get_inode()->fscrypt_auth.empty()) {
+    dout(10) << "blocking '" << ceph_mds_op_name(req->get_op())
+             << "' operation in encrypted node" << dendl;
+    return -CEPHFS_EROFS;
+  }
+
+  return 0;
+}
 
 int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
                            const filepath& path, int flags,
@@ -8294,6 +8315,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
   bool xlock_dentry = (flags & MDS_TRAVERSE_XLOCK_DENTRY);
   bool rdlock_authlock = (flags & MDS_TRAVERSE_RDLOCK_AUTHLOCK);
   bool forimport = (flags & MDS_TRAVERSE_IMPORT);
+  bool fscrypt_rdlock_authlock = false;
 
   if (forward)
     ceph_assert(mdr);  // forward requires a request
@@ -8329,6 +8351,25 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
   if (flags & MDS_TRAVERSE_CHECK_LOCKCACHE)
     mds->locker->find_and_attach_lock_cache(mdr, cur);
 
+  if (mdr) {
+    const cref_t<MClientRequest> &req = mdr->client_request;
+    Session *session = mds->get_session(req);
+    if (session && !session->info.has_feature(CEPHFS_FEATURE_ALTERNATE_NAME) &&
+	req->get_op() != CEPH_MDS_OP_LOOKUP &&
+	req->get_op() != CEPH_MDS_OP_LOOKUPHASH &&
+	req->get_op() != CEPH_MDS_OP_LOOKUPPARENT &&
+	req->get_op() != CEPH_MDS_OP_LOOKUPINO &&
+	req->get_op() != CEPH_MDS_OP_LOOKUPNAME &&
+	req->get_op() != CEPH_MDS_OP_LOOKUPSNAP &&
+	req->get_op() != CEPH_MDS_OP_RMSNAP &&
+	req->get_op() != CEPH_MDS_OP_LSSNAP &&
+	req->get_op() != CEPH_MDS_OP_GETATTR &&
+	req->get_op() != CEPH_MDS_OP_READDIR &&
+	req->get_op() != CEPH_MDS_OP_UNLINK &&
+	req->get_op() != CEPH_MDS_OP_RMDIR) {
+      fscrypt_rdlock_authlock = true;
+    }
+  }
   if (mdr && mdr->lock_cache) {
     if (flags & MDS_TRAVERSE_WANT_DIRLAYOUT)
       mdr->dir_layout = mdr->lock_cache->get_dir_layout();
@@ -8472,7 +8513,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	  if (depth > 0 || !mdr->lock_cache) {
 	    lov.add_wrlock(&cur->filelock);
 	    lov.add_wrlock(&cur->nestlock);
-	    if (rdlock_authlock)
+	    if (rdlock_authlock || (!depth && fscrypt_rdlock_authlock))
 	      lov.add_rdlock(&cur->authlock);
 	  }
 	  lov.add_xlock(&dn->lock);
@@ -8480,23 +8521,44 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	  // force client to flush async dir operation if necessary
 	  if (cur->filelock.is_cached())
 	    lov.add_wrlock(&cur->filelock);
+	  if (!depth && fscrypt_rdlock_authlock)
+	    lov.add_rdlock(&cur->authlock);
 	  lov.add_rdlock(&dn->lock);
 	}
 	if (!mds->locker->acquire_locks(mdr, lov)) {
 	  dout(10) << "traverse: failed to rdlock " << dn->lock << " " << *dn << dendl;
 	  return 1;
 	}
+	if (!depth && fscrypt_rdlock_authlock) {
+	  r = check_fscrypt_access(mdr, cur);
+	  if (r)
+	    return r;
+	}
       } else if (!path_locked &&
 		 !dn->lock.can_read(client) &&
 		 !(dn->lock.is_xlocked() && dn->lock.get_xlock_by() == mdr)) {
 	dout(10) << "traverse: non-readable dentry at " << *dn << dendl;
+
+	if (!depth && fscrypt_rdlock_authlock) {
+	  r = check_fscrypt_access(mdr, cur, true);
+	  if (r)
+	    return r;
+	}
+
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, cf.build());
 	if (mds->logger)
 	  mds->logger->inc(l_mds_traverse_lock);
 	if (dn->is_auth() && dn->lock.is_unstable_and_locked())
 	  mds->mdlog->flush();
 	return 1;
+      } else {
+	if (!depth && fscrypt_rdlock_authlock) {
+	  r = check_fscrypt_access(mdr, cur, true);
+	  if (r)
+	    return r;
+	}
       }
+
 
       if (pdnvec)
 	pdnvec->push_back(dn);
@@ -8573,6 +8635,8 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	   !curdir->is_in_bloom(path[depth]))) {
         // file not found
 	if (pdnvec) {
+	  bool need_lock = true;
+
 	  // instantiate a null dn?
 	  if (depth < path.depth() - 1) {
 	    dout(20) << " didn't traverse full path; not returning pdnvec" << dendl;
@@ -8593,7 +8657,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 		if (depth > 0 || !mdr->lock_cache) {
 		  lov.add_wrlock(&cur->filelock);
 		  lov.add_wrlock(&cur->nestlock);
-		  if (rdlock_authlock)
+		  if (rdlock_authlock || (!depth && fscrypt_rdlock_authlock))
 		    lov.add_rdlock(&cur->authlock);
 		}
 		lov.add_xlock(&dn->lock);
@@ -8601,13 +8665,21 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 		// force client to flush async dir operation if necessary
 		if (cur->filelock.is_cached())
 		  lov.add_wrlock(&cur->filelock);
+	        if (!depth && fscrypt_rdlock_authlock)
+	          lov.add_rdlock(&cur->authlock);
 		lov.add_rdlock(&dn->lock);
 	      }
 	      if (!mds->locker->acquire_locks(mdr, lov)) {
 		dout(10) << "traverse: failed to rdlock " << dn->lock << " " << *dn << dendl;
 		return 1;
 	      }
+	      need_lock = false;
 	    }
+	  }
+	  if (!depth && fscrypt_rdlock_authlock) {
+	    r = check_fscrypt_access(mdr, cur, need_lock);
+	    if (r)
+	      return r;
 	  }
 	  if (dn) {
 	    pdnvec->push_back(dn);
@@ -8628,6 +8700,11 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
           return -CEPHFS_EIO;
         }
 
+	if (!depth && fscrypt_rdlock_authlock) {
+	  r = check_fscrypt_access(mdr, cur, true);
+	  if (r)
+	    return r;
+	}
 	// directory isn't complete; reload
         dout(7) << "traverse: incomplete dir contents for " << *cur << ", fetching" << dendl;
         touch_inode(cur);
@@ -8636,8 +8713,13 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
         return 1;
       }
     } else {
-      // dirfrag/dentry is not mine.
+      if (!depth && fscrypt_rdlock_authlock) {
+	r = check_fscrypt_access(mdr, cur, true);
+	if (r)
+	  return r;
+      }
 
+      // dirfrag/dentry is not mine.
       if (forward &&
 	  mdr && mdr->client_request &&
 	  (int)depth < mdr->client_request->get_num_fwd()){
@@ -8681,6 +8763,11 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
     dout(7) << "no tail dentry, base " << *cur << dendl;
     if (want_dentry && !want_inode) {
       return -CEPHFS_ENOENT;
+    }
+    if (fscrypt_rdlock_authlock) {
+      r = check_fscrypt_access(mdr, cur, true);
+      if (r)
+        return r;
     }
     target_inode = cur;
   }
