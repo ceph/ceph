@@ -1666,6 +1666,12 @@ protected:
     return osdmap ? osdmap->get_epoch() : 0;
   }
 
+  /* When handling OSDMaps pg_num_history is used to
+   * track any changes to number of PGs of each pool
+   * to be used later in order to identify PG splits and merges.
+   * See: OSD::track_pools_and_pg_num_changes
+   *      and OSDService::identify_splits_and_merges.
+   */
   pool_pg_num_history_t pg_num_history;
 
   ceph::shared_mutex map_lock = ceph::make_shared_mutex("OSD::map_lock");
@@ -1674,6 +1680,10 @@ protected:
   friend struct send_map_on_destruct;
 
   void handle_osd_map(class MOSDMap *m);
+  void track_pools_and_pg_num_changes(const std::map<epoch_t,OSDMapRef>& added_maps,
+                                      ObjectStore::Transaction& t,
+                                      epoch_t first,
+                                      epoch_t last);
   void _committed_osd_maps(epoch_t first, epoch_t last, class MOSDMap *m);
   void trim_maps(epoch_t oldest);
   void note_down_osd(int osd);
