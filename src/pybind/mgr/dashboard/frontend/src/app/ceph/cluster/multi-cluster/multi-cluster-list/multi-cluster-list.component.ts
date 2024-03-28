@@ -1,4 +1,4 @@
-import { Component, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -18,18 +18,21 @@ import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MultiCluster } from '~/app/shared/models/multi-cluster';
 import { Router } from '@angular/router';
 import { CookiesService } from '~/app/shared/services/cookie.service';
+import { Observable, Subscription } from 'rxjs';
+import { SettingsService } from '~/app/shared/api/settings.service';
 
 @Component({
   selector: 'cd-multi-cluster-list',
   templateUrl: './multi-cluster-list.component.html',
   styleUrls: ['./multi-cluster-list.component.scss']
 })
-export class MultiClusterListComponent {
+export class MultiClusterListComponent implements OnInit, OnDestroy {
   @ViewChild(TableComponent)
   table: TableComponent;
   @ViewChild('urlTpl', { static: true })
   public urlTpl: TemplateRef<any>;
 
+  private subs = new Subscription();
   permissions: Permissions;
   tableActions: CdTableAction[];
   clusterTokenStatus: object = {};
@@ -42,9 +45,12 @@ export class MultiClusterListComponent {
   modalRef: NgbModalRef;
   hubUrl: string;
   currentUrl: string;
+  icons = Icons;
+  managedByConfig$: Observable<any>;
 
   constructor(
     private multiClusterService: MultiClusterService,
+    private settingsService: SettingsService,
     private router: Router,
     public actionLabels: ActionLabelsI18n,
     private notificationService: NotificationService,
@@ -86,15 +92,17 @@ export class MultiClusterListComponent {
   }
 
   ngOnInit(): void {
-    this.multiClusterService.subscribe((resp: object) => {
-      if (resp && resp['config']) {
-        this.hubUrl = resp['hub_url'];
-        this.currentUrl = resp['current_url'];
-        const clusterDetailsArray = Object.values(resp['config']).flat();
-        this.data = clusterDetailsArray;
-        this.checkClusterConnectionStatus();
-      }
-    });
+    this.subs.add(
+      this.multiClusterService.subscribe((resp: object) => {
+        if (resp && resp['config']) {
+          const clusterDetailsArray = Object.values(resp['config']).flat();
+          this.data = clusterDetailsArray;
+          this.checkClusterConnectionStatus();
+        }
+      })
+    );
+
+    this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
 
     this.columns = [
       {
@@ -133,10 +141,16 @@ export class MultiClusterListComponent {
       }
     ];
 
-    this.multiClusterService.subscribeClusterTokenStatus((resp: object) => {
-      this.clusterTokenStatus = resp;
-      this.checkClusterConnectionStatus();
-    });
+    this.subs.add(
+      this.multiClusterService.subscribeClusterTokenStatus((resp: object) => {
+        this.clusterTokenStatus = resp;
+        this.checkClusterConnectionStatus();
+      })
+    );
+  }
+
+  ngOnDestroy() {
+    this.subs.unsubscribe();
   }
 
   checkClusterConnectionStatus() {
