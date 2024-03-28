@@ -6,6 +6,7 @@ from random import randint, choice
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
+from teuthology.contextutil import safe_while
 from tasks.cephfs.fuse_mount import FuseMount
 
 log = logging.getLogger(__name__)
@@ -520,7 +521,7 @@ class TestFailover(CephFSTestCase):
 
 
 class TestStandbyReplay(CephFSTestCase):
-    CLIENTS_REQUIRED = 0
+    CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 4
 
     def _confirm_no_replay(self):
@@ -705,6 +706,64 @@ class TestStandbyReplay(CephFSTestCase):
 
         status = self._confirm_single_replay()
         self.assertTrue(standby_count, len(list(status.get_standbys())))
+
+    def test_health_warn_oversize_cache_has_no_counters(self):
+        '''
+        Test that when MDS cache size crosses the limit, health warning printed
+        for standy-replay MDS doesn't include inode and stray counters.
+
+        Tests: https://tracker.ceph.com/issues/63514
+        '''
+        # reduce MDS cache limit, default MDS cache limit is too high which
+        # will unnecessarily consume too many resources and too much time.
+        self.run_ceph_cmd('config set mds mds_cache_memory_limit 10M')
+        # health warning for crossing MDS cache size limit won't be raised
+        # until a threshold. default threshold is too high. it will
+        # unnecssarily consume so much time and resources.
+        self.run_ceph_cmd('config set mds mds_health_cache_threshold 1.000001')
+        # so that there is only active MDS and only 1 health warning is
+        # produced. presence of 2 warning should cause this test to fail
+        self.fs.set_max_mds(1)
+        self.run_ceph_cmd(f'fs set {self.fs.name} allow_standby_replay true')
+        self._confirm_single_replay()
+        self.fs.wait_for_daemons()
+        # The call above (to self.fs.wait_for_daemons()) should ensure we have
+        # only 1 active MDS on cluster
+        active_mds_id = self.fs.get_active_names()[0]
+        sr_mds_id = self.fs.get_standby_replay_names()[0]
+        import pdb; pdb.set_trace()
+
+        tar_link = 'https://download.ceph.com/qa/linux-6.5.11.tar.xz'
+        tar_name = 'linux-6.5.11.tar.xz'
+        log.info(f'active_mds_id = {active_mds_id}')
+        # TODO: following helps with locaing testing
+        self.mount_a.run_shell(f'cp ~/Downloads/{tar_name} ./')
+        #self.mount_a.run_shell(f'wget {tar_link}')
+        tar_proc = self.mount_a.run_shell(f'tar -xv -f {tar_name}',
+                                          timeout=10, terminate=True)
+
+        # actual test begins now...
+        errmsg = ('this test didn\'t generate health warning it was supposed '
+                  'to. health report has been logged above.')
+        with safe_while(sleep=2, tries=3, action=errmsg) as proceed:
+            check_now = False
+            while proceed():
+                cache_consumed = self.get_ceph_cmd_stdout(
+                    f'daemon mds.{active_mds_id} cache status')
+                log.info(f'cache_consumed = {cache_consumed}')
+
+                health_report = self.get_ceph_cmd_stdout('health detail')
+                log.info(health_report)
+                for line in health_report.split('\n'):
+                    if check_now:
+                        if f'mds.{sr_mds_id}' not in line:
+                            check_now = False
+                            continue
+                        self.assertNotIn('inodes in use by clients', line)
+                        self.assertNotIn('stray files', line)
+                        break
+                    if line.find('MDS_CACHE_OVERSIZED') != -1:
+                        check_now = True
 
 
 class TestMultiFilesystems(CephFSTestCase):
