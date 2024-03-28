@@ -112,19 +112,24 @@ void RGWLifecycleConfiguration_S3::decode_xml(XMLObj *obj)
 
 void LCFilter_S3::dump_xml(Formatter *f) const
 {
-  if (has_prefix()) {
-    encode_xml("Prefix", prefix, f);
-  }
   bool multi = has_multi_condition();
   if (multi) {
     f->open_array_section("And");
+  }
+  if (has_prefix()) {
+    encode_xml("Prefix", prefix, f);
   }
   if (has_tags()) {
     const auto& tagset_s3 = static_cast<const RGWObjTagSet_S3 &>(obj_tags);
     tagset_s3.dump_xml(f);
   }
+  if (has_flags()) {
+    if (have_flag(LCFlagType::ArchiveZone)) {
+      encode_xml("ArchiveZone", "", f);
+    }
+  }
   if (multi) {
-    f->close_section();
+    f->close_section(); // And
   }
 }
 
@@ -139,15 +144,21 @@ void LCFilter_S3::decode_xml(XMLObj *obj)
    * Empty filters are allowed:
    * https://docs.aws.amazon.com/AmazonS3/latest/dev/intro-lifecycle-rules.html
    */
-  XMLObj *o = obj->find_first("And");
+  XMLObj* o = obj->find_first("And");
   if (o == nullptr){
     o = obj;
   }
 
   RGWXMLDecoder::decode_xml("Prefix", prefix, o);
+
+  /* parse optional ArchiveZone flag (extension) */
+  if (o->find_first("ArchiveZone")) {
+    flags |= make_flag(LCFlagType::ArchiveZone);
+  }
+
+  obj_tags.clear(); // why is this needed?
   auto tags_iter = o->find("Tag");
-  obj_tags.clear();
-  while (auto tag_xml =tags_iter.get_next()){
+  while (auto tag_xml = tags_iter.get_next()){
     std::string _key,_val;
     RGWXMLDecoder::decode_xml("Key", _key, tag_xml);
     RGWXMLDecoder::decode_xml("Value", _val, tag_xml);

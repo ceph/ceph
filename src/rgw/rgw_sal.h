@@ -1468,6 +1468,8 @@ class Zone {
     virtual bool has_zonegroup_api(const std::string& api) const = 0;
     /** Get the current period ID for this zone */
     virtual const std::string& get_current_period_id() = 0;
+    /** Get the tier type for the zone */
+    virtual const std::string_view get_tier_type() = 0;
 };
 
 /**

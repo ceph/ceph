@@ -16,6 +16,7 @@
 #include "include/scope_guard.h"
 #include "common/Formatter.h"
 #include "common/containers.h"
+#include "common/split.h"
 #include <common/errno.h>
 #include "include/random.h"
 #include "cls/lock/cls_lock_client.h"
@@ -43,6 +44,9 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+constexpr int32_t hours_in_a_day = 24;
+constexpr int32_t secs_in_a_day = hours_in_a_day * 60 * 60;
 
 using namespace std;
 
@@ -150,10 +154,10 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
   } else {
     prefix = rule.get_prefix();
   }
-
   if (rule.get_filter().has_tags()){
     op.obj_tags = rule.get_filter().get_tags();
   }
+  op.rule_flags = rule.get_filter().get_flags();
   prefix_map.emplace(std::move(prefix), std::move(op));
   return true;
 }
@@ -350,7 +354,7 @@ static bool obj_has_expired(const DoutPrefixProvider *dpp, CephContext *cct, cep
   utime_t base_time;
   if (cct->_conf->rgw_lc_debug_interval <= 0) {
     /* Normal case, run properly */
-    cmp = double(days)*24*60*60;
+    cmp = double(days) * secs_in_a_day;
     base_time = ceph_clock_now().round_to_day();
   } else {
     /* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
@@ -975,7 +979,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
   worker->workpool->drain();
   return 0;
-}
+} /* RGWLC::handle_multipart_expiration */
 
 static int read_obj_tags(const DoutPrefixProvider *dpp, rgw::sal::Object* obj, RGWObjectCtx& ctx, bufferlist& tags_bl)
 {
@@ -993,6 +997,16 @@ static bool is_valid_op(const lc_op& op)
                || op.dm_expiration
                || !op.transitions.empty()
                || !op.noncur_transitions.empty()));
+}
+
+static bool zone_check(const lc_op& op, rgw::sal::Zone* zone)
+{
+
+  if (zone->get_tier_type() == "archive") {
+    return (op.rule_flags & uint32_t(LCFlagType::ArchiveZone));
+  } else {
+    return (! (op.rule_flags & uint32_t(LCFlagType::ArchiveZone)));
+  }
 }
 
 static inline bool has_all_tags(const lc_op& rule_action,
@@ -1768,6 +1782,9 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       return -1;
     }
 
+  /* fetch information for zone checks */
+  rgw::sal::Zone* zone = store->get_zone();
+
   auto pf = [](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
     auto wt =
       boost::get<std::tuple<LCOpRule, rgw_bucket_dir_entry>>(wi);
@@ -1820,11 +1837,17 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     LCObjsLister ol(store, bucket.get());
     ol.set_prefix(prefix_iter->first);
 
+    if (! zone_check(op, zone)) {
+      ldpp_dout(this, 7) << "LC rule not executable in " << zone->get_tier_type()
+			 << " zone, skipping" << dendl;
+      continue;
+    }
+
     ret = ol.init(this);
     if (ret < 0) {
       if (ret == (-ENOENT))
         return 0;
-      ldpp_dout(this, 0) << "ERROR: store->list_objects():" <<dendl;
+      ldpp_dout(this, 0) << "ERROR: store->list_objects():" << dendl;
       return ret;
     }
 
@@ -2015,8 +2038,7 @@ int RGWLC::process(LCWorker* worker,
 bool RGWLC::expired_session(time_t started)
 {
   time_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
-    ? cct->_conf->rgw_lc_debug_interval
-    : 24*60*60;
+    ? cct->_conf->rgw_lc_debug_interval : secs_in_a_day;
 
   auto now = time(nullptr);
 
@@ -2032,8 +2054,7 @@ bool RGWLC::expired_session(time_t started)
 time_t RGWLC::thread_stop_at()
 {
   uint64_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
-    ? cct->_conf->rgw_lc_debug_interval
-    : 24*60*60;
+    ? cct->_conf->rgw_lc_debug_interval : secs_in_a_day;
 
   return time(nullptr) + interval;
 }
@@ -2293,6 +2314,12 @@ bool RGWLC::LCWorker::should_work(utime_t& now)
   time_t tt = now.sec();
   localtime_r(&tt, &bdt);
 
+  // next-day adjustment if the configured end_hour is less than start_hour
+  if (end_hour < start_hour) {
+    bdt.tm_hour = bdt.tm_hour > end_hour ? bdt.tm_hour : bdt.tm_hour + hours_in_a_day;
+    end_hour += hours_in_a_day;
+  }
+
   if (cct->_conf->rgw_lc_debug_interval > 0) {
 	  /* We're debugging, so say we can run */
 	  return true;
@@ -2333,7 +2360,7 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
   nt = mktime(&bdt);
   secs = nt - tt;
 
-  return secs>0 ? secs : secs+24*60*60;
+  return secs > 0 ? secs : secs + secs_in_a_day;
 }
 
 RGWLC::LCWorker::~LCWorker()
@@ -2402,16 +2429,21 @@ int RGWLC::set_bucket_config(rgw::sal::Bucket* bucket,
                          const rgw::sal::Attrs& bucket_attrs,
                          RGWLifecycleConfiguration *config)
 {
+  int ret{0};
   rgw::sal::Attrs attrs = bucket_attrs;
-  bufferlist lc_bl;
-  config->encode(lc_bl);
+  if (config) {
+    /* if no RGWLifecycleconfiguration provided, it means
+     * RGW_ATTR_LC is already valid and present */
+    bufferlist lc_bl;
+    config->encode(lc_bl);
+    attrs[RGW_ATTR_LC] = std::move(lc_bl);
 
-  attrs[RGW_ATTR_LC] = std::move(lc_bl);
-
-  int ret =
-    bucket->merge_and_store_attrs(this, attrs, null_yield);
-  if (ret < 0)
-    return ret;
+    ret =
+      bucket->merge_and_store_attrs(this, attrs, null_yield);
+    if (ret < 0) {
+      return ret;
+    }
+  }
 
   rgw_bucket& b = bucket->get_key();
 
@@ -2614,7 +2646,7 @@ std::string s3_expiration_header(
       if (rule_expiration.has_days()) {
 	rule_expiration_date =
 	  boost::optional<ceph::real_time>(
-	    mtime + make_timespan(double(rule_expiration.get_days())*24*60*60 - ceph::real_clock::to_time_t(mtime)%(24*60*60) + 24*60*60));
+	    mtime + make_timespan(double(rule_expiration.get_days()) * secs_in_a_day - ceph::real_clock::to_time_t(mtime)%(secs_in_a_day) + secs_in_a_day));
       }
     }
 
@@ -2693,7 +2725,7 @@ bool s3_multipart_abort_header(
     std::optional<ceph::real_time> rule_abort_date;
     if (mp_expiration.has_days()) {
       rule_abort_date = std::optional<ceph::real_time>(
-              mtime + make_timespan(mp_expiration.get_days()*24*60*60 - ceph::real_clock::to_time_t(mtime)%(24*60*60) + 24*60*60));
+              mtime + make_timespan(mp_expiration.get_days() * secs_in_a_day - ceph::real_clock::to_time_t(mtime)%(secs_in_a_day) + secs_in_a_day));
     }
 
     // update earliest abort date
@@ -2749,6 +2781,9 @@ void LCFilter::dump(Formatter *f) const
 {
   f->dump_string("prefix", prefix);
   f->dump_object("obj_tags", obj_tags);
+  if (have_flag(LCFlagType::ArchiveZone)) {
+    f->dump_string("archivezone", "");
+  }
 }
 
 void LCExpiration::dump(Formatter *f) const
