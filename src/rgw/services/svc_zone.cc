@@ -76,7 +76,10 @@ bool RGWSI_Zone::zone_syncs_from(const RGWZone& source_zone) const
       break;
     }
   }
-  return found && target_zone.syncs_from(source_zone.name) &&
+
+#warning conditional
+  bool can_sync_from = found && (target_zone.syncs_from(source_zone.name) || target_zone.id == source_zone.id);
+  return can_sync_from &&
          sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
 }
 
@@ -347,9 +350,12 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   for (const auto& ziter : zonegroup->zones) {
     const rgw_zone_id& id = ziter.first;
     const RGWZone& z = ziter.second;
+#warning make this conditional
+#if 0
     if (id == zone_id()) {
       continue;
     }
+#endif
     if (z.endpoints.empty()) {
       ldpp_dout(dpp, 0) << "WARNING: can't generate connection for zone " << z.id << " id " << z.name << ": no endpoints defined" << dendl;
       continue;
@@ -729,7 +735,10 @@ bool RGWSI_Zone::need_to_sync() const
 
 bool RGWSI_Zone::need_to_log_data() const
 {
-  return (zone_public_config->log_data && sync_module_exports_data());
+#warning FIXME
+#if 1
+  return ((1 || zone_public_config->log_data) && sync_module_exports_data());
+#endif
 }
 
 bool RGWSI_Zone::is_meta_master() const

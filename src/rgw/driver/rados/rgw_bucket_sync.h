@@ -317,6 +317,9 @@ class RGWBucketSyncPolicyHandler {
     return !sources.empty() || !resolved_sources.empty();
   }
 
+  void allow_local_sync(RGWSI_Zone *zone_svc,
+                         rgw_sync_policy_info& policy);
+
   RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicyHandler *_parent,
                              const RGWBucketInfo& _bucket_info,
                              std::map<std::string, bufferlist>&& _bucket_attrs);

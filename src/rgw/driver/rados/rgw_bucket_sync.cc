@@ -191,7 +191,8 @@ void rgw_sync_group_pipe_map::init(const DoutPrefixProvider *dpp,
   for (auto& symmetrical_group : flow.symmetrical) {
     if (symmetrical_group.zones.find(zone) != symmetrical_group.zones.end()) {
       for (auto& z : symmetrical_group.zones) {
-        if (z != zone) {
+#warning conditional
+        if (1 || z != zone) {
           pall_zones->insert(z);
           try_add_source(z, zone, zone_pipes, filter_cb);
           try_add_dest(zone, z, zone_pipes, filter_cb);
@@ -205,7 +206,8 @@ void rgw_sync_group_pipe_map::init(const DoutPrefixProvider *dpp,
     if (rule.source_zone == zone) {
       pall_zones->insert(rule.dest_zone);
       try_add_dest(zone, rule.dest_zone, zone_pipes, filter_cb);
-    } else if (rule.dest_zone == zone) {
+    }
+    if (rule.dest_zone == zone) {
       pall_zones->insert(rule.source_zone);
       try_add_source(rule.source_zone, zone, zone_pipes, filter_cb);
     }
@@ -743,6 +745,31 @@ void RGWSyncPolicyCompat::convert_old_sync_config(RGWSI_Zone *zone_svc,
   *ppolicy = std::move(policy);
 }
 
+void RGWBucketSyncPolicyHandler::allow_local_sync(RGWSI_Zone *zone_svc,
+                                                   rgw_sync_policy_info& policy)
+{
+  bool found = false;
+
+  auto& group = policy.groups[".local."];
+  auto& zonegroup = zone_svc->get_zonegroup();
+
+  auto& id = zone_svc->get_zone().id;
+
+  rgw_sync_directional_rule *rule;
+  group.data_flow.find_or_create_directional(id,
+                                             id,
+                                             &rule);
+
+  rgw_sync_bucket_pipes pipes;
+  pipes.id = "all";
+  pipes.source.all_zones = true;
+  pipes.dest.all_zones = true;
+
+  group.pipes.emplace_back(std::move(pipes));
+
+  group.status = rgw_sync_policy_group::Status::ALLOWED;
+}
+
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
                                                        RGWSI_SyncModules *sync_modules_svc,
 						       RGWSI_Bucket_Sync *_bucket_sync_svc,
@@ -759,6 +786,8 @@ RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
     RGWSyncPolicyCompat::convert_old_sync_config(zone_svc, sync_modules_svc, &sync_policy);
     legacy_config = true;
   }
+
+  allow_local_sync(zone_svc, sync_policy);
 }
 
 RGWBucketSyncPolicyHandler::RGWBucketSyncPolicyHandler(const RGWBucketSyncPolicyHandler *_parent,
