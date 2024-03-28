@@ -83,6 +83,9 @@ public:
     std::lock_guard l{lock};
     return values;
   }
+  md_config_t& get_config() {
+    return config;
+  }
   void set_config_values(const ConfigValues& val) {
 #ifndef WITH_SEASTAR
     std::lock_guard l{lock};
