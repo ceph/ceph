@@ -74,7 +74,10 @@ RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
 {
   ldout(cct, 20) << __func__ << " destruct." << dendl;
   cleanup();
-  worker->remove_pending_conn(this);
+  //create qp failed, pending_conn not exist, so skip.
+  if(qp) {
+    worker->remove_pending_conn(this);
+  }
   dispatcher->schedule_qp_destroy(local_qpn);
 
   for (unsigned i=0; i < wc.size(); ++i) {
