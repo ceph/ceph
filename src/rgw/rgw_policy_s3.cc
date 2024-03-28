@@ -110,6 +110,7 @@ bool RGWPolicyEnv::match_policy_vars(map<string, bool, ltstr_nocase>& policy_var
     const string& var = iter->first;
     if (strncasecmp(ignore_prefix.c_str(), var.c_str(), ignore_prefix.size()) == 0)
       continue;
+    // XXXX checksum?  why is checksum needed by name here (imtz)?
     if (policy_vars.count(var) == 0) {
       err_msg = "Policy missing condition: ";
       err_msg.append(iter->first);
