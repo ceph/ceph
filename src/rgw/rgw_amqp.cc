@@ -130,7 +130,7 @@ struct connection_t {
   bool mandatory;
   bool use_ssl;
   bool verify_ssl;
-  boost::optional<const std::string&> ca_location;
+  boost::optional<std::string> ca_location;
   utime_t timestamp = ceph_clock_now();
 
   // default ctor
