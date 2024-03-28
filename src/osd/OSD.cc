@@ -6919,13 +6919,11 @@ void OSD::_send_boot()
     cluster_messenger->get_loopback_connection().get();
   entity_addrvec_t client_addrs = client_messenger->get_myaddrs();
   entity_addrvec_t cluster_addrs = cluster_messenger->get_myaddrs();
-  entity_addrvec_t hb_back_addrs = hb_back_server_messenger->get_myaddrs();
-  entity_addrvec_t hb_front_addrs = hb_front_server_messenger->get_myaddrs();
 
   dout(20) << " initial client_addrs " << client_addrs
 	   << ", cluster_addrs " << cluster_addrs
-	   << ", hb_back_addrs " << hb_back_addrs
-	   << ", hb_front_addrs " << hb_front_addrs
+	   << ", hb_back_addrs " << hb_back_server_messenger->get_myaddrs()
+	   << ", hb_front_addrs " << hb_front_server_messenger->get_myaddrs()
 	   << dendl;
   if (cluster_messenger->set_addr_unknowns(client_addrs)) {
     dout(10) << " assuming cluster_addrs match client_addrs "
@@ -6940,7 +6938,6 @@ void OSD::_send_boot()
   if (hb_back_server_messenger->set_addr_unknowns(cluster_addrs)) {
     dout(10) << " assuming hb_back_addrs match cluster_addrs "
 	     << cluster_addrs << dendl;
-    hb_back_addrs = hb_back_server_messenger->get_myaddrs();
   }
   if (auto session = local_connection->get_priv(); !session) {
     hb_back_server_messenger->ms_deliver_handle_fast_connect(local_connection);
@@ -6950,7 +6947,6 @@ void OSD::_send_boot()
   if (hb_front_server_messenger->set_addr_unknowns(client_addrs)) {
     dout(10) << " assuming hb_front_addrs match client_addrs "
 	     << client_addrs << dendl;
-    hb_front_addrs = hb_front_server_messenger->get_myaddrs();
   }
   if (auto session = local_connection->get_priv(); !session) {
     hb_front_server_messenger->ms_deliver_handle_fast_connect(local_connection);
@@ -6961,6 +6957,8 @@ void OSD::_send_boot()
   // are, so now is a good time!
   set_numa_affinity();
 
+  entity_addrvec_t hb_back_addrs = hb_back_server_messenger->get_myaddrs();
+  entity_addrvec_t hb_front_addrs = hb_front_server_messenger->get_myaddrs();
   MOSDBoot *mboot = new MOSDBoot(
     superblock, get_osdmap_epoch(), service.get_boot_epoch(),
     hb_back_addrs, hb_front_addrs, cluster_addrs,
