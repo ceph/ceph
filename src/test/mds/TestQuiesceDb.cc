@@ -514,8 +514,10 @@ TEST_F(QuiesceDbTest, QuiesceRequestValidation)
           << bool(expiration) << ", await: " 
           << bool(await) << ", roots.size(): " << roots.size();
       } else {
-        // if set id is provided, all goes
-        if (set_id) {
+        if (!r.is_awaitable() && r.await) {
+          EXPECT_FALSE(r.is_valid());
+        } else if (set_id) {
+          // if set id is provided, all goes
           EXPECT_TRUE(r.is_valid())
             << "op: " << r.op_string() << ", set_id: " << bool(set_id) 
             << ", if_version: " << bool(if_version) 

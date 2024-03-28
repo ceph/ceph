@@ -61,6 +61,16 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
   bool op_cancel = cmd_getval_or<bool>(cmdmap, "cancel", false);
   bool all = cmd_getval_or<bool>(cmdmap, "all", false);
   std::optional<std::string> set_id = cmd_getval<std::string>(cmdmap, "set_id");
+  auto await = [&]() -> std::optional<QuiesceTimeInterval> {
+    double timeout;
+    if (cmd_getval(cmdmap, "await_for", timeout)) {
+      return duration_cast<QuiesceTimeInterval>(dd(timeout));
+    } else if (cmd_getval_or<bool>(cmdmap, "await", false)) {
+      return QuiesceTimeInterval::max();
+    } else {
+      return std::nullopt;
+    }
+  }();
 
   auto roots = cmd_getval_or<std::vector<std::string>>(cmdmap, "roots", std::vector<std::string> {});
 
@@ -71,7 +81,11 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
     on_finish(-EINVAL, "Operations [include, exclude, reset, release, cancel, query] are mutually exclusive", bl);
     return;
   } else if (all_ops == 0) {
-    op_include = true;
+    if (roots.empty()) {
+      op_query = true;
+    } else {
+      op_include = true;
+    }
   }
 
   if ((op_release || op_cancel) && roots.size() > 0) {
@@ -107,6 +121,12 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
   if (!quiesce_db_manager) {
     bufferlist bl;
     on_finish(-EFAULT, "No quiesce db manager instance", bl);
+    return;
+  }
+
+  if ((op_query || op_cancel) && await) {
+    bufferlist bl;
+    on_finish(-EINVAL, "Operations [query, cancel] don't support `--await`", bl);
     return;
   }
 
@@ -203,12 +223,7 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
     }
 
     double timeout;
-
-    if (cmd_getval(cmdmap, "await_for", timeout)) {
-      r.await = duration_cast<QuiesceTimeInterval>(dd(timeout));
-    } else if (cmd_getval_or<bool>(cmdmap, "await", false)) {
-      r.await = QuiesceTimeInterval::max();
-    }
+    r.await = await;
 
     if (cmd_getval(cmdmap, "expiration", timeout)) {
       r.expiration = duration_cast<QuiesceTimeInterval>(dd(timeout));
