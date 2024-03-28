@@ -17,7 +17,9 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   styleUrls: ['./feedback.component.scss']
 })
 export class FeedbackComponent implements OnInit, OnDestroy {
-  title = 'Feedback';
+  action: string;
+  title = $localize`Feedback`;
+  resource = $localize`Issue`;
   project: any = [
     'dashboard',
     'block',
@@ -46,7 +48,9 @@ export class FeedbackComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit() {
+    this.action = this.actionLabels.CREATE;
     this.createForm();
+
     this.keySub = this.feedbackService.isKeyExist().subscribe({
       next: (data: boolean) => {
         this.isAPIKeySet = data;

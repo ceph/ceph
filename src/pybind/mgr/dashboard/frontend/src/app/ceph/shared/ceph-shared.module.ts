@@ -8,10 +8,11 @@ import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { SharedModule } from '~/app/shared/shared.module';
 import { DeviceListComponent } from './device-list/device-list.component';
 import { SmartListComponent } from './smart-list/smart-list.component';
+import { FeedbackListComponent } from './feedback/feedback-list/feedback-list.component';
 
 @NgModule({
   imports: [CommonModule, DataTableModule, SharedModule, NgbNavModule, NgxPipeFunctionModule],
   exports: [DeviceListComponent, SmartListComponent],
-  declarations: [DeviceListComponent, SmartListComponent]
+  declarations: [DeviceListComponent, SmartListComponent, FeedbackListComponent]
 })
 export class CephSharedModule {}

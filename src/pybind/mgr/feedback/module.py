@@ -57,9 +57,10 @@ class FeedbackModule(MgrModule):
         """
         Fetch issue list
         """
+        key = self.get_store('api_key')
         tracker_client = CephTrackerClient()
         try:
-            response = tracker_client.list_issues()
+            response = tracker_client.list_issues(key)
         except Exception:
             return HandleCommandResult(stderr="Error occurred. Try again later")
         return HandleCommandResult(stdout=str(response))
@@ -118,8 +119,9 @@ class FeedbackModule(MgrModule):
         return 'Successfully deleted API key'
 
     def get_issues(self):
+        key = self.get_store('api_key')
         tracker_client = CephTrackerClient()
-        return tracker_client.list_issues()
+        return tracker_client.list_issues(key)
 
     def validate_and_create_issue(self, project: str, tracker: str, subject: str, description: str, api_key=None):
         feedback = Feedback(Feedback.Project[project].value,

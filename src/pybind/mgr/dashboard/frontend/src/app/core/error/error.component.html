@@ -13,9 +13,17 @@
           <h3><b>{{ header }}</b></h3>
           <h4 class="mt-3"
               *ngIf="header !== message">{{ message }}</h4>
-          <h4 *ngIf="section"
+          <h4 *ngIf="section && section !== 'feedback'"
               i18n>Please consult the <a href="{{ docUrl }}">documentation</a> on how to configure and enable
                    the {{ sectionInfo }} management functionality.
+          </h4>
+          <h4 *ngIf="section == 'feedback'"
+              i18n>Redmine API key can be fetched from the <a href="https://tracker.ceph.com/my/api_key">official site.</a>
+            {{ feedbackAPISetCommand }}
+            <cd-copy-2-clipboard-button
+              [source]="feedbackAPISetCommand"
+              [byId]="false"
+              [showIconOnly]="true"></cd-copy-2-clipboard-button>
           </h4>
         </div>
       </div>
