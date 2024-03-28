@@ -97,7 +97,17 @@ class GatewayStub(object):
         self.list_subsystems = channel.unary_unary(
             '/Gateway/list_subsystems',
             request_serializer=gateway__pb2.list_subsystems_req.SerializeToString,
+            response_deserializer=gateway__pb2.subsystems_info_cli.FromString,
+        )
+        self.get_subsystems = channel.unary_unary(
+            '/Gateway/get_subsystems',
+            request_serializer=gateway__pb2.get_subsystems_req.SerializeToString,
             response_deserializer=gateway__pb2.subsystems_info.FromString,
+        )
+        self.set_ana_state = channel.unary_unary(
+            '/Gateway/set_ana_state',
+            request_serializer=gateway__pb2.ana_info.SerializeToString,
+            response_deserializer=gateway__pb2.req_status.FromString,
         )
         self.get_spdk_nvmf_log_flags_and_level = channel.unary_unary(
             '/Gateway/get_spdk_nvmf_log_flags_and_level',
@@ -243,6 +253,20 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def get_subsystems(self, request, context):
+        """Gets subsystems
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def set_ana_state(self, request, context):
+        """Set gateway ANA states
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def get_spdk_nvmf_log_flags_and_level(self, request, context):
         """Gets spdk nvmf log flags and level
         """
@@ -357,7 +381,17 @@ def add_GatewayServicer_to_server(servicer, server):
         'list_subsystems': grpc.unary_unary_rpc_method_handler(
             servicer.list_subsystems,
             request_deserializer=gateway__pb2.list_subsystems_req.FromString,
+            response_serializer=gateway__pb2.subsystems_info_cli.SerializeToString,
+        ),
+        'get_subsystems': grpc.unary_unary_rpc_method_handler(
+            servicer.get_subsystems,
+            request_deserializer=gateway__pb2.get_subsystems_req.FromString,
             response_serializer=gateway__pb2.subsystems_info.SerializeToString,
+        ),
+        'set_ana_state': grpc.unary_unary_rpc_method_handler(
+            servicer.set_ana_state,
+            request_deserializer=gateway__pb2.ana_info.FromString,
+            response_serializer=gateway__pb2.req_status.SerializeToString,
         ),
         'get_spdk_nvmf_log_flags_and_level': grpc.unary_unary_rpc_method_handler(
             servicer.get_spdk_nvmf_log_flags_and_level,
@@ -675,7 +709,41 @@ class Gateway(object):
                         metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/list_subsystems',
                                              gateway__pb2.list_subsystems_req.SerializeToString,
+                                             gateway__pb2.subsystems_info_cli.FromString,
+                                             options, channel_credentials,
+                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def get_subsystems(request,
+                       target,
+                       options=(),
+                       channel_credentials=None,
+                       call_credentials=None,
+                       insecure=False,
+                       compression=None,
+                       wait_for_ready=None,
+                       timeout=None,
+                       metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/get_subsystems',
+                                             gateway__pb2.get_subsystems_req.SerializeToString,
                                              gateway__pb2.subsystems_info.FromString,
+                                             options, channel_credentials,
+                                             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def set_ana_state(request,
+                      target,
+                      options=(),
+                      channel_credentials=None,
+                      call_credentials=None,
+                      insecure=False,
+                      compression=None,
+                      wait_for_ready=None,
+                      timeout=None,
+                      metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/set_ana_state',
+                                             gateway__pb2.ana_info.SerializeToString,
+                                             gateway__pb2.req_status.FromString,
                                              options, channel_credentials,
                                              insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
