@@ -1094,6 +1094,8 @@ class Module(MgrModule):
                                             'objects': pool_stats['objects'],
                                             'omap_bytes_used': pool_stats['omap_bytes_used'],
                                             'percent_used': pool_stats['percent_used'],
+                                            'max_raw_used_osd': pool_stats['max_raw_used_osd'],
+                                            'max_raw_used_rate': pool_stats['max_raw_used_rate'],
                                             'quota_bytes': pool_stats['quota_bytes'],
                                             'quota_objects': pool_stats['quota_objects'],
                                             'rd': pool_stats['rd'],
