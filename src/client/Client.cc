@@ -13862,7 +13862,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
 
   int xattr_flags = 0;
   if (!value)
-    xattr_flags |= CEPH_XATTR_REMOVE;
+    xattr_flags |= CEPH_XATTR_REMOVE | CEPH_XATTR_REMOVE2;
   if (flags & XATTR_CREATE)
     xattr_flags |= CEPH_XATTR_CREATE;
   if (flags & XATTR_REPLACE)
