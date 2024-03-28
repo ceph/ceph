@@ -1,0 +1,19 @@
+# Enable mgr modules now before any CephFS mounts are created by the mgr.  This
+# avoids the potential race of the mgr mounting CephFS and then getting failed
+# over by the monitors before the monitors have a chance to note the new client
+# session from the mgr beacon. In that case, the monitors will not blocklist
+# that client mount automatically so the MDS will eventually do the eviction
+# (and create a cluster log warning which we want to avoid).
+#
+# Note: ideally the mgr would gently stop mgr modules before respawning so that
+# the client mounts can be unmounted but this caused issues historically with
+# modules like the dashboard so an abrupt restart was chosen instead.
+
+mgrmodules:
+  sequential:
+    - print: "Enabling mgr modules"
+    # other fragments append to this
+
+tasks:
+  - sequential:
+      - mgrmodules
