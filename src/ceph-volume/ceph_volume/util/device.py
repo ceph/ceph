@@ -459,11 +459,11 @@ class Device(object):
     def device_type(self):
         self.load_blkid_api()
         if 'type' in self.sys_api:
-            return self.sys_api['type']
+            return self.sys_api.get('type')
         elif self.disk_api:
-            return self.disk_api['TYPE']
+            return self.disk_api.get('TYPE')
         elif self.blkid_api:
-            return self.blkid_api['TYPE']
+            return self.blkid_api.get('TYPE')
 
     @property
     def is_mpath(self):
@@ -477,9 +477,9 @@ class Device(object):
     def is_partition(self):
         self.load_blkid_api()
         if self.disk_api:
-            return self.disk_api['TYPE'] == 'part'
+            return self.disk_api.get('TYPE') == 'part'
         elif self.blkid_api:
-            return self.blkid_api['TYPE'] == 'part'
+            return self.blkid_api.get('TYPE') == 'part'
         return False
 
     @property
