@@ -740,7 +740,6 @@ void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
   }
 }
 
-
 int RGWPutObjTags_ObjStore_S3::get_params(optional_yield y)
 {
   RGWXMLParser parser;
@@ -3623,6 +3622,115 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
+int RGWGetObjAttrs_ObjStore_S3::get_params(optional_yield y)
+{
+  string err;
+  auto& env = s->info.env;
+  version_id = s->info.args.get("versionId");
+
+  auto hdr = env->get_optional("HTTP_X_AMZ_EXPECTED_BUCKET_OWNER");
+  if (hdr) {
+    expected_bucket_owner = *hdr;
+  }
+  hdr = env->get_optional("HTTP_X_AMZ_MAX_PARTS");
+  if (hdr) {
+    max_parts = strict_strtol(hdr->c_str(), 10, &err);
+    if (!err.empty()) {
+      s->err.message = "Invalid value for MaxParts: " + err;
+      ldpp_dout(s, 10) << "Invalid value for MaxParts " << *hdr << ": "
+		       << err << dendl;
+      return -ERR_INVALID_PART;
+    }
+  }
+  hdr = env->get_optional("HTTP_X_AMZ_PART_NUMBER_MARKER");
+  if (hdr) {
+    marker = strict_strtol(hdr->c_str(), 10, &err);
+    if (!err.empty()) {
+      s->err.message = "Invalid value for PartNumberMarker: " + err;
+      ldpp_dout(s, 10) << "Invalid value for PartNumberMarker " << *hdr << ": "
+		       << err << dendl;
+      return -ERR_INVALID_PART;
+    }
+  }
+
+  hdr = env->get_optional("HTTP_X_AMZ_OBJECT_ATTRIBUTES");
+  requested_attributes = recognize_attrs(*hdr);
+
+  /* XXX skipping SSE-C params for now */
+
+  return 0;
+} /* RGWGetObjAttrs_ObjStore_S3::get_params(...) */
+
+void RGWGetObjAttrs_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+
+  if (op_ret == 0) {
+    // x-amz-delete-marker: DeleteMarker // not sure we can plausibly do this?
+    dump_last_modified(s, lastmod);
+    dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+    // x-amz-request-charged: RequestCharged
+  }
+
+  end_header(s, this, to_mime_type(s->format));
+  dump_start(s);
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section("GetObjectAttributes");
+    if (requested_attributes & as_flag(ReqAttributes::Etag)) {
+      if (lo_etag.empty()) {
+       auto iter = attrs.find(RGW_ATTR_ETAG);
+       if (iter != attrs.end()) {
+	 lo_etag = iter->second.to_str();
+       }
+      }
+      s->formatter->dump_string("Etag", lo_etag);
+    }
+    if (requested_attributes & as_flag(ReqAttributes::Checksum)) {
+  /*
+   <Checksum>
+      <ChecksumCRC32>string</ChecksumCRC32>
+      <ChecksumCRC32C>string</ChecksumCRC32C>
+      <ChecksumSHA1>string</ChecksumSHA1>
+      <ChecksumSHA256>string</ChecksumSHA256>
+   </Checksum>
+  */
+    }
+    if (requested_attributes & as_flag(ReqAttributes::ObjectParts)) {
+    /*
+   <ObjectParts>
+      <IsTruncated>boolean</IsTruncated>
+      <MaxParts>integer</MaxParts>
+      <NextPartNumberMarker>integer</NextPartNumberMarker>
+      <PartNumberMarker>integer</PartNumberMarker>
+      <Part>
+         <ChecksumCRC32>string</ChecksumCRC32>
+         <ChecksumCRC32C>string</ChecksumCRC32C>
+         <ChecksumSHA1>string</ChecksumSHA1>
+         <ChecksumSHA256>string</ChecksumSHA256>
+         <PartNumber>integer</PartNumber>
+         <Size>long</Size>
+      </Part>
+      ...
+      <PartsCount>integer</PartsCount>
+   </ObjectParts>
+    */
+    }
+    if (requested_attributes & as_flag(ReqAttributes::ObjectSize)) {
+      s->formatter->dump_int("ObjectSize", s->obj_size);
+    }
+    if (requested_attributes & as_flag(ReqAttributes::StorageClass)) {
+    /*
+   <StorageClass>string</StorageClass>
+    */
+    }
+    s->formatter->close_section();
+  }
+  rgw_flush_formatter_and_reset(s, s->formatter);
+} /* RGWGetObjAttrs_ObjStore_S3::send_response */
+
 void RGWGetLC_ObjStore_S3::execute(optional_yield y)
 {
   config.set_ctx(s->cct);
@@ -4585,6 +4693,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data) const
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_get()
 {
+  /* XXX maybe we could replace this with an indexing operation */
   if (s->info.args.sub_resource_exists("encryption"))
     return nullptr;
 
@@ -4768,6 +4877,8 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
     return new RGWGetObjLayout_ObjStore_S3;
   } else if (is_tagging_op()) {
     return new RGWGetObjTags_ObjStore_S3;
+  } else if (is_attributes_op()) {
+    return new RGWGetObjAttrs_ObjStore_S3;
   } else if (is_obj_retention_op()) {
     return new RGWGetObjRetention_ObjStore_S3;
   } else if (is_obj_legal_hold_op()) {
