@@ -34,6 +34,7 @@ sensible.
     DiskPrediction module <diskprediction>
     Local pool module <localpool>
     RESTful module <restful>
+    Heartbeat Webhook module <heartbeat_webhook>
     Zabbix module <zabbix>
     Prometheus module <prometheus>
     Influx module <influx>
