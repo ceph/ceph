@@ -3396,7 +3396,7 @@ bool Server::check_dir_max_entries(const MDRequestRef& mdr, CDir *in)
                    in->inode->get_projected_inode()->dirstat.nsubdirs;
   if (dir_max_entries && size >= dir_max_entries) {
     dout(10) << "entries per dir " << *in << " size exceeds " << dir_max_entries << " (ENOSPC)" << dendl;
-    respond_to_request(mdr, -ENOSPC);
+    respond_to_request(mdr, -CEPHFS_ENOSPC);
     return false;
   }
   return true;
