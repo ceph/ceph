@@ -79,7 +79,12 @@ int Namespace<I>::create(librados::IoCtx& io_ctx, const std::string& name)
   return 0;
 
 rollback:
-  int ret_val = cls_client::namespace_remove(&default_ns_ctx, name);
+  int ret_val = ns_ctx.remove(RBD_DIRECTORY);
+  if (ret_val < 0 && ret_val != -ENOENT) {
+    lderr(cct) << "failed to remove image directory: " << cpp_strerror(ret_val) << dendl;
+  }
+
+  ret_val = cls_client::namespace_remove(&default_ns_ctx, name);
   if (ret_val < 0) {
     lderr(cct) << "failed to remove namespace: " << cpp_strerror(ret_val) << dendl;
   }
