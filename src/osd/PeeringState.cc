@@ -2663,6 +2663,10 @@ void PeeringState::activate(
 	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
       info.last_interval_started = info.history.same_interval_since;
+
+      // updating last_epoch_started ensures that last_update will not
+      // become divergent after activation completes.
+      pg_committed_to = info.last_update;
     }
   } else if (is_acting(pg_whoami)) {
     /* update last_epoch_started on acting replica to whatever the primary sent
@@ -2677,9 +2681,6 @@ void PeeringState::activate(
   auto &missing = pg_log.get_missing();
 
   min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
-  if (is_primary()) {
-    pg_committed_to = info.last_update;
-  }
   last_update_applied = info.last_update;
   last_rollback_info_trimmed_to_applied = pg_log.get_can_rollback_to();
 
