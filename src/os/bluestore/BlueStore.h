@@ -2972,13 +2972,19 @@ public:
 
 private:
   int _mount();
+  int _mount_readonly();
+  int _umount_readonly();
+
 public:
+  int mount_readonly() override;
+  int umount_readonly() override;
+
   int mount() override {
     return _mount();
   }
   int umount() override;
 
-  int open_db_environment(KeyValueDB **pdb, bool to_repair);
+  int open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair);
   int close_db_environment();
   BlueFS* get_bluefs();
 

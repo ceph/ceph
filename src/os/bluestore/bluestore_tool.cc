@@ -242,7 +242,7 @@ static void bluefs_import(
   }
   BlueStore bluestore(cct, path);
   KeyValueDB *db_ptr;
-  r = bluestore.open_db_environment(&db_ptr, false);
+  r = bluestore.open_db_environment(&db_ptr, false, false);
   if (r < 0) {
     cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
@@ -278,8 +278,8 @@ int main(int argc, char **argv)
   vector<string> devs;
   vector<string> devs_source;
   string dev_target;
-  string path;
-  string action;
+  string path, path_aux;
+  string action, action_aux;
   string log_file;
   string input_file;
   string dest_file;
@@ -295,6 +295,8 @@ int main(int argc, char **argv)
     ("help,h", "produce help message")
     (",i", po::value<string>(&osd_instance), "OSD instance. Requires access to monitor/ceph.conf")
     ("path", po::value<string>(&path), "bluestore path")
+    ("data-path", po::value<string>(&path_aux),
+      "--path alias, ignored if the latter is present")
     ("out-dir", po::value<string>(&out_dir), "output directory")
     ("input-file", po::value<string>(&input_file), "import file")
     ("dest-file", po::value<string>(&dest_file), "destination file")
@@ -309,6 +311,8 @@ int main(int argc, char **argv)
     ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'")
     ("sharding", po::value<string>(&new_sharding), "new sharding to apply")
     ("resharding-ctrl", po::value<string>(&resharding_ctrl), "gives control over resharding procedure details")
+    ("op", po::value<string>(&action_aux),
+      "--command alias, ignored if the latter is present")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
@@ -354,6 +358,26 @@ int main(int argc, char **argv)
     std::cerr << e.what() << std::endl;
     exit(EXIT_FAILURE);
   }
+  if (action != action_aux && !action.empty() && !action_aux.empty()) {
+    std::cerr
+      << " Ambiguous --op and --command options, please provide a single one."
+      << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  if (action.empty()) {
+    action.swap(action_aux);
+  }
+  if (!path_aux.empty()) {
+    if (path.empty()) {
+      path.swap(path_aux);
+    } else if (path != path_aux) {
+      std::cerr
+	<< " Ambiguous --data-path and --path options, please provide a single one."
+	<< std::endl;
+      exit(EXIT_FAILURE);
+    }
+  };
+
   // normalize path (remove ending '/' if any)
   if (path.size() > 1 && *(path.end() - 1) == '/') {
     path.resize(path.size() - 1);
@@ -1117,7 +1141,7 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
     }
-    int r = bluestore.open_db_environment(&db_ptr, true);
+    int r = bluestore.open_db_environment(&db_ptr, false, true);
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1135,7 +1159,7 @@ int main(int argc, char **argv)
   } else if (action == "show-sharding") {
     BlueStore bluestore(cct.get(), path);
     KeyValueDB *db_ptr;
-    int r = bluestore.open_db_environment(&db_ptr, false);
+    int r = bluestore.open_db_environment(&db_ptr, false, false);
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
