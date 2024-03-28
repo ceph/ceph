@@ -3345,6 +3345,8 @@ public:
   }
 
   /// methods to inject various errors fsck can repair
+  int get_shared_blob(const std::string& key,
+		       ceph::buffer::list& bl);
   void inject_broken_shared_blob_key(const std::string& key,
 			 const ceph::buffer::list& bl);
   void inject_no_shared_blob_key();
