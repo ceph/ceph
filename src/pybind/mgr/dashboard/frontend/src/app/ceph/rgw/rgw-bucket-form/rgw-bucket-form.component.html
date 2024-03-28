@@ -213,30 +213,34 @@
           </div>
         </fieldset>
 
-        <!-- Locking -->
-        <fieldset>
+        <!-- Object Locking -->
+        <fieldset *ngIf="!editing || (editing && bucketForm.getValue('lock_enabled'))">
           <legend class="cd-header"
-                  i18n>Locking</legend>
-
-          <!-- Locking enabled -->
+                  i18n>
+            Object Locking
+            <cd-help-text class="bc-legend-help">
+                Store objects using a write-once-read-many (WORM) model to help you prevent objects from being deleted or overwritten for a fixed amount of time or indefinitely.
+                Object Locking works only in versioned buckets.
+            </cd-help-text>
+          </legend>
+          <!-- Object Locking enable -->
           <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="lock_enabled"
-                       formControlName="lock_enabled"
-                       type="checkbox">
-                <label class="custom-control-label"
-                       for="lock_enabled"
-                       i18n>Enabled</label>
-                <cd-helper>
-                  <span i18n>Enables locking for the objects in the bucket. Locking can only be enabled while creating a bucket.</span>
-                </cd-helper>
-              </div>
+            <label class="cd-col-form-label pt-0"
+                   for="lock_enabled"
+                   i18n>
+                    Enable
+            </label>
+            <div class="cd-col-form-input">
+              <input class="form-check-input"
+                     id="lock_enabled"
+                     formControlName="lock_enabled"
+                     type="checkbox"/>
+              <cd-help-text>
+                <span i18n>Enables locking for the objects in the bucket. Locking can only be enabled while creating a bucket.</span>
+              </cd-help-text>
             </div>
           </div>
-
-          <!-- Locking mode -->
+          <!-- Object Locking mode -->
           <div *ngIf="bucketForm.getValue('lock_enabled')"
                class="form-group row">
             <label class="cd-col-form-label"
@@ -248,33 +252,66 @@
                       name="lock_mode"
                       id="lock_mode">
                 <option i18n
-                        value="COMPLIANCE">Compliance</option>
+                        value="COMPLIANCE" >
+                  Compliance
+                </option>
                 <option i18n
-                        value="GOVERNANCE">Governance</option>
+                        value="GOVERNANCE">
+                  Governance
+                </option>
               </select>
+              <cd-help-text>
+                <span *ngIf="bucketForm.getValue('lock_mode') === 'COMPLIANCE'"
+                      i18n>
+                  In COMPLIANCE an object version cannot be overwritten or deleted for the duration of the period.
+                </span>
+                <span *ngIf="bucketForm.getValue('lock_mode') === 'GOVERNANCE'"
+                      i18n>
+                  In GOVERNANCE mode, users cannot overwrite or delete an object version or alter its lock settings unless they have special permissions.
+                </span>
+              </cd-help-text>
             </div>
           </div>
-
           <!-- Retention period (days) -->
           <div *ngIf="bucketForm.getValue('lock_enabled')"
                class="form-group row">
             <label class="cd-col-form-label"
                    for="lock_retention_period_days">
               <ng-container i18n>Days</ng-container>
-              <cd-helper i18n>The number of days that you want to specify for the default retention period that will be applied to new objects placed in this bucket.</cd-helper>
             </label>
             <div class="cd-col-form-input">
               <input class="form-control"
                      type="number"
                      id="lock_retention_period_days"
                      formControlName="lock_retention_period_days"
-                     min="0">
+                     min="1">
+              <cd-help-text>
+                <span i18n>The number of days that you want to specify for the default retention period that will be applied to new objects placed in this bucket.</span>
+              </cd-help-text>
               <span class="invalid-feedback"
                     *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'pattern')"
                     i18n>The entered value must be a positive integer.</span>
               <span class="invalid-feedback"
                     *ngIf="bucketForm.showError('lock_retention_period_days', frm, 'lockDays')"
                     i18n>Retention Days must be a positive integer.</span>
+            </div>
+          </div>
+          <!-- Alerts -->
+          <div class="form-group row">
+            <div class="cd-col-form-label"></div>
+            <div class="cd-col-form-input">
+              <cd-alert-panel
+                type="info"
+                *ngIf="bucketForm.getValue('lock_enabled')"
+                class="me-1"
+                i18n-title>
+                  Bucket Versioning can't be disabled when Object Locking is enabled.
+              </cd-alert-panel>
+              <cd-alert-panel
+                type="warning"
+                *ngIf="bucketForm.getValue('lock_enabled')">
+                  Enabling Object Locking will allow the configuration of GOVERNANCE or COMPLIANCE modes, which will help ensure that an object version cannot be overwritten or deleted for the specified period.
+              </cd-alert-panel>
             </div>
           </div>
         </fieldset>
