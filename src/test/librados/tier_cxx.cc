@@ -6257,6 +6257,101 @@ TEST_F(LibRadosTwoPoolsPP, ManifestEvictRollback) {
   is_intended_refcount_state(ioctx, "foo", cache_ioctx, "chunk2", 1);
 }
 
+TEST_F(LibRadosTwoPoolsPP, ManifestPartialChunksFullRead) {
+  SKIP_IF_CRIMSON();
+  // skip test if not yet reef
+  if (_get_required_osd_release(cluster) < "reef") {
+    cout << "cluster is not yet pacific, skipping test" << std::endl;
+    return;
+  }
+
+  // create a new pool to get a new num_wr to check the number of writes
+  std::string temp_pool_name = get_temp_pool_name() + "-test-partial-chunk-read";
+  librados::IoCtx temp_ioctx;
+  ASSERT_EQ(0, cluster.pool_create(temp_pool_name.c_str()));
+  ASSERT_EQ(0, cluster.ioctx_create(temp_pool_name.c_str(), temp_ioctx));
+
+  map<string, librados::pool_stat_t> stats;
+  list<string> pool_names;
+  pool_names.push_back(temp_ioctx.get_pool_name());
+  ASSERT_EQ(0, cluster.get_pool_stats(pool_names, stats));
+  uint64_t num_wr_before = stats[temp_ioctx.get_pool_name()].num_wr;
+  stats.clear();
+
+  // create object
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, temp_ioctx.operate("foo", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("ABere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk1", &op));
+  }
+  {
+    bufferlist bl;
+    bl.append("CDere hiHI");
+    ObjectWriteOperation op;
+    op.write_full(bl);
+    ASSERT_EQ(0, cache_ioctx.operate("chunk2", &op));
+  }
+
+  manifest_set_chunk(cluster, cache_ioctx, temp_ioctx, 2, 2, "chunk1", "foo");
+  manifest_set_chunk(cluster, cache_ioctx, temp_ioctx, 8, 2, "chunk2", "foo");
+
+  {
+    ObjectReadOperation op, stat_op;
+    op.tier_evict();
+    librados::AioCompletion *completion = cluster.aio_create_completion();
+    ASSERT_EQ(0, temp_ioctx.aio_operate(
+	"foo", completion, &op,
+	librados::OPERATION_IGNORE_OVERLAY, NULL));
+    completion->wait_for_complete();
+    ASSERT_EQ(0, completion->get_return_value());
+  }
+
+  {
+    bufferlist bl;
+    ASSERT_EQ(10, temp_ioctx.read("foo", bl, 10, 0));
+    ASSERT_EQ('C', bl[0]);
+    ASSERT_EQ('A', bl[2]);
+    ASSERT_EQ('C', bl[8]);
+    ASSERT_EQ('e', bl[4]);
+  }
+  {
+    bufferlist bl;
+    ASSERT_EQ(9, temp_ioctx.read("foo", bl, 9, 0));
+    ASSERT_EQ('C', bl[0]);
+    ASSERT_EQ('A', bl[2]);
+    ASSERT_EQ('C', bl[8]);
+    ASSERT_EQ('e', bl[4]);
+  }
+  {
+    bufferlist bl;
+    ASSERT_EQ(6, temp_ioctx.read("foo", bl, 6, 0));
+    ASSERT_EQ('C', bl[0]);
+    ASSERT_EQ('A', bl[2]);
+    ASSERT_EQ('e', bl[4]);
+  }
+  {
+    bufferlist bl;
+    ASSERT_EQ(4, temp_ioctx.read("foo", bl, 4, 0));
+    ASSERT_EQ('C', bl[0]);
+    ASSERT_EQ('A', bl[2]);
+  }
+  
+  sleep(5); // wait for stat update
+  ASSERT_EQ(0, cluster.get_pool_stats(pool_names, stats));
+  // there is two writes (write + evict) if promote does not occur 
+  ASSERT_TRUE(stats[temp_ioctx.get_pool_name()].num_wr <= num_wr_before + 2); 
+  ASSERT_EQ(0, cluster.pool_delete(temp_pool_name.c_str()));
+}
+
 class LibRadosTwoPoolsECPP : public RadosTestECPP
 {
 public:
