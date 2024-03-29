@@ -552,9 +552,9 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
         goto out;
       }
       bufferlist trimmed;
+      ceph_assert(aligned.first <= read.offset);
       auto off = read.offset - aligned.first;
-      auto len =
-          std::min(read.size, bl.length() - (read.offset - aligned.first));
+      auto len = std::min(read.size, bl.length() - off);
       trimmed.substr_of(bl, off, len);
       result.insert(
 	read.offset, trimmed.length(), std::move(trimmed));
