@@ -395,6 +395,36 @@ This allows a user to add a non-existent directory for synchronization. The mirr
 will mark such a directory as failed and retry (less frequently). When the directory is
 created, the mirror daemon will clear the failed state upon successful synchronization.
 
+Adding a new snapshot or a new directory manually in the .snap directory of the remote filesystem would result in failed status of the corresponding configured directory. In the remote filesystem::
+
+  $ ceph fs subvolume snapshot create cephfs subvol1 snap2 group1
+  or
+  $ mkdir /d0/.snap/snap2
+
+  $ ceph --admin-daemon /var/run/ceph/cephfs-mirror.asok fs mirror peer status cephfs@360 a2dc7784-e7a1-4723-b103-03ee8d8768f8
+  {
+    "/d0": {
+        "state": "failed",
+        "last_synced_snap": {
+            "id": 120,
+            "name": "snap1",
+            "sync_duration": 0.079997898999999997,
+            "sync_time_stamp": "274900.558797s"
+        },
+        "snaps_synced": 2,
+        "snaps_deleted": 0,
+        "snaps_renamed": 0
+    },
+    "/f0": {
+        "state": "failed",
+        "snaps_synced": 0,
+        "snaps_deleted": 0,
+        "snaps_renamed": 0
+    }
+  }
+
+When the snapshot or the directory is removed from the remote filesystem, the mirror daemon will clear the failed state upon successful synchronization of the pending snapshots, if any.
+
 When mirroring is disabled, the respective `fs mirror status` command for the file system
 will not show up in command help.
 
