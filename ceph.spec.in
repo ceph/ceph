@@ -2715,6 +2715,5 @@ exit 0
 %dir %{python3_sitelib}/ceph_node_proxy
 %{python3_sitelib}/ceph_node_proxy/*
 %{python3_sitelib}/ceph_node_proxy-*
-#%{_mandir}/man8/ceph-node-proxy.8*
 
 %changelog
