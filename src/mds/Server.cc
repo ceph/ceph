@@ -8954,6 +8954,9 @@ void Server::handle_client_rename(const MDRequestRef& mdr)
       src_realm = dest_realm;
     else
       src_realm = srcdir->inode->find_snaprealm();
+    dout(20) << " src realm: " << *src_realm
+	     << "; dest realm: " << *dest_realm
+	     << dendl;
     if (src_realm != dest_realm &&
 	src_realm->get_subvolume_ino() != dest_realm->get_subvolume_ino()) {
       respond_to_request(mdr, -CEPHFS_EXDEV);
