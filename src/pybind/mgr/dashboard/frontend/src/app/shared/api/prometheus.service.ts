@@ -58,7 +58,8 @@ export class PrometheusService {
     this.disableSetting(this.settingsKey.prometheus);
   }
 
-  getAlerts(params = {}): Observable<AlertmanagerAlert[]> {
+  getAlerts(clusterFilteredAlerts = false, params = {}): Observable<AlertmanagerAlert[]> {
+    params['cluster_filter'] = clusterFilteredAlerts;
     return this.http.get<AlertmanagerAlert[]>(this.baseURL, { params });
   }
 

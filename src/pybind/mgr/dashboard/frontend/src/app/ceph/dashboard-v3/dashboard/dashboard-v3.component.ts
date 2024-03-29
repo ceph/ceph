@@ -120,6 +120,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.getDetailsCardData();
     this.getTelemetryReport();
     this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
+    this.prometheusAlertService.getAlerts(true);
   }
 
   getTelemetryText(): string {
