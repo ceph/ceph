@@ -1,0 +1,13 @@
+overrides:
+  install:
+    ceph:
+      extra_system_packages:
+        - pv
+tasks:
+- workunit:
+    clients:
+      cluster1.client.mirror:
+        - rbd/compare_mirror_image_alternate_primary.sh
+    env:
+      RBD_DEVICE_TYPE: 'krbd'
+    timeout: 3h
