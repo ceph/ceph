@@ -804,25 +804,8 @@ static inline bool looks_like_ip_address(const char *bucket)
   if (inet_pton(AF_INET6, bucket, static_cast<void*>(&a)) == 1) {
     return true;
   }
-  int num_periods = 0;
-  bool expect_period = false;
-  for (const char *b = bucket; *b; ++b) {
-    if (*b == '.') {
-      if (!expect_period)
-	return false;
-      ++num_periods;
-      if (num_periods > 3)
-	return false;
-      expect_period = false;
-    }
-    else if (isdigit(*b)) {
-      expect_period = true;
-    }
-    else {
-      return false;
-    }
-  }
-  return (num_periods == 3);
+  struct in_addr b;
+  return inet_pton(AF_INET, bucket, static_cast<void*>(&b)) == 1;
 }
 
 inline int valid_s3_object_name(const std::string& name) {
