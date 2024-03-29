@@ -105,6 +105,7 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         cellTemplate: this.externalLinkTpl
       }
     ];
+    this.prometheusAlertService.getAlerts(true);
   }
 
   updateSelection(selection: CdTableSelection) {
