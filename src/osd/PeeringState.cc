@@ -4118,7 +4118,8 @@ void PeeringState::merge_new_log_entries(
   psdout(10) << entries << dendl;
   ceph_assert(is_primary());
 
-  bool rebuild_missing = append_log_entries_update_missing(entries, t, trim_to, roll_forward_to);
+  bool rebuild_missing = append_log_entries_update_missing(
+    entries, t, trim_to, roll_forward_to);
   for (auto i = acting_recovery_backfill.begin();
        i != acting_recovery_backfill.end();
        ++i) {
