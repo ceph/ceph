@@ -1034,7 +1034,7 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
   ceph::os::Transaction t;
   peering_state.merge_new_log_entries(
     log_entries, t, peering_state.get_pg_trim_to(),
-    peering_state.get_min_last_complete_ondisk());
+    peering_state.get_pg_committed_to());
 
   return seastar::do_with(log_entries, set<pg_shard_t>{},
     [this, t=std::move(t), rep_tid](auto& log_entries, auto& waiting_on) mutable {
@@ -1055,7 +1055,7 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
                    get_last_peering_reset(),
                    rep_tid,
                    peering_state.get_pg_trim_to(),
-                   peering_state.get_min_last_complete_ondisk());
+                   peering_state.get_pg_committed_to());
       waiting_on.insert(peer);
       logger().debug("submit_error_log: sending log"
         "missing_request (rep_tid: {} entries: {})"

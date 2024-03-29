@@ -11623,7 +11623,7 @@ void PrimaryLogPG::submit_log_entries(
       eversion_t old_last_update = info.last_update;
       recovery_state.merge_new_log_entries(
 	entries, t, recovery_state.get_pg_trim_to(),
-	recovery_state.get_min_last_complete_ondisk());
+	recovery_state.get_pg_committed_to());
 
       set<pg_shard_t> waiting_on;
       for (set<pg_shard_t>::const_iterator i = get_acting_recovery_backfill().begin();
@@ -11643,7 +11643,7 @@ void PrimaryLogPG::submit_log_entries(
 	    get_last_peering_reset(),
 	    repop->rep_tid,
 	    recovery_state.get_pg_trim_to(),
-	    recovery_state.get_min_last_complete_ondisk());
+	    recovery_state.get_pg_committed_to());
 	  osd->send_message_osd_cluster(
 	    peer.osd, m, get_osdmap_epoch());
 	  waiting_on.insert(peer);
