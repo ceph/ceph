@@ -158,7 +158,7 @@ ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::Op &rhs)
     rhs.client_op->get_req()->print(lhs);
   }
 #endif
-  lhs << " roll_forward_to=" << rhs.roll_forward_to
+  lhs << " pg_committed_to=" << rhs.pg_committed_to
       << " temp_added=" << rhs.temp_added
       << " temp_cleared=" << rhs.temp_cleared
       << " pending_read=" << rhs.pending_read
@@ -895,7 +895,7 @@ bool ECCommon::RMWPipeline::try_reads_to_commit()
       should_send ? iter->second : empty,
       op->version,
       op->trim_to,
-      op->roll_forward_to,
+      op->pg_committed_to,
       op->log_entries,
       op->updated_hit_set_history,
       op->temp_added,
@@ -970,8 +970,8 @@ bool ECCommon::RMWPipeline::try_finish_rmw()
   dout(10) << __func__ << ": " << *op << dendl;
   dout(20) << __func__ << ": " << cache << dendl;
 
-  if (op->roll_forward_to > completed_to)
-    completed_to = op->roll_forward_to;
+  if (op->pg_committed_to > completed_to)
+    completed_to = op->pg_committed_to;
   if (op->version > committed_to)
     committed_to = op->version;
 
@@ -984,7 +984,7 @@ bool ECCommon::RMWPipeline::try_finish_rmw()
       auto nop = std::make_unique<ECDummyOp>();
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
-      nop->roll_forward_to = op->version;
+      nop->pg_committed_to = op->version;
       nop->tid = tid;
       nop->reqid = op->reqid;
       waiting_reads.push_back(*nop);

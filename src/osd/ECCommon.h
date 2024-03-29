@@ -522,7 +522,7 @@ struct ECCommon {
       osd_reqid_t reqid;
       ZTracer::Trace trace;
 
-      eversion_t roll_forward_to; /// Soon to be generated internally
+      eversion_t pg_committed_to; /// Soon to be generated internally
 
       /// Ancillary also provided from submit_transaction caller
       std::map<hobject_t, ObjectContextRef> obc_map;

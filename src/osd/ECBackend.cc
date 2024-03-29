@@ -983,8 +983,8 @@ void ECBackend::handle_sub_write(
     std::move(op.log_entries),
     op.updated_hit_set_history,
     op.trim_to,
-    op.roll_forward_to,
-    op.roll_forward_to,
+    op.pg_committed_to,
+    op.pg_committed_to,
     !op.backfill_or_async_recovery,
     localt,
     async);
@@ -1470,7 +1470,7 @@ void ECBackend::submit_transaction(
   const eversion_t &at_version,
   PGTransactionUPtr &&t,
   const eversion_t &trim_to,
-  const eversion_t &min_last_complete_ondisk,
+  const eversion_t &pg_committed_to,
   vector<pg_log_entry_t>&& log_entries,
   std::optional<pg_hit_set_history_t> &hset_history,
   Context *on_all_commit,
@@ -1485,7 +1485,7 @@ void ECBackend::submit_transaction(
   op->delta_stats = delta_stats;
   op->version = at_version;
   op->trim_to = trim_to;
-  op->roll_forward_to = std::max(min_last_complete_ondisk, rmw_pipeline.committed_to);
+  op->pg_committed_to = std::max(pg_committed_to, rmw_pipeline.committed_to);
   op->log_entries = log_entries;
   std::swap(op->updated_hit_set_history, hset_history);
   op->on_all_commit = on_all_commit;
