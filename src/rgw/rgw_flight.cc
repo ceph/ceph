@@ -17,7 +17,6 @@
 
 #include "arrow/type.h"
 #include "arrow/buffer.h"
-#include "arrow/util/string_view.h"
 #include "arrow/io/interfaces.h"
 #include "arrow/ipc/reader.h"
 #include "arrow/table.h"
@@ -175,7 +174,7 @@ arw::Status FlightServer::ListFlights(const flt::ServerCallContext& context,
       previous_key(null_flight_key)
       { }
 
-    arw::Status Next(std::unique_ptr<flt::FlightInfo>* info) {
+    arrow::Result<std::unique_ptr<flt::FlightInfo>> Next() override {
       std::optional<FlightData> fd = flight_store->after_key(previous_key);
       if (fd) {
 	previous_key = fd->key;
@@ -188,11 +187,9 @@ arw::Status FlightServer::ListFlights(const flt::ServerCallContext& context,
 
 	ARROW_ASSIGN_OR_RAISE(flt::FlightInfo info_obj,
 			      flt::FlightInfo::Make(*fd->schema, descriptor, endpoints, fd->num_records, fd->obj_size));
-	*info = std::make_unique<flt::FlightInfo>(std::move(info_obj));
-	return arw::Status::OK();
+	return std::make_unique<flt::FlightInfo>(std::move(info_obj));
       } else {
-	*info = nullptr;
-	return arw::Status::OK();
+	return nullptr;
       }
     }
   }; // class RGWFlightListing
@@ -346,7 +343,7 @@ public:
     }
   }
 
-  arw::Result<arw::util::string_view> Peek(int64_t nbytes) override {
+  arw::Result<std::string_view> Peek(int64_t nbytes) override {
     INFO << "called, not implemented" << dendl;
     return arw::Status::NotImplemented("peek not currently allowed");
   }
@@ -458,7 +455,7 @@ public:
     return flight_data.obj_size;
   }
 
-  arw::Result<arw::util::string_view> Peek(int64_t nbytes) override {
+  arw::Result<std::string_view> Peek(int64_t nbytes) override {
     std::iostream::pos_type here = file.tellg();
     if (here == -1) {
       return arw::Status::IOError(
@@ -620,7 +617,7 @@ public:
     return flight_data.obj_size;
   }
 
-  arw::Result<arw::util::string_view> Peek(int64_t nbytes) override {
+  arw::Result<std::string_view> Peek(int64_t nbytes) override {
     INFO << "entered: " << nbytes << " bytes" << dendl;
 
     int64_t saved_position = position;
@@ -716,7 +713,14 @@ arw::Status FlightServer::DoGet(const flt::ServerCallContext &context,
 
   std::vector<std::shared_ptr<arw::RecordBatch>> batches;
   arw::TableBatchReader batch_reader(*table);
-  ARROW_RETURN_NOT_OK(batch_reader.ReadAll(&batches));
+  while (true) {
+    std::shared_ptr<arw::RecordBatch> p;
+    auto s = batch_reader.ReadNext(&p);
+    if (!s.ok()) {
+      break;
+    }
+    batches.push_back(p);
+  }
 
   ARROW_ASSIGN_OR_RAISE(auto owning_reader,
 			arw::RecordBatchReader::Make(
