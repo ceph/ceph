@@ -142,24 +142,6 @@ export class MultiClusterService {
     });
   }
 
-  verifyConnection(
-    url: string,
-    username: string,
-    password: string,
-    token = '',
-    ssl = false,
-    cert = ''
-  ): Observable<any> {
-    return this.http.post('api/multi-cluster/verify_connection', {
-      url: url,
-      username: username,
-      password: password,
-      token: token,
-      ssl_verify: ssl,
-      ssl_certificate: cert
-    });
-  }
-
   private getClusterObserver() {
     return (data: any) => {
       this.msSource.next(data);

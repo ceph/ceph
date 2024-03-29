@@ -1,29 +1,56 @@
-<nav ngbNav
-     #nav="ngbNav"
-     class="nav-tabs">
-  <ng-container ngbNavItem>
-    <a ngbNavLink
-       i18n>Clusters List</a>
-    <ng-template ngbNavContent>
-      <cd-table #table
-                [data]="data"
-                [columns]="columns"
-                columnMode="flex"
-                selectionType="single"
-                [maxLimit]="25"
-                (updateSelection)="updateSelection($event)">
-        <div class="table-actions btn-toolbar">
-          <cd-table-actions [permission]="permissions.user"
-                            [selection]="selection"
-                            class="btn-group"
-                            id="cluster-actions"
-                            [tableActions]="tableActions">
-          </cd-table-actions>
-        </div>
-      </cd-table>
-    </ng-template>
+<ng-template #emptyCluster>
+  <ng-container class="container h-75"
+                *ngIf="managedByConfig$ | async as managedByConfig">
+    <div class="row h-100 justify-content-center align-items-center">
+      <div class="blank-page">
+        <i class="mx-auto d-block"
+           [ngClass]="[icons.large, icons.wrench]">
+        </i>
+      <div class="mt-4 text-center">
+        <h4 class="mt-3">This cluster is already managed by cluster -
+          <a target="_blank"
+             [href]="managedByConfig['MANAGED_BY_CLUSTERS'][0]['url']">
+            {{ managedByConfig['MANAGED_BY_CLUSTERS'][0]['fsid'] }}
+            <i class="fa fa-external-link"></i>
+          </a>
+        </h4>
+      </div>
+      </div>
+    </div>
   </ng-container>
-</nav>
+</ng-template>
+
+<ng-container *ngIf="managedByConfig$ | async as managedByConfig">
+  <div *ngIf="managedByConfig['MANAGED_BY_CLUSTERS'].length === 0; else emptyCluster">
+    <nav ngbNav
+         #nav="ngbNav"
+         class="nav-tabs">
+      <ng-container ngbNavItem>
+        <a ngbNavLink
+           i18n>Clusters List</a>
+        <ng-template ngbNavContent>
+          <cd-table #table
+                    [data]="data"
+                    [columns]="columns"
+                    columnMode="flex"
+                    selectionType="single"
+                    [maxLimit]="25"
+                    (updateSelection)="updateSelection($event)">
+            <div class="table-actions btn-toolbar">
+              <cd-table-actions [permission]="permissions.user"
+                                [selection]="selection"
+                                class="btn-group"
+                                id="cluster-actions"
+                                [tableActions]="tableActions">
+              </cd-table-actions>
+            </div>
+          </cd-table>
+        </ng-template>
+      </ng-container>
+    </nav>
+    <div [ngbNavOutlet]="nav"></div>
+  </div>
+</ng-container>
 
 <ng-template #urlTpl
              let-row="row">
@@ -34,4 +61,3 @@
   </a>
 </ng-template>
 
-<div [ngbNavOutlet]="nav"></div>
