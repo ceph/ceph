@@ -74,6 +74,82 @@ TEST(ECUtil, stripe_info_t)
             make_pair((uint64_t)0, 2*swidth));
 }
 
+TEST(ECUtil, offset_length_is_same_stripe)
+{
+  const uint64_t swidth = 4096;
+  const uint64_t schunk = 1024;
+  const uint64_t ssize = 4;
+
+  ECUtil::stripe_info_t s(ssize, swidth);
+  ASSERT_EQ(s.get_stripe_width(), swidth);
+  ASSERT_EQ(s.get_chunk_size(), schunk);
+
+  // read nothing at the very beginning
+  //   +---+---+---+---+
+  //   |  0|   |   |   |
+  //   +---+---+---+---+
+  //   |   |   |   |   |
+  //   +---+---+---+---+
+  ASSERT_TRUE(s.offset_length_is_same_stripe(0, 0));
+
+  // read nothing at the stripe end
+  //   +---+---+---+---+
+  //   |   |   |   |  0|
+  //   +---+---+---+---+
+  //   |   |   |   |   |
+  //   +---+---+---+---+
+  ASSERT_TRUE(s.offset_length_is_same_stripe(swidth, 0));
+
+  // read single byte at the stripe end
+  //   +---+---+---+---+
+  //   |   |   |   | ~1|
+  //   +---+---+---+---+
+  //   |   |   |   |   |
+  //   +---+---+---+---+
+  ASSERT_TRUE(s.offset_length_is_same_stripe(swidth - 1, 1));
+
+  // read single stripe
+  //   +---+---+---+---+
+  //   | 1k| 1k| 1k| 1k|
+  //   +---+---+---+---+
+  //   |   |   |   |   |
+  //   +---+---+---+---+
+  ASSERT_TRUE(s.offset_length_is_same_stripe(0, swidth));
+
+  // read single chunk
+  //   +---+---+---+---+
+  //   | 1k|   |   |   |
+  //   +---+---+---+---+
+  //   |   |   |   |   |
+  //   +---+---+---+---+
+  ASSERT_TRUE(s.offset_length_is_same_stripe(0, schunk));
+
+  // read single stripe except its first chunk
+  //   +---+---+---+---+
+  //   |   | 1k| 1k| 1k|
+  //   +---+---+---+---+
+  //   |   |   |   |   |
+  //   +---+---+---+---+
+  ASSERT_TRUE(s.offset_length_is_same_stripe(schunk, swidth - schunk));
+
+  // read two stripes
+  //   +---+---+---+---+
+  //   | 1k| 1k| 1k| 1k|
+  //   +---+---+---+---+
+  //   | 1k| 1k| 1k| 1k|
+  //   +---+---+---+---+
+  ASSERT_FALSE(s.offset_length_is_same_stripe(0, 2*swidth));
+
+  // multistripe read: 1st stripe without 1st byte + 1st byte of 2nd stripe
+  //   +-----+---+---+---+
+  //   | 1k-1| 1k| 1k| 1k|
+  //   +-----+---+---+---+
+  //   |    1|   |   |   |
+  //   +-----+---+---+---+
+  ASSERT_FALSE(s.offset_length_is_same_stripe(1, swidth));
+}
+
+
 TEST(ECCommon, get_min_want_to_read_shards)
 {
   const uint64_t swidth = 4096;

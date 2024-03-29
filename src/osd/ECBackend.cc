@@ -1531,13 +1531,17 @@ int ECBackend::objects_read_sync(
 }
 
 static bool should_partial_read(
+  const ECUtil::stripe_info_t& sinfo,
+  uint64_t off,
+  uint32_t len,
   bool fast_read)
 {
   // Don't partial read if we are doing a fast_read
   if (fast_read) {
     return false;
   }
-  return true;
+  // Same stripe only
+  return sinfo.offset_length_is_same_stripe(off, len);
 }
 
 void ECBackend::objects_read_async(
@@ -1553,7 +1557,8 @@ void ECBackend::objects_read_async(
   extent_set es;
   for (const auto& [read, ctx] : to_read) {
     pair<uint64_t, uint64_t> tmp;
-    if (!cct->_conf->osd_ec_partial_reads || !should_partial_read(fast_read)) {
+    if (!cct->_conf->osd_ec_partial_reads ||
+	!should_partial_read(sinfo, read.offset, read.size, fast_read)) {
       tmp = sinfo.offset_len_to_stripe_bounds(make_pair(read.offset, read.size));
     } else {
       tmp = sinfo.offset_len_to_chunk_bounds(make_pair(read.offset, read.size));
