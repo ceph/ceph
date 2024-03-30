@@ -13,20 +13,19 @@ their nicks on `GitHub`_:
 
 .. _github: https://github.com/
 
-========= ================ =============
-Scope     Lead             GitHub nick
-========= ================ =============
-Ceph      Sage Weil        liewegas
-RADOS     Neha Ojha        neha-ojha
-RGW       Yehuda Sadeh     yehudasa
-RGW       Matt Benjamin    mattbenjamin
-RBD       Ilya Dryomov     dis 
-CephFS    Patrick Donnelly batrick
-Dashboard Ernesto Puerta   epuertat
-MON       Joao Luis        jecluis
-Build/Ops Ken Dreyer       ktdreyer
-Docs      Zac Dover        zdover23
-========= ================ =============
+========= ================== =============
+Scope     Lead               GitHub nick
+========= ================== =============
+RADOS     Radoslaw Zarzynski rzarzynski 
+RGW       Casey Bodley       cbodley 
+RGW       Matt Benjamin      mattbenjamin
+RBD       Ilya Dryomov       dis 
+CephFS    Venky Shankar      vshankar
+Dashboard Nizamudeen A       nizamial09 
+MON       Joao Luis          jecluis
+Build/Ops Ken Dreyer         ktdreyer
+Docs      Zac Dover          zdover23
+========= ================== =============
 
 The Ceph-specific acronyms in the table are explained in
 :doc:`/architecture`.
