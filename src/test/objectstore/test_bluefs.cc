@@ -1174,13 +1174,19 @@ TEST(BlueFS, test_shared_alloc) {
     }
   }
   fs.compact_log();
-  auto *logger = fs.get_perf_counters();
-  ASSERT_NE(logger->get(l_bluefs_alloc_shared_dev_fallbacks), 0);
-  auto num_files = logger->get(l_bluefs_num_files);
-  fs.umount();
-  fs.mount();
-  ASSERT_EQ(num_files, logger->get(l_bluefs_num_files));
-  fs.umount();
+  uint64_t num_files = 0;
+  {
+    auto *logger = fs.get_perf_counters();
+    ASSERT_NE(logger->get(l_bluefs_alloc_shared_dev_fallbacks), 0);
+    num_files = logger->get(l_bluefs_num_files);
+    fs.umount();
+  }
+  {
+    fs.mount();
+    auto *logger = fs.get_perf_counters();
+    ASSERT_EQ(num_files, logger->get(l_bluefs_num_files));
+    fs.umount();
+  }
 }
 
 TEST(BlueFS, test_shared_alloc_sparse) {
