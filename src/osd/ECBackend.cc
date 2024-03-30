@@ -1485,7 +1485,15 @@ void ECBackend::submit_transaction(
   op->delta_stats = delta_stats;
   op->version = at_version;
   op->trim_to = trim_to;
-  op->pg_committed_to = std::max(pg_committed_to, rmw_pipeline.committed_to);
+  /* We update PeeringState::pg_committed_to via the callback
+   * invoked from ECBackend::handle_sub_write_reply immediately
+   * before updating rmw_pipeline.commited_to via
+   * rmw_pipeline.check_ops()->try_finish_rmw(), so these will
+   * *usually* match.  However, the PrimaryLogPG::submit_log_entries
+   * pathway can perform an out-of-band log update which updates
+   * PeeringState::pg_committed_to independently.  Thus, the value
+   * passed in is the right one to use. */
+  op->pg_committed_to = pg_committed_to;
   op->log_entries = log_entries;
   std::swap(op->updated_hit_set_history, hset_history);
   op->on_all_commit = on_all_commit;

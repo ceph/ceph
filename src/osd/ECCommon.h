@@ -522,7 +522,17 @@ struct ECCommon {
       osd_reqid_t reqid;
       ZTracer::Trace trace;
 
-      eversion_t pg_committed_to; /// Soon to be generated internally
+      /**
+       * pg_commited_to
+       *
+       * Represents a version v such that all v' < v handled by RMWPipeline
+       * have fully committed. This may actually lag
+       * PeeringState::pg_committed_to if PrimaryLogPG::submit_log_entries
+       * submits an out-of-band log update.
+       *
+       * Soon to be generated internally.
+       */
+      eversion_t pg_committed_to;
 
       /// Ancillary also provided from submit_transaction caller
       std::map<hobject_t, ObjectContextRef> obc_map;
