@@ -771,19 +771,22 @@ int RGWRados::get_max_chunk_size(const rgw_placement_rule& placement_rule, const
   return get_max_chunk_size(pool, max_chunk_size, dpp, palignment);
 }
 
-void add_datalog_entry(const DoutPrefixProvider* dpp,
-                       RGWDataChangesLog* datalog,
-                       const RGWBucketInfo& bucket_info,
-                       uint32_t shard_id, optional_yield y)
+[[nodiscard]] int add_datalog_entry(const DoutPrefixProvider* dpp,
+				    RGWDataChangesLog* datalog,
+				    const RGWBucketInfo& bucket_info,
+				    uint32_t shard_id, optional_yield y)
 {
   const auto& logs = bucket_info.layout.logs;
   if (logs.empty()) {
-    return;
+    return 0;
   }
   int r = datalog->add_entry(dpp, bucket_info, logs.back(), shard_id, y);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed writing data log" << dendl;
-  } // datalog error is not fatal
+  }
+  // DataLog error *is* fatal so that if we fail to write to the
+  // semaphore set we return an error.
+  return r;
 }
 
 class RGWIndexCompletionManager;
@@ -962,8 +965,11 @@ void RGWIndexCompletionManager::process()
 
       if (c->log_op) {
         // This null_yield can stay, for now, since we're in our own thread
-        add_datalog_entry(&dpp, store->svc.datalog_rados, bucket_info,
-                          bs.shard_id, null_yield);
+        r = add_datalog_entry(&dpp, store->svc.datalog_rados, bucket_info,
+			      bs.shard_id, null_yield);
+	ldpp_dout(&dpp, 0) << "ERROR: " << __func__ << "(): write to datalog failed, obj=" << c->obj << " r=" << r << dendl;
+
+        /* ignoring error, can't do anything about it */
       }
     }
   }
@@ -6150,8 +6156,10 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
     }
 
     if (add_log) {
-      add_datalog_entry(dpp, store->svc.datalog_rados,
-                        target->get_bucket_info(), bs->shard_id, y);
+      r = add_datalog_entry(dpp, store->svc.datalog_rados,
+			    target->get_bucket_info(), bs->shard_id, y);
+      ldpp_dout(dpp, 0) << "failed to write datalog for object: r=" << r << dendl;
+      return r;
     }
 
     return 0;
@@ -7481,8 +7489,8 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
 
   ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace, add_log);
   if (add_log) {
-    add_datalog_entry(dpp, store->svc.datalog_rados,
-                      target->bucket_info, bs->shard_id, y);
+    ret = add_datalog_entry(dpp, store->svc.datalog_rados,
+			    target->bucket_info, bs->shard_id, y);
   }
 
   return ret;
@@ -7512,8 +7520,8 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
   ret = store->cls_obj_complete_del(*bs, optag, poolid, epoch, obj, removed_mtime, remove_objs, bilog_flags, zones_trace, add_log);
 
   if (add_log) {
-    add_datalog_entry(dpp, store->svc.datalog_rados,
-                      target->bucket_info, bs->shard_id, y);
+    ret = add_datalog_entry(dpp, store->svc.datalog_rados,
+			    target->bucket_info, bs->shard_id, y);
   }
 
   return ret;
@@ -7543,8 +7551,8 @@ int RGWRados::Bucket::UpdateIndex::cancel(const DoutPrefixProvider *dpp,
      * for following the specific bucket shard log. Otherwise they end up staying behind, and users
      * have no way to tell that they're all caught up
      */
-    add_datalog_entry(dpp, store->svc.datalog_rados,
-                      target->bucket_info, bs->shard_id, y);
+    ret = add_datalog_entry(dpp, store->svc.datalog_rados,
+			    target->bucket_info, bs->shard_id, y);
   }
 
   return ret;
@@ -8373,10 +8381,10 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
   }
 
   if (log_data_change) {
-    add_datalog_entry(dpp, svc.datalog_rados, bucket_info, bs.shard_id, y);
+    r = add_datalog_entry(dpp, svc.datalog_rados, bucket_info, bs.shard_id, y);
   }
 
-  return 0;
+  return r;
 }
 
 void RGWRados::bucket_index_guard_olh_op(const DoutPrefixProvider *dpp, RGWObjState& olh_state, ObjectOperation& op)
