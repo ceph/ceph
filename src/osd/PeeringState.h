@@ -1924,7 +1924,7 @@ public:
     std::vector<pg_log_entry_t>&& logv,
     eversion_t trim_to,
     eversion_t roll_forward_to,
-    eversion_t min_last_complete_ondisk,
+    eversion_t pg_committed_to,
     ObjectStore::Transaction &t,
     bool transaction_applied,
     bool async);

@@ -1272,7 +1272,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   log_operation(std::move(log_entries),
                 req->pg_trim_to,
                 req->version,
-                req->min_last_complete_ondisk,
+                req->pg_committed_to,
                 !txn.empty(),
                 txn,
                 false);
@@ -1318,7 +1318,7 @@ void PG::log_operation(
   std::vector<pg_log_entry_t>&& logv,
   const eversion_t &trim_to,
   const eversion_t &roll_forward_to,
-  const eversion_t &min_last_complete_ondisk,
+  const eversion_t &pg_committed_to,
   bool transaction_applied,
   ObjectStore::Transaction &txn,
   bool async) {
@@ -1348,7 +1348,7 @@ void PG::log_operation(
   peering_state.append_log(std::move(logv),
                            trim_to,
                            roll_forward_to,
-                           min_last_complete_ondisk,
+                           pg_committed_to,
                            txn,
                            !txn.empty(),
                            false);

@@ -219,7 +219,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        const std::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
-       const eversion_t &min_last_complete_ondisk,
+       const eversion_t &pg_committed_to,
        bool transaction_applied,
        ObjectStore::Transaction &t,
        bool async = false) = 0;
@@ -435,8 +435,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const eversion_t &at_version,        ///< [in] version
      PGTransactionUPtr &&t,               ///< [in] trans to execute (move)
      const eversion_t &trim_to,           ///< [in] trim log to here
-     const eversion_t &min_last_complete_ondisk, ///< [in] lower bound on
-                                                 ///  committed version
+     const eversion_t &pg_committed_to,   ///< [in] lower bound on
+                                          ///       committed version
      std::vector<pg_log_entry_t>&& log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      std::optional<pg_hit_set_history_t> &hset_history,

@@ -200,7 +200,7 @@ struct ECListener {
     const std::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
-    const eversion_t &min_last_complete_ondisk,
+    const eversion_t &pg_committed_to,
     bool transaction_applied,
     ceph::os::Transaction &t,
     bool async = false) = 0;

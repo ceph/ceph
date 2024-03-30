@@ -468,7 +468,7 @@ void ReplicatedBackend::submit_transaction(
   const eversion_t &at_version,
   PGTransactionUPtr &&_t,
   const eversion_t &trim_to,
-  const eversion_t &min_last_complete_ondisk,
+  const eversion_t &pg_committed_to,
   vector<pg_log_entry_t>&& _log_entries,
   std::optional<pg_hit_set_history_t> &hset_history,
   Context *on_all_commit,
@@ -517,7 +517,7 @@ void ReplicatedBackend::submit_transaction(
     tid,
     reqid,
     trim_to,
-    min_last_complete_ondisk,
+    pg_committed_to,
     added.size() ? *(added.begin()) : hobject_t(),
     removed.size() ? *(removed.begin()) : hobject_t(),
     log_entries,
@@ -533,7 +533,7 @@ void ReplicatedBackend::submit_transaction(
     hset_history,
     trim_to,
     at_version,
-    min_last_complete_ondisk,
+    pg_committed_to,
     true,
     op_t);
   
@@ -953,7 +953,7 @@ Message * ReplicatedBackend::generate_subop(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
-  eversion_t min_last_complete_ondisk,
+  eversion_t pg_committed_to,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   const bufferlist &log_entries,
@@ -992,7 +992,7 @@ Message * ReplicatedBackend::generate_subop(
 
   // this feature is from 2019 (6f12bf27cb91), assume present
   ceph_assert(HAVE_FEATURE(parent->min_peer_features(), OSD_REPOP_MLCOD));
-  wr->min_last_complete_ondisk = min_last_complete_ondisk;
+  wr->pg_committed_to = pg_committed_to;
 
   wr->new_temp_oid = new_temp_oid;
   wr->discard_temp_oid = discard_temp_oid;
@@ -1006,7 +1006,7 @@ void ReplicatedBackend::issue_op(
   ceph_tid_t tid,
   osd_reqid_t reqid,
   eversion_t pg_trim_to,
-  eversion_t min_last_complete_ondisk,
+  eversion_t pg_committed_to,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
   const vector<pg_log_entry_t> &log_entries,
@@ -1039,7 +1039,7 @@ void ReplicatedBackend::issue_op(
 	  tid,
 	  reqid,
 	  pg_trim_to,
-	  min_last_complete_ondisk,
+	  pg_committed_to,
 	  new_temp_oid,
 	  discard_temp_oid,
 	  logs,
@@ -1141,7 +1141,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     m->updated_hit_set_history,
     m->pg_trim_to,
     m->version, /* Replicated PGs don't have rollback info */
-    m->min_last_complete_ondisk,
+    m->pg_committed_to,
     update_snaps,
     rm->localt,
     async);
