@@ -26,7 +26,6 @@ using std::string;
 
 void NVMeofGwMon::init(){
     dout(4) <<  "called " << dendl;
-    g_conf().add_observer(this);
 }
 
 void NVMeofGwMon::on_restart(){
@@ -56,7 +55,7 @@ void NVMeofGwMon::synchronize_last_beacon(){
 }
 
 void NVMeofGwMon::on_shutdown() {
-     g_conf().remove_observer(this);
+    dout(4) <<  "called " << dendl;
 }
 
 void NVMeofGwMon::tick(){
@@ -277,20 +276,6 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
     cmd_getval(cmdmap, "prefix", prefix);
     dout(4) << "MonCommand : "<< prefix <<  dendl;
 
-   /* MonSession *session = op->get_session();
-    if (!session)
-    {
-        dout(4) << "MonCommand : "<< prefix << " access denied due to lack of session" <<  dendl;
-        mon.reply_command(op, -EACCES, "access denied", rdata,
-                          get_last_committed());
-        return true;
-    }
-   */
-    string format = cmd_getval_or<string>(cmdmap, "format", "plain");
-    boost::scoped_ptr<Formatter> f(Formatter::create(format));
-
-    // TODO   need to check formatter per preffix  - if f is NULL
-
     return false;
 }
 
@@ -424,16 +409,9 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
 
 
 bool NVMeofGwMon::preprocess_beacon(MonOpRequestRef op){
-    //dout(4)   << dendl;
     auto m = op->get_req<MNVMeofGwBeacon>();
     const BeaconSubsystems& sub = m->get_subsystems();
-     //mon.no_reply(op); // we never reply to beacons
-     dout(15) << "beacon from " << m->get_type() << " GW : " << m->get_gw_id()  << " num subsystems " << sub.size() <<  dendl;
-     MonSession *session = op->get_session();
-     if (!session){
-         dout(4) << "beacon no session "  << dendl;
-         return true;
-     }
+    dout(15) << "beacon from " << m->get_type() << " GW : " << m->get_gw_id()  << " num subsystems " << sub.size() <<  dendl;
 
     return false; // allways  return false to call leader's prepare beacon
 }

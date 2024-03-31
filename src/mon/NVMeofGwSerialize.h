@@ -134,10 +134,7 @@ inline std::ostream& print_gw_created_t(std::ostream& os, const NvmeGwCreated va
     for (size_t i = 0; i < num_ana_groups; i++) {
         os << " " << anas[i] <<": " << value.sm_state[anas[i]] << ",";
     }
-    os <<  "]\n"<< MODULE_PREFFIX << " failover peers ";
-    for (size_t i = 0; i < num_ana_groups; i++) {
-        os << anas[i] <<": "  << value.failover_peer[anas[i]] << ",";
-    }
+
     os << "]\n"<< MODULE_PREFFIX << "availability " << value.availability << "]";
 
     return os;
@@ -153,10 +150,7 @@ inline std::ostream& operator<<(std::ostream& os, const NvmeGwCreated value) {
     for (int i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) {
         os << value.sm_state[i] << ",";
     }
-    os <<  "]\n"<< MODULE_PREFFIX << " failover peers ";
-    for (int i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i++) {
-        os << value.failover_peer[i] << ",";
-    }
+
     os <<  "]\n"<< MODULE_PREFFIX << " beacon-subsystems ";
     for (const auto& sub: value.subsystems) {
         os << sub << ",";
@@ -333,9 +327,6 @@ inline void encode(const NvmeGwCreatedMap& gws,  ceph::bufferlist &bl) {
         for(int i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++){
             encode((uint32_t)(gw.second.sm_state[i]), bl);
         }
-        for(int i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++){
-            encode((gw.second.failover_peer[i]), bl);
-        }
         encode((uint32_t)gw.second.availability, bl);
         encode((uint32_t)gw.second.last_gw_map_epoch_valid, bl);
         encode(gw.second.subsystems, bl);
@@ -368,10 +359,6 @@ inline void decode(NvmeGwCreatedMap& gws, ceph::buffer::list::const_iterator &bl
         for(int i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++){
             decode(sm_state, bl);
             gw_created.sm_state[i] = (GW_STATES_PER_AGROUP_E)  sm_state;
-        }
-        for(int i = 0; i <MAX_SUPPORTED_ANA_GROUPS; i ++){
-            decode(peer_name, bl);
-            gw_created.failover_peer[i] = peer_name;
         }
         uint32_t avail;
         decode(avail, bl);
