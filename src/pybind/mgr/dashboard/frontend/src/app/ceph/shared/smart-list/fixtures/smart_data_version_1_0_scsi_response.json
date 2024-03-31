@@ -1,0 +1,208 @@
+{
+    "WDC_WUH721818AL5204_012345689": {
+      "device": {
+        "info_name": "/dev/sdf",
+        "name": "/dev/sdf",
+        "protocol": "SCSI",
+        "type": "scsi"
+      },
+      "device_type": {
+        "name": "disk",
+        "scsi_value": 0
+      },
+      "form_factor": {
+        "name": "3.5 inches",
+        "scsi_value": 2
+      },
+      "json_format_version": [
+        1,
+        0
+      ],
+      "local_time": {
+        "asctime": "Sun May  8 14:21:11 2022 UTC",
+        "time_t": 1652019671
+      },
+      "logical_block_size": 512,
+      "model_name": "WDC WUH721818AL5204",
+      "nvme_smart_health_information_add_log_error": "nvme returned an error: sudo: exit status: 231",
+      "nvme_smart_health_information_add_log_error_code": -22,
+      "nvme_vendor": "wdc",
+      "physical_block_size": 4096,
+      "power_on_time": {
+        "hours": 1719,
+        "minutes": 55
+      },
+      "product": "WUH721818AL5204",
+      "revision": "C232",
+      "rotation_rate": 7200,
+      "scsi_error_counter_log": {
+        "read": {
+          "correction_algorithm_invocations": 1001,
+          "errors_corrected_by_eccdelayed": 0,
+          "errors_corrected_by_eccfast": 0,
+          "errors_corrected_by_rereads_rewrites": 0,
+          "gigabytes_processed": "8519.006",
+          "total_errors_corrected": 0,
+          "total_uncorrected_errors": 0
+        },
+        "verify": {
+          "correction_algorithm_invocations": 261,
+          "errors_corrected_by_eccdelayed": 0,
+          "errors_corrected_by_eccfast": 0,
+          "errors_corrected_by_rereads_rewrites": 0,
+          "gigabytes_processed": "0.000",
+          "total_errors_corrected": 0,
+          "total_uncorrected_errors": 0
+        },
+        "write": {
+          "correction_algorithm_invocations": 25720,
+          "errors_corrected_by_eccdelayed": 0,
+          "errors_corrected_by_eccfast": 0,
+          "errors_corrected_by_rereads_rewrites": 0,
+          "gigabytes_processed": "146241.629",
+          "total_errors_corrected": 0,
+          "total_uncorrected_errors": 0
+        }
+      },
+      "scsi_grown_defect_list": 0,
+      "scsi_version": "SPC-5",
+      "serial_number": "0123456789",
+      "smart_status": {
+        "passed": true
+      },
+      "smartctl": {
+        "argv": [
+          "smartctl",
+          "-x",
+          "--json=o",
+          "/dev/sdf"
+        ],
+        "build_info": "(local build)",
+        "exit_status": 0,
+        "output": [
+          "smartctl 7.1 2020-04-05 r5049 [x86_64-linux-4.18.0-348.2.1.el8_5.x86_64] (local build)",
+          "Copyright (C) 2002-19, Bruce Allen, Christian Franke, www.smartmontools.org",
+          "",
+          "=== START OF INFORMATION SECTION ===",
+          "Vendor:               WDC",
+          "Product:              WUH721818AL5204",
+          "Revision:             C232",
+          "Compliance:           SPC-5",
+          "User Capacity:        18,000,207,937,536 bytes [18.0 TB]",
+          "Logical block size:   512 bytes",
+          "Physical block size:  4096 bytes",
+          "LU is fully provisioned",
+          "Rotation Rate:        7200 rpm",
+          "Form Factor:          3.5 inches",
+          "Logical Unit id:      0xffffffffffffffffffffffff",
+          "Serial number:        0123456789",
+          "Device type:          disk",
+          "Transport protocol:   SAS (SPL-3)",
+          "Local Time is:        Sun May  8 14:21:11 2022 UTC",
+          "SMART support is:     Available - device has SMART capability.",
+          "SMART support is:     Enabled",
+          "Temperature Warning:  Enabled",
+          "Read Cache is:        Enabled",
+          "Writeback Cache is:   Enabled",
+          "",
+          "=== START OF READ SMART DATA SECTION ===",
+          "SMART Health Status: OK",
+          "",
+          "Grown defects during certification <not available>",
+          "Total blocks reassigned during format <not available>",
+          "Total new blocks reassigned <not available>",
+          "Power on minutes since format <not available>",
+          "Current Drive Temperature:     38 C",
+          "Drive Trip Temperature:        85 C",
+          "",
+          "Manufactured in week 43 of year 2021",
+          "Specified cycle count over device lifetime:  50000",
+          "Accumulated start-stop cycles:  9",
+          "Specified load-unload count over device lifetime:  600000",
+          "Accumulated load-unload cycles:  74",
+          "Elements in grown defect list: 0",
+          "",
+          "Error counter log:",
+          "           Errors Corrected by           Total   Correction     Gigabytes    Total",
+          "               ECC          rereads/    errors   algorithm      processed    uncorrected",
+          "           fast | delayed   rewrites  corrected  invocations   [10^9 bytes]  errors",
+          "read:          0        0         0         0       1001       8519.006           0",
+          "write:         0        0         0         0      25720     146241.629           0",
+          "verify:        0        0         0         0        261          0.000           0",
+          "",
+          "Non-medium error count:        0",
+          "",
+          "No Self-tests have been logged",
+          "",
+          "Background scan results log",
+          "  Status: waiting until BMS interval timer expires",
+          "    Accumulated power on time, hours:minutes 1719:55 [103195 minutes]",
+          "    Number of background scans performed: 5,  scan progress: 0.00%",
+          "    Number of background medium scans performed: 5",
+          "",
+          "Protocol Specific port log page for SAS SSP",
+          "relative target port id = 1",
+          "  generation code = 3",
+          "  number of phys = 1",
+          "  phy identifier = 0",
+          "    attached device type: expander device",
+          "    attached reason: loss of dword synchronization",
+          "    reason: unknown",
+          "    negotiated logical link rate: phy enabled; 12 Gbps",
+          "    attached initiator port: ssp=0 stp=0 smp=1",
+          "    attached target port: ssp=0 stp=0 smp=1",
+          "    SAS address = 0xffffffffffffffffffffffff",
+          "    attached SAS address = 0xffffffffffffffffffffffff",
+          "    attached phy identifier = 0",
+          "    Invalid DWORD count = 0",
+          "    Running disparity error count = 0",
+          "    Loss of DWORD synchronization = 0",
+          "    Phy reset problem = 0",
+          "    Phy event descriptors:",
+          "     Invalid word count: 0",
+          "     Running disparity error count: 0",
+          "     Loss of dword synchronization count: 0",
+          "     Phy reset problem count: 0",
+          "relative target port id = 2",
+          "  generation code = 3",
+          "  number of phys = 1",
+          "  phy identifier = 1",
+          "    attached device type: expander device",
+          "    attached reason: power on",
+          "    reason: unknown",
+          "    negotiated logical link rate: phy enabled; 12 Gbps",
+          "    attached initiator port: ssp=0 stp=0 smp=1",
+          "    attached target port: ssp=0 stp=0 smp=1",
+          "    SAS address = 0xffffffffffffffffffffffff",
+          "    attached SAS address = 0xffffffffffffffffffffffff",
+          "    attached phy identifier = 0",
+          "    Invalid DWORD count = 0",
+          "    Running disparity error count = 0",
+          "    Loss of DWORD synchronization = 0",
+          "    Phy reset problem = 0",
+          "    Phy event descriptors:",
+          "     Invalid word count: 0",
+          "     Running disparity error count: 0",
+          "     Loss of dword synchronization count: 0",
+          "     Phy reset problem count: 0",
+          ""
+        ],
+        "platform_info": "x86_64-linux-4.18.0-348.2.1.el8_5.x86_64",
+        "svn_revision": "5049",
+        "version": [
+          7,
+          1
+        ]
+      },
+      "temperature": {
+        "current": 38,
+        "drive_trip": 85
+      },
+      "user_capacity": {
+        "blocks": 35156656128,
+        "bytes": 18000207937536
+      },
+      "vendor": "WDC"
+    }
+  }
+  
