@@ -11074,7 +11074,7 @@ next:
     for (; i < max_shards; i++) {
       formatter->open_object_section("shard");
       encode_json("shard_id", i, formatter.get());
-      formatter->open_array_section("single shard entries");
+      formatter->open_array_section("shard_entries");
       RGWRados::BucketShard bs(static_cast<rgw::sal::RadosStore*>(driver)->getRados());
       int ret = bs.init(dpp(), bucket->get_info(), index, i, null_yield);
       if (ret < 0) {
