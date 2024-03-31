@@ -14,7 +14,7 @@ TEST(RocksDBOption, simple) {
   rocksdb::Options options;
   rocksdb::Status status;
   map<string,string> kvoptions;
-  RocksDBStore *db = new RocksDBStore(g_ceph_context, dir, kvoptions, NULL);
+  auto db = std::make_unique<RocksDBStore>(g_ceph_context, dir, kvoptions, nullptr);
   string options_string = ""
 			  "write_buffer_size=536870912;"
 			  "create_if_missing=true;"
@@ -48,7 +48,7 @@ TEST(RocksDBOption, interpret) {
   rocksdb::Options options;
   rocksdb::Status status;
   map<string,string> kvoptions;
-  RocksDBStore *db = new RocksDBStore(g_ceph_context, dir, kvoptions, NULL);
+  auto db = std::make_unique<RocksDBStore>(g_ceph_context, dir, kvoptions, nullptr);
   string options_string = "compact_on_mount = true; compaction_threads=10;flusher_threads=5;";
   
   int r = db->ParseOptionsFromString(options_string, options);
