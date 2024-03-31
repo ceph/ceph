@@ -198,9 +198,8 @@ void NVMeofGwMap::handle_abandoned_ana_groups(bool& propose)
 void  NVMeofGwMap::set_failover_gw_for_ANA_group(const NvmeGwId &failed_gw_id, const NvmeGroupKey& group_key, const NvmeGwId &gw_id,  NvmeAnaGrpId ANA_groupid)
 {
     NvmeGwCreated& gw_state = Created_gws[group_key][gw_id];
-    gw_state.failover_peer[ANA_groupid] = failed_gw_id;
     epoch_t epoch;
-    dout(4) << "Found failower GW " << gw_id << " for ANA group " << (int)ANA_groupid << dendl;
+    dout(4) << "Found failover GW " << gw_id << " for ANA group " << (int)ANA_groupid << dendl;
     int rc = blocklist_gw (failed_gw_id, group_key, ANA_groupid, epoch, true);
     if(rc){
         gw_state.active_state(ANA_groupid); //TODO check whether it is valid to  start failover when nonces are empty !
@@ -242,8 +241,6 @@ void  NVMeofGwMap::find_failback_gw(const NvmeGwId &gw_id, const NvmeGroupKey& g
         auto& failback_gw_id = gw_state_it.first;
         auto& st = gw_state_it.second;
         if (st.sm_state[gw_state.ana_grp_id] == GW_STATES_PER_AGROUP_E::GW_ACTIVE_STATE) {
-            ceph_assert(st.failover_peer[gw_state.ana_grp_id] == gw_id);
-
             dout(4)  << "Found Failback GW " << failback_gw_id << " that previously took over the ANAGRP " << gw_state.ana_grp_id << " of the available GW " << gw_id << dendl;
             st.sm_state[gw_state.ana_grp_id] = GW_STATES_PER_AGROUP_E::GW_WAIT_FAILBACK_PREPARED;
             start_timer(failback_gw_id, group_key, gw_state.ana_grp_id, 3);// Add timestamp of start Failback preparation

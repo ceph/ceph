@@ -82,7 +82,6 @@ struct NvmeGwCreated {
     NvmeAnaNonceMap    nonce_map;
     NvmeAnaNonceMap    copied_nonce_map;
     SM_STATE           sm_state;                      // state machine states per ANA group
-    NvmeGwId           failover_peer[MAX_SUPPORTED_ANA_GROUPS];
     struct{
        epoch_t     osd_epoch;
        bool        is_failover;
@@ -94,7 +93,6 @@ struct NvmeGwCreated {
     {
         for (int i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i++){
             sm_state[i] = GW_STATES_PER_AGROUP_E::GW_STANDBY_STATE;
-            failover_peer[i]  = "";
             blocklist_data[i].osd_epoch = 0;
             blocklist_data[i].is_failover = true;
         }
@@ -102,7 +100,6 @@ struct NvmeGwCreated {
 
     void standby_state(NvmeAnaGrpId grpid) {
            sm_state[grpid]       = GW_STATES_PER_AGROUP_E::GW_STANDBY_STATE;
-           failover_peer[grpid]  = "";
     };
     void active_state(NvmeAnaGrpId grpid) {
            sm_state[grpid]       = GW_STATES_PER_AGROUP_E::GW_ACTIVE_STATE;
