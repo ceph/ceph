@@ -2005,27 +2005,37 @@ def _samba_ad_dc_conf(ctx, remote, cengine):
     ]
 
 
-@contextlib.contextmanager
-def configure_samba_client_container(ctx, config):
-    # TODO: deduplicate logic between this task and deploy_samba_ad_dc
+def _discover_container_engine(ctx, config):
     role = config.get('role')
-    samba_client_image = config.get(
-        'samba_client_image', 'quay.io/samba.org/samba-client:latest'
-    )
     if not role:
-        raise ConfigError(
-            "you must specify a role to discover container engine / pull image"
-        )
+        raise ConfigError('must specify a role to discover container engine')
     (remote,) = ctx.cluster.only(role).remotes.keys()
     cengine = 'podman'
     try:
-        log.info("Testing if podman is available")
+        log.info('Testing if podman is available')
         remote.run(args=['sudo', cengine, '--help'])
     except CommandFailedError:
-        log.info("Failed to find podman. Using docker")
+        log.info('Failed to find podman. Using docker')
         cengine = 'docker'
+    return cengine
 
-    remote.run(args=['sudo', cengine, 'pull', samba_client_image])
+
+def _pull_samba_container_image(ctx, config, cengine, image):
+    role = config.get('role')
+    if not role:
+        raise ConfigError('must specify a role to pull container image')
+    (remote,) = ctx.cluster.only(role).remotes.keys()
+    remote.run(args=['sudo', cengine, 'pull', image])
+
+
+@contextlib.contextmanager
+def configure_samba_client_container(ctx, config):
+    # TODO: deduplicate logic between this task and deploy_samba_ad_dc
+    samba_client_image = config.get(
+        'samba_client_image', 'quay.io/samba.org/samba-client:latest'
+    )
+    cengine = _discover_container_engine(ctx, config)
+    _pull_samba_container_image(ctx, config, cengine, samba_client_image)
     samba_client_container_cmd = [
         'sudo',
         cengine,
@@ -2035,12 +2045,34 @@ def configure_samba_client_container(ctx, config):
         '-eKRB5_CONFIG=/dev/null',
         samba_client_image,
     ]
-
     setattr(ctx, 'samba_client_container_cmd', samba_client_container_cmd)
     try:
         yield
     finally:
         setattr(ctx, 'samba_client_container_cmd', None)
+
+
+@contextlib.contextmanager
+def configure_samba_toolbox_container(ctx, config):
+    samba_toolbox_image = config.get(
+        'samba_toolbox_image', 'quay.io/samba.org/samba-toolbox:latest'
+    )
+    cengine = _discover_container_engine(ctx, config)
+    _pull_samba_container_image(ctx, config, cengine, samba_toolbox_image)
+    samba_toolbox_container_cmd = [
+        'sudo',
+        cengine,
+        'run',
+        '--rm',
+        '--net=host',
+        '-eKRB5_CONFIG=/dev/null',
+        samba_toolbox_image,
+    ]
+    setattr(ctx, 'samba_toolbox_container_cmd', samba_toolbox_container_cmd)
+    try:
+        yield
+    finally:
+        setattr(ctx, 'samba_toolbox_container_cmd', None)
 
 
 @contextlib.contextmanager
