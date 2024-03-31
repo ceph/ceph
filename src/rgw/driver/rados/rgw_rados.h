@@ -1525,10 +1525,11 @@ public:
 	      const std::string& marker,
 	      uint32_t max,
 	      std::list<rgw_cls_bi_entry> *entries,
-	      bool *is_truncated, optional_yield y);
-  int bi_list(BucketShard& bs, const std::string& filter_obj, const std::string& marker, uint32_t max, std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, optional_yield y);
+	      bool *is_truncated, bool reshardlog, optional_yield y);
+  int bi_list(BucketShard& bs, const std::string& filter_obj, const std::string& marker, uint32_t max, std::list<rgw_cls_bi_entry> *entries,
+              bool *is_truncated, bool reshardlog, optional_yield y);
   int bi_list(const DoutPrefixProvider *dpp, rgw_bucket& bucket, const std::string& obj_name, const std::string& marker, uint32_t max,
-              std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, optional_yield y);
+              std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog, optional_yield y);
   int bi_remove(const DoutPrefixProvider *dpp, BucketShard& bs);
 
   int cls_obj_usage_log_add(const DoutPrefixProvider *dpp, const std::string& oid, rgw_usage_log_info& info, optional_yield y);

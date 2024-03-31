@@ -238,7 +238,7 @@ TEST_F(cls_rgw, index_remove_object)
   /* prepare both removal and modification on the same object, this time we'll
    * first complete modification then remove*/
   index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag_remove, obj, loc);
-  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_DEL, tag_modify, obj, loc);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag_modify, obj, loc);
 
   /* complete modification */
   total_size -= meta.size;
@@ -1339,4 +1339,65 @@ TEST_F(cls_rgw, index_racing_removes)
   }
 
   test_stats(ioctx, bucket_oid, RGWObjCategory::None, 0, 0);
+}
+
+void set_reshard_status(librados::IoCtx& ioctx, const std::string& oid,
+                const cls_rgw_bucket_instance_entry& entry)
+{
+  map<int, string> bucket_objs;
+  bucket_objs[0] = oid;
+  int r = CLSRGWIssueSetBucketResharding(ioctx, bucket_objs, entry, 1)();
+  ASSERT_EQ(0, r);
+}
+
+static int reshardlog_list(librados::IoCtx& ioctx, const std::string& oid,
+                           std::list<rgw_cls_bi_entry> *entries, bool *is_truncated)
+{
+  int ret = cls_rgw_bi_list(ioctx, oid, "", "", 100, entries, is_truncated, true);
+  if (ret < 0) {
+    return ret;
+  }
+  return 0;
+}
+
+TEST_F(cls_rgw, reshardlog_list)
+{
+  string bucket_oid = str_int("reshard", 0);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  cls_rgw_obj_key obj1 = str_int("obj1", 0);
+  string tag = str_int("tag-prepare", 0);
+  string loc = str_int("loc", 0);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj1, loc);
+  rgw_bucket_dir_entry_meta meta;
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, 1, obj1, meta);
+
+  // do not record logs
+  bool is_truncated = false;
+  std::list<rgw_cls_bi_entry> entries;
+  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
+  ASSERT_FALSE(is_truncated);
+  ASSERT_EQ(0u, entries.size());
+
+  // set reshard status to IN_LOGRECORD
+  cls_rgw_bucket_instance_entry entry;
+  entry.reshard_status = cls_rgw_reshard_status::IN_LOGRECORD;
+  set_reshard_status(ioctx, bucket_oid, entry);
+
+  // record a log in prepare
+  cls_rgw_obj_key obj2 = str_int("obj2", 0);
+  index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj2, loc);
+  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
+  ASSERT_FALSE(is_truncated);
+  ASSERT_EQ(1u, entries.size());
+
+  // overwrite the log writen in prepare
+  entries.clear();
+  index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, 1, obj2, meta);
+  ASSERT_EQ(0, reshardlog_list(ioctx, bucket_oid, &entries, &is_truncated));
+  ASSERT_FALSE(is_truncated);
+  ASSERT_EQ(1u, entries.size());
 }

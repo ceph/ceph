@@ -299,6 +299,7 @@ std::string_view to_string(const BucketReshardState& s)
 {
   switch (s) {
   case BucketReshardState::None: return "None";
+  case BucketReshardState::InLogrecord: return "InLogrecord";
   case BucketReshardState::InProgress: return "InProgress";
   default: return "Unknown";
   }
@@ -307,6 +308,10 @@ bool parse(std::string_view str, BucketReshardState& s)
 {
   if (boost::iequals(str, "None")) {
     s = BucketReshardState::None;
+    return true;
+  }
+  if (boost::iequals(str, "InLogrecord")) {
+    s = BucketReshardState::InLogrecord;
     return true;
   }
   if (boost::iequals(str, "InProgress")) {

@@ -760,22 +760,27 @@ struct rgw_cls_bi_list_op {
   uint32_t max;
   std::string name_filter; // limit result to one object and its instances
   std::string marker;
+  bool reshardlog;
 
-  rgw_cls_bi_list_op() : max(0) {}
+  rgw_cls_bi_list_op() : max(0), reshardlog(false) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(max, bl);
     encode(name_filter, bl);
     encode(marker, bl);
+    encode(reshardlog, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(max, bl);
     decode(name_filter, bl);
     decode(marker, bl);
+    if (struct_v >= 2) {
+      decode(reshardlog, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -783,6 +788,7 @@ struct rgw_cls_bi_list_op {
     f->dump_unsigned("max", max);
     f->dump_string("name_filter", name_filter);
     f->dump_string("marker", marker);
+    f->dump_bool("reshardlog", reshardlog);
   }
 
   static void generate_test_instances(std::list<rgw_cls_bi_list_op*>& o) {
@@ -791,6 +797,7 @@ struct rgw_cls_bi_list_op {
     o.back()->max = 100;
     o.back()->name_filter = "name_filter";
     o.back()->marker = "marker";
+    o.back()->reshardlog = true;
   }
 };
 WRITE_CLASS_ENCODER(rgw_cls_bi_list_op)

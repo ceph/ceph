@@ -118,6 +118,20 @@ static bool bi_entry_gt(const string& first, const string& second)
   return first > second;
 }
 
+/**
+ * return: Plain, Instance, OLH or Invalid
+ */
+BIIndexType bi_type(const string& s, const string& prefix)
+{
+  int ret = bi_entry_type(s.substr(prefix.size()));
+  if (ret < 0) {
+    return BIIndexType::Invalid;
+  } else if (ret == 0) {
+    return BIIndexType::Plain;
+  }
+  return (BIIndexType)ret;
+}
+
 static void get_time_key(real_time& ut, string *key)
 {
   char buf[32];
@@ -2822,14 +2836,21 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 
   rgw_cls_bi_entry& entry = op.entry;
 
-  int r = cls_cxx_map_set_val(hctx, entry.idx, &entry.data);
-  if (r < 0) {
-    CLS_LOG(0, "ERROR: %s: cls_cxx_map_set_val() returned r=%d", __func__, r);
+  if (entry.type == BIIndexType::ReshardDeleted) {
+    int r = cls_cxx_map_remove_key(hctx, entry.idx);
+    if (r < 0) {
+      CLS_LOG(0, "ERROR: %s: cls_cxx_map_remove_key() returned r=%d", __func__, r);
+      return r;
+    }
+  } else {
+    int r = cls_cxx_map_set_val(hctx, entry.idx, &entry.data);
+    if (r < 0) {
+      CLS_LOG(0, "ERROR: %s: cls_cxx_map_set_val() returned r=%d", __func__, r);
+    }
   }
 
   return 0;
 }
-
 
 /* The plain entries in the bucket index are divided into two regions
  * divided by the special entries that begin with 0x80. Those below
@@ -3176,6 +3197,57 @@ static int list_olh_entries(cls_method_context_t hctx,
   return count;
 }
 
+static int reshard_log_list_entries(cls_method_context_t hctx, const string& marker,
+                                    uint32_t max, list<rgw_cls_bi_entry>& entries, bool *truncated)
+{
+  string start_key, end_key;
+  start_key = BI_PREFIX_CHAR;
+  start_key.append(bucket_index_prefixes[BI_BUCKET_RESHARD_LOG_INDEX]);
+
+  string bi_type_marker = start_key;
+
+  end_key = BI_PREFIX_CHAR;
+  end_key.append(bucket_index_prefixes[BI_BUCKET_RESHARD_LOG_INDEX + 1]);
+
+  if (!marker.empty()) {
+    start_key.append(marker);
+  }
+
+  map<string, bufferlist> keys;
+  int ret = cls_cxx_map_get_vals(hctx, start_key, string(), max, &keys, truncated);
+  CLS_LOG(20, "%s(): start_key=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), (int)keys.size());
+  if (ret < 0) {
+    return ret;
+  }
+
+  map<string, bufferlist>::iterator iter;
+  for (iter = keys.begin(); iter != keys.end(); ++iter) {
+    if (iter->first.compare(end_key) >= 0) {
+      if (truncated) {
+        *truncated = false;
+      }
+      return 0;
+    }
+
+    rgw_cls_bi_entry entry;
+    auto biter = iter->second.cbegin();
+    try {
+      decode(entry, biter);
+    } catch (ceph::buffer::error& err) {
+      CLS_LOG(0, "ERROR: %s: failed to decode buffer for rgw_cls_bi_entry \"%s\"",
+	      __func__, escape_str(iter->first).c_str());
+      return -EIO;
+    }
+    if (entry.type != BIIndexType::ReshardDeleted)
+      entry.type = bi_type(iter->first, bi_type_marker);
+
+    CLS_LOG(20, "reshard_log_list_entries key=%s bl.length=%d\n", entry.idx.c_str(), (int)iter->second.length());
+
+    entries.push_back(entry);
+  }
+  return 0;
+}
+
 static int check_index(cls_method_context_t hctx,
 		       rgw_bucket_dir_header *existing_header,
 		       rgw_bucket_dir_header *calc_header)
@@ -3285,7 +3357,8 @@ int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist
 }
 
 
-/* Lists all the entries that appear in a bucket index listing.
+/* Lists all the entries that appear in a bucket index listing,
+ * or list all the entries in reshardlog namespace.
  *
  * It may not be obvious why this function calls three other "segment"
  * functions (list_plain_entries (twice), list_instance_entries,
@@ -3324,14 +3397,23 @@ static int rgw_bi_list_op(cls_method_context_t hctx,
   constexpr uint32_t MAX_BI_LIST_ENTRIES = 1000;
   const uint32_t max = std::min(op.max, MAX_BI_LIST_ENTRIES);
 
-  CLS_LOG(20, "%s: op.marker=\"%s\", op.name_filter=\"%s\", op.max=%u max=%u",
+  CLS_LOG(20, "%s: op.marker=\"%s\", op.name_filter=\"%s\", op.max=%u max=%u, op.reshardlog=%d",
 	  __func__, escape_str(op.marker).c_str(), escape_str(op.name_filter).c_str(),
-	  op.max, max);
+	  op.max, max, op.reshardlog);
 
   int ret;
   uint32_t count = 0;
   bool more = false;
   rgw_cls_bi_list_ret op_ret;
+
+  if (op.reshardlog) {
+    ret = reshard_log_list_entries(hctx, op.marker, op.max, op_ret.entries, &op_ret.is_truncated);
+    if (ret < 0)
+      return ret;
+    CLS_LOG(20, "%s: returning %lu entries, is_truncated=%d", __func__, op_ret.entries.size(), op_ret.is_truncated);
+    encode(op_ret, *out);
+    return 0;
+  }
 
   ret = list_plain_entries(hctx, op.name_filter, op.marker, max,
 			   &op_ret.entries, &more, PlainEntriesRegion::Low);
@@ -3661,7 +3743,6 @@ static int rgw_bi_log_stop(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   return write_bucket_header(hctx, &header);
 }
-
 
 static void usage_record_prefix_by_time(uint64_t epoch, string& key)
 {
@@ -4754,7 +4835,7 @@ static int rgw_guard_bucket_resharding(cls_method_context_t hctx, bufferlist *in
     return rc;
   }
 
-  if (header.resharding()) {
+  if (header.resharding_in_progress()) {
     return op.ret_err;
   }
 

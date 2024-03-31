@@ -955,6 +955,9 @@ std::ostream& operator<<(std::ostream& out, cls_rgw_reshard_status status) {
   case cls_rgw_reshard_status::NOT_RESHARDING:
     out << "NOT_RESHARDING";
     break;
+  case cls_rgw_reshard_status::IN_LOGRECORD:
+    out << "IN_LOGRECORD";
+    break;
   case cls_rgw_reshard_status::IN_PROGRESS:
     out << "IN_PROGRESS";
     break;

@@ -443,6 +443,7 @@ int cls_rgw_bi_get(librados::IoCtx& io_ctx, const string oid,
   return 0;
 }
 
+
 int cls_rgw_bi_put(librados::IoCtx& io_ctx, const string oid, const rgw_cls_bi_entry& entry)
 {
   bufferlist in, out;
@@ -470,13 +471,14 @@ void cls_rgw_bi_put(ObjectWriteOperation& op, const string oid, const rgw_cls_bi
  */
 int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
 		    const std::string& name_filter, const std::string& marker, uint32_t max,
-		    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated)
+		    std::list<rgw_cls_bi_entry> *entries, bool *is_truncated, bool reshardlog)
 {
   bufferlist in, out;
   rgw_cls_bi_list_op call;
   call.name_filter = name_filter;
   call.marker = marker;
   call.max = max;
+  call.reshardlog = reshardlog;
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_LIST, in, out);
   if (r < 0)

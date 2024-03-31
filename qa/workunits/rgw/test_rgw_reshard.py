@@ -223,6 +223,18 @@ def main():
     log.debug('TEST: reshard bucket with abort at do_reshard\n')
     test_bucket_reshard(connection, 'abort-at-do-reshard', abort_at='do_reshard')
 
+    log.debug('TEST: reshard bucket with EIO injected at logrecord_writes\n')
+    test_bucket_reshard(connection, 'error-at-logrecord-writes', error_at='logrecord_writes')
+    log.debug('TEST: reshard bucket with abort at logrecord_writes\n')
+    test_bucket_reshard(connection, 'abort-at-logrecord-writes', abort_at='logrecord_writes')
+
+    log.debug('TEST: reshard bucket with EIO injected at change_reshard_state\n')
+    test_bucket_reshard(connection, 'error-at-change-reshard-state', error_at='change_reshard_state')
+    log.debug('TEST: reshard bucket with ECANCELED injected at change_reshard_state\n')
+    test_bucket_reshard(connection, 'error-at-change-reshard-state', error_at='change_reshard_state', error_code=errno.ECANCELED)
+    log.debug('TEST: reshard bucket with abort at change_reshard_state\n')
+    test_bucket_reshard(connection, 'abort-at-change-reshard-state', abort_at='change_reshard_state')
+
     # TESTCASE 'versioning reshard-','bucket', reshard','versioning reshard','succeeds'
     log.debug(' test: reshard versioned bucket')
     num_shards_expected = get_bucket_stats(VER_BUCKET_NAME).num_shards + 1
