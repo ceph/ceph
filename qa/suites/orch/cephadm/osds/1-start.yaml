@@ -20,6 +20,8 @@ openstack:
     size: 10 # GB
 overrides:
   ceph:
+    log-ignorelist:
+      - OSD_DOWN
     conf:
       osd:
         osd shutdown pgref assert: true
