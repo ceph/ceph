@@ -255,6 +255,14 @@ private:
       && snapc.snaps[0] > initial_obc.ssc->snapset.seq; // existing obj is old
   }
 
+  /**
+  * update_clone_overlap
+  *
+  * We need to update the most recent snapshot and the overlapping
+  * part of the head object for each write operation.
+  */
+  void update_clone_overlap();
+
   interruptible_future<std::vector<pg_log_entry_t>> flush_clone_metadata(
     std::vector<pg_log_entry_t>&& log_entries,
     SnapMapper& snap_mapper,
