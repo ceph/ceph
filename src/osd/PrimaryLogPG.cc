@@ -1171,11 +1171,22 @@ void PrimaryLogPG::do_command(
     f->close_section();
   }
 
-  else if (prefix == "scrub" || prefix == "deep-scrub") {
+  else if (prefix == "scrub") {
     if (is_primary()) {
-      scrub_level_t deep = (prefix == "deep-scrub") ? scrub_level_t::deep
-						    : scrub_level_t::shallow;
-      m_scrubber->on_operator_forced_scrub(f.get(), deep, m_planned_scrub);
+      m_scrubber->on_operator_forced_scrub(
+	  f.get(), scrub_level_t::shallow, m_planned_scrub);
+    } else {
+      ss << "Not primary";
+      ret = -EPERM;
+    }
+    outbl.append(ss.str());
+  }
+
+  else if (prefix == "deep-scrub" || prefix == "deep_scrub") {
+    // the "deep_scrub" format is deprecated. Supported for backward compat.
+    if (is_primary()) {
+      m_scrubber->on_operator_forced_scrub(
+	  f.get(), scrub_level_t::deep, m_planned_scrub);
     } else {
       ss << "Not primary";
       ret = -EPERM;
@@ -1198,8 +1209,9 @@ void PrimaryLogPG::do_command(
     outbl.append(ss.str());
   }
 
-  else if (prefix == "block" || prefix == "unblock" || prefix == "set" ||
-           prefix == "unset") {
+  else if (
+      prefix == "block" || prefix == "unblock" || prefix == "set" ||
+      prefix == "unset") {
     string value;
     cmd_getval(cmdmap, "value", value);
 

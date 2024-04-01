@@ -2692,6 +2692,7 @@ void OSD::asok_command(
       prefix == "list_unfound" ||
       prefix == "scrub" ||
       prefix == "deep-scrub" ||
+      prefix == "deep_scrub" || // deprecated. Required for pre-Squid upgrade tests
       prefix == "schedule-scrub" ||      ///< dev/tests only!
       prefix == "schedule-deep-scrub"    ///< dev/tests only!
     ) {
@@ -4456,6 +4457,15 @@ void OSD::final_init()
     asok_hook,
     "");
   ceph_assert(r == 0);
+  // a deprecated form of the above. Required for
+  // upgrade compatibility & upgrade testing.
+  r = admin_socket->register_command(
+    "pg "
+    "name=pgid,type=CephPgid "
+    "name=cmd,type=CephChoices,strings=deep_scrub",
+    asok_hook,
+    "");
+  ceph_assert(r == 0);
   // new form: tell <pgid> <cmd> for both cli and rest
   r = admin_socket->register_command(
     "query",
@@ -4493,6 +4503,14 @@ void OSD::final_init()
     "name=pgid,type=CephPgid,req=false",
     asok_hook,
     "Trigger a deep scrub");
+  ceph_assert(r == 0);
+  // a deprecated form of the above. Required for
+  // upgrade compatibility & upgrade testing.
+  r = admin_socket->register_command(
+    "deep_scrub "
+    "name=pgid,type=CephPgid,req=false",
+    asok_hook,
+    "deprecated! use 'deep-scrub' instead");
   ceph_assert(r == 0);
   // debug/test commands (faking the timestamps)
   r = admin_socket->register_command(
