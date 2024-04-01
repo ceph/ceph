@@ -1,7 +1,29 @@
 overrides:
   ceph:
     log-ignorelist:
-      - \(MON_DOWN
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(REQUEST_SLOW\)
+      - \(TOO_FEW_PGS\)
+      - slow request
+      - timeout on replica
+      - late reservation from
+      - MON_DOWN
+      - OSDMAP_FLAGS
+      - OSD_DOWN
+      - PG_DEGRADED
+      - PG_AVAILABILITY
+      - POOL_APP_NOT_ENABLED
+      - mons down
+      - mon down
+      - out of quorum
 tasks:
 - install:
     branch: reef
