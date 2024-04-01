@@ -1053,7 +1053,7 @@ def main():
     if parsed_args.block:
         if (len(childargs) >= 2 and
                 childargs[0] == 'osd' and
-                childargs[1] in ['deep-scrub', 'scrub']):
+                childargs[1] in ['deep-scrub', 'scrub', 'deep_scrub']):
             block = True
             waitdata = get_scrub_timestamps(childargs)
 

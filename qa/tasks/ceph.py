@@ -1271,7 +1271,8 @@ def osd_scrub_pgs(ctx, config):
         try:
             manager.raw_cluster_cmd('tell', 'osd.' + id_, 'config', 'set',
                                     'osd_debug_deep_scrub_sleep', '0');
-            manager.raw_cluster_cmd('osd', 'deep-scrub', id_)
+            # using the old (deprecated) format, catering for mixed clusters
+            manager.raw_cluster_cmd('osd', 'deep_scrub', id_)
         except run.CommandFailedError:
             pass
     prev_good = 0
@@ -1303,7 +1304,7 @@ def osd_scrub_pgs(ctx, config):
                     # request was missed.  do not do it every time because
                     # the scrub may be in progress or not reported yet and
                     # we will starve progress.
-                    manager.raw_cluster_cmd('tell', pgid, 'deep-scrub')
+                    manager.raw_cluster_cmd('tell', pgid, 'deep_scrub')
             if gap_cnt > retries:
                 raise RuntimeError('Exiting scrub checking -- not all pgs scrubbed.')
         if loop:
