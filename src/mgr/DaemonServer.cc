@@ -1298,6 +1298,7 @@ bool DaemonServer::_handle_command(
     return true;
   } else if (prefix == "osd scrub" ||
 	      prefix == "osd deep-scrub" ||
+	      prefix == "osd deep_scrub" ||
 	      prefix == "osd repair") {
     string whostr;
     cmd_getval(cmdctx->cmdmap, "who", whostr);
@@ -1331,6 +1332,7 @@ bool DaemonServer::_handle_command(
       }
     }
     set<int> sent_osds, failed_osds;
+    const bool deep = (pvec.back() == "deep-scrub" || pvec.back() == "deep_scrub");
     for (auto osd : osds) {
       vector<spg_t> spgs;
       epoch_t epoch;
@@ -1358,7 +1360,7 @@ bool DaemonServer::_handle_command(
                                            epoch,
                                            spgs,
                                            pvec.back() == "repair",
-                                           pvec.back() == "deep-scrub"));
+                                           deep));
         }
       }
     }

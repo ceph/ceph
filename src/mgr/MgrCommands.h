@@ -170,6 +170,10 @@ COMMAND("osd deep-scrub " \
 	"name=who,type=CephString", \
 	"initiate deep scrub on osd <who>, or use <all|any> to deep scrub all", \
         "osd", "rw")
+COMMAND("osd deep_scrub " \
+	"name=who,type=CephString", \
+	"deprecated", \
+        "osd", "rw")
 COMMAND("osd repair " \
 	"name=who,type=CephString", \
 	"initiate repair on osd <who>, or use <all|any> to repair all", \
