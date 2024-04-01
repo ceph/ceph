@@ -252,6 +252,9 @@ class ESZone(Zone):
         def has_role(self, role_name):
             assert False
 
+        def put_role_policy(self, rolename, policyname, policy_document):
+            assert False
+
         def create_topic(self, topicname, attributes):
             assert False
 
@@ -271,6 +274,9 @@ class ESZone(Zone):
             assert False
 
         def list_notifications(self, bucket_name):
+            assert False
+
+        def assume_role(self, role_arn, session_name, policy, duration_seconds):
             assert False
 
     def get_conn(self, credentials):
