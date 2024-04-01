@@ -128,10 +128,7 @@ export class MultiClusterService {
     clusterAlias: string,
     username: string,
     password: string,
-    token = '',
     hub_url = '',
-    clusterFsid = '',
-    prometheusApiUrl = '',
     ssl = false,
     cert = '',
     ttl: number
@@ -141,10 +138,7 @@ export class MultiClusterService {
       cluster_alias: clusterAlias,
       username,
       password,
-      token,
       hub_url,
-      cluster_fsid: clusterFsid,
-      prometheus_api_url: prometheusApiUrl,
       ssl_verify: ssl,
       ssl_certificate: cert,
       ttl: ttl
@@ -155,7 +149,6 @@ export class MultiClusterService {
     url: any,
     username: string,
     password: string,
-    token = '',
     ssl = false,
     cert = '',
     ttl: number
@@ -164,7 +157,6 @@ export class MultiClusterService {
       url,
       username,
       password,
-      token,
       ssl_verify: ssl,
       ssl_certificate: cert,
       ttl: ttl
