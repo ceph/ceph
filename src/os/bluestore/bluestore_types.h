@@ -1156,7 +1156,6 @@ WRITE_CLASS_DENC(bluestore_deferred_op_t)
 /// writeahead-logged transaction
 struct bluestore_deferred_transaction_t {
   uint64_t seq = 0;
-  uint64_t txc_seq = 0;
   std::list<bluestore_deferred_op_t> ops;
   interval_set<uint64_t> released;  ///< allocations to release after tx
 
