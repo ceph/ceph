@@ -1,3 +1,10 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - MON_DOWN
+      - mons down
+      - mon down
+      - out of quorum
 tasks:
 - cephadm:
     conf:
