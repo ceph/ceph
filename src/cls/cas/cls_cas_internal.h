@@ -244,7 +244,7 @@ struct chunk_refs_by_hash_t : public chunk_refs_t::refs_t {
     int hash_bytes = (hash_bits + 7) / 8;
     while (n--) {
       int64_t poolid;
-      ceph_le32 hash;
+      ceph_le32 hash{0};
       uint64_t count;
       denc_signed_varint(poolid, p);
       memcpy(&hash, p.get_pos_add(hash_bytes), hash_bytes);
