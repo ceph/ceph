@@ -16,14 +16,14 @@
 #include "rgw/rgw_rest.h"
 #include "rgw/rgw_auth_s3.h"
 
-class RGWOp_RemoteD4N_Get : public RGWRESTOp {
+class RGWOp_RemoteD4N_Get : public RGWGetObj {
 public:
   RGWOp_RemoteD4N_Get() {}
   ~RGWOp_RemoteD4N_Get() override {}
 
-  int check_caps(const RGWUserCaps& caps) override {
-    return caps.check_cap("remoted4n", RGW_CAP_READ);
-  }
+  int get_params(optional_yield y) override {return 0; }
+  int send_response_data_error(optional_yield y) override;
+  int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
   void execute(optional_yield y) override;
   const char* name() const override { return "get_remoted4n"; }
 };

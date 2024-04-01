@@ -14,6 +14,8 @@
  */
 
 #include "include/page.h"
+#include <sstream>
+#include <iostream>
 
 #include "rgw_rest.h"
 #include "rgw_op.h"
@@ -32,53 +34,147 @@
 
 using namespace std;
 
-static inline void get_remoted4n_key(req_state *s, string& out) {
-  bool exists;
-  string key;// = s->info.args.get("key", &exists);
-  if (!rgw::sal::Object::empty(s->object.get()))
-      key = s->object->get_name();
-  ldpp_dout(s, 20) << "AMIN: " << __func__ << ": " << __LINE__ << ": key is: " << key << dendl;
+static inline std::vector<std::string> get_remoted4n_objectInfo(req_state *s, char delim) {
+  std::vector<std::string> result;
+  std::string item;
 
-  string section;
-  if (!s->init_state.url_bucket.empty()) {
-    section = s->init_state.url_bucket;
-  } else {
-    section = key;
-    key.clear();
+  string key;
+  if (!rgw::sal::Object::empty(s->object.get())){
+    key = s->object->get_name();
+    ldpp_dout(s, 20) << "AMIN: " << __func__ << ": " << __LINE__ << ": key is: " << key << dendl;
+    std::stringstream ss(key);
+    while (getline(ss, item, delim)) {
+        result.push_back(item);
+    }
   }
-
-  ldpp_dout(s, 20) << "AMIN: " << __func__ << ": " << __LINE__ << ": section is: " << section << dendl;
-  out = section;
-
-  if (!key.empty()) {
-    out += string("_") + key;
-  }
-  ldpp_dout(s, 20) << "AMIN: " << __func__ << ": " << __LINE__ << ": out is: " << out << dendl;
+  return result;
 }
+
+bool objectIsDirty(string key) {
+  if (key.rfind("D_", 0) == 0)
+    return true;
+  else
+    return false;
+}
+
+int RGWOp_RemoteD4N_Get::send_response_data_error(optional_yield y)
+{
+  bufferlist bl;
+  return send_response_data(bl, 0 , 0);
+}
+
+int RGWOp_RemoteD4N_Get::send_response_data(bufferlist& bl, off_t bl_ofs,
+					      off_t bl_len)
+{
+  int r = dump_body(s, bl.c_str() + bl_ofs, bl_len);
+  if (r < 0)
+    return r;
+  return 0;
+}
+
+
 
 void RGWOp_RemoteD4N_Get::execute(optional_yield y) {
   ldpp_dout(s, 20) << "AMIN: " << __func__ << ": " << __LINE__ << ": " << dendl;
-  string key;
+  string bucketName;
+  string objectName;
+  uint64_t offset;
+  uint64_t len;
+  std::string version;
+  string oid_in_cache;
+  string key; 
+  bufferlist bl;
+ 
+  //all the info  including offset, ... should come from remote cache as the key: bucket_version_object_ofs_length 
+  std::vector<std::string> v = get_remoted4n_objectInfo(s, '_');
+  if (v.empty()){
+    ldpp_dout(s, 5) << __func__ << ": " << __LINE__ <<  ": Remote Object name is not in right format!" << dendl;
+    op_ret = -1;
+    return;
+  }
 
-  get_remoted4n_key(s, key);
+  int j = 0;
+  for (auto i : v){ 
+    ldpp_dout(s, 20) << __func__ << ": " << __LINE__ <<  "v["  << j << "]: " << i << dendl;
+    j++;
+  }
 
-  //op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_cache_driver()->get(s, key, offset, len , bl, attrs, y); //FIXME: object length
+  bool dirty = false;
+  if (v[0] == string("D_")){
+    dirty = true;
+  }
+
+  char* end;
+  if (dirty == true){
+    if (v.size() == 5){
+      bucketName = v[1];
+      objectName = v[2];     
+      offset = strtoull(v[3].c_str(), &end,10);
+      len = strtoull(v[4].c_str(), &end,10);
+      oid_in_cache = bucketName + "_" + objectName + "_" + to_string(offset) + "_" + to_string(len);
+    }
+    else if (v.size() == 6){
+      bucketName = v[1];
+      version = v[2];
+      objectName = v[3];     
+      offset = strtoull(v[4].c_str(), &end,10);
+      len = strtoull(v[5].c_str(), &end,10);
+      oid_in_cache = bucketName + "_" + version + "_" + objectName + "_" + to_string(offset) + "_" + to_string(len);
+    }
+    else{
+      ldpp_dout(s, 5) << __func__ << ": " << __LINE__ <<  ": Remote Object name is not in right format!" << dendl;
+      op_ret = -1;
+      return;
+    }
+  }
+  else{ // dirty == flase
+    if (v.size() == 4){
+      bucketName = v[0];
+      objectName = v[1];     
+      offset = strtoull(v[2].c_str(), &end,10);
+      len = strtoull(v[3].c_str(), &end,10);
+      oid_in_cache = bucketName + "_" + objectName + "_" + to_string(offset) + "_" + to_string(len);
+    }
+    else if (v.size() == 5){
+      bucketName = v[0];     
+      version = v[1];
+      objectName = v[2];     
+      offset = strtoull(v[3].c_str(), &end,10);
+      len = strtoull(v[4].c_str(), &end,10);
+      oid_in_cache = bucketName + "_" + version + "_" + objectName + "_" + to_string(offset) + "_" + to_string(len);
+    }
+    else{
+      ldpp_dout(s, 5) << __func__ << ": " << __LINE__ <<  ": Remote Object name is not in right format!" << dendl;
+      op_ret = -1;
+      return;
+    }
+  }
+
+  if (dirty)
+    //RD_bucket_version_key_...
+    key = string("RD_") + oid_in_cache;
+  else 
+    key = oid_in_cache;
+
+
+  ldpp_dout(s, 20) << "AMIN: " << __func__ << ": " << __LINE__ << ": key is: " << key << dendl;
+
+  if (!rgw::sal::Object::empty(s->object.get()))
+      attrs = s->object->get_attrs();
+
+  op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_cache_driver()->get(s, key, offset, len , bl, attrs, y);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: can't get key: " << cpp_strerror(op_ret) << dendl;
     return;
   }
 
+  op_ret = send_response_data(bl, offset, len);
+  if (op_ret < 0) {
+    ldpp_dout(s, 5) << "ERROR: can't send seponse data: " << cpp_strerror(op_ret) << dendl;
+    return;
+  }
   op_ret = 0;
 }
-
-/*
-void RGWOp_RemoteD4N_Get_Myself::execute(optional_yield y) {
-  const std::string owner_id = s->owner.id.to_str();
-  s->info.args.append("key", owner_id);
-
-  return RGWOp_RemoteD4N_Get::execute(y);
-}
-*/
 
 int RGWOp_RemoteD4N_Put::get_data(bufferlist& bl) {
   
@@ -128,29 +224,103 @@ void RGWOp_RemoteD4N_Put::execute(optional_yield y) {
   ldpp_dout(s, 20) << "AMIN: " << __func__ << ": " << __LINE__ << dendl;
   bufferlist bl;
   rgw::sal::Attrs attrs;
-
+  string bucketName;
+  string objectName;
+  uint64_t offset;
+  uint64_t len;
+  std::string version;
+  string oid_in_cache;
   string key;
-  get_remoted4n_key(s, key);
+ 
+  //all the info  including offset, ... should come from remote cache as the key: bucket_version_object_ofs_length 
+  std::vector<std::string> v = get_remoted4n_objectInfo(s, '_');
+  if (v.empty()){
+    ldpp_dout(s, 5) << __func__ << ": Remote Object name is not in right format!" << dendl;
+    op_ret = -1;
+    return;
+  }
+
+  bool dirty = false;
+  if (v[0] == string("D_")){
+    dirty = true;
+  }
+
+  char* end;
+  if (dirty == true){
+    if (v.size() == 5){
+      bucketName = v[1];
+      objectName = v[2];     
+      offset = strtoull(v[3].c_str(), &end,10);
+      len = strtoull(v[4].c_str(), &end,10);
+    }
+    else if (v.size() == 6){
+      bucketName = v[1];
+      version = v[2];
+      objectName = v[3];     
+      offset = strtoull(v[4].c_str(), &end,10);
+      len = strtoull(v[5].c_str(), &end,10);
+    }
+    else{
+      ldpp_dout(s, 5) << __func__ << ": Remote Object name is not in right format!" << dendl;
+      op_ret = -1;
+      return;
+    }
+  }
+  else{ // dirty == flase
+    if (v.size() == 4){
+      bucketName = v[0];
+      objectName = v[1];     
+      offset = strtoull(v[2].c_str(), &end,10);
+      len = strtoull(v[3].c_str(), &end,10);
+    }
+    else if (v.size() == 5){
+      bucketName = v[0];     
+      version = v[1];
+      objectName = v[2];     
+      offset = strtoull(v[3].c_str(), &end,10);
+      len = strtoull(v[4].c_str(), &end,10);
+    }
+    else{
+      ldpp_dout(s, 5) << __func__ << ": Remote Object name is not in right format!" << dendl;
+      op_ret = -1;
+      return;
+    }
+  }
+  oid_in_cache = bucketName + "_" + version + "_" + objectName + "_" + to_string(offset) + "_" + to_string(len);
+  if (dirty)
+    //RD_bucket_version_key_...
+    key = string("RD_") + oid_in_cache;
+  else
+    key = oid_in_cache;
+
   ldpp_dout(s, 20) << "AMIN: " << __func__ << ": " << __LINE__ << ": key is: " << key << dendl;
 
+  if (!rgw::sal::Object::empty(s->object.get()))
+      attrs = s->object->get_attrs();
 
   op_ret = get_data(bl);
   if (op_ret < 0) {
     return;
   }
-  ldpp_dout(s, 20) << "AMIN: " << __func__ << __LINE__ << ": data is: " << bl.to_str() << dendl;
 
-  if (!rgw::sal::Object::empty(s->object.get()))
-      attrs = s->object->get_attrs();
+  ldpp_dout(s, 20) << "AMIN: " << __func__ << __LINE__ << ": data is: " << bl.to_str() << dendl;  
 
-  int ofs = 0; //FIXME: AMIN: what if we have several blocks from a remote cache? how can we pass this info to a remote cache?
-  string oid_in_cache = key + std::to_string(ofs) + std::to_string(bl.length()); //FIXME: AMIN: should we consider the object clean?
+  if (bl.length() != len){
+    ldpp_dout(s, 5) << __func__ << ": Data length is not right!" << dendl;
+    op_ret = -1;
+    return;
+  }
 
-  op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_cache_driver()->put(s, oid_in_cache, bl, bl.length(), attrs, y);
+  op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_cache_driver()->put(s, key, bl, bl.length(), attrs, y);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: can't write object into the cache: " << cpp_strerror(op_ret) << dendl;
     return;
   }
+
+  time_t creationTime = time(NULL);
+
+  static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime,  s->object->get_bucket()->get_owner(), y);
+
   // translate internal codes into return header
   if (op_ret == 0)
     update_status = "created";
@@ -173,8 +343,13 @@ void RGWOp_RemoteD4N_Put::send_response() {
 
 void RGWOp_RemoteD4N_Delete::execute(optional_yield y) {
   string key;
+  std::vector<std::string> v = get_remoted4n_objectInfo(s, '_');
+  if (v.empty()){
+    ldpp_dout(s, 5) << __func__ << ": Remote Object name is not in right format!" << dendl;
+    op_ret = -1;
+    return;
+  }
 
-  get_remoted4n_key(s, key);
   op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_cache_driver()->del(s, key, y);
   if (op_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: can't remove key: " << cpp_strerror(op_ret) << dendl;

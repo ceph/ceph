@@ -107,6 +107,32 @@ int LFUDAPolicy::init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_
   return result;
 }
 
+int LFUDAPolicy::getMinAvgWeight(const DoutPrefixProvider* dpp, int minAvgWeight, std::string cache_address, optional_yield y) {
+  response<std::string> resp;
+
+  try { 
+    boost::system::error_code ec;
+    request req;
+    req.push("HGET", "lfuda", "minLocalWeights_sum");
+    req.push("HGET", "lfuda", "minLocalWeights_size");
+    req.push("HGET", "lfuda", "minLocalWeights_address");
+      
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    return -EINVAL;
+  }
+
+  minAvgWeight =  std::get<0>(resp).value() / std::get<1>(resp).value();
+  cache_address =  std::get<2>(resp).value();
+  return 0;
+}
+
+
+
 int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y) {
   response<std::string> resp;
 
@@ -296,7 +322,14 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       return -ENOENT;
     }
 
-    int avgWeight = weightSum / entries_map.size();
+    //int avgWeight = weightSum / entries_map.size();
+    int avgWeight;
+    std::string remoteCacheAddress;
+    if (getMinAvgWeight(dpp, avgWeight, remoteCacheAddress, y) < 0)
+      ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Could not retrieve min average weight." << dendl;
+      delete victim;
+      return ret;
+    }
 
     if (victim->hostsList.size() == 1 && victim->hostsList[0] == dir->cct->_conf->rgw_d4n_l1_datacache_address) { /* Last copy */
       if (victim->globalWeight) {
@@ -319,6 +352,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       if (it->second->localWeight > avgWeight) {
 	// TODO: push victim block to remote cache
 	// add remote cache host to host list
+	remoteAPI->push(dpp, victim, remoteCacheAddress, y);	
       }
     }
 
