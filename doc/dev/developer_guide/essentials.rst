@@ -22,7 +22,6 @@ RGW       Matt Benjamin      mattbenjamin
 RBD       Ilya Dryomov       dis 
 CephFS    Venky Shankar      vshankar
 Dashboard Nizamudeen A       nizamial09 
-MON       Joao Luis          jecluis
 Build/Ops Ken Dreyer         ktdreyer
 Docs      Zac Dover          zdover23
 ========= ================== =============
