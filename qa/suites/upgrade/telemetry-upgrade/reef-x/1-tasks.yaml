@@ -25,6 +25,7 @@ overrides:
       - mon down
       - out of quorum
       - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
 tasks:
 - install:
     branch: reef
@@ -34,8 +35,7 @@ tasks:
 - print: "**** done start installing reef cephadm ..."
 - cephadm:
     image: quay.io/ceph/daemon-base:latest-reef
-    cephadm_branch: reef
-    cephadm_git_url: https://github.com/ceph/ceph
+    compiled_cephadm_branch: reef
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used

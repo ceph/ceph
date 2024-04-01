@@ -25,6 +25,7 @@ overrides:
       - mon down
       - out of quorum
       - CEPHADM_FAILED_DAEMON
+      - failed cephadm daemon
 tasks:
 - install:
     branch: quincy
