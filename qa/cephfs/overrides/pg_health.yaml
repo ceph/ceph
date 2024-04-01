@@ -1,0 +1,14 @@
+# To prevent PG_AVAILABILITY failures from dominating runs, we usually ignore
+# these warnings. However, we'd like to see the cause of these warnings to be
+# fixed so occasionally allow the warning to fail the job.
+#
+# https://tracker.ceph.com/issues/52624
+
+teuthology:
+  premerge: if math.random() < 0.05 then reject() end
+overrides:
+  ceph:
+    log-ignorelist:
+      - PG_AVAILABILITY
+      - PG_DEGRADED
+      - Reduced data availability
