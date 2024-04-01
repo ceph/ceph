@@ -21,8 +21,13 @@ paths:
             schema:
               properties:
                 password:
+                  description: Password
                   type: string
+                ttl:
+                  description: Token Time to Live (in hours)
+                  type: integer
                 username:
+                  description: Username
                   type: string
               required:
               - username
@@ -32,7 +37,42 @@ paths:
         '201':
           content:
             application/vnd.ceph.api.v1.0+json:
-              type: object
+              schema:
+                properties:
+                  permissions:
+                    description: List of permissions acquired
+                    properties:
+                      cephfs:
+                        description: ''
+                        items:
+                          type: string
+                        type: array
+                    required:
+                    - cephfs
+                    type: object
+                  pwdExpirationDate:
+                    description: Password expiration date
+                    type: string
+                  pwdUpdateRequired:
+                    description: Is password update required?
+                    type: boolean
+                  sso:
+                    description: Uses single sign on?
+                    type: boolean
+                  token:
+                    description: Authentication Token
+                    type: string
+                  username:
+                    description: Username
+                    type: string
+                required:
+                - token
+                - username
+                - permissions
+                - pwdExpirationDate
+                - sso
+                - pwdUpdateRequired
+                type: object
           description: Resource created.
         '202':
           content:
@@ -48,6 +88,7 @@ paths:
         '500':
           description: Unexpected error. Please check the response body for the stack
             trace.
+      summary: Dashboard Authentication
       tags:
       - Auth
   /api/auth/check:
@@ -7077,6 +7118,8 @@ paths:
                   type: boolean
                 token:
                   type: string
+                ttl:
+                  type: string
                 url:
                   type: string
                 username:
@@ -7256,6 +7299,8 @@ paths:
                   default: false
                   type: boolean
                 token:
+                  type: string
+                ttl:
                   type: string
                 url:
                   type: string
