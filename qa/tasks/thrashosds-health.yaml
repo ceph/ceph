@@ -25,3 +25,6 @@ overrides:
       - PG_DEGRADED
       - PG_AVAILABILITY
       - POOL_APP_NOT_ENABLED
+      - mons down
+      - mon down
+      - out of quorum
