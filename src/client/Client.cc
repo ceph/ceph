@@ -906,9 +906,16 @@ void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
 {
   uint64_t prior_size = in->size;
 
+  // In the case of a pending trunc size that is smaller than orig size
+  // (i.e. truncating from 8M to 4M) passed truncate_seq will be larger
+  // than inode truncate_seq. This shows passed size is latest.
   if (truncate_seq > in->truncate_seq ||
       (truncate_seq == in->truncate_seq && size > in->size)) {
     ldout(cct, 10) << "size " << in->size << " -> " << size << dendl;
+    if (in->is_fscrypt_enabled()) {
+      in->set_effective_size(size);
+      size = fscrypt_block_from_ofs(size);
+    }
     in->size = size;
     in->reported_size = size;
     if (truncate_seq != in->truncate_seq) {
@@ -1092,9 +1099,6 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   if (new_version ||
       (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
     in->layout = st->layout;
-    if (st->fscrypt_file.size() >= sizeof(uint64_t)) {
-      in->fscrypt_file = st->fscrypt_file;
-    }
     update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
   }
 
@@ -1451,7 +1455,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
         if (r < 0) {
           ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
           dname = orig_dname;
-        }
+      	}
       } else {
         dname = orig_dname;
       }
@@ -5626,9 +5630,6 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, const MConstRef<M
   ceph_assert(in->caps.count(mds));
 
   uint64_t size = m->get_size();
-  if (in->is_fscrypt_enabled()) {
-    size = *(ceph_le64 *)in->fscrypt_file.data();
-  }
   ldout(cct, 10) << __func__ << " on ino " << *in
 	   << " size " << in->size << " -> " << m->get_size()
 	   << dendl;
