@@ -67,8 +67,7 @@ protected:
     eversion_t need);
   ObjectRecoveryInfo set_recovery_info(
     const hobject_t& soid,
-    const crimson::osd::SnapSetContextRef ssc,
-    const hobject_t& last_backfill);
+    const crimson::osd::SnapSetContextRef ssc);
   std::vector<pg_shard_t> get_shards_to_push(
     const hobject_t& soid) const;
   interruptible_future<PushOp> build_push_op(
