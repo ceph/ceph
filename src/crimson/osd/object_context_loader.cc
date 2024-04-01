@@ -22,6 +22,10 @@ using crimson::common::local_conf;
       return get_or_load_obc<State>(obc, existed)
       .safe_then_interruptible(
         [func = std::move(func)](auto obc) {
+        // The template with_obc_func_t wrapper supports two obcs (head and clone).
+        // In the 'with_head_obc' case, however, only the head is in use.
+        // Pass the same head obc twice in order to
+        // to support the generic with_obc sturcture.
         return std::move(func)(obc, obc);
       });
     }).finally([FNAME, this, obc=std::move(obc)] {
