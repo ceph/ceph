@@ -24,6 +24,7 @@ overrides:
       - mons down
       - mon down
       - out of quorum
+      - CEPHADM_FAILED_DAEMON
 tasks:
 - install:
     branch: reef
