@@ -515,6 +515,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
 
   RGWRados::Object::Write obj_op(&op_target);
   obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.manifest = &manifest;
   obj_op.meta.mtime = mtime;
   obj_op.meta.owner = owner;
   obj_op.meta.delete_at = delete_at;
