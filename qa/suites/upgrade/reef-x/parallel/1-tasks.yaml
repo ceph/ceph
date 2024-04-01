@@ -1,3 +1,10 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - mons down
+      - mon down
+      - MON_DOWN
+      - out of quorum
 tasks:
 - install:
     branch: reef
