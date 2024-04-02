@@ -7,4 +7,5 @@ export interface MultiCluster {
   cluster_connection_status: number;
   ssl_verify: boolean;
   ssl_certificate: string;
+  ttl: number;
 }

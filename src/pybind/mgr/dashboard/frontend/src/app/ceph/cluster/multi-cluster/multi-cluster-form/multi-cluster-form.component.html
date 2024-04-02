@@ -17,14 +17,6 @@
                         spacingClass="mb-3"
                         i18n>{{ connectionMessage }}
         </cd-alert-panel>
-        <cd-alert-panel type="info"
-                        spacingClass="mb-3"
-                        i18n
-                        *ngIf="connectionVerified !== undefined && !connectionVerified && connectionMessage === 'Connection refused' || remoteClusterForm.getValue('showToken')">
-        <p>You need to set this cluster's url as the cross origin url in the remote cluster you are trying to connect.
-          You can do it by running this CLI command in your remote cluster and proceed with authentication via token.</p>
-          <cd-code-block [codes]="[crossOriginCmd]"></cd-code-block>
-        </cd-alert-panel>
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="remoteClusterUrl"
@@ -52,6 +44,10 @@
             <span class="invalid-feedback"
                   *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'endpoint')"
                   i18n>Please enter a valid URL.
+            </span>
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'hubUrlCheck')"
+                  i18n>The hub cluster cannot be connected.
             </span>
           </div>
         </div>
@@ -100,51 +96,7 @@
           </div>
         </div>
         <div class="form-group row"
-             *ngIf="remoteClusterForm.getValue('showToken') && action !== 'edit'">
-          <label class="cd-col-form-label required"
-                 for="clusterFsid"
-                 i18n>Cluster FSID
-          </label>
-          <div class="cd-col-form-input">
-            <input id="clusterFsid"
-                   name="clusterFsid"
-                   class="form-control"
-                   type="text"
-                   formControlName="clusterFsid">
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('clusterFsid', frm, 'required')"
-                  i18n>This field is required.
-            </span>
-          </div>
-        </div>
-        <div class="form-group row"
-             *ngIf="remoteClusterForm.getValue('showToken') && action !== 'edit'">
-          <label class="cd-col-form-label required"
-                 for="prometheusApiUrl"
-                 i18n>Prometheus API URL
-            <cd-helper>
-              <span>
-                <p>Enter the Prometheus API URL. You can retrieve it from the CLI with: <b>{{ prometheusApiUrlCmd }} </b>
-                  <cd-copy-2-clipboard-button [source]="prometheusApiUrlCmd"
-                                              [byId]="false"></cd-copy-2-clipboard-button>
-                </p>
-              </span>
-            </cd-helper>
-          </label>
-          <div class="cd-col-form-input">
-            <input id="prometheusApiUrl"
-                   name="prometheusApiUrl"
-                   class="form-control"
-                   type="text"
-                   formControlName="prometheusApiUrl">
-            <span class="invalid-feedback"
-                  *ngIf="remoteClusterForm.showError('prometheusApiUrl', frm, 'required')"
-                  i18n>This field is required.
-            </span>
-          </div>
-        </div>
-        <div class="form-group row"
-             *ngIf="!remoteClusterForm.getValue('showToken') && !showCrossOriginError && action !== 'edit'">
+             *ngIf="action !== 'edit'">
           <label class="cd-col-form-label required"
                  for="password"
                  i18n>Password
@@ -172,7 +124,26 @@
           </div>
         </div>
         <div class="form-group row"
-             *ngIf="remoteClusterForm.getValue('showToken') && action !== 'edit'">
+             *ngIf="action !== 'edit'">
+          <label class="cd-col-form-label"
+                 for="ttl"
+                 i18n>Login Expiration</label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="ttl"
+                    formControlName="ttl"
+                    name="ttl">
+              <option value="1">1 day</option>
+              <option value="7">1 week</option>
+              <option value="15"
+                      [selected]="true">15 days</option>
+              <option value="30">30 days</option>
+            </select>
+          </div>
+        </div>
+        <!--
+        <div class="form-group row"
+             *ngIf="action !== 'edit'">
           <label class="cd-col-form-label required"
                  for="apiToken"
                  i18n>Token
@@ -203,7 +174,7 @@
                      i18n>Auth with token</label>
             </div>
           </div>
-        </div>
+        </div> -->
         <!-- ssl -->
         <div class="form-group row">
           <div class="cd-col-form-offset">
@@ -220,40 +191,27 @@
         </div>
 
         <!-- ssl_cert -->
-          <div *ngIf="remoteClusterForm.controls.ssl.value"
-               class="form-group row">
-            <label class="cd-col-form-label"
-                   for="ssl_cert">
-              <span i18n>Certificate</span>
-              <cd-helper i18n>The SSL certificate in PEM format.</cd-helper>
-            </label>
-            <div class="cd-col-form-input">
-              <textarea id="ssl_cert"
-                        class="form-control resize-vertical text-monospace text-pre"
-                        formControlName="ssl_cert"
-                        rows="5">
-              </textarea>
-              <input type="file"
-                     (change)="fileUpload($event.target.files, 'ssl_cert')">
-              <span class="invalid-feedback"
-                    *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'required')"
-                    i18n>This field is required.</span>
-              <span class="invalid-feedback"
-                    *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'pattern')"
-                    i18n>Invalid SSL certificate.</span>
-            </div>
-          </div>
-        <div class="form-group row"
-             *ngIf="!showCrossOriginError && action !== 'edit' && !remoteClusterForm.getValue('showToken') && !connectionVerified">
-          <div class="cd-col-form-offset">
-            <div class="custom-control">
-              <button class="btn btn-primary"
-                      type="button"
-                      [disabled]="(remoteClusterForm.getValue('showToken') && remoteClusterForm.getValue('apiToken') === '') || (!remoteClusterForm.getValue('showToken') && (remoteClusterForm.getValue('username') === '' || remoteClusterForm.getValue('password') === ''))"
-                      (click)="verifyConnection()">
-                Verify Connection
-              </button>
-            </div>
+        <div *ngIf="remoteClusterForm.controls.ssl.value"
+             class="form-group row">
+          <label class="cd-col-form-label"
+                 for="ssl_cert">
+            <span i18n>Certificate</span>
+            <cd-helper i18n>The SSL certificate in PEM format.</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <textarea id="ssl_cert"
+                      class="form-control resize-vertical text-monospace text-pre"
+                      formControlName="ssl_cert"
+                      rows="5">
+            </textarea>
+            <input type="file"
+                   (change)="fileUpload($event.target.files, 'ssl_cert')">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('ssl_cert', frm, 'pattern')"
+                  i18n>Invalid SSL certificate.</span>
           </div>
         </div>
       </div>

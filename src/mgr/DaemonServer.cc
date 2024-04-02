@@ -2678,7 +2678,9 @@ void DaemonServer::send_report()
 void DaemonServer::adjust_pgs()
 {
   dout(20) << dendl;
-  unsigned max = std::max<int64_t>(1, g_conf()->mon_osd_max_creating_pgs);
+  uint64_t max = std::max<uint64_t>(
+    1,
+    g_conf().get_val<uint64_t>("mgr_max_pg_creating"));
   double max_misplaced = g_conf().get_val<double>("target_max_misplaced_ratio");
   bool aggro = g_conf().get_val<bool>("mgr_debug_aggressive_pg_num_changes");
 
@@ -2889,7 +2891,7 @@ void DaemonServer::adjust_pgs()
 		     << " pgp_num_target " << p.get_pgp_num_target()
 		     << " pgp_num " << p.get_pgp_num()
 		     << " - misplaced_ratio " << misplaced_ratio
-		     << " > max " << max_misplaced
+		     << " > max_misplaced " << max_misplaced
 		     << ", deferring pgp_num update" << dendl;
 	  } else {
 	    // NOTE: this calculation assumes objects are

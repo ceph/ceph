@@ -54,42 +54,90 @@ class MultiCluster(RESTController):
     @CreatePermission
     @EndpointDoc("Authenticate to a remote cluster")
     def auth(self, url: str, cluster_alias: str, username: str,
-             password=None, token=None, hub_url=None, cluster_fsid=None,
-             prometheus_api_url=None, ssl_verify=False, ssl_certificate=None):
+             password=None, hub_url=None, ssl_verify=False, ssl_certificate=None, ttl=None):
+        try:
+            hub_fsid = mgr.get('config')['fsid']
+        except KeyError:
+            hub_fsid = ''
+
         if password:
             payload = {
                 'username': username,
-                'password': password
+                'password': password,
+                'ttl': ttl
             }
-            content = self._proxy('POST', url, 'api/auth', payload=payload)
-            if 'token' not in content:
-                raise DashboardException(
-                    "Could not authenticate to remote cluster",
-                    http_status_code=400,
-                    component='dashboard')
-
-            cluster_token = content['token']
+            cluster_token = self.check_cluster_connection(url, payload, username,
+                                                          ssl_verify, ssl_certificate)
 
             self._proxy('PUT', url, 'ui-api/multi-cluster/set_cors_endpoint',
                         payload={'url': hub_url}, token=cluster_token, verify=ssl_verify,
                         cert=ssl_certificate)
+
             fsid = self._proxy('GET', url, 'api/health/get_cluster_fsid', token=cluster_token)
+
+            managed_by_clusters_content = self._proxy('GET', url,
+                                                      'api/settings/MANAGED_BY_CLUSTERS',
+                                                      token=cluster_token)
+
+            managed_by_clusters_config = managed_by_clusters_content['value']
+
+            if managed_by_clusters_config is not None:
+                managed_by_clusters_config.append({'url': hub_url, 'fsid': hub_fsid})
+
+            self._proxy('PUT', url, 'api/settings/MANAGED_BY_CLUSTERS',
+                        payload={'value': managed_by_clusters_config}, token=cluster_token,
+                        verify=ssl_verify, cert=ssl_certificate)
 
             # add prometheus targets
             prometheus_url = self._proxy('GET', url, 'api/settings/PROMETHEUS_API_HOST',
                                          token=cluster_token)
+
             _set_prometheus_targets(prometheus_url['value'])
 
             self.set_multi_cluster_config(fsid, username, url, cluster_alias,
                                           cluster_token, prometheus_url['value'],
                                           ssl_verify, ssl_certificate)
-            return
+            return True
 
-        if token and cluster_fsid and prometheus_api_url:
-            _set_prometheus_targets(prometheus_api_url)
-            self.set_multi_cluster_config(cluster_fsid, username, url,
-                                          cluster_alias, token, prometheus_api_url,
-                                          ssl_verify, ssl_certificate)
+        return False
+
+    def check_cluster_connection(self, url, payload, username, ssl_verify, ssl_certificate):
+        try:
+            content = self._proxy('POST', url, 'api/auth', payload=payload,
+                                  verify=ssl_verify, cert=ssl_certificate)
+            if 'token' not in content:
+                raise DashboardException(msg=content['detail'], code='invalid_credentials',
+                                         component='multi-cluster')
+
+            user_content = self._proxy('GET', url, f'api/user/{username}',
+                                       token=content['token'])
+
+            if 'status' in user_content and user_content['status'] == '403 Forbidden':
+                raise DashboardException(msg='User is not an administrator',
+                                         code='invalid_permission', component='multi-cluster')
+            if 'roles' in user_content and 'administrator' not in user_content['roles']:
+                raise DashboardException(msg='User is not an administrator',
+                                         code='invalid_permission', component='multi-cluster')
+
+        except Exception as e:
+            if '[Errno 111] Connection refused' in str(e):
+                raise DashboardException(msg='Connection refused',
+                                         code='connection_refused', component='multi-cluster')
+            raise DashboardException(msg=str(e), code='connection_failed',
+                                     component='multi-cluster')
+
+        cluster_token = content['token']
+
+        managed_by_clusters_content = self._proxy('GET', url, 'api/settings/MANAGED_BY_CLUSTERS',
+                                                  token=cluster_token)
+
+        managed_by_clusters_config = managed_by_clusters_content['value']
+
+        if len(managed_by_clusters_config) > 1:
+            raise DashboardException(msg='Cluster is already managed by another cluster',
+                                     code='cluster_managed_by_another_cluster',
+                                     component='multi-cluster')
+        return cluster_token
 
     def set_multi_cluster_config(self, fsid, username, url, cluster_alias, token,
                                  prometheus_url=None, ssl_verify=False, ssl_certificate=None):
@@ -144,33 +192,28 @@ class MultiCluster(RESTController):
 
     @Endpoint('PUT')
     @UpdatePermission
-    # pylint: disable=unused-variable
-    def reconnect_cluster(self, url: str, username=None, password=None, token=None,
-                          ssl_verify=False, ssl_certificate=None):
+    # pylint: disable=W0613
+    def reconnect_cluster(self, url: str, username=None, password=None,
+                          ssl_verify=False, ssl_certificate=None, ttl=None):
         multicluster_config = self.load_multi_cluster_config()
         if username and password:
             payload = {
                 'username': username,
-                'password': password
+                'password': password,
+                'ttl': ttl
             }
-            content = self._proxy('POST', url, 'api/auth', payload=payload,
-                                  verify=ssl_verify, cert=ssl_certificate)
-            if 'token' not in content:
-                raise DashboardException(
-                    "Could not authenticate to remote cluster",
-                    http_status_code=400,
-                    component='dashboard')
 
-            token = content['token']
+            cluster_token = self.check_cluster_connection(url, payload, username,
+                                                          ssl_verify, ssl_certificate)
 
-        if username and token:
+        if username and cluster_token:
             if "config" in multicluster_config:
                 for _, cluster_details in multicluster_config["config"].items():
                     for cluster in cluster_details:
                         if cluster["url"] == url and cluster["user"] == username:
-                            cluster['token'] = token
+                            cluster['token'] = cluster_token
             Settings.MULTICLUSTER_CONFIG = multicluster_config
-        return Settings.MULTICLUSTER_CONFIG
+        return True
 
     @Endpoint('PUT')
     @UpdatePermission
@@ -189,10 +232,17 @@ class MultiCluster(RESTController):
     @DeletePermission
     def delete_cluster(self, cluster_name, cluster_user):
         multicluster_config = self.load_multi_cluster_config()
+        try:
+            hub_fsid = mgr.get('config')['fsid']
+        except KeyError:
+            hub_fsid = ''
         if "config" in multicluster_config:
             for key, value in list(multicluster_config['config'].items()):
                 if value[0]['name'] == cluster_name and value[0]['user'] == cluster_user:
-
+                    cluster_url = value[0]['url']
+                    cluster_token = value[0]['token']
+                    cluster_ssl_certificate = value[0]['ssl_certificate']
+                    cluster_ssl_verify = value[0]['ssl_verify']
                     orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
                     try:
                         if orch_backend == 'cephadm':
@@ -204,54 +254,24 @@ class MultiCluster(RESTController):
                     except KeyError:
                         pass
 
+                    managed_by_clusters_content = self._proxy('GET', cluster_url,
+                                                              'api/settings/MANAGED_BY_CLUSTERS',
+                                                              token=cluster_token)
+
+                    managed_by_clusters_config = managed_by_clusters_content['value']
+                    for cluster in managed_by_clusters_config:
+                        if cluster['fsid'] == hub_fsid:
+                            managed_by_clusters_config.remove(cluster)
+
+                    self._proxy('PUT', cluster_url, 'api/settings/MANAGED_BY_CLUSTERS',
+                                payload={'value': managed_by_clusters_config}, token=cluster_token,
+                                verify=cluster_ssl_verify, cert=cluster_ssl_certificate)
+
                     del multicluster_config['config'][key]
                     break
 
         Settings.MULTICLUSTER_CONFIG = multicluster_config
         return Settings.MULTICLUSTER_CONFIG
-
-    @Endpoint('POST')
-    @CreatePermission
-    # pylint: disable=R0911
-    def verify_connection(self, url=None, username=None, password=None, token=None,
-                          ssl_verify=False, ssl_certificate=None):
-        if token:
-            try:
-                payload = {
-                    'token': token
-                }
-                content = self._proxy('POST', url, 'api/auth/check', payload=payload,
-                                      verify=ssl_verify, cert=ssl_certificate)
-                if 'permissions' not in content:
-                    return content['detail']
-                user_content = self._proxy('GET', url, f'api/user/{username}',
-                                           token=content['token'])
-                if 'status' in user_content and user_content['status'] == '403 Forbidden':
-                    return 'User is not an administrator'
-            except Exception as e:  # pylint: disable=broad-except
-                if '[Errno 111] Connection refused' in str(e):
-                    return 'Connection refused'
-                return 'Connection failed'
-
-        if username and password:
-            try:
-                payload = {
-                    'username': username,
-                    'password': password
-                }
-                content = self._proxy('POST', url, 'api/auth', payload=payload,
-                                      verify=ssl_verify, cert=ssl_certificate)
-                if 'token' not in content:
-                    return content['detail']
-                user_content = self._proxy('GET', url, f'api/user/{username}',
-                                           token=content['token'])
-                if 'status' in user_content and user_content['status'] == '403 Forbidden':
-                    return 'User is not an administrator'
-            except Exception as e:  # pylint: disable=broad-except
-                if '[Errno 111] Connection refused' in str(e):
-                    return 'Connection refused'
-                return 'Connection failed'
-        return 'Connection successful'
 
     @Endpoint()
     @ReadPermission
@@ -266,6 +286,15 @@ class MultiCluster(RESTController):
         current_time = time.time()
         return expiration_time < current_time
 
+    def get_time_left(self, jwt_token):
+        split_message = jwt_token.split(".")
+        base64_message = split_message[1]
+        decoded_token = json.loads(base64.urlsafe_b64decode(base64_message + "===="))
+        expiration_time = decoded_token['exp']
+        current_time = time.time()
+        time_left = expiration_time - current_time
+        return max(0, time_left)
+
     def check_token_status_expiration(self, token):
         if self.is_token_expired(token):
             return 1
@@ -279,7 +308,9 @@ class MultiCluster(RESTController):
             token = item['token']
             user = item['user']
             status = self.check_token_status_expiration(token)
-            token_status_map[cluster_name] = {'status': status, 'user': user}
+            time_left = self.get_time_left(token)
+            token_status_map[cluster_name] = {'status': status, 'user': user,
+                                              'time_left': time_left}
 
         return token_status_map
 

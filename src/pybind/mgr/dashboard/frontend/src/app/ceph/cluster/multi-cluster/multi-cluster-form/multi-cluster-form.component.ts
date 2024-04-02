@@ -23,14 +23,10 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
   readonly ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
   readonly ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
   clusterApiUrlCmd = 'ceph mgr services';
-  prometheusApiUrlCmd = 'ceph config get mgr mgr/dashboard/PROMETHEUS_API_HOST';
-  crossOriginCmd = `ceph dashboard set-cross-origin-url ${window.location.origin}`;
   remoteClusterForm: CdFormGroup;
-  showToken = false;
   connectionVerified: boolean;
   connectionMessage = '';
   private subs = new Subscription();
-  showCrossOriginError = false;
   action: string;
   cluster: MultiCluster;
   clustersData: MultiCluster[];
@@ -38,6 +34,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
   clusterUrls: string[];
   clusterUsers: string[];
   clusterUrlUserMap: Map<string, string>;
+  hubUrl: string;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -45,6 +42,11 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     public notificationService: NotificationService,
     private multiClusterService: MultiClusterService
   ) {
+    this.subs.add(
+      this.multiClusterService.subscribe((resp: any) => {
+        this.hubUrl = resp['hub_url'];
+      })
+    );
     this.createForm();
   }
   ngOnInit(): void {
@@ -62,8 +64,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
       this.remoteClusterForm.get('clusterAlias').disable();
       this.remoteClusterForm.get('username').setValue(this.cluster.user);
       this.remoteClusterForm.get('username').disable();
-      this.remoteClusterForm.get('clusterFsid').setValue(this.cluster.name);
-      this.remoteClusterForm.get('clusterFsid').disable();
       this.remoteClusterForm.get('ssl').setValue(this.cluster.ssl_verify);
       this.remoteClusterForm.get('ssl_cert').setValue(this.cluster.ssl_certificate);
     }
@@ -76,7 +76,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
 
   createForm() {
     this.remoteClusterForm = new CdFormGroup({
-      showToken: new FormControl(false),
+      // showToken: new FormControl(false),
       username: new FormControl('', [
         CdValidators.custom('uniqueUrlandUser', (username: string) => {
           let remoteClusterUrl = '';
@@ -96,16 +96,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
           );
         })
       ]),
-      clusterFsid: new FormControl('', [
-        CdValidators.requiredIf({
-          showToken: true
-        })
-      ]),
-      prometheusApiUrl: new FormControl('', [
-        CdValidators.requiredIf({
-          showToken: true
-        })
-      ]),
       password: new FormControl('', []),
       remoteClusterUrl: new FormControl(null, {
         validators: [
@@ -120,14 +110,17 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
               );
             }
           }),
+          CdValidators.custom('hubUrlCheck', (remoteClusterUrl: string) => {
+            return this.action === 'connect' && remoteClusterUrl?.includes(this.hubUrl);
+          }),
           Validators.required
         ]
       }),
-      apiToken: new FormControl('', [
-        CdValidators.requiredIf({
-          showToken: true
-        })
-      ]),
+      // apiToken: new FormControl('', [
+      //   CdValidators.requiredIf({
+      //     showToken: true
+      //   })
+      // ]),
       clusterAlias: new FormControl(null, {
         validators: [
           Validators.required,
@@ -141,6 +134,7 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
         ]
       }),
       ssl: new FormControl(false),
+      ttl: new FormControl(15),
       ssl_cert: new FormControl('', {
         validators: [
           CdValidators.requiredIf({
@@ -155,137 +149,87 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     this.subs.unsubscribe();
   }
 
+  handleError(error: any): void {
+    if (error.error.code === 'connection_refused') {
+      this.connectionVerified = false;
+      this.connectionMessage = error.error.detail;
+    } else {
+      this.connectionVerified = false;
+      this.connectionMessage = error.error.detail;
+    }
+    this.remoteClusterForm.setErrors({ cdSubmitButton: true });
+    this.notificationService.show(
+      NotificationType.error,
+      $localize`Connection to the cluster failed`
+    );
+  }
+
+  handleSuccess(message?: string): void {
+    this.notificationService.show(NotificationType.success, message);
+    this.submitAction.emit();
+    this.activeModal.close();
+  }
+
+  convertToHours(value: number): number {
+    return value * 24; // Convert days to hours
+  }
+
   onSubmit() {
     const url = this.remoteClusterForm.getValue('remoteClusterUrl');
     const updatedUrl = url.endsWith('/') ? url.slice(0, -1) : url;
     const clusterAlias = this.remoteClusterForm.getValue('clusterAlias');
-    const prometheusApiUrl = this.remoteClusterForm.getValue('prometheusApiUrl');
     const username = this.remoteClusterForm.getValue('username');
     const password = this.remoteClusterForm.getValue('password');
-    const token = this.remoteClusterForm.getValue('apiToken');
-    const clusterFsid = this.remoteClusterForm.getValue('clusterFsid');
     const ssl = this.remoteClusterForm.getValue('ssl');
+    const ttl = this.convertToHours(this.remoteClusterForm.getValue('ttl'));
     const ssl_certificate = this.remoteClusterForm.getValue('ssl_cert')?.trim();
 
-    if (this.action === 'edit') {
-      this.subs.add(
-        this.multiClusterService
-          .editCluster(this.cluster.url, clusterAlias, this.cluster.user)
-          .subscribe({
-            error: () => {
-              this.remoteClusterForm.setErrors({ cdSubmitButton: true });
-            },
-            complete: () => {
-              this.notificationService.show(
-                NotificationType.success,
-                $localize`Cluster updated successfully`
-              );
-              this.submitAction.emit();
-              this.activeModal.close();
-            }
-          })
-      );
+    const commonSubscribtion = {
+      error: (error: any) => this.handleError(error),
+      next: (response: any) => {
+        if (response === true) {
+          this.handleSuccess($localize`Cluster connected successfully`);
+        }
+      }
+    };
+
+    switch (this.action) {
+      case 'edit':
+        this.subs.add(
+          this.multiClusterService
+            .editCluster(this.cluster.url, clusterAlias, this.cluster.user)
+            .subscribe({
+              ...commonSubscribtion,
+              complete: () => this.handleSuccess($localize`Cluster updated successfully`)
+            })
+        );
+        break;
+      case 'reconnect':
+        this.subs.add(
+          this.multiClusterService
+            .reConnectCluster(updatedUrl, username, password, ssl, ssl_certificate, ttl)
+            .subscribe(commonSubscribtion)
+        );
+        break;
+      case 'connect':
+        this.subs.add(
+          this.multiClusterService
+            .addCluster(
+              updatedUrl,
+              clusterAlias,
+              username,
+              password,
+              window.location.origin,
+              ssl,
+              ssl_certificate,
+              ttl
+            )
+            .subscribe(commonSubscribtion)
+        );
+        break;
+      default:
+        break;
     }
-
-    if (this.action === 'reconnect') {
-      this.subs.add(
-        this.multiClusterService
-          .reConnectCluster(updatedUrl, username, password, token, ssl, ssl_certificate)
-          .subscribe({
-            error: () => {
-              this.remoteClusterForm.setErrors({ cdSubmitButton: true });
-            },
-            complete: () => {
-              this.notificationService.show(
-                NotificationType.success,
-                $localize`Cluster reconnected successfully`
-              );
-              this.submitAction.emit();
-              this.activeModal.close();
-            }
-          })
-      );
-    }
-
-    if (this.action === 'connect') {
-      this.subs.add(
-        this.multiClusterService
-          .addCluster(
-            updatedUrl,
-            clusterAlias,
-            username,
-            password,
-            token,
-            window.location.origin,
-            clusterFsid,
-            prometheusApiUrl,
-            ssl,
-            ssl_certificate
-          )
-          .subscribe({
-            error: () => {
-              this.remoteClusterForm.setErrors({ cdSubmitButton: true });
-            },
-            complete: () => {
-              this.notificationService.show(
-                NotificationType.success,
-                $localize`Cluster connected successfully`
-              );
-              this.submitAction.emit();
-              this.activeModal.close();
-            }
-          })
-      );
-    }
-  }
-
-  verifyConnection() {
-    const url = this.remoteClusterForm.getValue('remoteClusterUrl');
-    const username = this.remoteClusterForm.getValue('username');
-    const password = this.remoteClusterForm.getValue('password');
-    const token = this.remoteClusterForm.getValue('apiToken');
-    const ssl = this.remoteClusterForm.getValue('ssl');
-    const ssl_certificate = this.remoteClusterForm.getValue('ssl_cert')?.trim();
-
-    this.subs.add(
-      this.multiClusterService
-        .verifyConnection(url, username, password, token, ssl, ssl_certificate)
-        .subscribe((resp: string) => {
-          switch (resp) {
-            case 'Connection successful':
-              this.connectionVerified = true;
-              this.connectionMessage = 'Connection Verified Successfully';
-              this.notificationService.show(
-                NotificationType.success,
-                $localize`Connection Verified Successfully`
-              );
-              break;
-
-            case 'Connection refused':
-              this.connectionVerified = false;
-              this.showCrossOriginError = true;
-              this.connectionMessage = resp;
-              this.notificationService.show(
-                NotificationType.error,
-                $localize`Connection to the cluster failed`
-              );
-              break;
-
-            default:
-              this.connectionVerified = false;
-              this.connectionMessage = resp;
-              this.notificationService.show(
-                NotificationType.error,
-                $localize`Connection to the cluster failed`
-              );
-              break;
-          }
-        })
-    );
-  }
-
-  toggleToken() {
-    this.showToken = !this.showToken;
   }
 
   fileUpload(files: FileList, controlName: string) {

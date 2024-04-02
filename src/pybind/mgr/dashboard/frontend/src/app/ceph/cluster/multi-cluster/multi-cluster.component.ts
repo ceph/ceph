@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
-import { Subscription } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -16,6 +16,7 @@ import {
   MultiClusterPromqlsForClusterUtilization as ClusterUltilizationQueries,
   MultiClusterPromqlsForPoolUtilization as PoolUltilizationQueries
 } from '~/app/shared/enum/dashboard-promqls.enum';
+import { SettingsService } from '~/app/shared/api/settings.service';
 
 @Component({
   selector: 'cd-multi-cluster',
@@ -87,9 +88,11 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   interval: NodeJS.Timer;
   selectedTime: any;
   multiClusterQueries: any = {};
+  managedByConfig$: Observable<any>;
 
   constructor(
     private multiClusterService: MultiClusterService,
+    private settingsService: SettingsService,
     private modalService: ModalService,
     private router: Router,
     private prometheusService: PrometheusService,
@@ -185,7 +188,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         }
       })
     );
-
+    this.managedByConfig$ = this.settingsService.getValues('MANAGED_BY_CLUSTERS');
     this.subs.add(
       this.multiClusterService.subscribeClusterTokenStatus((resp: object) => {
         this.clusterTokenStatus = resp;
@@ -229,14 +232,14 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   }
 
   getPrometheusData(selectedTime: any, selectedQueries?: string) {
-    const validRangeQueries = [
-      'CLUSTER_CAPACITY_UTILIZATION',
-      'CLUSTER_IOPS_UTILIZATION',
-      'CLUSTER_THROUGHPUT_UTILIZATION',
-      'POOL_CAPACITY_UTILIZATION',
-      'POOL_IOPS_UTILIZATION',
-      'POOL_THROUGHPUT_UTILIZATION'
-    ];
+    const validRangeQueries = Object.keys(ClusterUltilizationQueries).concat(
+      Object.keys(PoolUltilizationQueries)
+    );
+
+    const allMultiClusterQueries = Object.keys(allQueries).concat(
+      Object.keys(ClusterUltilizationQueries).concat(Object.keys(PoolUltilizationQueries))
+    );
+
     const validQueries = [
       'ALERTS',
       'MGR_METADATA',
@@ -255,13 +258,17 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
       'CLUSTER_ALERTS'
     ];
 
+    let validSelectedQueries = allMultiClusterQueries;
+
     if (selectedQueries) {
       if (selectedQueries === 'poolUtilization') {
         this.multiClusterQueries.pool['selectedTime'] = selectedTime;
+        validSelectedQueries = Object.keys(PoolUltilizationQueries);
       }
 
       if (selectedQueries === 'clusterUtilization') {
         this.multiClusterQueries.cluster.selectedTime = selectedTime;
+        validSelectedQueries = Object.keys(ClusterUltilizationQueries);
       }
     }
 
@@ -270,7 +277,9 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         this.queriesResults,
         validQueries,
         validRangeQueries,
-        this.multiClusterQueries
+        this.multiClusterQueries,
+        validSelectedQueries,
+        allMultiClusterQueries
       )
       .subscribe((data: any) => {
         this.queriesResults = data;
@@ -434,6 +443,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    this.subs.unsubscribe();
     clearInterval(this.interval);
   }
 }

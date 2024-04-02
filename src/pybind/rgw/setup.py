@@ -116,7 +116,8 @@ def check_sanity():
             output_dir=tmp_dir,
         )
 
-        if ldflags := os.environ.get('LDFLAGS'):
+        ldflags = os.environ.get('LDFLAGS')
+        if ldflags:
             extra_postargs = ldflags.split()
         else:
             extra_postargs = None

@@ -221,6 +221,10 @@ class CLIContext:
     def cephadm_build_args(self):
         return list(self._cli.cephadm_build_arg or [])
 
+    @property
+    def run_before_commands(self):
+        return list(self._cli.run_before or [])
+
     def build_components(self):
         if self._cli.components:
             return self._cli.components
@@ -314,6 +318,11 @@ class CLIContext:
             "-A",
             action="append",
             help="Pass additional arguments to cephadm build script.",
+        )
+        parser.add_argument(
+            "--run-before",
+            action="append",
+            help="Add a RUN command before other actions"
         )
         # selectors
         component_selections = [
@@ -441,6 +450,8 @@ class Builder:
     def build(self):
         """Build the container image."""
         dlines = [f"FROM {self._ctx.base_image}"]
+        for cmd in self._ctx.run_before_commands:
+            dlines.append(f'RUN {cmd}')
         jcount = len(self._jobs)
         for idx, (component, job) in enumerate(self._jobs):
             num = idx + 1
@@ -456,8 +467,10 @@ class Builder:
     def _container_build(self):
         log.info("Building container image")
         cmd = [self._ctx.engine, "build", "--tag", self._ctx.target, "."]
+        cmd.append('--net=host')
         if self._ctx.root_build:
             cmd.insert(0, "sudo")
+        log.debug("Container build command: %r", cmd)
         _run(cmd, cwd=self._workdir).check_returncode()
 
     def _build_tar(
