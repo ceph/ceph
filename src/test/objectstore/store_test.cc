@@ -7175,7 +7175,6 @@ INSTANTIATE_TEST_SUITE_P(
     deferred_test_t{4 * 1024, 16 * 1024, 32 * 1024, 32 * 1024},
     deferred_test_t{4 * 1024, 16 * 1024, 64 * 1024, 128 * 1024}
   ));
-#endif
 
 class DeferredReplayTest : public DeferredWriteTest {
 };
@@ -7362,7 +7361,6 @@ TEST_P(DeferredReplayTest, DeferredReplayInReadOnly) {
   ASSERT_EQ(1, logger->get(l_bluestore_submitted_deferred_writes));
 }
 
-#if defined(WITH_BLUESTORE)
 INSTANTIATE_TEST_SUITE_P(
   BlueStore,
   DeferredReplayTest,
