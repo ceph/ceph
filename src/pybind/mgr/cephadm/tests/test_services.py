@@ -736,6 +736,9 @@ class TestMonitoring:
                     - source_labels: [__address__]
                       target_label: cluster
                       replacement: fsid
+                    - source_labels: [instance]
+                      target_label: instance
+                      replacement: 'ceph_cluster'
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=mgr-prometheus
 
@@ -895,6 +898,10 @@ class TestMonitoring:
                     tls_config:
                       ca_file: mgr_prometheus_cert.pem
                     honor_labels: true
+                    relabel_configs:
+                    - source_labels: [instance]
+                      target_label: instance
+                      replacement: 'ceph_cluster'
                     http_sd_configs:
                     - url: https://[::1]:8765/sd/prometheus/sd-config?service=mgr-prometheus
                       basic_auth:
