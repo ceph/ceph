@@ -39,11 +39,14 @@
 #include "common/lru_map.h"
 
 #include "cls/log/cls_log_types.h"
+#include "neorados/cls/sem_set.h"
 #include "rgw_basic_types.h"
 #include "rgw_log_backing.h"
 #include "rgw_sync_policy.h"
 #include "rgw_trim_bilog.h"
 #include "rgw_zone.h"
+
+#include "common/async/spawn_group.h"
 
 namespace asio = boost::asio;
 namespace bc = boost::container;
@@ -334,13 +337,21 @@ inline bool operator <(const BucketGen& l, const BucketGen& r) {
 }
 
 class RGWDataChangesLog {
+  friend class DataLogTest;
   friend DataLogBackends;
   CephContext *cct;
-  rgw::sal::RadosStore* store = nullptr;
+  neorados::RADOS* rados;
   neorados::IOContext loc;
   rgw::BucketChangeObserver *observer = nullptr;
-  const RGWZone* zone;
+  bool log_data = false;
   std::unique_ptr<DataLogBackends> bes;
+
+  std::shared_ptr<asio::cancellation_signal> renew_signal =
+    std::make_shared<asio::cancellation_signal>();
+  std::shared_ptr<asio::cancellation_signal> watch_signal =
+    std::make_shared<asio::cancellation_signal>();
+  std::shared_ptr<asio::cancellation_signal> recovery_signal =
+    std::make_shared<asio::cancellation_signal>();
 
   const int num_shards;
   std::string get_prefix() { return "data_log"; }
@@ -370,18 +381,19 @@ class RGWDataChangesLog {
   using ChangeStatusPtr = std::shared_ptr<ChangeStatus>;
 
   lru_map<BucketGen, ChangeStatusPtr> changes;
+  const uint64_t sem_max_keys = neorados::cls::sem_set::max_keys;
 
   bc::flat_set<BucketGen> cur_cycle;
+  std::vector<bc::flat_set<std::string>> semaphores{unsigned(num_shards)};
 
   ChangeStatusPtr _get_change(const rgw_bucket_shard& bs, uint64_t gen);
-  void register_renew(const rgw_bucket_shard& bs,
-		      const rgw::bucket_log_layout_generation& gen);
+  bool register_renew(BucketGen bg);
   void update_renewed(const rgw_bucket_shard& bs,
 		      uint64_t gen,
 		      ceph::real_time expiration);
 
   std::optional<asio::steady_timer> renew_timer;
-  asio::awaitable<void> renew_run();
+  asio::awaitable<void> renew_run(decltype(renew_signal) renew_signal);
   void renew_stop();
 
   std::function<bool(const rgw_bucket& bucket, optional_yield y,
@@ -391,13 +403,31 @@ class RGWDataChangesLog {
 				      const rgw_bucket& bucket) const;
   asio::awaitable<void> renew_entries(const DoutPrefixProvider *dpp);
 
+  uint64_t watchcookie = 0;
+
 public:
 
   RGWDataChangesLog(CephContext* cct);
+  // For testing.
+  RGWDataChangesLog(CephContext* cct, bool log_data,
+		    neorados::RADOS* rados);
   ~RGWDataChangesLog();
 
-  int start(const DoutPrefixProvider *dpp, const RGWZone* _zone, const RGWZoneParams& zoneparams,
+  asio::awaitable<void> start(const DoutPrefixProvider* dpp,
+			      const rgw_pool& log_pool,
+			      // For testing
+			      bool recovery = true,
+			      bool watch = true,
+			      bool renew = true);
+
+  int start(const DoutPrefixProvider *dpp, const RGWZone* _zone,
+	    const RGWZoneParams& zoneparams,
 	    rgw::sal::RadosStore* store);
+  asio::awaitable<bool> establish_watch(const DoutPrefixProvider* dpp,
+					std::string_view oid);
+  asio::awaitable<void> process_notification(const DoutPrefixProvider* dpp,
+					     std::string_view oid);
+  asio::awaitable<void> watch_loop(decltype(watch_signal));
   int choose_oid(const rgw_bucket_shard& bs);
   asio::awaitable<void> add_entry(const DoutPrefixProvider *dpp,
 				  const RGWBucketInfo& bucket_info,
@@ -451,13 +481,29 @@ public:
   // a marker that compares greater than any other
   std::string max_marker() const;
   std::string get_oid(uint64_t gen_id, int shard_id) const;
+  std::string get_sem_set_oid(int shard_id) const;
 
 
-  int change_format(const DoutPrefixProvider *dpp, log_type type, optional_yield y);
+  int change_format(const DoutPrefixProvider *dpp, log_type type,
+		    optional_yield y);
   int trim_generations(const DoutPrefixProvider *dpp,
 		       std::optional<uint64_t>& through,
 		       optional_yield y);
   void shutdown();
+  asio::awaitable<void> read_all_sems(int index,
+				      bc::flat_map<std::string, uint64_t>* out);
+  asio::awaitable<bool>
+  synthesize_entries(const DoutPrefixProvider* dpp, int index,
+		     const bc::flat_map<std::string, uint64_t>& semcount);
+  asio::awaitable<bool>
+  gather_working_sets(const DoutPrefixProvider* dpp,
+		      int index,
+		      bc::flat_map<std::string, uint64_t>& semcount);
+  asio::awaitable<void>
+  decrement_sems(int index,
+		 bc::flat_map<std::string, uint64_t>&& semcount);
+  asio::awaitable<void> recover(const DoutPrefixProvider* dpp,
+				decltype(recovery_signal));
 };
 
 class RGWDataChangesBE : public boost::intrusive_ref_counter<RGWDataChangesBE> {
