@@ -27,11 +27,11 @@ class OpenFileTable(CephFSTestCase):
         # Write some bytes to a file
         size_mb = 1
 
-        # Hold the file open
+        # Hold the files open
         file_count = 8
         for i in range(0, file_count):
             filename = "open_file{}".format(i)
-            p = self.mount_a.open_background(filename)
+            self.mount_a.open_background(filename)
             self.mount_a.write_n_mb(filename, size_mb)
 
         time.sleep(10)
@@ -44,8 +44,8 @@ class OpenFileTable(CephFSTestCase):
 
         self.fs.radosm(["stat", "mds0_openfiles.1"])
 
-        # Now close the file
-        self.mount_a.kill_background(p)
+        # Now close the files
+        self.mount_a.kill_background()
 
     def test_perf_counters(self):
         """
