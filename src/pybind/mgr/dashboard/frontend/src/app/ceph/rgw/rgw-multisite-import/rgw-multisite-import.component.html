@@ -1,0 +1,182 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">Import Multi-site Token</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="importTokenForm"
+          #frm="ngForm"
+          [formGroup]="importTokenForm">
+    <div class="modal-body">
+      <cd-alert-panel type="info"
+                      spacingClass="mb-3">
+        <ul>
+          <li>This feature allows you to configure a connection between your primary and secondary Ceph clusters for data replication. By importing a token, you establish a link between the clusters, enabling data synchronization.</li>
+          <li>To obtain the token, generate it from your primary Ceph cluster. This token includes encoded information about the primary cluster's endpoint, access key, and secret key.</li>
+          <li>The secondary zone represents the destination cluster where your data will be replicated.</li>
+        </ul>
+      </cd-alert-panel>
+      <legend i18n>Zone Details</legend>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="realmToken"
+               i18n>Token
+        </label>
+        <div class="cd-col-form-input">
+          <input id="realmToken"
+                 name="realmToken"
+                 class="form-control"
+                 type="text"
+                 formControlName="realmToken">
+          <span class="invalid-feedback"
+                *ngIf="importTokenForm.showError('realmToken', frm, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zoneName"
+               i18n>Secondary Zone Name</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Zone name..."
+                 id="zoneName"
+                 name="zoneName"
+                 formControlName="zoneName">
+          <span class="invalid-feedback"
+                *ngIf="importTokenForm.showError('zoneName', frm, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="importTokenForm.showError('zoneName', frm, 'uniqueName')"
+                i18n>The chosen zone name is already in use.</span>
+        </div>
+      </div>
+
+      <legend i18n>Service Details</legend>
+      <div class="form-group row">
+        <div class="cd-col-form-offset">
+          <div class="custom-control custom-checkbox">
+            <input class="custom-control-input"
+                   id="unmanaged"
+                   type="checkbox"
+                   formControlName="unmanaged">
+            <label class="custom-control-label"
+                   for="unmanaged"
+                   i18n>Unmanaged</label>
+            <cd-helper i18n>If set to true, the orchestrator will not start nor stop any daemon associated with this service.
+               Placement and all other properties will be ignored.</cd-helper>
+          </div>
+        </div>
+      </div>
+
+      <!-- Placement -->
+      <div *ngIf="!importTokenForm.controls.unmanaged.value"
+           class="form-group row">
+        <label class="cd-col-form-label"
+               for="placement"
+               i18n>Placement</label>
+        <div class="cd-col-form-input">
+          <select id="placement"
+                  class="form-select"
+                  formControlName="placement">
+            <option i18n
+                    value="hosts">Hosts</option>
+            <option i18n
+                    value="label">Label</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Label -->
+      <div *ngIf="!importTokenForm.controls.unmanaged.value && importTokenForm.controls.placement.value === 'label'"
+           class="form-group row">
+        <label i18n
+               class="cd-col-form-label"
+               for="label">Label</label>
+        <div class="cd-col-form-input">
+          <input id="label"
+                 class="form-control"
+                 type="text"
+                 formControlName="label"
+                 [ngbTypeahead]="searchLabels"
+                 (focus)="labelFocus.next($any($event).target.value)"
+                 (click)="labelClick.next($any($event).target.value)">
+          <span class="invalid-feedback"
+                *ngIf="importTokenForm.showError('label', frm, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+
+      <!-- Hosts -->
+      <div *ngIf="!importTokenForm.controls.unmanaged.value && importTokenForm.controls.placement.value === 'hosts'"
+           class="form-group row">
+        <label class="cd-col-form-label"
+               for="hosts"
+               i18n>Hosts</label>
+        <div class="cd-col-form-input">
+          <cd-select-badges id="hosts"
+                            [data]="importTokenForm.controls.hosts.value"
+                            [options]="hosts.options"
+                            [messages]="hosts.messages">
+          </cd-select-badges>
+        </div>
+      </div>
+
+      <!-- count -->
+      <div *ngIf="!importTokenForm.controls.unmanaged.value"
+           class="form-group row">
+        <label class="cd-col-form-label"
+               for="count">
+          <span i18n>Count</span>
+          <cd-helper i18n>Only that number of daemons will be created.</cd-helper>
+        </label>
+        <div class="cd-col-form-input">
+          <input id="count"
+                 class="form-control"
+                 type="number"
+                 formControlName="count"
+                 min="1">
+          <span class="invalid-feedback"
+                *ngIf="importTokenForm.showError('count', frm, 'min')"
+                i18n>The value must be at least 1.</span>
+          <span class="invalid-feedback"
+                *ngIf="importTokenForm.showError('count', frm, 'pattern')"
+                i18n>The entered value needs to be a number.</span>
+        </div>
+      </div>
+
+      <!-- RGW -->
+      <ng-container *ngIf="!importTokenForm.controls.unmanaged.value">
+        <!-- rgw_frontend_port -->
+        <div class="form-group row">
+          <label i18n
+                 class="cd-col-form-label"
+                 for="rgw_frontend_port">Port</label>
+          <div class="cd-col-form-input">
+            <input id="rgw_frontend_port"
+                   class="form-control"
+                   type="number"
+                   formControlName="rgw_frontend_port"
+                   min="1"
+                   max="65535">
+            <span class="invalid-feedback"
+                  *ngIf="importTokenForm.showError('rgw_frontend_port', frm, 'pattern')"
+                  i18n>The entered value needs to be a number.</span>
+            <span class="invalid-feedback"
+                  *ngIf="importTokenForm.showError('rgw_frontend_port', frm, 'min')"
+                  i18n>The value must be at least 1.</span>
+            <span class="invalid-feedback"
+                  *ngIf="importTokenForm.showError('rgw_frontend_port', frm, 'max')"
+                  i18n>The value cannot exceed 65535.</span>
+          </div>
+        </div>
+      </ng-container>
+    </div>
+    <div class="modal-footer">
+      <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                            [submitText]="actionLabels.IMPORT"
+                            [form]="importTokenForm"></cd-form-button-panel>
+    </div>
+    </form>
+  </ng-container>
+</cd-modal>

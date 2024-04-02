@@ -1,0 +1,13 @@
+os_type: centos
+os_version: "9.stream"
+overrides:
+  selinux:
+    allowlist:
+      - scontext=system_u:system_r:logrotate_t:s0
+
+tasks:
+- pexec:
+    all:
+    - sudo dnf install runc -y
+    - sudo sed -i 's/^#runtime = "crun"/runtime = "runc"/g' /usr/share/containers/containers.conf
+    - sudo sed -i 's/runtime = "crun"/#runtime = "crun"/g' /usr/share/containers/containers.conf
