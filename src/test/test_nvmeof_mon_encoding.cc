@@ -87,7 +87,6 @@ void test_MNVMeofGwMap() {
   pending_map.cfg_add_gw("GW3" ,group_key);
   NvmeNonceVector new_nonces = {"abc", "def","hij"};
   pending_map.Created_gws[group_key]["GW1"].nonce_map[1] = new_nonces;
-  pending_map.Created_gws[group_key]["GW1"].copied_nonce_map[1] = new_nonces;
   pending_map.Created_gws[group_key]["GW1"].subsystems.push_back(sub);
   for(int i=0; i< MAX_SUPPORTED_ANA_GROUPS; i++){
     pending_map.Created_gws[group_key]["GW1"].blocklist_data[i].osd_epoch = i*2;

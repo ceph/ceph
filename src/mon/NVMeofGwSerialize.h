@@ -130,7 +130,6 @@ inline std::ostream& print_gw_created_t(std::ostream& os, const NvmeGwCreated va
         os << " " << anas[i] <<": " << value.blocklist_data[anas[i]].osd_epoch << ":" <<value.blocklist_data[anas[i]].is_failover ;
     }
     os << "\n" << MODULE_PREFFIX << "nonces: " << value.nonce_map << " }";
-    os << "\n" << MODULE_PREFFIX << "saved-nonces: " << value.copied_nonce_map << " }";
     for (size_t i = 0; i < num_ana_groups; i++) {
         os << " " << anas[i] <<": " << value.sm_state[anas[i]] << ",";
     }
@@ -336,7 +335,6 @@ inline void encode(const NvmeGwCreatedMap& gws,  ceph::bufferlist &bl) {
             encode(gw.second.blocklist_data[i].is_failover, bl);
         }
         encode(gw.second.nonce_map, bl);
-        encode(gw.second.copied_nonce_map, bl);
     }
     ENCODE_FINISH(bl);
 }
@@ -375,7 +373,6 @@ inline void decode(NvmeGwCreatedMap& gws, ceph::buffer::list::const_iterator &bl
             decode(gw_created.blocklist_data[i].is_failover, bl);
         }
         decode(gw_created.nonce_map, bl);
-        decode(gw_created.copied_nonce_map, bl);
 
         gws[gw_name] = gw_created;
     }

@@ -80,7 +80,6 @@ struct NvmeGwCreated {
     bool               last_gw_map_epoch_valid;       // "true" if the last epoch seen by the gw-client is up-to-date
     BeaconSubsystems   subsystems;                    // gateway susbsystem and their state machine states
     NvmeAnaNonceMap    nonce_map;
-    NvmeAnaNonceMap    copied_nonce_map;
     SM_STATE           sm_state;                      // state machine states per ANA group
     struct{
        epoch_t     osd_epoch;
