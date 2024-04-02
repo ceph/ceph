@@ -270,7 +270,15 @@ void do_simple_crypto() {
 
 #if GTEST_HAS_DEATH_TEST && !defined(_WIN32)
 TEST_F(ForkDeathTest, MD5) {
-  ASSERT_EXIT(do_simple_crypto(), ::testing::ExitedWithCode(0), "^$");
+#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+  // sanitizer warns like:
+  // ==3798016==Running thread 3797882 was not suspended. False leaks are possible.
+  // but we should not take it as a fatal error.
+  const std::string matcher = ".*False leaks are possible.*");
+#else
+  const std::string matcher = "^$";
+#endif
+  ASSERT_EXIT(do_simple_crypto(), ::testing::ExitedWithCode(0), matcher);
 }
 #endif // GTEST_HAS_DEATH_TEST && !defined(_WIN32)
 
