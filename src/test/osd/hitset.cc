@@ -15,10 +15,14 @@
 #include <iostream>
 
 class HitSetTestStrap {
-public:
+protected:
   HitSet *hitset;
 
+public:
   explicit HitSetTestStrap(HitSet *h) : hitset(h) {}
+  ~HitSetTestStrap() {
+    delete hitset;
+  }
 
   void fill(unsigned count) {
     char buf[50];
