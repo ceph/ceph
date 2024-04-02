@@ -1,192 +1,370 @@
 # -*- coding: utf-8 -*-
-import json
 from typing import Optional
 
+from ..model import nvmeof as model
 from ..security import Scope
-from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
-    EndpointDoc, ReadPermission, RESTController
+from ..tools import str_to_bool
+from . import APIDoc, APIRouter, Endpoint, EndpointDoc, Param, ReadPermission, RESTController
 
 try:
-    from google.protobuf.json_format import MessageToJson
-
-    from ..services.nvmeof_client import NVMeoFClient
+    from ..services.nvmeof_client import NVMeoFClient, empty_response, \
+        handle_nvmeof_error, map_collection, map_model
 except ImportError:
-    MessageToJson = None
+    pass
 else:
-    @APIRouter('/nvmeof/namespace', Scope.NVME_OF)
-    @APIDoc('NVMe-oF Namespace Management API', 'NVMe-oF')
-    class NvmeofNamespace(RESTController):
-        @ReadPermission
-        def list(self, subsystem_nqn: str):
-            """
-            List all NVMeoF namespaces
-            """
-            response = MessageToJson(NVMeoFClient().list_namespaces(subsystem_nqn))
-            return json.loads(response)
+    @APIRouter("/nvmeof/gateway", Scope.NVME_OF)
+    @APIDoc("NVMe-oF Gateway Management API", "NVMe-oF Gateway")
+    class NVMeoFGateway(RESTController):
+        @EndpointDoc("Get information about the NVMeoF gateway")
+        @map_model(model.GatewayInfo)
+        @handle_nvmeof_error
+        def list(self):
+            return NVMeoFClient().stub.get_gateway_info(
+                NVMeoFClient.pb2.get_gateway_info_req()
+            )
 
-        @CreatePermission
-        def create(self, rbd_pool: str, rbd_image: str, subsystem_nqn: str,
-                   create_image: Optional[bool] = True, image_size: Optional[int] = 1024,
-                   block_size: int = 512, nsid: Optional[int] = 1,
-                   uuid: Optional[str] = None, anagrpid: Optional[int] = 1):
-            """
-            Create a new NVMeoF namespace
-            :param rbd_pool: RBD pool name
-            :param rbd_image: RBD image name
-            :param subsystem_nqn: NVMeoF subsystem NQN
-            :param create_image: Create RBD image
-            :param image_size: RBD image size
-            :param block_size: NVMeoF namespace block size
-            :param nsid: NVMeoF namespace ID
-            :param uuid: NVMeoF namespace UUID
-            :param anagrpid: NVMeoF namespace ANA group ID
-            """
-            response = NVMeoFClient().create_namespace(rbd_pool, rbd_image,
-                                                       subsystem_nqn, block_size,
-                                                       nsid, uuid, anagrpid,
-                                                       create_image, image_size)
-            return json.loads(MessageToJson(response))
+    @APIRouter("/nvmeof/subsystem", Scope.NVME_OF)
+    @APIDoc("NVMe-oF Subsystem Management API", "NVMe-oF Subsystem")
+    class NVMeoFSubsystem(RESTController):
+        @EndpointDoc("List all NVMeoF subsystems")
+        @map_collection(model.Subsystem, pick="subsystems")
+        @handle_nvmeof_error
+        def list(self):
+            return NVMeoFClient().stub.list_subsystems(
+                NVMeoFClient.pb2.list_subsystems_req()
+            )
 
-        @Endpoint('DELETE', path='{subsystem_nqn}')
-        def delete(self, subsystem_nqn: str, nsid: int):
-            """
-            Delete an existing NVMeoF namespace
-            :param subsystem_nqn: NVMeoF subsystem NQN
-            :param nsid: NVMeoF namespace ID
-            """
-            response = NVMeoFClient().delete_namespace(subsystem_nqn, nsid)
-            return json.loads(MessageToJson(response))
+        @EndpointDoc(
+            "Get information from a specific NVMeoF subsystem",
+            parameters={"nqn": Param(str, "NVMeoF subsystem NQN")},
+        )
+        @map_model(model.Subsystem, first="subsystems")
+        @handle_nvmeof_error
+        def get(self, nqn: str):
+            return NVMeoFClient().stub.list_subsystems(
+                NVMeoFClient.pb2.list_subsystems_req(subsystem_nqn=nqn)
+            )
 
-    @APIRouter('/nvmeof/subsystem', Scope.NVME_OF)
-    @APIDoc('NVMe-oF Subsystem Management API', 'NVMe-oF')
-    class NvmeofSubsystem(RESTController):
-        @ReadPermission
-        @EndpointDoc("List all NVMeoF gateways",
-                     parameters={
-                         'subsystem_nqn': (str, 'NVMeoF subsystem NQN'),
-                         'serial_number': (str, 'NVMeoF subsystem serial number')
-                     })
-        def list(self, subsystem_nqn: Optional[str] = None, serial_number: Optional[str] = None):
-            response = MessageToJson(NVMeoFClient().list_subsystems(
-                subsystem_nqn=subsystem_nqn, serial_number=serial_number))
+        @EndpointDoc(
+            "Create a new NVMeoF subsystem",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "max_namespaces": Param(int, "Maximum number of namespaces", True, 256),
+                "enable_ha": Param(bool, "Enable high availability"),
+            },
+        )
+        @empty_response
+        @handle_nvmeof_error
+        def create(self, nqn: str, enable_ha: bool, max_namespaces: int = 256):
+            return NVMeoFClient().stub.create_subsystem(
+                NVMeoFClient.pb2.create_subsystem_req(
+                    subsystem_nqn=nqn, max_namespaces=max_namespaces, enable_ha=enable_ha
+                )
+            )
 
-            return json.loads(response)
+        @EndpointDoc(
+            "Delete an existing NVMeoF subsystem",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "force": Param(bool, "Force delete", "false"),
+            },
+        )
+        @empty_response
+        @handle_nvmeof_error
+        def delete(self, nqn: str, force: Optional[str] = "false"):
+            return NVMeoFClient().stub.delete_subsystem(
+                NVMeoFClient.pb2.delete_subsystem_req(
+                    subsystem_nqn=nqn, force=str_to_bool(force)
+                )
+            )
 
-        @CreatePermission
-        def create(self, subsystem_nqn: str, serial_number: Optional[str] = None,
-                   max_namespaces: Optional[int] = 256, ana_reporting: Optional[bool] = False,
-                   enable_ha: Optional[bool] = False):
-            """
-            Create a new NVMeoF subsystem
+    @APIRouter("/nvmeof/subsystem/{nqn}/listener", Scope.NVME_OF)
+    @APIDoc("NVMe-oF Subsystem Listener Management API", "NVMe-oF Subsystem Listener")
+    class NVMeoFListener(RESTController):
+        @EndpointDoc(
+            "List all NVMeoF listeners",
+            parameters={"nqn": Param(str, "NVMeoF subsystem NQN")},
+        )
+        @map_collection(model.Listener, pick="listeners")
+        @handle_nvmeof_error
+        def list(self, nqn: str):
+            return NVMeoFClient().stub.list_listeners(
+                NVMeoFClient.pb2.list_listeners_req(subsystem=nqn)
+            )
 
-            :param subsystem_nqn: NVMeoF subsystem NQN
-            :param serial_number: NVMeoF subsystem serial number
-            :param max_namespaces: NVMeoF subsystem maximum namespaces
-            :param ana_reporting: NVMeoF subsystem ANA reporting
-            :param enable_ha: NVMeoF subsystem enable HA
-            """
-            response = NVMeoFClient().create_subsystem(subsystem_nqn, serial_number, max_namespaces,
-                                                       ana_reporting, enable_ha)
-            return json.loads(MessageToJson(response))
+        @EndpointDoc(
+            "Create a new NVMeoF listener",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "gateway": Param(str, "NVMeoF gateway"),
+                "traddr": Param(str, "NVMeoF transport address"),
+                "trsvcid": Param(int, "NVMeoF transport service port"),
+                "adrfam": Param(str, "NVMeoF address family"),
+                "trtype": Param(str, "NVMeoF transport type"),
+            },
+        )
+        @empty_response
+        @handle_nvmeof_error
+        def create(
+            self,
+            nqn: str,
+            gateway: str,
+            traddr: str,
+            trsvcid: Optional[int] = 4420,
+            adrfam: Optional[str] = "ipv4",
+        ):
+            return NVMeoFClient().stub.create_listener(
+                NVMeoFClient.pb2.create_listener_req(
+                    nqn=nqn,
+                    gateway_name=gateway,
+                    traddr=traddr,
+                    trsvcid=trsvcid,
+                    adrfam=adrfam,
+                )
+            )
 
-        @DeletePermission
-        @Endpoint('DELETE', path='{subsystem_nqn}')
-        def delete(self, subsystem_nqn: str):
-            """
-            Delete an existing NVMeoF subsystem
-            :param subsystem_nqn: NVMeoF subsystem NQN
-            """
-            response = NVMeoFClient().delete_subsystem(subsystem_nqn)
-            return json.loads(MessageToJson(response))
-
-    @APIRouter('/nvmeof/hosts', Scope.NVME_OF)
-    @APIDoc('NVMe-oF Host Management API', 'NVMe-oF')
-    class NvmeofHost(RESTController):
-        @ReadPermission
-        def list(self, subsystem_nqn: str):
-            """
-            List all NVMeoF hosts
-            :param subsystem_nqn: NVMeoF subsystem NQN
-            """
-            response = MessageToJson(NVMeoFClient().list_hosts(subsystem_nqn))
-            return json.loads(response)
-
-        @CreatePermission
-        def create(self, subsystem_nqn: str, host_nqn: str):
-            """
-            Create a new NVMeoF host
-            :param subsystem_nqn: NVMeoF subsystem NQN
-            :param host_nqn: NVMeoF host NQN
-            """
-            response = NVMeoFClient().add_host(subsystem_nqn, host_nqn)
-            return json.loads(MessageToJson(response))
-
-        @DeletePermission
-        def delete(self, subsystem_nqn: str, host_nqn: str):
-            """
-            Delete an existing NVMeoF host
-            :param subsystem_nqn: NVMeoF subsystem NQN
-            :param host_nqn: NVMeoF host NQN
-            """
-            response = NVMeoFClient().remove_host(subsystem_nqn, host_nqn)
-            return json.loads(MessageToJson(response))
-
-    @APIRouter('/nvmeof/listener', Scope.NVME_OF)
-    @APIDoc('NVMe-oF Listener Management API', 'NVMe-oF')
-    class NvmeofListener(RESTController):
-        @ReadPermission
-        def list(self, subsystem_nqn: str):
-            """
-            List all NVMeoF listeners
-            :param nqn: NVMeoF subsystem NQN
-            """
-            response = MessageToJson(NVMeoFClient().list_listeners(subsystem_nqn))
-            return json.loads(response)
-
-        @CreatePermission
-        def create(self, nqn: str, gateway: str, traddr: Optional[str] = None,
-                   trtype: Optional[str] = 'TCP', adrfam: Optional[str] = 'IPV4',
-                   trsvcid: Optional[int] = 4420,
-                   auto_ha_state: Optional[str] = 'AUTO_HA_UNSET'):
-            """
-            Create a new NVMeoF listener
-            :param nqn: NVMeoF subsystem NQN
-            :param gateway: NVMeoF gateway
-            :param traddr: NVMeoF transport address
-            :param trtype: NVMeoF transport type
-            :param adrfam: NVMeoF address family
-            :param trsvcid: NVMeoF transport service ID
-            :param auto_ha_state: NVMeoF auto HA state
-            """
-            response = NVMeoFClient().create_listener(nqn, gateway, traddr,
-                                                      trtype, adrfam, trsvcid, auto_ha_state)
-            return json.loads(MessageToJson(response))
-
-        @DeletePermission
+        @EndpointDoc(
+            "Delete an existing NVMeoF listener",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "gateway": Param(str, "NVMeoF gateway"),
+                "traddr": Param(str, "NVMeoF transport address"),
+                "trsvid": Param(int, "NVMeoF transport service port"),
+            },
+        )
+        @empty_response
+        @handle_nvmeof_error
         def delete(self, nqn: str, gateway: str, traddr: Optional[str] = None,
-                   transport_type: Optional[str] = 'TCP', addr_family: Optional[str] = 'IPV4',
-                   transport_svc_id: Optional[int] = 4420):
-            """
-            Delete an existing NVMeoF listener
-            :param nqn: NVMeoF subsystem NQN
-            :param gateway: NVMeoF gateway
-            :param traddr: NVMeoF transport address
-            :param transport_type: NVMeoF transport type
-            :param addr_family: NVMeoF address family
-            :param transport_svc_id: NVMeoF transport service ID
-            """
-            response = NVMeoFClient().delete_listener(nqn, gateway, traddr, transport_type,
-                                                      addr_family, transport_svc_id)
-            return json.loads(MessageToJson(response))
+                   trsvcid: Optional[int] = 4420):
+            return NVMeoFClient().stub.delete_listener(
+                NVMeoFClient.pb2.delete_listener_req(
+                    nqn=nqn, gateway_name=gateway, traddr=traddr, trsvcid=int(trsvcid)
+                )
+            )
 
-    @APIRouter('/nvmeof/gateway', Scope.NVME_OF)
-    @APIDoc('NVMe-oF Gateway Management API', 'NVMe-oF')
-    class NvmeofGateway(RESTController):
+    @APIRouter("/nvmeof/subsystem/{nqn}/namespace", Scope.NVME_OF)
+    @APIDoc("NVMe-oF Subsystem Namespace Management API", "NVMe-oF Subsystem Namespace")
+    class NVMeoFNamespace(RESTController):
+        @EndpointDoc(
+            "List all NVMeoF namespaces in a subsystem",
+            parameters={"nqn": Param(str, "NVMeoF subsystem NQN")},
+        )
+        @map_collection(model.Namespace, pick="namespaces")
+        @handle_nvmeof_error
+        def list(self, nqn: str):
+            return NVMeoFClient().stub.list_namespaces(
+                NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn)
+            )
+
+        @EndpointDoc(
+            "Get info from specified NVMeoF namespace",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nsid": Param(str, "NVMeoF Namespace ID"),
+            },
+        )
+        @map_model(model.Namespace, first="namespaces")
+        @handle_nvmeof_error
+        def get(self, nqn: str, nsid: str):
+            return NVMeoFClient().stub.list_namespaces(
+                NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn, nsid=int(nsid))
+            )
+
         @ReadPermission
-        @Endpoint()
-        def info(self):
-            """
-            Get NVMeoF gateway information
-            """
-            response = MessageToJson(NVMeoFClient().gateway_info())
-            return json.loads(response)
+        @Endpoint('GET', '{nsid}/io_stats')
+        @EndpointDoc(
+            "Get IO stats from specified NVMeoF namespace",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nsid": Param(str, "NVMeoF Namespace ID"),
+            },
+        )
+        @map_model(model.NamespaceIOStats)
+        @handle_nvmeof_error
+        def io_stats(self, nqn: str, nsid: str):
+            return NVMeoFClient().stub.namespace_get_io_stats(
+                NVMeoFClient.pb2.namespace_get_io_stats_req(
+                    subsystem_nqn=nqn, nsid=int(nsid))
+            )
+
+        @EndpointDoc(
+            "Create a new NVMeoF namespace",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "rbd_pool": Param(str, "RBD pool name"),
+                "rbd_image_name": Param(str, "RBD image name"),
+                "create_image": Param(bool, "Create RBD image"),
+                "size": Param(int, "RBD image size"),
+                "block_size": Param(int, "NVMeoF namespace block size"),
+                "load_balancing_group": Param(int, "Load balancing group"),
+            },
+        )
+        @map_model(model.NamespaceCreation)
+        @handle_nvmeof_error
+        def create(
+            self,
+            nqn: str,
+            rbd_image_name: str,
+            rbd_pool: str = "rbd",
+            create_image: Optional[bool] = True,
+            size: Optional[int] = 1024,
+            block_size: int = 512,
+            load_balancing_group: Optional[int] = None,
+        ):
+            return NVMeoFClient().stub.namespace_add(
+                NVMeoFClient.pb2.namespace_add_req(
+                    subsystem_nqn=nqn,
+                    rbd_image_name=rbd_image_name,
+                    rbd_pool_name=rbd_pool,
+                    block_size=block_size,
+                    create_image=create_image,
+                    size=size,
+                    anagrpid=load_balancing_group,
+                )
+            )
+
+        @EndpointDoc(
+            "Update an existing NVMeoF namespace",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nsid": Param(str, "NVMeoF Namespace ID"),
+                "rbd_image_size": Param(int, "RBD image size"),
+                "load_balancing_group": Param(int, "Load balancing group"),
+                "rw_ios_per_second": Param(int, "Read/Write IOPS"),
+                "rw_mbytes_per_second": Param(int, "Read/Write MB/s"),
+                "r_mbytes_per_second": Param(int, "Read MB/s"),
+                "w_mbytes_per_second": Param(int, "Write MB/s"),
+            },
+        )
+        @empty_response
+        @handle_nvmeof_error
+        def update(
+            self,
+            nqn: str,
+            nsid: str,
+            rbd_image_size: Optional[int] = None,
+            load_balancing_group: Optional[int] = None,
+            rw_ios_per_second: Optional[int] = None,
+            rw_mbytes_per_second: Optional[int] = None,
+            r_mbytes_per_second: Optional[int] = None,
+            w_mbytes_per_second: Optional[int] = None,
+        ):
+            if rbd_image_size:
+                mib = 1024 * 1024
+                new_size_mib = int((rbd_image_size + mib - 1) / mib)
+
+                response = NVMeoFClient().stub.namespace_resize(
+                    NVMeoFClient.pb2.namespace_resize_req(
+                        subsystem_nqn=nqn, nsid=int(nsid), new_size=new_size_mib
+                    )
+                )
+                if response.status != 0:
+                    return response
+
+            if load_balancing_group:
+                response = NVMeoFClient().stub.namespace_change_load_balancing_group(
+                    NVMeoFClient.pb2.namespace_change_load_balancing_group_req(
+                        subsystem_nqn=nqn, nsid=int(nsid), anagrpid=load_balancing_group
+                    )
+                )
+                if response.status != 0:
+                    return response
+
+            if (
+                rw_ios_per_second
+                or rw_mbytes_per_second
+                or r_mbytes_per_second
+                or w_mbytes_per_second
+            ):
+                response = NVMeoFClient().stub.namespace_set_qos_limits(
+                    NVMeoFClient.pb2.namespace_set_qos_req(
+                        subsystem_nqn=nqn,
+                        nsid=int(nsid),
+                        rw_ios_per_second=rw_ios_per_second,
+                        rw_mbytes_per_second=rw_mbytes_per_second,
+                        r_mbytes_per_second=r_mbytes_per_second,
+                        w_mbytes_per_second=w_mbytes_per_second,
+                    )
+                )
+                if response.status != 0:
+                    return response
+
+            return response
+
+        @EndpointDoc(
+            "Delete an existing NVMeoF namespace",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nsid": Param(str, "NVMeoF Namespace ID"),
+            },
+        )
+        @empty_response
+        @handle_nvmeof_error
+        def delete(self, nqn: str, nsid: str):
+            return NVMeoFClient().stub.namespace_delete(
+                NVMeoFClient.pb2.namespace_delete_req(subsystem_nqn=nqn, nsid=int(nsid))
+            )
+
+    @APIRouter("/nvmeof/subsystem/{nqn}/host", Scope.NVME_OF)
+    @APIDoc("NVMe-oF Subsystem Host Allowlist Management API",
+            "NVMe-oF Subsystem Host Allowlist")
+    class NVMeoFHost(RESTController):
+        @EndpointDoc(
+            "List all allowed hosts for an NVMeoF subsystem",
+            parameters={"nqn": Param(str, "NVMeoF subsystem NQN")},
+        )
+        @map_collection(
+            model.Host,
+            pick="hosts",
+            # Display the "allow any host" option as another host item
+            finalize=lambda i, o: [model.Host(nqn="*")._asdict()] + o
+            if i.allow_any_host
+            else o,
+        )
+        @handle_nvmeof_error
+        def list(self, nqn: str):
+            return NVMeoFClient().stub.list_hosts(
+                NVMeoFClient.pb2.list_hosts_req(subsystem=nqn)
+            )
+
+        @EndpointDoc(
+            "Allow hosts to access an NVMeoF subsystem",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "host_nqn": Param(str, 'NVMeoF host NQN. Use "*" to allow any host.'),
+            },
+        )
+        @empty_response
+        @handle_nvmeof_error
+        def create(self, nqn: str, host_nqn: str):
+            return NVMeoFClient().stub.add_host(
+                NVMeoFClient.pb2.add_host_req(subsystem_nqn=nqn, host_nqn=host_nqn)
+            )
+
+        @EndpointDoc(
+            "Disallow hosts from accessing an NVMeoF subsystem",
+            parameters={
+                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "host_nqn": Param(str, 'NVMeoF host NQN. Use "*" to disallow any host.'),
+            },
+        )
+        @empty_response
+        @handle_nvmeof_error
+        def delete(self, nqn: str, host_nqn: str):
+            return NVMeoFClient().stub.remove_host(
+                NVMeoFClient.pb2.remove_host_req(subsystem_nqn=nqn, host_nqn=host_nqn)
+            )
+
+    @APIRouter("/nvmeof/subsystem/{nqn}/connection", Scope.NVME_OF)
+    @APIDoc("NVMe-oF Subsystem Connection Management API", "NVMe-oF Subsystem Connection")
+    class NVMeoFConnection(RESTController):
+        @EndpointDoc(
+            "List all NVMeoF Subsystem Connections",
+            parameters={"nqn": Param(str, "NVMeoF subsystem NQN")},
+        )
+        @map_collection(model.Connection, pick="connections")
+        @handle_nvmeof_error
+        def list(self, nqn: str):
+            return NVMeoFClient().stub.list_connections(
+                NVMeoFClient.pb2.list_connections_req(subsystem=nqn)
+            )

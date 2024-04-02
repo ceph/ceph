@@ -10,37 +10,17 @@
 
 syntax = "proto3";
 
-enum TransportType {
-    INVALID = 0;
-    RDMA = 1;
-    FC = 2;
-    TCP = 3;
-    PCIE = 256;
-    VFIOUSER = 1024;
-    CUSTOM = 4096;
-}
-
 enum AddressFamily {
-    invalid = 0;
-    ipv4 = 1;
-    ipv6 = 2;
-    ib = 3;
-    fc = 4;
+    ipv4 = 0;
+    ipv6 = 1;
 }
 
 enum LogLevel {
-    DISABLED = 0;
-    ERROR = 1;
-    WARNING = 2;
-    NOTICE = 3;
-    INFO = 4;
-    DEBUG = 5;
-}
-
-enum AutoHAState {
-    AUTO_HA_UNSET = 0;
-    AUTO_HA_OFF = 1;
-    AUTO_HA_ON = 2;
+    ERROR = 0;
+    WARNING = 1;
+    NOTICE = 2;
+    INFO = 3;
+    DEBUG = 4;
 }
 
 service Gateway {
@@ -93,7 +73,13 @@ service Gateway {
 	rpc list_listeners(list_listeners_req) returns(listeners_info) {}
 
 	// List subsystems
-	rpc list_subsystems(list_subsystems_req) returns(subsystems_info) {}
+	rpc list_subsystems(list_subsystems_req) returns(subsystems_info_cli) {}
+
+        // Gets subsystems
+        rpc get_subsystems(get_subsystems_req) returns(subsystems_info) {}
+
+	// Set gateway ANA states
+	rpc set_ana_state(ana_info) returns(req_status) {}
 
 	// Gets spdk nvmf log flags and level
 	rpc get_spdk_nvmf_log_flags_and_level(get_spdk_nvmf_log_flags_and_level_req) returns(spdk_nvmf_log_flags_and_level_info) {}
@@ -119,14 +105,15 @@ message namespace_add_req {
 	optional string uuid = 6;
 	optional int32 anagrpid = 7;
 	optional bool create_image = 8;
-	optional uint32 size = 9;
+	optional uint64 size = 9;
+	optional bool force = 10;
 }
 
 message namespace_resize_req {
 	string subsystem_nqn = 1;
 	optional uint32 nsid = 2;
 	optional string uuid = 3;
-	uint32 new_size = 4;
+	uint64 new_size = 4;
 }
 
 message namespace_get_io_stats_req {
@@ -162,8 +149,7 @@ message create_subsystem_req {
 	string subsystem_nqn = 1;
 	string serial_number = 2;
 	optional uint32 max_namespaces = 3;
-	bool ana_reporting = 4;
-	bool enable_ha = 5;
+	bool enable_ha = 4;
 }
 
 message delete_subsystem_req {
@@ -199,17 +185,14 @@ message create_listener_req {
 	string nqn = 1;
 	string gateway_name = 2;
 	string traddr = 3;
-	optional TransportType trtype = 4;
 	optional AddressFamily adrfam = 5;
 	optional uint32 trsvcid = 6;
-	optional AutoHAState auto_ha_state = 7;
 }
 
 message delete_listener_req {
 	string nqn = 1;
 	string gateway_name = 2;
 	string traddr = 3;
-	optional TransportType trtype = 4;
 	optional AddressFamily adrfam = 5;
 	optional uint32 trsvcid = 6;
 }
@@ -221,6 +204,9 @@ message list_listeners_req {
 message list_subsystems_req {
 	optional string subsystem_nqn = 1;
 	optional string serial_number = 2;
+}
+
+message get_subsystems_req {
 }
 
 message get_spdk_nvmf_log_flags_and_level_req {
@@ -238,13 +224,38 @@ message get_gateway_info_req {
 	optional string cli_version = 1;
 }
 
-// Return messages 
-
-message bdev_status {
-	int32 status = 1;
-	string error_message = 2;
-	string bdev_name = 3;
+// From https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4-2019.06.10-Ratified.pdf page 138
+// Asymmetric Namespace Access state for all namespaces in this ANA
+// Group when accessed through this controller.
+// Value Description Reference
+// 01h ANA Optimized state 8.20.3.1
+// 02h ANA Non-Optimized state 8.20.3.2
+// 03h ANA Inaccessible state 8.20.3.3
+// 04h ANA Persistent Loss state 8.20.3.4
+// 0Fh ANA Change state 8.20.3.5
+// All others Reserved
+enum ana_state {
+  UNSET         = 0;
+  OPTIMIZED     = 1;
+  NON_OPTIMIZED = 2;
+  INACCESSIBLE  = 3;
 }
+
+message ana_group_state {
+	uint32     grp_id = 1;  // groupd id
+	ana_state  state  = 2;  // ANA state
+}
+
+message nqn_ana_states {
+	string     nqn                     = 1; // subsystem nqn
+	repeated   ana_group_state  states = 2; // list of group states
+}
+
+message ana_info {
+	repeated nqn_ana_states states = 1; // list of nqn states
+}
+
+// Return messages 
 
 message req_status {
 	int32 status = 1;
@@ -258,12 +269,48 @@ message nsid_status {
 }
 
 message subsystems_info {
-	int32 status = 1;
-	string error_message = 2;
-	repeated subsystem subsystems = 3;
+        repeated subsystem subsystems = 1;
 }
 
 message subsystem {
+        string nqn = 1;
+        string subtype = 2;
+        repeated listen_address listen_addresses = 3;
+        repeated host hosts = 4;
+        bool allow_any_host = 5;
+        optional string serial_number = 6;
+        optional string model_number = 7;
+        optional uint32 max_namespaces = 8;
+        optional uint32 min_cntlid = 9;
+        optional uint32 max_cntlid = 10;
+        repeated namespace namespaces = 11;
+}
+
+message listen_address {
+        string trtype = 1;
+        string adrfam = 2;
+        string traddr = 3;
+        string trsvcid = 4;
+        optional string transport = 5;
+}
+
+message namespace {
+    uint32 nsid = 1;
+    string name = 2;
+    optional string bdev_name = 3;
+    optional string nguid = 4;
+    optional string uuid = 5;
+    optional uint32 anagrpid = 6;
+    optional string nonce = 7;
+}
+
+message subsystems_info_cli {
+	int32 status = 1;
+	string error_message = 2;
+	repeated subsystem_cli subsystems = 3;
+}
+
+message subsystem_cli {
 	string nqn = 1;
 	bool enable_ha = 2;
 	string serial_number = 3;
@@ -272,6 +319,7 @@ message subsystem {
 	uint32 max_cntlid = 6;
 	uint32 namespace_count = 7;
 	string subtype = 8;
+	uint32 max_namespaces = 9;
 }
 
 message gateway_info {
@@ -284,7 +332,8 @@ message gateway_info {
 	bool bool_status = 7;
 	int32 status = 8;
 	string error_message = 9;
-	string spdk_version = 10;
+	optional string spdk_version = 10;
+        uint32 load_balancing_group = 11;
 }
 
 message cli_version {
@@ -301,7 +350,7 @@ message gw_version {
 
 message listener_info {
 	string gateway_name = 1;
-	TransportType trtype = 2;
+	string trtype = 2;
 	AddressFamily adrfam = 3;
 	string traddr = 4;
 	uint32 trsvcid = 5;
@@ -329,7 +378,7 @@ message connection {
 	string nqn = 1;
 	string traddr = 2;
 	uint32 trsvcid = 3;
-	TransportType trtype = 4;
+        string trtype = 4;
 	AddressFamily adrfam = 5;
 	bool connected = 6;
 	int32 qpairs_count = 7;
@@ -343,7 +392,7 @@ message connections_info {
 	repeated connection connections = 4;
 }
 
-message namespace {
+message namespace_cli {
 	uint32 nsid = 1;
 	string bdev_name = 2;
 	string rbd_image_name = 3;
@@ -362,7 +411,7 @@ message namespaces_info {
 	int32 status = 1;
 	string error_message = 2;
 	string subsystem_nqn = 3;
-	repeated namespace namespaces = 4;
+	repeated namespace_cli namespaces = 4;
 }
 
 message namespace_io_stats_info {

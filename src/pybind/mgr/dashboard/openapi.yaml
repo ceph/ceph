@@ -7696,9 +7696,8 @@ paths:
       summary: Updates an NFS-Ganesha export
       tags:
       - NFS-Ganesha
-  /api/nvmeof/gateway/info:
+  /api/nvmeof/gateway:
     get:
-      description: "\n            Get NVMeoF gateway information\n            "
       parameters: []
       responses:
         '200':
@@ -7717,25 +7716,221 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Get information about the NVMeoF gateway
       tags:
-      - NVMe-oF
-  /api/nvmeof/hosts:
+      - NVMe-oF Gateway
+  /api/nvmeof/subsystem:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List all NVMeoF subsystems
+      tags:
+      - NVMe-oF Subsystem
     post:
-      description: "\n            Create a new NVMeoF host\n            :param subsystem_nqn:\
-        \ NVMeoF subsystem NQN\n            :param host_nqn: NVMeoF host NQN\n   \
-        \         "
       parameters: []
       requestBody:
         content:
           application/json:
             schema:
               properties:
-                host_nqn:
-                  type: string
-                subsystem_nqn:
+                enable_ha:
+                  description: Enable high availability
+                  type: boolean
+                max_namespaces:
+                  default: 256
+                  description: Maximum number of namespaces
+                  type: integer
+                nqn:
+                  description: NVMeoF subsystem NQN
                   type: string
               required:
-              - subsystem_nqn
+              - nqn
+              - enable_ha
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Create a new NVMeoF subsystem
+      tags:
+      - NVMe-oF Subsystem
+  /api/nvmeof/subsystem/{nqn}:
+    delete:
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      - default: 'false'
+        description: Force delete
+        in: query
+        name: force
+        schema:
+          type: boolean
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Delete an existing NVMeoF subsystem
+      tags:
+      - NVMe-oF Subsystem
+    get:
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get information from a specific NVMeoF subsystem
+      tags:
+      - NVMe-oF Subsystem
+  /api/nvmeof/subsystem/{nqn}/connection:
+    get:
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List all NVMeoF Subsystem Connections
+      tags:
+      - NVMe-oF Subsystem Connection
+  /api/nvmeof/subsystem/{nqn}/host:
+    get:
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List all allowed hosts for an NVMeoF subsystem
+      tags:
+      - NVMe-oF Subsystem Host Allowlist
+    post:
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                host_nqn:
+                  description: NVMeoF host NQN. Use "*" to allow any host.
+                  type: string
+              required:
               - host_nqn
               type: object
       responses:
@@ -7760,49 +7955,20 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Allow hosts to access an NVMeoF subsystem
       tags:
-      - NVMe-oF
-  /api/nvmeof/hosts/{subsystem_nqn}:
-    get:
-      description: "\n            List all NVMeoF hosts\n            :param subsystem_nqn:\
-        \ NVMeoF subsystem NQN\n            "
-      parameters:
-      - in: path
-        name: subsystem_nqn
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      tags:
-      - NVMe-oF
-  /api/nvmeof/hosts/{subsystem_nqn}/{host_nqn}:
+      - NVMe-oF Subsystem Host Allowlist
+  /api/nvmeof/subsystem/{nqn}/host/{host_nqn}:
     delete:
-      description: "\n            Delete an existing NVMeoF host\n            :param\
-        \ subsystem_nqn: NVMeoF subsystem NQN\n            :param host_nqn: NVMeoF\
-        \ host NQN\n            "
       parameters:
-      - in: path
-        name: subsystem_nqn
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
         required: true
         schema:
           type: string
-      - in: path
+      - description: NVMeoF host NQN. Use "*" to disallow any host.
+        in: path
         name: host_nqn
         required: true
         schema:
@@ -7829,15 +7995,15 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Disallow hosts from accessing an NVMeoF subsystem
       tags:
-      - NVMe-oF
-  /api/nvmeof/listener:
+      - NVMe-oF Subsystem Host Allowlist
+  /api/nvmeof/subsystem/{nqn}/listener:
     get:
-      description: "\n            List all NVMeoF listeners\n            :param nqn:\
-        \ NVMeoF subsystem NQN\n            "
       parameters:
-      - in: query
-        name: subsystem_nqn
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
         required: true
         schema:
           type: string
@@ -7858,42 +8024,39 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: List all NVMeoF listeners
       tags:
-      - NVMe-oF
+      - NVMe-oF Subsystem Listener
     post:
-      description: "\n            Create a new NVMeoF listener\n            :param\
-        \ nqn: NVMeoF subsystem NQN\n            :param gateway: NVMeoF gateway\n\
-        \            :param traddr: NVMeoF transport address\n            :param trtype:\
-        \ NVMeoF transport type\n            :param adrfam: NVMeoF address family\n\
-        \            :param trsvcid: NVMeoF transport service ID\n            :param\
-        \ auto_ha_state: NVMeoF auto HA state\n            "
-      parameters: []
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
             schema:
               properties:
                 adrfam:
-                  default: IPV4
-                  type: string
-                auto_ha_state:
-                  default: AUTO_HA_UNSET
+                  default: ipv4
+                  description: NVMeoF address family
                   type: string
                 gateway:
-                  type: string
-                nqn:
+                  description: NVMeoF gateway
                   type: string
                 traddr:
+                  description: NVMeoF transport address
                   type: string
                 trsvcid:
                   default: 4420
+                  description: NVMeoF transport service port
                   type: integer
-                trtype:
-                  default: TCP
-                  type: string
               required:
-              - nqn
               - gateway
+              - traddr
               type: object
       responses:
         '201':
@@ -7917,45 +8080,33 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Create a new NVMeoF listener
       tags:
-      - NVMe-oF
-  /api/nvmeof/listener/{nqn}/{gateway}:
+      - NVMe-oF Subsystem Listener
+  /api/nvmeof/subsystem/{nqn}/listener/{gateway}:
     delete:
-      description: "\n            Delete an existing NVMeoF listener\n           \
-        \ :param nqn: NVMeoF subsystem NQN\n            :param gateway: NVMeoF gateway\n\
-        \            :param traddr: NVMeoF transport address\n            :param transport_type:\
-        \ NVMeoF transport type\n            :param addr_family: NVMeoF address family\n\
-        \            :param transport_svc_id: NVMeoF transport service ID\n      \
-        \      "
       parameters:
-      - in: path
+      - description: NVMeoF subsystem NQN
+        in: path
         name: nqn
         required: true
         schema:
           type: string
-      - in: path
+      - description: NVMeoF gateway
+        in: path
         name: gateway
         required: true
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF transport address
         in: query
         name: traddr
         schema:
           type: string
-      - default: TCP
-        in: query
-        name: transport_type
-        schema:
-          type: string
-      - default: IPV4
-        in: query
-        name: addr_family
-        schema:
-          type: string
       - default: 4420
         in: query
-        name: transport_svc_id
+        name: trsvcid
         schema:
           type: integer
       responses:
@@ -7980,51 +8131,75 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Delete an existing NVMeoF listener
       tags:
-      - NVMe-oF
-  /api/nvmeof/namespace:
+      - NVMe-oF Subsystem Listener
+  /api/nvmeof/subsystem/{nqn}/namespace:
+    get:
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List all NVMeoF namespaces in a subsystem
+      tags:
+      - NVMe-oF Subsystem Namespace
     post:
-      description: "\n            Create a new NVMeoF namespace\n            :param\
-        \ rbd_pool: RBD pool name\n            :param rbd_image: RBD image name\n\
-        \            :param subsystem_nqn: NVMeoF subsystem NQN\n            :param\
-        \ create_image: Create RBD image\n            :param image_size: RBD image\
-        \ size\n            :param block_size: NVMeoF namespace block size\n     \
-        \       :param nsid: NVMeoF namespace ID\n            :param uuid: NVMeoF\
-        \ namespace UUID\n            :param anagrpid: NVMeoF namespace ANA group\
-        \ ID\n            "
-      parameters: []
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
             schema:
               properties:
-                anagrpid:
-                  default: 1
-                  type: integer
                 block_size:
                   default: 512
+                  description: NVMeoF namespace block size
                   type: integer
                 create_image:
                   default: true
+                  description: Create RBD image
                   type: boolean
-                image_size:
-                  default: 1024
+                load_balancing_group:
+                  description: Load balancing group
                   type: integer
-                nsid:
-                  default: 1
-                  type: integer
-                rbd_image:
+                rbd_image_name:
+                  description: RBD image name
                   type: string
                 rbd_pool:
+                  default: rbd
+                  description: RBD pool name
                   type: string
-                subsystem_nqn:
-                  type: string
-                uuid:
-                  type: string
+                size:
+                  default: 1024
+                  description: RBD image size
+                  type: integer
               required:
-              - rbd_pool
-              - rbd_image
-              - subsystem_nqn
+              - rbd_image_name
               type: object
       responses:
         '201':
@@ -8048,48 +8223,20 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Create a new NVMeoF namespace
       tags:
-      - NVMe-oF
-  /api/nvmeof/namespace/{subsystem_nqn}:
-    get:
-      description: "\n            List all NVMeoF namespaces\n            "
-      parameters:
-      - in: path
-        name: subsystem_nqn
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              type: object
-          description: OK
-        '400':
-          description: Operation exception. Please check the response body for details.
-        '401':
-          description: Unauthenticated access. Please login first.
-        '403':
-          description: Unauthorized access. Please check your permissions.
-        '500':
-          description: Unexpected error. Please check the response body for the stack
-            trace.
-      security:
-      - jwt: []
-      tags:
-      - NVMe-oF
-  /api/nvmeof/namespace/{subsystem_nqn}/{nsid}:
+      - NVMe-oF Subsystem Namespace
+  /api/nvmeof/subsystem/{nqn}/namespace/{nsid}:
     delete:
-      description: "\n            Delete an existing NVMeoF namespace\n          \
-        \  :param subsystem_nqn: NVMeoF subsystem NQN\n            :param nsid: NVMeoF\
-        \ namespace ID\n            "
       parameters:
-      - in: path
-        name: subsystem_nqn
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
         required: true
         schema:
           type: string
-      - in: path
+      - description: NVMeoF Namespace ID
+        in: path
         name: nsid
         required: true
         schema:
@@ -8116,21 +8263,21 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Delete an existing NVMeoF namespace
       tags:
-      - NVMe-oF
-  /api/nvmeof/subsystem:
+      - NVMe-oF Subsystem Namespace
     get:
       parameters:
-      - allowEmptyValue: true
-        description: NVMeoF subsystem NQN
-        in: query
-        name: subsystem_nqn
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
         schema:
           type: string
-      - allowEmptyValue: true
-        description: NVMeoF subsystem serial number
-        in: query
-        name: serial_number
+      - description: NVMeoF Namespace ID
+        in: path
+        name: nsid
+        required: true
         schema:
           type: string
       responses:
@@ -8150,49 +8297,53 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: List all NVMeoF gateways
+      summary: Get info from specified NVMeoF namespace
       tags:
-      - NVMe-oF
-    post:
-      description: "\n            Create a new NVMeoF subsystem\n\n            :param\
-        \ subsystem_nqn: NVMeoF subsystem NQN\n            :param serial_number: NVMeoF\
-        \ subsystem serial number\n            :param max_namespaces: NVMeoF subsystem\
-        \ maximum namespaces\n            :param ana_reporting: NVMeoF subsystem ANA\
-        \ reporting\n            :param enable_ha: NVMeoF subsystem enable HA\n  \
-        \          "
-      parameters: []
+      - NVMe-oF Subsystem Namespace
+    patch:
+      parameters:
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      - description: NVMeoF Namespace ID
+        in: path
+        name: nsid
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
             schema:
               properties:
-                ana_reporting:
-                  default: false
-                  type: boolean
-                enable_ha:
-                  default: false
-                  type: boolean
-                max_namespaces:
-                  default: 256
+                load_balancing_group:
+                  description: Load balancing group
                   type: integer
-                serial_number:
+                r_mbytes_per_second:
+                  description: Read MB/s
                   type: integer
-                subsystem_nqn:
-                  type: string
-              required:
-              - subsystem_nqn
+                rbd_image_size:
+                  description: RBD image size
+                  type: integer
+                rw_ios_per_second:
+                  description: Read/Write IOPS
+                  type: integer
+                rw_mbytes_per_second:
+                  description: Read/Write MB/s
+                  type: integer
+                w_mbytes_per_second:
+                  description: Write MB/s
+                  type: integer
               type: object
       responses:
-        '201':
+        '200':
           content:
             application/vnd.ceph.api.v1.0+json:
               type: object
-          description: Resource created.
-        '202':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              type: object
-          description: Operation is still executing. Please check the task queue.
+          description: Resource updated.
         '400':
           description: Operation exception. Please check the response body for details.
         '401':
@@ -8204,29 +8355,30 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Update an existing NVMeoF namespace
       tags:
-      - NVMe-oF
-  /api/nvmeof/subsystem/{subsystem_nqn}:
-    delete:
-      description: "\n            Delete an existing NVMeoF subsystem\n          \
-        \  :param subsystem_nqn: NVMeoF subsystem NQN\n            "
+      - NVMe-oF Subsystem Namespace
+  /api/nvmeof/subsystem/{nqn}/namespace/{nsid}/io_stats:
+    get:
       parameters:
-      - in: path
-        name: subsystem_nqn
+      - description: NVMeoF subsystem NQN
+        in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      - description: NVMeoF Namespace ID
+        in: path
+        name: nsid
         required: true
         schema:
           type: string
       responses:
-        '202':
+        '200':
           content:
             application/vnd.ceph.api.v1.0+json:
               type: object
-          description: Operation is still executing. Please check the task queue.
-        '204':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              type: object
-          description: Resource deleted.
+          description: OK
         '400':
           description: Operation exception. Please check the response body for details.
         '401':
@@ -8238,8 +8390,9 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Get IO stats from specified NVMeoF namespace
       tags:
-      - NVMe-oF
+      - NVMe-oF Subsystem Namespace
   /api/osd:
     get:
       parameters: []
@@ -14113,7 +14266,17 @@ tags:
 - description: NFS-Ganesha Cluster Management API
   name: NFS-Ganesha
 - description: NVMe-oF Gateway Management API
-  name: NVMe-oF
+  name: NVMe-oF Gateway
+- description: NVMe-oF Subsystem Management API
+  name: NVMe-oF Subsystem
+- description: NVMe-oF Subsystem Connection Management API
+  name: NVMe-oF Subsystem Connection
+- description: NVMe-oF Subsystem Host Allowlist Management API
+  name: NVMe-oF Subsystem Host Allowlist
+- description: NVMe-oF Subsystem Listener Management API
+  name: NVMe-oF Subsystem Listener
+- description: NVMe-oF Subsystem Namespace Management API
+  name: NVMe-oF Subsystem Namespace
 - description: OSD management API
   name: OSD
 - description: OSD Perf Counters Management API

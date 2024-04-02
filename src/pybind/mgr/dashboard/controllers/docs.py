@@ -215,7 +215,7 @@ class Docs(BaseController):
             resp['201'] = {'description': "Resource created.",
                            'content': {version.to_mime_type():
                                        {'type': 'object'}}}
-        if method.lower() == 'put':
+        if method.lower() in ['put', 'patch']:
             resp['200'] = {'description': "Resource updated.",
                            'content': {version.to_mime_type():
                                        {'type': 'object'}}}
@@ -315,7 +315,7 @@ class Docs(BaseController):
     @classmethod
     def gen_paths(cls, all_endpoints):
         # pylint: disable=R0912
-        method_order = ['get', 'post', 'put', 'delete']
+        method_order = ['get', 'post', 'put', 'patch', 'delete']
         paths = {}
         for path, endpoints in sorted(list(ENDPOINT_MAP.items()),
                                       key=lambda p: p[0]):
@@ -344,7 +344,7 @@ class Docs(BaseController):
                 if summary:
                     methods[method.lower()]['summary'] = summary
 
-                if method.lower() in ['post', 'put']:
+                if method.lower() in ['post', 'put', 'patch']:
                     cls.set_request_body_param(endpoint.body_params, method, methods, p_info)
                     cls.set_request_body_param(endpoint.query_params, method, methods, p_info)
 
