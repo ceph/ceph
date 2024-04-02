@@ -236,7 +236,7 @@ public:
 
 struct BucketGen {
   rgw_bucket_shard shard;
-  uint64_t gen;
+  uint64_t gen = 0;
 
   BucketGen(const rgw_bucket_shard& shard, uint64_t gen)
     : shard(shard), gen(gen) {}
@@ -244,12 +244,79 @@ struct BucketGen {
   BucketGen(rgw_bucket_shard&& shard, uint64_t gen)
     : shard(std::move(shard)), gen(gen) {}
 
+  BucketGen(std::string_view key) {
+    {
+      auto genpos = key.rfind(':');
+      if (genpos == key.npos) {
+	throw sys::system_error{
+	  EILSEQ, sys::generic_category(),
+	  fmt::format("Missing delimeter for generation in: {}", key)};
+      }
+      auto gensub = key.substr(genpos + 1);
+      auto maybegen = ceph::parse<decltype(gen)>(gensub);
+      if (!maybegen) {
+	throw sys::system_error{
+	  EILSEQ, sys::generic_category(),
+	  fmt::format("Invalid generation: {}", gensub)};
+      }
+      gen = *maybegen;
+      key.remove_suffix(key.size() - genpos);
+    }
+    std::string_view name{key};
+    std::string_view instance;
+
+    // split tenant/name
+    auto pos = name.find('/');
+    if (pos != name.npos) {
+      auto tenant = name.substr(0, pos);
+      shard.bucket.tenant.assign(tenant.begin(), tenant.end());
+      name = name.substr(pos + 1);
+    } else {
+      shard.bucket.tenant.clear();
+    }
+
+    // split name:instance
+    pos = name.find(':');
+    if (pos != name.npos) {
+      instance = name.substr(pos + 1);
+      name = name.substr(0, pos);
+    }
+    shard.bucket.name.assign(name.begin(), name.end());
+
+    // split instance:shard
+    pos = instance.find(':');
+    if (pos == instance.npos) {
+      auto maybeshard = ceph::parse<decltype(gen)>(instance);
+      if (maybeshard) {
+	shard.shard_id = *maybeshard;
+      } else {
+	shard.bucket.bucket_id.assign(instance.begin(), instance.end());
+	shard.shard_id = 0;
+      }
+    } else {
+      auto shardsub = instance.substr(pos + 1);
+      auto maybeshard = ceph::parse<decltype(gen)>(shardsub);
+      if (!maybeshard) {
+	throw sys::system_error{
+	  EILSEQ, sys::generic_category(),
+	  fmt::format("Invalid shard: {}", shardsub)};
+      }
+      shard.shard_id = *maybeshard;
+      instance = instance.substr(0, pos);
+      shard.bucket.bucket_id.assign(instance.begin(), instance.end());
+    }
+  }
+
   BucketGen(const BucketGen&) = default;
   BucketGen(BucketGen&&) = default;
   BucketGen& operator =(const BucketGen&) = default;
   BucketGen& operator =(BucketGen&&) = default;
 
   ~BucketGen() = default;
+
+  auto get_key() const {
+    return fmt::format("{}:{:0>20}", shard.get_key(), gen);
+  }
 };
 
 inline bool operator ==(const BucketGen& l, const BucketGen& r) {
