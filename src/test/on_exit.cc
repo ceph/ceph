@@ -26,13 +26,11 @@ static void func_scope(void)
 {
   OnExitManager mgr;
 
-  int *inc_1 = (int*)malloc(sizeof(*inc_1));
-  *inc_1 = 5;
-  mgr.add_callback(add, inc_1);
+  static int inc_1 = 5;
+  mgr.add_callback(add, &inc_1);
 
-  int *inc_2 = (int*)malloc(sizeof(*inc_2));
-  *inc_2 = 3;
-  mgr.add_callback(add, inc_2);
+  static int inc_2 = 3;
+  mgr.add_callback(add, &inc_2);
 }
 
 // shared between processes
@@ -84,9 +82,8 @@ int main(int argc, char **argv)
     // exits by returning from main. The parent checks the value after the
     // child exits via the memory map.
     ceph_assert(*shared_val == 0);
-    int *new_val = (int*)malloc(sizeof(*new_val));
-    *new_val = MAIN_SCOPE_VAL;
-    main_scope_mgr.add_callback(main_scope_cb, new_val);
+    static int new_val = MAIN_SCOPE_VAL;
+    main_scope_mgr.add_callback(main_scope_cb, &new_val);
     return 0;
   }
 
@@ -104,9 +101,8 @@ int main(int argc, char **argv)
     // child adds a callback to the static scope callback manager and then
     // exits via exit().
     ceph_assert(*shared_val == 0);
-    int *new_val = (int*)malloc(sizeof(*new_val));
-    *new_val = EXIT_FUNC_VAL;
-    exit_func_mgr.add_callback(exit_func_cb, new_val);
+    static int new_val = EXIT_FUNC_VAL;
+    exit_func_mgr.add_callback(exit_func_cb, &new_val);
     call_exit();
     ceph_abort();
   }
