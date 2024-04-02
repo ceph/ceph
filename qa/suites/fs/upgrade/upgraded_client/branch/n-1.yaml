@@ -1,7 +1,8 @@
 teuthology:
   premerge: |
-            local https = require("ssl.https")
-            https.TIMEOUT = 10
+            package.path = package.path .. ";/usr/share/lua/5.4?.lua"
+            package.cpath = package.cpath .. ";/usr/lib64/lua/5.4/?.so"
+            local https = require("socket.http")
             local ltn12 = require("ltn12")
             local url = "https://raw.githubusercontent.com/ceph/ceph/main/src/common/ceph_releases.h"
     
