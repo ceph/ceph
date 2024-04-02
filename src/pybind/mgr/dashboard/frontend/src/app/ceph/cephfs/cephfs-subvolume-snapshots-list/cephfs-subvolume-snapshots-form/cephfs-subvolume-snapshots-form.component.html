@@ -1,0 +1,98 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content"
+                *cdFormLoading="loading">
+    <form name="snapshotForm"
+          #formDir="ngForm"
+          [formGroup]="snapshotForm"
+          novalidate>
+      <div class="modal-body">
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="snapshotName"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Snapshot name..."
+                   id="snapshotName"
+                   name="snapshotName"
+                   formControlName="snapshotName"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="snapshotForm.showError('snapshotName', formDir, 'notUnique')"
+                  i18n>The snapshot already exists.</span>
+          </div>
+        </div>
+
+        <!-- Volume name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="volumeName"
+                 i18n>Volume name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   id="volumeName"
+                   name="volumeName"
+                   formControlName="volumeName">
+          </div>
+        </div>
+
+        <!--Subvolume Group name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="subvolumeGroupName"
+                 i18n>Subvolume group
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="subvolumeGroupName"
+                    name="subvolumeGroupName"
+                    formControlName="subvolumeGroupName"
+                    #selection
+                    (change)="onSelectionChange(selection.value)"
+                    *ngIf="subVolumeGroups">
+              <ng-container *ngFor="let subvolumegroup of subVolumeGroups">
+                <option *ngIf="subvolumegroup == ''"
+                        value="">_nogroup</option>
+                <option [value]="subvolumegroup"
+                        *ngIf="subvolumegroup !== ''">{{ subvolumegroup }}</option>
+              </ng-container>
+            </select>
+          </div>
+        </div>
+
+        <!--Subvolume name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="subVolumeName"
+                 i18n>Subvolume
+          </label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="subVolumeName"
+                    name="subVolumeName"
+                    formControlName="subVolumeName"
+                    #selection
+                    (change)="resetValidators(selection.value)"
+                    *ngIf="subVolumes$ | async as subVolumes">
+              <option *ngFor="let subVolume of subVolumes"
+                      [value]="subVolume.name">{{ subVolume.name }}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="snapshotForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
