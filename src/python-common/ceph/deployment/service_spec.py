@@ -1322,6 +1322,9 @@ class NvmeofServiceSpec(ServiceSpec):
                  enable_prometheus_exporter: Optional[bool] = True,
                  bdevs_per_cluster: Optional[int] = 32,
                  verify_nqns: Optional[bool] = True,
+                 allowed_consecutive_spdk_ping_failures: Optional[int] = 1,
+                 spdk_ping_interval_in_seconds: Optional[float] = 2.0,
+                 ping_spdk_under_lock: Optional[bool] = False,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1393,6 +1396,12 @@ class NvmeofServiceSpec(ServiceSpec):
         self.omap_file_lock_retry_sleep_interval = omap_file_lock_retry_sleep_interval
         #: ``omap_file_update_reloads`` number of attempt to reload OMAP when it differs from local
         self.omap_file_update_reloads = omap_file_update_reloads
+        #: ``allowed_consecutive_spdk_ping_failures`` # of ping failures before aborting gateway
+        self.allowed_consecutive_spdk_ping_failures = allowed_consecutive_spdk_ping_failures
+        #: ``spdk_ping_interval_in_seconds`` sleep interval in seconds between SPDK pings
+        self.spdk_ping_interval_in_seconds = spdk_ping_interval_in_seconds
+        #: ``ping_spdk_under_lock`` whether or not we should perform SPDK ping under the RPC lock
+        self.ping_spdk_under_lock = ping_spdk_under_lock
         #: ``bdevs_per_cluster`` number of bdevs per cluster
         self.bdevs_per_cluster = bdevs_per_cluster
         #: ``server_key`` gateway server key
@@ -1479,6 +1488,12 @@ class NvmeofServiceSpec(ServiceSpec):
                                            'notice', 'NOTICE']:
                 raise SpecValidationError(
                     'Invalid SPDK log level. Valid values are: DEBUG, INFO, WARNING, ERROR, NOTICE')
+
+        if self.spdk_ping_interval_in_seconds < 1.0:
+            raise SpecValidationError("SPDK ping interval should be at least 1 second")
+
+        if self.allowed_consecutive_spdk_ping_failures < 1:
+            raise SpecValidationError("Allowed consecutive SPDK ping failures should be at least 1")
 
 
 yaml.add_representer(NvmeofServiceSpec, ServiceSpec.yaml_representer)
