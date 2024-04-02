@@ -274,7 +274,7 @@ TEST_F(ForkDeathTest, MD5) {
   // sanitizer warns like:
   // ==3798016==Running thread 3797882 was not suspended. False leaks are possible.
   // but we should not take it as a fatal error.
-  const std::string matcher = ".*False leaks are possible.*");
+  const std::string matcher = ".*False leaks are possible.*";
 #else
   const std::string matcher = "^$";
 #endif
