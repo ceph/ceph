@@ -400,6 +400,9 @@ omap_file_lock_duration = 60
 omap_file_lock_retries = 15
 omap_file_lock_retry_sleep_interval = 5
 omap_file_update_reloads = 10
+allowed_consecutive_spdk_ping_failures = 1
+spdk_ping_interval_in_seconds = 2.0
+ping_spdk_under_lock = False
 
 [gateway-logs]
 log_level = INFO
