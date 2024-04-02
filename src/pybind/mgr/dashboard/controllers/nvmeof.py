@@ -13,8 +13,12 @@ except ImportError:
     pass
 else:
     @APIRouter("/nvmeof/gateway", Scope.NVME_OF)
-    @APIDoc("NVMe-oF Gateway Management API", "NVMe-oF Gateway")
     class NVMeoFGateway(RESTController):
+        """
+        NVMe-oF Gateway
+
+        NVMe-oF Gateway Management API
+        """
         @EndpointDoc("Get information about the NVMeoF gateway")
         @map_model(model.GatewayInfo)
         @handle_nvmeof_error
@@ -24,8 +28,10 @@ else:
             )
 
     @APIRouter("/nvmeof/subsystem", Scope.NVME_OF)
-    @APIDoc("NVMe-oF Subsystem Management API", "NVMe-oF Subsystem")
     class NVMeoFSubsystem(RESTController):
+        """
+        NVMe-oF Subsystem: NVMe-oF Subsystem Management API
+        """
         @EndpointDoc("List all NVMeoF subsystems")
         @map_collection(model.Subsystem, pick="subsystems")
         @handle_nvmeof_error
@@ -79,8 +85,10 @@ else:
             )
 
     @APIRouter("/nvmeof/subsystem/{nqn}/listener", Scope.NVME_OF)
-    @APIDoc("NVMe-oF Subsystem Listener Management API", "NVMe-oF Subsystem Listener")
     class NVMeoFListener(RESTController):
+        """
+        NVMe-oF Subsystem Listener: NVMe-oF Subsystem Listener Management API
+        """
         @EndpointDoc(
             "List all NVMeoF listeners",
             parameters={"nqn": Param(str, "NVMeoF subsystem NQN")},
@@ -143,8 +151,10 @@ else:
             )
 
     @APIRouter("/nvmeof/subsystem/{nqn}/namespace", Scope.NVME_OF)
-    @APIDoc("NVMe-oF Subsystem Namespace Management API", "NVMe-oF Subsystem Namespace")
     class NVMeoFNamespace(RESTController):
+        """
+        NVMe-oF Subsystem Namespace: NVMe-oF Subsystem Namespace Management API
+        """
         @EndpointDoc(
             "List all NVMeoF namespaces in a subsystem",
             parameters={"nqn": Param(str, "NVMeoF subsystem NQN")},
@@ -306,9 +316,12 @@ else:
             )
 
     @APIRouter("/nvmeof/subsystem/{nqn}/host", Scope.NVME_OF)
-    @APIDoc("NVMe-oF Subsystem Host Allowlist Management API",
-            "NVMe-oF Subsystem Host Allowlist")
     class NVMeoFHost(RESTController):
+        """
+        NVMe-oF Subsystem Host Allowlist:
+
+        NVMe-oF Subsystem Host Allowlist Management API
+        """
         @EndpointDoc(
             "List all allowed hosts for an NVMeoF subsystem",
             parameters={"nqn": Param(str, "NVMeoF subsystem NQN")},
@@ -356,8 +369,10 @@ else:
             )
 
     @APIRouter("/nvmeof/subsystem/{nqn}/connection", Scope.NVME_OF)
-    @APIDoc("NVMe-oF Subsystem Connection Management API", "NVMe-oF Subsystem Connection")
     class NVMeoFConnection(RESTController):
+        """
+        NVMe-oF Subsystem Connection: NVMe-oF Subsystem Connection Management API
+        """
         @EndpointDoc(
             "List all NVMeoF Subsystem Connections",
             parameters={"nqn": Param(str, "NVMeoF subsystem NQN")},
