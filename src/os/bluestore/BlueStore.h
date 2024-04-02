@@ -755,6 +755,8 @@ public:
     /// split the blob
     void split(Collection *coll, uint32_t blob_offset, Blob *o);
 
+    void maybe_prune_tail();
+
     void get() {
       ++nref;
     }

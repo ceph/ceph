@@ -2878,6 +2878,19 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 	   << "    and " << *r << dendl;
 }
 
+
+void BlueStore::Blob::maybe_prune_tail() {
+  if (get_blob().is_shared()) {
+    return;
+  }
+
+  if (!get_blob().is_compressed() && get_blob().can_prune_tail()) {
+    dirty_blob().prune_tail();
+    used_in_blob.prune_tail(get_blob().get_ondisk_length());
+    dout(20) << __func__ << " pruned tail, now " << get_blob() << dendl;
+  }
+}
+
 #ifndef CACHE_BLOB_BL
 void BlueStore::Blob::decode(
   bufferptr::const_iterator& p,
@@ -16461,6 +16474,7 @@ void BlueStore::_wctx_finish(
       }
     }
 
+    b->maybe_prune_tail();
     for (auto e : r) {
       dout(20) << __func__ << "  release " << e << dendl;
       txc->released.insert(e.offset, e.length);
