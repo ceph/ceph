@@ -23,6 +23,15 @@ enum LogLevel {
     DEBUG = 4;
 }
 
+enum GwLogLevel {
+    notset = 0;
+    debug = 10;
+    info = 20;
+    warning = 30;
+    error = 40;
+    critical = 50;
+}
+
 service Gateway {
 	// Creates a namespace from an RBD image
 	rpc namespace_add(namespace_add_req) returns (nsid_status) {}
@@ -92,6 +101,12 @@ service Gateway {
 
 	// Get gateway info
 	rpc get_gateway_info(get_gateway_info_req) returns(gateway_info) {}
+
+	// Get gateway log level
+	rpc get_gateway_log_level(get_gateway_log_level_req) returns(gateway_log_level_info) {}
+
+	// Set gateway log level
+	rpc set_gateway_log_level(set_gateway_log_level_req) returns(req_status) {}
 }
 
 // Request messages
@@ -183,7 +198,7 @@ message list_connections_req {
 
 message create_listener_req {
 	string nqn = 1;
-	string gateway_name = 2;
+	string host_name = 2;
 	string traddr = 3;
 	optional AddressFamily adrfam = 5;
 	optional uint32 trsvcid = 6;
@@ -191,10 +206,11 @@ message create_listener_req {
 
 message delete_listener_req {
 	string nqn = 1;
-	string gateway_name = 2;
+	string host_name = 2;
 	string traddr = 3;
 	optional AddressFamily adrfam = 5;
 	optional uint32 trsvcid = 6;
+	optional bool force = 7;
 }
 
 message list_listeners_req {
@@ -222,6 +238,13 @@ message set_spdk_nvmf_logs_req {
 
 message get_gateway_info_req {
 	optional string cli_version = 1;
+}
+
+message get_gateway_log_level_req {
+}
+
+message set_gateway_log_level_req {
+	GwLogLevel log_level = 1;
 }
 
 // From https://nvmexpress.org/wp-content/uploads/NVM-Express-1_4-2019.06.10-Ratified.pdf page 138
@@ -334,6 +357,7 @@ message gateway_info {
 	string error_message = 9;
 	optional string spdk_version = 10;
         uint32 load_balancing_group = 11;
+	string hostname = 12;
 }
 
 message cli_version {
@@ -349,7 +373,7 @@ message gw_version {
 }
 
 message listener_info {
-	string gateway_name = 1;
+	string host_name = 1;
 	string trtype = 2;
 	AddressFamily adrfam = 3;
 	string traddr = 4;
@@ -455,4 +479,10 @@ message spdk_nvmf_log_flags_and_level_info {
 	repeated spdk_log_flag_info nvmf_log_flags = 3;
 	LogLevel log_level = 4;
 	LogLevel log_print_level = 5;
+}
+
+message gateway_log_level_info {
+	int32 status = 1;
+	string error_message = 2;
+	GwLogLevel log_level = 3;
 }
