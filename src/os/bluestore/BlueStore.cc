@@ -1810,50 +1810,37 @@ void BlueStore::BufferSpace::read(
   cache->logger->inc(l_bluestore_buffer_miss_bytes, miss_bytes);
 }
 
-void BlueStore::BufferSpace::_finish_write(OnodeRef onode, uint64_t seq)
+void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache,  uint64_t seq)
 {
-  while (true) {
-    BufferCacheShard *cache = onode->c->cache;
-    std::lock_guard l(cache->lock);
-    if (cache != onode->c->cache) {
-      ldout(cache->cct, 20) << __func__
-	       << " raced with sb cache update, was " << cache
-	       << ", now " << onode->c->cache << ", retrying"
-	       << dendl;
+  ldout(cache->cct, 20) << __func__ << " seq=" << seq << dendl;
+  auto i = writing.begin();
+  while (i != writing.end()) {
+    if (i->seq > seq) {
+      break;
+    }
+    if (i->seq < seq) {
+      ++i;
       continue;
     }
-    ldout(cache->cct, 20) << __func__ << " seq=" << seq << dendl;
-    auto i = writing.begin();
-    while (i != writing.end()) {
-      if (i->seq > seq) {
-        break;
-      }
-      if (i->seq < seq) {
-        ++i;
-        continue;
-      }
 
-      Buffer *b = &*i;
-      ceph_assert(b->is_writing());
+    Buffer *b = &*i;
+    ceph_assert(b->is_writing());
 
-      if (b->flags & Buffer::FLAG_NOCACHE) {
-        writing.erase(i++);
-        ldout(cache->cct, 20) << __func__ << " discard " << *b << dendl;
-        buffer_map.erase(b->offset);
-      } else {
-        b->state = Buffer::STATE_CLEAN;
-        writing.erase(i++);
-        b->maybe_rebuild();
-        b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
-        cache->_add(b, 1, nullptr);
-        ldout(cache->cct, 20) << __func__ << " added " << *b << dendl;
-      }
+    if (b->flags & Buffer::FLAG_NOCACHE) {
+      writing.erase(i++);
+      ldout(cache->cct, 20) << __func__ << " discard " << *b << dendl;
+      buffer_map.erase(b->offset);
+    } else {
+      b->state = Buffer::STATE_CLEAN;
+      writing.erase(i++);
+      b->maybe_rebuild();
+      b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+      cache->_add(b, 1, nullptr);
+      ldout(cache->cct, 20) << __func__ << " added " << *b << dendl;
     }
-    cache->_trim();
-    cache->_audit("finish_write end");
-
-    break;
   }
+  cache->_trim();
+  cache->_audit("finish_write end");
 }
 
 /*
@@ -4761,6 +4748,23 @@ void BlueStore::Onode::decode_omap_key(const string& key, string *user_key)
     }
   }
   *user_key = key.substr(pos);
+}
+
+void BlueStore::Onode::finish_write(uint64_t seq)
+{
+  while (true) {
+    BufferCacheShard *cache = c->cache;
+    std::lock_guard l(cache->lock);
+    if (cache != c->cache) {
+      ldout(cache->cct, 20) << __func__
+	       << " raced with sb cache update, was " << cache
+	       << ", now " << c->cache << ", retrying"
+	       << dendl;
+      continue;
+    }
+    bc._finish_write(cache, seq);
+    break;
+  }
 }
 
 // =======================================================
@@ -13786,10 +13790,10 @@ void BlueStore::_txc_finish(TransContext *txc)
 
       }
       for (auto &dependent_onode : dependent_onodes) {
-        dependent_onode->bc._finish_write(dependent_onode, seq);
+        dependent_onode->finish_write(seq);
       }
     }
-    onode->bc._finish_write(onode, seq);
+    onode->finish_write(seq);
   }
   txc->buffers_written.clear();
 
@@ -18147,7 +18151,7 @@ void BlueStore::_shutdown_cache()
     std::unique_lock l(p.second->lock);
     for (auto &[seq, onodes] : p.second->deferred_seq_dependencies) {
       for (auto &onode : onodes) {
-        onode->bc._finish_write(onode, seq);
+        onode->finish_write(seq);
       }
     }
     p.second->deferred_seq_dependencies.clear();

@@ -499,7 +499,7 @@ public:
                   nullptr);
       cache->_trim();
     }
-    void _finish_write(OnodeRef onode, uint64_t seq);
+    void _finish_write(BufferCacheShard* cache, uint64_t seq);
     void did_read(BufferCacheShard* cache, uint32_t offset, ceph::buffer::list&& bl) {
       std::lock_guard l(cache->lock);
       uint16_t cache_private = _discard(cache, offset, bl.length());
@@ -1438,6 +1438,8 @@ public:
 
     void rewrite_omap_key(const std::string& old, std::string *out);
     void decode_omap_key(const std::string& key, std::string *user_key);
+
+    void finish_write(uint64_t seq);
 
 private:
     void _decode(const ceph::buffer::list& v);
