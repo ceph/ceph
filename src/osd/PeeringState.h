@@ -2417,10 +2417,6 @@ public:
     return missing_loc.get_missing_by_count();
   }
 
-  eversion_t get_min_last_complete_ondisk() const {
-    return min_last_complete_ondisk;
-  }
-
   eversion_t get_pg_trim_to() const {
     return pg_trim_to;
   }

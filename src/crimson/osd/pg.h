@@ -129,10 +129,6 @@ public:
     return peering_state.get_pg_trim_to();
   }
 
-  eversion_t get_min_last_complete_ondisk() const {
-    return peering_state.get_pg_committed_to();
-  }
-
   eversion_t get_pg_committed_to() const {
     return peering_state.get_pg_committed_to();
   }
