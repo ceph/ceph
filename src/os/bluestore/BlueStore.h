@@ -505,7 +505,7 @@ public:
       uint16_t cache_private = _discard(cache, offset, bl.length());
       _add_buffer(
           cache, this,
-          Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl, 0),
+          Buffer(this, Buffer::STATE_CLEAN, 0, offset, std::move(bl), 0),
           cache_private, 1, nullptr);
       cache->_trim();
     }
