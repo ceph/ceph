@@ -43,11 +43,10 @@ distribution that includes a supported kernel and supported system startup
 framework, for example ``sysvinit`` or ``systemd``. Ceph is sometimes ported to
 non-Linux systems but these are not supported by the core Ceph effort.
 
-
 +---------------+---------------+------------------+------------------+------------------+
 |               | Reef (18.2.z) | Quincy (17.2.z)  | Pacific (16.2.z) | Octopus (15.2.z) |
 +===============+===============+==================+==================+==================+
-| Centos 7      |               |                  |         A        |      B           |
+| Centos 7      |               |                  |                  |      B           |
 +---------------+---------------+------------------+------------------+------------------+
 | Centos 8      |               |                  |                  |                  |
 +---------------+---------------+------------------+------------------+------------------+
