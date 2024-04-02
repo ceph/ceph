@@ -1396,7 +1396,7 @@ class CephFSMount(object):
         For a process that was returned by one of the _background member functions,
         kill it hard.
         """
-        procs = [p] if p is not None else self.background_procs
+        procs = [p] if p is not None else list(self.background_procs)
         for p in procs:
             log.debug(f"terminating {p}")
             self._kill_background(p)
