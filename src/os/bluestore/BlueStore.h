@@ -520,7 +520,6 @@ public:
     }
 
     void _dup_writing(TransContext* txc, Collection* collection, OnodeRef onode, uint32_t offset, uint32_t length);
-    void split(BufferCacheShard* cache, size_t pos, BufferSpace &r);
 
     void dump(BufferCacheShard* cache, ceph::Formatter *f) const {
       std::lock_guard l(cache->lock);

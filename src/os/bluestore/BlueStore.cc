@@ -1907,62 +1907,6 @@ void BlueStore::BufferSpace::_dup_writing(TransContext* txc, Collection* collect
   }
 }
 
-void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStore::BufferSpace &r)
-{
-  std::lock_guard lk(cache->lock);
-  if (buffer_map.empty())
-    return;
-
-  auto p = --buffer_map.end();
-  while (true) {
-    if (p->second.end() <= pos) break;
-
-    if (p->second.offset < pos) {
-      ldout(cache->cct, 30) << __func__ << " cut " << p->second << dendl;
-      size_t left = pos - p->second.offset;
-      size_t right = p->second.length - left;
-      if (p->second.data.length()) {
-        bufferlist bl;
-        bl.substr_of(p->second.data, left, right);
-        r._add_buffer(
-            cache, &r,
-            Buffer(&r, p->second.state, p->second.seq, 0, bl, p->second.flags),
-            0, 0, &p->second);
-      } else {
-        r._add_buffer(cache, &r, Buffer(&r, p->second.state, p->second.seq, 0, right,
-                      p->second.flags), 0, 0, &p->second);
-      }
-      cache->_adjust_size(&p->second, -right);
-      p->second.truncate(left);
-      break;
-    }
-
-    ceph_assert(p->second.end() > pos);
-    ldout(cache->cct, 30) << __func__ << " move " << p->second << dendl;
-    if (p->second.data.length()) {
-      r._add_buffer(cache, &r,
-                    Buffer(&r, p->second.state, p->second.seq,
-                                     p->second.offset - pos, p->second.data,
-                                     p->second.flags),
-                    0, 0, &p->second);
-    } else {
-      r._add_buffer(cache, &r,
-                    Buffer(&r, p->second.state, p->second.seq,
-                                     p->second.offset - pos, p->second.length,
-                                     p->second.flags),
-                    0, 0, &p->second);
-    }
-    if (p == buffer_map.begin()) {
-      _rm_buffer(cache, p);
-      break;
-    } else {
-      _rm_buffer(cache, p--);
-    }
-  }
-  ceph_assert(writing.empty());
-  cache->_trim();
-}
-
 // lists content of BufferSpace
 // BufferSpace must be under exclusive access
 std::ostream& operator<<(std::ostream& out, const BlueStore::BufferSpace& bc)
