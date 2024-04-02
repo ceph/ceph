@@ -47,6 +47,7 @@ std::string PyModule::mgr_store_prefix = "mgr/";
 
 
 using std::string;
+using std::wstring;
 
 // decode a Python exception into a string
 std::string handle_pyerror(
@@ -230,6 +231,72 @@ std::pair<int, std::string> PyModuleConfig::set_config(
   }
 }
 
+std::string PyModule::get_site_packages()
+{
+  std::stringstream site_packages;
+
+  // CPython doesn't auto-add site-packages dirs to sys.path for us,
+  // but it does provide a module that we can ask for them.
+  auto site_module = PyImport_ImportModule("site");
+  ceph_assert(site_module);
+
+  auto site_packages_fn = PyObject_GetAttrString(site_module, "getsitepackages");
+  if (site_packages_fn != nullptr) {
+    auto site_packages_list = PyObject_CallObject(site_packages_fn, nullptr);
+    ceph_assert(site_packages_list);
+
+    auto n = PyList_Size(site_packages_list);
+    for (Py_ssize_t i = 0; i < n; ++i) {
+      if (i != 0) {
+        site_packages << ":";
+      }
+      site_packages << PyUnicode_AsUTF8(PyList_GetItem(site_packages_list, i));
+    }
+
+    Py_DECREF(site_packages_list);
+    Py_DECREF(site_packages_fn);
+  } else {
+    // Fall back to generating our own site-packages paths by imitating
+    // what the standard site.py does.  This is annoying but it lets us
+    // run inside virtualenvs :-/
+
+    auto site_packages_fn = PyObject_GetAttrString(site_module, "addsitepackages");
+    ceph_assert(site_packages_fn);
+
+    auto known_paths = PySet_New(nullptr);
+    auto pArgs = PyTuple_Pack(1, known_paths);
+    PyObject_CallObject(site_packages_fn, pArgs);
+    Py_DECREF(pArgs);
+    Py_DECREF(known_paths);
+    Py_DECREF(site_packages_fn);
+
+    auto sys_module = PyImport_ImportModule("sys");
+    ceph_assert(sys_module);
+    auto sys_path = PyObject_GetAttrString(sys_module, "path");
+    ceph_assert(sys_path);
+
+    dout(1) << "sys.path:" << dendl;
+    auto n = PyList_Size(sys_path);
+    bool first = true;
+    for (Py_ssize_t i = 0; i < n; ++i) {
+      dout(1) << "  " << PyUnicode_AsUTF8(PyList_GetItem(sys_path, i)) << dendl;
+      if (first) {
+        first = false;
+      } else {
+        site_packages << ":";
+      }
+      site_packages << PyUnicode_AsUTF8(PyList_GetItem(sys_path, i));
+    }
+
+    Py_DECREF(sys_path);
+    Py_DECREF(sys_module);
+  }
+
+  Py_DECREF(site_module);
+
+  return site_packages.str();
+}
+
 PyObject* PyModule::init_ceph_logger()
 {
   auto py_logger = PyModule_Create(&ceph_logger_module);
@@ -290,6 +357,17 @@ int PyModule::load(PyThreadState *pMainThreadState)
       return -EINVAL;
     } else {
       pMyThreadState.set(thread_state);
+      // Some python modules do not cope with an unpopulated argv, so lets
+      // fake one.  This step also picks up site-packages into sys.path.
+      const wchar_t *argv[] = {L"ceph-mgr"};
+      PySys_SetArgv(1, (wchar_t**)argv);
+      // Configure sys.path to include mgr_module_path
+      string paths = (g_conf().get_val<std::string>("mgr_module_path") + ':' +
+                      get_site_packages() + ':');
+      wstring sys_path(wstring(begin(paths), end(paths)) + Py_GetPath());
+      PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));
+      dout(10) << "Computed sys.path '"
+	       << string(begin(sys_path), end(sys_path)) << "'" << dendl;
     }
   }
   // Environment is all good, import the external module
