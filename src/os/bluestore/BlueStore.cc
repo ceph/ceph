@@ -16829,7 +16829,6 @@ void BlueStore::_do_truncate(
     o->bc.discard(o->c->cache, offset, length);
     o->extent_map.fault_range(db, offset, length);
     o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
-    o->bc.discard(o->c->cache, offset, length);
     o->extent_map.dirty_range(offset, length);
 
     _wctx_finish(txc, c, o, &wctx, maybe_unshared_blobs);
