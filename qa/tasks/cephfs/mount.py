@@ -977,7 +977,7 @@ class CephFSMount(object):
                     f.write("{content}")
                     f.flush()
                     while True:
-                        print("open_background: keeping file open", file=sys.stderr)
+                        print("open_background: keeping file '{path}' open", file=sys.stderr)
                         try:
                              if os.read(0, 4096) == b"":
                                   break
@@ -996,7 +996,7 @@ class CephFSMount(object):
 
                 with open("{path}", 'r') as f:
                     while True:
-                        print("open_background: keeping file open", file=sys.stderr)
+                        print("open_background: keeping file '{path}' open", file=sys.stderr)
                         try:
                              if os.read(0, 4096) == b"":
                                   break
