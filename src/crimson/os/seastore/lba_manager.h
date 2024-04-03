@@ -87,7 +87,8 @@ public:
     laddr_t hint,
     extent_len_t len,
     paddr_t addr,
-    LogicalCachedExtent &nextent) = 0;
+    LogicalCachedExtent &nextent,
+    extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) = 0;
 
   virtual alloc_extent_ret clone_mapping(
     Transaction &t,
@@ -187,7 +188,7 @@ public:
    * update lba mapping for a delayed allocated extent
    */
   using update_mapping_iertr = base_iertr;
-  using update_mapping_ret = base_iertr::future<>;
+  using update_mapping_ret = base_iertr::future<extent_ref_count_t>;
   virtual update_mapping_ret update_mapping(
     Transaction& t,
     laddr_t laddr,
@@ -203,7 +204,7 @@ public:
    * update lba mappings for delayed allocated extents
    */
   using update_mappings_iertr = update_mapping_iertr;
-  using update_mappings_ret = update_mapping_ret;
+  using update_mappings_ret = update_mappings_iertr::future<>;
   update_mappings_ret update_mappings(
     Transaction& t,
     const std::list<LogicalCachedExtentRef>& extents);

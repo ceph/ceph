@@ -307,7 +307,8 @@ BtreeLBAManager::_alloc_extent(
   extent_len_t len,
   pladdr_t addr,
   paddr_t actual_addr,
-  LogicalCachedExtent* nextent)
+  LogicalCachedExtent* nextent,
+  extent_ref_count_t refcount)
 {
   struct state_t {
     laddr_t last_end;
@@ -319,7 +320,7 @@ BtreeLBAManager::_alloc_extent(
   };
 
   LOG_PREFIX(BtreeLBAManager::_alloc_extent);
-  TRACET("{}~{}, hint={}", t, addr, len, hint);
+  TRACET("{}~{}, hint={}, refcount={}", t, addr, len, hint, refcount);
 
   ceph_assert(actual_addr != P_ADDR_NULL ? addr.is_laddr() : addr.is_paddr());
   auto c = get_context(t);
@@ -330,7 +331,7 @@ BtreeLBAManager::_alloc_extent(
     c,
     hint,
     [this, FNAME, c, hint, len, addr, lookup_attempts,
-    &t, nextent](auto &btree, auto &state) {
+    &t, nextent, refcount](auto &btree, auto &state) {
       return LBABtree::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, hint),
@@ -366,12 +367,12 @@ BtreeLBAManager::_alloc_extent(
 	      interruptible::ready_future_marker{},
 	      seastar::stop_iteration::no);
 	  }
-	}).si_then([FNAME, c, addr, len, hint, &btree, &state, nextent] {
+	}).si_then([FNAME, c, addr, len, hint, &btree, &state, nextent, refcount] {
 	  return btree.insert(
 	    c,
 	    *state.insert_iter,
 	    state.last_end,
-	    lba_map_val_t{len, pladdr_t(addr), 1, 0},
+	    lba_map_val_t{len, pladdr_t(addr), refcount, 0},
 	    nextent
 	  ).si_then([&state, FNAME, c, addr, len, hint, nextent](auto &&p) {
 	    auto [iter, inserted] = std::move(p);
@@ -557,6 +558,8 @@ BtreeLBAManager::update_mapping(
       auto &result = res.map_value;
       DEBUGT("laddr={}, paddr {} => {} done -- {}",
              t, laddr, prev_addr, addr, result);
+      return update_mapping_iertr::make_ready_future<
+	extent_ref_count_t>(result.refcount);
     },
     update_mapping_iertr::pass_further{},
     /* ENOENT in particular should be impossible */

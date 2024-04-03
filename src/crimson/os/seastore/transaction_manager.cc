@@ -467,7 +467,7 @@ TransactionManager::rewrite_logical_extent(
       lextent->get_paddr(),
       nlextent->get_length(),
       nlextent->get_paddr(),
-      nlextent.get());
+      nlextent.get()).discard_result();
   } else {
     assert(get_extent_category(lextent->get_type()) == data_category_t::DATA);
     auto extents = cache->alloc_new_data_extents_by_type(
@@ -481,10 +481,11 @@ TransactionManager::rewrite_logical_extent(
       std::move(extents),
       0,
       lextent->get_length(),
-      [this, lextent, &t](auto &extents, auto &off, auto &left) {
+      extent_ref_count_t(0),
+      [this, lextent, &t](auto &extents, auto &off, auto &left, auto &refcount) {
       return trans_intr::do_for_each(
         extents,
-        [lextent, this, &t, &off, &left](auto &nextent) {
+        [lextent, this, &t, &off, &left, &refcount](auto &nextent) {
         LOG_PREFIX(TransactionManager::rewrite_logical_extent);
         bool first_extent = (off == 0);
         ceph_assert(left >= nextent->get_length());
@@ -510,14 +511,19 @@ TransactionManager::rewrite_logical_extent(
             lextent->get_paddr(),
             nlextent->get_length(),
             nlextent->get_paddr(),
-            nlextent.get());
+            nlextent.get()
+	  ).si_then([&refcount](auto c) {
+	    refcount = c;
+	  });
         } else {
+	  ceph_assert(refcount != 0);
           fut = lba_manager->alloc_extent(
             t,
             lextent->get_laddr() + off,
             nlextent->get_length(),
             nlextent->get_paddr(),
-            *nlextent
+            *nlextent,
+	    refcount
           ).si_then([lextent, nlextent, off](auto mapping) {
             ceph_assert(mapping->get_key() == lextent->get_laddr() + off);
             ceph_assert(mapping->get_val() == nlextent->get_paddr());
