@@ -127,10 +127,12 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
         [host]).stdout == f"Created osd(s) 1 on host '{host}'"
     assert _run_cephadm.mock_calls == [
         mock.call(host, 'osd', 'ceph-volume',
-                  ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, error_ok=False, image='', log_output=True),
-        mock.call(host, f'osd.{osd_id}', ['_orch', 'deploy'], [], stdin=mock.ANY),
+                  ['--', 'lvm', 'list', '--format', 'json'],
+                  no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False),
+        mock.call(host, f'osd.{osd_id}', ['_orch', 'deploy'], [], stdin=mock.ANY, use_current_daemon_image=False),
         mock.call(host, 'osd', 'ceph-volume',
-                  ['--', 'raw', 'list', '--format', 'json'], no_fsid=False, error_ok=False, image='', log_output=True),
+                  ['--', 'raw', 'list', '--format', 'json'],
+                  no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False),
     ]
     dd = cephadm_module.cache.get_daemon(f'osd.{osd_id}', host=host)
     assert dd.name() == f'osd.{osd_id}'
@@ -524,6 +526,7 @@ class TestCephadm(object):
                             },
                         },
                     }),
+                    use_current_daemon_image=True,
                 )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -578,6 +581,7 @@ class TestCephadm(object):
                             "crush_location": "datacenter=a",
                         },
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -619,6 +623,7 @@ class TestCephadm(object):
                             "keyring": "[client.crash.test]\nkey = None\n",
                         },
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -660,6 +665,7 @@ class TestCephadm(object):
                         },
                         "config_blobs": {},
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -709,6 +715,7 @@ class TestCephadm(object):
                         },
                         "config_blobs": {},
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -762,6 +769,7 @@ class TestCephadm(object):
                         },
                         "config_blobs": {},
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1107,9 +1115,13 @@ class TestCephadm(object):
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True,
                 stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False, error_ok=False, log_output=True)
+                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'],
+                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
+            )
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'], image='', no_fsid=False, error_ok=False, log_output=True)
+                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'],
+                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
+            )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_apply_osd_save_non_collocated(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -1147,11 +1159,16 @@ class TestCephadm(object):
                     '--no-auto', '/dev/sdb', '--db-devices', '/dev/sdc',
                     '--wal-devices', '/dev/sdd', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
-                error_ok=True, stdin='{"config": "", "keyring": ""}')
+                error_ok=True, stdin='{"config": "", "keyring": ""}',
+            )
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'], image='', no_fsid=False, error_ok=False, log_output=True)
+                'test', 'osd', 'ceph-volume', ['--', 'lvm', 'list', '--format', 'json'],
+                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
+            )
             _run_cephadm.assert_any_call(
-                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'], image='', no_fsid=False, error_ok=False, log_output=True)
+                'test', 'osd', 'ceph-volume', ['--', 'raw', 'list', '--format', 'json'],
+                image='', no_fsid=False, error_ok=False, log_output=True, use_current_daemon_image=False
+            )
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.module.SpecStore.save")
@@ -2283,10 +2300,10 @@ Traceback (most recent call last):
             assert _run_cephadm.mock_calls == [
                 mock.call('test', 'osd', 'ceph-volume',
                           ['--', 'inventory', '--format=json-pretty', '--filter-for-batch'], image='',
-                          no_fsid=False, error_ok=False, log_output=False),
+                          no_fsid=False, error_ok=False, log_output=False, use_current_daemon_image=False),
                 mock.call('test', 'osd', 'ceph-volume',
                           ['--', 'inventory', '--format=json-pretty'], image='',
-                          no_fsid=False, error_ok=False, log_output=False),
+                          no_fsid=False, error_ok=False, log_output=False, use_current_daemon_image=False),
             ]
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
