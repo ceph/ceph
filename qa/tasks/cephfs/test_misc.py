@@ -69,14 +69,12 @@ class TestMisc(CephFSTestCase):
 
         # create a file and hold it open. MDS will issue CEPH_CAP_EXCL_*
         # to mount_a
-        p = self.mount_a.open_background("testfile")
+        self.mount_a.open_background("testfile")
         self.mount_b.wait_for_visible("testfile")
 
         # this triggers a lookup request and an open request. The debug
         # code will check if lookup/open reply contains xattrs
         self.mount_b.run_shell(["cat", "testfile"])
-
-        self.mount_a.kill_background(p)
 
     def test_root_rctime(self):
         """
