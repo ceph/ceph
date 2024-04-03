@@ -1,0 +1,61 @@
+roles:
+# Test is for basic smb deployment & functionality. one node cluster is OK
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - client.0
+# Reserve a host for acting as a domain controller
+- - host.b
+  - cephadm.exclude
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+tasks:
+- cephadm.deploy_samba_ad_dc:
+    role: host.b
+- cephadm:
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create cephfs
+- cephadm.wait_for_service:
+    service: mds.cephfs
+
+- cephadm.shell:
+    host.a:
+      # add subvolgroup & subvolumes for test
+      - cmd: ceph fs subvolumegroup create cephfs smb
+      - cmd: ceph fs subvolume create cephfs sv1 --group-name=smb --mode=0777
+      - cmd: ceph fs subvolume create cephfs sv2 --group-name=smb --mode=0777
+      # set up smb cluster and shares
+      - cmd: ceph mgr module enable smb
+      # TODO: replace sleep with poll of mgr state?
+      - cmd: sleep 30
+      - cmd: >
+          ceph smb cluster create modtest1 active-directory
+          --domain-realm=domain1.sink.test
+          --domain-join-user-pass=Administrator%Passw0rd
+          --custom-dns={{ctx.samba_ad_dc_ip}}
+      - cmd: ceph smb share create modtest1 share1 cephfs / --subvolume=smb/sv1
+      - cmd: ceph smb share create modtest1 share2 cephfs / --subvolume=smb/sv2
+# Wait for the smb service to start
+- cephadm.wait_for_service:
+    service: smb.modtest1
+# Check if shares exist
+- cephadm.exec:
+    host.b:
+      - sleep 30
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{'host.a'|role_to_remote|attr('ip_address')}}/share2 -c ls"
+
+- cephadm.shell:
+    host.a:
+      - cmd: ceph smb share rm modtest1 share2
+      - cmd: ceph smb share rm modtest1 share1
+      - cmd: ceph smb cluster rm modtest1
+# Wait for the smb service to be removed
+- cephadm.wait_for_service_not_present:
+    service: smb.modtest1
