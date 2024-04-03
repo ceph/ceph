@@ -487,13 +487,16 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op){
 
 set_propose:
     if(!propose) {
-      if(gw_created){
-          ack_map.Created_gws[group_key][gw_id] = map.Created_gws[group_key][gw_id];// respond with a map slice correspondent to the same GW
-      }
-      ack_map.epoch = map.epoch;
-      dout(20) << "ack_map " << ack_map <<dendl;
-      auto msg = make_message<MNVMeofGwMap>(ack_map);
-      mon.send_reply(op, msg.detach());
+       if(gw_created){
+           ack_map.Created_gws[group_key][gw_id] = map.Created_gws[group_key][gw_id];// respond with a map slice correspondent to the same GW
+       }
+       ack_map.epoch = map.epoch;
+       dout(20) << "ack_map " << ack_map <<dendl;
+       auto msg = make_message<MNVMeofGwMap>(ack_map);
+       mon.send_reply(op, msg.detach());
+    }
+    else {
+       mon.no_reply(op);
     }
 false_return:
     if (propose){
