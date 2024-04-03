@@ -155,6 +155,8 @@ lines prefixed with *mgr[zabbix]* for easy filtering.
 Installing zabbix-agent 2
 -------------------------
 
+*The procedures that explain the installation of Zabbix 2 were developed by John Jasen.*
+
 Follow the instructions in the sections :ref:`mgr_zabbix_2_nodes`,
 :ref:`mgr_zabbix_2_cluster`, and :ref:`mgr_zabbix_2_server` to install a Zabbix
 server to monitor your Ceph cluster.
