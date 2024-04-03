@@ -11316,8 +11316,6 @@ void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
 
 void Client::C_Read_Async_Finisher::finish(int r)
 {
-  clnt->client_lock.lock();
-
   if (denc && r >= 0) {
       std::vector<ObjectCacher::ObjHole> holes;
       r = denc->decrypt_bl(off, len, read_start, holes, bl);
