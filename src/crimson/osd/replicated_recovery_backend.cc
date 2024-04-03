@@ -799,27 +799,11 @@ ReplicatedRecoveryBackend::_handle_pull_response(
   if (pull_info.recovery_progress.first) {
     prepare_waiter = pg.obc_loader.with_obc<RWState::RWNONE>(
       pull_info.recovery_info.soid,
-      [this, &pull_info, &recovery_waiter, &push_op](auto, auto obc) {
+      [this, &pull_info, &recovery_waiter](auto, auto obc) {
+        // Classic can load the obc using a given attrset, Crimson doesn't
+        // load obc using existing attrset yet (consults disk by default instead).
         pull_info.obc = obc;
         recovery_waiter.obc = obc;
-        obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR),
-                                  push_op.soid);
-        auto ss_attr_iter = push_op.attrset.find(SS_ATTR);
-        if (ss_attr_iter != push_op.attrset.end()) {
-          if (!obc->ssc) {
-            obc->ssc = new crimson::osd::SnapSetContext(
-              push_op.soid.get_snapdir());
-          }
-          try {
-            obc->ssc->snapset = SnapSet(ss_attr_iter->second);
-            obc->ssc->exists = true;
-          } catch (const buffer::error&) {
-            logger().warn("unable to decode SnapSet");
-            throw crimson::osd::invalid_argument();
-          }
-          assert(!pull_info.obc->ssc->exists ||
-                 obc->ssc->snapset.seq == pull_info.obc->ssc->snapset.seq);
-        }
         pull_info.recovery_info.oi = obc->obs.oi;
         if (pull_info.recovery_info.soid.snap &&
             pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
