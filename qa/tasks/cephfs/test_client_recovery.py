@@ -377,7 +377,7 @@ class TestClientRecovery(CephFSTestCase):
         """
 
         flockable = self._is_flockable()
-        lock_holder = self.mount_a.lock_background(do_flock=flockable)
+        self.mount_a.lock_background(do_flock=flockable)
 
         self.mount_b.wait_for_visible("background_file-2")
         self.mount_b.check_filelock(do_flock=flockable)
@@ -386,8 +386,6 @@ class TestClientRecovery(CephFSTestCase):
         self.fs.wait_for_state('up:active', timeout=MDS_RESTART_GRACE)
 
         self.mount_b.check_filelock(do_flock=flockable)
-
-        self.mount_a._kill_background(lock_holder)
 
     def test_filelock_eviction(self):
         """
