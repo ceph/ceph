@@ -13424,10 +13424,11 @@ int Client::_removexattr(Inode *in, const char *name, const UserPerm& perms)
 
   // same xattrs supported by kernel client
   if (strncmp(name, "user.", 5) &&
-      strncmp(name, "system.", 7) &&
       strncmp(name, "security.", 9) &&
       strncmp(name, "trusted.", 8) &&
-      strncmp(name, "ceph.", 5))
+      strncmp(name, "ceph.", 5) &&
+      strcmp(name, ACL_EA_ACCESS) &&
+      strcmp(name, ACL_EA_DEFAULT))
     return -CEPHFS_EOPNOTSUPP;
 
   const VXattr *vxattr = _match_vxattr(in, name);
@@ -13442,6 +13443,11 @@ int Client::_removexattr(Inode *in, const char *name, const UserPerm& perms)
   req->set_inode(in);
  
   int res = make_request(req, perms);
+
+  if ((!strcmp(name, ACL_EA_ACCESS) ||
+      !strcmp(name, ACL_EA_DEFAULT)) &&
+      res == -CEPHFS_ENODATA)
+    res = 0;
 
   trim_cache();
   ldout(cct, 8) << "_removexattr(" << in->ino << ", \"" << name << "\") = " << res << dendl;
