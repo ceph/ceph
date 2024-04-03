@@ -58,6 +58,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "ms"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -124,7 +133,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -245,6 +254,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "ms"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -311,7 +329,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
@@ -587,6 +605,15 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "short"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -640,7 +667,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": 20,
             "mode": "histogram",
@@ -775,6 +802,15 @@
          "dashes": false,
          "datasource": "$datasource",
          "description": "Show the read/write workload profile overtime",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "short"
+            }
+         },
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -834,7 +870,7 @@
             "sort": 0,
             "value_type": "individual"
          },
-         "type": "graph",
+         "type": "timeseries",
          "xaxis": {
             "buckets": null,
             "mode": "time",
