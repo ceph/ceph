@@ -257,20 +257,68 @@ local info_rbd_stats = std.join(
         8,
         7
       ),
-      $.addTableSchema(
-        '$datasource',
-        info_rbd_stats,
-        { col: 3, desc: true },
-        [
-          $.overviewStyle('Pool', 'pool', 'string', 'short'),
-          $.overviewStyle('Image', 'image', 'string', 'short'),
-          $.overviewStyle('IOPS', 'Value', 'number', 'iops'),
-          $.overviewStyle('', '/.*/', 'hidden', 'short'),
+
+      $.addTableExtended(
+        datasource='${datasource}',
+        title='Highest IOPS',
+        description='RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.',
+        gridPosition={ h: 7, w: 8, x: 0, y: 7 },
+        options={
+          footer: {
+            fields: '',
+            reducer: ['sum'],
+            countRows: false,
+            enablePagination: false,
+            show: false,
+          },
+          frameIndex: 1,
+          showHeader: true,
+        },
+        custom={ align: 'null', cellOptions: { type: 'auto' }, filterable: true, inspect: false },
+        thresholds={
+          mode: 'absolute',
+          steps: [
+            { color: 'green', value: null },
+            { color: 'red', value: 80 },
+          ],
+        },
+        overrides=[
+          {
+            matcher: { id: 'byName', options: 'pool' },
+            properties: [
+              { id: 'displayName', value: 'Pool' },
+              { id: 'unit', value: 'short' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
+          {
+            matcher: { id: 'byName', options: 'image' },
+            properties: [
+              { id: 'displayName', value: 'Image' },
+              { id: 'unit', value: 'short' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
+          {
+            matcher: { id: 'byName', options: 'Value' },
+            properties: [
+              { id: 'displayName', value: 'IOPS' },
+              { id: 'unit', value: 'iops' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
         ],
-        'Highest IOPS',
-        'table'
+        pluginVersion='10.4.0'
       )
-      .addTarget(
+      .addTransformations([
+        {
+          id: 'merge',
+          options: { reducers: [] },
+        },
+      ]).addTarget(
         $.addTargetSchema(
           |||
             topk(10,
@@ -287,21 +335,69 @@ local info_rbd_stats = std.join(
           1,
           true
         )
-      ) + { gridPos: { x: 0, y: 7, w: 8, h: 7 } },
-      $.addTableSchema(
-        '$datasource',
-        info_rbd_stats,
-        { col: 3, desc: true },
-        [
-          $.overviewStyle('Pool', 'pool', 'string', 'short'),
-          $.overviewStyle('Image', 'image', 'string', 'short'),
-          $.overviewStyle('Throughput', 'Value', 'number', 'Bps'),
-          $.overviewStyle('', '/.*/', 'hidden', 'short'),
+      ),
+
+      $.addTableExtended(
+        datasource='${datasource}',
+        title='Highest Throughput',
+        description='RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.',
+        gridPosition={ h: 7, w: 8, x: 8, y: 7 },
+        options={
+          footer: {
+            fields: '',
+            reducer: ['sum'],
+            countRows: false,
+            enablePagination: false,
+            show: false,
+          },
+          frameIndex: 1,
+          showHeader: true,
+        },
+        custom={ align: 'null', cellOptions: { type: 'auto' }, filterable: true, inspect: false },
+        thresholds={
+          mode: 'absolute',
+          steps: [
+            { color: 'green', value: null },
+            { color: 'red', value: 80 },
+          ],
+        },
+        overrides=[
+          {
+            matcher: { id: 'byName', options: 'pool' },
+            properties: [
+              { id: 'displayName', value: 'Pool' },
+              { id: 'unit', value: 'short' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
+          {
+            matcher: { id: 'byName', options: 'image' },
+            properties: [
+              { id: 'displayName', value: 'Image' },
+              { id: 'unit', value: 'short' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
+          {
+            matcher: { id: 'byName', options: 'Value' },
+            properties: [
+              { id: 'displayName', value: 'Throughput' },
+              { id: 'unit', value: 'Bps' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
         ],
-        'Highest Throughput',
-        'table'
+        pluginVersion='10.4.0'
       )
-      .addTarget(
+      .addTransformations([
+        {
+          id: 'merge',
+          options: { reducers: [] },
+        },
+      ]).addTarget(
         $.addTargetSchema(
           |||
             topk(10,
@@ -318,21 +414,69 @@ local info_rbd_stats = std.join(
           1,
           true
         )
-      ) + { gridPos: { x: 8, y: 7, w: 8, h: 7 } },
-      $.addTableSchema(
-        '$datasource',
-        info_rbd_stats,
-        { col: 3, desc: true },
-        [
-          $.overviewStyle('Pool', 'pool', 'string', 'short'),
-          $.overviewStyle('Image', 'image', 'string', 'short'),
-          $.overviewStyle('Latency', 'Value', 'number', 'ns'),
-          $.overviewStyle('', '/.*/', 'hidden', 'short'),
+      ),
+
+      $.addTableExtended(
+        datasource='${datasource}',
+        title='Highest Latency',
+        description='RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.',
+        gridPosition={ h: 7, w: 8, x: 16, y: 7 },
+        options={
+          footer: {
+            fields: '',
+            reducer: ['sum'],
+            countRows: false,
+            enablePagination: false,
+            show: false,
+          },
+          frameIndex: 1,
+          showHeader: true,
+        },
+        custom={ align: 'null', cellOptions: { type: 'auto' }, filterable: true, inspect: false },
+        thresholds={
+          mode: 'absolute',
+          steps: [
+            { color: 'green', value: null },
+            { color: 'red', value: 80 },
+          ],
+        },
+        overrides=[
+          {
+            matcher: { id: 'byName', options: 'pool' },
+            properties: [
+              { id: 'displayName', value: 'Pool' },
+              { id: 'unit', value: 'short' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
+          {
+            matcher: { id: 'byName', options: 'image' },
+            properties: [
+              { id: 'displayName', value: 'Image' },
+              { id: 'unit', value: 'short' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
+          {
+            matcher: { id: 'byName', options: 'Value' },
+            properties: [
+              { id: 'displayName', value: 'Latency' },
+              { id: 'unit', value: 'ns' },
+              { id: 'decimals', value: 2 },
+              { id: 'custom.align', value: null },
+            ],
+          },
         ],
-        'Highest Latency',
-        'table'
+        pluginVersion='10.4.0'
       )
-      .addTarget(
+      .addTransformations([
+        {
+          id: 'merge',
+          options: { reducers: [] },
+        },
+      ]).addTarget(
         $.addTargetSchema(
           |||
             topk(10,
@@ -349,6 +493,6 @@ local info_rbd_stats = std.join(
           1,
           true
         )
-      ) + { gridPos: { x: 16, y: 7, w: 8, h: 7 } },
+      ),
     ]),
 }

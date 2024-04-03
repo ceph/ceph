@@ -1203,73 +1203,105 @@
       },
       {
          "columns": [ ],
-         "datasource": "$datasource",
-         "description": "This table shows the 10 hosts with the highest number of slow ops",
+         "datasource": "${datasource}",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "align": "null",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": true,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "instance"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Instance"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "short"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "displayName",
+                        "value": "Slow Ops"
+                     },
+                     {
+                        "id": "unit",
+                        "value": "none"
+                     },
+                     {
+                        "id": "decimals",
+                        "value": 2
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": null
+                     }
+                  ]
+               }
+            ]
+         },
          "gridPos": {
             "h": 8,
-            "w": 4,
+            "w": 6,
             "x": 0,
-            "y": 40
+            "y": 30
          },
          "id": 15,
          "links": [ ],
-         "sort": {
-            "col": 2,
-            "desc": true
+         "options": {
+            "footer": {
+               "countRows": false,
+               "enablePagination": false,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "frameIndex": 1,
+            "showHeader": true
          },
-         "styles": [
-            {
-               "alias": "Instance",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "instance",
-               "thresholds": [ ],
-               "type": "string",
-               "unit": "short",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "Slow Ops",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "Value",
-               "thresholds": [ ],
-               "type": "number",
-               "unit": "none",
-               "valueMaps": [ ]
-            },
-            {
-               "alias": "",
-               "colorMode": null,
-               "colors": [
-                  "rgba(245, 54, 54, 0.9)",
-                  "rgba(237, 129, 40, 0.89)",
-                  "rgba(50, 172, 45, 0.97)"
-               ],
-               "dateFormat": "YYYY-MM-DD HH:mm:ss",
-               "decimals": 2,
-               "mappingType": 1,
-               "pattern": "/.*/",
-               "thresholds": [ ],
-               "type": "hidden",
-               "unit": "short",
-               "valueMaps": [ ]
-            }
-         ],
+         "pluginVersion": "10.4.0",
+         "styles": "",
          "targets": [
             {
                "expr": "topk(10,\n  (sum by (instance)(ceph_daemon_health_metrics{type=\"SLOW_OPS\", ceph_daemon=~\"osd.*\"}))\n)\n",
@@ -1283,7 +1315,20 @@
          "timeFrom": null,
          "timeShift": null,
          "title": "Top Slow Ops per Host",
-         "transform": "table",
+         "transformations": [
+            {
+               "id": "organize",
+               "options": {
+                  "excludeByName": {
+                     "Time": true,
+                     "cluster": true
+                  },
+                  "includeByName": { },
+                  "indexByName": { },
+                  "renameByName": { }
+               }
+            }
+         ],
          "type": "table"
       }
    ],

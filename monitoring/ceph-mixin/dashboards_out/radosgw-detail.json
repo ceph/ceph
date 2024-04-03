@@ -389,15 +389,100 @@
          ]
       },
       {
-         "aliasColors": {
-            "Failures": "#bf1b00",
-            "GETs": "#7eb26d",
-            "Other (HEAD,POST,DELETE)": "#447ebc",
-            "PUTs": "#eab839",
-            "Requests": "#3f2b5b"
-         },
          "datasource": "$datasource",
          "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  }
+               },
+               "mappings": [ ]
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Failures"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#bf1b00",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "GETs"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#7eb26d",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Other (HEAD,POST,DELETE)"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#447ebc",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "PUTs"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#eab839",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Requests"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#3f2b5b",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               }
+            ]
+         },
          "gridPos": {
             "h": 8,
             "w": 4,
@@ -405,13 +490,31 @@
             "y": 1
          },
          "id": 6,
-         "legend": {
-            "percentage": true,
-            "show": true,
-            "values": true
+         "options": {
+            "displayLabels": [ ],
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "table",
+               "placement": "bottom",
+               "showLegend": true,
+               "values": [
+                  "percent",
+                  "value"
+               ]
+            },
+            "pieType": "pie",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "tooltip": {
+               "mode": "single",
+               "sort": "none"
+            }
          },
-         "legendType": "Under graph",
-         "pieType": "pie",
          "targets": [
             {
                "expr": "rate(ceph_rgw_failed_req{job=~\"$job\"}[$__rate_interval]) *\n  on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{job=~\"$job\", ceph_daemon=~\"$rgw_servers\"}\n",
@@ -443,8 +546,7 @@
             }
          ],
          "title": "Workload Breakdown",
-         "type": "grafana-piechart-panel",
-         "valueName": "current"
+         "type": "piechart"
       }
    ],
    "refresh": "30s",
