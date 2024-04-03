@@ -72,7 +72,7 @@ struct LocalPoolMeta {
   std::string mirror_uuid;
 };
 
-std::ostream& operator<<(std::ostream& lhs,
+std::ostream& operator<<(std::ostream& os,
                          const LocalPoolMeta& local_pool_meta);
 
 struct RemotePoolMeta {
@@ -87,7 +87,7 @@ struct RemotePoolMeta {
   std::string mirror_peer_uuid;
 };
 
-std::ostream& operator<<(std::ostream& lhs,
+std::ostream& operator<<(std::ostream& os,
                          const RemotePoolMeta& remote_pool_meta);
 
 template <typename I>
@@ -114,8 +114,8 @@ struct Peer {
 };
 
 template <typename I>
-std::ostream& operator<<(std::ostream& lhs, const Peer<I>& peer) {
-  return lhs << peer.remote_pool_meta;
+std::ostream& operator<<(std::ostream& os, const Peer<I>& peer) {
+  return os << peer.remote_pool_meta;
 }
 
 struct PeerSpec {
@@ -162,7 +162,7 @@ struct PeerSpec {
   }
 };
 
-std::ostream& operator<<(std::ostream& lhs, const PeerSpec &peer);
+std::ostream& operator<<(std::ostream& os, const PeerSpec &peer);
 
 } // namespace mirror
 } // namespace rbd
