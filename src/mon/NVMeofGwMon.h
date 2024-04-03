@@ -45,11 +45,8 @@ class NVMeofGwMon: public PaxosService,
     // election) to reset last_beacon timeouts
     ceph::coarse_mono_clock::time_point last_tick;
 
-    std::vector<MonCommand> command_descs;
-    std::vector<MonCommand> pending_command_descs;
-
 public:
-    NVMeofGwMon(Monitor &mn, Paxos &p, const std::string& service_name): PaxosService(mn, p, service_name) {map.mon = &mn; last_leader = false;}
+    NVMeofGwMon(Monitor &mn, Paxos &p, const std::string& service_name): PaxosService(mn, p, service_name) {map.mon = &mn;}
     ~NVMeofGwMon() override {}
 
 
@@ -86,7 +83,6 @@ public:
     void check_sub(Subscription *sub);
 
 private:
-    bool last_leader;
     void synchronize_last_beacon();
 
 };
