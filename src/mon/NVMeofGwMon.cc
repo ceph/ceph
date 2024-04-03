@@ -32,15 +32,14 @@ void NVMeofGwMon::on_restart(){
     dout(10) <<  "called " << dendl;
     last_beacon.clear();
     last_tick = ceph::coarse_mono_clock::now();
+    synchronize_last_beacon();
 }
 
 
 void NVMeofGwMon::synchronize_last_beacon(){
-    dout(10) <<  "called " << dendl;
-    last_beacon.clear();
-    last_tick = ceph::coarse_mono_clock::now();
+    dout(10) <<  "called, is leader : " << mon.is_leader()  <<" active " << is_active()  << dendl;
     // Initialize last_beacon to identify transitions of available  GWs to unavailable state
-    for (const auto& created_map_pair: pending_map.Created_gws) {
+    for (const auto& created_map_pair: map.Created_gws) {
       const auto& group_key = created_map_pair.first;
       const NvmeGwCreatedMap& gw_created_map = created_map_pair.second;
       for (const auto& gw_created_pair: gw_created_map) {
@@ -61,7 +60,6 @@ void NVMeofGwMon::on_shutdown() {
 void NVMeofGwMon::tick(){
     if (!is_active() || !mon.is_leader()){
         dout(10) << "NVMeofGwMon leader : " << mon.is_leader() << "active : " << is_active()  << dendl;
-        last_leader = false;
         return;
     }
     bool _propose_pending = false;
@@ -135,10 +133,6 @@ void NVMeofGwMon::create_pending(){
     pending_map = map;// deep copy of the object
     pending_map.epoch++;
     dout(10) << " pending " << pending_map  << dendl;
-    if(last_leader == false){ // peon becomes leader and gets updated map , need to synchronize the last_beacon
-        synchronize_last_beacon();
-        last_leader = true;
-    }
 }
 
 void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t){
