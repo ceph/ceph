@@ -134,6 +134,14 @@ void run_truncate_test_case(int mode, int result, size_t size, bool with_admin=f
   ceph_close(_cmount, fd);
 }
 
+void run_change_mode_test_case()
+{
+  char c_dir[1024];
+  sprintf(c_dir, "/mode_test_%d", getpid());
+  ASSERT_EQ(0, ceph_mkdirs(admin, c_dir, 0700));
+  ASSERT_EQ(ceph_chmod(cmount, c_dir, 0777), -CEPHFS_EPERM);
+}
+
 TEST(SuidsgidTest, WriteClearSetuid) {
   ASSERT_EQ(0, ceph_create(&admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
@@ -205,6 +213,8 @@ TEST(SuidsgidTest, WriteClearSetuid) {
 
   // 14, Truncate by unprivileged user clears the suid and sgid
   run_truncate_test_case(06766, 0, 100);
+
+  run_change_mode_test_case();
 
   // clean up
   ceph_shutdown(cmount);
