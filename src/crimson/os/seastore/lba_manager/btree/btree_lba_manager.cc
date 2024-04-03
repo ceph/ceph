@@ -704,15 +704,11 @@ BtreeLBAManager::update_refcount(
       );
     }
     return fut.si_then([map_value, mapping=std::move(mapping)]
-		       (auto removed) mutable {
+		       (auto decref_intermediate_res) mutable {
       if (map_value.pladdr.is_laddr()
-	  && removed) {
+	  && decref_intermediate_res) {
 	return update_refcount_ret_bare_t{
-	  ref_update_result_t{
-	    map_value.refcount,
-	    removed->addr,
-	    removed->length
-	  },
+	  *decref_intermediate_res,
 	  std::move(mapping)
 	};
       } else {
