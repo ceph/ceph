@@ -774,26 +774,48 @@ void ReplicaActive::exit()
 
 
 /*
- * Note: we are expected to be in the initial internal state (Idle) when
- * receiving any registration request. ReplicaActiveOp, our other internal
- * state, has its own handler for this event, and will treat it
- * as an abort request.
- *
- * Process:
- * - if already reserved: clear existing reservation, then continue
- * - for async requests:
- *   - enqueue the request with reserver;
- *   - move to the ReplicaWaitingReservation state
- *   - no reply is expected by the caller
- * - for legacy requests:
- *   - ask the OSD for the "reservation resource"
- *   - if granted: move to ReplicaReserved and notify the Primary.
- *   - otherwise: just notify the requesting primary.
- *
- * implementation note: sc::result objects cannot be copied or moved. Thus,
- * we've resorted to returning a code indicating the next action.
+ * Note: we are expected to be in the ReplicaIdle sub-state: the current
+ * scrub code on the primary side would never interlace chunk ops with
+ * reservation requests. But 'badly timed' requests are not blocked
+ * on the replica side: while requests arriving while in ReplicaActiveOp
+ * are at this time probably a bug; but a future Primary scrub code
+ * would possibly treat 'reservation' & 'scrubbing' as (almost)
+ * totally orthogonal.
  */
 sc::result ReplicaActive::react(const ReplicaReserveReq& ev)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "ReplicaActive::react(const ReplicaReserveReq&)" << dendl;
+
+  if (m_reservation_status != reservation_status_t::unreserved) {
+    // we are not expected to be in this state when a new request arrives.
+    // Clear the existing reservation - be it granted or pending.
+    const auto& m = *(ev.m_op->get_req<MOSDScrubReserve>());
+    dout(1) << fmt::format(
+		   "ReplicaActive::react(const ReplicaReserveReq&): unexpected "
+		   "request. Discarding existing "
+		   "reservation (was granted?:{}). Incoming request: {}",
+		   reservation_granted, m)
+	    << dendl;
+    clear_remote_reservation(true);
+  }
+
+  handle_reservation_request(ev);
+  return discard_event();
+}
+
+
+/*
+ * Process:
+ * - for async requests:
+ *   - enqueue the request with reserver, noting the nonce;
+ *   - no reply is expected by the caller
+ * - for legacy requests:
+ *   - ask the OSD for the "reservation resource";
+ *   - send grant/reject to the requesting primary;
+ *   - update 'reservation_granted'
+ */
+void ReplicaActive::handle_reservation_request(const ReplicaReserveReq& ev)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   const auto& m = *(ev.m_op->get_req<MOSDScrubReserve>());
@@ -803,23 +825,10 @@ sc::result ReplicaActive::react(const ReplicaReserveReq& ev)
       "osd_scrub_disable_reservation_queuing");
   const bool async_request = !async_disabled && m.wait_for_resources;
   dout(10) << fmt::format(
-		  "ReplicaActive::react(const ReplicaReserveReq&): async "
-		  "request?:{} disabled?:{} -> async? {}",
-		  m.wait_for_resources, async_disabled, async_request)
+		  "{}: Message:{}. async request?:{} disabled?:{} -> async? {}",
+		  __func__, m, m.wait_for_resources, async_disabled,
+		  async_request)
 	   << dendl;
-
-  if (m_reservation_status != reservation_status_t::unreserved) {
-    // we are not expected to be in this state when a new request arrives.
-    // Exit-then-reenter ReplicaActive, causing the existing reservation - be
-    // it granted or pending - to be cleared. This maneuver also aborts
-    // any on-going chunk request.
-    dout(1) << fmt::format(
-		   "{}: unexpected request (granted:{} request:{})", __func__,
-		   reservation_granted, m)
-	    << dendl;
-    post_event(ev);
-    return transit<ReplicaActive>();
-  }
 
   auto& reserver = m_osds->get_scrub_reserver();
 
@@ -828,8 +837,7 @@ sc::result ReplicaActive::react(const ReplicaReserveReq& ev)
     AsyncScrubResData request_details{
 	pg_id, ev.m_from, ev.m_op->sent_epoch, m.reservation_nonce};
     dout(15) << fmt::format(
-		    "ReplicaActive::react(const ReplicaReserveReq& ev): async "
-		    "request: {} details:{}",
+		    "{}: async request: {} details:{}", __func__,
 		    ev, request_details)
 	     << dendl;
 
@@ -859,7 +867,6 @@ sc::result ReplicaActive::react(const ReplicaReserveReq& ev)
     m_osds->send_message_osd_cluster(
 	reply, ev.m_op->get_req()->get_connection());
   }
-  return discard_event();
 }
 
 
@@ -1009,20 +1016,6 @@ sc::result ReplicaActiveOp::react(const StartReplica&)
   // exit & re-enter the state
   post_event(ReplicaPushesUpd{});
   return transit<ReplicaActiveOp>();
-}
-
-
-sc::result ReplicaActiveOp::react(const ReplicaReserveReq& ev)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaActiveOp::react(const ReplicaReserveReq&)" << dendl;
-  scrbr->get_clog()->warn() << fmt::format(
-      "osd.{} pg[{}]: reservation requested while processing a chunk",
-      scrbr->get_whoami(), scrbr->get_spgid());
-  // exit-n-renter ReplicaActive (aborting the chunk & freeing the reservation
-  // in the process)
-  post_event(ev);
-  return transit<ReplicaActive>();
 }
 
 
