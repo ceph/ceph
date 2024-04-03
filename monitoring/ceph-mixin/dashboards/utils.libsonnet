@@ -194,14 +194,6 @@ local timeSeries = import 'timeseries_panel.libsonnet';
                         title=title,
                         valueName=valueName),
 
-  addTableSchema(datasource, description, sort, styles, title, transform)::
-    g.tablePanel.new(datasource=datasource,
-                     description=description,
-                     sort=sort,
-                     styles=styles,
-                     title=title,
-                     transform=transform),
-
   addStyle(alias,
            colorMode,
            colors,
@@ -659,7 +651,9 @@ local timeSeries = import 'timeseries_panel.libsonnet';
     tooltip={},
     pieType='pie',
     values=[],
-    colorMode='auto'
+    colorMode='auto',
+    overrides=[],
+    reduceOptions={},
   )::
     pieChartPanel.new(
       title,
@@ -673,7 +667,9 @@ local timeSeries = import 'timeseries_panel.libsonnet';
       tooltip=tooltip,
       pieType=pieType,
       values=values,
-      colorMode=colorMode
+      colorMode=colorMode,
+      overrides=overrides,
+      reduceOptions=reduceOptions,
     ),
 
   heatMapPanel(
