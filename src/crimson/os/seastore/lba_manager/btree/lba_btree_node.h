@@ -35,14 +35,14 @@ struct lba_map_val_t {
   extent_len_t len = 0;  ///< length of mapping
   pladdr_t pladdr;         ///< physical addr of mapping or
 			   //	laddr of a physical lba mapping(see btree_lba_manager.h)
-  uint32_t refcount = 0; ///< refcount
+  extent_ref_count_t refcount = 0; ///< refcount
   uint32_t checksum = 0; ///< checksum of original block written at paddr (TODO)
 
   lba_map_val_t() = default;
   lba_map_val_t(
     extent_len_t len,
     pladdr_t pladdr,
-    uint32_t refcount,
+    extent_ref_count_t refcount,
     uint32_t checksum)
     : len(len), pladdr(pladdr), refcount(refcount), checksum(checksum) {}
   bool operator==(const lba_map_val_t&) const = default;
@@ -121,7 +121,7 @@ constexpr size_t LEAF_NODE_CAPACITY = 140;
 struct lba_map_val_le_t {
   extent_len_le_t len = init_extent_len_le(0);
   pladdr_le_t pladdr;
-  ceph_le32 refcount{0};
+  extent_ref_count_le_t refcount{0};
   ceph_le32 checksum{0};
 
   lba_map_val_le_t() = default;
