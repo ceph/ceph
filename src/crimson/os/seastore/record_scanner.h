@@ -14,8 +14,7 @@ class RecordScanner {
 public:
   using read_ertr = SegmentManager::read_ertr;
   using scan_valid_records_ertr = read_ertr;
-  using scan_valid_records_ret = scan_valid_records_ertr::future<
-    size_t>;
+  using scan_valid_records_ret = scan_valid_records_ertr::future<>;
   using found_record_handler_t = std::function<
     scan_valid_records_ertr::future<>(
       record_locator_t record_locator,
