@@ -1412,7 +1412,7 @@ SegmentCleaner::scan_extents_ret SegmentCleaner::scan_no_tail_segment(
       cursor,
       segment_header.segment_nonce,
       segments.get_segment_size(),
-      handler).discard_result();
+      handler);
   }).safe_then([this, segment_id, segment_header] {
     init_mark_segment_closed(
       segment_id,
