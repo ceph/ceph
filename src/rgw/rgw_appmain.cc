@@ -339,6 +339,11 @@ void rgw::AppMain::init_ldap()
   const string &ldap_dnattr = cct->_conf->rgw_ldap_dnattr;
   std::string ldap_bindpw = parse_rgw_ldap_bindpw(cct);
 
+  if (ldap_uri.empty()) {
+    derr << "LDAP not started since no server URIs were provided in the configuration." << dendl;
+    return;
+  }
+
   ldh.reset(new rgw::LDAPHelper(ldap_uri, ldap_binddn,
             ldap_bindpw.c_str(), ldap_searchdn, ldap_searchfilter, ldap_dnattr));
   ldh->init();
