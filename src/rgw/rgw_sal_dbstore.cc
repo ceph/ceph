@@ -1436,15 +1436,37 @@ namespace rgw::sal {
     return 0;
   }
 
-  std::unique_ptr<RGWOIDCProvider> DBStore::get_oidc_provider()
+  int DBStore::store_oidc_provider(const DoutPrefixProvider *dpp,
+                                   optional_yield y,
+                                   const RGWOIDCProviderInfo& info,
+                                   bool exclusive)
   {
-    RGWOIDCProvider* p = nullptr;
-    return std::unique_ptr<RGWOIDCProvider>(p);
+    return -ENOTSUP;
+  }
+
+  int DBStore::load_oidc_provider(const DoutPrefixProvider *dpp,
+                                  optional_yield y,
+                                  std::string_view account,
+                                  std::string_view url,
+                                  RGWObjVersionTracker* objv_tracker,
+                                  RGWOIDCProviderInfo& info)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::delete_oidc_provider(const DoutPrefixProvider *dpp,
+                                    optional_yield y,
+                                    std::string_view tenant,
+                                    std::string_view url,
+                                    RGWObjVersionTracker& objv_tracker,
+                                    RGWOIDCProviderInfo& info)
+  {
+    return -ENOTSUP;
   }
 
   int DBStore::get_oidc_providers(const DoutPrefixProvider *dpp,
-      const std::string& tenant,
-      vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
+      optional_yield y, std::string_view tenant,
+      vector<RGWOIDCProviderInfo>& providers)
   {
     return 0;
   }
