@@ -821,6 +821,7 @@ public:
   int init() override {
     /* init output connection */
     RGWRESTStreamS3PutObj *out_req{nullptr};
+    int ret = -1;
 
     if (multipart.is_multipart) {
       char buf[32];
@@ -828,9 +829,13 @@ public:
       rgw_http_param_pair params[] = { { "uploadId", multipart.upload_id.c_str() },
                                        { "partNumber", buf },
                                        { nullptr, nullptr } };
-      target->conn->put_obj_send_init(dest_obj, params, &out_req);
+      ret = target->conn->put_obj_send_init(dest_obj, params, &out_req);
     } else {
-      target->conn->put_obj_send_init(dest_obj, nullptr, &out_req);
+      ret = target->conn->put_obj_send_init(dest_obj, nullptr, &out_req);
+    }
+
+    if (ret < 0 || !out_req) {
+      return ret;
     }
 
     set_req(out_req);
