@@ -11,6 +11,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/context/protected_fixedsize_stack.hpp>
 #include <spawn/spawn.hpp>
+#include "include/function2.hpp"
 #include "rgw_sal_rados.h"
 #include "rgw_pubsub.h"
 #include "rgw_pubsub_push.h"
@@ -1040,7 +1041,11 @@ int publish_reserve(const DoutPrefixProvider* dpp,
           << dendl;
 
       // reload the topic in case it changed since the notification was added
-      const RGWPubSub ps(res.store, res.user_tenant, site);
+      const std::string& topic_tenant = std::visit(fu2::overload(
+          [] (const rgw_user& u) -> const std::string& { return u.tenant; },
+          [] (const rgw_account_id& a) -> const std::string& { return a; }
+          ), topic_cfg.owner);
+      const RGWPubSub ps(res.store, topic_tenant, site);
       int ret = ps.get_topic(res.dpp, topic_cfg.dest.arn_topic,
                              topic_cfg, res.yield, nullptr);
       if (ret < 0) {
