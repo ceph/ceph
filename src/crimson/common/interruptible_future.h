@@ -801,6 +801,9 @@ public:
     return safe_then_interruptible(std::forward<Args>(args)...);
   }
 
+  auto discard_result() noexcept {
+    return si_then([](auto &&) {});
+  }
 
   template<bool interruptible = true, typename ValueInterruptCondT, typename ErrorVisitorT,
 	   typename U = T, std::enable_if_t<!std::is_void_v<U> && interruptible, int> = 0>

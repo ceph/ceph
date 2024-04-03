@@ -28,7 +28,7 @@ seastar::future<> TMDriver::write(
         [this, offset, &ptr](auto& t)
       {
         return tm->remove(t, offset
-        ).si_then([](auto){}).handle_error_interruptible(
+        ).discard_result().handle_error_interruptible(
           crimson::ct_error::enoent::handle([](auto) { return seastar::now(); }),
           crimson::ct_error::pass_further_all{}
         ).si_then([this, offset, &t, &ptr] {
