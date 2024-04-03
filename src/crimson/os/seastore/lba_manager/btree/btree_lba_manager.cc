@@ -553,8 +553,8 @@ BtreeLBAManager::update_mapping(
       return ret;
     },
     nextent
-  ).si_then([&t, laddr, prev_addr, addr, FNAME](auto p) {
-      auto &result = p.first;
+  ).si_then([&t, laddr, prev_addr, addr, FNAME](auto res) {
+      auto &result = res.map_value;
       DEBUGT("laddr={}, paddr {} => {} done -- {}",
              t, laddr, prev_addr, addr, result);
     },
@@ -616,7 +616,7 @@ void BtreeLBAManager::register_metrics()
   );
 }
 
-BtreeLBAManager::ref_iertr::future<std::optional<std::pair<paddr_t, extent_len_t>>>
+BtreeLBAManager::_decref_intermediate_ret
 BtreeLBAManager::_decref_intermediate(
   Transaction &t,
   laddr_t addr,
@@ -650,15 +650,20 @@ BtreeLBAManager::_decref_intermediate(
 	if (!val.refcount) {
 	  return btree.remove(c, iter
 	  ).si_then([val] {
-	    return std::make_optional<
-	      std::pair<paddr_t, extent_len_t>>(
-		val.pladdr.get_paddr(), val.len);
+	    auto res = ref_update_result_t{
+	      val.refcount,
+	      val.pladdr.get_paddr(),
+	      val.len
+	    };
+	    return ref_iertr::make_ready_future<
+	      std::optional<ref_update_result_t>>(
+	        std::make_optional<ref_update_result_t>(res));
 	  });
 	} else {
 	  return btree.update(c, iter, val, nullptr
 	  ).si_then([](auto) {
-	    return seastar::make_ready_future<
-	      std::optional<std::pair<paddr_t, extent_len_t>>>(std::nullopt);
+	    return ref_iertr::make_ready_future<
+	      std::optional<ref_update_result_t>>(std::nullopt);
 	  });
 	}
       });
@@ -685,36 +690,40 @@ BtreeLBAManager::update_refcount(
       return out;
     },
     nullptr
-  ).si_then([&t, addr, delta, FNAME, this, cascade_remove](auto p) {
-    auto &result = p.first;
-    auto &mapping = p.second;
-    DEBUGT("laddr={}, delta={} done -- {}", t, addr, delta, result);
+  ).si_then([&t, addr, delta, FNAME, this, cascade_remove](auto res) {
+    auto &map_value = res.map_value;
+    auto &mapping = res.mapping;
+    DEBUGT("laddr={}, delta={} done -- {}", t, addr, delta, map_value);
     auto fut = ref_iertr::make_ready_future<
-      std::optional<std::pair<paddr_t, extent_len_t>>>();
-    if (!result.refcount && result.pladdr.is_laddr() && cascade_remove) {
+      std::optional<ref_update_result_t>>();
+    if (!map_value.refcount && map_value.pladdr.is_laddr() && cascade_remove) {
       fut = _decref_intermediate(
 	t,
-	result.pladdr.get_laddr(),
-	result.len
+	map_value.pladdr.get_laddr(),
+	map_value.len
       );
     }
-    return fut.si_then([result, mapping=std::move(mapping)]
+    return fut.si_then([map_value, mapping=std::move(mapping)]
 		       (auto removed) mutable {
-      if (result.pladdr.is_laddr()
+      if (map_value.pladdr.is_laddr()
 	  && removed) {
-	return std::make_pair(
-	    ref_update_result_t{
-	      result.refcount,
-	      removed->first,
-	      removed->second},
-	    std::move(mapping));
+	return update_refcount_ret_bare_t{
+	  ref_update_result_t{
+	    map_value.refcount,
+	    removed->addr,
+	    removed->length
+	  },
+	  std::move(mapping)
+	};
       } else {
-	return std::make_pair(
-	    ref_update_result_t{
-	      result.refcount,
-	      result.pladdr,
-	      result.len},
-	    std::move(mapping));
+	return update_refcount_ret_bare_t{
+	  ref_update_result_t{
+	    map_value.refcount,
+	    map_value.pladdr,
+	    map_value.len
+	  },
+	  std::move(mapping)
+	};
       }
     });
   });
@@ -728,7 +737,7 @@ BtreeLBAManager::_update_mapping(
   LogicalCachedExtent* nextent)
 {
   auto c = get_context(t);
-  return with_btree_ret<LBABtree, _update_mapping_ret_bare>(
+  return with_btree_ret<LBABtree, update_mapping_ret_bare_t>(
     cache,
     c,
     [f=std::move(f), c, addr, nextent](auto &btree) mutable {
@@ -748,8 +757,10 @@ BtreeLBAManager::_update_mapping(
 	    c,
 	    iter
 	  ).si_then([ret] {
-	    return std::make_pair(
-		std::move(ret), BtreeLBAMappingRef(nullptr));
+	    return update_mapping_ret_bare_t{
+	      std::move(ret),
+	      BtreeLBAMappingRef(nullptr)
+	    };
 	  });
 	} else {
 	  return btree.update(
@@ -758,8 +769,10 @@ BtreeLBAManager::_update_mapping(
 	    ret,
 	    nextent
 	  ).si_then([c, ret](auto iter) {
-	    return std::make_pair(
-		std::move(ret), iter.get_pin(c));
+	    return update_mapping_ret_bare_t{
+	      std::move(ret),
+	      iter.get_pin(c)
+	    };
 	  });
 	}
       });
