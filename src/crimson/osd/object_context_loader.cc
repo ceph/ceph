@@ -75,6 +75,7 @@ using crimson::common::local_conf;
       auto loaded = get_or_load_obc<State>(clone, existed);
       return loaded.safe_then_interruptible(
         [func = std::move(func), head=std::move(head)](auto clone) mutable {
+        clone->set_clone_ssc(head->ssc);
         return std::move(func)(std::move(head), std::move(clone));
       });
     });
@@ -112,6 +113,7 @@ using crimson::common::local_conf;
         auto loaded = get_or_load_obc<State>(clone, existed);
         return loaded.safe_then_interruptible(
           [func = std::move(func), head=std::move(head)](auto clone) {
+          clone->set_clone_ssc(head->ssc);
           return std::move(func)(std::move(head), std::move(clone));
         });
       });
@@ -152,6 +154,9 @@ using crimson::common::local_conf;
         obc->set_head_state(std::move(md->os),
                             std::move(md->ssc));
       } else {
+        // we load and set the ssc only for head obc.
+        // For clones, the head's ssc will be referenced later.
+        // See set_clone_ssc
         obc->set_clone_state(std::move(md->os));
       }
       DEBUGDPP("returning obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);

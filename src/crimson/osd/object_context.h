@@ -103,6 +103,11 @@ public:
     fully_loaded = true;
   }
 
+  void set_clone_ssc(SnapSetContextRef head_ssc) {
+    ceph_assert(!is_head());
+    ssc = head_ssc;
+  }
+
   /// pass the provided exception to any waiting consumers of this ObjectContext
   template<typename Exception>
   void interrupt(Exception ex) {
