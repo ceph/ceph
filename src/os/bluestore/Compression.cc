@@ -341,23 +341,28 @@ bool Scan::maybe_expand_scan_range(
   const bluestore_blob_t &h_bblob = h_Blob->get_blob();
   // we made left_walk up to here, it must be compressed blob
   dout(29) << "mesr " << h_Blob->print(P::NICK + P::SDISK + P::SUSE + P::SCHK) << dendl;
-  ceph_assert(h_bblob.is_compressed());
-  auto i = scanned_blobs.find(h_Blob);
-  if (i == scanned_blobs.end() || i->second.rejected == false) {
-    // We only accept blobs we have not seen before,
-    // or ones that are not fully scanned yet.
-    left = std::min(left, it->blob_start());
-    left = std::max(limit_left, left);
-    right = std::max(right, it->blob_end());
-    right = std::min(limit_right, right);
-    dout(19) << "mesr cblob scan range now [0x" << std::hex << left <<  "-" << right << ")" << dendl;
-    expanded = true;
+  if (h_bblob.is_shared()) {
+    dout(29) << "rejecting shared blob" << dendl;
   } else {
-    dout(29) << "mesr blob aready scanned and rejected" << dendl;
+    ceph_assert(h_bblob.is_compressed());
+    auto i = scanned_blobs.find(h_Blob);
+    if (i == scanned_blobs.end() || i->second.rejected == false) {
+      // We only accept blobs we have not seen before,
+      // or ones that are not fully scanned yet.
+      left = std::min(left, it->blob_start());
+      left = std::max(limit_left, left);
+      right = std::max(right, it->blob_end());
+      right = std::min(limit_right, right);
+      dout(19) << "mesr cblob scan range now [0x" << std::hex 
+        << left << "-" << right << ")" << dendl;
+      expanded = true;
+    } else {
+      dout(29) << "mesr blob aready scanned and rejected" << dendl;
+    }
   }
   return expanded;
 }
-    
+
 // Calculate gain and cost of recompressing an extent
 void Scan::if_recompressed_extent(
   const Extent* e, gain_cost& gc)
