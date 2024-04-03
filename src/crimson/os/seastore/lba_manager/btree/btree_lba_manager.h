@@ -244,8 +244,8 @@ public:
     ).si_then([&t, this, intermediate_base](auto indirect_mapping) {
       assert(indirect_mapping->is_indirect());
       return update_refcount(t, intermediate_base, 1, false
-      ).si_then([imapping=std::move(indirect_mapping)](auto p) mutable {
-	auto mapping = std::move(p.second);
+      ).si_then([imapping=std::move(indirect_mapping)](auto res) mutable {
+	auto mapping = std::move(res.mapping);
 	ceph_assert(mapping->is_stable());
 	mapping->make_indirect(
 	  imapping->get_key(),
@@ -281,8 +281,8 @@ public:
     laddr_t addr,
     bool cascade_remove) final {
     return update_refcount(t, addr, -1, cascade_remove
-    ).si_then([](auto p) {
-      return std::move(p.first);
+    ).si_then([](auto res) {
+      return std::move(res.ref_update_res);
     });
   }
 
@@ -290,8 +290,8 @@ public:
     Transaction &t,
     laddr_t addr) final {
     return update_refcount(t, addr, 1, false
-    ).si_then([](auto p) {
-      return std::move(p.first);
+    ).si_then([](auto res) {
+      return std::move(res.ref_update_res);
     });
   }
 
@@ -301,8 +301,8 @@ public:
     int delta) final {
     ceph_assert(delta > 0);
     return update_refcount(t, addr, delta, false
-    ).si_then([](auto p) {
-      return std::move(p.first);
+    ).si_then([](auto res) {
+      return std::move(res.ref_update_res);
     });
   }
 
@@ -366,10 +366,13 @@ private:
    *
    * Updates refcount, returns resulting refcount
    */
-  using update_refcount_ret_bare = std::pair<ref_update_result_t, BtreeLBAMappingRef>;
+  struct update_refcount_ret_bare_t {
+    ref_update_result_t ref_update_res;
+    BtreeLBAMappingRef mapping;
+  };
   using update_refcount_iertr = ref_iertr;
   using update_refcount_ret = update_refcount_iertr::future<
-    update_refcount_ret_bare>;
+    update_refcount_ret_bare_t>;
   update_refcount_ret update_refcount(
     Transaction &t,
     laddr_t addr,
@@ -381,9 +384,13 @@ private:
    *
    * Updates mapping, removes if f returns nullopt
    */
+  struct update_mapping_ret_bare_t {
+    lba_map_val_t map_value;
+    BtreeLBAMappingRef mapping;
+  };
   using _update_mapping_iertr = ref_iertr;
-  using _update_mapping_ret_bare = std::pair<lba_map_val_t, BtreeLBAMappingRef>;
-  using _update_mapping_ret = ref_iertr::future<_update_mapping_ret_bare>;
+  using _update_mapping_ret = ref_iertr::future<
+    update_mapping_ret_bare_t>;
   using update_func_t = std::function<
     lba_map_val_t(const lba_map_val_t &v)
     >;
@@ -411,8 +418,9 @@ private:
     op_context_t<laddr_t> c,
     std::list<BtreeLBAMappingRef> &pin_list);
 
-  ref_iertr::future<std::optional<std::pair<paddr_t, extent_len_t>>>
-  _decref_intermediate(
+  using _decref_intermediate_ret = ref_iertr::future<
+    std::optional<ref_update_result_t>>;
+  _decref_intermediate_ret _decref_intermediate(
     Transaction &t,
     laddr_t addr,
     extent_len_t len);
