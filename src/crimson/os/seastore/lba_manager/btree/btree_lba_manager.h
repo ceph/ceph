@@ -221,7 +221,8 @@ public:
       len,
       P_ADDR_ZERO,
       P_ADDR_NULL,
-      nullptr);
+      nullptr,
+      EXTENT_DEFAULT_REF_COUNT);
   }
 
   alloc_extent_ret clone_mapping(
@@ -240,7 +241,8 @@ public:
       len,
       intermediate_key,
       actual_addr,
-      nullptr
+      nullptr,
+      EXTENT_DEFAULT_REF_COUNT
     ).si_then([&t, this, intermediate_base](auto indirect_mapping) {
       assert(indirect_mapping->is_indirect());
       return update_refcount(t, intermediate_base, 1, false
@@ -265,7 +267,8 @@ public:
     laddr_t hint,
     extent_len_t len,
     paddr_t addr,
-    LogicalCachedExtent &ext) final
+    LogicalCachedExtent &ext,
+    extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) final
   {
     return _alloc_extent(
       t,
@@ -273,7 +276,8 @@ public:
       len,
       addr,
       P_ADDR_NULL,
-      &ext);
+      &ext,
+      refcount);
   }
 
   ref_ret decref_extent(
@@ -406,7 +410,8 @@ private:
     extent_len_t len,
     pladdr_t addr,
     paddr_t actual_addr,
-    LogicalCachedExtent*);
+    LogicalCachedExtent*,
+    extent_ref_count_t refcount);
 
   using _get_mapping_ret = get_mapping_iertr::future<BtreeLBAMappingRef>;
   _get_mapping_ret _get_mapping(

@@ -22,7 +22,7 @@ LBAManager::update_mappings(
       extent->get_paddr(),
       nullptr	// all the extents should have already been
 		// added to the fixed_kv_btree
-    );
+    ).discard_result();
   });
 }
 
