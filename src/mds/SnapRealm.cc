@@ -309,7 +309,7 @@ void SnapRealm::adjust_parent()
 
 void SnapRealm::split_at(SnapRealm *child)
 {
-  dout(10) << "split_at " << *child 
+  dout(10) << __func__ << ": " << *child
 	   << " on " << *child->inode << dendl;
 
   if (inode->is_mdsdir() || !child->inode->is_dir()) {
@@ -328,8 +328,23 @@ void SnapRealm::split_at(SnapRealm *child)
 
   // it's a dir.
 
+  if (child->inode->get_projected_parent_dir()->inode->is_stray()) {
+    if (child->inode->containing_realm) {
+      dout(10) << " moving unlinked directory inode" << dendl;
+      child->inode->move_to_realm(child);
+    } else {
+      /* This shouldn't happen because an unlinked directory will have caps
+       * issued to the caller executing rmdir (for today's clients).
+       */
+      dout(10) << " skipping unlinked directory inode w/o caps" << dendl;
+    }
+    return;
+  }
+
   // split open_children
-  dout(10) << " open_children are " << open_children << dendl;
+  if (!open_children.empty()) {
+    dout(10) << " open_children are " << open_children << dendl;
+  }
   for (set<SnapRealm*>::iterator p = open_children.begin();
        p != open_children.end(); ) {
     SnapRealm *realm = *p;
@@ -346,17 +361,25 @@ void SnapRealm::split_at(SnapRealm *child)
   }
 
   // split inodes_with_caps
+  std::unordered_map<CInode const*,bool> visited;
+  uint64_t count = 0;
+  dout(20) << " reserving space for " << CDir::count() << " dirs" << dendl;
+  visited.reserve(CDir::count()); /* a reasonable starting poing: keep in mind there may be CInode directories without fragments in cache */
   for (auto p = inodes_with_caps.begin(); !p.end(); ) {
     CInode *in = *p;
     ++p;
     // does inode fall within the child realm?
-    if (child->inode->is_ancestor_of(in)) {
-      dout(20) << " child gets " << *in << dendl;
+    if (child->inode->is_ancestor_of(in, &visited)) {
+      dout(25) << " child gets " << *in << dendl;
       in->move_to_realm(child);
+      ++count;
     } else {
-      dout(20) << "    keeping " << *in << dendl;
+      dout(25) << "    keeping " << *in << dendl;
     }
   }
+  dout(20) << " visited " << visited.size() << " directories" << dendl;
+
+  dout(10) << __func__ << ": split " << count << " inodes" << dendl;
 }
 
 void SnapRealm::merge_to(SnapRealm *newparent)
