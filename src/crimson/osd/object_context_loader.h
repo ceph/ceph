@@ -33,6 +33,8 @@ public:
     std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
   // Use this variant by default
+  // If oid is a clone object, the clone obc *and* it's
+  // matching head obc will be locked and can be used in func.
   template<RWState::State State>
   load_obc_iertr::future<> with_obc(hobject_t oid,
                                     with_obc_func_t&& func);
@@ -45,14 +47,6 @@ public:
   load_obc_iertr::future<> with_clone_obc_only(ObjectContextRef head,
                                                hobject_t clone_oid,
                                                with_obc_func_t&& func);
-
-  // Use this variant in the case where both the head
-  // object *and* the matching clone object are being used
-  // in func.
-  template<RWState::State State>
-  load_obc_iertr::future<> with_clone_obc_direct(
-    hobject_t oid,
-    with_obc_func_t&& func);
 
   load_obc_iertr::future<> reload_obc(ObjectContext& obc) const;
 
