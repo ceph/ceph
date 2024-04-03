@@ -478,17 +478,22 @@ def connection2():
     return conn
 
 
-def another_user(tenant=None):
+def another_user(user=None, tenant=None, account=None):
     access_key = str(time.time())
     secret_key = str(time.time())
-    uid = UID_PREFIX + str(time.time())
+    uid = user or UID_PREFIX + str(time.time())
+    cmd = ['user', 'create', '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', 'Superman']
+    arn = f'arn:aws:iam:::user/{uid}'
     if tenant:
-        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
-    else:
-        _, result = admin(['user', 'create', '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
-    arn = f'arn:aws:iam::{tenant or ""}:user/{uid}'
+        cmd += ['--tenant', tenant]
+        arn = f'arn:aws:iam::{tenant}:user/{uid}'
+    if account:
+        cmd += ['--account-id', account, '--account-root']
+        arn = f'arn:aws:iam::{account}:user/Superman'
 
+    _, result = admin(cmd, get_config_cluster())
     assert_equal(result, 0)
+
     conn = S3Connection(aws_access_key_id=access_key,
                   aws_secret_access_key=secret_key,
                       is_secure=False, port=get_config_port(), host=get_config_host(), 
@@ -3800,9 +3805,8 @@ def test_ps_s3_persistent_multiple_endpoints():
     conn.delete_bucket(bucket_name)
     http_server.close()
 
-def persistent_notification(endpoint_type):
+def persistent_notification(endpoint_type, conn):
     """ test pushing persistent notification """
-    conn = connection()
     zonegroup = get_config_zonegroup()
 
     # create bucket
@@ -3907,19 +3911,38 @@ def persistent_notification(endpoint_type):
 @attr('http_test')
 def test_ps_s3_persistent_notification_http():
     """ test pushing persistent notification http """
-    persistent_notification('http')
+    conn = connection()
+    persistent_notification('http', conn)
 
+@attr('http_test')
+def test_ps_s3_persistent_notification_http_account():
+    """ test pushing persistent notification via http for account user """
+
+    account = 'RGW77777777777777777'
+    user = UID_PREFIX + 'test'
+
+    _, result = admin(['account', 'create', '--account-id', account, '--account-name', 'testacct'], get_config_cluster())
+    assert_equal(result, 0)
+
+    conn, _ = another_user(user=user, account=account)
+    try:
+        persistent_notification('http', conn)
+    finally:
+        admin(['user', 'rm', '--uid', user], get_config_cluster())
+        admin(['account', 'rm', '--account-id', account], get_config_cluster())
 
 @attr('amqp_test')
 def test_ps_s3_persistent_notification_amqp():
     """ test pushing persistent notification amqp """
-    persistent_notification('amqp')
+    conn = connection()
+    persistent_notification('amqp', conn)
 
 
 @attr('kafka_test')
 def test_ps_s3_persistent_notification_kafka():
     """ test pushing persistent notification kafka """
-    persistent_notification('kafka')
+    conn = connection()
+    persistent_notification('kafka', conn)
 
 
 def random_string(length):
