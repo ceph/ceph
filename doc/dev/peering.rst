@@ -6,43 +6,43 @@ Concepts
 --------
 
 *Peering*
-   the process of bringing all of the OSDs that store
-   a Placement Group (PG) into agreement about the state
-   of all of the objects (and their metadata) in that PG.
-   Note that agreeing on the state does not mean that
-   they all have the latest contents.
+   the process of bringing all of the OSDs that store a Placement Group (PG)
+   into agreement about the state of all of the objects in that PG and all of
+   the metadata associated with those objects. Two OSDs can agree on the state
+   of the objects in the placement group yet still may not necessarily have the
+   latest contents.
 
 *Acting set*
-   the ordered list of OSDs who are (or were as of some epoch)
-   responsible for a particular PG.
+   the ordered list of OSDs that are (or were as of some epoch) responsible for
+   a particular PG.
 
 *Up set*
-   the ordered list of OSDs responsible for a particular PG for
-   a particular epoch according to CRUSH.  Normally this
-   is the same as the *acting set*, except when the *acting set* has been
-   explicitly overridden via *PG temp* in the OSDMap.
+   the ordered list of OSDs responsible for a particular PG for a particular
+   epoch, according to CRUSH. This is the same as the *acting set* except when
+   the *acting set* has been explicitly overridden via *PG temp* in the OSDMap.
 
 *PG temp* 
-   a temporary placement group acting set used while backfilling the
-   primary osd. Let say acting is [0,1,2] and we are
-   active+clean. Something happens and acting is now [3,1,2]. osd 3 is
-   empty and can't serve reads although it is the primary. osd.3 will
-   see that and request a *PG temp* of [1,2,3] to the monitors using a
-   MOSDPGTemp message so that osd.1 temporarily becomes the
-   primary. It will select osd.3 as a backfill peer and continue to
-   serve reads and writes while osd.3 is backfilled. When backfilling
-   is complete, *PG temp* is discarded and the acting set changes back
-   to [3,1,2] and osd.3 becomes the primary.
+   a temporary placement group acting set that is used while backfilling the
+   primary OSD. Assume that the acting set is ``[0,1,2]`` and we are
+   ``active+clean``. Now assume that something happens and the acting set
+   becomes ``[2,1,2]``. Under these circumstances, OSD ``3`` is empty and can't
+   serve reads even though it is the primary. ``osd.3`` will respond by
+   requesting a *PG temp* of ``[1,2,3]`` to the monitors using a ``MOSDPGTemp``
+   message, and ``osd.1`` will become the primary temporarily. ``osd.1`` will
+   select ``osd.3`` as a backfill peer and will continue to serve reads and
+   writes while ``osd.3`` is backfilled. When backfilling is complete, *PG
+   temp* is discarded. The acting set changes back to ``[3,1,2]`` and ``osd.3``
+   becomes the primary.
 
 *current interval* or *past interval*
-   a sequence of OSD map epochs during which the *acting set* and *up
-   set* for particular PG do not change
+   a sequence of OSD map epochs during which the *acting set* and the *up
+   set* for particular PG do not change.
 
 *primary*
-   the (by convention first) member of the *acting set*,
-   who is responsible for coordination peering, and is
-   the only OSD that will accept client initiated
-   writes to objects in a placement group.
+   the member of the *acting set* that is responsible for coordination peering.
+   The only OSD that accepts client-initiated writes to the objects in a
+   placement group. By convention, the primary is the first member of the
+   *acting set*.
 
 *replica*
    a non-primary OSD in the *acting set* for a placement group
