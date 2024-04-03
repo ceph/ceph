@@ -188,7 +188,7 @@ Journal::replay_ret CircularBoundedJournal::replay_segment(
         cursor,
 	cjs.get_cbj_header().magic,
         std::numeric_limits<size_t>::max(),
-        dhandler).safe_then([](auto){}
+        dhandler
       ).handle_error(
         replay_ertr::pass_further{},
         crimson::ct_error::assert_all{
