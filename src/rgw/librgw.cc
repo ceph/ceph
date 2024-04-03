@@ -579,10 +579,12 @@ namespace rgw {
       store->ctx()->_conf->rgw_ldap_dnattr;
     std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
 
-    ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw.c_str(),
-			      ldap_searchdn, ldap_searchfilter, ldap_dnattr);
-    ldh->init();
-    ldh->bind();
+    if (! ldap_uri.empty()) {
+      ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw.c_str(),
+				ldap_searchdn, ldap_searchfilter, ldap_dnattr);
+      ldh->init();
+      ldh->bind();
+    }
 
     rgw_log_usage_init(g_ceph_context, store);
 
