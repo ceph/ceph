@@ -41,7 +41,7 @@ dec_ref_ret dec_ref(omap_context_t oc, T&& addr) {
     crimson::ct_error::assert_all{
       "Invalid error in OMapInnerNode helper dec_ref"
     }
-  ).si_then([](auto &&e) {});
+  ).discard_result();
 }
 
 /**

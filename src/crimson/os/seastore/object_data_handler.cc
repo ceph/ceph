@@ -499,8 +499,7 @@ ObjectDataHandler::write_ret do_removals(
       return ctx.tm.remove(
 	ctx.t,
 	pin->get_key()
-      ).si_then(
-	[](auto){},
+      ).discard_result().handle_error_interruptible(
 	ObjectDataHandler::write_iertr::pass_further{},
 	crimson::ct_error::assert_all{
 	  "object_data_handler::do_removals invalid error"
