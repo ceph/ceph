@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 import json
 import os
-import re
 import sys
 import subprocess
 import tempfile
 import difflib
-from typing import Dict, List, Any
+from typing import Dict, Any
 from pathlib import Path
 import concurrent.futures
 from collections import OrderedDict
@@ -14,7 +13,7 @@ from collections import OrderedDict
 temp_unrec = tempfile.mktemp(prefix="unrecognized_")
 err_file_rc = tempfile.mktemp(prefix="dencoder_err_")
 
-fast_shouldnt_skip: List[str] = []
+fast_shouldnt_skip = []
 backward_compat: Dict[str, Any] = {}
 incompat_paths: Dict[str, Any] = {}
 
@@ -62,7 +61,7 @@ def process_type(file_path, type):
             cmd_determ = [CEPH_DENCODER, "type", type, "is_deterministic"]
             determ_res = subprocess.run(cmd_determ, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
              # Check if the command failed
-            if determ_res.returncode != 0 and determ_res.returncode != 1:
+            if determ_res.returncode != 0:
                 error_message = determ_res.stderr.decode().strip()
                 debug_print(f"Error running command: {error_message}")
                 return 1
@@ -96,17 +95,15 @@ def process_type(file_path, type):
     return 0  # File passed the test
 
 def test_object_wrapper(type, vdir, arversion, current_ver):
+    global incompat_paths
     _numtests = 0
     _failed = 0
     unrecognized = ""
 
     if subprocess.call([CEPH_DENCODER, "type", type], stderr=subprocess.DEVNULL) == 0:
 
-        if should_skip_object(type, arversion, current_ver):
+        if should_skip_object(type, arversion, current_ver) and (type not in incompat_paths or len(incompat_paths[type]) == 0):
             debug_print(f"skipping object of type {type} due to backward incompatibility")
-            return (_numtests, _failed, unrecognized)
-        if type in incompat_paths:
-            debug_print(f"skipping object of type {type} it is in incompat paths")
             return (_numtests, _failed, unrecognized)
 
         debug_print(f"        {vdir}/objects/{type}")
@@ -132,82 +129,48 @@ def test_object_wrapper(type, vdir, arversion, current_ver):
         
     return (_numtests, _failed, unrecognized)
 
-def parse_version(version):
-    """
-    Parse a version string into a tuple of integers, ignoring suffixes.
-
-    Args:
-        version (str): The version string to parse.
-
-    Returns:
-        tuple: A tuple of integers representing the version.
-    """
-    numeric_part = re.match(r'(\d+(\.\d+)*).*', version)
-    if numeric_part:
-        return tuple(map(int, numeric_part.group(1).split('.')))
-    raise ValueError(f"Invalid version format: {version}")
-
-
 def should_skip_object(type, arversion, current_ver):
     """
-    Determine if an object should be skipped based on backward compatibility.
+    Check if an object of a specific type should be skipped based on backward compatibility.
 
-    Args:
-        type (str): The type of the object to check.
-        arversion (str): The archive version of the object.
-        current_ver (str): The current version of the decoder.
+    Description:
+    This function determines whether an object of a given type should be skipped based on the
+    provided versions and backward compatibility information. It checks the global variable
+    'backward_compat' to make this decision.
 
-    Returns:
-        bool: True if the object should be skipped, False otherwise.
+    Input:
+    - type: str
+        The type of the object to be checked for skipping.
+
+    - arversion: str
+        The version from which the object is attempted to be accessed (archive version).
+
+    - current_ver: str
+        The version of the object being processed (current version).
+
+    Output:
+    - bool:
+        True if the object should be skipped, False otherwise.
+
+    Note: The function relies on two global variables, 'backward_compat' and 'fast_shouldnt_skip',
+    which should be defined and updated appropriately in the calling code.
     """
+    global backward_compat
+    global fast_shouldnt_skip
 
-    # Validate global structures
-    if not isinstance(backward_compat, dict) or not isinstance(fast_shouldnt_skip, list):
-        raise ValueError("Global variables 'backward_compat' must be a dict and 'fast_shouldnt_skip' must be a list.")
-
-    # Early return for cached types
     if type in fast_shouldnt_skip:
-        debug_print(f"fast Type {type} is in the fast_shouldnt_skip list - don't skip.")
+        debug_print(f"fast Type {type} does not exist in the backward compatibility structure.")
         return False
 
-    # If the type doesn't exist in any backward_compat entry
     if all(type not in v for v in backward_compat.values()):
-        debug_print(f"fast Type {type} does not exist in the backward compatibility structure - don't skip.")
         fast_shouldnt_skip.append(type)
         return False
 
-    # Parse current and archive versions
-    parsed_arversion = parse_version(arversion)
-    parsed_current_ver = parse_version(current_ver)
-
-    # Find the lowest version where the type exists
-    compatible_versions = [
-        parse_version(key) for key, types in backward_compat.items() if type in types
-    ]
-    if not compatible_versions:
-        debug_print(f"{type} has no compatible versions - don't skip.")
-        fast_shouldnt_skip.append(type)
+    versions = [key for key, value in backward_compat.items() if type in value and key >= arversion and key != current_ver]
+    if len(versions) == 0:
         return False
 
-    lowest_version = min(compatible_versions)
-    debug_print(f"{type} lowest compatible version: {lowest_version}")
-
-    # Check cascading compatibility
-    if parsed_current_ver < lowest_version:
-        # Current version is too old for this type
-        debug_print(f"{type} current version {parsed_current_ver} is less than {lowest_version} - skip.")
-        return True
-
-    # Filter archive versions within compatibility range
-    versions = [
-        key for key in backward_compat
-        if type in backward_compat[key]
-        and parse_version(key) >= parsed_arversion
-        and parse_version(key) <= parsed_current_ver
-    ]
-
-    debug_print(f"{type} versions: {versions} will return {len(versions) > 0}")
-    return len(versions) > 0
+    return True
 
 def check_backward_compat():
     """
@@ -259,7 +222,7 @@ def check_backward_compat():
                 version_name = version.name
                 _backward_compat[version_name] = {}
                 type_dir = archive_dir / version_name / "forward_incompat"
-                if type_dir.exists():
+                if type_dir.exists() and type_dir.is_dir():
                     for type_entry in type_dir.iterdir():
                         if type_entry.is_dir():
                             type_name = type_entry.name
@@ -280,8 +243,7 @@ def check_backward_compat():
 
 def process_batch(batch):
     results = []
-    max_workers = 15
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+    with concurrent.futures.ThreadPoolExecutor() as executor:
         futures = [
             executor.submit(
                 test_object_wrapper, batch_type, vdir, arversion, current_ver
@@ -297,8 +259,7 @@ def process_batch(batch):
 
 # Create a generator that processes batches asynchronously
 def async_process_batches(task_batches):
-    max_workers = 10
-    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+    with concurrent.futures.ProcessPoolExecutor() as executor:
         futures = [executor.submit(process_batch, batch) for batch in task_batches]
         for future in concurrent.futures.as_completed(futures):
             yield future.result()
