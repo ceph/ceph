@@ -4690,3 +4690,540 @@ def test_ps_s3_notification_push_kafka_security_ssl_sasl_scram():
 def test_ps_s3_notification_push_kafka_security_sasl_scram():
     kafka_security('SASL_PLAINTEXT', mechanism='SCRAM-SHA-256')
 
+
+@attr('data_path_v2_test')
+def test_persistent_ps_s3_data_path_v2_migration():
+    """ test data path v2 persistent migration """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # create random port for the http server
+    host = get_ip()
+    http_port = random.randint(10000, 20000)
+
+    # disable v2 notification
+    result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(http_port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                        'Events': []
+                        }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # topic stats
+    result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
+    assert_equal(result[1], 0)
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key('key-'+str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    time_diff = time.time() - start_time
+    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    http_server = None
+    try:
+        # topic stats
+        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+        parsed_result = json.loads(result[0])
+        assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
+        assert_equal(result[1], 0)
+
+        # create topic to poll on
+        topic_name_1 = topic_name + '_1'
+        topic_conf_1 = PSTopicS3(conn, topic_name_1, zonegroup, endpoint_args=endpoint_args)
+
+        # enable v2 notification
+        result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
+        assert_equal(result[1], 0)
+        result = admin(['period', 'update'], get_config_cluster())
+        assert_equal(result[1], 0)
+        result = admin(['period', 'commit'], get_config_cluster())
+        assert_equal(result[1], 0)
+
+        # poll on topic_1
+        result = 1
+        while result != 0:
+            time.sleep(1)
+            result = admin(['topic', 'rm', '--topic', topic_name_1], get_config_cluster())[1]
+
+        # topic stats
+        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+        parsed_result = json.loads(result[0])
+        assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
+        assert_equal(result[1], 0)
+
+        # create more objects in the bucket (async)
+        client_threads = []
+        start_time = time.time()
+        for i in range(number_of_objects):
+            key = bucket.new_key('key-'+str(i))
+            content = str(os.urandom(1024*1024))
+            thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
+        time_diff = time.time() - start_time
+        print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+        # topic stats
+        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+        parsed_result = json.loads(result[0])
+        assert_equal(parsed_result['Topic Stats']['Entries'], 2*number_of_objects)
+        assert_equal(result[1], 0)
+
+        # start an http server in a separate thread
+        http_server = StreamingHTTPServer(host, http_port, num_workers=number_of_objects)
+
+        delay = 30
+        print('wait for '+str(delay)+'sec for the messages...')
+        time.sleep(delay)
+
+        # topic stats
+        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+        parsed_result = json.loads(result[0])
+        assert_equal(parsed_result['Topic Stats']['Entries'], 0)
+        assert_equal(result[1], 0)
+        # verify events
+        keys = list(bucket.list())
+        http_server.verify_s3_events(keys, exact_match=False)
+
+    except Exception as e:
+        assert False, str(e)
+    finally:
+        # cleanup
+        s3_notification_conf.del_config()
+        topic_conf.del_config()
+        # delete objects from the bucket
+        client_threads = []
+        for key in bucket.list():
+            thr = threading.Thread(target = key.delete, args=())
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
+        # delete the bucket
+        conn.delete_bucket(bucket_name)
+        if http_server:
+            http_server.close()
+
+
+@attr('data_path_v2_test')
+def test_ps_s3_data_path_v2_migration():
+    """ test data path v2 migration """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # create random port for the http server
+    host = get_ip()
+    http_port = random.randint(10000, 20000)
+
+    # start an http server in a separate thread
+    number_of_objects = 10
+    http_server = StreamingHTTPServer(host, http_port, num_workers=number_of_objects)
+
+    # disable v2 notification
+    result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(http_port)
+    endpoint_args = 'push-endpoint='+endpoint_address
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                        'Events': []
+                        }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket (async)
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key('key-'+str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    time_diff = time.time() - start_time
+    print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    try:
+        # verify events
+        keys = list(bucket.list())
+        http_server.verify_s3_events(keys, exact_match=False)
+
+        # create topic to poll on
+        topic_name_1 = topic_name + '_1'
+        topic_conf_1 = PSTopicS3(conn, topic_name_1, zonegroup, endpoint_args=endpoint_args)
+
+        # enable v2 notification
+        result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
+        assert_equal(result[1], 0)
+        result = admin(['period', 'update'], get_config_cluster())
+        assert_equal(result[1], 0)
+        result = admin(['period', 'commit'], get_config_cluster())
+        assert_equal(result[1], 0)
+
+
+        # poll on topic_1
+        result = 1
+        while result != 0:
+            time.sleep(1)
+            result = admin(['topic', 'rm', '--topic', topic_name_1], get_config_cluster())[1]
+
+
+        # create more objects in the bucket (async)
+        client_threads = []
+        start_time = time.time()
+        for i in range(number_of_objects):
+            key = bucket.new_key('key-'+str(i))
+            content = str(os.urandom(1024*1024))
+            thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
+        time_diff = time.time() - start_time
+        print('average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+        # verify events
+        keys = list(bucket.list())
+        http_server.verify_s3_events(keys, exact_match=True)
+
+    except Exception as e:
+        assert False, str(e)
+    finally:
+        # cleanup
+        s3_notification_conf.del_config()
+        topic_conf.del_config()
+        # delete objects from the bucket
+        client_threads = []
+        for key in bucket.list():
+            thr = threading.Thread(target = key.delete, args=())
+            thr.start()
+            client_threads.append(thr)
+        [thr.join() for thr in client_threads]
+        # delete the bucket
+        conn.delete_bucket(bucket_name)
+        http_server.close()
+
+
+@attr('data_path_v2_test')
+def test_ps_s3_data_path_v2_large_migration():
+    """ test data path v2 large migration """
+    conn = connection()
+    connections_list = []
+    connections_list.append(conn)
+    zonegroup = get_config_zonegroup()
+    tenants_list = []
+    tenants_list.append('')
+    for i in ['1', '2']:
+        access_key = str(time.time())
+        secret_key = str(time.time())
+        uid = UID_PREFIX + str(time.time())
+        tenant_id = 'kaboom_' + i
+        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant_id, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
+        assert_equal(result, 0)
+        tenants_list.append(tenant_id)
+        conn = S3Connection(aws_access_key_id=access_key,
+                            aws_secret_access_key=secret_key,
+                            is_secure=False, port=get_config_port(), host=get_config_host(),
+                            calling_format='boto.s3.connection.OrdinaryCallingFormat')
+        connections_list.append(conn)
+
+    # disable v2 notification
+    result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
+    # create random port for the http server
+    host = get_ip()
+    http_port = random.randint(10000, 20000)
+
+    # create s3 topic
+    buckets_list = []
+    topics_conf_list = []
+    s3_notification_conf_list = []
+    num_of_s3_notifications = 110
+    for conn in connections_list:
+        # create bucket
+        bucket_name = gen_bucket_name()
+        bucket = conn.create_bucket(bucket_name)
+        buckets_list.append(bucket)
+        topic_name = bucket_name + TOPIC_SUFFIX
+        # create s3 topic
+        endpoint_address = 'http://' + host + ':' + str(http_port)
+        endpoint_args = 'push-endpoint=' + endpoint_address + '&persistent=true'
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topics_conf_list.append(topic_conf)
+        topic_arn = topic_conf.set_config()
+        # create s3 110 notifications
+        s3_notification_list = []
+        for i in range(num_of_s3_notifications):
+            notification_name = bucket_name + NOTIFICATION_SUFFIX + '_' + str(i + 1)
+            s3_notification_list.append({'Id': notification_name, 'TopicArn': topic_arn,
+                                    'Events': []
+                                    })
+
+        s3_notification_conf = PSNotificationS3(conn, bucket_name, s3_notification_list)
+        s3_notification_conf_list.append(s3_notification_conf)
+        response, status = s3_notification_conf.set_config()
+        assert_equal(status / 100, 2)
+
+    # create topic to poll on
+    polling_topics_conf = []
+    for conn, bucket in zip(connections_list, buckets_list):
+        topic_name = bucket.name + TOPIC_SUFFIX + '_1'
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        polling_topics_conf.append(topic_conf)
+
+    # enable v2 notification
+    result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
+    # poll on topic_1
+    for tenant, topic_conf in zip(tenants_list, polling_topics_conf):
+        while True:
+            if tenant == '':
+                result = admin(['topic', 'rm', '--topic', topic_conf.topic_name], get_config_cluster())
+            else:
+                result = admin(['topic', 'rm', '--topic', topic_conf.topic_name, '--tenant', tenant], get_config_cluster())
+
+            if result[1] != 0:
+                print('migration in process... error: '+str(result[1]))
+            else:
+                break
+
+            time.sleep(1)
+
+    # check if we migrated all the topics
+    for tenant in tenants_list:
+        if tenant == '':
+            topics_result = admin(['topic', 'list'], get_config_cluster())
+        else:
+            topics_result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
+        topics_json = json.loads(topics_result[0])
+        assert_equal(len(topics_json['topics']), 1)
+
+    # check if we migrated all the notifications
+    for tenant, bucket in zip(tenants_list, buckets_list):
+        if tenant == '':
+            result = admin(['notification', 'list', '--bucket', bucket.name], get_config_cluster())
+        else:
+            result = admin(['notification', 'list', '--bucket', bucket.name, '--tenant', tenant], get_config_cluster())
+        parsed_result = json.loads(result[0])
+        assert_equal(len(parsed_result['notifications']), num_of_s3_notifications)
+
+    # cleanup
+    for s3_notification_conf in s3_notification_conf_list:
+        s3_notification_conf.del_config()
+    for topic_conf in topics_conf_list:
+        topic_conf.del_config()
+    # delete the bucket
+    for conn, bucket in zip(connections_list, buckets_list):
+        conn.delete_bucket(bucket.name)
+
+
+@attr('data_path_v2_test')
+def test_ps_s3_data_path_v2_mixed_migration():
+    """ test data path v2 mixed migration """
+    conn = connection()
+    connections_list = []
+    connections_list.append(conn)
+    zonegroup = get_config_zonegroup()
+    tenants_list = []
+    tenants_list.append('')
+    
+    # make sure that we start at v2
+    result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
+    for i in ['1', '2']:
+        access_key = str(time.time())
+        secret_key = str(time.time())
+        uid = UID_PREFIX + str(time.time())
+        tenant_id = 'kaboom_' + i
+        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant_id, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
+        assert_equal(result, 0)
+        tenants_list.append(tenant_id)
+        conn = S3Connection(aws_access_key_id=access_key,
+                            aws_secret_access_key=secret_key,
+                            is_secure=False, port=get_config_port(), host=get_config_host(),
+                            calling_format='boto.s3.connection.OrdinaryCallingFormat')
+        connections_list.append(conn)
+
+    # create random port for the http server
+    host = get_ip()
+    http_port = random.randint(10000, 20000)
+
+    # create s3 topic
+    buckets_list = []
+    topics_conf_list = []
+    s3_notification_conf_list = []
+    topic_arn_list = []
+    created_version = '_created_v2'
+    for conn in connections_list:
+        # create bucket
+        bucket_name = gen_bucket_name()
+        bucket = conn.create_bucket(bucket_name)
+        buckets_list.append(bucket)
+        topic_name = bucket_name + TOPIC_SUFFIX + created_version
+        # create s3 topic
+        endpoint_address = 'http://' + host + ':' + str(http_port)
+        endpoint_args = 'push-endpoint=' + endpoint_address + '&persistent=true'
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topics_conf_list.append(topic_conf)
+        topic_arn = topic_conf.set_config()
+        topic_arn_list.append(topic_arn)
+        # create s3 notification
+        notification_name = bucket_name + NOTIFICATION_SUFFIX + created_version
+        s3_notification_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                                 'Events': []
+                                 }]
+
+        s3_notification_conf = PSNotificationS3(conn, bucket_name, s3_notification_list)
+        s3_notification_conf_list.append(s3_notification_conf)
+        response, status = s3_notification_conf.set_config()
+        assert_equal(status / 100, 2)
+
+    # disable v2 notification
+    result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
+    # create s3 topic
+    created_version = '_created_v1'
+    for conn, bucket in zip(connections_list, buckets_list):
+        # create bucket
+        bucket_name = bucket.name
+        topic_name = bucket_name + TOPIC_SUFFIX + created_version
+        # create s3 topic
+        endpoint_address = 'http://' + host + ':' + str(http_port)
+        endpoint_args = 'push-endpoint=' + endpoint_address + '&persistent=true'
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topics_conf_list.append(topic_conf)
+        topic_arn = topic_conf.set_config()
+        # create s3 notification
+        notification_name = bucket_name + NOTIFICATION_SUFFIX + created_version
+        s3_notification_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                                 'Events': []
+                                 }]
+
+        s3_notification_conf = PSNotificationS3(conn, bucket_name, s3_notification_list)
+        s3_notification_conf_list.append(s3_notification_conf)
+        response, status = s3_notification_conf.set_config()
+        assert_equal(status / 100, 2)
+
+    # create topic to poll on
+    polling_topics_conf = []
+    for conn, bucket in zip(connections_list, buckets_list):
+        topic_name = bucket.name + TOPIC_SUFFIX + '_1'
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        polling_topics_conf.append(topic_conf)
+
+    # enable v2 notification
+    result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
+    # poll on topic_1
+    for tenant, topic_conf in zip(tenants_list, polling_topics_conf):
+        while True:
+            if tenant == '':
+                result = admin(['topic', 'rm', '--topic', topic_conf.topic_name], get_config_cluster())
+            else:
+                result = admin(['topic', 'rm', '--topic', topic_conf.topic_name, '--tenant', tenant], get_config_cluster())
+
+            if result[1] != 0:
+                print(result)
+            else:
+                break
+
+            time.sleep(1)
+
+    # check if we migrated all the topics
+    for tenant in tenants_list:
+        if tenant == '':
+            topics_result = admin(['topic', 'list'], get_config_cluster())
+        else:
+            topics_result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
+        topics_json = json.loads(topics_result[0])
+        assert_equal(len(topics_json['topics']), 2)
+
+    # check if we migrated all the notifications
+    for tenant, bucket in zip(tenants_list, buckets_list):
+        if tenant == '':
+            notifications_result = admin(['notification', 'list', '--bucket', bucket.name], get_config_cluster())
+        else:
+            notifications_result = admin(['notification', 'list', '--bucket', bucket.name, '--tenant', tenant], get_config_cluster())
+        notifications_json = json.loads(notifications_result[0])
+        assert_equal(len(notifications_json['notifications']), 2)
+
+    # cleanup
+    for s3_notification_conf in s3_notification_conf_list:
+        s3_notification_conf.del_config()
+    for topic_conf in topics_conf_list:
+        topic_conf.del_config()
+    # delete the bucket
+    for conn, bucket in zip(connections_list, buckets_list):
+        conn.delete_bucket(bucket.name)
+

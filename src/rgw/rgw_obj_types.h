@@ -477,6 +477,10 @@ struct rgw_raw_obj {
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<rgw_raw_obj*>& o);
   void decode_json(JSONObj *obj);
+
+  inline std::string to_str() const {
+    return pool.to_str() + ":" + oid;
+  }
 };
 WRITE_CLASS_ENCODER(rgw_raw_obj)
 

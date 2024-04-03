@@ -33,6 +33,9 @@ namespace rgw { namespace sal {
 
 class RadosMultipartUpload;
 
+extern const std::string pubsub_oid_prefix; // v1 topic metadata prefix
+extern const std::string pubsub_bucket_oid_infix;  // v1 notification in-fix
+
 class RadosPlacementTier: public StorePlacementTier {
   RadosStore* store;
   RGWZoneGroupPlacementTier tier;
