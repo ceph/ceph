@@ -345,6 +345,7 @@ log_to_file = False"""
                             },
                         }
                     }),
+                    use_current_daemon_image=False,
                 )
 
 
@@ -480,6 +481,7 @@ timeout = 1.0\n"""
                             }
                         }
                     }),
+                    use_current_daemon_image=False,
                 )
 
 
@@ -590,6 +592,7 @@ class TestMonitoring:
                             "peers": [],
                         }
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -685,6 +688,7 @@ class TestMonitoring:
                             'web_config': '/etc/alertmanager/web.yml',
                         }
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -819,6 +823,7 @@ class TestMonitoring:
                             'ip_to_bind_to': '1.2.3.1',
                         },
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -997,6 +1002,7 @@ class TestMonitoring:
                             'web_config': '/etc/prometheus/web.yml',
                         },
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1065,6 +1071,7 @@ class TestMonitoring:
                             },
                         },
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1123,6 +1130,7 @@ class TestMonitoring:
                             },
                         },
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1234,6 +1242,7 @@ class TestMonitoring:
                             "files": files,
                         },
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -1408,6 +1417,7 @@ spec:
                             },
                             "config_blobs": {},
                         }),
+                        use_current_daemon_image=True,
                     )
 
 
@@ -1514,6 +1524,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1561,6 +1572,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1612,6 +1624,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1668,6 +1681,7 @@ class TestSNMPGateway:
                         },
                         "config_blobs": config,
                     }),
+                    use_current_daemon_image=False,
                 )
 
 
@@ -2735,6 +2749,7 @@ class TestJaeger:
                         },
                         "config_blobs": config,
                     }),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -2774,6 +2789,7 @@ class TestJaeger:
                         },
                         "config_blobs": es_config,
                     }),
+                    use_current_daemon_image=False,
                 )
                 with with_service(cephadm_module, collector_spec):
                     _run_cephadm.assert_called_with(
@@ -2801,6 +2817,7 @@ class TestJaeger:
                             },
                             "config_blobs": collector_config,
                         }),
+                        use_current_daemon_image=False,
                     )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -2840,6 +2857,7 @@ class TestJaeger:
                         },
                         "config_blobs": collector_config,
                     }),
+                    use_current_daemon_image=False,
                 )
                 with with_service(cephadm_module, agent_spec):
                     _run_cephadm.assert_called_with(
@@ -2867,6 +2885,7 @@ class TestJaeger:
                             },
                             "config_blobs": agent_config,
                         }),
+                        use_current_daemon_image=False,
                     )
 
 
@@ -2923,6 +2942,7 @@ class TestCustomContainer:
                             },
                         }
                     ),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -3009,6 +3029,7 @@ class TestCustomContainer:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    use_current_daemon_image=False,
                 )
 
 
@@ -3059,6 +3080,7 @@ class TestSMB:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    use_current_daemon_image=False,
                 )
 
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
@@ -3128,4 +3150,5 @@ class TestSMB:
                     ['_orch', 'deploy'],
                     [],
                     stdin=json.dumps(expected),
+                    use_current_daemon_image=False,
                 )
