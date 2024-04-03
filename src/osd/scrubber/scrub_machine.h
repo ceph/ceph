@@ -887,6 +887,16 @@ struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
 
   reservation_status_t m_reservation_status{reservation_status_t::unreserved};
 
+  /**
+   * React to the reservation request.
+   * Called after any existing pending/granted request was released.
+   *
+   * Async requests are sent to the reserver.
+   * For old-style synchronous requests, the reserver is queried using
+   * its 'immediate' interface, and the response is sent back to the primary.
+   */
+  void handle_reservation_request(const ReplicaReserveReq& ev);
+
   // clang-format off
   struct RtReservationCB : public Context {
     PGRef pg;
@@ -929,8 +939,7 @@ struct ReplicaActiveOp
 
   using reactions = mpl::list<
       sc::custom_reaction<StartReplica>,
-      sc::custom_reaction<ReplicaRelease>,
-      sc::custom_reaction<ReplicaReserveReq>>;
+      sc::custom_reaction<ReplicaRelease>>;
 
   /**
    * Handling the unexpected (read - caused by a bug) case of receiving a
@@ -950,14 +959,6 @@ struct ReplicaActiveOp
    * releasing the reservation on the way.
    */
   sc::result react(const ReplicaRelease&);
-
-  /**
-   * handling unexpected 'reservation requests' while we are in the middle
-   * of serving a chunk request.
-   * This is a bug. We log it, abort the operation, and re-enter ReplicaActive
-   * to handle the reservation request.
-   */
-  sc::result react(const ReplicaReserveReq& ev);
 };
 
 /*
