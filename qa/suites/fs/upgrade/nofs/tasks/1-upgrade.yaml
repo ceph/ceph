@@ -23,7 +23,6 @@ tasks:
     - ceph fs dump
 - install.upgrade:
     mon.a:
-      branch: reef
 - print: "**** done install.upgrade"
 - ceph.restart:
     daemons: [mon.*, mgr.*]
@@ -39,7 +38,7 @@ tasks:
     - ceph versions
     - ceph osd dump -f json-pretty
     - ceph fs dump
-    - ceph osd require-osd-release quincy
+    - ceph osd require-osd-release squid
     - for f in `ceph osd pool ls` ; do ceph osd pool set $f pg_autoscale_mode off ; done
 - ceph.healthy:
 - print: "**** done ceph.restart"
