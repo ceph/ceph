@@ -19,6 +19,7 @@
 
 #include "rgw_aio.h"
 #include "rgw_d3n_cacherequest.h"
+#include "rgw_cache_driver.h"
 
 namespace rgw {
 
