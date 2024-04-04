@@ -73,6 +73,7 @@ set(librgw_common_srcs
   rgw_compression.cc
   rgw_cors.cc
   rgw_cors_s3.cc
+  rgw_d3n_cacherequest.cc
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
@@ -148,6 +149,7 @@ set(librgw_common_srcs
   rgw_tracer.cc
   rgw_lua_background.cc
   rgw_data_access.cc
+  rgw_sal_d3n.cc
   driver/rados/cls_fifo_legacy.cc
   driver/rados/rgw_bucket.cc
   driver/rados/rgw_bucket_sync.cc

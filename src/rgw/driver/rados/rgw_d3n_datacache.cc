@@ -301,12 +301,15 @@ bool D3nDataCache::get(const string& oid, const off_t len)
       const std::lock_guard l(d3n_eviction_lock);
       lru_remove(chdo);
       lru_insert_head(chdo);
+      lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "(): file found of required size =" << st.st_size << dendl;
     } else {
       d3n_cache_map.erase(oid);
       const std::lock_guard l(d3n_eviction_lock);
       lru_remove(chdo);
       delete chdo;
       exist = false;
+      lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "(): file found of but of different size =" << st.st_size << dendl;
+      lsubdout(g_ceph_context, rgw_datacache, 20) << "D3nDataCache: " << __func__ << "(): removing oid from d3n cache map =" << oid << dendl;
     }
   }
   return exist;

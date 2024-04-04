@@ -14,26 +14,14 @@
  */
 
 #include "common/ceph_json.h"
-#include "common/strtol.h"
-#include "rgw_rest.h"
 #include "rgw_op.h"
-#include "rgw_rados.h"
-#include "rgw_rest_s3.h"
+#include "rgw_process_env.h"
 #include "rgw_rest_config.h"
-#include "rgw_client_io.h"
-#include "rgw_sal_rados.h"
-#include "common/errno.h"
-#include "include/ceph_assert.h"
-
-#include "services/svc_zone.h"
-
-#define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 
 void RGWOp_ZoneConfig_Get::send_response() {
-  const RGWZoneParams& zone_params = static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->get_zone_params();
+  const RGWZoneParams& zone_params = s->penv.site->get_zone_params();
 
   set_req_state_err(s, op_ret);
   dump_errno(s);

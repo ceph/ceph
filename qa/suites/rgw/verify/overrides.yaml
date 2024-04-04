@@ -11,6 +11,7 @@ overrides:
         rgw torrent flag: true
         rgw user counters cache: true
         rgw bucket counters cache: true
+        debug rgw_datacache: 30
   rgw:
     compression type: random
     storage classes: LUKEWARM, FROZEN

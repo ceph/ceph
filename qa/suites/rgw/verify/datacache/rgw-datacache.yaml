@@ -6,6 +6,7 @@ overrides:
         rgw enable ops log: true
         rgw d3n l1 datacache persistent path: /tmp/rgw_datacache/
         rgw d3n l1 datacache size: 10737418240
+        rgw filter: d3n
   rgw:
     datacache: true
     datacache_path: /tmp/rgw_datacache

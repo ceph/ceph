@@ -76,6 +76,9 @@ class StoreDriver : public Driver {
                                  const DoutPrefixProvider* dpp) override {
       return -EOPNOTSUPP;
     }
+    virtual Driver *get_store() override {
+      return this;
+    }
 };
 
 class StoreUser : public User {
