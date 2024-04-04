@@ -2,17 +2,9 @@ import logging
 
 from teuthology import misc as teuthology
 from teuthology.task import Task
-from teuthology.orchestra import run
 from teuthology.packaging import remove_package
 
 log = logging.getLogger(__name__)
-
-def get_toxvenv_dir(ctx):
-    return ctx.tox.venv_path
-
-def toxvenv_sh(ctx, remote, args, **kwargs):
-    activate = get_toxvenv_dir(ctx) + '/bin/activate'
-    return remote.sh(['source', activate, run.Raw('&&')] + args, **kwargs)
 
 display_name='Foo'
 email='foo@foo.com'
@@ -50,13 +42,10 @@ class D4NTests(Task):
             log.debug('D4N Tests: Host is: {host}'.format(host=host))
 
         self.create_user()
-        self.redis_startup()
 
     def end(self):
         super(D4NTests, self).end()
         log.info('D4N Tests: END')
-
-        self.redis_shutdown()
 
         for client in self.all_clients:
             self.remove_packages(client)
@@ -92,41 +81,9 @@ class D4NTests(Task):
                         ],
                     )
 
-    def redis_startup(self):
-        try:
-            for client in self.all_clients:
-                self.ctx.cluster.only(client).run(
-                    args=[
-                        'sudo',
-                        'redis-server',
-                        '--daemonize',
-                        'yes'
-                        ],
-                    )
-    
-        except Exception as err:
-            log.debug('D4N Tests: Error starting up a Redis server')
-            log.debug(err)
-
-    def redis_shutdown(self):
-        try:
-            for client in self.all_clients:
-                self.ctx.cluster.only(client).run(
-                    args=[
-                        'sudo',
-                        'redis-cli',
-                        'shutdown',
-                        ],
-                    )
-    
-        except Exception as err:
-            log.debug('D4N Tests: Error shutting down a Redis server')
-            log.debug(err)
-
     def remove_packages(self, client):
         (remote,) = self.ctx.cluster.only(client).remotes.keys()
         remove_package('s3cmd', remote)
-        remove_package('redis', remote)
 
     def delete_user(self, client):
         log.info("D4N Tests: Deleting S3 user...")
