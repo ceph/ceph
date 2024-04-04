@@ -1,4 +1,5 @@
 local g = import 'grafonnet/grafana.libsonnet';
+local pieChartPanel = import 'piechart_panel.libsonnet';
 
 {
   _config:: error 'must provide _config',
@@ -330,4 +331,33 @@ local g = import 'grafonnet/grafana.libsonnet';
                         'pie',
                         title,
                         'current'),
+
+  pieChartPanel(
+    title,
+    description='',
+    datasource=null,
+    gridPos={},
+    displayMode='table',
+    placement='bottom',
+    showLegend=true,
+    displayLabels=[],
+    tooltip={},
+    pieType='pie',
+    values=[],
+    colorMode='auto'
+  )::
+    pieChartPanel.new(
+      title,
+      description=description,
+      datasource=datasource,
+      gridPos=gridPos,
+      displayMode=displayMode,
+      placement=placement,
+      showLegend=showLegend,
+      displayLabels=displayLabels,
+      tooltip=tooltip,
+      pieType=pieType,
+      values=values,
+      colorMode=colorMode
+    ),
 }
