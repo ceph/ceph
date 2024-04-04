@@ -41,7 +41,7 @@ describe('nfsExport page', () => {
 
     it('should create a nfs-export with RGW backend', () => {
       buckets.navigateTo('create');
-      buckets.create(bucketName, 'dashboard', 'default-placement');
+      buckets.create(bucketName, 'dashboard');
 
       nfsExport.navigateTo();
       nfsExport.existTableCell(rgwPseudo, false);
