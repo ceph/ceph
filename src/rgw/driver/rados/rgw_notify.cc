@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_notify.h"
@@ -1011,21 +1011,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
   rgw_pubsub_bucket_topics bucket_topics;
   if (all_zonegroups_support(site, zone_features::notification_v2) &&
       res.store->stat_topics_v1(res.user_tenant, res.yield, res.dpp) == -ENOENT) {
-    auto ret = 0;
-    if (!res.s) {
-      //  for non S3-request caller (e.g., lifecycle, ObjectSync), bucket attrs
-      //  are not loaded, so force to reload the bucket, that reloads the attr.
-      // for non S3-request caller, res.s is nullptr
-      ret = res.bucket->load_bucket(dpp, res.yield);
-      if (ret < 0) {
-        ldpp_dout(dpp, 1)
-            << "ERROR: failed to reload bucket: '" << res.bucket->get_name()
-            << "' to get bucket notification attrs with error ret= " << ret
-            << dendl;
-        return ret;
-      }
-    }
-    ret = get_bucket_notifications(dpp, res.bucket, bucket_topics);
+    auto ret = get_bucket_notifications(dpp, res.bucket, bucket_topics);
     if (ret < 0) {
       return ret;
     }
