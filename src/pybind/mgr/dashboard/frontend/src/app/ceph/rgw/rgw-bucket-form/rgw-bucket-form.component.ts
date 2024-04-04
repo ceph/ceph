@@ -126,7 +126,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       ],
       owner: [null, [Validators.required]],
       kms_provider: ['vault'],
-      'placement-target': [null, this.editing ? [] : [Validators.required]],
+      'placement-target': [null],
       versioning: [null],
       'mfa-delete': [null],
       'mfa-token-serial': [''],
