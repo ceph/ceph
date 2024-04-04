@@ -69,7 +69,7 @@ export class RbdConfigurationFormComponent implements OnInit {
 
     this.rbdConfigurationService
       .getWritableSections()
-      .forEach((section) => (this.sectionVisibility[section.class] = false));
+      .forEach((section) => (this.sectionVisibility[section.class] = true));
   }
 
   getDirtyValues(includeLocalValues = false, localFieldType?: RbdConfigurationSourceField) {
