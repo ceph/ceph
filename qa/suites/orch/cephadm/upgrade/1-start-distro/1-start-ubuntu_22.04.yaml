@@ -1,5 +1,5 @@
 os_type: ubuntu
-os_version: "20.04"
+os_version: "22.04"
 
 tasks:
 - cephadm:
