@@ -1396,7 +1396,7 @@ COMMAND("nvme-gw show"
    " name=pool,type=CephString"
    " name=group,type=CephString",
    " show nvmeof gateways within (pool, group)",
-   "mgr", "rw")
+   "mon", "r")
 
 // these are tell commands that were implemented as CLI commands in
 // the broken pre-octopus way that we want to allow to work when a

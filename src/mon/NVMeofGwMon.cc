@@ -286,13 +286,6 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
         return true;
     }
 
-    MonSession *session = op->get_session();
-    if (!session)
-    {
-        mon.reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
-        return true;
-    }
-
     string format = cmd_getval_or<string>(cmdmap, "format", "plain");
     boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
