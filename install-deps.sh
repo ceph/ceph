@@ -550,7 +550,8 @@ else
         sed "/$IGNORE_YUM_BUILDEP_ERRORS/d" $DIR/yum-builddep.out | grep -i "error:" && exit 1
         # for rgw motr backend build checks
         if ! rpm --quiet -q cortx-motr-devel &&
-              { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
+              { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; } &&
+              test $MAJOR_VERSION = 8; then
             $SUDO dnf install -y \
                   "$motr_pkgs_url/isa-l-2.30.0-1.el7.${ARCH}.rpm" \
                   "$motr_pkgs_url/cortx-motr-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm" \
