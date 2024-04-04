@@ -2,13 +2,16 @@
 
 import base64
 import json
+import re
 import time
+from urllib.parse import urlparse
 
 import requests
 
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
+from ..services.orchestrator import OrchClient
 from ..settings import Settings
 from ..tools import configure_cors
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
@@ -89,13 +92,13 @@ class MultiCluster(RESTController):
                         verify=ssl_verify, cert=ssl_certificate)
 
             # add prometheus targets
-            prometheus_url = self._proxy('GET', url, 'api/settings/PROMETHEUS_API_HOST',
+            prometheus_url = self._proxy('GET', url, 'api/multi-cluster/get_prometheus_api_url',
                                          token=cluster_token)
 
-            _set_prometheus_targets(prometheus_url['value'])
+            _set_prometheus_targets(prometheus_url)
 
             self.set_multi_cluster_config(fsid, username, url, cluster_alias,
-                                          cluster_token, prometheus_url['value'],
+                                          cluster_token, prometheus_url,
                                           ssl_verify, ssl_certificate)
             return True
 
@@ -319,6 +322,25 @@ class MultiCluster(RESTController):
     def check_token_status(self, clustersTokenMap=None):
         clusters_token_map = json.loads(clustersTokenMap)
         return self.check_token_status_array(clusters_token_map)
+
+    @Endpoint()
+    @ReadPermission
+    def get_prometheus_api_url(self):
+        prometheus_url = Settings.PROMETHEUS_API_HOST
+        if prometheus_url is not None:
+            # check if is url is already in IP format
+            pattern = r'^(?:https?|http):\/\/(?:\d{1,3}\.){3}\d{1,3}:\d+$'
+            valid_ip_url = bool(re.match(pattern, prometheus_url))
+            if not valid_ip_url:
+                parsed_url = urlparse(prometheus_url)
+                hostname = parsed_url.hostname
+                orch = OrchClient.instance()
+                inventory_hosts = [host.to_json() for host in orch.hosts.list()]
+                for host in inventory_hosts:
+                    if host['hostname'] == hostname or host['hostname'] in hostname:
+                        node_ip = host['addr']
+                prometheus_url = prometheus_url.replace(hostname, node_ip)
+        return prometheus_url
 
 
 @UIRouter('/multi-cluster', Scope.CONFIG_OPT)
