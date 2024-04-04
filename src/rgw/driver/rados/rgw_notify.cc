@@ -1276,7 +1276,7 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   object_name(_object_name),
   tagset(_s->tagset),
   metadata_fetched_from_attributes(false),
-  user_id(_s->user->get_id().id),
+  user_id(to_string(_s->owner.id)),
   user_tenant(_s->user->get_id().tenant),
   req_id(_s->req_id),
   yield(y)
