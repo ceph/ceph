@@ -1,0 +1,54 @@
+---
+name: Issue Backporting
+on:
+  # To manually trigger this: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_dispatch
+  # View past runs and output: https://github.com/ceph/ceph/actions/workflows/create-backport-trackers.yml
+  workflow_dispatch:
+    inputs:
+      issues:
+        description: 'whitespace-separated list of issue numbers'
+        type: string
+        default: ''      
+      debug:
+        description: '--debug: Show debug-level messages'
+        default: false
+        type: boolean
+      resolveParent:
+        description: '--resolve-parent: Resolve parent issue if all backports resolved/rejected'
+        default: false
+        type: boolean
+      force:
+        description: >
+          --force: When issue numbers provided, process them even if not in
+          'Pending Backport' status.
+          Otherwise, process all issues in 'Pending Backport' status even if
+          already processed (tag 'backport_processed' added)'
+        default: false
+        type: boolean
+      dryRun:
+        description: '--dry-run: Do not write anything to Redmine'
+        default: false
+        type: boolean
+  schedule:
+    # Every 5 minutes: https://crontab.guru/every-5-minutes
+    - cron: '*/5 * * * *'
+jobs:
+  create-backports:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: | 
+              src/script/backport-create-issue
+              src/script/requirements.backport-create-issue.txt
+          sparse-checkout-cone-mode: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '>=3.6 <3.12'
+          cache: 'pip'
+          cache-dependency-path: src/script/requirements.backport-create-issue.txt
+      - run: pip install -r src/script/requirements.backport-create-issue.txt
+      - run: python3 src/script/backport-create-issue ${{ inputs.debug && '--debug' || '' }} ${{ inputs.resolveParent && '--resolve-parent' || '' }} ${{ inputs.force && '--force' || '' }} ${{ inputs.dryRun && '--dry-run' || '' }} ${{ inputs.issues }}
+        env:
+          REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}

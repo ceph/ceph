@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd read from replica policy: balance
+
+tasks:
+- exec:
+    osd.0:
+      - ceph osd set-require-min-compat-client octopus
