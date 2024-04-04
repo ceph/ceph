@@ -7,6 +7,8 @@ overrides:
       - Scrub error on inode
       - Scrub error on dir
       - Metadata damage detected
+      - object missing on disk; some files may be lost
+      - Corrupt dentry
 tasks:
   - cephfs_test_runner:
       modules:
