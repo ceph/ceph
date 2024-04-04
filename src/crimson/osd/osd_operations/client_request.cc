@@ -190,8 +190,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       DEBUGDPP("{}.{}: dropping misdirected op",
 	       pg, *this, this_instance_id);
       co_return;
-    } else if (const hobject_t& hoid = m->get_hobj();
-               !pg.get_peering_state().can_serve_replica_read(hoid)) {
+    } else if (!pg.get_peering_state().can_serve_replica_read(m->get_hobj())) {
       DEBUGDPP("{}.{}: unstable write on replica, bouncing to primary",
 	       pg, *this, this_instance_id);
       co_await reply_op_error(pgref, -EAGAIN);
