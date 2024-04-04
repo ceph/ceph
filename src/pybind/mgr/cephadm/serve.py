@@ -1155,8 +1155,9 @@ class CephadmServe:
                     if host not in client_files:
                         client_files[host] = {}
                     ceph_conf = (0o644, 0, 0, bytes(config), str(config_digest))
-                    client_files[host]['/etc/ceph/ceph.conf'] = ceph_conf
-                    client_files[host][f'{cluster_cfg_dir}/ceph.conf'] = ceph_conf
+                    if ks.include_ceph_conf:
+                        client_files[host]['/etc/ceph/ceph.conf'] = ceph_conf
+                        client_files[host][f'{cluster_cfg_dir}/ceph.conf'] = ceph_conf
                     client_key = (ks.mode, ks.uid, ks.gid, keyring.encode('utf-8'), digest)
                     client_files[host][ks.path] = client_key
                     client_files[host][f'{cluster_cfg_dir}/{os.path.basename(ks.path)}'] = client_key
