@@ -656,3 +656,183 @@ class TestSkipReplayInoTable(CephFSTestCase):
 
         ls_out = set(self.mount_a.ls("test_alloc_ino/"))
         self.assertEqual(ls_out, set({"dir1", "dir2"}))
+
+
+class TestNewFSCreation(CephFSTestCase):
+    MDSS_REQUIRED = 1
+    TEST_FS = "test_fs"
+    TEST_FS1 = "test_fs1"
+
+    def test_fs_creation_valid_ops(self):
+        """
+        Test setting fs ops with CLI command `ceph fs new`.
+        """
+        fs_ops = [["max_mds", "3"], ["refuse_client_session", "true"],
+                  ["allow_new_snaps", "true", "max_file_size", "65536"],
+                  ["session_timeout", "234", "session_autoclose",
+                   "100", "max_xattr_size", "150"]]
+
+        for fs_ops_list in fs_ops:
+            test_fs = None
+            try:
+                test_fs = self.mds_cluster.newfs(name=self.TEST_FS,
+                                                 create=True,
+                                                 fs_ops=fs_ops_list)
+
+                for i in range(0, len(fs_ops_list), 2):
+                    # edge case: for option `allow_new_snaps`, the flag name
+                    # is `allow_snaps` in mdsmap
+                    if fs_ops_list[i] == "allow_new_snaps":
+                        fs_ops_list[i] = "allow_snaps"
+                    fs_op_val = str(test_fs.get_var_from_fs(
+                        self.TEST_FS, fs_ops_list[i])).lower()
+                    self.assertEqual(fs_op_val, fs_ops_list[i+1])
+            finally:
+                if test_fs is not None:
+                    test_fs.destroy()
+
+    def test_fs_creation_invalid_ops(self):
+        """
+        Test setting invalid fs ops with CLI command `ceph fs new`.
+        """
+        invalid_fs_ops = {("inline_data", "true"): errno.EPERM,
+                          ("session_timeout", "3"): errno.ERANGE,
+                          ("session_autoclose", "foo"): errno.EINVAL,
+                          ("max_mds", "-1"): errno.EINVAL,
+                          ("bal_rank_mask", ""): errno.EINVAL,
+                          ("foo", "2"): errno.EINVAL,
+                          ("", ""): errno.EINVAL,
+                          ("session_timeout", "180", "", "3"): errno.EINVAL,
+                          ("allow_new_snaps", "true", "max_mddds", "3"):
+                              errno.EINVAL,
+                          ("allow_new_snapsss", "true", "max_mds", "3"):
+                              errno.EINVAL,
+                          ("session_timeout", "20", "max_mddds", "3"):
+                              errno.ERANGE}
+
+        for invalid_op_list, expected_errno in invalid_fs_ops.items():
+            test_fs = None
+            try:
+                test_fs = self.mds_cluster.newfs(name=self.TEST_FS, create=True,
+                                                 fs_ops=invalid_op_list)
+            except CommandFailedError as e:
+                self.assertEqual(e.exitstatus, expected_errno)
+            else:
+                self.fail(f"Expected {expected_errno}")
+            finally:
+                if test_fs is not None:
+                    test_fs.destroy()
+
+    def test_fs_creation_incomplete_args(self):
+        """
+        Test sending incomplete key-val pair of fs ops.
+        """
+        invalid_args_fs_ops = [["max_mds"], ["max_mds", "2", "3"], [""]]
+
+        for incomplete_args in invalid_args_fs_ops:
+            test_fs = None
+            try:
+                test_fs = self.mds_cluster.newfs(name=self.TEST_FS, create=True,
+                                                 fs_ops=incomplete_args)
+            except CommandFailedError as e:
+                self.assertEqual(e.exitstatus, errno.EINVAL)
+            else:
+                self.fail("Expected EINVAL")
+            finally:
+                if test_fs is not None:
+                    test_fs.destroy()
+
+    def test_endure_fs_fields_post_failure(self):
+        """
+        Test fields like epoch and legacy_client_fscid should not change after
+        fs creation failure.
+        """
+        initial_epoch_ = self.mds_cluster.status()["epoch"]
+        initial_default_fscid = self.mds_cluster.status()["default_fscid"]
+
+        test_fs = None
+        try:
+            test_fs = self.mds_cluster.newfs(name=self.TEST_FS, create=True,
+                                             fs_ops=["foo"])
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EINVAL)
+            self.assertEqual(initial_epoch_,
+                             self.mds_cluster.status()["epoch"])
+            self.assertEqual(initial_default_fscid,
+                             self.mds_cluster.status()["default_fscid"])
+        else:
+            self.fail("Expected EINVAL")
+        finally:
+            if test_fs is not None:
+                test_fs.destroy()
+
+    def test_yes_i_really_really_mean_it(self):
+        """
+        --yes-i-really-really-mean-it can be used while creating fs with
+        CLI command `ceph fs new`, test fs creation succeeds.
+        """
+        test_fs = None
+        try:
+            test_fs = self.mds_cluster.newfs(name=self.TEST_FS, create=True,
+                                             yes_i_really_really_mean_it=True)
+            self.assertTrue(test_fs.exists())
+        finally:
+            if test_fs is not None:
+                test_fs.destroy()
+
+    def test_inline_data(self):
+        """
+        inline_data needs --yes-i-really-really-mean-it to get it enabled.
+        Test fs creation by with/without providing it.
+        NOTE: inline_data is deprecated, this test case would be removed in
+        the future.
+        """
+        test_fs = None
+        try:
+            test_fs = self.mds_cluster.newfs(name=self.TEST_FS, create=True,
+                                             fs_ops=["inline_data", "true"])
+        except CommandFailedError as e:
+            self.assertEqual(e.exitstatus, errno.EPERM)
+            test_fs = self.mds_cluster.newfs(name=self.TEST_FS, create=True,
+                                             fs_ops=["inline_data", "true"],
+                                             yes_i_really_really_mean_it=True)
+            self.assertIn("mds uses inline data", str(test_fs.status()))
+        else:
+            self.fail("Expected EPERM")
+        finally:
+            if test_fs is not None:
+                test_fs.destroy()
+
+    def test_no_fs_id_incr_on_fs_creation_fail(self):
+        """
+        Failure while creating fs due to error in setting fs ops will keep on
+        incrementing `next_filesystem_id`, test its value is preserved and
+        rolled back in case fs creation fails.
+        """
+
+        test_fs, test_fs1 = None, None
+        try:
+            test_fs = self.mds_cluster.newfs(name=self.TEST_FS, create=True)
+
+            for _ in range(5):
+                try:
+                    self.mds_cluster.newfs(name=self.TEST_FS1, create=True,
+                                           fs_ops=["max_mdss", "2"])
+                except CommandFailedError as e:
+                    self.assertEqual(e.exitstatus, errno.EINVAL)
+
+            test_fs1 = self.mds_cluster.newfs(name=self.TEST_FS1, create=True,
+                                              fs_ops=["max_mds", "2"])
+
+            test_fs_id, test_fs1_id = None, None
+            for fs in self.mds_cluster.status().get_filesystems():
+                if fs["mdsmap"]["fs_name"] == self.TEST_FS:
+                    test_fs_id = fs["id"]
+                if fs["mdsmap"]["fs_name"] == self.TEST_FS1:
+                    test_fs1_id = fs["id"]
+            self.assertEqual(test_fs_id, test_fs1_id - 1)
+        finally:
+            if test_fs is not None:
+                test_fs.destroy()
+            if test_fs1 is not None:
+                test_fs1.destroy()
