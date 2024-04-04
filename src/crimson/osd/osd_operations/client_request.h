@@ -253,7 +253,10 @@ public:
     r_conn = make_local_shared_foreign(std::move(conn));
   }
 
-  seastar::future<> with_pg_int(Ref<PG> pg);
+  interruptible_future<> with_pg_process_interruptible(
+    Ref<PG> pgref, const unsigned instance_id, instance_handle_t &ihref);
+
+  seastar::future<> with_pg_process(Ref<PG> pg);
 
 public:
   seastar::future<> with_pg(
@@ -262,20 +265,25 @@ public:
 private:
   template <typename FuncT>
   interruptible_future<> with_sequencer(FuncT&& func);
-  auto reply_op_error(const Ref<PG>& pg, int err);
+  interruptible_future<> reply_op_error(const Ref<PG>& pg, int err);
 
-  interruptible_future<> do_process(
+
+  using do_process_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      ::crimson::errorator<crimson::ct_error::eagain>>;
+  do_process_iertr::future<> do_process(
     instance_handle_t &ihref,
-    Ref<PG>& pg,
+    Ref<PG> pg,
     crimson::osd::ObjectContextRef obc,
     unsigned this_instance_id);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_pg_op(
-    Ref<PG> &pg);
+    Ref<PG> pg);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_op(
       instance_handle_t &ihref,
-      Ref<PG> &pg,
+      Ref<PG> pg,
       unsigned this_instance_id);
   bool is_pg_op() const;
 
@@ -290,7 +298,7 @@ private:
   bool is_misdirected(const PG& pg) const;
 
   const SnapContext get_snapc(
-    Ref<PG>& pg,
+    PG &pg,
     crimson::osd::ObjectContextRef obc) const;
 
 public:
