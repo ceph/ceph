@@ -170,7 +170,8 @@ try:
     from tasks.ceph_manager import CephManager
     from tasks.cephfs.fuse_mount import FuseMount
     from tasks.cephfs.kernel_mount import KernelMount
-    from tasks.cephfs.filesystem import Filesystem, MDSCluster, CephCluster
+    from tasks.cephfs.filesystem import (Filesystem, MDSCluster, CephCluster,
+                                         gen_fsname)
     from tasks.cephfs.mount import CephFSMount
     from tasks.mgr.mgr_test_case import MgrCluster
     from teuthology.task import interactive
@@ -917,7 +918,8 @@ class LocalMDSCluster(LocalCephCluster, MDSCluster):
         # FIXME: unimplemented
         pass
 
-    def newfs(self, name='cephfs', create=True):
+    def newfs(self, name=None, create=True):
+        name = gen_fsname() if name is None else name
         return LocalFilesystem(self._ctx, name=name, create=create)
 
     def delete_all_filesystems(self):
