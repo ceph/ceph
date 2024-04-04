@@ -406,12 +406,14 @@ class ClientKeyringSpec(object):
             mode: Optional[int] = None,
             uid: Optional[int] = None,
             gid: Optional[int] = None,
+            include_ceph_conf: bool = True,
     ) -> None:
         self.entity = entity
         self.placement = placement
         self.mode = mode or 0o600
         self.uid = uid or 0
         self.gid = gid or 0
+        self.include_ceph_conf = include_ceph_conf
 
     def validate(self) -> None:
         pass
@@ -423,6 +425,7 @@ class ClientKeyringSpec(object):
             'mode': self.mode,
             'uid': self.uid,
             'gid': self.gid,
+            'include_ceph_conf': self.include_ceph_conf,
         }
 
     @property
