@@ -53,7 +53,7 @@ describe('RgwBucketService', () => {
         'foo',
         'bar',
         'default',
-        'default-placement',
+        null,
         false,
         'COMPLIANCE',
         '5',
@@ -66,7 +66,7 @@ describe('RgwBucketService', () => {
       )
       .subscribe();
     const req = httpTesting.expectOne(
-      `api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&placement_target=default-placement&lock_enabled=false&lock_mode=COMPLIANCE&lock_retention_period_days=5&encryption_state=true&encryption_type=aws%253Akms&key_id=qwerty1&tags=null&bucket_policy=null&canned_acl=private&${RgwHelper.DAEMON_QUERY_PARAM}`
+      `api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&lock_enabled=false&lock_mode=COMPLIANCE&lock_retention_period_days=5&encryption_state=true&encryption_type=aws%253Akms&key_id=qwerty1&tags=null&bucket_policy=null&canned_acl=private&${RgwHelper.DAEMON_QUERY_PARAM}`
     );
     expect(req.request.method).toBe('POST');
   });
