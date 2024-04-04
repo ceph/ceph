@@ -935,6 +935,8 @@ class TestMirroringCommands(CephFSTestCase):
 class TestFsAuthorize(CapsHelper):
     client_id = 'testuser'
     client_name = 'client.' + client_id
+    CLIENTS_REQUIRED = 2
+    MDSS_REQUIRED = 3
 
     def test_single_path_r(self):
         perm = 'r'
@@ -969,6 +971,58 @@ class TestFsAuthorize(CapsHelper):
             self.assertEqual(filedata, contents)
             cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath]
             self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
+
+    def test_multifs_single_path_rootsquash(self):
+        """
+        Test root_squash with multi fs
+        """
+        filedata_fs1, filename_fs1 = 'some data on fs 1', 'file_on_fs1'
+        filepath_fs1 = os_path_join(self.mount_a.hostfs_mntpt, filename_fs1)
+        self.mount_a.write_file(filepath_fs1, filedata_fs1)
+
+        self.fs1 = self.fs
+        self.fs2 = self.mds_cluster.newfs(name="testcephfs2")
+        self.mount_b.remount(cephfs_name=self.fs2.name)
+
+        filedata_fs2, filename_fs2 = 'some data on fs 2', 'file_on_fs2'
+        filepath_fs2 = os_path_join(self.mount_a.hostfs_mntpt, filename_fs2)
+        self.mount_b.write_file(filepath_fs2, filedata_fs2)
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
+        # Authorize client to fs1
+        PERM = 'rw'
+        FS_AUTH_CAPS = (('/', PERM, 'root_squash'),)
+        self.fs1.authorize(self.client_id, FS_AUTH_CAPS)
+
+        # Authorize client to fs2
+        self.fs2.authorize(self.client_id, FS_AUTH_CAPS)
+        keyring_a = self.fs1.authorize(self.client_id, FS_AUTH_CAPS)
+        keyring_path_a = self.mount_a.client_remote.mktemp(data=keyring_a)
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path_a,
+                             cephfs_mntpt='/')
+        keyring_b = self.fs2.authorize(self.client_id, FS_AUTH_CAPS)
+        keyring_path_b = self.mount_a.client_remote.mktemp(data=keyring_b)
+        self.mount_b.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path_b,
+                             cephfs_mntpt='/')
+
+        if filepath_fs1.find(self.mount_a.hostfs_mntpt) != -1:
+            # can read, but not write as root
+            contents = self.mount_a.read_file(filepath_fs1)
+            self.assertEqual(filedata_fs1, contents)
+            cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath_fs1]
+            self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
+
+        if filepath_fs2.find(self.mount_b.hostfs_mntpt) != -1:
+            # can read, but not write as root
+            contents = self.mount_b.read_file(filepath_fs2)
+            self.assertEqual(filedata_fs2, contents)
+            cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath_fs2]
+            self.mount_b.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
 
     def test_single_path_authorize_on_nonalphanumeric_fsname(self):
         """
