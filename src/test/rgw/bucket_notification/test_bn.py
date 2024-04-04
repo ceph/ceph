@@ -36,6 +36,7 @@ from . import(
 from .api import PSTopicS3, \
     PSNotificationS3, \
     delete_all_objects, \
+    delete_all_topics, \
     put_object_tagging, \
     admin
 
@@ -512,6 +513,10 @@ def test_ps_s3_topic_on_master():
                   aws_secret_access_key=secret_key,
                       is_secure=False, port=get_config_port(), host=get_config_host(), 
                       calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    
+    # make sure there are no leftover topics
+    delete_all_topics(conn, tenant, get_config_cluster())
+    
     zonegroup = get_config_zonegroup()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
@@ -520,17 +525,6 @@ def test_ps_s3_topic_on_master():
     endpoint_address = 'amqp://127.0.0.1:7001/vhost_1'
     endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
     topic_conf1 = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
-    # clean all topics
-    try:
-        result = topic_conf1.get_list()[0]['ListTopicsResponse']['ListTopicsResult']['Topics']
-        topics = []
-        if result is not None:
-            topics = result['member']
-        for topic in topics:
-            topic_conf1.del_config(topic_arn=topic['TopicArn'])
-    except Exception as err:
-        print('failed to do topic cleanup: ' + str(err))
-
     topic_arn = topic_conf1.set_config()
     assert_equal(topic_arn,
                  'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_1')
@@ -593,6 +587,10 @@ def test_ps_s3_topic_admin_on_master():
                   aws_secret_access_key=secret_key,
                       is_secure=False, port=get_config_port(), host=get_config_host(), 
                       calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    
+    # make sure there are no leftover topics
+    delete_all_topics(conn, tenant, get_config_cluster())
+    
     zonegroup = get_config_zonegroup()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
@@ -601,17 +599,6 @@ def test_ps_s3_topic_admin_on_master():
     endpoint_address = 'amqp://127.0.0.1:7001/vhost_1'
     endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
     topic_conf1 = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
-    # clean all topics
-    try:
-        result = topic_conf1.get_list()[0]['ListTopicsResponse']['ListTopicsResult']['Topics']
-        topics = []
-        if result is not None:
-            topics = result['member']
-        for topic in topics:
-            topic_conf1.del_config(topic_arn=topic['TopicArn'])
-    except Exception as err:
-        print('failed to do topic cleanup: ' + str(err))
-
     topic_arn1 = topic_conf1.set_config()
     assert_equal(topic_arn1,
                  'arn:aws:sns:' + zonegroup + ':' + tenant + ':' + topic_name + '_1')
@@ -670,22 +657,14 @@ def test_ps_s3_notification_configuration_admin_on_master():
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
     topic_name = bucket_name + TOPIC_SUFFIX
+    
+    # make sure there are no leftover topics
+    delete_all_topics(conn, '', get_config_cluster())
 
     # create s3 topics
     endpoint_address = 'amqp://127.0.0.1:7001/vhost_1'
     endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
     topic_conf = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
-    # clean all topics
-    try:
-        result = topic_conf.get_list()[0]['ListTopicsResponse']['ListTopicsResult']['Topics']
-        topics = []
-        if result is not None:
-            topics = result['member']
-        for topic in topics:
-            topic_conf.del_config(topic_arn=topic['TopicArn'])
-    except Exception as err:
-        print('failed to do topic cleanup: ' + str(err))
-
     topic_arn = topic_conf.set_config()
     assert_equal(topic_arn,
                  'arn:aws:sns:' + zonegroup + '::' + topic_name + '_1')
@@ -4903,12 +4882,15 @@ def test_ps_s3_data_path_v2_large_migration():
     zonegroup = get_config_zonegroup()
     tenants_list = []
     tenants_list.append('')
+    # make sure there are no leftover topics
+    delete_all_topics(conn, '', get_config_cluster())
     for i in ['1', '2']:
         access_key = str(time.time())
         secret_key = str(time.time())
         uid = UID_PREFIX + str(time.time())
         tenant_id = 'kaboom_' + i
-        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant_id, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
+        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant_id, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], 
+                          get_config_cluster())
         assert_equal(result, 0)
         tenants_list.append(tenant_id)
         conn = S3Connection(aws_access_key_id=access_key,
@@ -4916,6 +4898,8 @@ def test_ps_s3_data_path_v2_large_migration():
                             is_secure=False, port=get_config_port(), host=get_config_host(),
                             calling_format='boto.s3.connection.OrdinaryCallingFormat')
         connections_list.append(conn)
+        # make sure there are no leftover topics
+        delete_all_topics(conn, tenant_id, get_config_cluster())
 
     # disable v2 notification
     result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], get_config_cluster())
@@ -5026,6 +5010,8 @@ def test_ps_s3_data_path_v2_mixed_migration():
     zonegroup = get_config_zonegroup()
     tenants_list = []
     tenants_list.append('')
+    # make sure there are no leftover topics
+    delete_all_topics(conn, '', get_config_cluster())
     
     # make sure that we start at v2
     result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
@@ -5040,7 +5026,8 @@ def test_ps_s3_data_path_v2_mixed_migration():
         secret_key = str(time.time())
         uid = UID_PREFIX + str(time.time())
         tenant_id = 'kaboom_' + i
-        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant_id, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
+        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant_id, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], 
+                          get_config_cluster())
         assert_equal(result, 0)
         tenants_list.append(tenant_id)
         conn = S3Connection(aws_access_key_id=access_key,
@@ -5048,6 +5035,8 @@ def test_ps_s3_data_path_v2_mixed_migration():
                             is_secure=False, port=get_config_port(), host=get_config_host(),
                             calling_format='boto.s3.connection.OrdinaryCallingFormat')
         connections_list.append(conn)
+        # make sure there are no leftover topics
+        delete_all_topics(conn, tenant_id, get_config_cluster())
 
     # create random port for the http server
     host = get_ip()
