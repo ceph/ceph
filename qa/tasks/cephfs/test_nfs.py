@@ -16,16 +16,14 @@ NFS_POOL_NAME = '.nfs'  # should match mgr_module.py
 # TODO Add test for cluster update when ganesha can be deployed on multiple ports.
 class TestNFS(MgrTestCase):
     def _cmd(self, *args):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
+        return self.get_ceph_cmd_stdout(args)
 
     def _nfs_cmd(self, *args):
         return self._cmd("nfs", *args)
 
     def _nfs_complete_cmd(self, cmd):
-        return self.mgr_cluster.mon_manager.run_cluster_cmd(args=f"nfs {cmd}",
-                                                            stdout=StringIO(),
-                                                            stderr=StringIO(),
-                                                            check_status=False)
+        return self.run_ceph_cmd(args=f"nfs {cmd}", stdout=StringIO(),
+                                 stderr=StringIO(), check_status=False)
 
     def _orch_cmd(self, *args):
         return self._cmd("orch", *args)
@@ -142,7 +140,7 @@ class TestNFS(MgrTestCase):
         :param cmd_args: nfs command arguments to be run
         '''
         cmd_func()
-        ret = self.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd_args)
+        ret = self.get_ceph_cmd_result(*cmd_args)
         if ret != 0:
             self.fail("Idempotency test failed")
 

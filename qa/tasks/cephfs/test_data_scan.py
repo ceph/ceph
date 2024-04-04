@@ -428,7 +428,7 @@ class TestDataScan(CephFSTestCase):
         self.fs.data_scan(["scan_links"])
 
         # Mark the MDS repaired
-        self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
+        self.run_ceph_cmd('mds', 'repaired', '0')
 
         # Start the MDS
         self.fs.mds_restart()
@@ -604,7 +604,7 @@ class TestDataScan(CephFSTestCase):
             file_path = "mydir/myfile_{0}".format(i)
             ino = self.mount_a.path_to_ino(file_path)
             obj = "{0:x}.{1:08x}".format(ino, 0)
-            pgid = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+            pgid = json.loads(self.get_ceph_cmd_stdout(
                 "osd", "map", self.fs.get_data_pool_name(), obj,
                 "--format=json-pretty"
             ))['pgid']
