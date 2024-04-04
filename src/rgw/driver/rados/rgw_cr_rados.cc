@@ -741,6 +741,15 @@ int send_sync_notification(const DoutPrefixProvider* dpp,
       return -EIO;
     }
   }
+  // bucket attrs are required for notification and since its not loaded,
+  // reload the bucket
+  int r = bucket->load_bucket(dpp, null_yield);
+  if (r < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to load bucket attrs for bucket:"
+                      << bucket->get_name() << " with error ret= " << r
+                      << " . Not sending notification" << dendl;
+    return r;
+  }
   rgw::notify::reservation_t notify_res(dpp, store, obj, nullptr, bucket,
                                         user_id, bucket->get_tenant(), req_id,
                                         null_yield);
