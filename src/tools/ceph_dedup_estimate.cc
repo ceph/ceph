@@ -622,6 +622,7 @@ static int calculate_fp_fbc(FP_BUFFER *fp_buffer,
 			    bufferlist &bl,
 			    const ObjectCursor &cursor,
 			    uint32_t offset_in_obj,
+			    uint64_t version,
 			    const dedup_params_t &params)
 {
   unsigned chunk_size = params.chunk_size;
@@ -663,6 +664,7 @@ static int calculate_fp_cdc(FP_BUFFER *fp_buffer,
 			    bufferlist &bl,
 			    const ObjectCursor &cursor,
 			    uint32_t offset_in_obj,
+			    uint64_t version,
 			    const dedup_params_t &params)
 {
   unsigned chunk_size = params.chunk_size;
@@ -810,6 +812,8 @@ static int thread_collect(unsigned thread_id,
     oid_vec.push_back(oid);
     obj_ioctx.set_namespace(itr->get_nspace());
     obj_ioctx.locator_set_key(itr->get_locator());
+
+    uint64_t version = obj_ioctx.get_last_version();
     bufferlist bl;
     //utime_t start_time = ceph_clock_now();
     // 0 @len means read until the end
@@ -825,11 +829,11 @@ static int thread_collect(unsigned thread_id,
     max_time = std::max(max_time, duration);
 #endif
     if (params.chunk_algo == CHUNK_ALGO_FBC) {
-      fp_count = calculate_fp_fbc(fp_buffer.get(), bl, itr.get_cursor(), offset_in_obj, params);
+      fp_count = calculate_fp_fbc(fp_buffer.get(), bl, itr.get_cursor(), offset_in_obj, version, params);
     }
     else {
       assert(params.chunk_algo == CHUNK_ALGO_CDC);
-      fp_count = calculate_fp_cdc(fp_buffer.get(), bl, itr.get_cursor(), offset_in_obj, params);
+      fp_count = calculate_fp_cdc(fp_buffer.get(), bl, itr.get_cursor(), offset_in_obj, version, params);
     }
 
     objs_read++;
