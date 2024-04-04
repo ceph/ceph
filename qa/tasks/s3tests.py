@@ -105,7 +105,7 @@ def create_users(ctx, config, s3tests_conf):
         client_with_id = daemon_type + '.' + client_id
         conf = s3tests_conf[client]
         conf.setdefault('fixtures', {})
-        conf['fixtures'].setdefault('bucket prefix', 'test-' + client + '-{random}-')
+        conf['fixtures'].setdefault('bucket prefix', 'test-{random}-')
 
         accounts = cconfig.get('accounts', {})
         keystone_users = cconfig.get('keystone users', {})
