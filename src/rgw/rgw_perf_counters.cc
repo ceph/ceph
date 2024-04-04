@@ -109,6 +109,8 @@ void frontend_counters_init(CephContext *cct) {
 
 namespace rgw::op_counters {
 
+typedef std::chrono::nanoseconds ns;
+
 ceph::perf_counters::PerfCountersCache *user_counters_cache = NULL;
 ceph::perf_counters::PerfCountersCache *bucket_counters_cache = NULL;
 PerfCounters *global_op_counters = NULL;
@@ -124,6 +126,11 @@ std::shared_ptr<PerfCounters> create_rgw_op_counters(const std::string& name, Ce
   add_rgw_op_counters(&pcb);
   std::shared_ptr<PerfCounters> new_counters(pcb.create_perf_counters());
   cct->get_perfcounters_collection()->add(new_counters.get());
+  auto expiration = cct->_conf.get_val<uint64_t>("rgw_op_counters_dump_expiration");
+  if (expiration) {
+    new_counters->time_alive = std::chrono::seconds(expiration);
+    new_counters->last_updated = ceph::coarse_real_clock::now();
+  }
   return new_counters;
 }
 
@@ -164,10 +171,16 @@ void inc(const CountersContainer &counters, int idx, uint64_t v) {
   if (counters.user_counters) {
     PerfCounters *user_counters = counters.user_counters.get();
     user_counters->inc(idx, v);
+    if (user_counters->time_alive != ns::zero()) {
+      user_counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
   if (counters.bucket_counters) {
     PerfCounters *bucket_counters = counters.bucket_counters.get();
     bucket_counters->inc(idx, v);
+    if (bucket_counters->time_alive != ns::zero()) {
+      bucket_counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
   if (global_op_counters) {
     global_op_counters->inc(idx, v);
@@ -178,10 +191,16 @@ void tinc(const CountersContainer &counters, int idx, utime_t amt) {
   if (counters.user_counters) {
     PerfCounters *user_counters = counters.user_counters.get();
     user_counters->tinc(idx, amt);
+    if (user_counters->time_alive != ns::zero()) {
+      user_counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
   if (counters.bucket_counters) {
     PerfCounters *bucket_counters = counters.bucket_counters.get();
     bucket_counters->tinc(idx, amt);
+    if (bucket_counters->time_alive != ns::zero()) {
+      bucket_counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
   if (global_op_counters) {
     global_op_counters->tinc(idx, amt);
@@ -192,10 +211,16 @@ void tinc(const CountersContainer &counters, int idx, ceph::timespan amt) {
   if (counters.user_counters) {
     PerfCounters *user_counters = counters.user_counters.get();
     user_counters->tinc(idx, amt);
+    if (user_counters->time_alive != ns::zero()) {
+      user_counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
   if (counters.bucket_counters) {
     PerfCounters *bucket_counters = counters.bucket_counters.get();
     bucket_counters->tinc(idx, amt);
+    if (bucket_counters->time_alive != ns::zero()) {
+      bucket_counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
   if (global_op_counters) {
     global_op_counters->tinc(idx, amt);

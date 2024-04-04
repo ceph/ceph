@@ -3,6 +3,8 @@
 
 namespace ceph::perf_counters {
 
+typedef std::chrono::nanoseconds ns;
+
 void PerfCountersCache::check_key(const std::string &key) {
   std::string_view key_name = ceph::perf_counters::key_name(key);
   // don't accept an empty key name
@@ -41,6 +43,9 @@ void PerfCountersCache::inc(const std::string &key, int indx, uint64_t v) {
   auto counters = add(key);
   if (counters) {
     counters->inc(indx, v);
+    if (counters->time_alive != ns::zero()) {
+      counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
 }
 
@@ -49,6 +54,9 @@ void PerfCountersCache::dec(const std::string &key, int indx, uint64_t v) {
   auto counters = add(key);
   if (counters) {
     counters->dec(indx, v);
+    if (counters->time_alive != ns::zero()) {
+      counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
 }
 
@@ -57,6 +65,9 @@ void PerfCountersCache::tinc(const std::string &key, int indx, utime_t amt) {
   auto counters = add(key);
   if (counters) {
     counters->tinc(indx, amt);
+    if (counters->time_alive != ns::zero()) {
+      counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
 }
 
@@ -65,6 +76,9 @@ void PerfCountersCache::tinc(const std::string &key, int indx, ceph::timespan am
   auto counters = add(key);
   if (counters) {
     counters->tinc(indx, amt);
+    if (counters->time_alive != ns::zero()) {
+      counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
 }
 
@@ -73,6 +87,9 @@ void PerfCountersCache::set_counter(const std::string &key, int indx, uint64_t v
   auto counters = add(key);
   if (counters) {
     counters->set(indx, val);
+    if (counters->time_alive != ns::zero()) {
+      counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
 }
 
@@ -103,6 +120,9 @@ void PerfCountersCache::tset(const std::string &key, int indx, utime_t amt) {
   auto counters = add(key);
   if (counters) {
     counters->tset(indx, amt);
+    if (counters->time_alive != ns::zero()) {
+      counters->last_updated = ceph::coarse_real_clock::now();
+    }
   }
 }
 
