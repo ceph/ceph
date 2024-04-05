@@ -486,6 +486,7 @@ int RGWLCStreamRead::read(off_t ofs, off_t end, RGWGetDataCB *out_cb) {
 }
 
 int RGWLCCloudStreamPut::init() {
+  int ret = -1;
   /* init output connection */
   if (multipart.is_multipart) {
     char buf[32];
@@ -493,9 +494,14 @@ int RGWLCCloudStreamPut::init() {
     rgw_http_param_pair params[] = { { "uploadId", multipart.upload_id.c_str() },
                                      { "partNumber", buf },
                                      { nullptr, nullptr } };
-    conn.put_obj_send_init(dest_obj, params, &out_req);
+    ret = conn.put_obj_send_init(dest_obj, params, &out_req);
   } else {
-    conn.put_obj_send_init(dest_obj, nullptr, &out_req);
+    ret = conn.put_obj_send_init(dest_obj, nullptr, &out_req);
+  }
+
+  if (ret < 0 || !out_req) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to create RGWRESTStreamS3PutObj request" << dendl;
+    return ret;
   }
 
   return 0;
@@ -651,6 +657,7 @@ void RGWLCCloudStreamPut::init_send_attrs(const DoutPrefixProvider *dpp,
 
 void RGWLCCloudStreamPut::send_ready(const DoutPrefixProvider *dpp, const rgw_rest_obj& rest_obj) {
   auto r = static_cast<RGWRESTStreamS3PutObj *>(out_req);
+  ceph_assert(r);
 
   std::map<std::string, std::string> new_attrs;
   if (!multipart.is_multipart) {
