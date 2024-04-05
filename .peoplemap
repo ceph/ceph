@@ -17,6 +17,7 @@
 # git log --pretty='%aN <%aE>' $range | git -c mailmap.file=.peoplemap check-mailmap --stdin | sort | uniq | sed -e 's/\(.*\) \(<.*\)/\2 \1/' | uniq --skip-field=1 --all-repeated | sed -e 's/\(.*>\) \(.*\)/\2 \1/'
 #
 Abhishek Lekshmanan <abhishek.lekshmanan@cern.ch> <abhishek@suse.com>
+Abhishek Lekshmanan <abhishek.lekshmanan@cern.ch> <abhishek.lekshmanan@ril.com>
 Adam Kupczyk <akupczyk@ibm.com> <akupczyk@redhat.com> <akupczyk@mirantis.com>
 Alexandre Marangone <amarango@redhat.com> Alexandre Marangone <alexandre.marangone@inktank.com>
 Alfredo Deza <adeza@redhat.com> Alfredo Deza <alfredo.deza@inktank.com>
