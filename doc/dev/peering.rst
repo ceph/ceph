@@ -77,24 +77,22 @@ Concepts
    kept track of on an ``<OSD,PG>`` basis.
 
 *Authoritative History*
-   a complete, and fully ordered set of operations that, if
-   performed, would bring an OSD's copy of a Placement Group
-   up to date.
+   a complete and fully-ordered set of operations that bring an OSD's copy of a
+   Placement Group up to date.
 
 *epoch*
-   a (monotonically increasing) OSD map version number
+   a (monotonically increasing) OSD map version number.
 
 *last epoch start*
-   the last epoch at which all nodes in the *acting set*
-   for a particular placement group agreed on an
-   *authoritative history*.  At this point, *peering* is
-   deemed to have been successful.
+   the last epoch at which all nodes in the *acting set* for a given placement
+   group agreed on an *authoritative history*.  At the start of the last epoch,
+   *peering* is deemed to have been successful.
 
 *up_thru*
    before a primary can successfully complete the *peering* process,
    it must inform a monitor that is alive through the current
    OSD map epoch by having the monitor set its *up_thru* in the osd
-   map.  This helps peering ignore previous *acting sets* for which
+   map. This helps peering ignore previous *acting sets* for which
    peering never completed after certain sequences of failures, such as
    the second interval below:
 
@@ -104,10 +102,9 @@ Concepts
    - *acting set* = [B] (B restarts, A does not)
 
 *last epoch clean*
-   the last epoch at which all nodes in the *acting set*
-   for a particular placement group were completely
-   up to date (both PG logs and object contents).
-   At this point, *recovery* is deemed to have been
+   the last epoch at which all nodes in the *acting set* for a given placement
+   group were completely up to date (this includes both the PG's PG logs and
+   the PG's object contents). At this point, *recovery* is deemed to have been
    completed.
 
 Description of the Peering Process
