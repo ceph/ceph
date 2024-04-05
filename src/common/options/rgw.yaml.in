@@ -4286,11 +4286,21 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_remote_cache_address
+  type: str
+  level: advanced
+  desc: Remote CacheDriver address 
+  default: 127.0.0.1:8001
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_d4n_backend_address
   type: str
   level: advanced
   desc: The backend address used by D4N cache 
-  default: 127.0.0.1:6379
+  default: 127.0.0.1:8000
   services: 
   - rgw
   flags:

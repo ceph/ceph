@@ -9,6 +9,7 @@
 #include "d4n_directory.h"
 #include "rgw_sal_d4n.h"
 #include "rgw_cache_driver.h"
+#include "rgw_rest_conn.h"
 
 namespace rgw::sal {
   class D4NFilterObject;
@@ -18,6 +19,14 @@ namespace rgw { namespace d4n {
 
 namespace asio = boost::asio;
 namespace sys = boost::system;
+
+class RGWRemoteD4NGetCB : public RGWHTTPStreamRWRequest::ReceiveCB {                                     
+public:
+  bufferlist *in_bl;                                                                                  
+  RGWRemoteD4NGetCB(bufferlist* _bl): in_bl(_bl) {}
+  int handle_data(bufferlist& bl, bool *pause) override;                                              
+}; 
+
 
 class CachePolicy {
   protected:
@@ -110,6 +119,8 @@ class LFUDAPolicy : public CachePolicy {
     rgw::sal::Driver *driver;
     std::thread tc;
 
+    int sendRemote(const DoutPrefixProvider* dpp, CacheBlock *victim, std::string remoteCacheAddress, std::string key, bufferlist* out_bl, optional_yield y);
+    int getMinAvgWeight(const DoutPrefixProvider* dpp, int minAvgWeight, std::string cache_address, optional_yield y);
     CacheBlock* get_victim_block(const DoutPrefixProvider* dpp, optional_yield y);
     int age_sync(const DoutPrefixProvider* dpp, optional_yield y); 
     int local_weight_sync(const DoutPrefixProvider* dpp, optional_yield y); 

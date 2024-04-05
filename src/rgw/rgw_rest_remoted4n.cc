@@ -51,7 +51,7 @@ static inline std::vector<std::string> get_remoted4n_objectInfo(req_state *s, ch
 }
 
 bool objectIsDirty(string key) {
-  if (key.rfind("D_", 0) == 0)
+  if (key.rfind("D", 0) == 0)
     return true;
   else
     return false;
@@ -100,7 +100,7 @@ void RGWOp_RemoteD4N_Get::execute(optional_yield y) {
   }
 
   bool dirty = false;
-  if (v[0] == string("D_")){
+  if (v[0] == string("D")){
     dirty = true;
   }
 
@@ -241,7 +241,7 @@ void RGWOp_RemoteD4N_Put::execute(optional_yield y) {
   }
 
   bool dirty = false;
-  if (v[0] == string("D_")){
+  if (v[0] == string("D")){
     dirty = true;
   }
 
@@ -319,7 +319,11 @@ void RGWOp_RemoteD4N_Put::execute(optional_yield y) {
 
   time_t creationTime = time(NULL);
 
-  static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime,  s->object->get_bucket()->get_owner(), y);
+  //FIXME: AMIN: this is only for test, remove it
+  rgw_user user;
+  user.tenant = "AMIN_TEST";
+  static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime,  user, y);
+  //static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime,  s->object->get_bucket()->get_owner(), y);
 
   // translate internal codes into return header
   if (op_ret == 0)

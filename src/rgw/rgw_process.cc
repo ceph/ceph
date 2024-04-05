@@ -218,7 +218,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
     }
   }
 
-  /* AMIN: FIXME: uncomment
+  /* AMIN:  for CURL testing comment this */
   ldpp_dout(op, 2) << "verifying op permissions" << dendl;
   {
     auto span = tracing::rgw::tracer.add_span("verify_permission", s->trace);
@@ -241,7 +241,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   if (ret < 0) {
     return ret;
   }
-  */
+  /* AMIN : until here */
 
   ldpp_dout(op, 2) << "pre-executing" << dendl;
   op->pre_exec();
