@@ -45,39 +45,36 @@ Concepts
    *acting set*.
 
 *replica*
-   a non-primary OSD in the *acting set* for a placement group
-   (and who has been recognized as such and *activated* by the primary).
+   a non-primary OSD in the *acting set* of a placement group. A replica has
+   been recognized as a non-primary OSD and has been *activated* by the
+   primary.
 
 *stray*
-   an OSD who is not a member of the current *acting set*, but
-   has not yet been told that it can delete its copies of a
-   particular placement group.
+   an OSD that is not a member of the current *acting set* and has not yet been
+   told to delete its copies of a particular placement group.
 
 *recovery*
-   ensuring that copies of all of the objects in a PG
-   are on all of the OSDs in the *acting set*.  Once
-   *peering* has been performed, the primary can start
-   accepting write operations, and *recovery* can proceed
-   in the background.
+   the process of ensuring that copies of all of the objects in a PG are on all
+   of the OSDs in the *acting set*. After *peering* has been performed, the
+   primary can begin accepting write operations and *recovery* can proceed in
+   the background.
 
 *PG info*
-   basic metadata about the PG's creation epoch, the version
-   for the most recent write to the PG, *last epoch started*, *last
-   epoch clean*, and the beginning of the *current interval*.  Any
-   inter-OSD communication about PGs includes the *PG info*, such that
-   any OSD that knows a PG exists (or once existed) also has a lower
-   bound on *last epoch clean* or *last epoch started*.
+   basic metadata about the PG's creation epoch, the version for the most
+   recent write to the PG, the *last epoch started*, the *last epoch clean*,
+   and the beginning of the *current interval*. Any inter-OSD communication
+   about PGs includes the *PG info*, such that any OSD that knows a PG exists
+   (or once existed) and also has a lower bound on *last epoch clean* or *last
+   epoch started*.
 
 *PG log*
-   a list of recent updates made to objects in a PG.
-   Note that these logs can be truncated after all OSDs
-   in the *acting set* have acknowledged up to a certain
-   point.
+   a list of recent updates made to objects in a PG. These logs can be
+   truncated after all OSDs in the *acting set* have acknowledged the changes.
 
 *missing set*
-   Each OSD notes update log entries and if they imply updates to
-   the contents of an object, adds that object to a list of needed
-   updates.  This list is called the *missing set* for that <OSD,PG>.
+   the set of all objects that have not yet had their contents updated to match
+   the log entries. The missing set is collated by each OSD. Missing sets are
+   kept track of on an ``<OSD,PG>`` basis.
 
 *Authoritative History*
    a complete, and fully ordered set of operations that, if
