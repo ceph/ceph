@@ -704,6 +704,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   const CDir *get_projected_parent_dir() const;
   CDir *get_projected_parent_dir();
   CInode *get_parent_inode();
+
+  bool is_any_ancestor_inode_a_replica();
   
   bool is_lt(const MDSCacheObject *r) const override {
     const CInode *o = static_cast<const CInode*>(r);
