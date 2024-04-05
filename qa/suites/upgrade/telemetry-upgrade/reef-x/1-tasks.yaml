@@ -26,6 +26,7 @@ overrides:
       - out of quorum
       - CEPHADM_FAILED_DAEMON
       - failed cephadm daemon
+      - FS_DEGRADED
 tasks:
 - install:
     branch: reef
