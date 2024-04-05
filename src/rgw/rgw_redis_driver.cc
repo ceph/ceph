@@ -68,7 +68,7 @@ int RedisDriver::initialize(const DoutPrefixProvider* dpp)
     partition_info.location += "/";
   }
 
-  std::string address = dpp->get_cct()->_conf->rgw_local_cache_address;
+  std::string address = dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address;
 
   config cfg;
   cfg.addr.host = address.substr(0, address.find(":"));
