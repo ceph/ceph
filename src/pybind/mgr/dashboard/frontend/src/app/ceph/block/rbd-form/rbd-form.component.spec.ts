@@ -293,12 +293,24 @@ describe('RbdFormComponent', () => {
   });
 
   describe('test image configuration component', () => {
-    it('is visible', () => {
+    beforeEach(() => {
+      fixture.detectChanges();
+    });
+    it('is hidden by default under Advanced', () => {
       fixture.detectChanges();
       expect(
-        fixture.debugElement.query(By.css('cd-rbd-configuration-form')).nativeElement.parentElement
-          .hidden
-      ).toBe(true);
+        queryNativeElement('cd-rbd-configuration-form')
+          .closest('.accordion-collapse')
+          .classList.contains('show')
+      ).toBeFalsy();
+    });
+
+    it('is visible when Advanced is not collapsed', () => {
+      queryNativeElement('#advanced-fieldset').click();
+      fixture.detectChanges();
+      expect(
+        queryNativeElement('cd-rbd-configuration-form').closest('.accordion-collapse').classList
+      ).toContain('show');
     });
   });
 
