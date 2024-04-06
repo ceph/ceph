@@ -66,6 +66,25 @@
   <div class="container-fluid h-100 p-4"
        *ngIf="isMultiCluster && managedByConfig['MANAGED_BY_CLUSTERS'].length === 0; else emptyCluster">
     <ng-container *ngIf="!loading; else loadingTpl">
+      <cd-alert-panel type="error"
+                      spacingClass="mb-3"
+                      [showTitle]="false"
+                      size="slim"
+                      *ngIf="prometheusConnectionError.length > 0"
+                      (dismissed)="onDismissed()"
+                      [dismissible]="true"
+                      i18n>
+        <div>
+          <p>Couldn't fetch metrics from the following clusters. Please reconnect the respective clusters to re-establish the prometheus connection - <br></p>
+          <span *ngFor="let cluster of prometheusConnectionError">
+            {{ cluster['cluster_alias']}} - {{ cluster['cluster_name'] }}
+            <button class="btn btn-primary btn-sm"
+                    type="button"
+                    (click)="openReconnectClusterForm(cluster)">Reconnect
+            </button>
+          </span>
+        </div>
+      </cd-alert-panel>
       <cd-alert-panel type="info"
                       spacingClass="mb-3"
                       [showTitle]="false"
