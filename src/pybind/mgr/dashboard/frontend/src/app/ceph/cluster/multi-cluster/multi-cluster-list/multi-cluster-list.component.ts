@@ -48,6 +48,7 @@ export class MultiClusterListComponent implements OnInit, OnDestroy {
   currentUrl: string;
   icons = Icons;
   managedByConfig$: Observable<any>;
+  prometheusConnectionError: any[] = [];
 
   constructor(
     private multiClusterService: MultiClusterService,

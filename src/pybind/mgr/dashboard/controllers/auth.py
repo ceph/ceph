@@ -126,7 +126,7 @@ class Auth(RESTController, ControllerAuthMixin):
                             ]
                         }
                     }
-                Settings.MULTICLUSTER_CONFIG = multicluster_config
+                Settings.MULTICLUSTER_CONFIG = json.dumps(multicluster_config)
                 return {
                     'token': token,
                     'username': username,

@@ -1,7 +1,7 @@
 import errno
 import ipaddress
-import logging
 import json
+import logging
 import os
 import socket
 from typing import List, Any, Tuple, Dict, Optional, cast
@@ -445,10 +445,13 @@ class PrometheusService(CephadmService):
         FSID = self.mgr._cluster_fsid
 
         clusters_credentials = {}
-        multi_cluster_config_raw = str(self.mgr.get_module_option_ex('dashboard', 'MULTICLUSTER_CONFIG'))
-        multi_cluster_config_str = multi_cluster_config_raw.replace("'", '"')
-        valid_multi_cluster_config_str = multi_cluster_config_str.replace('True', '"True"').replace('False', '"False"')
-        multi_cluster_config = json.loads(valid_multi_cluster_config_str)
+        multi_cluster_config_str = str(self.mgr.get_module_option_ex('dashboard', 'MULTICLUSTER_CONFIG'))
+        try:
+            multi_cluster_config = json.loads(multi_cluster_config_str)
+        except json.JSONDecodeError as e:
+            multi_cluster_config = None
+            logger.error(f'Invalid JSON format for multi-cluster config: {e}')
+
         if multi_cluster_config:
             for url in targets:
                 credentials = self.find_prometheus_credentials(multi_cluster_config, url)
@@ -488,11 +491,13 @@ class PrometheusService(CephadmService):
 
         if self.mgr.secure_monitoring_stack:
             r2: Dict[str, Any] = {'files': {}}
+            unique_id_counter = 1
             for url, credentials in clusters_credentials.items():
-                r2['files'][f'prometheus_{url}_cert.crt'] = credentials['certificate']
-                credentials['cert_file_name'] = f'prometheus_{url}_cert.crt'
-                context['clusters_credentials'] = clusters_credentials
-
+                unique_id = unique_id_counter
+                unique_id_counter += 1
+                r2['files'][f'prometheus_{unique_id}_cert.crt'] = credentials['certificate']
+                credentials['cert_file_name'] = f'prometheus_{unique_id}_cert.crt'
+            context['clusters_credentials'] = clusters_credentials
             cfg_key = 'mgr/prometheus/root/cert'
             cmd = {'prefix': 'config-key get', 'key': cfg_key}
             ret, mgr_prometheus_rootca, err = self.mgr.mon_command(cmd)
@@ -608,13 +613,13 @@ class PrometheusService(CephadmService):
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
         return HandleCommandResult(0, warn_message, '')
 
-    def find_prometheus_credentials(self, multicluster_config, url):
-        for cluster_id, clusters in multicluster_config['config'].items():
+    def find_prometheus_credentials(self, multicluster_config: Dict[str, Any], url: str) -> Optional[Dict[str, Any]]:
+        for _, clusters in multicluster_config['config'].items():
             for cluster in clusters:
                 prometheus_url = cluster.get('prometheus_url')
                 if prometheus_url:
-                    valid_url = prometheus_url.replace("https://", "").replace("http://", "")
-                    if valid_url == url:
+                    valid_url = prometheus_url.replace("https://", "").replace("http://", "")  # since target URLs are without scheme
+                    if valid_url == url:  # check if the target URL matches with the prometheus URL (without scheme) in the config
                         return cluster.get('prometheus_access_info')
         return None
 
