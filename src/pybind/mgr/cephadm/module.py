@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from urllib.error import HTTPError
+from urllib.parse import urlparse
 from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
@@ -3184,12 +3185,12 @@ Then run the following:
         self.set_store(PrometheusService.USER_CFG_KEY, user)
         self.set_store(PrometheusService.PASS_CFG_KEY, password)
         return 'prometheus credentials updated correctly'
-    
+
     @handle_orch_error
     def set_prometheus_cert(self, cert: str) -> str:
         self.set_store(PrometheusService.PROMETHEUS_CERT_CFG_KEY, cert)
         return 'prometheus cert stored correctly'
-    
+
     @handle_orch_error
     def get_prometheus_cert(self) -> str:
         prometheus_cert = self.get_store(PrometheusService.PROMETHEUS_CERT_CFG_KEY)
@@ -3205,9 +3206,21 @@ Then run the following:
 
     @handle_orch_error
     def set_prometheus_target(self, url: str) -> str:
-        valid_url_pattern = r"^(?!http:\/\/)(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d{1,5})$"
-        if re.match(valid_url_pattern, url) is None:
-            return f"Invalid URL '{url}'. It should be in the format host_ip:port"
+        try:
+            if url.startswith("http://") or url.startswith("https://"):
+                return f"Invalid URL '{url}'. It should be in the format host_ip:port"
+
+            parsed_url_with_scheme = urlparse(f'http://{url}')
+            host = parsed_url_with_scheme.hostname
+            port = parsed_url_with_scheme.port
+
+            if not host or port is None:
+                raise ValueError("Hostname or port is missing.")
+
+            ipaddress.ip_address(host)
+
+        except (ValueError, OSError) as e:
+            return f"Invalid URL. {e}"
         prometheus_spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
         if url not in prometheus_spec.targets:
             prometheus_spec.targets.append(url)

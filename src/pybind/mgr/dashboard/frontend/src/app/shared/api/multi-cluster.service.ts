@@ -17,6 +17,8 @@ export class MultiClusterService {
   tokenStatusSource$ = this.tokenStatusSource.asObservable();
   showDeletionMessage = false;
   isClusterAddedFlag = false;
+  prometheusConnectionError: any[] = [];
+
   constructor(
     private http: HttpClient,
     private timerService: TimerService,
@@ -217,6 +219,13 @@ export class MultiClusterService {
       this.isClusterAddedFlag = isClusterAddedFlag;
     }
     return this.isClusterAddedFlag;
+  }
+
+  managePrometheusConnectionError(prometheusConnectionError?: any[]) {
+    if (prometheusConnectionError !== undefined) {
+      this.prometheusConnectionError = prometheusConnectionError;
+    }
+    return this.prometheusConnectionError;
   }
 
   refreshMultiCluster(currentRoute: string) {
