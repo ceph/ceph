@@ -103,8 +103,8 @@ Concepts
 
 *last epoch clean*
    the last epoch at which all nodes in the *acting set* for a given placement
-   group were completely up to date (this includes both the PG's PG logs and
-   the PG's object contents). At this point, *recovery* is deemed to have been
+   group were completely up to date (this includes both the PG's logs and the
+   PG's object contents). At this point, *recovery* is deemed to have been
    completed.
 
 Description of the Peering Process
