@@ -37,7 +37,7 @@ alerting:
 
 scrape_configs:
   - job_name: 'ceph'
-  relabel_configs:
+    relabel_configs:
     - source_labels: [__address__]
       target_label: cluster
       replacement: {{ cluster_fsid }}
@@ -49,10 +49,6 @@ scrape_configs:
     tls_config:
       ca_file: root_cert.pem
     honor_labels: true
-    relabel_configs:
-    - source_labels: [instance]
-      target_label: instance
-      replacement: 'ceph_cluster'
     http_sd_configs:
     - url: {{ mgr_prometheus_sd_url }}
       basic_auth:
@@ -62,10 +58,6 @@ scrape_configs:
         ca_file: root_cert.pem
 {% else %}
     honor_labels: true
-    relabel_configs:
-    - source_labels: [instance]
-      target_label: instance
-      replacement: 'ceph_cluster'
     http_sd_configs:
     - url: {{ mgr_prometheus_sd_url }}
 {% endif %}
@@ -168,6 +160,10 @@ scrape_configs:
     scrape_interval: 15s
     honor_labels: true
     metrics_path: '/federate'
+    relabel_configs:
+    - source_labels: [__address__]
+      target_label: cluster
+      replacement: {{ cluster_fsid }}
 {% if security_enabled %}
     scheme: https
     tls_config:
@@ -182,7 +178,6 @@ scrape_configs:
         - '{job="node"}'
         - '{job="haproxy"}'
         - '{job="ceph-exporter"}'
-        - '{job="nvmeof"}'
     static_configs:
     - targets: ['{{ url }}']
 {% endfor %}

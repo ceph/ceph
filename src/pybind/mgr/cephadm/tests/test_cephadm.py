@@ -160,6 +160,34 @@ class TestCephadm(object):
         match_glob(new_mgr, 'myhost.*')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_valid_url(self, cephadm_module):
+        # Test with valid URLs
+        test_cases = [
+            ("192.168.100.100:9090", "prometheus multi-cluster targets updated"),
+            ("127.0.0.1:8080", "prometheus multi-cluster targets updated"),
+        ]
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='prometheus'), CephadmOrchestrator.apply_prometheus, 'test'):
+                for url, expected_output in test_cases:
+                    c = cephadm_module.set_prometheus_target(url)
+                    assert wait(cephadm_module,
+                                c) == expected_output
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_invalid_url(self, cephadm_module):
+        # Test with invalid URLs
+        test_cases = [
+            ("http://example.com:9090", "Invalid URL 'http://example.com:9090'. It should be in the format host_ip:port"),
+            ("127.0.0.1:67700", "Invalid URL. Port out of range 0-65535")
+        ]
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='prometheus'), CephadmOrchestrator.apply_prometheus, 'test'):
+                for url, expected_output in test_cases:
+                    c = cephadm_module.set_prometheus_target(url)
+                    assert wait(cephadm_module,
+                                c) == expected_output
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_host(self, cephadm_module):
         assert wait(cephadm_module, cephadm_module.get_hosts()) == []
         with with_host(cephadm_module, 'test'):
