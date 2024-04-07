@@ -9,11 +9,11 @@ using crimson::common::local_conf;
 
   template<RWState::State State>
   ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_head_obc(ObjectContextRef obc,
-                                     bool existed,
+  ObjectContextLoader::with_head_obc(const hobject_t& oid,
                                      with_obc_func_t&& func)
   {
     LOG_PREFIX(ObjectContextLoader::with_head_obc);
+    auto [obc, existed] = obc_registry.get_cached_obc(oid);
     DEBUGDPP("object {}", dpp, obc->get_oid());
     assert(obc->is_head());
     obc->append_to(obc_set_accessing);
@@ -36,7 +36,7 @@ using crimson::common::local_conf;
 
   template<RWState::State State>
   ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_clone_obc(hobject_t oid,
+  ObjectContextLoader::with_clone_obc(const hobject_t& oid,
                                       with_obc_func_t&& func)
   {
     LOG_PREFIX(ObjectContextLoader::with_clone_obc);
@@ -97,11 +97,7 @@ using crimson::common::local_conf;
                                 with_obc_func_t&& func)
   {
     if (oid.is_head()) {
-      auto [obc, existed] =
-        obc_registry.get_cached_obc(std::move(oid));
-      return with_head_obc<State>(std::move(obc),
-                                  existed,
-                                  std::move(func));
+      return with_head_obc<State>(oid, std::move(func));
     } else {
       return with_clone_obc<State>(oid, std::move(func));
     }
