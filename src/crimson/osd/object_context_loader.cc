@@ -41,7 +41,7 @@ using crimson::common::local_conf;
   {
     LOG_PREFIX(ObjectContextLoader::with_clone_obc);
     assert(!oid.is_head());
-    return with_obc<RWState::RWREAD>(
+    return with_head_obc<RWState::RWREAD>(
       oid.get_head(),
       [FNAME, oid, func=std::move(func), this](auto head, auto) mutable
       -> load_obc_iertr::future<> {
