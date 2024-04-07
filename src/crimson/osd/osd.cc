@@ -667,6 +667,7 @@ seastar::future<> OSD::start_asok_admin()
 	std::as_const(get_shard_services().get_registry())));
     asok->register_command(
       make_asok_hook<DumpRecoveryReservationsHook>(get_shard_services()));
+    asok->register_command(make_asok_hook<TrimStaleOsdmapsHook>(*this));
   });
 }
 
@@ -1351,6 +1352,22 @@ seastar::future<> OSD::send_beacon()
   beacon->pgs = min_last_epoch_clean_pgs;
   DEBUG("{}", *beacon);
   return monc->send_message(std::move(beacon));
+}
+
+seastar::future<int> OSD::trim_stale_maps()
+{
+  LOG_PREFIX(OSD::trim_stale_maps);
+  return seastar::do_with(ceph::os::Transaction{},
+    [this, FNAME](auto& t) {
+      return pg_shard_manager.trim_stale_maps(t).then([&t, this, FNAME](int num_removed) {
+        DEBUG("submitting transaction");
+        DEBUG("Trimmed {} osdmaps", num_removed);
+        return store.get_sharded_store().do_transaction(
+          pg_shard_manager.get_meta_coll().collection(), std::move(t)).then([num_removed]() {
+            return seastar::make_ready_future<int>(num_removed);
+          });
+      });
+  });
 }
 
 seastar::future<> OSD::update_heartbeat_peers()

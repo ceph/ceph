@@ -58,6 +58,42 @@ read_errorator::future<ceph::bufferlist> OSDMeta::load_inc_map(epoch_t e)
                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
 }
 
+seastar::future<std::vector<ghobject_t>> OSDMeta::list_all_map()
+{
+  using ertr = crimson::errorator<crimson::ct_error::invarg>;
+  uint64_t limit = 1000;
+  auto start = ghobject_t{};
+  return seastar::do_with(
+    std::vector<ghobject_t>(),
+    std::move(start),
+    limit,
+    [this](auto& ret, auto& start, auto& limit) {
+      return crimson::repeat([this, &ret, &start, &limit] {
+        return store.list_objects(
+          coll, start, ghobject_t::get_max(), limit
+        ).then([&ret, &start](const auto& result) {
+          auto maps = std::get<0>(result);
+          ret.insert(ret.end(), maps.begin(), maps.end());
+          auto next = std::get<1>(result);
+          start = next;
+          if (next == ghobject_t::get_max()) {
+            return ertr::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::yes
+            );
+          }
+          return ertr::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::no
+          );
+        });
+      }).safe_then([&ret] {
+          return std::move(ret);
+        }).handle_error(
+          crimson::ct_error::assert_all{
+          "Invalid error in OSDMeta::list_all_map"
+        });
+    });
+}
+
 void OSDMeta::store_superblock(ceph::os::Transaction& t,
                                const OSDSuperblock& superblock)
 {

@@ -571,4 +571,30 @@ private:
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<DumpRecoveryReservationsHook>(crimson::osd::ShardServices& shard_services);
 
+class TrimStaleOsdmapsHook : public AdminSocketHook {
+public:
+  explicit TrimStaleOsdmapsHook(crimson::osd::OSD& osd) :
+    AdminSocketHook{"trim stale osdmaps", "", "cleanup any existing osdmap from the store " \
+      "in the range of 0 up to the superblock's oldest_map."},
+    osd(osd)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+				      std::string_view format,
+				      ceph::bufferlist&& input) const final
+  {
+    logger().info("{}", __func__);
+    return osd.trim_stale_maps().then([](int num_trimed) {
+      ceph::bufferlist bl;
+      bl.append(fmt::format("Trimmed {} osdmaps\n", num_trimed));
+      return seastar::make_ready_future<tell_result_t>(0,
+                  std::string{},
+                  std::move(bl));
+    });
+  }
+private:
+  crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<TrimStaleOsdmapsHook>(crimson::osd::OSD& osd);
+
 } // namespace crimson::admin
