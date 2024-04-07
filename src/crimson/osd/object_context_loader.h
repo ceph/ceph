@@ -59,12 +59,11 @@ private:
   obc_accessing_list_t obc_set_accessing;
 
   template<RWState::State State>
-  load_obc_iertr::future<> with_clone_obc(hobject_t oid,
+  load_obc_iertr::future<> with_clone_obc(const hobject_t& oid,
                                           with_obc_func_t&& func);
 
   template<RWState::State State>
-  load_obc_iertr::future<> with_head_obc(ObjectContextRef obc,
-                                         bool existed,
+  load_obc_iertr::future<> with_head_obc(const hobject_t& oid,
                                          with_obc_func_t&& func);
 
   template<RWState::State State>
