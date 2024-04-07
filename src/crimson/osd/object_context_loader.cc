@@ -56,18 +56,24 @@ using crimson::common::local_conf;
   template<RWState::State State>
   ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_clone_obc_only(ObjectContextRef head,
-                                           hobject_t oid,
+                                           hobject_t clone_oid,
                                            with_obc_func_t&& func)
   {
     LOG_PREFIX(ObjectContextLoader::with_clone_obc_only);
-    auto coid = resolve_oid(head->get_head_ss(), oid);
-    if (!coid) {
-      ERRORDPP("clone {} not found", dpp, oid);
+    DEBUGDPP("{}", clone_oid);
+    assert(!clone_oid.is_head());
+    auto resolved_oid = resolve_oid(head->get_head_ss(), clone_oid);
+    if (!resolved_oid) {
+      ERRORDPP("clone {} not found", dpp, clone_oid);
       return load_obc_iertr::future<>{
         crimson::ct_error::enoent::make()
       };
     }
-    auto [clone, existed] = obc_registry.get_cached_obc(*coid);
+    if (resolved_oid->is_head()) {
+      // See resolve_oid
+      return std::move(func)(head, head);
+    }
+    auto [clone, existed] = obc_registry.get_cached_obc(*resolved_oid);
     return clone->template with_lock<State, IOInterruptCondition>(
       [existed=existed, clone=std::move(clone),
        func=std::move(func), head=std::move(head), this]() mutable

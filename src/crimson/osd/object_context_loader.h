@@ -43,7 +43,7 @@ public:
   // with an already locked head.
   template<RWState::State State>
   load_obc_iertr::future<> with_clone_obc_only(ObjectContextRef head,
-                                               hobject_t oid,
+                                               hobject_t clone_oid,
                                                with_obc_func_t&& func);
 
   // Use this variant in the case where both the head
