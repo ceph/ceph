@@ -7754,9 +7754,17 @@ void BlueStore::_close_db()
   db = nullptr;
 
   if (do_destage && fm && fm->is_null_manager()) {
-    int ret = store_allocator(alloc);
-    if (ret != 0) {
-      derr << __func__ << "::NCB::store_allocator() failed (continue with bitmapFreelistManager)" << dendl;
+    // force all backgrounds discards to be committed before storing allocator
+    // set timeout to 500msec
+    int ret = bdev->discard_drain(500);
+    if (ret == 0) {
+      ret = store_allocator(alloc);
+      if (unlikely(ret != 0)) {
+	derr << __func__ << "::NCB::store_allocator() failed (we will need to rebuild it on startup)" << dendl;
+      }
+    }
+    else {
+      derr << __func__ << "::NCB::discard_drain() exceeded timeout (abort!)" << dendl;
     }
   }
 
