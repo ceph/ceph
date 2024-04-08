@@ -37,33 +37,38 @@ using crimson::common::local_conf;
   template<RWState::State State>
   ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_clone_obc(const hobject_t& oid,
-                                      with_obc_func_t&& func)
+                                      with_obc_func_t&& func,
+                                      bool resolve_clone)
   {
     LOG_PREFIX(ObjectContextLoader::with_clone_obc);
     assert(!oid.is_head());
     return with_head_obc<RWState::RWREAD>(
       oid.get_head(),
-      [FNAME, oid, func=std::move(func), this](auto head, auto) mutable
-      -> load_obc_iertr::future<> {
+      [FNAME, oid, func=std::move(func), resolve_clone, this]
+      (auto head, auto) mutable -> load_obc_iertr::future<> {
       if (!head->obs.exists) {
 	ERRORDPP("head doesn't exist for object {}", dpp, head->obs.oi.soid);
         return load_obc_iertr::future<>{
           crimson::ct_error::enoent::make()
         };
       }
-      auto resolved_oid = resolve_oid(head->get_head_ss(), oid);
-      if (!resolved_oid) {
-        ERRORDPP("clone {} not found", dpp, oid);
-        return load_obc_iertr::future<>{
-          crimson::ct_error::enoent::make()
-        };
-      }
-      if (resolved_oid->is_head()) {
-        // See resolve_oid
-        return std::move(func)(head, head);
+      hobject_t clone_oid = oid;
+      if (resolve_clone) {
+        auto resolved_oid = resolve_oid(head->get_head_ss(), oid);
+        if (!resolved_oid) {
+          ERRORDPP("clone {} not found", dpp, oid);
+          return load_obc_iertr::future<>{
+            crimson::ct_error::enoent::make()
+          };
+        }
+        if (resolved_oid->is_head()) {
+          // See resolve_oid
+          return std::move(func)(head, head);
+        }
+        clone_oid = *resolved_oid;
       }
       return this->with_clone_obc_only<State>(std::move(head),
-                                              *resolved_oid,
+                                              clone_oid,
                                               std::move(func));
     });
   }
@@ -93,12 +98,13 @@ using crimson::common::local_conf;
   template<RWState::State State>
   ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_obc(hobject_t oid,
-                                with_obc_func_t&& func)
+                                with_obc_func_t&& func,
+                                bool resolve_clone)
   {
     if (oid.is_head()) {
       return with_head_obc<State>(oid, std::move(func));
     } else {
-      return with_clone_obc<State>(oid, std::move(func));
+      return with_clone_obc<State>(oid, std::move(func), resolve_clone);
     }
   }
 
@@ -191,17 +197,21 @@ using crimson::common::local_conf;
   // explicitly instantiate the used instantiations
   template ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_obc<RWState::RWNONE>(hobject_t,
-                                                 with_obc_func_t&&);
+                                                 with_obc_func_t&&,
+                                                 bool resolve_clone);
 
   template ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_obc<RWState::RWREAD>(hobject_t,
-                                                 with_obc_func_t&&);
+                                                 with_obc_func_t&&,
+                                                 bool resolve_clone);
 
   template ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_obc<RWState::RWWRITE>(hobject_t,
-                                                  with_obc_func_t&&);
+                                                  with_obc_func_t&&,
+                                                 bool resolve_clone);
 
   template ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_obc<RWState::RWEXCL>(hobject_t,
-                                                 with_obc_func_t&&);
+                                                 with_obc_func_t&&,
+                                                 bool resolve_clone);
 }
