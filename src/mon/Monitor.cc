@@ -479,7 +479,9 @@ int Monitor::do_admin_command(
 	    << duration << " seconds" << dendl;
     out << "compacted " << g_conf().get_val<std::string>("mon_keyvaluedb")
 	<< " in " << duration << " seconds";
- } else {
+  } else if (command == "backup") {
+    r = backup();
+  } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
   (read_only ? audit_clog->debug() : audit_clog->info())
@@ -496,6 +498,34 @@ abort:
     << "cmd=" << command << " "
     << "args=" << args << ": aborted";
   return r;
+}
+
+int Monitor::backup()
+{
+    dout(1) << "triggering backup" << dendl;
+    logger->inc(l_mon_backup_started);
+    auto start = ceph::coarse_mono_clock::now();
+    std::string backup_path = g_conf()->mon_backup_path;
+    if (backup_path.empty()) {
+      logger->inc(l_mon_backup_failed);
+      dout(1) << "backup failed: no backup_path configured" << dendl;
+      return -ENOTDIR;
+    }
+    bool success = store->backup(backup_path);
+    auto end = ceph::coarse_mono_clock::now();
+    auto duration = ceph::to_seconds<double>(end - start);
+    logger->tinc(l_mon_backup_duration, end - start);
+    if (success) {
+      logger->inc(l_mon_backup_success);
+      dout(1) << "finished backup in "
+              << duration << " seconds" << dendl;
+    } else {
+      logger->inc(l_mon_backup_failed);
+      dout(1) << "failed backup in "
+              << duration << " seconds" << dendl;
+      return -EIO;
+    }
+    return 0;
 }
 
 void Monitor::handle_signal(int signum)
@@ -747,6 +777,14 @@ int Monitor::preinit()
         "ewon", PerfCountersBuilder::PRIO_INTERESTING);
     pcb.add_u64_counter(l_mon_election_lose, "election_lose", "Elections lost",
         "elst", PerfCountersBuilder::PRIO_INTERESTING);
+    pcb.add_u64_counter(l_mon_backup_started, "backup_started", "Mon backups started",
+        "bak", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_success, "backup_success", "Mon backups finished successfully",
+        "baks", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_u64_counter(l_mon_backup_failed, "backup_failed", "Mon backups failed",
+        "bakf", PerfCountersBuilder::PRIO_USEFUL);
+    pcb.add_time_avg(l_mon_backup_duration, "backup_duration", "Mon backup duration",
+        "bakd", PerfCountersBuilder::PRIO_USEFUL);
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
   }

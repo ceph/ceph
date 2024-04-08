@@ -206,6 +206,7 @@ public:
     return cct->_conf.get_val<uint64_t>("rocksdb_delete_range_threshold");
   }
 
+  bool backup(const std::string& path) override;
   void compact() override;
 
   void compact_async() override {

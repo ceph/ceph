@@ -1505,3 +1505,8 @@ COMMAND_WITH_FLAG("dump_historic_slow_ops",
             "show recent slow ops",
             "mon", "r",
             FLAG(TELL))
+COMMAND_WITH_FLAG("backup",
+            "backups mon database",
+            "mon", "rwx",
+            FLAG(TELL))
+

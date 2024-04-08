@@ -1059,9 +1059,9 @@ options:
   type: str
   level: advanced
   desc: Compression algorithm to use in Messenger when communicating with OSD
-  long_desc: Compression algorithm for connections with OSD in order of preference 
+  long_desc: Compression algorithm for connections with OSD in order of preference
     Although the default value is set to snappy, a list
-    (like snappy zlib zstd etc.) is acceptable as well. 
+    (like snappy zlib zstd etc.) is acceptable as well.
   default: snappy
   services:
   - osd
@@ -1074,11 +1074,11 @@ options:
   level: advanced
   desc: Allowing compression when on-wire encryption is enabled
   long_desc: Combining encryption with compression reduces the level of security of
-    messages between peers. In case both encryption and compression are enabled, 
-    compression setting will be ignored and message will not be compressed. 
-    This behaviour can be override using this setting. 
+    messages between peers. In case both encryption and compression are enabled,
+    compression setting will be ignored and message will not be compressed.
+    This behaviour can be override using this setting.
   default: false
-  see_also: 
+  see_also:
   - ms_osd_compress_mode
   flags:
   - runtime
@@ -1572,11 +1572,11 @@ options:
 - name: mon_initial_members
   type: str
   level: advanced
-  fmt_desc: The IDs of initial monitors in a cluster during startup. If 
-    specified, Ceph requires an odd number of monitors to form an 
+  fmt_desc: The IDs of initial monitors in a cluster during startup. If
+    specified, Ceph requires an odd number of monitors to form an
     initial quorum (e.g., 3).
-  note: A *majority* of monitors in your cluster must be able to reach 
-    each other in order to establish a quorum. You can decrease the initial 
+  note: A *majority* of monitors in your cluster must be able to reach
+    each other in order to establish a quorum. You can decrease the initial
     number of monitors to establish a quorum with this setting.
   services:
   - mon
@@ -1969,6 +1969,26 @@ options:
   default: 0
   services:
   - mon
+  with_legacy: true
+- name: mon_backup_path
+  type: str
+  level: advanced
+  desc: directory in which mon backups should be placed
+  default: /var/backups/ceph-mon
+  services:
+  - mon
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_auto_backup
+  type: bool
+  level: advanced
+  desc: automatically trigger backups on important database changes
+  default: false
+  services:
+  - mon
+  flags:
+  - runtime
   with_legacy: true
 - name: mon_debug_extra_checks
   type: bool
@@ -2567,13 +2587,13 @@ options:
   desc: number of PGs for new pools
   fmt_desc: The default number of placement groups for a pool. The default
     value is the same as ``pg_num`` with ``mkpool``.
-  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being 
-    `on` the number of PGs for new pools will start out with 1 pg, unless the 
+  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being
+    `on` the number of PGs for new pools will start out with 1 pg, unless the
     user specifies the pg_num.
   default: 32
   services:
   - mon
-  see_also: 
+  see_also:
   - osd_pool_default_pg_autoscale_mode
   flags:
   - runtime
@@ -4552,7 +4572,7 @@ options:
   flags:
   - startup
   with_legacy: true
-- name: bluestore_use_optimal_io_size_for_min_alloc_size 
+- name: bluestore_use_optimal_io_size_for_min_alloc_size
   type: bool
   level: advanced
   desc: Discover media optimal IO Size and use for min_alloc_size

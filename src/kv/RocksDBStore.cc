@@ -17,6 +17,7 @@
 #include "rocksdb/slice.h"
 #include "rocksdb/cache.h"
 #include "rocksdb/filter_policy.h"
+#include "rocksdb/utilities/backup_engine.h"
 #include "rocksdb/utilities/convenience.h"
 #include "rocksdb/utilities/table_properties_collectors.h"
 #include "rocksdb/merge_operator.h"
@@ -2004,6 +2005,17 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
   if (key)
     *key = string(separator+1, in.size()-prefix_len-1);
   return 0;
+}
+
+bool RocksDBStore::backup(const std::string& path)
+{
+  rocksdb::BackupEngine* backup_engine;
+  rocksdb::Status s = rocksdb::BackupEngine::Open(
+    rocksdb::BackupEngineOptions(path),
+    rocksdb::Env::Default(),
+    &backup_engine);
+  s = backup_engine->CreateNewBackup(db);
+  return s.ok();
 }
 
 void RocksDBStore::compact()
