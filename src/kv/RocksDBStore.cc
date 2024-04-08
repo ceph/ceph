@@ -2018,6 +2018,42 @@ bool RocksDBStore::backup(const std::string& path)
   return s.ok();
 }
 
+bool RocksDBStore::restore_backup(CephContext *cct, const std::string &path, const std::string &backup_path, const std::string& version)
+{
+  rocksdb::BackupEngineReadOnly* backup_engine;
+  rocksdb::Status s = rocksdb::BackupEngineReadOnly::Open(rocksdb::Env::Default(), rocksdb::BackupEngineOptions(path), &backup_engine);
+  const rocksdb::RestoreOptions options = rocksdb::RestoreOptions();
+  if (!s.ok()) {
+    derr << __func__ << "Can't open backup folder: " << s.ToString() << dendl;
+    return false;
+  }
+  if (version == "-1") {
+    derr << "Restore last valid backup" << dendl;
+    s = backup_engine->RestoreDBFromLatestBackup(
+        options,
+        backup_path,
+        backup_path);
+  } else {
+    rocksdb::BackupID backup_id;
+    try {
+      backup_id = std::stol(version);
+    } catch (std::invalid_argument const& ex) {
+      //derr << "invalid version: " << ex.what() << '\n';
+      return false;
+    } catch (std::out_of_range const& ex) {
+      //derr << "invalid version: " << ex.what() << '\n';
+      return false;
+    }
+    s = backup_engine->RestoreDBFromBackup(options, backup_id, backup_path, backup_path);
+  }
+  delete backup_engine;
+  if (!s.ok()) {
+    derr << "Error when restoring backup: " << s.ToString() << dendl;
+  }
+  return s.ok();
+};
+
+
 void RocksDBStore::compact()
 {
   dout(2) << __func__ << " starting" << dendl;
@@ -3263,7 +3299,7 @@ int RocksDBStore::prepare_for_reshard(const std::string& new_sharding,
 	   << full_name << dendl;
       return -EINVAL;
     }
-    dout(10) << "created column " << full_name << " handle = " << (void*)cf << dendl; 
+    dout(10) << "created column " << full_name << " handle = " << (void*)cf << dendl;
     existing_columns.push_back(full_name);
     handles.push_back(cf);
   }

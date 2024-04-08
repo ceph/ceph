@@ -18,6 +18,18 @@ KeyValueDB *KeyValueDB::create(CephContext *cct, const string& type,
   return NULL;
 }
 
+bool KeyValueDB::restore_backup(CephContext *cct,
+                                const std::string &type,
+                                const std::string &path,
+                                const std::string &backup_location,
+                                const std::string &version)
+{
+  if (type == "rocksdb") {
+    return RocksDBStore::restore_backup(cct, path, backup_location, version);
+  }
+  return false;
+}
+
 int KeyValueDB::test_init(const string& type, const string& dir)
 {
   if (type == "rocksdb") {

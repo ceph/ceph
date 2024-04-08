@@ -104,8 +104,8 @@ public:
     }
 
     /// Remove Single Key which exists and was not overwritten.
-    /// This API is only related to performance optimization, and should only be 
-    /// re-implemented by log-insert-merge tree based keyvalue stores(such as RocksDB). 
+    /// This API is only related to performance optimization, and should only be
+    /// re-implemented by log-insert-merge tree based keyvalue stores(such as RocksDB).
     /// If a key is overwritten (by calling set multiple times), then the result
     /// of calling rm_single_key on this key is undefined.
     virtual void rm_single_key(
@@ -384,6 +384,9 @@ public:
 
   /// creates a kv database backup in directory path. Returns true on success
   virtual bool backup(const std::string& path) { return false; }
+
+  /// restore from backup the specified backup version
+  static bool restore_backup(CephContext *cct, const std::string &type, const std::string &path, const std::string &backup_location, const std::string& version);
 
   /// compact the underlying store
   virtual void compact() {}
