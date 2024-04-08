@@ -3,6 +3,8 @@ overrides:
     log-ignorelist:
       - MON_DOWN
       - POOL_APP_NOT_ENABLED
+    log-only-match:
+      - CEPHADM_
 roles:
 - - host.a
   - osd.0
