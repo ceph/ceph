@@ -1087,14 +1087,15 @@ public:
 
 class RGWStatBucket : public RGWOp {
 protected:
-  std::unique_ptr<rgw::sal::Bucket> bucket;
   RGWStorageStats stats;
+  bool report_stats{true};
 
 public:
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
 
+  virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "stat_bucket"; }
   RGWOpType get_type() override { return RGW_OP_STAT_BUCKET; }

@@ -1668,7 +1668,6 @@ int RGWDeleteMultiObj_ObjStore::get_params(optional_yield y)
   return op_ret;
 }
 
-
 void RGWRESTOp::send_response()
 {
   if (!flusher.did_start()) {
