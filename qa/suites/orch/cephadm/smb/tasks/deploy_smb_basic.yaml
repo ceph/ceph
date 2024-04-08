@@ -10,6 +10,10 @@ roles:
   # Reserve a host for acting as a test client
   - - host.b
     - cephadm.exclude
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
 tasks:
   # TODO: (jjm) I don't think `install` is necessary for this file. Remove?
   - install:

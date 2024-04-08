@@ -9,6 +9,10 @@ roles:
 # Reserve a host for acting as a domain controller
 - - host.b
   - cephadm.exclude
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
 tasks:
 - cephadm.deploy_samba_ad_dc:
     role: host.b

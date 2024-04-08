@@ -1,3 +1,7 @@
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
 tasks:
 - cephadm:
     conf:
