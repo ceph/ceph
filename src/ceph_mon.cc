@@ -220,6 +220,10 @@ static void usage()
        << "        where the mon store and keyring are located\n"
        << "  --set-crush-location <bucket>=<foo>"
        << "        sets monitor's crush bucket location (only for stretch mode)"
+       << "  --restore-backup <directory>\n"
+       << "        restore the backup from location and exit\n"
+       << "  --backup-version <version>\n"
+       << "        defaults to -1 which, is the last valid backup\n"
        << std::endl;
   generic_server_usage();
 }
@@ -258,7 +262,7 @@ int main(int argc, const char **argv)
   bool compact = false;
   bool force_sync = false;
   bool yes_really = false;
-  std::string osdmapfn, inject_monmap, extract_monmap, crush_loc;
+  std::string osdmapfn, inject_monmap, extract_monmap, crush_loc, restore_backup_location, restore_backup_version("-1");
 
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {
@@ -329,8 +333,10 @@ int main(int argc, const char **argv)
       inject_monmap = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--extract-monmap", (char*)NULL)) {
       extract_monmap = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--set-crush-location", (char*)NULL)) {
-      crush_loc = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--restore-backup", (char*)NULL)) {
+      restore_backup_location = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--backup-version", (char*)NULL)) {
+      restore_backup_version = val;
     } else {
       ++i;
     }
@@ -353,6 +359,22 @@ int main(int argc, const char **argv)
 
   if (g_conf()->name.get_id().empty()) {
     cerr << "must specify id (--id <id> or --name mon.<id>)" << std::endl;
+    exit(1);
+  }
+
+  // -- restore --
+  if (restore_backup_location.length()) {
+    cerr << "restoring backup from location '" << restore_backup_location << "' to '"
+         << g_conf()->mon_data << "'" << std::endl;
+    if (!restore_backup_version.length()) {
+        cerr << "please specify the version to backup" << std::endl;
+        exit(1);
+    }
+    if (MonitorDBStore::restore_backup(cct.get(), g_conf()->mon_data, restore_backup_location, restore_backup_version)) {
+        cerr << "sucessfully restored backup. Start ceph-mon normally" << std::endl;
+        exit(0);
+    }
+    cerr << "restoring failed. Try an earlier version." << std::endl;
     exit(1);
   }
 
@@ -531,7 +553,7 @@ int main(int argc, const char **argv)
       exit(1);
     }
     store.close();
-    dout(0) << argv[0] << ": created monfs at " << g_conf()->mon_data 
+    dout(0) << argv[0] << ": created monfs at " << g_conf()->mon_data
 	    << " for " << g_conf()->name << dendl;
     return 0;
   }
