@@ -470,7 +470,8 @@ SnapTrimObjSubEvent::start()
           });
         });
       });
-    }).si_then([this] {
+    },
+    false).si_then([this] {
       logger().debug("{}: completed", *this);
       return handle.complete();
     }).handle_error_interruptible(

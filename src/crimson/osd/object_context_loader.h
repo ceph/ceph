@@ -35,9 +35,13 @@ public:
   // Use this variant by default
   // If oid is a clone object, the clone obc *and* it's
   // matching head obc will be locked and can be used in func.
+  // resolve_clone: For SnapTrim, it may be possible that it
+  //                won't be possible to resolve the clone.
+  // See SnapTrimObjSubEvent::remove_or_update - in_removed_snaps_queue usage.
   template<RWState::State State>
   load_obc_iertr::future<> with_obc(hobject_t oid,
-                                    with_obc_func_t&& func);
+                                    with_obc_func_t&& func,
+                                    bool resolve_clone = true);
 
   // Use this variant in the case where the head object
   // obc is already locked and only the clone obc is needed.
@@ -46,7 +50,8 @@ public:
   template<RWState::State State>
   load_obc_iertr::future<> with_clone_obc_only(ObjectContextRef head,
                                                hobject_t clone_oid,
-                                               with_obc_func_t&& func);
+                                               with_obc_func_t&& func,
+                                               bool resolve_clone = true);
 
   load_obc_iertr::future<> reload_obc(ObjectContext& obc) const;
 
@@ -60,7 +65,8 @@ private:
 
   template<RWState::State State>
   load_obc_iertr::future<> with_clone_obc(const hobject_t& oid,
-                                          with_obc_func_t&& func);
+                                          with_obc_func_t&& func,
+                                          bool resolve_clone);
 
   template<RWState::State State>
   load_obc_iertr::future<> with_head_obc(const hobject_t& oid,
