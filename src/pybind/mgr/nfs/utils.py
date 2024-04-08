@@ -101,4 +101,4 @@ def cephfs_path_is_dir(mgr: 'Module', fs: str, path: str) -> None:
         stx = fs_handle.statx(path.encode('utf-8'), cephfs.CEPH_STATX_MODE,
                               cephfs.AT_SYMLINK_NOFOLLOW)
         if not stat.S_ISDIR(stx.get('mode')):
-            raise NotADirectoryError()
+            raise NotADirectoryError
