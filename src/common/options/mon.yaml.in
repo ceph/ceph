@@ -1110,6 +1110,15 @@ options:
   flags:
   - no_mon_update
   with_legacy: true
+- name: mon_backup
+  type: str
+  level: advanced
+  desc: path to mon database backups
+  fmt_desc: The monitor's backup location.
+  services:
+  - mon
+  flags:
+  - no_mon_update
 - name: mon_rocksdb_options
   type: str
   level: advanced

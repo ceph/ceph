@@ -96,6 +96,10 @@ enum {
   l_mon_election_call,
   l_mon_election_win,
   l_mon_election_lose,
+  l_mon_backup_started,
+  l_mon_backup_success,
+  l_mon_backup_failed,
+  l_mon_backup_duration,
   l_mon_last,
 };
 
@@ -1073,6 +1077,9 @@ private:
 		       ceph::Formatter *f,
 		       std::ostream& err,
 		       std::ostream& out);
+
+  // Execute mon database backup
+  int backup();
 
 private:
   // don't allow copying

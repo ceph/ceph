@@ -382,6 +382,9 @@ public:
     return 0;
   }
 
+  /// creates a kv database backup in directory path. Returns true on success
+  virtual bool backup(const std::string& path) { return false; }
+
   /// compact the underlying store
   virtual void compact() {}
 
