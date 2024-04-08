@@ -168,18 +168,23 @@ void QuiesceDbManager::update_membership(const QuiesceClusterMembership& new_mem
     dout(5) << "starting the db mgr thread at epoch: " << new_membership.epoch << dendl;
     db_thread_should_exit = false;
     quiesce_db_thread.create("quiesce_db_mgr");
-  } else {
+  } else if (quiesce_db_thread.is_started()) {
     submit_condition.notify_all();
   }
 
   if (inject_request) {
-    pending_requests.push_front(inject_request);
+    if (will_participate || quiesce_db_thread.is_started()) {
+      pending_requests.push_front(inject_request);
+    } else {
+      inject_request->complete(ENOTTY);
+    }
   }
 
   if (will_participate) {
     cluster_membership = new_membership;
   } else {
     cluster_membership.reset();
+    db_thread_should_clear_db = true;
   }
 
   std::lock_guard lc(agent_mutex);
@@ -188,8 +193,20 @@ void QuiesceDbManager::update_membership(const QuiesceClusterMembership& new_mem
   }
 }
 
-std::pair<QuiesceDbManager::IsMemberBool, QuiesceDbManager::ShouldExitBool> QuiesceDbManager::membership_upkeep()
+std::pair<QuiesceDbManager::IsMemberBool, QuiesceDbManager::ShouldExitBool>
+QuiesceDbManager::membership_upkeep()
 {
+  if (db_thread_should_clear_db) {
+    dout(5) << "a reset of the db has been requested" << dendl;
+    db_thread_should_clear_db = false;
+    membership.epoch = 0;
+    // clear the peers to bootstrap from scratch if we are the leader
+    peers.clear();
+    // reset the db
+    db.clear();
+    // not clearing awaits and requests, they will be handled below
+  }
+
   if (cluster_membership && cluster_membership->epoch == membership.epoch) {
     // no changes
     return {true, db_thread_should_exit};
@@ -218,12 +235,6 @@ std::pair<QuiesceDbManager::IsMemberBool, QuiesceDbManager::ShouldExitBool> Quie
     for (auto peer : cluster_membership->members) {
       peers.try_emplace(peer);
     }
-
-    if (db.set_version == 0) {
-      db.time_zero = QuiesceClock::now();
-      db.sets.clear();
-    }
-
   } else {
     peers.clear();
     // abort awaits with EINPROGRESS
@@ -244,11 +255,6 @@ std::pair<QuiesceDbManager::IsMemberBool, QuiesceDbManager::ShouldExitBool> Quie
   if (cluster_membership) {
     membership = *cluster_membership;
     dout(15) << "Updated membership" << dendl;
-  } else {
-    membership.epoch = 0;
-    peers.clear();
-    awaits.clear();
-    db.clear();
   }
 
   return { cluster_membership.has_value(), db_thread_should_exit };
@@ -291,7 +297,7 @@ QuiesceTimeInterval QuiesceDbManager::replica_upkeep(decltype(pending_db_updates
   db.time_zero = time_zero;
 
   if (db.set_version > update.db_version.set_version) {
-    dout(3) << "got an older version of DB from the leader: " << db.set_version << " > " << update.db_version.set_version << dendl;
+    dout(3) << "got an older version of DB from the leader: " << update.db_version.set_version << " < " << db.set_version << dendl;
     dout(3) << "discarding the DB" << dendl;
     db.clear();
   } else {

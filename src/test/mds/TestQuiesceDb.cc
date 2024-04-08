@@ -1571,7 +1571,7 @@ TEST_F(QuiesceDbTest, MultiRankRecovery)
   ASSERT_NO_FATAL_FAILURE(configure_cluster({ mds_gid_t(1), mds_gid_t(2), mds_gid_t(3) }));
 
   // we expect the db to be populated since the new leader must have discovered newer versions
-  // we expect the sets to become quiescing since there's at least one member that's not acking (the new one)
+  // we expect the sets to become quiesced since all members are now acking
   EXPECT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set1";
     r.await = sec(1);
@@ -1598,15 +1598,9 @@ TEST_F(QuiesceDbTest, MultiRankRecovery)
   });
 
   // add back a quiescing peer
-  ASSERT_NO_FATAL_FAILURE(configure_cluster({ mds_gid_t(1), mds_gid_t(2), mds_gid_t(3)}));
-
-  EXPECT_EQ(OK(), run_request([](auto& r) {}));
-  ASSERT_EQ(2, last_request->response.sets.size());
-  EXPECT_EQ(QS_QUIESCED, last_request->response.sets.at("set1").rstate.state);
-  EXPECT_EQ(QS_QUIESCED, last_request->response.sets.at("set2").rstate.state);
+  ASSERT_NO_FATAL_FAILURE(configure_cluster({ mds_gid_t(1), mds_gid_t(2), mds_gid_t(3) }));
 
   EXPECT_EQ(std::future_status::ready, did_ack3.wait_for(std::chrono::milliseconds(2000)));
-
   EXPECT_EQ(OK(), run_request([](auto& r) {}));
   ASSERT_EQ(2, last_request->response.sets.size());
   EXPECT_EQ(QS_QUIESCED, last_request->response.sets.at("set1").rstate.state);
