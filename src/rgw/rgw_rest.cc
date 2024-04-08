@@ -1668,6 +1668,12 @@ int RGWDeleteMultiObj_ObjStore::get_params(optional_yield y)
   return op_ret;
 }
 
+int RGWStatBucket_ObjStore::get_params(optional_yield y)
+{
+  report_stats = s->info.args.exists("read-stats");
+
+  return 0;
+}
 
 void RGWRESTOp::send_response()
 {
