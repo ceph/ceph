@@ -43,7 +43,7 @@ class MonitorDBStore
   int dump_fd_binary;
   std::ofstream dump_fd_json;
   ceph::JSONFormatter dump_fmt;
-  
+
 
   Finisher io_work;
 
@@ -684,7 +684,7 @@ class MonitorDBStore
     if (r < 0)
       return r;
 
-    // Monitors are few in number, so the resource cost of exposing 
+    // Monitors are few in number, so the resource cost of exposing
     // very detailed stats is low: ramp up the priority of all the
     // KV store's perf counters.  Do this after open, because backend may
     // not have constructed PerfCounters earlier.
@@ -734,6 +734,30 @@ class MonitorDBStore
     io_work.stop();
     is_open = false;
     db.reset(NULL);
+  }
+
+  /// @brief Creates a backup of the database
+  /// @param backup_path location to create backup at
+  /// @return true on success
+  bool backup(const std::string& backup_path) {
+    return db->backup(backup_path);
+  }
+
+  /// @brief Restores a the backup with given version from backup_path
+  /// @param cct ceph context
+  /// @param path path to database location
+  /// @param backup_path path to backup location
+  /// @param version version of the backup to restore
+  /// @return true on success
+  static bool restore_backup(CephContext *cct, const std::string &path, const std::string &backup_path, const std::string& version) {
+    std::string kv_type;
+    int r = read_meta_path("kv_backend", &kv_type, &path);
+    if (r < 0) {
+        // Some proper error reporting would be nice
+        return false;
+    }
+
+    return KeyValueDB::restore_backup(cct, kv_type, path, backup_path, version);
   }
 
   void compact() {
@@ -791,8 +815,29 @@ class MonitorDBStore
    */
   int read_meta(const std::string& key,
 		std::string *value) const {
+
+  return read_meta_path(key,
+                value,
+                &path);
+  }
+
+  /**
+   * read_meta_path - read a simple configuration key out-of-band
+   *
+   * Read a simple key value to an specified path store.
+   *
+   * Trailing whitespace is stripped off.
+   *
+   * @param key key name
+   * @param value pointer to value string
+   * @param path path to directory
+   * @returns 0 for success, or an error code
+   */
+  static int read_meta_path(const std::string& key,
+		std::string *value,
+                const std::string *path) {
     char buf[4096];
-    int r = safe_read_file(path.c_str(), key.c_str(),
+    int r = safe_read_file(path->c_str(), key.c_str(),
 			   buf, sizeof(buf));
     if (r <= 0)
       return r;
