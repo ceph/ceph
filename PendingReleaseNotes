@@ -48,6 +48,10 @@
   CephFS does not support disk space reservation. The only flags supported are
   `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
 
+* The HeadBucket API now reports the `X-RGW-Bytes-Used` and `X-RGW-Object-Count`
+  headers only when the `read-stats` querystring is explicitly included in the
+  API request.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
