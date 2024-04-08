@@ -108,6 +108,7 @@ int NVMeofGwMap::process_gw_map_gw_down(const NvmeGwId &gw_id, const NvmeGroupKe
             fsm_handle_gw_down (gw_id, group_key, st.sm_state[i], i, propose_pending);
             st.standby_state(i);
         }
+        propose_pending = true; // map should reflect that gw becames unavailable
     }
     else {
         dout(1)  << __FUNCTION__ << "ERROR GW-id was not found in the map " << gw_id << dendl;
@@ -478,11 +479,11 @@ void NVMeofGwMap::fsm_handle_to_expired(const NvmeGwId &gw_id, const NvmeGroupKe
                     break;
                 }
                 else if(st.sm_state[grpid] == GW_STATES_PER_AGROUP_E::GW_STANDBY_STATE  &&  st.availability == GW_AVAILABILITY_E::GW_AVAILABLE) {
-                   st.active_state(grpid);// GW failed and started during the persistency interval
-                   dout(4)  << "Failback unsuccessfull. GW: " << gw_state.first << "becomes Active for the ana group " << grpid  << dendl;
+                   st.standby_state(grpid);// GW failed during the persistency interval
+                   dout(4)  << "Failback unsuccessfull. GW: " << gw_state.first << " becomes Standby for the ANA groupId " << grpid  << dendl;
                 }
                 fbp_gw_state.standby_state(grpid);
-                dout(4) << "Failback unsuccessfull GW: " << gw_id << "becomes standby for the ana group " << grpid  << dendl;
+                dout(4) << "Failback unsuccessfull GW: " << gw_id << " becomes Standby for the ANA groupId " << grpid  << dendl;
                 map_modified = true;
                 break;
             }

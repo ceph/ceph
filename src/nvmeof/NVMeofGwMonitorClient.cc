@@ -189,7 +189,6 @@ static bool get_gw_state(const char* desc, const std::map<NvmeGroupKey, NvmeGwMa
 void NVMeofGwMonitorClient::send_beacon()
 {
   ceph_assert(ceph_mutex_is_locked_by_me(lock));
-  //dout(0) << "sending beacon as gid " << monc.get_global_id() << dendl;
   GW_AVAILABILITY_E gw_availability = GW_AVAILABILITY_E::GW_CREATED;
   BeaconSubsystems subs;
   NVMeofGwClient gw_client(

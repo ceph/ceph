@@ -55,18 +55,38 @@ using ANA_STATE = std::vector<std::pair<GW_EXPORTED_STATES_PER_AGROUP_E, epoch_t
 struct BeaconNamespace {
     NvmeAnaGrpId anagrpid;
     std::string  nonce;
+
+    // Define the equality operator
+    bool operator==(const BeaconNamespace& other) const {
+        return anagrpid == other.anagrpid &&
+               nonce == other.nonce;
+    }
 };
 
 struct BeaconListener {
     std::string address_family; // IPv4 or IPv6
     std::string address;        //
     std::string svcid;          // port
+
+    // Define the equality operator
+    bool operator==(const BeaconListener& other) const {
+        return address_family == other.address_family &&
+               address == other.address &&
+               svcid == other.svcid;
+    }
 };
 
 struct BeaconSubsystem {
     NvmeNqnId nqn;
     std::list<BeaconListener>  listeners;
     std::list<BeaconNamespace> namespaces;
+
+    // Define the equality operator
+    bool operator==(const BeaconSubsystem& other) const {
+        return nqn == other.nqn &&
+               listeners == other.listeners &&
+               namespaces == other.namespaces;
+    }
 };
 
 using BeaconSubsystems = std::list<BeaconSubsystem>;
