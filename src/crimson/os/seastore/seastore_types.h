@@ -1142,6 +1142,11 @@ inline extent_len_le_t init_extent_len_le(extent_len_t len) {
   return ceph_le32(len);
 }
 
+using extent_ref_count_t = uint32_t;
+constexpr extent_ref_count_t EXTENT_DEFAULT_REF_COUNT = 1;
+
+using extent_ref_count_le_t = ceph_le32;
+
 struct laddr_list_t : std::list<std::pair<laddr_t, extent_len_t>> {
   template <typename... T>
   laddr_list_t(T&&... args)
