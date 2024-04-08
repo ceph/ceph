@@ -448,7 +448,13 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op){
     if(sub.size() == 0) {
         avail = GW_AVAILABILITY_E::GW_UNAVAILABLE;
     }
-    pending_map.Created_gws[group_key][gw_id].subsystems =  sub;
+    if(pending_map.Created_gws[group_key][gw_id].subsystems != sub)
+    {
+        dout(10) << "subsystems of GW changed, propose pending " << gw_id << dendl;
+        pending_map.Created_gws[group_key][gw_id].subsystems =  sub;
+        dout(10) << "subsystems of GW " << gw_id << " "<< pending_map.Created_gws[group_key][gw_id].subsystems << dendl;
+        nonce_propose = true;
+    }
     pending_map.Created_gws[group_key][gw_id].last_gw_map_epoch_valid = ( map.epoch == m->get_last_gwmap_epoch() );
     if( pending_map.Created_gws[group_key][gw_id].last_gw_map_epoch_valid == false ){
       dout(1) <<  "map epoch of gw is not up-to-date " << gw_id << " epoch " << map.epoch << " beacon_epoch " << m->get_last_gwmap_epoch() <<  dendl;
