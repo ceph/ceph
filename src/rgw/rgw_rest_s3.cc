@@ -469,7 +469,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     try {
       ceph::real_time replicated_time;
       decode(replicated_time, i->second);
-      dump_time(s, "x-rgw-replicated-at", replicated_time);
+      dump_time_header(s, "x-rgw-replicated-at", replicated_time);
     } catch (const buffer::error&) {}
   }
 
