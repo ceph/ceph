@@ -36,6 +36,7 @@ def main():
     connection = boto_connect(ACCESS_KEY, SECRET_KEY, Config(retries = {
         'total_max_attempts': 1,
     }))
+    client = connection.meta.client
 
     # pre-test cleanup
     try:
@@ -127,6 +128,43 @@ def main():
     num_leftover_olh_entries = len(json.loads(out))
     assert num_leftover_olh_entries == 0, \
       'Found leftover olh entries after concurrent deletes'
+
+    # TESTCASE 'verify that an unversioned listing makes progress when there are many non-current versioned entries'
+    log.debug('''TEST: verify that an unversioned listing makes progress when \
+there are many non-current versioned entries\n''')
+
+    bucket.object_versions.all().delete()
+    key = 'test_many_versions_1'
+    for _ in range(100):
+        put_resp = bucket.put_object(Key=key, Body=b"")
+
+    key = 'test_many_versions_2'
+    put_resp = bucket.put_object(Key=key, Body=b"")
+
+    try:
+        exec_cmd('ceph config set client rgw_list_bucket_min_readahead 1')
+    
+        more = True
+        continuation_token = ''
+        count = 0
+        req_count = 0
+
+        while more and req_count < 1000:
+            req_count += 1
+            resp = client.list_objects_v2(
+                Bucket=BUCKET_NAME,
+                MaxKeys=1,
+                ContinuationToken=continuation_token, 
+            )
+            count += resp['KeyCount']
+            if 'NextContinuationToken' in resp:
+              continuation_token = resp['NextContinuationToken']
+            more = resp['IsTruncated']
+    finally:
+        exec_cmd('ceph config rm client rgw_list_bucket_min_readahead')
+        
+    assert count == 2
+    assert req_count > 2
 
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
