@@ -242,6 +242,7 @@ public:
   ~RGWStatBucket_ObjStore_S3() override {}
 
   void send_response() override;
+  int get_params(optional_yield y) override;
 };
 
 class RGWCreateBucket_ObjStore_S3 : public RGWCreateBucket_ObjStore {

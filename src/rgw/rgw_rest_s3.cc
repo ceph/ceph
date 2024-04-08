@@ -2401,34 +2401,41 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket,
+static void dump_bucket_metadata(req_state *s,
                                  RGWStorageStats& stats)
 {
   dump_header(s, "X-RGW-Object-Count", static_cast<long long>(stats.num_objects));
   dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(stats.size));
+}
 
-  // only bucket's owner is allowed to get the quota settings of the account
-  if (s->auth.identity->is_owner_of(bucket->get_owner())) {
-    const auto& user_info = s->user->get_info();
-    const auto& bucket_quota = s->bucket->get_info().quota; // bucket quota
-    dump_header(s, "X-RGW-Quota-Max-Buckets", static_cast<long long>(user_info.max_buckets));
+int RGWStatBucket_ObjStore_S3::get_params(optional_yield y)
+{
+  report_stats = s->info.args.exists("read-stats");
 
-    if (user_info.quota.user_quota.enabled){
-      dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.quota.user_quota.max_size));
-      dump_header(s, "X-RGW-Quota-User-Objects", static_cast<long long>(user_info.quota.user_quota.max_objects));
-    }
-
-    if (bucket_quota.enabled){
-      dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(bucket_quota.max_size));
-      dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(bucket_quota.max_objects));
-    }
-  }
+  return 0;
 }
 
 void RGWStatBucket_ObjStore_S3::send_response()
 {
   if (op_ret >= 0) {
-    dump_bucket_metadata(s, bucket.get(), stats);
+    if (report_stats) {
+      dump_bucket_metadata(s, stats);
+    }
+    // only bucket's owner is allowed to get the quota settings of the account
+    if (s->auth.identity->is_owner_of(s->bucket->get_owner())) {
+      const auto& user_info = s->user->get_info();
+      const auto& bucket_quota = s->bucket->get_info().quota; // bucket quota
+
+      dump_header(s, "X-RGW-Quota-Max-Buckets", static_cast<long long>(user_info.max_buckets));
+      if (user_info.quota.user_quota.enabled) {
+        dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.quota.user_quota.max_size));
+        dump_header(s, "X-RGW-Quota-User-Objects", static_cast<long long>(user_info.quota.user_quota.max_objects));
+      }
+      if (bucket_quota.enabled) {
+        dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(bucket_quota.max_size));
+        dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(bucket_quota.max_objects));
+      }
+    }
   }
 
   set_req_state_err(s, op_ret);
