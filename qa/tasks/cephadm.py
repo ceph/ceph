@@ -345,7 +345,7 @@ def ceph_log(ctx, config):
 
     finally:
         log.info('Checking cluster log for badness...')
-        def first_in_ceph_log(pattern, excludes):
+        def first_in_ceph_log(pattern, excludes, only_match):
             """
             Find the first occurrence of the pattern specified in the Ceph log,
             Returns None if none found.
@@ -360,6 +360,8 @@ def ceph_log(ctx, config):
                 '/var/log/ceph/{fsid}/ceph.log'.format(
                     fsid=fsid),
             ]
+            if only_match:
+                args.extend([run.Raw('|'), 'egrep', '|'.join(only_match)])
             if excludes:
                 for exclude in excludes:
                     args.extend([run.Raw('|'), 'egrep', '-v', exclude])
@@ -375,14 +377,22 @@ def ceph_log(ctx, config):
                 return stdout
             return None
 
+        # NOTE: technically the first and third arg to first_in_ceph_log
+        # are serving a similar purpose here of being something we
+        # look for in the logs. The reason they are separate args is that
+        # we want '\[ERR\]|\[WRN\]|\[SEC\]' to always have to be in the thing
+        # we match even if the test yaml specifies nothing else, and then the
+        # log-only-match options are for when a test only wants to fail on
+        # a specific subset of log lines that '\[ERR\]|\[WRN\]|\[SEC\]' matches
         if first_in_ceph_log('\[ERR\]|\[WRN\]|\[SEC\]',
-                             config.get('log-ignorelist')) is not None:
+                             config.get('log-ignorelist'),
+                             config.get('log-only-match')) is not None:
             log.warning('Found errors (ERR|WRN|SEC) in cluster log')
             ctx.summary['success'] = False
             # use the most severe problem as the failure reason
             if 'failure_reason' not in ctx.summary:
                 for pattern in ['\[SEC\]', '\[ERR\]', '\[WRN\]']:
-                    match = first_in_ceph_log(pattern, config['log-ignorelist'])
+                    match = first_in_ceph_log(pattern, config['log-ignorelist'], config.get('log-only-match'))
                     if match is not None:
                         ctx.summary['failure_reason'] = \
                             '"{match}" in cluster log'.format(
