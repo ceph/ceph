@@ -3787,7 +3787,7 @@ def test_ps_s3_persistent_multiple_endpoints():
 
     wait_for_queue_to_drain(topic_name+'_1')
 
-    http_server.verify_s3_events(keys, exact_match=False, deletions=False)
+    http_server.verify_s3_events(keys, exact_match=True, deletions=False)
 
     # delete objects from the bucket
     client_threads = []
@@ -3800,7 +3800,7 @@ def test_ps_s3_persistent_multiple_endpoints():
 
     wait_for_queue_to_drain(topic_name+'_1')
 
-    http_server.verify_s3_events(keys, exact_match=False, deletions=True)
+    http_server.verify_s3_events(keys, exact_match=True, deletions=True)
 
     # cleanup
     s3_notification_conf1.del_config()
@@ -4094,7 +4094,7 @@ def test_ps_s3_topic_update():
     #zone_bucket_checkpoint(ps_zone.zone, master_zone.zone, bucket_name)
     keys = list(bucket.list())
     # TODO: use exact match
-    receiver.verify_s3_events(keys, exact_match=False)
+    receiver.verify_s3_events(keys, exact_match=True)
     # update the same topic with new endpoint
     #topic_conf = PSTopic(ps_zone.conn, topic_name,endpoint='http://'+ hostname + ':' + str(port))
     topic_conf = PSTopicS3(conn, topic_name, endpoint_args='http://'+ hostname + ':' + str(port))
@@ -4752,6 +4752,7 @@ def test_persistent_ps_s3_data_path_v2_migration():
         wait_for_queue_to_drain(topic_name)
         # verify events
         keys = list(bucket.list())
+        # exact match is false because the notifications are persistent.
         http_server.verify_s3_events(keys, exact_match=False)
 
     except Exception as e:
@@ -4831,7 +4832,7 @@ def test_ps_s3_data_path_v2_migration():
     try:
         # verify events
         keys = list(bucket.list())
-        http_server.verify_s3_events(keys, exact_match=False)
+        http_server.verify_s3_events(keys, exact_match=True)
 
         # create topic to poll on
         topic_name_1 = topic_name + '_1'
