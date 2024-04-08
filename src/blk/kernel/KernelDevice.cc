@@ -587,35 +587,13 @@ bool KernelDevice::_discard_started()
   return !discard_threads.empty();
 }
 
-int KernelDevice::discard_drain(uint32_t timeout_msec = 0)
+void KernelDevice::discard_drain()
 {
   dout(10) << __func__ << dendl;
-  bool check_timeout = false;
-  utime_t end_time;
-  if (timeout_msec) {
-    check_timeout = true;
-    uint32_t timeout_sec = 0;
-    if (timeout_msec >= 1000) {
-      timeout_sec = (timeout_msec / 1000);
-      timeout_msec = (timeout_msec % 1000);
-    }
-    end_time = ceph_clock_now();
-    // add the timeout after converting from msec to nsec
-    end_time.tv.tv_nsec += (timeout_msec * (1000*1000));
-    if (end_time.tv.tv_nsec > (1000*1000*1000)) {
-      end_time.tv.tv_nsec -= (1000*1000*1000);
-      end_time.tv.tv_sec += 1;
-    }
-    end_time.tv.tv_sec += timeout_sec;
-  }
   std::unique_lock l(discard_lock);
   while (!discard_queued.empty() || discard_running) {
     discard_cond.wait(l);
-    if (check_timeout && ceph_clock_now() > end_time) {
-      return -1;
-    }
   }
-  return 0;
 }
 
 static bool is_expected_ioerr(const int r)
