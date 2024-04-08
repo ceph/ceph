@@ -1033,6 +1033,8 @@ private:
 
   OpTracker op_tracker;
 
+  bool mon_backup_requested;
+
  public:
   Monitor(CephContext *cct_, std::string nm, MonitorDBStore *s,
 	  Messenger *m, Messenger *mgr_m, MonMap *map);
@@ -1078,6 +1080,10 @@ private:
 		       std::ostream& err,
 		       std::ostream& out);
 
+  // Notify monitor that it should create a new database backup
+  void should_backup() {
+    mon_backup_requested = true;
+  }
   // Execute mon database backup
   int backup();
 
