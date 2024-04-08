@@ -160,11 +160,53 @@ there are many non-current versioned entries\n''')
             if 'NextContinuationToken' in resp:
               continuation_token = resp['NextContinuationToken']
             more = resp['IsTruncated']
+
+        assert count == 2
+        assert req_count > 2
+
     finally:
         exec_cmd('ceph config rm client rgw_list_bucket_min_readahead')
         
-    assert count == 2
-    assert req_count > 2
+    # TESTCASE 'verify that ListObjectsV2 can iterate through contiguous delete markers'
+    log.debug('''TEST: verify that ListObjectsV2 can iterate through contiguous delete \
+markers\n''')
+
+    bucket.object_versions.all().delete()
+    
+    try:
+        exec_cmd('ceph config set client rgw_list_bucket_min_readahead 1')
+        exec_cmd('radosgw-admin reshard bucket --bucket versioning-bucket \
+--num-shards 2 --yes-i-really-mean-it')
+
+        # create 100 delete markers
+        for i in range(100):
+            bucket.Object(str(i).zfill(3)).delete()
+
+        bucket.put_object(Key='100', Body=b"")
+        
+        more = True
+        continuation_token = ''
+        count = 0
+        req_count = 0
+
+        while more and req_count < 1000:
+            req_count += 1
+            resp = client.list_objects_v2(
+                Bucket=BUCKET_NAME,
+                MaxKeys=1,
+                ContinuationToken=continuation_token, 
+            )
+            print(resp)
+            count += resp['KeyCount']
+            if 'NextContinuationToken' in resp:
+              continuation_token = resp['NextContinuationToken']
+            more = resp['IsTruncated']
+
+        assert count == 1
+        assert req_count > 1
+
+    finally:
+        exec_cmd('ceph config rm client rgw_list_bucket_min_readahead')
 
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
