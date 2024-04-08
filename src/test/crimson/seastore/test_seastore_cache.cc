@@ -100,7 +100,7 @@ struct cache_test_t : public seastar_test_suite_t {
           return cache->mkfs(t);
         }).safe_then([this, &ref_t] {
           return submit_transaction(std::move(ref_t)
-          ).then([](auto p) {});
+          ).discard_result();
         });
       });
     }).handle_error(

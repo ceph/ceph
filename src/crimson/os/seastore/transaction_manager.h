@@ -233,7 +233,7 @@ public:
 
 
   using ref_iertr = LBAManager::ref_iertr;
-  using ref_ret = ref_iertr::future<unsigned>;
+  using ref_ret = ref_iertr::future<extent_ref_count_t>;
 
 #ifdef UNIT_TESTS_BUILT
   /// Add refcount for ref
