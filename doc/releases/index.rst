@@ -23,7 +23,6 @@ security fixes.
 
    Reef (v18.2.*) <reef>
    Quincy (v17.2.*) <quincy>
-   Pacific (v16.2.*) <pacific>
 
 .. ceph_releases:: releases.yml current
 
@@ -40,6 +39,7 @@ receive bug fixes or backports).
    :maxdepth: 1
    :hidden:
 
+   Pacific (v16.2.*) <pacific>
    Octopus (v15.2.*) <octopus>
    Nautilus (v14.2.*) <nautilus>
    Mimic (v13.2.*) <mimic>
