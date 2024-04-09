@@ -195,6 +195,9 @@ class CephadmServe:
             val = None
         else:
             total_mem *= 1024   # kb -> bytes
+            self.log.debug(f'Autotuning memory for host {host} with '
+                           f'{total_mem} total bytes of memory and '
+                           f'{self.mgr.autotune_memory_target_ratio} target ratio')
             total_mem *= self.mgr.autotune_memory_target_ratio
             a = MemoryAutotuner(
                 daemons=self.mgr.cache.get_daemons_by_host(host),
@@ -231,6 +234,9 @@ class CephadmServe:
             # options as users may be using them. Since there is no way to set autotuning
             # on/off at a host level, best we can do is check if it is globally on.
             if self.mgr.get_foreign_ceph_option('osd', 'osd_memory_target_autotune'):
+                self.mgr.log.debug(f'Removing osd_memory_target for OSDs on {host}'
+                                   ' as either there were no OSDs to tune or the '
+                                   ' per OSD memory calculation result was <= 0')
                 self.mgr.check_mon_command({
                     'prefix': 'config rm',
                     'who': f'osd/host:{host.split(".")[0]}',
