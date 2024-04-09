@@ -38,6 +38,10 @@ enum {
   l_cephfs_mirror_peer_replayer_snap_sync_failures,
   l_cephfs_mirror_peer_replayer_avg_sync_time,
   l_cephfs_mirror_peer_replayer_sync_bytes,
+  l_cephfs_mirror_peer_replayer_last_synced_start,
+  l_cephfs_mirror_peer_replayer_last_synced_end,
+  l_cephfs_mirror_peer_replayer_last_synced_duration,
+  l_cephfs_mirror_peer_replayer_last_synced_bytes,
   l_cephfs_mirror_peer_replayer_last,
 };
 
@@ -203,6 +207,14 @@ PeerReplayer::PeerReplayer(CephContext *cct, FSMirror *fs_mirror,
 		   "avg_sync_time", "Average Sync Time", "asyn", prio);
   plb.add_u64_counter(l_cephfs_mirror_peer_replayer_sync_bytes,
 		      "sync_bytes", "Sync Bytes", "sbye", prio);
+  plb.add_time(l_cephfs_mirror_peer_replayer_last_synced_start,
+	       "last_synced_start", "Last Synced Start", "lsst", prio);
+  plb.add_time(l_cephfs_mirror_peer_replayer_last_synced_end,
+	       "last_synced_end", "Last Synced End", "lsen", prio);
+  plb.add_time(l_cephfs_mirror_peer_replayer_last_synced_duration,
+	       "last_synced_duration", "Last Synced Duration", "lsdn", prio);
+  plb.add_u64_counter(l_cephfs_mirror_peer_replayer_last_synced_bytes,
+		      "last_synced_bytes", "Last Synced Bytes", "lsbt", prio);
   m_perf_counters = plb.create_perf_counters();
   m_cct->get_perfcounters_collection()->add(m_perf_counters);
 }
@@ -751,7 +763,7 @@ int PeerReplayer::remote_file_op(const std::string &dir_root, const std::string 
         return r;
       }
       if (m_perf_counters) {
-	m_perf_counters->inc(l_cephfs_mirror_peer_replayer_sync_bytes, stx.stx_size);
+        m_perf_counters->inc(l_cephfs_mirror_peer_replayer_sync_bytes, stx.stx_size);
       }
       inc_sync_bytes(dir_root, stx.stx_size);
     } else if (S_ISLNK(stx.stx_mode)) {
@@ -1669,9 +1681,17 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     "cephfs_mirror_max_snapshot_sync_per_cycle");
 
   dout(10) << ": synchronizing from snap-id=" << it->first << dendl;
+  double start = 0;
+  double end = 0;
+  double duration = 0;
   for (; it != local_snap_map.end(); ++it) {
+    if (m_perf_counters) {
+      start = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now().time_since_epoch()).count();
+      utime_t t;
+      t.set_from_double(start);
+      m_perf_counters->tset(l_cephfs_mirror_peer_replayer_last_synced_start, t);
+    }
     set_current_syncing_snap(dir_root, it->first, it->second);
-    auto start = clock::now();
     boost::optional<Snapshot> prev = boost::none;
     if (last_snap_id != 0) {
       prev = std::make_pair(last_snap_name, last_snap_id);
@@ -1685,16 +1705,18 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     }
     if (m_perf_counters) {
       m_perf_counters->inc(l_cephfs_mirror_peer_replayer_snaps_synced);
+      end = std::chrono::duration_cast<std::chrono::milliseconds>(clock::now().time_since_epoch()).count();
+      utime_t t;
+      t.set_from_double(end);
+      m_perf_counters->tset(l_cephfs_mirror_peer_replayer_last_synced_end, t);
+      duration = end - start;
+      t.set_from_double(duration);
+      m_perf_counters->tinc(l_cephfs_mirror_peer_replayer_avg_sync_time, t);
+      m_perf_counters->tset(l_cephfs_mirror_peer_replayer_last_synced_duration, t);
+      m_perf_counters->set(l_cephfs_mirror_peer_replayer_last_synced_bytes, m_snap_sync_stats.at(dir_root).sync_bytes);
     }
-    std::chrono::duration<double> duration = clock::now() - start;
 
-    utime_t d;
-    d.set_from_double(duration.count());
-    if (m_perf_counters) {
-      m_perf_counters->tinc(l_cephfs_mirror_peer_replayer_avg_sync_time, d);
-    }
-
-    set_last_synced_stat(dir_root, it->first, it->second, duration.count());
+    set_last_synced_stat(dir_root, it->first, it->second, duration);
     if (--snaps_per_cycle == 0) {
       break;
     }
