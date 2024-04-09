@@ -3094,9 +3094,6 @@ def test_ps_s3_persistent_topic_stats():
     host = get_ip()
     port = random.randint(10000, 20000)
 
-    # start an http server in a separate thread
-    http_server = HTTPServerWithEvents((host, port))
-
     # create bucket
     bucket_name = gen_bucket_name()
     bucket = conn.create_bucket(bucket_name)
@@ -3116,10 +3113,6 @@ def test_ps_s3_persistent_topic_stats():
     s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
     response, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
-
-    delay = 30
-    time.sleep(delay)
-    http_server.close()
 
     # topic stats
     result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
@@ -3150,18 +3143,13 @@ def test_ps_s3_persistent_topic_stats():
     # delete objects from the bucket
     client_threads = []
     start_time = time.time()
-    count = 0
     for key in bucket.list():
-        count += 1
         thr = threading.Thread(target = key.delete, args=())
         thr.start()
         client_threads.append(thr)
-        if count%100 == 0:
-            [thr.join() for thr in client_threads]
-            time_diff = time.time() - start_time
-            print('average time for deletion + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
-            client_threads = []
-            start_time = time.time()
+    [thr.join() for thr in client_threads]
+    time_diff = time.time() - start_time
+    print('average time for deletion + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
     # topic stats
     result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
@@ -3179,7 +3167,6 @@ def test_ps_s3_persistent_topic_stats():
     topic_conf.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
-    time.sleep(delay)
     http_server.close()
 
 def ps_s3_persistent_topic_configs(persistency_time, config_dict):
