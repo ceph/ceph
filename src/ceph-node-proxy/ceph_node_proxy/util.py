@@ -31,7 +31,8 @@ CONFIG: Dict[str, Any] = {
 
 
 def get_logger(name: str, level: Union[int, str] = logging.NOTSET) -> logging.Logger:
-    if level == logging.NOTSET:
+    log_level: Union[int, str] = level
+    if log_level == logging.NOTSET:
         log_level = CONFIG['logging']['level']
     logger = logging.getLogger(name)
     logger.setLevel(log_level)
