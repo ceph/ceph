@@ -180,6 +180,10 @@ enum {
   l_osdc_osdop_omap_rd,
   l_osdc_osdop_omap_del,
 
+  l_osdc_replica_read_sent,
+  l_osdc_replica_read_bounced,
+  l_osdc_replica_read_completed,
+
   l_osdc_last,
 };
 
@@ -377,6 +381,13 @@ void Objecter::init()
 			"OSD OMAP read operations");
     pcb.add_u64_counter(l_osdc_osdop_omap_del, "omap_del",
 			"OSD OMAP delete operations");
+
+    pcb.add_u64_counter(l_osdc_replica_read_sent, "replica_read_sent",
+			"Operations sent to replica");
+    pcb.add_u64_counter(l_osdc_replica_read_bounced, "replica_read_bounced",
+			"Operations bounced by replica to be resent to primary");
+    pcb.add_u64_counter(l_osdc_replica_read_completed, "replica_read_completed",
+			"Operations completed by replica");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2328,6 +2339,10 @@ void Objecter::_send_op_account(Op *op)
     ldout(cct, 20) << " note: not requesting reply" << dendl;
   }
 
+  if (op->target.used_replica) {
+    logger->inc(l_osdc_replica_read_sent);
+  }
+
   logger->inc(l_osdc_op_active);
   logger->inc(l_osdc_op);
   logger->inc(l_osdc_oplen_avg, op->ops.size());
@@ -3475,6 +3490,15 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     _op_submit(op, sul, NULL);
     m->put();
     return;
+  }
+
+  if (op->target.flags & (CEPH_OSD_FLAG_BALANCE_READS |
+			  CEPH_OSD_FLAG_LOCALIZE_READS)) {
+    if (rc == -EAGAIN) {
+      logger->inc(l_osdc_replica_read_bounced);
+    } else {
+      logger->inc(l_osdc_replica_read_completed);
+    }
   }
 
   if (rc == -EAGAIN) {
