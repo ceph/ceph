@@ -496,16 +496,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         :param hostname: hostname
         """
         table_heading_mapping = {
-            'summary': ['HOST', 'STORAGE', 'CPU', 'NET', 'MEMORY', 'POWER', 'FANS'],
+            'summary': ['HOST', 'SN', 'STORAGE', 'CPU', 'NET', 'MEMORY', 'POWER', 'FANS'],
             'fullreport': [],
             'firmwares': ['HOST', 'COMPONENT', 'NAME', 'DATE', 'VERSION', 'STATUS'],
             'criticals': ['HOST', 'COMPONENT', 'NAME', 'STATUS', 'STATE'],
-            'memory': ['HOST', 'NAME', 'STATUS', 'STATE'],
-            'storage': ['HOST', 'NAME', 'MODEL', 'SIZE', 'PROTOCOL', 'SN', 'STATUS', 'STATE'],
-            'processors': ['HOST', 'NAME', 'MODEL', 'CORES', 'THREADS', 'STATUS', 'STATE'],
-            'network': ['HOST', 'NAME', 'SPEED', 'STATUS', 'STATE'],
-            'power': ['HOST', 'ID', 'NAME', 'MODEL', 'MANUFACTURER', 'STATUS', 'STATE'],
-            'fans': ['HOST', 'ID', 'NAME', 'STATUS', 'STATE']
+            'memory': ['HOST', 'SYS_ID', 'NAME', 'STATUS', 'STATE'],
+            'storage': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'SIZE', 'PROTOCOL', 'SN', 'STATUS', 'STATE'],
+            'processors': ['HOST', 'SYS_ID', 'NAME', 'MODEL', 'CORES', 'THREADS', 'STATUS', 'STATE'],
+            'network': ['HOST', 'SYS_ID', 'NAME', 'SPEED', 'STATUS', 'STATE'],
+            'power': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'MODEL', 'MANUFACTURER', 'STATUS', 'STATE'],
+            'fans': ['HOST', 'CHASSIS_ID', 'ID', 'NAME', 'STATUS', 'STATE']
         }
 
         if category not in table_heading_mapping.keys():
@@ -522,21 +522,23 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 output = json.dumps(summary)
             else:
                 for k, v in summary.items():
-                    row = [k]
-                    row.extend([v['status'][key] for key in ['storage', 'processors', 'network', 'memory', 'power', 'fans']])
+                    row = [k, v['sn']]
+                    row.extend([v['status'][key] for key in ['storage', 'processors',
+                                                             'network', 'memory',
+                                                             'power', 'fans']])
                     table.add_row(row)
                 output = table.get_string()
         elif category == 'fullreport':
             if hostname is None:
-                output = "Missing host name"
+                output = 'Missing host name'
             elif format != Format.json:
-                output = "fullreport only supports json output"
+                output = 'fullreport only supports json output'
             else:
                 completion = self.node_proxy_fullreport(hostname=hostname)
                 fullreport: Dict[str, Any] = raise_if_exception(completion)
                 output = json.dumps(fullreport)
         elif category == 'firmwares':
-            output = "Missing host name" if hostname is None else self._firmwares_table(hostname, table, format)
+            output = 'Missing host name' if hostname is None else self._firmwares_table(hostname, table, format)
         elif category == 'criticals':
             output = self._criticals_table(hostname, table, format)
         else:
@@ -552,7 +554,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             return json.dumps(data)
         for host, details in data.items():
             for k, v in details.items():
-                table.add_row((host, k, v['name'], v['release_date'], v['version'], v['status']['health']))
+                try:
+                    status = v['status']['health']
+                except (KeyError, TypeError):
+                    status = 'N/A'
+                table.add_row((host, k, v['name'], v['release_date'], v['version'], status))
         return table.get_string()
 
     def _criticals_table(self, hostname: Optional[str], table: PrettyTable, format: Format) -> str:
@@ -584,20 +590,21 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         }
 
         fields = mapping.get(category, ())
-        for host, details in data.items():
-            for k, v in details.items():
-                row = []
-                for field in fields:
-                    if field in v:
-                        row.append(v[field])
-                    elif field in v.get('status', {}):
-                        row.append(v['status'][field])
+        for host in data.keys():
+            for sys_id, details in data[host].items():
+                for k, v in details.items():
+                    row = []
+                    for field in fields:
+                        if field in v:
+                            row.append(v[field])
+                        elif field in v.get('status', {}):
+                            row.append(v['status'][field])
+                        else:
+                            row.append('')
+                    if category in ('power', 'fans', 'processors'):
+                        table.add_row((host, sys_id,) + (k,) + tuple(row))
                     else:
-                        row.append('')
-                if category in ('power', 'fans', 'processors'):
-                    table.add_row((host,) + (k,) + tuple(row))
-                else:
-                    table.add_row((host,) + tuple(row))
+                        table.add_row((host, sys_id,) + tuple(row))
 
         return table.get_string()
 
@@ -623,7 +630,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         data = raise_if_exception(completion)
         output: str = ''
         if action == self.HardwareLightAction.get:
-            status = 'on' if data["LocationIndicatorActive"] else 'off'
+            status = 'on' if data['LocationIndicatorActive'] else 'off'
             if light_type == self.HardwareLightType.device:
                 output = f'ident LED for {device} on {hostname} is: {status}'
             else:
