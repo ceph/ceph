@@ -15,7 +15,10 @@ BtreeNodeMapping<key_t, val_t>::get_logical_extent(
   assert(parent->is_valid());
   assert(pos != std::numeric_limits<uint16_t>::max());
   auto &p = (FixedKVNode<key_t>&)*parent;
-  auto v = p.get_logical_child(ctx, pos);
+  auto k = this->is_indirect()
+    ? this->get_intermediate_base()
+    : get_key();
+  auto v = p.template get_child<LogicalCachedExtent>(ctx, pos, k);
   if (!v.has_child()) {
     this->child_pos = v.get_child_pos();
   }
