@@ -219,7 +219,7 @@ static void usage()
        << "  --mon-data <directory>\n"
        << "        where the mon store and keyring are located\n"
        << "  --set-crush-location <bucket>=<foo>"
-       << "        sets monitor's crush bucket location (only for stretch mode)"
+       << "        sets monitor's crush bucket location (only for stretch mode)\n"
        << "  --restore-backup <directory>\n"
        << "        restore the backup from location and exit\n"
        << "  --backup-version <version>\n"
