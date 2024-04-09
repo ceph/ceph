@@ -15508,9 +15508,7 @@ void BlueStore::_do_write_small(
 	  }
           logger->inc(l_bluestore_write_small_pre_read);
 
-          bufferlist without_padding;
-          without_padding.substr_of(bl, head_pad, bl.length() - head_pad);
-          _buffer_cache_write(txc, o, offset - head_read, std::move(without_padding),
+          _buffer_cache_write(txc, o, offset - head_read - head_pad, bl,
                               wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
           b->dirty_blob().calc_csum(b_off, bl);
