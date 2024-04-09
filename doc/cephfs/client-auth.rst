@@ -16,20 +16,20 @@ to the lowest possible level of authority needed.
 Path restriction
 ================
 
-By default, clients are not restricted in what paths they are allowed to
-mount. Further, when clients mount a subdirectory, e.g., ``/home/user``, the
-MDS does not by default verify that subsequent operations are ‘locked’ within
-that directory.
+By default, clients are not restricted in the paths that they are allowed to
+mount. When clients mount a subdirectory (for example ``/home/user``), the MDS
+does not by default verify that subsequent operations are "locked" within that
+directory.
 
-To restrict clients to only mount and work within a certain directory, use
-path-based MDS authentication capabilities.
+To restrict clients so that they mount and work only within a certain
+directory, use path-based MDS authentication capabilities.
 
-Note that this restriction *only* impacts the filesystem hierarchy -- the metadata
-tree managed by the MDS. Clients will still be able to access the underlying
-file data in RADOS directly. To segregate clients fully, you must also isolate
-untrusted clients in their own RADOS namespace. You can place a client's
-filesystem subtree in a particular namespace using `file layouts`_ and then
-restrict their RADOS access to that namespace using `OSD capabilities`_
+This restriction impacts *only* the filesystem hierarchy, or, in other words,
+the metadata tree that is managed by the MDS. Clients will still be able to
+access the underlying file data in RADOS directly. To segregate clients fully,
+isolate untrusted clients in their own RADOS namespace. You can place a
+client's filesystem subtree in a particular namespace using `file layouts`_ and
+then restrict their RADOS access to that namespace using `OSD capabilities`_
 
 .. _file layouts: ./file-layouts
 .. _OSD capabilities: ../rados/operations/user-management/#authorization-capabilities
@@ -37,17 +37,21 @@ restrict their RADOS access to that namespace using `OSD capabilities`_
 Syntax
 ------
 
-To grant rw access to the specified directory only, we mention the specified
-directory while creating key for a client using the following syntax::
+To grant ``rw`` access to the specified directory only, mention the specified
+directory while creating key for a client. Use a command of the following form:
 
- ceph fs authorize <fs_name> client.<client_id> <path-in-cephfs> rw
+.. prompt:: bash #
 
-For example, to restrict client ``foo`` to writing only in the ``bar``
-directory of file system ``cephfs_a``, use ::
+   ceph fs authorize <fs_name> client.<client_id> <path-in-cephfs> rw
 
- ceph fs authorize cephfs_a client.foo / r /bar rw
+For example, to restrict a client named ``foo`` so that it can write only in
+the ``bar`` directory of file system ``cephfs_a``, run the following command:
 
- results in:
+.. prompt:: bash #
+
+   ceph fs authorize cephfs_a client.foo / r /bar rw
+
+This results in::
 
  client.foo
    key: *key*
@@ -56,48 +60,52 @@ directory of file system ``cephfs_a``, use ::
    caps: [osd] allow rw tag cephfs data=cephfs_a
 
 To completely restrict the client to the ``bar`` directory, omit the
-root directory ::
+root directory :
 
- ceph fs authorize cephfs_a client.foo /bar rw
+.. prompt:: bash #
 
-Note that if a client's read access is restricted to a path, they will only
-be able to mount the file system when specifying a readable path in the
-mount command (see below).
+   ceph fs authorize cephfs_a client.foo /bar rw
 
-Supplying ``all`` or ``*`` as the file system name will grant access to every
-file system. Note that it is usually necessary to quote ``*`` to protect it
-from the shell.
+If a client's read access is restricted to a path, the client will be able to
+mount the file system only by specifying a readable path in the mount command
+(see below).
 
-See `User Management - Add a User to a Keyring`_. for additional details on
-user management
+Supplying ``all`` or ``*`` as the file system name grants access to every file
+system. It is usually necessary to quote ``*`` to protect it from the
+shell.
 
-To restrict a client to the specified sub-directory only, we mention the
-specified directory while mounting using the following syntax::
+See `User Management - Add a User to a Keyring`_ for more on user management.
 
- ceph-fuse -n client.<client_id> <mount-path> -r *directory_to_be_mounted*
+To restrict a client to only the specified sub-directory, mention the specified
+directory while mounting. Use a command of the following form: 
 
-For example, to restrict client ``foo`` to ``mnt/bar`` directory, we will
-use::
+.. prompt:: bash #
 
- ceph-fuse -n client.foo mnt -r /bar
+   ceph-fuse -n client.<client_id> <mount-path> -r *directory_to_be_mounted*
+
+For example, to restrict client ``foo`` to ``mnt/bar`` directory, use the
+following command:
+
+.. prompt:: bash #
+
+   ceph-fuse -n client.foo mnt -r /bar
 
 Free space reporting
 --------------------
 
-By default, when a client is mounting a sub-directory, the used space (``df``)
-will be calculated from the quota on that sub-directory, rather than reporting
-the overall amount of space used on the cluster.
+When a client is mounting a sub-directory, by default the used space (``df``)
+is calculated from the quota on that sub-directory rather than reporting the
+overall amount of space used on the cluster.
 
-If you would like the client to report the overall usage of the file system,
-and not just the quota usage on the sub-directory mounted, then set the
-following config option on the client::
-
+To make the client report the overall usage of the file system and not just the
+quota usage on the mounted sub-directory, set the following config option on
+the client::
 
     client quota df = false
 
-If quotas are not enabled, or no quota is set on the sub-directory mounted,
-then the overall usage of the file system will be reported irrespective of
-the value of this setting.
+If quotas are not enabled or if no quota is set on the mounted sub-directory,
+then the overall usage of the file system will be reported irrespective of the
+value of this setting.
 
 Layout and Quota restriction (the 'p' flag)
 ===========================================
