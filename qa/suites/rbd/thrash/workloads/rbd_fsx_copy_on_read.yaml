@@ -1,0 +1,10 @@
+tasks:
+- rbd_fsx:
+    clients: [client.0]
+    ops: 6000
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd cache: true
+        rbd clone copy on read: true
