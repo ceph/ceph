@@ -96,11 +96,10 @@ else:
             "Create a new NVMeoF listener",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
-                "gateway": Param(str, "NVMeoF gateway"),
+                "host_name": Param(str, "NVMeoF hostname"),
                 "traddr": Param(str, "NVMeoF transport address"),
-                "trsvcid": Param(int, "NVMeoF transport service port"),
-                "adrfam": Param(str, "NVMeoF address family"),
-                "trtype": Param(str, "NVMeoF transport type"),
+                "trsvcid": Param(int, "NVMeoF transport service port", True, 4420),
+                "adrfam": Param(int, "NVMeoF address family (0 - IPv4, 1 - IPv6)", True, 0),
             },
         )
         @empty_response
@@ -108,18 +107,18 @@ else:
         def create(
             self,
             nqn: str,
-            gateway: str,
+            host_name: str,
             traddr: str,
-            trsvcid: Optional[int] = 4420,
-            adrfam: Optional[str] = "ipv4",
+            trsvcid: int = 4420,
+            adrfam: int = 0,  # IPv4
         ):
             return NVMeoFClient().stub.create_listener(
                 NVMeoFClient.pb2.create_listener_req(
                     nqn=nqn,
-                    gateway_name=gateway,
+                    host_name=host_name,
                     traddr=traddr,
-                    trsvcid=trsvcid,
-                    adrfam=adrfam,
+                    trsvcid=int(trsvcid),
+                    adrfam=int(adrfam),
                 )
             )
 
@@ -127,18 +126,31 @@ else:
             "Delete an existing NVMeoF listener",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
-                "gateway": Param(str, "NVMeoF gateway"),
+                "host_name": Param(str, "NVMeoF hostname"),
                 "traddr": Param(str, "NVMeoF transport address"),
-                "trsvid": Param(int, "NVMeoF transport service port"),
+                "trsvcid": Param(int, "NVMeoF transport service port", True, 4420),
+                "adrfam": Param(int, "NVMeoF address family (0 - IPv4, 1 - IPv6)", True, 0),
             },
         )
         @empty_response
         @handle_nvmeof_error
-        def delete(self, nqn: str, gateway: str, traddr: Optional[str] = None,
-                   trsvcid: Optional[int] = 4420):
+        def delete(
+            self,
+            nqn: str,
+            host_name: str,
+            traddr: str,
+            trsvcid: int = 4420,
+            adrfam: int = 0,  # IPv4
+            force: bool = False,
+        ):
             return NVMeoFClient().stub.delete_listener(
                 NVMeoFClient.pb2.delete_listener_req(
-                    nqn=nqn, gateway_name=gateway, traddr=traddr, trsvcid=int(trsvcid)
+                    nqn=nqn,
+                    host_name=host_name,
+                    traddr=traddr,
+                    trsvcid=int(trsvcid),
+                    adrfam=int(adrfam),
+                    force=str_to_bool(force),
                 )
             )
 

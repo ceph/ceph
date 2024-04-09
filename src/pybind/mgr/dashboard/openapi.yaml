@@ -8388,11 +8388,11 @@ paths:
             schema:
               properties:
                 adrfam:
-                  default: ipv4
-                  description: NVMeoF address family
-                  type: string
-                gateway:
-                  description: NVMeoF gateway
+                  default: 0
+                  description: NVMeoF address family (0 - IPv4, 1 - IPv6)
+                  type: integer
+                host_name:
+                  description: NVMeoF hostname
                   type: string
                 traddr:
                   description: NVMeoF transport address
@@ -8402,7 +8402,7 @@ paths:
                   description: NVMeoF transport service port
                   type: integer
               required:
-              - gateway
+              - host_name
               - traddr
               type: object
       responses:
@@ -8430,7 +8430,7 @@ paths:
       summary: Create a new NVMeoF listener
       tags:
       - NVMe-oF Subsystem Listener
-  /api/nvmeof/subsystem/{nqn}/listener/{gateway}:
+  /api/nvmeof/subsystem/{nqn}/listener/{host_name}/{traddr}:
     delete:
       parameters:
       - description: NVMeoF subsystem NQN
@@ -8439,23 +8439,35 @@ paths:
         required: true
         schema:
           type: string
-      - description: NVMeoF gateway
+      - description: NVMeoF hostname
         in: path
-        name: gateway
+        name: host_name
         required: true
         schema:
           type: string
-      - allowEmptyValue: true
-        description: NVMeoF transport address
-        in: query
+      - description: NVMeoF transport address
+        in: path
         name: traddr
+        required: true
         schema:
           type: string
       - default: 4420
+        description: NVMeoF transport service port
         in: query
         name: trsvcid
         schema:
           type: integer
+      - default: 0
+        description: NVMeoF address family (0 - IPv4, 1 - IPv6)
+        in: query
+        name: adrfam
+        schema:
+          type: integer
+      - default: false
+        in: query
+        name: force
+        schema:
+          type: boolean
       responses:
         '202':
           content:

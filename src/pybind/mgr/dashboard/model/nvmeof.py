@@ -81,11 +81,11 @@ class NamespaceIOStats(NamedTuple):
 
 
 class Listener(NamedTuple):
-    gateway_name: str
+    host_name: str
     trtype: str
     traddr: str
-    adrfam: Optional[str] = "ipv4"
-    trsvcid: Optional[int] = 4420
+    adrfam: int = 0  # 0: IPv4, 1: IPv6
+    trsvcid: int = 4420
 
 
 class Host(NamedTuple):
