@@ -712,7 +712,8 @@ public:
   void start_shutdown();
   void shutdown_reserver();
   void shutdown();
-
+  void fast_shutdown();
+  
   // -- stats --
   ceph::mutex stat_lock = ceph::make_mutex("OSDService::stat_lock");
   osd_stat_t osd_stat;
