@@ -4605,6 +4605,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    if (!s->cct->_conf->rgw_enable_mdsearch) {
+      return NULL;
+    }
     return new RGWGetBucketMetaSearch_ObjStore_S3;
   }
 
@@ -4727,6 +4730,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    if (!s->cct->_conf->rgw_enable_mdsearch) {
+      return NULL;
+    }
     return new RGWDelBucketMetaSearch_ObjStore_S3;
   }
 
@@ -4740,6 +4746,9 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_post()
   }
 
   if (s->info.args.exists("mdsearch")) {
+    if (!s->cct->_conf->rgw_enable_mdsearch) {
+      return NULL;
+    }
     return new RGWConfigBucketMetaSearch_ObjStore_S3;
   }
 
