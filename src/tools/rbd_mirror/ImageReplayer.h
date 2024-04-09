@@ -127,7 +127,7 @@ protected:
    * REPLAYING
    *    |
    *    v
-   * JOURNAL_REPLAY_SHUT_DOWN
+   * REPLAY_SHUT_DOWN
    *    |
    *    v
    * LOCAL_IMAGE_CLOSE
@@ -142,7 +142,7 @@ protected:
   bool on_start_interrupted();
   bool on_start_interrupted(ceph::mutex& lock);
 
-  void on_stop_journal_replay(int r = 0, const std::string &desc = "");
+  void on_stop_replay(int r = 0, const std::string &desc = "");
 
   bool on_replay_interrupted();
 
