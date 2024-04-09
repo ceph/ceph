@@ -128,6 +128,9 @@ class OSD final : public crimson::net::Dispatcher,
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
 
+  seastar::timer<seastar::lowres_clock> stats_timer;
+  std::vector<ShardServices::shard_stats_t> shard_stats;
+
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string> &changed) final;

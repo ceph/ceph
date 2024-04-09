@@ -5,6 +5,8 @@
 
 #include <type_traits>
 
+#include <seastar/core/metrics_api.hh>
+
 namespace _impl {
   template <class T> struct always_false : std::false_type {};
 };
@@ -35,4 +37,17 @@ auto apply_method_to_tuple(Obj &obj, Method method, ArgTuple &&tuple) {
   return internal::_apply_method_to_tuple(
     obj, method, std::forward<ArgTuple>(tuple),
     std::make_index_sequence<tuple_size>());
+}
+
+inline double get_reactor_utilization() {
+  auto &value_map = seastar::metrics::impl::get_value_map();
+  auto found = value_map.find("reactor_utilization");
+  assert(found != value_map.end());
+  auto &[full_name, metric_family] = *found;
+  std::ignore = full_name;
+  assert(metric_family.size() == 1);
+  const auto& [labels, metric] = *metric_family.begin();
+  std::ignore = labels;
+  auto value = (*metric)();
+  return value.d();
 }
