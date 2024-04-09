@@ -46,6 +46,8 @@ class SMBService(CephService):
         config_blobs['config_uri'] = smb_spec.config_uri
         if smb_spec.join_sources:
             config_blobs['join_sources'] = smb_spec.join_sources
+        if smb_spec.user_sources:
+            config_blobs['user_sources'] = smb_spec.user_sources
         if smb_spec.custom_dns:
             config_blobs['custom_dns'] = smb_spec.custom_dns
         ceph_users = smb_spec.include_ceph_users or []
@@ -86,6 +88,7 @@ class SMBService(CephService):
     def _pools_in_spec(self, smb_spec: SMBSpec) -> Iterator[str]:
         uris = [smb_spec.config_uri]
         uris.extend(smb_spec.join_sources or [])
+        uris.extend(smb_spec.user_sources or [])
         for uri in uris:
             pool = self._rados_uri_to_pool(uri)
             if pool:
