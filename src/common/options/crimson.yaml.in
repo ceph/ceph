@@ -31,6 +31,11 @@ options:
   desc: CPU cores on which alienstore threads will run in cpuset(7) format
   flags:
   - startup
+- name: crimson_osd_stat_interval
+  type: int
+  level: advanced
+  default: 0
+  desc: Report OSD status periodically in seconds, 0 to disable
 - name: seastore_segment_size
   type: size
   desc: Segment size to use for SegmentManager
