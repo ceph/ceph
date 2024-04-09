@@ -45,31 +45,31 @@ class RedfishDellSystem(BaseRedfishSystem):
         return normalize_dict(result)
 
     def get_sn(self) -> str:
-        return self._sys['SKU']
+        return self._sys.get('SKU', '')
 
     def get_status(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys['status']
+        return self._sys.get('status', {})
 
     def get_memory(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys['memory']
+        return self._sys.get('memory', {})
 
     def get_processors(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys['processors']
+        return self._sys.get('processors', {})
 
     def get_network(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys['network']
+        return self._sys.get('network', {})
 
     def get_storage(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys['storage']
+        return self._sys.get('storage', {})
 
     def get_firmwares(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys['firmwares']
+        return self._sys.get('firmwares', {})
 
     def get_power(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys['power']
+        return self._sys.get('power', {})
 
     def get_fans(self) -> Dict[str, Dict[str, Dict]]:
-        return self._sys['fans']
+        return self._sys.get('fans', {})
 
     def _update_network(self) -> None:
         fields = ['Description', 'Name', 'SpeedMbps', 'Status']
