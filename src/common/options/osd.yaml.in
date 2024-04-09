@@ -58,7 +58,10 @@ options:
     in recovery and 1 shard of another recovering PG.
   fmt_desc: The maximum number of backfills allowed to or from a single OSD.
     Note that this is applied separately for read and write operations.
+    This setting is automatically reset when the mClock scheduler is used.
   default: 1
+  see_also:
+  - osd_mclock_override_recovery_settings
   flags:
   - runtime
   with_legacy: true
@@ -95,6 +98,7 @@ options:
   fmt_desc: Time in seconds to sleep before the next recovery or backfill op.
     Increasing this value will slow down recovery operation while
     client operations will be less impacted.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
@@ -105,6 +109,7 @@ options:
   desc: Time in seconds to sleep before next recovery or backfill op for HDDs
   fmt_desc: Time in seconds to sleep before next recovery or backfill op
     for HDDs.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0.1
   flags:
   - runtime
@@ -115,6 +120,7 @@ options:
   desc: Time in seconds to sleep before next recovery or backfill op for SSDs
   fmt_desc: Time in seconds to sleep before the next recovery or backfill op
     for SSDs.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   see_also:
   - osd_recovery_sleep
@@ -128,6 +134,7 @@ options:
     on HDD and journal is on SSD
   fmt_desc: Time in seconds to sleep before the next recovery or backfill op
     when OSD data is on HDD and OSD journal / WAL+DB is on SSD.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0.025
   see_also:
   - osd_recovery_sleep
@@ -141,6 +148,7 @@ options:
   fmt_desc: Time in seconds to sleep before next snap trim op.
     Increasing this value will slow down snap trimming.
     This option overrides backend specific variants.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
@@ -149,6 +157,7 @@ options:
   type: float
   level: advanced
   desc: Time in seconds to sleep before next snap trim for HDDs
+  note: This setting is ignored when the mClock scheduler is used.
   default: 5
   flags:
   - runtime
@@ -158,6 +167,7 @@ options:
   desc: Time in seconds to sleep before next snap trim for SSDs
   fmt_desc: Time in seconds to sleep before next snap trim op
     for SSD OSDs (including NVMe).
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
@@ -168,6 +178,7 @@ options:
     is on SSD
   fmt_desc: Time in seconds to sleep before next snap trim op
     when OSD data is on an HDD and the OSD journal or WAL+DB is on an SSD.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 2
   flags:
   - runtime
@@ -182,6 +193,7 @@ options:
   desc: Maximum concurrent scrubs on a single OSD
   fmt_desc: The maximum number of simultaneous scrub operations for
     a Ceph OSD Daemon.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 3
   with_legacy: true
 - name: osd_scrub_during_recovery
@@ -387,7 +399,7 @@ options:
   fmt_desc: Sleep time in seconds before scrubbing the next group of objects (the next chunk).
     Increasing this value will slow down the overall rate of scrubbing, reducing scrub
     impact on client operations.
-    This setting is ignored when the mClock scheduler is used.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
@@ -402,7 +414,7 @@ options:
     This configuration value is used for scrubbing out of scrubbing hours.
     Increasing this value will slow down the overall rate of scrubbing, reducing scrub
     impact on client operations.
-    This setting is ignored when the mClock scheduler is used.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   see_also:
   - osd_scrub_begin_hour
@@ -1255,10 +1267,12 @@ options:
     is ``0``, which means that the ``hdd`` or ``ssd`` values
     (below) are used, depending on the type of the primary
     device backing the OSD.
+    This setting is automatically reset when the mClock scheduler is used.
   default: 0
   see_also:
   - osd_recovery_max_active_hdd
   - osd_recovery_max_active_ssd
+  - osd_mclock_override_recovery_settings
   flags:
   - runtime
   with_legacy: true
@@ -1269,10 +1283,12 @@ options:
     devices)
   fmt_desc: The number of active recovery requests per OSD at one time, if the
     primary device is rotational.
+  note: This setting is automatically reset when the mClock scheduler is used.
   default: 3
   see_also:
   - osd_recovery_max_active
   - osd_recovery_max_active_ssd
+  - osd_mclock_override_recovery_settings
   flags:
   - runtime
   with_legacy: true
@@ -1283,10 +1299,12 @@ options:
     solid state devices)
   fmt_desc: The number of active recovery requests per OSD at one time, if the
     primary device is non-rotational (i.e., an SSD).
+  note: This setting is automatically reset when the mClock scheduler is used.
   default: 10
   see_also:
   - osd_recovery_max_active
   - osd_recovery_max_active_hdd
+  - osd_mclock_override_recovery_settings
   flags:
   - runtime
   with_legacy: true
@@ -1381,13 +1399,15 @@ options:
     overrides _ssd, _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before the next removal transaction. This
     throttles the PG deletion process.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
 - name: osd_delete_sleep_hdd
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next removal transaction for HDDs
+  desc: Time in seconds to sleep before next removal transaction for HDDs.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 5
   flags:
   - runtime
@@ -1395,6 +1415,7 @@ options:
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction for SSDs
+  note: This setting is ignored when the mClock scheduler is used.
   default: 1
   flags:
   - runtime
@@ -1403,6 +1424,7 @@ options:
   level: advanced
   desc: Time in seconds to sleep before next removal transaction when OSD data is on HDD
     and OSD journal or WAL+DB is on SSD
+  note: This setting is ignored when the mClock scheduler is used.
   default: 1
   flags:
   - runtime
