@@ -1783,6 +1783,48 @@ static int clean_intermediate_objs(const string &pool_name,
 }
 
 //---------------------------------------------------------------------------
+static int dedup_full_object(const string &pool_name, const string &oid)
+{
+  Rados rados;
+  IoCtx itr_ioctx, obj_ioctx;
+  if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, pool_name.c_str()) != 0) {
+    return -1;
+  }
+  bufferlist bl;
+  int ret = obj_ioctx.read_full(oid, bl);
+  if (unlikely(ret < 0)) {
+    cerr << "failed to read file: " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+  std::map<std::string, bufferlist> attrset;
+  ret = obj_ioctx.getxattrs(oid, attrset);
+  if (unlikely(ret < 0)) {
+    cerr << "failed to read xattrs: " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+  for (auto itr = attrset.begin(); itr != attrset.end(); ++itr) {
+    std::string attr_name = itr->first;
+    const char *attr_val  = itr->second.c_str();
+
+    std::cout << __func__ << "::attr_name=" << attr_name
+	      << ", attr_val=" << attr_val << std::endl;
+  }
+#if 0
+  ret = obj_ioctx.getxattr(oid, RGW_ATTR_ETAG, bl);
+
+  RGW_ATTR_ETAG;
+  RGW_ATTR_MANIFEST;
+  int getxattr(const std::string& oid, const char *name, bufferlist& bl);
+  int getxattrs(const std::string& oid, std::map<std::string, bufferlist>& attrset);
+  int setxattr(const std::string& oid, const char *name, bufferlist& bl);
+  int rmxattr(const std::string& oid, const char *name);
+  int exec(const std::string& oid, const char *cls, const char *method,
+	   bufferlist& inbl, bufferlist& outbl);
+#endif
+  return 0;
+}
+
+//---------------------------------------------------------------------------
 static void run_full_scan(const dedup_params_t &params)
 {
   uint64_t total_bytes_before = 0;
@@ -1928,6 +1970,8 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
 	  DEDUP_THRESHOLD_MAX << ") **" << std::endl;
 	usage_exit();
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--obj", (char*)NULL)) {
+      opts["oid"] = val;
     } else {
       if (val[0] == '-') {
 	cerr << "** Bad argument <" << val[0] << "> **" << std::endl;
@@ -1973,6 +2017,10 @@ int main(int argc, char **argv)
 
   if (strncmp(args[0], "list", strlen("list")) == 0) {
     list_intermediate_objs(params.pool_name, params.verbose);
+  }
+  else if (strncmp(args[0], "dedup", strlen("dedup")) == 0) {
+    cout << "dedup for " << opts["oid"] << " in pool " << params.pool_name << std::endl;
+    dedup_full_object(params.pool_name, opts["oid"]);
   }
   else if (strncmp(args[0], "clean", strlen("clean")) == 0) {
     bool clean_raw_fp = params.clean_raw_fp;
