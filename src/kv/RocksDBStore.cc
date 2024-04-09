@@ -2014,7 +2014,15 @@ bool RocksDBStore::backup(const std::string& path)
     rocksdb::BackupEngineOptions(path),
     rocksdb::Env::Default(),
     &backup_engine);
+  if (!backup_engine || !s.ok()) {
+    derr << __func__ << "Can't create backup_engine: " << s.ToString() << dendl;
+    ldout(db->cct, 0) << __func__ << "Can't create backup_engine: " << s.ToString() << dendl;
+    return false;
+  }
   s = backup_engine->CreateNewBackup(db);
+  if (!s.ok()) {
+    ldout(db->cct, 0) << __func__ << "Can't create backup: " << s.ToString() << dendl;
+  }
   return s.ok();
 }
 
