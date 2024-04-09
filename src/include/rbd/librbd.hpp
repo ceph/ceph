@@ -532,6 +532,14 @@ public:
   Image();
   ~Image();
 
+  // non-copyable
+  Image(const Image& rhs) = delete;
+  Image& operator=(const Image& rhs) = delete;
+
+  // moveable
+  Image(Image&& rhs) noexcept;
+  Image& operator=(Image&& rhs) noexcept;
+
   int close();
   int aio_close(RBD::AioCompletion *c);
 
@@ -853,9 +861,6 @@ public:
 
 private:
   friend class RBD;
-
-  Image(const Image& rhs);
-  const Image& operator=(const Image& rhs);
 
   image_ctx_t ctx;
 };
