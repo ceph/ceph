@@ -387,6 +387,26 @@ seastar::future<> OSD::start()
         std::ref(osd_states));
     });
   }).then([this, FNAME] {
+    auto stats_seconds = local_conf().get_val<int64_t>("crimson_osd_stat_interval");
+    if (stats_seconds > 0) {
+      shard_stats.resize(seastar::smp::count);
+      stats_timer.set_callback([this, FNAME] {
+        std::ignore = shard_services.invoke_on_all(
+          [this](auto &local_service) {
+          auto stats = local_service.report_stats();
+          shard_stats[seastar::this_shard_id()] = stats;
+        }).then([this, FNAME] {
+          std::ostringstream oss;
+          for (const auto &stats : shard_stats) {
+            oss << int(stats.reactor_utilization);
+            oss << ",";
+          }
+          INFO("reactor_utilizations: {}", oss.str());
+        });
+      });
+      stats_timer.arm_periodic(std::chrono::seconds(stats_seconds));
+    }
+
     heartbeat.reset(new Heartbeat{
 	whoami, get_shard_services(),
 	*monc, *hb_front_msgr, *hb_back_msgr});
@@ -1320,6 +1340,7 @@ seastar::future<> OSD::restart()
 {
   beacon_timer.cancel();
   tick_timer.cancel();
+  stats_timer.cancel();
   return pg_shard_manager.set_up_epoch(
     0
   ).then([this] {
