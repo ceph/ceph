@@ -791,6 +791,7 @@ class MotrAtomicWriter : public StoreWriter {
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -839,6 +840,7 @@ public:
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -888,6 +890,9 @@ public:
   virtual uint64_t get_size() { return info.accounted_size; }
   virtual const std::string& get_etag() { return info.etag; }
   virtual ceph::real_time& get_mtime() { return info.modified; }
+  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() {
+    return info.cksum;
+  }
 
   RGWObjManifest& get_manifest() { return info.manifest; }
 

@@ -21,6 +21,7 @@
 #pragma once
 
 #include <string>
+#include <optional>
 #include <fmt/format.h>
 
 #include "include/types.h"
@@ -256,10 +257,10 @@ struct RGWUploadPartInfo {
   uint64_t size;
   uint64_t accounted_size{0};
   std::string etag;
-  rgw::cksum::Cksum cksum;
   ceph::real_time modified;
   RGWObjManifest manifest;
   RGWCompressionInfo cs_info;
+  std::optional<rgw::cksum::Cksum> cksum;
 
   // Previous part obj prefixes. Recorded here for later cleanup.
   std::set<std::string> past_prefixes; 

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <errno.h>
+#include <optional>
 #include <stdlib.h>
 #include <system_error>
 #include <unistd.h>
@@ -24,6 +25,7 @@
 #include "common/ceph_json.h"
 #include "common/static_ptr.h"
 #include "common/perf_counters_key.h"
+#include "rgw_cksum.h"
 #include "rgw_common.h"
 #include "rgw_tracer.h"
 
@@ -4583,10 +4585,13 @@ void RGWPutObj::execute(optional_yield y)
 
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
   const req_context rctx{this, s->yield, s->trace.get()};
-  op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
-                               (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
-                               (user_data.empty() ? nullptr : &user_data), nullptr, nullptr,
-                               rctx, complete_flags);
+
+  op_ret =
+    processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
+			cksum, (delete_at ? *delete_at : real_time()),
+			if_match, if_nomatch,
+			(user_data.empty() ? nullptr : &user_data),
+			nullptr, nullptr, rctx, complete_flags);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
   if (op_ret < 0) {
     return;
@@ -4598,7 +4603,7 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
-}
+} /* RGWPutObj::execute() */
 
 int RGWPostObj::init_processing(optional_yield y)
 {
@@ -4804,11 +4809,13 @@ void RGWPostObj::execute(optional_yield y)
       emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
     }
 
+    /* TODO:  implement POST checksums */
     const req_context rctx{this, s->yield, s->trace.get()};
-    op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(), attrs,
-                                (delete_at ? *delete_at : real_time()),
-                                nullptr, nullptr, nullptr, nullptr, nullptr,
-                                rctx, rgw::sal::FLAG_LOG_OP);
+    op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(),
+				 attrs, rgw::cksum::no_cksum,
+				 (delete_at ? *delete_at : real_time()),
+				 nullptr, nullptr, nullptr, nullptr, nullptr,
+				 rctx, rgw::sal::FLAG_LOG_OP);
     if (op_ret < 0) {
       return;
     }
@@ -6309,7 +6316,6 @@ void RGWInitMultipart::execute(optional_yield y)
 {
   multipart_trace = tracing::rgw::tracer.start_trace(tracing::rgw::MULTIPART, s->trace_enabled);
   bufferlist aclbl, tracebl;
-  rgw::sal::Attrs attrs;
 
   op_ret = get_params(y);
   if (op_ret < 0) {
@@ -6344,6 +6350,7 @@ void RGWInitMultipart::execute(optional_yield y)
 				       upload_id);
   upload->obj_legal_hold = obj_legal_hold;
   upload->obj_retention = obj_retention;
+  upload->cksum_type = cksum_algo;
   op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
 
   if (op_ret == 0) {
@@ -6376,9 +6383,110 @@ void RGWCompleteMultipart::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+static inline int
+try_sum_part_cksums(const DoutPrefixProvider *dpp,
+		    CephContext *cct,
+		    rgw::sal::MultipartUpload* upload,
+		    RGWMultiCompleteUpload* parts,
+		    std::optional<rgw::cksum::Cksum>& out_cksum,
+		    optional_yield y)
+{
+  /* 1. need checksum-algorithm header (if invalid, fail)
+     2. conditional on have-checksum,
+     3. need digest for supplied algo
+     4. iterate over parts, confirm each has same algo, if not, fail
+     5. for each part-checksum, accumlate bytes into new checksum
+     6. return armored and append "-<nparts>"
+     7. verify -- if invalid, fail */
+
+    /* rgw_sal.h says that list_parts is called for the side effect of loading
+     * the parts of an upload into "cache"--the api is strange and truncated
+     * flag suggests that it needs to be called multiple times to handle large
+     * uploads--but does not explain how that affects the hidden cache;  I'm
+     * assuming it turns over? */
+
+  int op_ret = 0;
+  bool truncated = false;
+  int marker = 0;
+  auto num_parts = int(parts->parts.size());
+
+  rgw::cksum::Type& cksum_type = upload->cksum_type;
+
+  int again_count{0};
+ again:
+  op_ret = upload->list_parts(dpp, cct, num_parts, marker,
+			      &marker, &truncated, y);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  if (truncated) {
+    ldpp_dout(dpp, 20)
+      << fmt::format(
+	 "WARNING: {} upload->list_parts {} {} truncated, again_count={}!",
+	     __func__, num_parts, marker, again_count)
+      << dendl;
+    truncated = false;
+    ++again_count;
+    goto again;
+  }
+
+  if (cksum_type == rgw::cksum::Type::none) [[unlikely]] {
+    /* ordinary, no-checksum case */
+    return 0;
+  }
+
+  rgw::cksum::DigestVariant dv = rgw::cksum::digest_factory(cksum_type);
+  rgw::cksum::Digest* digest = rgw::cksum::get_digest(dv);
+
+  /* returns the parts (currently?) in cache */
+  auto parts_ix{0};
+  auto& parts_map = upload->get_parts();
+  for (auto& part : parts_map) {
+    ++parts_ix;
+    auto& part_cksum = part.second->get_cksum();
+    ldpp_dout(dpp, 16)
+      << fmt::format("INFO: {} iterate part: {} {} {}",
+		     __func__, parts_ix, part_cksum->type_string(),
+		     part_cksum->to_armor())
+      << dendl;
+    if ((part_cksum->type != cksum_type)) {
+      /* if parts have inconsistent checksum, fail now */
+      ldpp_dout(dpp, 4)
+	<< fmt::format(
+	       "ERROR: multipart part checksum type mismatch\n\tcomplete "
+	       "multipart header={} part={}",
+	       to_string(part_cksum->type), to_string(cksum_type))
+	<< dendl;
+      op_ret = -ERR_INVALID_REQUEST;
+      return op_ret;
+    }
+
+    /* the checksum of the final object is a checksum (of the same type,
+     * presumably) of the concatenated checksum bytes of the parts, plus
+     * "-<num-parts>.  See
+     * https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums
+     */
+    auto ckr = part_cksum->raw();
+    digest->Update((unsigned char *)ckr.data(), ckr.length());
+  } /* all-parts */
+
+  /* we cannot verify this checksum, only compute it */
+  out_cksum = rgw::cksum::finalize_digest(digest, cksum_type);
+
+  ldpp_dout(dpp, 16)
+    << fmt::format("INFO: {} combined checksum {} {}-{}",
+		   __func__,
+		   out_cksum->type_string(),
+		   out_cksum->to_armor(), num_parts)
+    << dendl;
+
+  return op_ret;
+} /* try_sum_part_chksums */
+
 void RGWCompleteMultipart::execute(optional_yield y)
 {
-  RGWMultiCompleteUpload *parts;
+  RGWMultiCompleteUpload* parts;
   RGWMultiXMLParser parser;
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
   off_t ofs = 0;
@@ -6418,7 +6526,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-
   if ((int)parts->parts.size() >
       s->cct->_conf->rgw_multipart_part_upload_limit) {
     op_ret = -ERANGE;
@@ -6426,6 +6533,23 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 
   upload = s->bucket->get_multipart_upload(s->object->get_name(), upload_id);
+  ldpp_dout(this, 16) <<
+    fmt::format("INFO: {}->get_multipart_upload for obj {}, {} cksum_type {}",
+		s->bucket->get_name(),
+		s->object->get_name(), upload_id,
+		(!!upload) ? to_string(upload->cksum_type) : 0)
+		<< dendl;
+
+  rgw_placement_rule* dest_placement;
+  op_ret = upload->get_info(this, s->yield, &dest_placement);
+  if (op_ret < 0) {
+    /* XXX this fails inconsistently when !checksum */
+    ldpp_dout(this, 0) <<
+      "ERROR: MultipartUpload::get_info() for placement failed "
+		       << "ret=" << op_ret << dendl;
+    op_ret =  -ERR_INTERNAL_ERROR;
+    return;
+  }
 
   RGWCompressionInfo cs_info;
   bool compressed = false;
@@ -6437,8 +6561,8 @@ void RGWCompleteMultipart::execute(optional_yield y)
   meta_obj->set_in_extra_data(true);
   meta_obj->set_hash_source(s->object->get_name());
 
-  /*take a cls lock on meta_obj to prevent racing completions (or retries)
-    from deleting the parts*/
+  /* take a cls lock on meta_obj to prevent racing completions (or retries)
+     from deleting the parts*/
   int max_lock_secs_mp =
     s->cct->_conf.get_val<int64_t>("rgw_mp_lock_max_time");
   utime_t dur(max_lock_secs_mp, 0);
@@ -6468,6 +6592,14 @@ void RGWCompleteMultipart::execute(optional_yield y)
   extract_span_context(meta_obj->get_attrs(), trace_ctx);
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
 
+  /* checksum computation */
+  if (upload->cksum_type != rgw::cksum::Type::none) {
+    op_ret = try_sum_part_cksums(this, s->cct, upload.get(), parts, cksum, y);
+    if (op_ret < 0) {
+      return;
+    }
+  }
+
   if (s->bucket->versioning_enabled()) {
     if (!version_id.empty()) {
       s->object->set_instance(version_id);
@@ -6476,17 +6608,47 @@ void RGWCompleteMultipart::execute(optional_yield y)
       version_id = s->object->get_instance();
     }
   }
-  s->object->set_attrs(meta_obj->get_attrs());
+
+  auto target_attrs = meta_obj->get_attrs();
+
+  if (cksum) {
+    armored_cksum =
+      fmt::format("{}-{}", cksum->to_armor(), parts->parts.size());
+
+    /* validate computed checksum against supplied checksum, if present */
+    auto [hdr_cksum, supplied_cksum] =
+      rgw::putobj::find_hdr_cksum(*(s->info.env));
+    ldpp_dout(this, 10) << fmt::format("INFO: client supplied checksum {}: {}",
+				       hdr_cksum.header_name(), supplied_cksum)
+			<< dendl;
+
+    if (! (supplied_cksum.empty()) &&
+	(supplied_cksum != armored_cksum)) {
+      op_ret = -ERR_INVALID_REQUEST;
+      return;
+    }
+
+    buffer::list cksum_bl;
+    cksum->encode(cksum_bl);
+    target_attrs.emplace(RGW_ATTR_CKSUM, std::move(cksum_bl));
+  } /* cksum */
+
+  s->object->set_attrs(target_attrs);
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res;
-  res = driver->get_notification(s->object.get(), nullptr, s, rgw::notify::ObjectCreatedCompleteMultipartUpload, y);
+  res = driver->get_notification(
+	    s->object.get(), nullptr, s,
+	    rgw::notify::ObjectCreatedCompleteMultipartUpload, y);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
   }
 
-  op_ret = upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch, s->object.get());
+  op_ret =
+    upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
+		     compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
+		     s->object.get());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
@@ -6533,8 +6695,9 @@ bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUplo
     char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     hex_to_buf(partetag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
     hash.Update((const unsigned char *)petag, sizeof(petag));
-    ldpp_dout(this, 20) << __func__ << "() re-calculating multipart etag: part: "
-                                   << index << ", etag: " << partetag << dendl;
+    ldpp_dout(this, 20)
+      << __func__ << "() re-calculating multipart etag: part: "
+      << index << ", etag: " << partetag << dendl;
   }
 
   unsigned char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
@@ -6645,6 +6808,21 @@ void RGWListMultipart::execute(optional_yield y)
       policy.decode(bliter);
     } catch (buffer::error& err) {
       ldpp_dout(this, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
+      op_ret = -EIO;
+    }
+  }
+  if (op_ret < 0)
+    return;
+
+  iter = attrs.find(RGW_ATTR_CKSUM);
+  if (iter != attrs.end()) {
+    auto bliter = iter->second.cbegin();
+    try {
+      rgw::cksum::Cksum tcksum;
+      tcksum.decode(bliter);
+      cksum = std::move(tcksum);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 0) << "ERROR: could not decode stored cksum, caught buffer::error" << dendl;
       op_ret = -EIO;
     }
   }
@@ -7464,12 +7642,15 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
     attrs.emplace(RGW_ATTR_COMPRESSION, std::move(tmp));
   }
 
+  /* XXX I don't think bulk upload can support checksums */
+
   /* Complete the transaction. */
   const req_context rctx{this, s->yield, s->trace.get()};
   op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
-                              attrs, ceph::real_time() /* delete_at */,
-                              nullptr, nullptr, nullptr, nullptr, nullptr,
-                              rctx, rgw::sal::FLAG_LOG_OP);
+			       attrs, rgw::cksum::no_cksum,
+			       ceph::real_time() /* delete_at */,
+			       nullptr, nullptr, nullptr, nullptr, nullptr,
+			       rctx, rgw::sal::FLAG_LOG_OP);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor::complete returned op_ret=" << op_ret << dendl;
   }
