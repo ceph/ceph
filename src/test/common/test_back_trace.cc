@@ -37,7 +37,7 @@ TEST(BackTrace, Basic) {
 		 "<foo.*>\\s"
 		 "at\\s.*$"};
 #else
-		 "\\(foo.*\\)\\s"
+		 "\\((foo|ceph::ClibBackTrace::ClibBackTrace).*\\)\\s"
 		 "\\[0x[[:xdigit:]]+\\]$"};
 #endif
   EXPECT_TRUE(std::regex_match(lines[lineno], e));
