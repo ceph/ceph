@@ -20,6 +20,7 @@ overrides:
       osd:
         osd fast shutdown: false
     valgrind:
+      reboot-on-exit-zero: true
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       mds: [--tool=memcheck]
     watchdog:
