@@ -1475,9 +1475,10 @@ def run_daemon(ctx, config, type_):
                     valgrind_args = vc[type_]
                 if role in vc:
                     valgrind_args = vc[role]
+                rebooter = vc.get('reboot-on-exit-zero', False)
                 exit_on_first_error = vc.get('exit_on_first_error', True)
                 run_cmd = get_valgrind_args(testdir, role, run_cmd, valgrind_args,
-                    exit_on_first_error=exit_on_first_error)
+                    exit_on_first_error=exit_on_first_error, rebooter=rebooter)
 
             run_cmd.extend(run_cmd_tail)
             log_path = f'/var/log/ceph/{cluster_name}-{type_}.{id_}.log'
