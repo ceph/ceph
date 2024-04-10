@@ -356,6 +356,8 @@ ssize_t AsyncConnection::_try_send(bool more)
     }
   }
 
+  last_active = ceph::coarse_mono_clock::now();
+
   return outgoing_bl.length();
 }
 
