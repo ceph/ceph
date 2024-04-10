@@ -322,8 +322,7 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   # used by rgw_amqp.cc
   target_link_libraries(rgw_common
     PRIVATE
-      RabbitMQ::RabbitMQ
-      OpenSSL::SSL)
+      RabbitMQ::RabbitMQ)
 endif()
 if(WITH_OPENLDAP)
   target_link_libraries(rgw_common
@@ -479,10 +478,6 @@ target_link_libraries(radosgw PRIVATE
   kmip
   ${ALLOC_LIBS})
 
-if(WITH_RADOSGW_BEAST_OPENSSL)
-  # used by rgw_asio_frontend.cc
-  target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
-endif()
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
