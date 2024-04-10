@@ -30,6 +30,7 @@
 #include "common/version.h"
 #include "common/blkdev.h"
 #include "common/cmdparse.h"
+#include "common/MemoryModel.h"
 #include "common/signal.h"
 
 #include "osd/OSDMap.h"
@@ -163,7 +164,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   finisher(cct_, "mon_finisher", "fin"),
   cpu_tp(cct, "Monitor::cpu_tp", "cpu_tp", g_conf()->mon_cpu_threads),
   has_ever_joined(false),
-  logger(NULL), cluster_logger(NULL), cluster_logger_registered(false),
+  logger(NULL), cluster_logger(NULL), mon_memory_perf(NULL), cluster_logger_registered(false),
   monmap(map),
   log_client(cct_, messenger, monmap, LogClient::FLAG_MON),
   key_server(cct, &keyring),
@@ -774,6 +775,15 @@ int Monitor::preinit()
     cluster_logger = pcb.create_perf_counters();
   }
 
+  {
+    PerfCountersBuilder monm_perf(cct, "osd_memory_perf", l_monm_first, l_monm_last);
+
+    monm_perf.add_u64(l_monm_rss, "rss", "RSS", "rss", PerfCountersBuilder::PRIO_USEFUL);
+    monm_perf.add_u64(l_monm_heap, "heap", "Heap size");
+
+    mon_memory_perf = monm_perf.create_perf_counters();
+  }
+
   paxos->init_logger();
 
   // verify cluster_uuid
@@ -1016,6 +1026,28 @@ void Monitor::unregister_cluster_logger()
   }
 }
 
+void Monitor::register_mon_memory_perf()
+{
+  if (!mon_memory_perf_registered) {
+    dout(10) << "register_mon_memory_perf" << dendl;
+    mon_memory_perf_registered = true;
+    cct->get_perfcounters_collection()->add(mon_memory_perf);
+  } else {
+    dout(10) << "register_mon_memory_perf - already registered" << dendl;
+  }
+}
+
+void Monitor::unregister_mon_memory_perf()
+{
+  if (mon_memory_perf_registered) {
+    dout(10) << "unregister_mon_memory_perf" << dendl;
+    mon_memory_perf_registered = false;
+    cct->get_perfcounters_collection()->remove(mon_memory_perf);
+  } else {
+    dout(10) << "unregister_mon_memory_perf - not registered" << dendl;
+  }
+}
+
 void Monitor::update_logger()
 {
   cluster_logger->set(l_cluster_num_mon, monmap->size());
@@ -1166,6 +1198,7 @@ void Monitor::bootstrap()
 
   sync_reset_requester();
   unregister_cluster_logger();
+  unregister_mon_memory_perf();
   cancel_probe_timeout();
 
   if (monmap->get_epoch() == 0) {
@@ -2403,6 +2436,7 @@ void Monitor::finish_election()
   resend_routed_requests();
   update_logger();
   register_cluster_logger();
+  register_mon_memory_perf();
 
   // enable authentication
   {
@@ -5961,7 +5995,26 @@ void Monitor::tick()
   }
 
   mgr_client.update_daemon_health(get_health_metrics());
+  check_memory_usage();
   new_tick();
+}
+
+void Monitor::check_memory_usage()
+{
+  static MemoryModel mm(g_ceph_context);
+  static MemoryModel::snap last;
+  mm.sample(&last);
+  static MemoryModel::snap baseline = last;
+
+  dout(2) << "Memory usage: "
+	   << " total " << last.get_total()
+	   << ", rss " << last.get_rss()
+	   << ", heap " << last.get_heap()
+	   << ", baseline " << baseline.get_heap()
+	   << dendl;
+  
+  mon_memory_perf->set(l_monm_rss, last.get_rss());
+  mon_memory_perf->set(l_monm_heap, last.get_heap());
 }
 
 vector<DaemonHealthMetric> Monitor::get_health_metrics() 

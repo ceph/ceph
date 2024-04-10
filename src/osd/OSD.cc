@@ -14,6 +14,7 @@
  */
 
 #include "acconfig.h"
+#include "common/MemoryModel.h"
 
 #include <cctype>
 #include <fstream>
@@ -2326,6 +2327,7 @@ OSD::OSD(CephContext *cct_,
   mgrc(cct_, client_messenger, &mc->monmap),
   logger(create_logger()),
   recoverystate_perf(create_recoverystate_perf()),
+  osd_memory_perf(create_osd_memory_perf()),
   store(std::move(store_)),
   log_client(cct, client_messenger, &mc->monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel()),
@@ -2454,8 +2456,10 @@ OSD::~OSD()
     shards.pop_back();
   }
   cct->get_perfcounters_collection()->remove(recoverystate_perf);
+  cct->get_perfcounters_collection()->remove(osd_memory_perf);
   cct->get_perfcounters_collection()->remove(logger);
   delete recoverystate_perf;
+  delete osd_memory_perf;
   delete logger;
 }
 
@@ -4525,6 +4529,13 @@ PerfCounters* OSD::create_recoverystate_perf()
   return recoverystate_perf;
 }
 
+PerfCounters* OSD::create_osd_memory_perf()
+{
+  PerfCounters* osd_memory_perf = build_osd_memory_perf(cct);
+  cct->get_perfcounters_collection()->add(osd_memory_perf);
+  return osd_memory_perf;
+}
+
 int OSD::shutdown()
 {
   // vstart overwrites osd_fast_shutdown value in the conf file -> force the value here!
@@ -6340,6 +6351,8 @@ void OSD::tick()
 	       << " next " << next << dendl;
     }
   }
+
+  check_memory_usage();
 
   tick_timer.add_event_after(get_tick_interval(), new C_Tick(this));
 }
@@ -8684,6 +8697,24 @@ void OSD::check_osdmap_features()
 		      stringify((int)osdmap->require_osd_release));
     last_require_osd_release = osdmap->require_osd_release;
   }
+}
+
+void OSD::check_memory_usage()
+{
+  static MemoryModel mm(g_ceph_context);
+  static MemoryModel::snap last;
+  mm.sample(&last);
+  static MemoryModel::snap baseline = last;
+
+  dout(2) << "Memory usage: "
+	   << " total " << last.get_total()
+	   << ", rss " << last.get_rss()
+	   << ", heap " << last.get_heap()
+	   << ", baseline " << baseline.get_heap()
+	   << dendl;
+  
+  osd_memory_perf->set(l_osdm_rss, last.get_rss());
+  osd_memory_perf->set(l_osdm_heap, last.get_heap());
 }
 
 struct C_FinishSplits : public Context {

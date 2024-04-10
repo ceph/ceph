@@ -36,7 +36,8 @@ if(HAVE_GSSAPI)
 endif()
 
 add_library(mon STATIC
-  ${lib_mon_srcs})
+  ${lib_mon_srcs}
+  ${PROJECT_SOURCE_DIR}/src/common/MemoryModel.cc)
 target_link_libraries(mon
   kv
   heap_profiler

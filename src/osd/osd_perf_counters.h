@@ -233,3 +233,12 @@ enum {
 };
 
 PerfCounters *build_scrub_labeled_perf(CephContext *cct, std::string label);
+
+enum {
+  l_osdm_first = 21000,
+  l_osdm_rss,
+  l_osdm_heap,
+  l_osdm_last,
+};
+
+PerfCounters *build_osd_memory_perf(CephContext *cct);

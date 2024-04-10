@@ -1082,6 +1082,7 @@ protected:
   MgrClient   mgrc;
   PerfCounters      *logger;
   PerfCounters      *recoverystate_perf;
+  PerfCounters      *osd_memory_perf;
   std::unique_ptr<ObjectStore> store;
 #ifdef HAVE_LIBFUSE
   FuseStore *fuse_store = nullptr;
@@ -1104,11 +1105,13 @@ protected:
   ZTracer::Endpoint trace_endpoint;
   PerfCounters* create_logger();
   PerfCounters* create_recoverystate_perf();
+  PerfCounters* create_osd_memory_perf();
   void tick();
   void tick_without_osd_lock();
   void _dispatch(Message *m);
 
   void check_osdmap_features();
+  void check_memory_usage();
 
   // asok
   friend class OSDSocketHook;

@@ -414,3 +414,12 @@ PerfCounters *build_scrub_labeled_perf(CephContext *cct, std::string label)
 
   return scrub_perf.create_perf_counters();
 }
+
+PerfCounters *build_osd_memory_perf(CephContext *cct) {
+  PerfCountersBuilder osdm_perf(cct, "osd_memory_perf", l_osdm_first, l_osdm_last);
+
+  osdm_perf.add_u64(l_osdm_rss, "rss", "RSS", "rss", PerfCountersBuilder::PRIO_USEFUL);
+  osdm_perf.add_u64(l_osdm_heap, "heap", "Heap size");
+
+  return osdm_perf.create_perf_counters();
+}

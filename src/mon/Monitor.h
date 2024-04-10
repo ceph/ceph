@@ -99,6 +99,13 @@ enum {
   l_mon_last,
 };
 
+enum {
+  l_monm_first = 457000,
+  l_monm_rss,
+  l_monm_heap,
+  l_monm_last,
+};
+
 class PaxosService;
 
 class AdminSocketHook;
@@ -130,11 +137,13 @@ public:
   /// monitor.
   bool has_ever_joined;
 
-  PerfCounters *logger, *cluster_logger;
-  bool cluster_logger_registered;
+  PerfCounters *logger, *cluster_logger, *mon_memory_perf;
+  bool cluster_logger_registered, mon_memory_perf_registered;
 
   void register_cluster_logger();
   void unregister_cluster_logger();
+  void register_mon_memory_perf();
+  void unregister_mon_memory_perf();
 
   MonMap *monmap;
   uuid_d fingerprint;
@@ -1044,6 +1053,7 @@ private:
   void refresh_from_paxos(bool *need_bootstrap);
   void shutdown();
   void tick();
+  void check_memory_usage();
 
   void handle_signal(int sig);
 
