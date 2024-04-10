@@ -33,6 +33,7 @@ struct link_rollback {
   utime_t old_dir_mtime;
   utime_t old_dir_rctime;
   bufferlist snapbl;
+  inodeno_t referent_ino;
 
   link_rollback() : ino(0), was_inc(false) {}
 

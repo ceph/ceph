@@ -2438,7 +2438,7 @@ void ECommitted::generate_test_instances(std::list<ECommitted*>& ls)
 
 void link_rollback::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 2, bl);
+  ENCODE_START(4, 2, bl);
   encode(reqid, bl);
   encode(ino, bl);
   encode(was_inc, bl);
@@ -2446,12 +2446,13 @@ void link_rollback::encode(bufferlist &bl) const
   encode(old_dir_mtime, bl);
   encode(old_dir_rctime, bl);
   encode(snapbl, bl);
+  encode(referent_ino, bl);
   ENCODE_FINISH(bl);
 }
 
 void link_rollback::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   decode(reqid, bl);
   decode(ino, bl);
   decode(was_inc, bl);
@@ -2460,6 +2461,8 @@ void link_rollback::decode(bufferlist::const_iterator &bl)
   decode(old_dir_rctime, bl);
   if (struct_v >= 3)
     decode(snapbl, bl);
+  if (struct_v >= 4)
+    decode(referent_ino, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2471,6 +2474,7 @@ void link_rollback::dump(Formatter *f) const
   f->dump_stream("old_ctime") << old_ctime;
   f->dump_stream("old_dir_mtime") << old_dir_mtime;
   f->dump_stream("old_dir_rctime") << old_dir_rctime;
+  f->dump_stream("referent_ino") << referent_ino;
 }
 
 void link_rollback::generate_test_instances(std::list<link_rollback*>& ls)
