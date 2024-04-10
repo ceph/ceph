@@ -14,6 +14,6 @@ describe('Shared pages', () => {
 
   it('should check all available languages', () => {
     language.getLanguageBtn().click();
-    language.getAllLanguages().should('have.length', 1).should('contain.text', 'English');
+    language.getAllLanguages().should('have.length', 13).should('contain.text', 'English');
   });
 });
