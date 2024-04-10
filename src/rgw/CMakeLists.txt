@@ -116,8 +116,6 @@ set(librgw_common_srcs
   rgw_role.cc
   rgw_sal.cc
   rgw_sal_filter.cc
-  rgw_redis_driver.cc
-  rgw_ssd_driver.cc
   rgw_string.cc
   rgw_tag.cc
   rgw_tag_s3.cc
@@ -150,9 +148,6 @@ set(librgw_common_srcs
   rgw_tracer.cc
   rgw_lua_background.cc
   rgw_data_access.cc
-  driver/d4n/d4n_directory.cc
-  driver/d4n/d4n_policy.cc
-  driver/d4n/rgw_sal_d4n.cc
   driver/rados/cls_fifo_legacy.cc
   driver/rados/rgw_bucket.cc
   driver/rados/rgw_bucket_sync.cc
@@ -246,6 +241,15 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   # list(APPEND radosgw_srcs rgw_flight.cc rgw_flight_frontend.cc)
   list(APPEND librgw_common_srcs rgw_flight.cc rgw_flight_frontend.cc)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
+
+if(WITH_RADOSGW_D4N)
+  list(APPEND librgw_common_srcs
+        rgw_redis_driver.cc
+        rgw_ssd_driver.cc
+        driver/d4n/d4n_directory.cc
+        driver/d4n/d4n_policy.cc
+        driver/d4n/rgw_sal_d4n.cc)
+endif()
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
 
