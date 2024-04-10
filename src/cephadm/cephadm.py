@@ -2695,8 +2695,9 @@ def rollback(func: FuncT) -> FuncT:
             # another cluster with the provided fsid already exists: don't remove.
             raise
         except (KeyboardInterrupt, Exception) as e:
-            logger.error(f'{type(e).__name__}: {e}')
-            if ctx.no_cleanup_on_failure:
+            # If ctx.fsid is None it would print meaningless message suggesting
+            # running "cephadm rm-cluster --force --fsid None"
+            if ctx.no_cleanup_on_failure and ctx.fsid is not None:
                 logger.info('\n\n'
                             '\t***************\n'
                             '\tCephadm hit an issue during cluster installation. Current cluster files will NOT BE DELETED automatically. To change\n'
@@ -2706,7 +2707,10 @@ def rollback(func: FuncT) -> FuncT:
                             '\t   > cephadm rm-cluster --force --zap-osds --fsid <fsid>\n\n'
                             '\tfor more information please refer to https://docs.ceph.com/en/latest/cephadm/operations/#purging-a-cluster\n'
                             '\t***************\n\n')
-            else:
+            if not ctx.no_cleanup_on_failure:
+                # The logger.error() used to be called before these conditions, which resulted in the error being printed twice.
+                # Moving it inside this condition to print the error if _rm_cluster() is called and also fails.
+                logger.error(f'{type(e).__name__}: {e}')
                 logger.info('\n\n'
                             '\t***************\n'
                             '\tCephadm hit an issue during cluster installation. Current cluster files will be deleted automatically.\n'
@@ -2733,6 +2737,13 @@ def command_bootstrap(ctx):
         ctx.output_keyring = os.path.join(ctx.output_dir, CEPH_KEYRING)
     if not ctx.output_pub_ssh_key:
         ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, CEPH_PUBKEY)
+
+    if ctx.apply_spec and not os.path.exists(ctx.apply_spec):
+        # Given that nothing has been deployed at this point, setting `ctx.no_cleanup_on_failure = True`
+        # as there's no need to call _rm_cluster() which would generate the message:
+        # "ERROR: must select the cluster to delete by passing --fsid to proceed"
+        ctx.no_cleanup_on_failure = True
+        raise Error(f"--apply-spec has been specified but {ctx.apply_spec} doesn't exist.")
 
     if (
         (bool(ctx.ssh_private_key) is not bool(ctx.ssh_public_key))
