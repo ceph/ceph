@@ -23,6 +23,7 @@
 #include "common/BackTrace.h"
 #include "common/ceph_time.h"
 
+#include "rgw_cksum.h"
 #include "rgw_sal.h"
 #include "rgw_zone.h"
 #include "rgw_cache.h"
@@ -4542,8 +4543,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& dest_obj_ctx,
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     bool canceled = false;
     ret = processor.complete(accounted_size, etag, mtime, set_mtime,
-                             attrs, delete_at, nullptr, nullptr, nullptr,
-                             zones_trace, &canceled, rctx, rgw::sal::FLAG_LOG_OP);
+                             attrs, rgw::cksum::no_cksum, delete_at, nullptr, nullptr,
+			     nullptr, zones_trace, &canceled, rctx,
+			     rgw::sal::FLAG_LOG_OP);
     if (ret < 0) {
       goto set_err_state;
     }
@@ -5105,7 +5107,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   }
 
   const req_context rctx{dpp, y, nullptr};
-  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
+  return processor.complete(accounted_size, etag, mtime, set_mtime, attrs,
+			    rgw::cksum::no_cksum, delete_at,
                             nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }

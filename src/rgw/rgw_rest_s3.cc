@@ -15,6 +15,8 @@
 #include "common/safe_io.h"
 #include "common/errno.h"
 #include "auth/Crypto.h"
+#include "rgw_cksum.h"
+#include "rgw_common.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -68,7 +70,7 @@
 #include "rgw_rest_iam.h"
 #include "rgw_sts.h"
 #include "rgw_sal_rados.h"
-
+#include "rgw_cksum_pipe.h"
 #include "rgw_s3select.h"
 
 #define dout_context g_ceph_context
@@ -479,7 +481,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     } catch (const buffer::error&) {}
   }
 
-  if (multipart_parts_count) {
+  if (multipart_parts_count && multipart_parts_count > 0) {
     dump_header(s, "x-amz-mp-parts-count", *multipart_parts_count);
   }
 
@@ -502,7 +504,12 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 	try {
 	  rgw::cksum::Cksum cksum;
 	  decode(cksum, i->second);
-	  dump_header(s, cksum.header_name(), cksum.to_armor());
+	  if (multipart_parts_count && multipart_parts_count > 0) {
+	    dump_header(s, cksum.header_name(),
+			fmt::format("{}-{}", cksum.to_armor(), *multipart_parts_count));
+	  } else {
+	    dump_header(s, cksum.header_name(), cksum.to_armor());
+	  }
 	}  catch (buffer::error& err) {
 	  ldpp_dout(this, 0) << "ERROR: failed to decode rgw::cksum::Cksum"
 			     << dendl;
@@ -2735,7 +2742,7 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_content_length(s, 0);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       dump_header_if_nonempty(s, "x-amz-expiration", expires);
-      if (cksum) {
+      if (cksum && cksum->aws()) {
 	dump_header(s, cksum->header_name(), cksum->to_armor());
       }
       for (auto &it : crypt_http_responses)
@@ -2964,6 +2971,7 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     std::string v { rgw_trim_whitespace(std::string_view(d.c_str(), d.length())) };
     rgw_set_amz_meta_header(s->info.crypt_attribute_map, p.first, v, OVERWRITE);
   }
+
   int r = get_encryption_defaults(s);
   if (r < 0) {
     ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << r << dendl;
@@ -4005,6 +4013,11 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
     return -ERR_INVALID_REQUEST;
   }
 
+  auto algo_hdr = rgw::putobj::cksum_algorithm_hdr(*(s->info.env));
+  if (algo_hdr.second) {
+    cksum_algo = rgw::cksum::parse_cksum_type(algo_hdr.second);
+  }
+
   return 0;
 }
 
@@ -4021,6 +4034,9 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   if (exist_multipart_abort) {
     dump_time_header(s, "x-amz-abort-date", abort_date);
     dump_header_if_nonempty(s, "x-amz-abort-rule-id", rule_id);
+  }
+  if (cksum_algo != rgw::cksum::Type::none) {
+    dump_header(s, "x-amz-checksum-algorithm", safe_upcase_str(to_string(cksum_algo)));
   }
   end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
@@ -4084,6 +4100,9 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object->get_name());
     s->formatter->dump_format("ETag", "\"%s\"", etag.c_str());
+    if (armored_cksum) {
+      s->formatter->dump_string(cksum->element_name(), *armored_cksum);
+    }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
@@ -4135,9 +4154,15 @@ void RGWListMultipart_ObjStore_S3::send_response()
     ACLOwner& owner = policy.get_owner();
     dump_owner(s, owner.id, owner.display_name);
 
+    /* TODO: missing initiator:
+       Container element that identifies who initiated the multipart upload. If the initiator is an AWS account, this element provides the same information as the Owner element. If the initiator is an IAM User, this element provides the user ARN and display name, see https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html */
+
+    if (cksum && cksum->aws()) {
+      s->formatter->dump_string("ChecksumAlgorithm", safe_upcase_str(cksum->type_string()));
+    }
+
     for (; iter != upload->get_parts().end(); ++iter) {
       rgw::sal::MultipartPart* part = iter->second.get();
-
       s->formatter->open_object_section("Part");
 
       dump_time(s, "LastModified", part->get_mtime());
@@ -4145,6 +4170,11 @@ void RGWListMultipart_ObjStore_S3::send_response()
       s->formatter->dump_unsigned("PartNumber", part->get_num());
       s->formatter->dump_format("ETag", "\"%s\"", part->get_etag().c_str());
       s->formatter->dump_unsigned("Size", part->get_size());
+      auto& part_cksum = part->get_cksum();
+      if (part_cksum && part_cksum->aws()) {
+	s->formatter->dump_string(part_cksum->element_name(),
+				  fmt::format("{}", part_cksum->to_armor()));
+      }
       s->formatter->close_section();
     }
     s->formatter->close_section();

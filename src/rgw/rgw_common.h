@@ -17,6 +17,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string_view>
 #include <atomic>
 #include <unordered_map>
@@ -82,8 +83,9 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_RATELIMIT	RGW_ATTR_PREFIX "ratelimit"
 #define RGW_ATTR_LC		RGW_ATTR_PREFIX "lc"
 #define RGW_ATTR_CORS		RGW_ATTR_PREFIX "cors"
-#define RGW_ATTR_ETAG    	RGW_ATTR_PREFIX "etag"
+#define RGW_ATTR_ETAG RGW_ATTR_PREFIX "etag"
 #define RGW_ATTR_CKSUM    	RGW_ATTR_PREFIX "cksum"
+#define RGW_ATTR_CKSUM_ALGORITHM     RGW_ATTR_PREFIX "x-amz-checksum-algorithm"
 #define RGW_ATTR_BUCKETS	RGW_ATTR_PREFIX "buckets"
 #define RGW_ATTR_META_PREFIX	RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX
 #define RGW_ATTR_CONTENT_TYPE	RGW_ATTR_PREFIX "content_type"
@@ -161,9 +163,6 @@ using ceph::crypto::MD5;
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
 #define RGW_ATTR_UNIX1          RGW_ATTR_PREFIX "unix1"
-
-/* Content Checksums */
-#define RGW_ATTR_AMZ_CKSUM      RGW_ATTR_PREFIX "x-amz-content-checksum"
 
 #define RGW_ATTR_CRYPT_PREFIX   RGW_ATTR_PREFIX "crypt."
 #define RGW_ATTR_CRYPT_MODE     RGW_ATTR_CRYPT_PREFIX "mode"
@@ -1521,25 +1520,33 @@ struct multipart_upload_info
   bool obj_legal_hold_exist{false};
   RGWObjectRetention obj_retention;
   RGWObjectLegalHold obj_legal_hold;
+  rgw::cksum::Type cksum_type {rgw::cksum::Type::none};
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(dest_placement, bl);
     encode(obj_retention_exist, bl);
     encode(obj_legal_hold_exist, bl);
     encode(obj_retention, bl);
     encode(obj_legal_hold, bl);
+    uint16_t ct{uint16_t(cksum_type)};
+    encode(ct, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
     decode(dest_placement, bl);
     if (struct_v >= 2) {
       decode(obj_retention_exist, bl);
       decode(obj_legal_hold_exist, bl);
       decode(obj_retention, bl);
       decode(obj_legal_hold, bl);
+      if (struct_v >= 3) {
+	uint16_t ct;
+	decode(ct, bl);
+	cksum_type = rgw::cksum::Type(ct);
+      }
     } else {
       obj_retention_exist = false;
       obj_legal_hold_exist = false;
@@ -1984,6 +1991,16 @@ static inline std::string ys_header_mangle(std::string_view name)
 		 });
   return out;
 } /* ys_header_mangle */
+
+static inline std::string& upcase_str(std::string& s) {
+  std::transform(s.begin(), s.end(), s.begin(), ::toupper);
+  return s;
+}
+
+static inline std::string safe_upcase_str(std::string s) {
+  std::transform(s.begin(), s.end(), s.begin(), ::toupper);
+  return s;
+}
 
 extern int rgw_bucket_parse_bucket_instance(const std::string& bucket_instance, std::string *bucket_name, std::string *bucket_id, int *shard_id);
 

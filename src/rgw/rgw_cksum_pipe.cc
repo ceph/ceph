@@ -32,45 +32,19 @@ namespace rgw::putobj {
       dv(rgw::cksum::digest_factory(_type)),
       _digest(cksum::get_digest(dv)), cksum_hdr(_hdr),
       _state(State::DIGEST)
-  {
-    cksum::Digest* digest = cksum::get_digest(dv);
-    /* XXXX remove this */
-    std::cout << "ctor had digest " << _digest
-	      << " and got digest: " << digest
-	      << std::endl;
-  }
+  {}
 
   std::unique_ptr<RGWPutObj_Cksum> RGWPutObj_Cksum::Factory(
     rgw::sal::DataProcessor* next, const RGWEnv& env)
   {
     /* look for matching headers */
-    auto match = [&env] () -> const cksum_hdr_t {
-      /* If the individual checksum value you provide through
-      x-amz-checksum-algorithm doesn't match the checksum algorithm
-      you set through x-amz-sdk-checksum-algorithm, Amazon S3 ignores
-      any provided ChecksumAlgorithm parameter and uses the checksum
-      algorithm that matches the provided value in
-      x-amz-checksum-algorithm.
-      https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutObject.html
-      */
-      for (const auto hk : {"HTTP_X_AMZ_CHECKSUM_ALGORITHM",
-			    "HTTP_X_AMZ_SDK_CHECKSUM_ALGORITHM"}) {
-	auto hv = env.get(hk);
-	if (hv) {
-	  return cksum_hdr_t(hk, hv);
-	}
-      }
-      return cksum_hdr_t(nullptr, nullptr);
-    };
-
-    auto algo_header = match();
+    auto algo_header = cksum_algorithm_hdr(env);
     if (algo_header.first) {
       if (algo_header.second) {
 	auto cksum_type = cksum::parse_cksum_type(algo_header.second);
-	return  std::make_unique<RGWPutObj_Cksum>(
-						  next,
-						  cksum_type,
-						  std::move(algo_header));
+	return
+	  std::make_unique<RGWPutObj_Cksum>(
+				    next, cksum_type, std::move(algo_header));
       }
       /* malformed checksum algorithm header(s) */
       throw rgw::io::Exception(EINVAL, std::system_category());

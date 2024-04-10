@@ -15,6 +15,8 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <cstdint>
+#include <cstring>
+#include <optional>
 #include <stdint.h>
 #include <string>
 #include <string_view>
@@ -81,6 +83,11 @@ namespace rgw { namespace cksum {
 
   namespace  ba = boost::algorithm;
 
+  static inline std::string safe_upcase_str(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), ::toupper);
+    return s;
+  }
+
   class Cksum {
   public:
     static constexpr std::array<Desc, 8> checksums =
@@ -102,23 +109,41 @@ namespace rgw { namespace cksum {
     value_type digest;
 
     Cksum(Type _type = Type::none) : type(_type) {}
+    Cksum(Type _type, const char* _armored_text)
+      : type(_type) {
+      const auto& ckd = checksums[uint16_t(type)];
+      (void) ceph_unarmor((char*) digest.begin(), (char*) digest.begin() + ckd.digest_size,
+			  _armored_text, _armored_text + std::strlen(_armored_text));
+    }
 
-    static const char* type_string(const Type type) {
+    const char* type_string() const {
       return (Cksum::checksums[uint16_t(type)]).name;
     }
 
-    std::string aws_name() {
-      return fmt::format("x-amz-checksum-{}", type_string(type));
+    const bool aws() const {
+      return (Cksum::checksums[uint16_t(type)]).aws();
     }
 
-    std::string rgw_name() {
-      return fmt::format("x-rgw-checksum-{}", type_string(type));
+    std::string aws_name() const {
+      return fmt::format("x-amz-checksum-{}", type_string());
     }
 
-    std::string header_name() {
-      return ((Cksum::checksums[uint16_t(type)]).aws()) ?
-	aws_name() :
-	rgw_name();
+    std::string rgw_name() const {
+      return fmt::format("x-rgw-checksum-{}", type_string());
+    }
+
+    std::string header_name() const {
+      return (aws()) ? aws_name() : rgw_name();
+    }
+
+    std::string element_name() const {
+      std::string ts{type_string()};
+      return fmt::format("Checksum{}", safe_upcase_str(ts));
+    }
+
+    std::string_view raw() const {
+      const auto& ckd = checksums[uint16_t(type)];
+      return std::string_view((char*) digest.begin(), ckd.digest_size);
     }
 
     std::string to_armor() const {
@@ -171,6 +196,8 @@ namespace rgw { namespace cksum {
     }
   }; /* Cksum */
   WRITE_CLASS_ENCODER(Cksum);
+
+  static inline const std::optional<rgw::cksum::Cksum> no_cksum{std::nullopt};
 
   static inline Type parse_cksum_type(const char* name)
   {

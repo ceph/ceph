@@ -178,7 +178,7 @@ class D4NFilterFixture : public ::testing::Test {
       
       int ret = testWriter->complete(accounted_size, etag,
                        &mtime, set_mtime,
-                       attrs,
+                       attrs, std::nullopt,
                        delete_at,
                        &if_match, &if_nomatch,
                        &user_data,
@@ -439,7 +439,7 @@ TEST_F(D4NFilterFixture, CopyObjectReplace) {
   
   ASSERT_EQ(testWriterCopy->complete(accounted_size, etag,
 		   &mtime, set_mtime,
-		   attrs,
+                   attrs, std::nullopt,
 		   delete_at,
 		   &if_match, &if_nomatch,
 		   &user_data,
@@ -564,7 +564,7 @@ TEST_F(D4NFilterFixture, CopyObjectMerge) {
   
   ASSERT_EQ(testWriterCopy->complete(accounted_size, etag,
 		   &mtime, set_mtime,
-		   attrs,
+                   attrs, std::nullopt,
 		   delete_at,
 		   &if_match, &if_nomatch,
 		   &user_data,
@@ -1892,7 +1892,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 
   ASSERT_EQ(testWriter->complete(accounted_size, etag,
 		 &mtime, set_mtime,
-		 attrs,
+                 attrs, std::nullopt,
 		 delete_at,
 		 &if_match, &if_nomatch,
 		 &user_data,
@@ -1917,7 +1917,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 
   ASSERT_EQ(testWriter->complete(accounted_size, etag,
 		 &mtime, set_mtime,
-		 attrs,
+                 attrs, std::nullopt,
 		 delete_at,
 		 &if_match, &if_nomatch,
 		 &user_data,

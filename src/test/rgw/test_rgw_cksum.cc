@@ -24,6 +24,7 @@
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "rgw/rgw_cksum.h"
+#include "rgw/rgw_cksum_pipe.h"
 #include <openssl/sha.h>
 #include "rgw/rgw_hex.h"
 
@@ -49,6 +50,17 @@ namespace {
 
   std::string dolor =
     R"(Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.)";
+
+TEST(RGWCksum, Ctor)
+{
+  cksum::Cksum ck1;
+  cksum::Cksum ck2(cksum::Type::none);
+
+  auto ck3 = rgw::putobj::GetHeaderCksumResult(ck1, "");
+
+  ASSERT_EQ(ck1.to_armor(), ck2.to_armor());
+  ASSERT_EQ(ck2.to_armor(), ck3.first.to_armor());
+}
 
 TEST(RGWCksum, Output)
 {
