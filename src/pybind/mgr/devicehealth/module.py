@@ -327,6 +327,11 @@ CREATE TABLE DeviceHealthMetrics (
                         count += 1
                 except json.decoder.JSONDecodeError:
                     pass
+                except rados.ObjectNotFound:
+                    # https://tracker.ceph.com/issues/63882
+                    # Sometimes an object appears in the pool listing but cannot be interacted with?
+                    self.log.debug(f"object {obj} does not exist because it is deleted in HEAD")
+                    pass
                 if count >= 10:
                     break
             done = count < 10
