@@ -2043,6 +2043,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
+  if (!is_primary()) {
+    osd->logger->inc(l_osd_replica_read);
+  }
+
   if (!check_laggy(op)) {
     return;
   }
@@ -2173,6 +2177,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   // missing object?
   if (is_unreadable_object(head)) {
     if (!is_primary()) {
+      osd->logger->inc(l_osd_replica_read_redirect_missing);
       osd->reply_op_error(op, -EAGAIN);
       return;
     }
@@ -2304,11 +2309,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       dout(20) << __func__
                << ": unstable write on replica, bouncing to primary "
 	       << *m << dendl;
+      osd->logger->inc(l_osd_replica_read_redirect_conflict);
       osd->reply_op_error(op, -EAGAIN);
       return;
     }
     dout(20) << __func__ << ": serving replica read on oid " << oid
              << dendl;
+    osd->logger->inc(l_osd_replica_read_served);
   }
 
   int r = find_object_context(
