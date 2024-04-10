@@ -361,6 +361,46 @@ int LFUDAPolicy::sendRemote(const DoutPrefixProvider* dpp, CacheBlock *victim, s
   return 0;
 }	
 
+/*
+int LFUDAPolicy::getRemote(const DoutPrefixProvider* dpp, CacheBlock *victim, std::string remoteCacheAddress, std::string key, bufferlist* out_bl, optional_yield y)
+{
+  bufferlist in_bl;
+  RGWRemoteD4NGetCB cb(&in_bl);
+  std::string bucketName = victim->cacheObj.bucketName;
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << ": bucket name is: " << bucketName << dendl;                          
+*/ 
+  /*
+  map<std::string, RGWAccessKey> accessKeys =  user->get_info().access_keys;
+  accesskey->id = accessKeys.begin()->second.id;
+  accesskey->key = accessKeys.begin()->second.key;
+  */
+/*
+  //FIXME: check the directory to see if the data is dirty, location, ...
+  // should we check the directory here? or should it be checked before and pass the info as the key?
+
+  HostStyle host_style = PathStyle;
+  std::map<std::string, std::string> extra_headers;                                                            
+
+  auto sender = new RGWRESTStreamRWRequest(dpp->get_cct(), "GET", remoteCacheAddress, &cb, NULL, NULL, "", host_style);
+
+  //TODO: AMIN: the second arg which is nullptr should be accesskey. Use rgw_user in cacheblock to create it.
+  int ret = sender->send_request(dpp, nullptr, extra_headers, "admin/remoted4n/"+bucketName+"/"+key, nullptr, out_bl);                 
+  if (ret < 0) {                                                                                      
+    delete sender;                                                                                       
+    return ret;                                                                                       
+  }                                                                                                   
+  
+  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;                          
+  ret = sender->complete_request(y);                                                            
+  if (ret < 0){
+    delete sender;                                                                                   
+    return ret;                                                                                   
+  }
+
+  return 0;
+}	
+*/
+
 int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) {
   uint64_t freeSpace = cacheDriver->get_free_space(dpp);
 
@@ -413,8 +453,13 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 	// add remote cache host to host list
 	bufferlist out_bl;
         rgw::sal::Attrs obj_attrs;
+
+	std::string remoteKey = key;
+	if (it->second->dirty == true)
+	  remoteKey = "D_"+key;
+
     	cacheDriver->get(dpp, key, 0, it->second->len, out_bl, obj_attrs, y);
-	if (int ret = sendRemote(dpp, victim, remoteCacheAddress, key, &out_bl, y) < 0){
+	if (int ret = sendRemote(dpp, victim, remoteCacheAddress, remoteKey, &out_bl, y) < 0){
           delete victim;
           return ret;
         }

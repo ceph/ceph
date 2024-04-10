@@ -322,8 +322,25 @@ void RGWOp_RemoteD4N_Put::execute(optional_yield y) {
   //FIXME: AMIN: this is only for test, remove it
   rgw_user user;
   user.tenant = "AMIN_TEST";
-  static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime,  user, y);
-  //static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime,  s->object->get_bucket()->get_owner(), y);
+  op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime,  user, y);
+  //op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime,  s->object->get_bucket()->get_owner(), y);
+  if (op_ret < 0) {
+    ldpp_dout(s, 5) << "ERROR: updating in-memory structures for remote object failed!: " << cpp_strerror(op_ret) << dendl;
+    return;
+  }
+
+  rgw::d4n::CacheBlock block;
+  block.cacheObj.objName = objectName;
+  block.cacheObj.bucketName = bucketName;
+  block.blockID = offset;
+  block.size = len;
+
+  op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_block_dir()->update_field(&block, "blockHosts", s->get_cct()->_conf->rgw_local_cache_address, y);
+  if (op_ret < 0) {
+    ldpp_dout(s, 5) << "ERROR: can't update directory entry: " << cpp_strerror(op_ret) << dendl;
+    return;
+  }
+
 
   // translate internal codes into return header
   if (op_ret == 0)
