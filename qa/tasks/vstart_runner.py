@@ -83,6 +83,7 @@ from teuthology.config import config as teuth_config
 from teuthology.contextutil import safe_while
 from teuthology.contextutil import MaxWhileTries
 from teuthology.exceptions import CommandFailedError
+from teuthology.task.install.util import TEUTHOLOGY_BIN_UTILITIES
 try:
     import urllib3
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -321,20 +322,7 @@ class LocalRemote(RemoteShell):
     Run this inside your src/ dir!
     """
 
-    rewrite_helper_tools = [
-      {
-        'name': 'adjust-ulimits',
-        'path': None
-      },
-      {
-        'name': 'daemon-helper',
-        'path': None
-      },
-      {
-        'name': 'stdin-killer',
-        'path': None
-      },
-    ]
+    rewrite_helper_tools = [{'name': n, 'path': None} for n in TEUTHOLOGY_BIN_UTILITIES]
 
     def __init__(self):
         super().__init__()
