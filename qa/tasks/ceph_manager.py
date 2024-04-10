@@ -105,30 +105,30 @@ def get_valgrind_args(testdir, name, preamble, v, exit_on_first_error=True, cd=T
     ])
 
     val_path = '/var/log/ceph/valgrind'
+
+    extra_args = []
+
+    extra_args += [
+        'valgrind',
+        '--trace-children=no',
+        '--child-silent-after-fork=yes',
+        '--soname-synonyms=somalloc=*tcmalloc*',
+        '--time-stamp=yes',
+        '--vgdb=yes',
+        '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
+    ]
+
     if '--tool=memcheck' in v or '--tool=helgrind' in v:
-        extra_args = [
-            'valgrind',
-            '--trace-children=no',
-            '--child-silent-after-fork=yes',
-            '--soname-synonyms=somalloc=*tcmalloc*',
+        extra_args += [
             '--num-callers=50',
-            '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
             '--xml=yes',
             '--xml-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
-            '--time-stamp=yes',
-            '--vgdb=yes',
         ]
     else:
-        extra_args = [
-            'valgrind',
-            '--trace-children=no',
-            '--child-silent-after-fork=yes',
-            '--soname-synonyms=somalloc=*tcmalloc*',
-            '--suppressions={tdir}/valgrind.supp'.format(tdir=testdir),
+        extra_args += [
             '--log-file={vdir}/{n}.log'.format(vdir=val_path, n=name),
-            '--time-stamp=yes',
-            '--vgdb=yes',
         ]
+
     if exit_on_first_error:
         extra_args.extend([
             # at least Valgrind 3.14 is required
