@@ -8,6 +8,7 @@ overrides:
       - Scrub error on dir
       - Metadata damage detected
       - object missing on disk
+      - Invalid tag char
 tasks:
   - cephfs_test_runner:
       modules:
