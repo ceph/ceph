@@ -686,7 +686,7 @@ class ExportMgr:
             if not check_fs(self.mgr, fs_name):
                 raise FSNotFound(fs_name)
 
-            validate_cephfs_path(self.mgr, fs_name, path)
+            # validate_cephfs_path(self.mgr, fs_name, path)
 
             user_id = f"nfs.{cluster_id}.{ex_id}"
             if "user_id" in fsal and fsal["user_id"] != user_id:
@@ -714,7 +714,7 @@ class ExportMgr:
                              clients: list = [],
                              sectype: Optional[List[str]] = None) -> Dict[str, Any]:
 
-        validate_cephfs_path(self.mgr, fs_name, path)
+        # validate_cephfs_path(self.mgr, fs_name, path)
 
         pseudo_path = normalize_path(pseudo_path)
 
