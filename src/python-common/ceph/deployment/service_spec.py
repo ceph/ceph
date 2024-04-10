@@ -1352,6 +1352,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_log_directory_backups: Optional[int] = 10,
                  log_directory: Optional[str] = '/var/log/ceph/',
                  monitor_timeout: Optional[float] = 1.0,
+                 enable_monitor_client: bool = False,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -1454,6 +1455,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.log_directory = log_directory or '/var/log/ceph/'
         #: ``monitor_timeout`` monitor connectivity timeout
         self.monitor_timeout = monitor_timeout
+        #: ``enable_monitor_client`` whether to connect to the ceph monitor or not
+        self.enable_monitor_client = enable_monitor_client
 
     def get_port_start(self) -> List[int]:
         return [5500, 4420, 8009]
