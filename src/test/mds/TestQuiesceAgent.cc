@@ -139,12 +139,18 @@ class QuiesceAgentTest : public testing::Test {
     }
 
     void TearDown() override {
+      for (auto it = quiesce_requests.cbegin(); it != quiesce_requests.cend(); ) {
+        if (it->second.second) {
+          it->second.second->complete(-ECANCELED);
+        }
+        it = quiesce_requests.erase(it);
+      }
+
       if (agent) {
         agent->shutdown();
         agent.reset();
       }
     }
-
 
     using R = QuiesceMap::Roots::value_type;
     using RootInitList = std::initializer_list<R>;
