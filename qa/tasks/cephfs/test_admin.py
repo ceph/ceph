@@ -1745,34 +1745,36 @@ class TestFsAuthorize(CephFSTestCase):
         self.fs1 = self.fs
         self.fs2 = self.mds_cluster.newfs('testcephfs2')
         self.mount_b.remount(cephfs_name=self.fs2.name)
-        self.captesters = (CapTester(self.mount_a), CapTester(self.mount_b))
+        self.captester1 = CapTester(self.mount_a)
+        self.captester2 = CapTester(self.mount_b)
 
-        # Authorize client to fs1
         PERM = 'rw'
         FS_AUTH_CAPS = (('/', PERM, 'root_squash'),)
-        self.captester = CapTester(self.mount_a, '/')
-        self.fs1.authorize(self.client_id, FS_AUTH_CAPS)
 
-        # Authorize client to fs2
+        self.fs1.authorize(self.client_id, FS_AUTH_CAPS)
         self.fs2.authorize(self.client_id, FS_AUTH_CAPS)
         keyring = self.fs.mon_manager.get_keyring(self.client_id)
 
-        self._remount(self.mount_a, self.fs1.name, keyring)
-        self._remount(self.mount_b, self.fs2.name, keyring)
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path)
         # testing MDS caps...
         # Since root_squash is set in client caps, client can read but not
         # write even though access level is set to "rw" on both fses
-        self.captester[0].conduct_pos_test_for_read_caps()
-        self.captester[0].conduct_pos_test_for_open_caps()
-        self.captester[0].conduct_neg_test_for_write_caps(sudo_write=True)
-        self.captester[0].conduct_neg_test_for_chown_caps()
-        self.captester[0].conduct_neg_test_for_truncate_caps()
+        self.captester1.conduct_pos_test_for_read_caps()
+        self.captester1.conduct_pos_test_for_open_caps()
+        self.captester1.conduct_neg_test_for_write_caps(sudo_write=True)
+        self.captester1.conduct_neg_test_for_chown_caps()
+        self.captester1.conduct_neg_test_for_truncate_caps()
 
-        self.captester[1].conduct_pos_test_for_read_caps()
-        self.captester[1].conduct_pos_test_for_open_caps()
-        self.captester[1].conduct_neg_test_for_write_caps(sudo_write=True)
-        self.captester[1].conduct_neg_test_for_chown_caps()
-        self.captester[1].conduct_neg_test_for_truncate_caps()
+        keyring_path = self.mount_b.client_remote.mktemp(data=keyring)
+        self.mount_b.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path)
+        self.captester2.conduct_pos_test_for_read_caps()
+        self.captester2.conduct_pos_test_for_open_caps()
+        self.captester2.conduct_neg_test_for_write_caps(sudo_write=True)
+        self.captester2.conduct_neg_test_for_chown_caps()
+        self.captester2.conduct_neg_test_for_truncate_caps()
 
     def test_single_path_rootsquash_issue_56067(self):
         """
