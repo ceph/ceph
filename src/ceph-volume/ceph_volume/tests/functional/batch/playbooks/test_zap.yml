@@ -15,10 +15,10 @@
   tasks:
 
     - name: mark osds down
-      command: "ceph --cluster {{ cluster }} osd down osd.{{ item }}"
+      command: "ceph osd down osd.{{ item }}"
       with_items: "{{ osd_ids }}"
     - name: purge osds
-      command: "ceph --cluster {{ cluster }} osd purge osd.{{ item }} --yes-i-really-mean-it"
+      command: "ceph osd purge osd.{{ item }} --yes-i-really-mean-it"
       with_items: "{{ osd_ids }}"
 
 
@@ -27,7 +27,7 @@
   tasks:
 
     - name: zap devices used for OSDs
-      command: "ceph-volume --cluster {{ cluster }} lvm zap --osd-id {{ item }} --destroy"
+      command: "ceph-volume lvm zap --osd-id {{ item }} --destroy"
       with_items: "{{ osd_ids }}"
       environment:
         CEPH_VOLUME_DEBUG: 1
