@@ -398,6 +398,7 @@ def main():
     else:
         argv = sys.argv[1:]
     parser.add_argument('--branch', dest='branch', action='store', default=default_branch, help='branch to create ("HEAD" leaves HEAD detached; i.e. no branch is made)')
+    parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
     parser.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
     parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
     parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
@@ -409,6 +410,10 @@ def main():
     parser.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
+
+    if args.debug:
+        log.setLevel(logging.DEBUG)
+
     return build_branch(args)
 
 if __name__ == "__main__":
