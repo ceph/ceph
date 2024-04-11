@@ -21,20 +21,6 @@
     DEBIAN_FRONTEND: noninteractive
 
   pre_tasks:
-    # If we can't get python2 installed before any module is used we will fail
-    # so just try what we can to get it installed
-    - name: check for python2
-      stat:
-        path: /usr/bin/python
-      ignore_errors: yes
-      register: systempython2
-
-    - name: install python2 for debian based systems
-      raw: sudo apt-get -y install python-simplejson
-      ignore_errors: yes
-      when:
-        - systempython2.stat is undefined or systempython2.stat.exists == false
-
     # Ansible will try to auto-install python-apt, in some systems this might be
     # python3-apt, or python-apt, and it has caused whole runs to fail because
     # it is trying to do an interactive prompt
@@ -45,18 +31,6 @@
         - python3-apt
         - python-apt
         - aptitude
-
-    - name: install python2 for fedora
-      raw: sudo dnf -y install python creates=/usr/bin/python
-      ignore_errors: yes
-      when:
-        - systempython2.stat is undefined or systempython2.stat.exists == false
-
-    - name: install python2 for opensuse
-      raw: sudo zypper -n install python-base creates=/usr/bin/python2.7
-      ignore_errors: yes
-      when:
-        - systempython2.stat is undefined or systempython2.stat.exists == false
 
     - name: gather facts
       setup:
@@ -91,6 +65,12 @@
       package:
         name: rpm
         state: latest
+      when: not is_atomic | bool
+
+    - name: install net-tools
+      package:
+        name: net-tools
+        state: present
       when: not is_atomic | bool
 
     - name: update the system
