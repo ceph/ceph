@@ -397,7 +397,7 @@ void CloneRequest<I>::handle_attach_child(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "failed to attach parent: " << cpp_strerror(r) << dendl;
+    lderr(m_cct) << "failed to attach child: " << cpp_strerror(r) << dendl;
     m_r_saved = r;
     close_child();
     return;
