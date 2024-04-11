@@ -585,9 +585,11 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 	  return -ec.value();
 	}
 
-	std::get<0>(resp).value() += "_";
-	std::get<0>(resp).value() += value;
-	value = std::get<0>(resp).value();
+	if (std::get<0>(resp).value().find(value) == std::string::npos) {
+	  std::get<0>(resp).value() += "_";
+	  std::get<0>(resp).value() += value;
+	  value = std::get<0>(resp).value();
+        }
       }
 
       {
