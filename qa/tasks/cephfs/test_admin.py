@@ -1747,10 +1747,6 @@ class TestFsAuthorize(CephFSTestCase):
         self.mount_b.remount(cephfs_name=self.fs2.name)
         self.captesters = (CapTester(self.mount_a), CapTester(self.mount_b))
 
-        if not isinstance(self.mount_a, FuseMount):
-            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
-                          "needed to enforce root_squash MDS caps")
-
         # Authorize client to fs1
         PERM = 'rw'
         FS_AUTH_CAPS = (('/', PERM, 'root_squash'),)
