@@ -113,6 +113,7 @@ import logging
 import os
 import re
 import requests
+import signal
 import sys
 
 from os.path import expanduser
@@ -360,6 +361,11 @@ def build_branch(args):
                 sys.exit(1)
             log.info("Labeled PR #{pr} {label}".format(pr=pr, label=label))
 
+    if args.stop_at_built:
+        log.warning("Stopping execution (SIGSTOP) with built branch for further modification. Foreground when execution should resume (typically `fg`).")
+        signal.raise_signal(signal.SIGSTOP)
+        log.warning("Resuming execution.")
+
     # If the branch is 'HEAD', leave HEAD detached (but use "main" for commit message)
     if branch == 'HEAD':
         log.info("Leaving HEAD detached; no branch anchors your commits")
@@ -400,6 +406,7 @@ def main():
     parser.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
     parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
     parser.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
+    parser.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
     return build_branch(args)
