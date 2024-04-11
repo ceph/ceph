@@ -261,7 +261,7 @@
          "steppedLine": false,
          "targets": [
             {
-               "expr": "deriv(ceph_pool_objects{cluster=~\"$cluster\", }[1m]) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster\", }\n",
+               "expr": "deriv(ceph_pool_objects{cluster=~\"$cluster\", }[$__rate_interval]) *\n  on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~\"$pool_name\", cluster=~\"$cluster\", }\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "Objects per second",

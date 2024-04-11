@@ -682,7 +682,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         'Objects out(-) / in(+) ',
         null,
         |||
-          deriv(ceph_pool_objects{%(matchers)s}[1m]) *
+          deriv(ceph_pool_objects{%(matchers)s}[$__rate_interval]) *
             on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
         ||| % $.matchers(),
         'Objects per second',
