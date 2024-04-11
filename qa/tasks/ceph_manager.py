@@ -85,7 +85,7 @@ def write_conf(ctx, conf_path=DEFAULT_CONF_PATH, cluster='ceph'):
     teuthology.feed_many_stdins_and_close(conf_fp, writes)
     run.wait(writes)
 
-def get_valgrind_args(testdir, name, preamble, v, exit_on_first_error=True, cd=True, rebooter=False):
+def get_valgrind_args(testdir, name, preamble, v, exit_on_first_error=True, cd=True):
     """
     Build a command line for running valgrind.
 
@@ -107,9 +107,6 @@ def get_valgrind_args(testdir, name, preamble, v, exit_on_first_error=True, cd=T
     val_path = '/var/log/ceph/valgrind'
 
     extra_args = []
-
-    if rebooter:
-        extra_args.append('daemon-rebooter')
 
     extra_args += [
         'valgrind',

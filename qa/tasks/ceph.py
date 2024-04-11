@@ -1455,8 +1455,9 @@ def run_daemon(ctx, config, type_):
                 'adjust-ulimits',
                 'ceph-coverage',
                 coverage_dir,
-                'daemon-helper',
-                daemon_signal,
+                'stdin-killer',
+                '--timeout=0',
+                '--signal=' + daemon_signal,
             ]
             run_cmd_tail = [
                 'ceph-%s' % (type_),
@@ -1476,9 +1477,13 @@ def run_daemon(ctx, config, type_):
                 if role in vc:
                     valgrind_args = vc[role]
                 rebooter = vc.get('reboot-on-exit-zero', False)
+                if rebooter:
+                    run_cmd += ("--reboot-on-exit0", "--")
                 exit_on_first_error = vc.get('exit_on_first_error', True)
                 run_cmd = get_valgrind_args(testdir, role, run_cmd, valgrind_args,
-                    exit_on_first_error=exit_on_first_error, rebooter=rebooter)
+                    exit_on_first_error=exit_on_first_error)
+            else:
+                run_cmd.append("--")
 
             run_cmd.extend(run_cmd_tail)
             log_path = f'/var/log/ceph/{cluster_name}-{type_}.{id_}.log'
