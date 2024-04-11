@@ -452,7 +452,7 @@ def build_branch(args):
             log.info("Created tag %s" % tag)
 
     if args.create_qa:
-        if created_branch is None:
+        if not created_branch:
             log.error("branch already exists!")
             sys.exit(1)
         project = R.project.get(REDMINE_PROJECT_QA)
@@ -473,7 +473,8 @@ def build_branch(args):
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_RUNS, 'value': branch})
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_RELEASE, 'value': args.qa_release})
 
-        G.git.push(CI_REMOTE_URL, tag.name)
+        G.git.push(CI_REMOTE_URL, branch) # for shaman
+        G.git.push(CI_REMOTE_URL, tag.name) # for archival
         origin_url = f'{BASE_PROJECT}/{CI_REPO}/commits/{tag.name}'
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_GIT_BRANCH, 'value': origin_url})
 
