@@ -909,6 +909,8 @@ public:
 
   bool can_prune_tail() const {
     return
+      !is_shared() &&
+      !is_compressed() &&
       extents.size() > 1 &&  // if it's all invalid it's not pruning.
       !extents.back().is_valid() &&
       !has_unused();

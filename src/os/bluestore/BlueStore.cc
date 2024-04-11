@@ -2811,11 +2811,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 
 
 void BlueStore::Blob::maybe_prune_tail() {
-  if (get_blob().is_shared()) {
-    return;
-  }
-
-  if (!get_blob().is_compressed() && get_blob().can_prune_tail()) {
+  if (get_blob().can_prune_tail()) {
     dirty_blob().prune_tail();
     used_in_blob.prune_tail(get_blob().get_ondisk_length());
     dout(20) << __func__ << " pruned tail, now " << get_blob() << dendl;
@@ -5083,6 +5079,7 @@ void BlueStore::Collection::split_cache(
       }
 
       for (auto &i : o->bc.buffer_map) {
+        ceph_assert(!i.second.is_writing());
         ldout(store->cct, 1)
           << __func__ << "   moving " << i.second << dendl;
         dest->cache->_move(cache, &i.second);
