@@ -286,7 +286,11 @@ void RGWOp_RemoteD4N_Put::execute(optional_yield y) {
       return;
     }
   }
-  oid_in_cache = bucketName + "_" + version + "_" + objectName + "_" + to_string(offset) + "_" + to_string(len);
+  if (version.length() > 0)
+    oid_in_cache = bucketName + "_" + version + "_" + objectName + "_" + to_string(offset) + "_" + to_string(len);
+  else 
+    oid_in_cache = bucketName + "_" + objectName + "_" + to_string(offset) + "_" + to_string(len);
+
   if (dirty)
     //RD_bucket_version_key_...
     key = string("RD_") + oid_in_cache;
@@ -322,12 +326,8 @@ void RGWOp_RemoteD4N_Put::execute(optional_yield y) {
   //FIXME: AMIN: this is only for test, remove it
   rgw_user user;
   user.tenant = "AMIN_TEST";
-  op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime,  user, y);
+  static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime, user, y);
   //op_ret = static_cast<rgw::sal::D4NFilterDriver*>(driver)->get_policy_driver()->get_cache_policy()->update(s, oid_in_cache, offset, len, version, dirty, creationTime,  s->object->get_bucket()->get_owner(), y);
-  if (op_ret < 0) {
-    ldpp_dout(s, 5) << "ERROR: updating in-memory structures for remote object failed!: " << cpp_strerror(op_ret) << dendl;
-    return;
-  }
 
   rgw::d4n::CacheBlock block;
   block.cacheObj.objName = objectName;
