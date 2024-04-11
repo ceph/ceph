@@ -6,10 +6,12 @@
 # into main.
 #
 #
+# == Getting Started ==
+#
 # You will probably want to setup a virtualenv for running this script:
 #
 #    (
-#    virtualenv3 ~/ptl-venv
+#    virtualenv ~/ptl-venv
 #    source ~/ptl-venv/bin/activate
 #    pip3 install GitPython
 #    pip3 install python-redmine
@@ -17,19 +19,24 @@
 #
 # Then run the tool with:
 #
-#    (source ~/ptl-venv/bin/activate && python3 src/script/ptl-tool.py ...)
+#    (source ~/ptl-venv/bin/activate && python3 src/script/ptl-tool.py --help)
 #
+# Important files in your $HOME:
+#
+#  ~/.redmine_key -- Your redmine API key from right side of: https://tracker.ceph.com/my/account
+#
+#  ~/.github.key -- Your github API key: https://github.com/settings/tokens
 #
 # Some important environment variables:
 #
 #  - PTL_TOOL_BASE_REMOTE (the name for your upstream remote, default "upstream")
+#  - PTL_TOOL_BASE_PATH (where your upstream -- i.e. https://github.com/ceph/ceph/ -- branch refs are, default "refs/remotes/upstream/")
 #  - PTL_TOOL_GITHUB_USER (your github username)
 #  - PTL_TOOL_GITHUB_API_KEY (your github api key, or what is stored in ~/.github.key)
 #  - PTL_TOOL_REDMINE_USER (your redmine username)
 #  - PTL_TOOL_REDMINE_API_KEY (your redmine api key, or what is stored in ~/redmine_key)
 #  - PTL_TOOL_USER (your desired username embedded in test branch names)
 #
-# Make a redmine API key on the right side of https://tracker.ceph.com/my/account
 #
 # Because developers often have custom names for the ceph upstream remote
 # (https://github.com/ceph/ceph.git), You will probably want to export the
