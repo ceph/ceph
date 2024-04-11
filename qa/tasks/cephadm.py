@@ -1060,7 +1060,12 @@ def ceph_osds(ctx, config):
                 id_to_remote[int(id_)] = (osd, remote)
 
         cur = 0
+        raw = config.get('raw-osds', False)
         for osd_id in sorted(id_to_remote.keys()):
+            if raw:
+                raise ConfigError(
+                    "raw-osds is only supported without OSD roles"
+                )
             osd, remote = id_to_remote[osd_id]
             _, _, id_ = teuthology.split_role(osd)
             assert int(id_) == cur
@@ -1092,9 +1097,10 @@ def ceph_osds(ctx, config):
             cur += 1
 
         if cur == 0:
-            _shell(ctx, cluster_name, remote, [
-                'ceph', 'orch', 'apply', 'osd', '--all-available-devices',
-            ])
+            osd_cmd = ['ceph', 'orch', 'apply', 'osd', '--all-available-devices']
+            if raw:
+                osd_cmd.extend(['--method', 'raw'])
+            _shell(ctx, cluster_name, remote, osd_cmd)
             # expect the number of scratch devs
             num_osds = sum(map(len, devs_by_remote.values()))
             assert num_osds
