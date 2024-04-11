@@ -6,10 +6,12 @@
 # into main.
 #
 #
+# == Getting Started ==
+#
 # You will probably want to setup a virtualenv for running this script:
 #
 #    (
-#    virtualenv3 ~/ptl-venv
+#    virtualenv ~/ptl-venv
 #    source ~/ptl-venv/bin/activate
 #    pip3 install GitPython
 #    pip3 install python-redmine
@@ -17,30 +19,21 @@
 #
 # Then run the tool with:
 #
-#    (source ~/ptl-venv/bin/activate && python3 src/script/ptl-tool.py ...)
+#    (source ~/ptl-venv/bin/activate && python3 src/script/ptl-tool.py --help)
 #
+# Important files in your $HOME:
+#
+#  ~/.redmine_key -- Your redmine API key from right side of: https://tracker.ceph.com/my/account
+#
+#  ~/.github.key -- Your github API key: https://github.com/settings/tokens
 #
 # Some important environment variables:
 #
-#  - PTL_TOOL_BASE_REMOTE (the name for your upstream remote, default "upstream")
 #  - PTL_TOOL_GITHUB_USER (your github username)
 #  - PTL_TOOL_GITHUB_API_KEY (your github api key, or what is stored in ~/.github.key)
 #  - PTL_TOOL_REDMINE_USER (your redmine username)
 #  - PTL_TOOL_REDMINE_API_KEY (your redmine api key, or what is stored in ~/redmine_key)
 #  - PTL_TOOL_USER (your desired username embedded in test branch names)
-#
-# Make a redmine API key on the right side of https://tracker.ceph.com/my/account
-#
-# Because developers often have custom names for the ceph upstream remote
-# (https://github.com/ceph/ceph.git), You will probably want to export the
-# PTL_TOOL_BASE_PATH environment variable in your shell rc files before using
-# this script:
-#
-#     export PTL_TOOL_BASE_PATH=refs/remotes/<remotename>/
-#
-# and PTL_TOOL_BASE_REMOTE as the name of your Ceph upstream remote (default: "upstream"):
-#
-#     export PTL_TOOL_BASE_REMOTE=<remotename>
 #
 #
 # You can use this tool to create a QA tracker ticket for you:
@@ -156,8 +149,9 @@ from os.path import expanduser
 
 BASE_PROJECT = os.getenv("PTL_TOOL_BASE_PROJECT", "ceph")
 BASE_REPO = os.getenv("PTL_TOOL_BASE_REPO", "ceph")
-BASE_REMOTE = os.getenv("PTL_TOOL_BASE_REMOTE", "upstream")
-BASE_PATH = os.getenv("PTL_TOOL_BASE_PATH", "refs/remotes/upstream/")
+BASE_REMOTE_URL = os.getenv("PTL_TOOL_BASE_REMOTE_URL", f"https://github.com/{BASE_PROJECT}/{BASE_REPO}.git")
+CI_REPO = os.getenv("PTL_TOOL_CI_REPO", "ceph-ci")
+CI_REMOTE_URL = os.getenv("PTL_TOOL_CI_REMOTE_URL", f"git@github.com:{BASE_PROJECT}/{CI_REPO}.git")
 GITDIR = os.getenv("PTL_TOOL_GITDIR", ".")
 GITHUB_USER = os.getenv("PTL_TOOL_GITHUB_USER", os.getenv("PTL_TOOL_USER", getuser()))
 GITHUB_API_KEY = None
@@ -309,6 +303,8 @@ def get_credits(session, pr, pr_req):
 def build_branch(args):
     base = args.base
     branch = datetime.datetime.utcnow().strftime(args.branch).format(user=USER)
+    if args.branch_release:
+        branch = branch + "-" + args.branch_release
     if args.debug_build:
         branch = branch + "-debug"
     label = args.label
@@ -335,10 +331,6 @@ def build_branch(args):
         R = Redmine(REDMINE_ENDPOINT, username=REDMINE_USER, key=REDMINE_API_KEY)
         log.debug("connected")
 
-    # First get the latest base branch and PRs from BASE_REMOTE
-    remote = getattr(G.remotes, BASE_REMOTE)
-    remote.fetch()
-
     prs = args.prs
     if args.pr_label is not None:
         if args.pr_label == '' or args.pr_label.isspace():
@@ -364,14 +356,14 @@ def build_branch(args):
     else:
         log.info("Detaching HEAD onto base: {}".format(base))
         try:
-            base_path = args.base_path + base
-            base = next(ref for ref in G.refs if ref.path == base_path)
+            G.git.fetch(BASE_REMOTE_URL, base)
             # So we know that we're not on an old test branch, detach HEAD onto ref:
-            base.checkout()
-        except StopIteration:
+            c = G.commit('FETCH_HEAD')
+        except git.exc.GitCommandError:
+            log.debug("could not fetch %s from %s", base, BASE_REMOTE_URL)
             log.info(f"Trying to checkout uninterpreted base {base}")
             c = G.commit(base)
-            G.git.checkout(c)
+        G.git.checkout(c)
         assert G.head.is_detached
 
     qa_tracker_description = []
@@ -381,11 +373,12 @@ def build_branch(args):
         log.info("Merging PR #{pr}".format(pr=pr))
 
         remote_ref = "refs/pull/{pr}/head".format(pr=pr)
-        fi = remote.fetch(remote_ref)
-        if len(fi) != 1:
-            log.error("PR {pr} does not exist?".format(pr=pr))
+        try:
+            G.git.fetch(BASE_REMOTE_URL, remote_ref)
+        except git.exc.GitCommandError:
+            log.error("could not fetch %s from %s", remote_ref, BASE_REMOTE_URL)
             sys.exit(1)
-        tip = fi[0].ref.commit
+        tip = G.commit("FETCH_HEAD")
 
         endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}"
         response = next(get(session, endpoint, paging=False))
@@ -437,7 +430,7 @@ def build_branch(args):
         if old_head != new_head:
             rev = f'{old_head}..{new_head}'
             for commit in G.iter_commits(rev=rev):
-                qa_tracker_description.append(f'* "commit {commit}":https://github.com/ceph/ceph-ci/commit/{commit} -- {commit.summary}')
+                qa_tracker_description.append(f'* "commit {commit}":{CI_REMOTE_URL}/commit/{commit} -- {commit.summary}')
 
     # If the branch is 'HEAD', leave HEAD detached (but use "main" for commit message)
     if branch == 'HEAD':
@@ -459,7 +452,7 @@ def build_branch(args):
             log.info("Created tag %s" % tag)
 
     if args.create_qa:
-        if created_branch is None:
+        if not created_branch:
             log.error("branch already exists!")
             sys.exit(1)
         project = R.project.get(REDMINE_PROJECT_QA)
@@ -480,8 +473,9 @@ def build_branch(args):
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_RUNS, 'value': branch})
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_RELEASE, 'value': args.qa_release})
 
-        G.remotes.ci.push(tag)
-        origin_url = f'ceph/ceph-ci/commits/{tag.name}'
+        G.git.push(CI_REMOTE_URL, branch) # for shaman
+        G.git.push(CI_REMOTE_URL, tag.name) # for archival
+        origin_url = f'{BASE_PROJECT}/{CI_REPO}/commits/{tag.name}'
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_GIT_BRANCH, 'value': origin_url})
 
         issue_kwargs = {
@@ -508,18 +502,18 @@ def main():
         default_label = False
     else:
         argv = sys.argv[1:]
+    parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
     parser.add_argument('--branch', dest='branch', action='store', default=default_branch, help='branch to create ("HEAD" leaves HEAD detached; i.e. no branch is made)')
+    parser.add_argument('--branch-release', dest='branch_release', action='store', help='release name to embed in branch (for shaman)')
     parser.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
     parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
     parser.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
-    parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
-    parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
-    parser.add_argument('--base-path', dest='base_path', action='store', default=BASE_PATH, help='base for branch')
     parser.add_argument('--git-dir', dest='git', action='store', default=git_dir, help='git directory')
     parser.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
+    parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
+    parser.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
     parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
     parser.add_argument('--qa-release', dest='qa_release', action='store', default='main', help='QA release for tracker')
-    parser.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
     parser.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
