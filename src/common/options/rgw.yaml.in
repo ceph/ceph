@@ -51,6 +51,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_disable_s3select
+  type: bool
+  level: advanced
+  desc: disable the s3select operation; RGW will report an error and will return ERR_INVALID_REQUEST.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_rados_tracing
   type: bool
   level: advanced

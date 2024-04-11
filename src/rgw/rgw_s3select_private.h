@@ -94,6 +94,7 @@ private:
   void push_header(const char* header_name, const char* header_value);
 
   int create_message(u_int32_t header_len,std::string*);
+  std::function<void(void)> m_fp_chunk_encoding;
 
 public:
   aws_response_handler(req_state* ps, RGWOp* rgwop) : s(ps), m_rgwop(rgwop), total_bytes_returned{0}, processed_size{0}
@@ -110,10 +111,11 @@ public:
     return true;
   }
 
-  void set(req_state* ps, RGWOp* rgwop)
+  void set(req_state* ps, RGWOp* rgwop, std::function<void(void)>& fp_chunk_encoding)
   {
     s = ps;
     m_rgwop = rgwop;
+    m_fp_chunk_encoding = fp_chunk_encoding;
   }
 
   std::string& get_sql_result();
@@ -150,7 +152,9 @@ public:
 
   void init_stats_response();
 
-  void send_error_response(const char* error_message);
+  void send_error_response(const char* error_code,
+                           const char* error_message,
+                           const char* resource_id);
 
   void send_success_response();
 
