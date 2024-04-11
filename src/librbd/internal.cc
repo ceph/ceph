@@ -729,9 +729,13 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
             const std::string &non_primary_global_image_id,
             const std::string &primary_mirror_uuid)
   {
-    ceph_assert((p_id == nullptr) ^ (p_name == nullptr));
-
     CephContext *cct = (CephContext *)p_ioctx.cct();
+
+    if (((p_id == nullptr) ^ (p_name == nullptr)) == 0) {
+      lderr(cct) << "must specify either parent image id or parent image name"
+                 << dendl;
+      return -EINVAL;
+    }
     if (p_snap_name == nullptr) {
       lderr(cct) << "image to be cloned must be a snapshot" << dendl;
       return -EINVAL;
