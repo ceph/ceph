@@ -11898,12 +11898,10 @@ int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
   end_block_ofs = fscrypt_block_start(endoff - 1);
   ofs_in_end_block = fscrypt_ofs_in_block(endoff - 1);
 
-  need_read_start = ofs_in_start_block > 0;
+  need_read_start = ofs_in_start_block >= 0;
   need_read_end = (endoff < in->effective_size() && ofs_in_end_block < FSCRYPT_BLOCK_SIZE - 1 && start_block != end_block);
+  read_start_size = FSCRYPT_BLOCK_SIZE;
 
-  read_start_size = (need_read_start && need_read_end && start_block == end_block ?
-                     FSCRYPT_BLOCK_SIZE : ofs_in_start_block);
-  
   bool need_read = need_read_start | need_read_end;
 
 
