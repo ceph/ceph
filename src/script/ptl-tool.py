@@ -303,6 +303,8 @@ def get_credits(session, pr, pr_req):
 def build_branch(args):
     base = args.base
     branch = datetime.datetime.utcnow().strftime(args.branch).format(user=USER)
+    if args.branch_release:
+        branch = branch + "-" + args.branch_release
     if args.debug_build:
         branch = branch + "-debug"
     label = args.label
@@ -501,6 +503,7 @@ def main():
         argv = sys.argv[1:]
     parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
     parser.add_argument('--branch', dest='branch', action='store', default=default_branch, help='branch to create ("HEAD" leaves HEAD detached; i.e. no branch is made)')
+    parser.add_argument('--branch-release', dest='branch_release', action='store', help='release name to embed in branch (for shaman)')
     parser.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
     parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
     parser.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
