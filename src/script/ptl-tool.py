@@ -499,17 +499,17 @@ def main():
         default_label = False
     else:
         argv = sys.argv[1:]
+    parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
     parser.add_argument('--branch', dest='branch', action='store', default=default_branch, help='branch to create ("HEAD" leaves HEAD detached; i.e. no branch is made)')
     parser.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
     parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
     parser.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
-    parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
-    parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
     parser.add_argument('--git-dir', dest='git', action='store', default=git_dir, help='git directory')
     parser.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
+    parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
+    parser.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
     parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
     parser.add_argument('--qa-release', dest='qa_release', action='store', default='main', help='QA release for tracker')
-    parser.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
     parser.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
