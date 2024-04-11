@@ -401,7 +401,7 @@ ReplicatedRecoveryBackend::prep_push(
   push_info.recovery_info.ss = push_info_ss;
   push_info.recovery_info.soid = soid;
   push_info.recovery_info.oi = obc->obs.oi;
-  push_info.recovery_info.version = obc->obs.oi.version;
+  push_info.recovery_info.version = need;
   push_info.recovery_info.object_exist =
     missing_iter->second.clean_regions.object_is_exist();
   push_info.recovery_progress.omap_complete =
