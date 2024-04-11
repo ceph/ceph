@@ -3,8 +3,33 @@
 # README:
 #
 # This tool's purpose is to make it easier to merge PRs into test branches and
-# into main. Make sure you generate a Personal access token in GitHub and
-# add it your ~/.github.key.
+# into main.
+#
+#
+# You will probably want to setup a virtualenv for running this script:
+#
+#    (
+#    virtualenv3 ~/ptl-venv
+#    source ~/ptl-venv/bin/activate
+#    pip3 install GitPython
+#    pip3 install python-redmine
+#    )
+#
+# Then run the tool with:
+#
+#    (source ~/ptl-venv/bin/activate && python3 src/script/ptl-tool.py ...)
+#
+#
+# Some important environment variables:
+#
+#  - PTL_TOOL_BASE_REMOTE (the name for your upstream remote, default "upstream")
+#  - PTL_TOOL_GITHUB_USER (your github username)
+#  - PTL_TOOL_GITHUB_API_KEY (your github api key, or what is stored in ~/.github.key)
+#  - PTL_TOOL_REDMINE_USER (your redmine username)
+#  - PTL_TOOL_REDMINE_API_KEY (your redmine api key, or what is stored in ~/redmine_key)
+#  - PTL_TOOL_USER (your desired username embedded in test branch names)
+#
+# Make a redmine API key on the right side of https://tracker.ceph.com/my/account
 #
 # Because developers often have custom names for the ceph upstream remote
 # (https://github.com/ceph/ceph.git), You will probably want to export the
@@ -17,6 +42,14 @@
 #
 #     export PTL_TOOL_BASE_REMOTE=<remotename>
 #
+#
+# You can use this tool to create a QA tracker ticket for you:
+#
+# $ python3 ptl-tool.py ... --create-qa --qa-release reef
+#
+# which will populate the ticket with all the usual information and also push a
+# tagged version of your test branch to ceph-ci for posterity.
+
 #
 # ** Here are some basic exmples to get started: **
 #
@@ -100,45 +133,67 @@
 
 # TODO
 # Look for check failures?
-# redmine issue update: http://www.redmine.org/projects/redmine/wiki/Rest_Issues
 
 import argparse
 import codecs
 import datetime
-import getpass
-import git
+from getpass import getuser
+import git # https://github.com/gitpython-developers/gitpython
 import itertools
 import json
 import logging
 import os
 import re
+try:
+    from redminelib import Redmine  # https://pypi.org/project/python-redmine/
+except ModuleNotFoundError:
+    Redmine = None
 import requests
 import signal
 import sys
 
 from os.path import expanduser
 
-log = logging.getLogger(__name__)
-log.addHandler(logging.StreamHandler())
-log.setLevel(logging.INFO)
-
 BASE_PROJECT = os.getenv("PTL_TOOL_BASE_PROJECT", "ceph")
 BASE_REPO = os.getenv("PTL_TOOL_BASE_REPO", "ceph")
 BASE_REMOTE = os.getenv("PTL_TOOL_BASE_REMOTE", "upstream")
 BASE_PATH = os.getenv("PTL_TOOL_BASE_PATH", "refs/remotes/upstream/")
 GITDIR = os.getenv("PTL_TOOL_GITDIR", ".")
-USER = os.getenv("PTL_TOOL_USER", getpass.getuser())
-with open(expanduser("~/.github.key")) as f:
-    PASSWORD = f.read().strip()
-TEST_BRANCH = os.getenv("PTL_TOOL_TEST_BRANCH", "wip-{user}-testing-%Y%m%d.%H%M%S")
-
-SPECIAL_BRANCHES = ('main', 'luminous', 'jewel', 'HEAD')
-
+GITHUB_USER = os.getenv("PTL_TOOL_GITHUB_USER", os.getenv("PTL_TOOL_USER", getuser()))
+GITHUB_API_KEY = None
+try:
+    with open(expanduser("~/.github.key")) as f:
+        GITHUB_API_KEY = f.read().strip()
+except FileNotFoundError:
+    pass
+GITHUB_API_KEY = os.getenv("PTL_TOOL_GITHUB_API_KEY", GITHUB_API_KEY)
 INDICATIONS = [
     re.compile("(Reviewed-by: .+ <[\w@.-]+>)", re.IGNORECASE),
     re.compile("(Acked-by: .+ <[\w@.-]+>)", re.IGNORECASE),
     re.compile("(Tested-by: .+ <[\w@.-]+>)", re.IGNORECASE),
 ]
+REDMINE_CUSTOM_FIELD_ID_SHAMAN_BUILD = 26
+REDMINE_CUSTOM_FIELD_ID_QA_RUNS = 27
+REDMINE_CUSTOM_FIELD_ID_QA_RELEASE = 28
+REDMINE_CUSTOM_FIELD_ID_GIT_BRANCH = 29
+REDMINE_ENDPOINT = "https://tracker.ceph.com"
+REDMINE_PROJECT_QA = "ceph-qa"
+REDMINE_TRACKER_QA = "QA Run"
+REDMINE_USER = os.getenv("PTL_TOOL_REDMINE_USER", getuser())
+REDMINE_API_KEY = None
+try:
+    with open(expanduser("~/.redmine_key")) as f:
+        REDMINE_API_KEY = f.read().strip()
+except FileNotFoundError:
+    pass
+REDMINE_API_KEY = os.getenv("PTL_TOOL_REDMINE_API_KEY", REDMINE_API_KEY)
+SPECIAL_BRANCHES = ('main', 'luminous', 'jewel', 'HEAD')
+TEST_BRANCH = os.getenv("PTL_TOOL_TEST_BRANCH", "wip-{user}-testing-%Y%m%d.%H%M%S")
+USER = os.getenv("PTL_TOOL_USER", getuser())
+
+log = logging.getLogger(__name__)
+log.addHandler(logging.StreamHandler())
+log.setLevel(logging.INFO)
 
 # find containing git dir
 git_dir = GITDIR
@@ -163,13 +218,16 @@ with codecs.open(git_dir + "/.githubmap", encoding='utf-8') as f:
 BZ_MATCH = re.compile("(.*https?://bugzilla.redhat.com/.*)")
 TRACKER_MATCH = re.compile("(.*https?://tracker.ceph.com/.*)")
 
+def gitauth():
+    return (GITHUB_USER, GITHUB_API_KEY)
+
 def get(session, url, params=None, paging=True):
     if params is None:
         params = {}
     params['per_page'] = 100
 
     log.debug(f"Fetching {url}")
-    response = session.get(url, auth=(USER, PASSWORD), params=params)
+    response = session.get(url, auth=gitauth(), params=params)
     log.debug(f"Response = {response}; links = {response.headers.get('link', '')}")
     if response.status_code != 200:
         log.error(f"Failed to fetch {url}: {response}")
@@ -183,7 +241,7 @@ def get(session, url, params=None, paging=True):
             log.debug(f"Fetching {url}")
             new_params = dict(params)
             new_params.update({'page': page})
-            response = session.get(url, auth=(USER, PASSWORD), params=new_params)
+            response = session.get(url, auth=gitauth(), params=new_params)
             log.debug(f"Response = {response}; links = {response.headers.get('link', '')}")
             if response.status_code != 200:
                 log.error(f"Failed to fetch {url}: {response}")
@@ -272,6 +330,11 @@ def build_branch(args):
 
     G = git.Repo(args.git)
 
+    if args.create_qa:
+        log.info("connecting to %s", REDMINE_ENDPOINT)
+        R = Redmine(REDMINE_ENDPOINT, username=REDMINE_USER, key=REDMINE_API_KEY)
+        log.debug("connected")
+
     # First get the latest base branch and PRs from BASE_REMOTE
     remote = getattr(G.remotes, BASE_REMOTE)
     remote.fetch()
@@ -311,6 +374,8 @@ def build_branch(args):
             G.git.checkout(c)
         assert G.head.is_detached
 
+    qa_tracker_description = []
+
     for pr in prs:
         pr = int(pr)
         log.info("Merging PR #{pr}".format(pr=pr))
@@ -324,6 +389,8 @@ def build_branch(args):
 
         endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/pulls/{pr}"
         response = next(get(session, endpoint, paging=False))
+
+        qa_tracker_description.append(f'* "PR #{pr}":{response["html_url"]} -- {response["title"].strip()}')
 
         message = "Merge PR #%d into %s\n\n* %s:\n" % (pr, merge_branch_name, remote_ref)
 
@@ -355,7 +422,7 @@ def build_branch(args):
             G.git.commit("--amend", "--no-edit")
 
         if label:
-            req = session.post("https://api.github.com/repos/{project}/{repo}/issues/{pr}/labels".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), data=json.dumps([label]), auth=(USER, PASSWORD))
+            req = session.post("https://api.github.com/repos/{project}/{repo}/issues/{pr}/labels".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), data=json.dumps([label]), auth=gitauth())
             if req.status_code != 200:
                 log.error("PR #%d could not be labeled %s: %s" % (pr, label, req))
                 sys.exit(1)
@@ -363,8 +430,14 @@ def build_branch(args):
 
     if args.stop_at_built:
         log.warning("Stopping execution (SIGSTOP) with built branch for further modification. Foreground when execution should resume (typically `fg`).")
+        old_head = G.head.commit
         signal.raise_signal(signal.SIGSTOP)
         log.warning("Resuming execution.")
+        new_head = G.head.commit
+        if old_head != new_head:
+            rev = f'{old_head}..{new_head}'
+            for commit in G.iter_commits(rev=rev):
+                qa_tracker_description.append(f'* "commit {commit}":https://github.com/ceph/ceph-ci/commit/{commit} -- {commit.summary}')
 
     # If the branch is 'HEAD', leave HEAD detached (but use "main" for commit message)
     if branch == 'HEAD':
@@ -381,9 +454,47 @@ def build_branch(args):
 
         if created_branch:
             # tag it for future reference.
-            tag = "testing/%s" % branch
-            git.refs.tag.Tag.create(G, tag)
+            tag_name = "testing/%s" % branch
+            tag = git.refs.tag.Tag.create(G, tag_name)
             log.info("Created tag %s" % tag)
+
+    if args.create_qa:
+        if created_branch is None:
+            log.error("branch already exists!")
+            sys.exit(1)
+        project = R.project.get(REDMINE_PROJECT_QA)
+        log.debug("got redmine project %s", project)
+        user = R.user.get('current')
+        log.debug("got redmine user %s", user)
+        for tracker in project.trackers:
+            if tracker['name'] == REDMINE_TRACKER_QA:
+                tracker = tracker
+        if tracker is None:
+            log.error("could not find tracker in project: %s", REDMINE_TRACKER_QA)
+        log.debug("got redmine tracker %s", tracker)
+
+        # Use hard-coded custom field ids because there is apparently no way to
+        # figure these out via the python library
+        custom_fields = []
+        custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_SHAMAN_BUILD, 'value': branch})
+        custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_RUNS, 'value': branch})
+        custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_RELEASE, 'value': args.qa_release})
+
+        G.remotes.ci.push(tag)
+        origin_url = f'ceph/ceph-ci/commits/{tag.name}'
+        custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_GIT_BRANCH, 'value': origin_url})
+
+        issue_kwargs = {
+          "assigned_to_id": user['id'],
+          "custom_fields": custom_fields,
+          "description": '\n'.join(qa_tracker_description),
+          "project_id": project['id'],
+          "subject": branch,
+          "watcher_user_ids": user['id'],
+        }
+        log.debug("creating issue with kwargs: %s", issue_kwargs)
+        issue = R.issue.create(**issue_kwargs)
+        log.info("created redmine qa issue: %s", issue.url)
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
@@ -398,6 +509,7 @@ def main():
     else:
         argv = sys.argv[1:]
     parser.add_argument('--branch', dest='branch', action='store', default=default_branch, help='branch to create ("HEAD" leaves HEAD detached; i.e. no branch is made)')
+    parser.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
     parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
     parser.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
     parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
@@ -406,6 +518,7 @@ def main():
     parser.add_argument('--git-dir', dest='git', action='store', default=git_dir, help='git directory')
     parser.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
     parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
+    parser.add_argument('--qa-release', dest='qa_release', action='store', default='main', help='QA release for tracker')
     parser.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
     parser.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
@@ -413,6 +526,10 @@ def main():
 
     if args.debug:
         log.setLevel(logging.DEBUG)
+
+    if args.create_qa and Redmine is None:
+        log.error("redmine library is not available so cannot create qa tracker ticket")
+        sys.exit(1)
 
     return build_branch(args)
 
