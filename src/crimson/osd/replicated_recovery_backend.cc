@@ -1304,6 +1304,11 @@ ReplicatedRecoveryBackend::handle_recovery_op(
   Ref<MOSDFastDispatchOp> m,
   crimson::net::ConnectionXcoreRef conn)
 {
+  if (pg.can_discard_replica_op(*m)) {
+    logger().debug("{}: discarding {}", __func__, *m);
+    return seastar::now();
+  }
+
   switch (m->get_header().type) {
   case MSG_OSD_PG_PULL:
     return handle_pull(boost::static_pointer_cast<MOSDPGPull>(m));
