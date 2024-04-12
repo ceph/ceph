@@ -259,7 +259,8 @@ public:
 
   void set_allow_all();
   bool parse(std::string_view str, std::ostream *err);
-  bool merge(MDSAuthCaps newcap);
+  bool merge_one_cap_grant(MDSCapGrant ng);
+  bool merge(MDSAuthCaps newcaps);
 
   bool allow_all() const;
   bool is_capable(std::string_view inode_path,
