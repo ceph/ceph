@@ -740,7 +740,7 @@ public:
 
   template <typename MsgType>
   bool can_discard_replica_op(const MsgType& m) const {
-    return can_discard_replica_op(m, m.map_epoch);
+    return can_discard_replica_op(m, m.get_map_epoch());
   }
 
 private:
