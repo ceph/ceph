@@ -680,6 +680,7 @@ void rgw::auth::RemoteApplier::write_ops_log_entry(rgw_log_entry& entry) const
 {
   entry.access_key_id = info.access_key_id;
   entry.subuser = info.subuser;
+  entry.user = info.keystone_user;
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */
