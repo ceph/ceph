@@ -720,14 +720,17 @@ public:
 protected:
   Role role;
   TokenAttrs token_attrs;
+  bool is_system_request;
 
 public:
 
   RoleApplier(CephContext* const cct,
                const Role& role,
-               const TokenAttrs& token_attrs)
+               const TokenAttrs& token_attrs,
+               bool is_system_request)
     : role(role),
-      token_attrs(token_attrs) {}
+      token_attrs(token_attrs),
+      is_system_request(is_system_request) {}
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
@@ -755,7 +758,8 @@ public:
     virtual aplptr_t create_apl_role( CephContext* cct,
                                       const req_state* s,
                                       const rgw::auth::RoleApplier::Role& role,
-                                      const rgw::auth::RoleApplier::TokenAttrs& token_attrs) const = 0;
+                                      const rgw::auth::RoleApplier::TokenAttrs& token_attrs,
+                                      bool is_system_request) const = 0;
     };
 };
 
