@@ -3,10 +3,10 @@
 
 #pragma once
 
+#include <optional>
 #include <type_traits>
 
 #include <boost/logic/tribool.hpp>
-#include <boost/optional.hpp>
 
 #include "rgw_service.h"
 #include "rgw_common.h"
@@ -65,16 +65,20 @@ public:
     : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 
+  ACLOwner get_aclowner() const override {
+    return get_decoratee().get_aclowner();
+  }
+
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return get_decoratee().get_perms_from_aclspec(dpp, aclspec);
   }
 
-  bool is_admin_of(const rgw_user& uid) const override {
-    return get_decoratee().is_admin_of(uid);
+  bool is_admin_of(const rgw_owner& o) const override {
+    return get_decoratee().is_admin_of(o);
   }
 
-  bool is_owner_of(const rgw_user& uid) const override {
-    return get_decoratee().is_owner_of(uid);
+  bool is_owner_of(const rgw_owner& o) const override {
+    return get_decoratee().is_owner_of(o);
   }
 
   bool is_anonymous() const override {
@@ -97,17 +101,20 @@ public:
     return get_decoratee().get_subuser();
   }
 
-  bool is_identity(
-    const boost::container::flat_set<Principal>& ids) const override {
-    return get_decoratee().is_identity(ids);
+  bool is_identity(const Principal& p) const override {
+    return get_decoratee().is_identity(p);
   }
 
   void to_str(std::ostream& out) const override {
     get_decoratee().to_str(out);
   }
 
-  std::string get_role_tenant() const override {     /* in/out */
-    return get_decoratee().get_role_tenant();
+  const std::string& get_tenant() const override {
+    return get_decoratee().get_tenant();
+  }
+
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    return get_decoratee().get_account();
   }
 
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override {  /* out */
@@ -225,6 +232,7 @@ class SysReqApplier : public DecoratedApplier<T> {
   rgw::sal::Driver* driver;
   const RGWHTTPArgs& args;
   mutable boost::tribool is_system;
+  mutable std::optional<ACLOwner> effective_owner;
 
 public:
   template <typename U>
@@ -242,12 +250,23 @@ public:
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override;   /* out */
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;       /* in/out */
+
+  ACLOwner get_aclowner() const override {
+    if (effective_owner) {
+      return *effective_owner;
+    }
+    return DecoratedApplier<T>::get_aclowner();
+  }
 };
 
 template <typename T>
 void SysReqApplier<T>::to_str(std::ostream& out) const
 {
-  out << "rgw::auth::SysReqApplier" << " -> ";
+  out << "rgw::auth::SysReqApplier";
+  if (effective_owner) {
+    out << '(' << effective_owner->id << ')';
+  }
+  out << " -> ";
   DecoratedApplier<T>::to_str(out);
 }
 
@@ -260,17 +279,19 @@ void SysReqApplier<T>::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo
   if (is_system) {
     //ldpp_dout(dpp, 20) << "system request" << dendl;
 
-    rgw_user effective_uid(args.sys_get(RGW_SYS_PARAM_PREFIX "uid"));
-    if (! effective_uid.empty()) {
-      /* We aren't writing directly to user_info for consistency and security
-       * reasons. rgw_get_user_info_by_uid doesn't trigger the operator=() but
-       * calls ::decode instead. */
-      std::unique_ptr<rgw::sal::User> user = driver->get_user(effective_uid);
-      if (user->load_user(dpp, null_yield) < 0) {
-        //ldpp_dout(dpp, 0) << "User lookup failed!" << dendl;
-        throw -EACCES;
+    std::string str = args.sys_get(RGW_SYS_PARAM_PREFIX "uid");
+    if (!str.empty()) {
+      effective_owner.emplace();
+      effective_owner->id = parse_owner(str);
+
+      if (const auto* uid = std::get_if<rgw_user>(&effective_owner->id); uid) {
+        std::unique_ptr<rgw::sal::User> user = driver->get_user(*uid);
+        if (user->load_user(dpp, null_yield) < 0) {
+          //ldpp_dout(dpp, 0) << "User lookup failed!" << dendl;
+          throw -EACCES;
+        }
+        effective_owner->display_name = user->get_display_name();
       }
-      user_info = user->get_info();
     }
   }
 }

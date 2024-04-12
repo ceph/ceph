@@ -5,8 +5,10 @@
 
 #include "rgw_user.h"
 
+#include "rgw_account.h"
 #include "rgw_bucket.h"
 #include "rgw_quota.h"
+#include "rgw_rest_iam.h" // validate_iam_user_name()
 
 #include "services/svc_user.h"
 #include "services/svc_meta.h"
@@ -163,7 +165,7 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("user_quota", info.quota.user_quota, f);
   encode_json("temp_url_keys", info.temp_url_keys, f);
 
-  string user_source_type;
+  std::string_view user_source_type;
   switch ((RGWIdentityType)info.type) {
   case TYPE_RGW:
     user_source_type = "rgw";
@@ -176,6 +178,9 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
     break;
   case TYPE_NONE:
     user_source_type = "none";
+    break;
+  case TYPE_ROOT:
+    user_source_type = "root";
     break;
   default:
     user_source_type = "none";
@@ -491,6 +496,41 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
   return 0;
 }
 
+void rgw_generate_secret_key(CephContext* cct,
+                             std::string& secret_key)
+{
+  char secret_key_buf[SECRET_KEY_LEN + 1];
+  gen_rand_alphanumeric_plain(cct, secret_key_buf, sizeof(secret_key_buf));
+  secret_key = secret_key_buf;
+}
+
+int rgw_generate_access_key(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            rgw::sal::Driver* driver,
+                            std::string& access_key_id)
+{
+  std::string id;
+  int r = 0;
+
+  do {
+    id.resize(PUBLIC_ID_LEN + 1);
+    gen_rand_alphanumeric_upper(dpp->get_cct(), id.data(), id.size());
+    id.pop_back(); // remove trailing null
+
+    if (!validate_access_key(id))
+      continue;
+
+    std::unique_ptr<rgw::sal::User> duplicate_check;
+    r = driver->get_user_by_access_key(dpp, id, y, &duplicate_check);
+  } while (r == 0);
+
+  if (r == -ENOENT) {
+    access_key_id = std::move(id);
+    return 0;
+  }
+  return r;
+}
+
 // Generate a new random key
 int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state,
 				   optional_yield y, std::string *err_msg)
@@ -498,7 +538,6 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
   std::string id;
   std::string key;
 
-  std::pair<std::string, RGWAccessKey> key_pair;
   RGWAccessKey new_key;
   std::unique_ptr<rgw::sal::User> duplicate_check;
 
@@ -553,23 +592,16 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
 
     key = op_state.get_secret_key();
   } else {
-    char secret_key_buf[SECRET_KEY_LEN + 1];
-    gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
-    key = secret_key_buf;
+    rgw_generate_secret_key(dpp->get_cct(), key);
   }
 
   // Generate the access key
   if (key_type == KEY_TYPE_S3 && gen_access) {
-    char public_id_buf[PUBLIC_ID_LEN + 1];
-
-    do {
-      int id_buf_size = sizeof(public_id_buf);
-      gen_rand_alphanumeric_upper(g_ceph_context, public_id_buf, id_buf_size);
-      id = public_id_buf;
-      if (!validate_access_key(id))
-        continue;
-
-    } while (!driver->get_user_by_access_key(dpp, id, y, &duplicate_check));
+    int r = rgw_generate_access_key(dpp, y, driver, id);
+    if (r < 0) {
+      set_err_msg(err_msg, "failed to generate s3 access key");
+      return -ERR_INVALID_ACCESS_KEY;
+    }
   }
 
   if (key_type == KEY_TYPE_SWIFT) {
@@ -590,13 +622,16 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
   new_key.id = id;
   new_key.key = key;
 
-  key_pair.first = id;
-  key_pair.second = new_key;
+  if (op_state.create_date) {
+    new_key.create_date = *op_state.create_date;
+  } else {
+    new_key.create_date = ceph::real_clock::now();
+  }
 
   if (key_type == KEY_TYPE_S3) {
-    access_keys->insert(key_pair);
+    access_keys->emplace(id, new_key);
   } else if (key_type == KEY_TYPE_SWIFT) {
-    swift_keys->insert(key_pair);
+    swift_keys->emplace(id, new_key);
   }
 
   return 0;
@@ -659,6 +694,9 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
   }
   if (op_state.access_key_active) {
     modify_key.active = *op_state.access_key_active;
+  }
+  if (op_state.create_date) {
+    modify_key.create_date = *op_state.create_date;
   }
 
   if (key_type == KEY_TYPE_S3) {
@@ -1571,8 +1609,9 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   rgw::sal::BucketList listing;
   do {
-    ret = old_user->list_buckets(dpp, listing.next_marker, "",
-                                 max_entries, false, listing, y);
+    ret = driver->list_buckets(dpp, old_user->get_id(), old_user->get_tenant(),
+                               listing.next_marker, "", max_entries, false,
+                               listing, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to list user buckets");
       return ret;
@@ -1614,6 +1653,92 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   return update(dpp, op_state, err_msg, y);
 }
 
+// when setting RGWUserInfo::account_id, verify that the account metadata
+// exists and matches the user's tenant
+static int validate_account_tenant(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   rgw::sal::Driver* driver,
+                                   std::string_view account_id,
+                                   std::string_view tenant,
+                                   std::string& err)
+{
+  RGWAccountInfo info;
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  int r = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+  if (r < 0) {
+    err = "Failed to load account by id";
+    return r;
+  }
+  if (info.tenant != tenant) {
+    err = "User tenant does not match account tenant";
+    return -EINVAL;
+  }
+  return 0;
+}
+
+static int adopt_user_bucket(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             rgw::sal::Driver* driver,
+                             const rgw_bucket& bucketid,
+                             const rgw_owner& new_owner)
+{
+  // retry in case of racing writes to the bucket instance metadata
+  static constexpr auto max_retries = 10;
+  int tries = 0;
+  int r = 0;
+
+  do {
+    ldpp_dout(dpp, 1) << "adopting bucket " << bucketid << "..." << dendl;
+
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    r = driver->load_bucket(dpp, bucketid, &bucket, y);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "failed to load bucket " << bucketid
+          << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    r = bucket->chown(dpp, new_owner, y);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "failed to chown bucket " << bucketid
+          << ": " << cpp_strerror(r) << dendl;
+    }
+    ++tries;
+  } while (r == -ECANCELED && tries < max_retries);
+
+  return r;
+}
+
+static int adopt_user_buckets(const DoutPrefixProvider* dpp, optional_yield y,
+                              rgw::sal::Driver* driver, const rgw_user& user,
+                              const rgw_account_id& account_id)
+{
+  const size_t max_chunk = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+  constexpr bool need_stats = false;
+
+  ldpp_dout(dpp, 1) << "adopting all buckets owned by " << user
+      << " into account " << account_id << dendl;
+
+  rgw::sal::BucketList listing;
+  do {
+    int r = driver->list_buckets(dpp, user, user.tenant, listing.next_marker,
+                                 "", max_chunk, need_stats, listing, y);
+    if (r < 0) {
+      return r;
+    }
+
+    for (const auto& ent : listing.buckets) {
+      r = adopt_user_bucket(dpp, y, driver, ent.bucket, account_id);
+      if (r < 0 && r != -ENOENT) {
+        return r;
+      }
+    }
+  } while (!listing.next_marker.empty());
+
+  return 0;
+}
+
 int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
 			 optional_yield y)
 {
@@ -1627,6 +1752,12 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
   user_info.user_id = user_id;
   user_info.display_name = display_name;
   user_info.type = TYPE_RGW;
+
+  // tenant must not look like a valid account id
+  if (rgw::account::validate_id(uid.tenant)) {
+    set_err_msg(err_msg, "tenant must not be formatted as an account id");
+    return -EINVAL;
+  }
 
   if (!user_email.empty())
     user_info.user_email = user_email;
@@ -1672,6 +1803,50 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
 
   if (op_state.placement_tags_specified) {
     user_info.placement_tags = op_state.placement_tags;
+  }
+
+  if (!op_state.account_id.empty()) {
+    if (!rgw::account::validate_id(op_state.account_id, err_msg)) {
+      return -EINVAL;
+    }
+    // tenant must match account.tenant
+    std::string err;
+    int ret = validate_account_tenant(dpp, y, driver, op_state.account_id,
+                                      user_info.user_id.tenant, err);
+    if (ret < 0) {
+      set_err_msg(err_msg, err);
+      return ret;
+    }
+    user_info.account_id = op_state.account_id;
+  }
+
+  if (op_state.account_root) {
+    if (user_info.account_id.empty()) {
+      set_err_msg(err_msg, "account-root user must belong to an account");
+      return -EINVAL;
+    }
+    user_info.type = TYPE_ROOT;
+  }
+
+  if (!user_info.account_id.empty()) {
+    // validate user name according to iam api
+    std::string err;
+    if (!validate_iam_user_name(user_info.display_name, err)) {
+      set_err_msg(err_msg, err);
+      return -EINVAL;
+    }
+  }
+
+  if (!op_state.path.empty()) {
+    user_info.path = op_state.path;
+  } else {
+    user_info.path = "/";
+  }
+
+  if (op_state.create_date) {
+    user_info.create_date = *op_state.create_date;
+  } else {
+    user_info.create_date = ceph::real_clock::now();
   }
 
   // update the request
@@ -1772,8 +1947,9 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   rgw::sal::BucketList listing;
   do {
-    ret = user->list_buckets(dpp, listing.next_marker, string(),
-                             max_buckets, false, listing, y);
+    ret = driver->list_buckets(dpp, user->get_id(), user->get_tenant(),
+                               listing.next_marker, string(),
+                               max_buckets, false, listing, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to list user buckets");
       return ret;
@@ -1928,8 +2104,9 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
     rgw::sal::BucketList listing;
     do {
-      ret = user->list_buckets(dpp, listing.next_marker, string(),
-                               max_buckets, false, listing, y);
+      ret = driver->list_buckets(dpp, user->get_id(), user->get_tenant(),
+                                 listing.next_marker, string(),
+                                 max_buckets, false, listing, y);
       if (ret < 0) {
         set_err_msg(err_msg, "could not get buckets for uid:  " + user_id.to_str());
         return ret;
@@ -1959,6 +2136,61 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   if (op_state.placement_tags_specified) {
     user_info.placement_tags = op_state.placement_tags;
+  }
+
+  if (!op_state.account_id.empty()) {
+    if (!rgw::account::validate_id(op_state.account_id, err_msg)) {
+      return -EINVAL;
+    }
+    if (user_info.account_id != op_state.account_id) {
+      // allow users to migrate into an account, but don't allow them to leave
+      if (!user_info.account_id.empty()) {
+        set_err_msg(err_msg, "users cannot be moved out of their account");
+        return -EINVAL;
+      }
+      user_info.account_id = op_state.account_id;
+
+      // tenant must match new account.tenant
+      std::string err;
+      ret = validate_account_tenant(dpp, y, driver, op_state.account_id,
+                                    user_info.user_id.tenant, err);
+      if (ret < 0) {
+        set_err_msg(err_msg, err);
+        return ret;
+      }
+      // change account on user's buckets
+      ret = adopt_user_buckets(dpp, y, driver, user_info.user_id,
+                               user_info.account_id);
+      if (ret < 0) {
+        set_err_msg(err_msg, "failed to change ownership of user's buckets");
+        return ret;
+      }
+    }
+  }
+
+  if (op_state.account_root_specified) {
+    if (op_state.account_root && user_info.account_id.empty()) {
+      set_err_msg(err_msg, "account-root user must belong to an account");
+      return -EINVAL;
+    }
+    user_info.type = op_state.account_root ? TYPE_ROOT : TYPE_RGW;
+  }
+
+  if (!user_info.account_id.empty()) {
+    // validate user name according to iam api
+    std::string err;
+    if (!validate_iam_user_name(user_info.display_name, err)) {
+      set_err_msg(err_msg, err);
+      return -EINVAL;
+    }
+  }
+
+  if (!op_state.path.empty()) {
+    user_info.path = op_state.path;
+  }
+
+  if (op_state.create_date) {
+    user_info.create_date = *op_state.create_date;
   }
 
   op_state.set_user_info(user_info);
@@ -2121,8 +2353,15 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
 
   ruser = driver->get_user(info.user_id);
 
+  rgw_owner owner = info.user_id;
+  if (!info.account_id.empty()) {
+    ldpp_dout(dpp, 4) << "Reading stats for user account "
+        << info.account_id << dendl;
+    owner = info.account_id;
+  }
+
   if (op_state.sync_stats) {
-    ret = rgw_user_sync_all_stats(dpp, driver, ruser.get(), y);
+    ret = rgw_sync_all_stats(dpp, y, driver, owner, ruser->get_tenant());
     if (ret < 0) {
       return ret;
     }
@@ -2131,7 +2370,10 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   RGWStorageStats stats;
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
-    int ret = ruser->read_stats(dpp, y, &stats);
+    ceph::real_time last_synced; // ignored
+    ceph::real_time last_updated; // ignored
+    int ret = driver->load_stats(dpp, y, owner, stats,
+                                 last_synced, last_updated);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
@@ -2644,6 +2886,7 @@ int RGWUserCtl::get_info_by_email(const DoutPrefixProvider *dpp,
     return svc.user->get_user_info_by_email(op->ctx(), email,
                                             info,
                                             params.objv_tracker,
+                                            params.attrs,
                                             params.mtime,
                                             y,
                                             dpp);
@@ -2660,6 +2903,7 @@ int RGWUserCtl::get_info_by_swift(const DoutPrefixProvider *dpp,
     return svc.user->get_user_info_by_swift(op->ctx(), swift_name,
                                             info,
                                             params.objv_tracker,
+                                            params.attrs,
                                             params.mtime,
                                             y,
                                             dpp);
@@ -2676,6 +2920,7 @@ int RGWUserCtl::get_info_by_access_key(const DoutPrefixProvider *dpp,
     return svc.user->get_user_info_by_access_key(op->ctx(), access_key,
                                                  info,
                                                  params.objv_tracker,
+                                                 params.attrs,
                                                  params.mtime,
                                                  y,
                                                  dpp);
@@ -2724,49 +2969,6 @@ int RGWUserCtl::remove_info(const DoutPrefixProvider *dpp,
     return svc.user->remove_user_info(op->ctx(), info,
                                       params.objv_tracker,
                                       y, dpp);
-  });
-}
-
-int RGWUserCtl::list_buckets(const DoutPrefixProvider *dpp, 
-                             const rgw_user& user,
-                             const string& marker,
-                             const string& end_marker,
-                             uint64_t max,
-                             bool need_stats,
-                             RGWUserBuckets *buckets,
-                             bool *is_truncated,
-			     optional_yield y,
-                             uint64_t default_max)
-{
-  if (!max) {
-    max = default_max;
-  }
-
-  int ret = svc.user->list_buckets(dpp, user, marker, end_marker,
-                                   max, buckets, is_truncated, y);
-  if (ret < 0) {
-    return ret;
-  }
-  if (need_stats) {
-    map<string, RGWBucketEnt>& m = buckets->get_buckets();
-    ret = ctl.bucket->read_buckets_stats(m, y, dpp);
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 0) << "ERROR: could not get stats for buckets" << dendl;
-      return ret;
-    }
-  }
-  return 0;
-}
-
-int RGWUserCtl::read_stats(const DoutPrefixProvider *dpp, 
-                           const rgw_user& user, RGWStorageStats *stats,
-			   optional_yield y,
-			   ceph::real_time *last_stats_sync,
-			   ceph::real_time *last_stats_update)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->read_stats(dpp, op->ctx(), user, stats,
-				last_stats_sync, last_stats_update, y);
   });
 }
 

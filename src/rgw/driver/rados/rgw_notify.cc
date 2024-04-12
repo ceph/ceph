@@ -11,6 +11,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/context/protected_fixedsize_stack.hpp>
 #include <spawn/spawn.hpp>
+#include "include/function2.hpp"
 #include "rgw_sal_rados.h"
 #include "rgw_pubsub.h"
 #include "rgw_pubsub_push.h"
@@ -730,36 +731,36 @@ public:
       ldpp_dout(this, 10) << "Started notification manager with: " << worker_count << " workers" << dendl;
     }
 
-  int add_persistent_topic(const std::string& topic_name, optional_yield y) {
-    if (topic_name == Q_LIST_OBJECT_NAME) {
+  int add_persistent_topic(const std::string& topic_queue, optional_yield y) {
+    if (topic_queue == Q_LIST_OBJECT_NAME) {
       ldpp_dout(this, 1) << "ERROR: topic name cannot be: " << Q_LIST_OBJECT_NAME << " (conflict with queue list object name)" << dendl;
       return -EINVAL;
     }
     librados::ObjectWriteOperation op;
     op.create(true);
-    cls_2pc_queue_init(op, topic_name, max_queue_size);
+    cls_2pc_queue_init(op, topic_queue, max_queue_size);
     auto& rados_ioctx = rados_store.getRados()->get_notif_pool_ctx();
-    auto ret = rgw_rados_operate(this, rados_ioctx, topic_name, &op, y);
+    auto ret = rgw_rados_operate(this, rados_ioctx, topic_queue, &op, y);
     if (ret == -EEXIST) {
       // queue already exists - nothing to do
-      ldpp_dout(this, 20) << "INFO: queue for topic: " << topic_name << " already exists. nothing to do" << dendl;
+      ldpp_dout(this, 20) << "INFO: queue for topic: " << topic_queue << " already exists. nothing to do" << dendl;
       return 0;
     }
     if (ret < 0) {
       // failed to create queue
-      ldpp_dout(this, 1) << "ERROR: failed to create queue for topic: " << topic_name << ". error: " << ret << dendl;
+      ldpp_dout(this, 1) << "ERROR: failed to create queue for topic: " << topic_queue << ". error: " << ret << dendl;
       return ret;
     }
    
     bufferlist empty_bl;
-    std::map<std::string, bufferlist> new_topic{{topic_name, empty_bl}};
+    std::map<std::string, bufferlist> new_topic{{topic_queue, empty_bl}};
     op.omap_set(new_topic);
     ret = rgw_rados_operate(this, rados_ioctx, Q_LIST_OBJECT_NAME, &op, y);
     if (ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to add queue: " << topic_name << " to queue list. error: " << ret << dendl;
+      ldpp_dout(this, 1) << "ERROR: failed to add queue: " << topic_queue << " to queue list. error: " << ret << dendl;
       return ret;
     } 
-    ldpp_dout(this, 20) << "INFO: queue: " << topic_name << " added to queue list"  << dendl;
+    ldpp_dout(this, 20) << "INFO: queue: " << topic_queue << " added to queue list"  << dendl;
     return 0;
   }
 };
@@ -805,37 +806,37 @@ int add_persistent_topic(const std::string& topic_name, optional_yield y) {
   return s_manager->add_persistent_topic(topic_name, y);
 }
 
-int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_name, optional_yield y) {
+int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_queue, optional_yield y) {
   librados::ObjectWriteOperation op;
   op.remove();
-  auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_name, &op, y);
+  auto ret = rgw_rados_operate(dpp, rados_ioctx, topic_queue, &op, y);
   if (ret == -ENOENT) {
     // queue already removed - nothing to do
-    ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_name << " already removed. nothing to do" << dendl;
+    ldpp_dout(dpp, 20) << "INFO: queue for topic: " << topic_queue << " already removed. nothing to do" << dendl;
     return 0;
   }
   if (ret < 0) {
     // failed to remove queue
-    ldpp_dout(dpp, 1) << "ERROR: failed to remove queue for topic: " << topic_name << ". error: " << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove queue for topic: " << topic_queue << ". error: " << ret << dendl;
     return ret;
   }
 
-  std::set<std::string> topic_to_remove{{topic_name}};
+  std::set<std::string> topic_to_remove{{topic_queue}};
   op.omap_rm_keys(topic_to_remove);
   ret = rgw_rados_operate(dpp, rados_ioctx, Q_LIST_OBJECT_NAME, &op, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to remove queue: " << topic_name << " from queue list. error: " << ret << dendl;
+    ldpp_dout(dpp, 1) << "ERROR: failed to remove queue: " << topic_queue << " from queue list. error: " << ret << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 20) << "INFO: queue: " << topic_name << " removed from queue list"  << dendl;
+  ldpp_dout(dpp, 20) << "INFO: queue: " << topic_queue << " removed from queue list"  << dendl;
   return 0;
 }
 
-int remove_persistent_topic(const std::string& topic_name, optional_yield y) {
+int remove_persistent_topic(const std::string& topic_queue, optional_yield y) {
   if (!s_manager) {
     return -EAGAIN;
   }
-  return remove_persistent_topic(s_manager, s_manager->rados_store.getRados()->get_notif_pool_ctx(), topic_name, y);
+  return remove_persistent_topic(s_manager, s_manager->rados_store.getRados()->get_notif_pool_ctx(), topic_queue, y);
 }
 
 rgw::sal::Object* get_object_with_attributes(
@@ -921,7 +922,7 @@ static inline void populate_event(reservation_t& res,
   event.x_amz_id_2 = res.store->getRados()->host_id; // RGW on which the change was made
   // configurationId is filled from notification configuration
   event.bucket_name = res.bucket->get_name();
-  event.bucket_ownerIdentity = res.bucket->get_owner().id;
+  event.bucket_ownerIdentity = to_string(res.bucket->get_owner());
   const auto region = res.store->get_zone()->get_zonegroup().get_api_name();
   rgw::ARN bucket_arn(res.bucket->get_key());
   bucket_arn.region = region; 
@@ -1024,9 +1025,9 @@ int publish_reserve(const DoutPrefixProvider* dpp,
       return rc;
     }
   }
-  for (const auto& bucket_topic : bucket_topics.topics) {
-    const rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
-    const rgw_pubsub_topic& topic_cfg = topic_filter.topic;
+  for (auto& bucket_topic : bucket_topics.topics) {
+    rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
+    rgw_pubsub_topic& topic_cfg = topic_filter.topic;
     for (auto& event_type : event_types) {
       if (!notification_match(res, topic_filter, event_type, req_tags)) {
         // notification does not apply to req_state
@@ -1039,6 +1040,30 @@ int publish_reserve(const DoutPrefixProvider* dpp,
           << "') apply to event of type: '" << to_string(event_type) << "'"
           << dendl;
 
+      // reload the topic in case it changed since the notification was added
+      const std::string& topic_tenant = std::visit(fu2::overload(
+          [] (const rgw_user& u) -> const std::string& { return u.tenant; },
+          [] (const rgw_account_id& a) -> const std::string& { return a; }
+          ), topic_cfg.owner);
+      const RGWPubSub ps(res.store, topic_tenant, site);
+      int ret = ps.get_topic(res.dpp, topic_cfg.dest.arn_topic,
+                             topic_cfg, res.yield, nullptr);
+      if (ret < 0) {
+        ldpp_dout(res.dpp, 1)
+            << "INFO: failed to load topic: " << topic_cfg.dest.arn_topic
+            << ". error: " << ret
+            << " while reserving persistent notification event" << dendl;
+        if (ret == -ENOENT) {
+          // either the topic is deleted but the corresponding notification
+          // still exist or in v2 mode the notification could have synced first
+          // but topic is not synced yet.
+          return 0;
+        }
+        ldpp_dout(res.dpp, 1)
+            << "WARN: Using the stored topic from bucket notification struct."
+            << dendl;
+      }
+
       cls_2pc_reservation::id_t res_id = cls_2pc_reservation::NO_ID;
       if (topic_cfg.dest.persistent) {
         // TODO: take default reservation size from conf
@@ -1047,7 +1072,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         librados::ObjectWriteOperation op;
         bufferlist obl;
         int rval;
-        const auto& queue_name = topic_cfg.dest.arn_topic;
+        const auto& queue_name = topic_cfg.dest.persistent_queue;
         cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
         auto ret = rgw_rados_operate(
             res.dpp, res.store->getRados()->get_notif_pool_ctx(), queue_name,
@@ -1067,31 +1092,8 @@ int publish_reserve(const DoutPrefixProvider* dpp,
           return ret;
         }
       }
-      // load the topic,if there is change in topic config while it's stored in
-      // notification.
-      rgw_pubsub_topic result;
-      const RGWPubSub ps(res.store, res.user_tenant, site);
-      auto ret =
-          ps.get_topic(res.dpp, topic_cfg.dest.arn_topic, result, res.yield, nullptr);
-      if (ret < 0) {
-        ldpp_dout(res.dpp, 1)
-            << "INFO: failed to load topic: " << topic_cfg.name
-            << ". error: " << ret
-            << " while reserving persistent notification event" << dendl;
-        if (ret == -ENOENT) {
-          // either the topic is deleted but the corresponding notification
-          // still exist or in v2 mode the notification could have synced first
-          // but topic is not synced yet.
-          return 0;
-        }
-        ldpp_dout(res.dpp, 1)
-            << "WARN: Using the stored topic from bucket notification struct."
-            << dendl;
-        res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id,
-                                event_type);
-      } else {
-        res.topics.emplace_back(topic_filter.s3_id, result, res_id, event_type);
-      }
+
+      res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id, event_type);
     }
   }
   return 0;
@@ -1127,7 +1129,7 @@ int publish_commit(rgw::sal::Object* obj,
       event_entry.retry_sleep_duration = topic.cfg.dest.retry_sleep_duration;
       bufferlist bl;
       encode(event_entry, bl);
-      const auto& queue_name = topic.cfg.dest.arn_topic;
+      const auto& queue_name = topic.cfg.dest.persistent_queue;
       if (bl.length() > res.size) {
         // try to make a larger reservation, fail only if this is not possible
         ldpp_dout(dpp, 5) << "WARNING: committed size: " << bl.length()
@@ -1140,7 +1142,7 @@ int publish_commit(rgw::sal::Object* obj,
         cls_2pc_queue_abort(op, topic.res_id);
         auto ret = rgw_rados_operate(
 	  dpp, res.store->getRados()->get_notif_pool_ctx(),
-	  topic.cfg.dest.arn_topic, &op,
+	  queue_name, &op,
 	  res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to abort reservation: "
@@ -1224,7 +1226,7 @@ int publish_abort(reservation_t& res) {
       // nothing to abort or already committed/aborted
       continue;
     }
-    const auto& queue_name = topic.cfg.dest.arn_topic;
+    const auto& queue_name = topic.cfg.dest.persistent_queue;
     librados::ObjectWriteOperation op;
     cls_2pc_queue_abort(op, topic.res_id);
     const auto ret = rgw_rados_operate(
@@ -1241,18 +1243,19 @@ int publish_abort(reservation_t& res) {
   return 0;
 }
 
-int get_persistent_queue_stats_by_topic_name(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
-                                             const std::string &topic_name, rgw_topic_stats &stats, optional_yield y)
+int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &rados_ioctx,
+                               const std::string &queue_name, rgw_topic_stats &stats, optional_yield y)
 {
+  // TODO: use optional_yield instead calling rados_ioctx.operate() synchronously
   cls_2pc_reservations reservations;
-  auto ret = cls_2pc_queue_list_reservations(rados_ioctx, topic_name, reservations);
+  auto ret = cls_2pc_queue_list_reservations(rados_ioctx, queue_name, reservations);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to read queue list reservation: " << ret << dendl;
     return ret;
   }
   stats.queue_reservations = reservations.size();
 
-  ret = cls_2pc_queue_get_topic_stats(rados_ioctx, topic_name, stats.queue_entries, stats.queue_size);
+  ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, stats.queue_entries, stats.queue_size);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get the queue size or the number of entries: " << ret << dendl;
     return ret;
@@ -1273,7 +1276,7 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   object_name(_object_name),
   tagset(_s->tagset),
   metadata_fetched_from_attributes(false),
-  user_id(_s->user->get_id().id),
+  user_id(to_string(_s->owner.id)),
   user_tenant(_s->user->get_id().tenant),
   req_id(_s->req_id),
   yield(y)

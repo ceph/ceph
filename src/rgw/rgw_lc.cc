@@ -597,7 +597,7 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
     = obj->get_bucket()->get_info().versioning_status();
   del_op->params.obj_owner.id = rgw_user{meta.owner};
   del_op->params.obj_owner.display_name = meta.owner_display_name;
-  del_op->params.bucket_owner.id = bucket_info.owner;
+  del_op->params.bucket_owner = bucket_info.owner;
   del_op->params.unmod_since = meta.mtime;
 
   // notification supported only for RADOS driver for now

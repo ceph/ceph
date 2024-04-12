@@ -171,8 +171,7 @@ bool ACLOwner_S3::xml_end(const char *el) {
 
 void to_xml(const ACLOwner& o, std::ostream& out)
 {
-  string s;
-  o.id.to_str(s);
+  const std::string s = to_string(o.id);
   if (s.empty())
     return;
   out << "<Owner>" << "<ID>" << s << "</ID>";
@@ -299,7 +298,47 @@ struct s3_acl_header {
   const char *http_header;
 };
 
+static int read_owner_display_name(const DoutPrefixProvider* dpp,
+                                   optional_yield y, rgw::sal::Driver* driver,
+                                   const rgw_owner& owner, std::string& name)
+{
+  return std::visit(fu2::overload(
+      [&] (const rgw_user& uid) {
+        auto user = driver->get_user(uid);
+        int r = user->load_user(dpp, y);
+        if (r >= 0) {
+          name = user->get_display_name();
+        }
+        return r;
+      },
+      [&] (const rgw_account_id& account_id) {
+        RGWAccountInfo info;
+        rgw::sal::Attrs attrs;
+        RGWObjVersionTracker objv;
+        int r = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+        if (r >= 0) {
+          name = info.name;
+        }
+        return r;
+      }), owner);
+}
+
+static int read_aclowner_by_email(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  rgw::sal::Driver* driver,
+                                  std::string_view email,
+                                  ACLOwner& aclowner)
+{
+  int ret = driver->load_owner_by_email(dpp, y, email, aclowner.id);
+  if (ret < 0) {
+    return ret;
+  }
+  return read_owner_display_name(dpp, y, driver, aclowner.id,
+                                 aclowner.display_name);
+}
+
 static int parse_grantee_str(const DoutPrefixProvider* dpp,
+                             optional_yield y,
                              rgw::sal::Driver* driver,
                              const std::string& grantee_str,
                              const s3_acl_header* perm,
@@ -316,19 +355,21 @@ static int parse_grantee_str(const DoutPrefixProvider* dpp,
   string id_val = rgw_trim_quotes(id_val_quoted);
 
   if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
-    std::unique_ptr<rgw::sal::User> user;
-    ret = driver->get_user_by_email(dpp, id_val, null_yield, &user);
+    ACLOwner owner;
+    ret = read_aclowner_by_email(dpp, y, driver, id_val, owner);
     if (ret < 0)
       return ret;
 
-    grant.set_canon(user->get_id(), user->get_display_name(), rgw_perm);
+    grant.set_canon(owner.id, owner.display_name, rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(id_val));
-    ret = user->load_user(dpp, null_yield);
+    ACLOwner owner;
+    owner.id = parse_owner(id_val);
+    ret = read_owner_display_name(dpp, y, driver,
+                                  owner.id, owner.display_name);
     if (ret < 0)
       return ret;
 
-    grant.set_canon(user->get_id(), user->get_display_name(), rgw_perm);
+    grant.set_canon(owner.id, owner.display_name, rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "uri") == 0) {
     ACLGroupTypeEnum gid = rgw::s3::acl_uri_to_group(id_val);
     if (gid == ACL_GROUP_NONE)
@@ -342,7 +383,8 @@ static int parse_grantee_str(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-static int parse_acl_header(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+static int parse_acl_header(const DoutPrefixProvider* dpp,
+                            optional_yield y, rgw::sal::Driver* driver,
                             const RGWEnv& env, const s3_acl_header* perm,
                             RGWAccessControlList& acl)
 {
@@ -353,7 +395,7 @@ static int parse_acl_header(const DoutPrefixProvider* dpp, rgw::sal::Driver* dri
 
   for (std::string_view grantee : ceph::split(hacl, ",")) {
     ACLGrant grant;
-    int ret = parse_grantee_str(dpp, driver, std::string{grantee}, perm, grant);
+    int ret = parse_grantee_str(dpp, y, driver, std::string{grantee}, perm, grant);
     if (ret < 0)
       return ret;
 
@@ -366,7 +408,7 @@ static int parse_acl_header(const DoutPrefixProvider* dpp, rgw::sal::Driver* dri
 static int create_canned(const ACLOwner& owner, const ACLOwner& bucket_owner,
                          const string& canned_acl, RGWAccessControlList& acl)
 {
-  const rgw_user& bid = bucket_owner.id;
+  const rgw_owner& bid = bucket_owner.id;
   const std::string& bname = bucket_owner.display_name;
 
   /* owner gets full control */
@@ -454,28 +496,29 @@ static int resolve_grant(const DoutPrefixProvider* dpp, optional_yield y,
 {
   const uint32_t perm = xml_grant.permission->flags;
 
-  std::unique_ptr<rgw::sal::User> user;
+  ACLOwner owner;
   switch (xml_grant.type.get_type()) {
   case ACL_TYPE_EMAIL_USER:
     if (xml_grant.email.empty()) {
       return -EINVAL;
     }
-    if (driver->get_user_by_email(dpp, xml_grant.email, y, &user) < 0) {
+    if (read_aclowner_by_email(dpp, y, driver, xml_grant.email, owner) < 0) {
       ldpp_dout(dpp, 10) << "grant user email not found or other error" << dendl;
       err_msg = "The e-mail address you provided does not match any account on record.";
       return -ERR_UNRESOLVABLE_EMAIL;
     }
-    grant.set_canon(user->get_id(), user->get_display_name(), perm);
+    grant.set_canon(owner.id, owner.display_name, perm);
     return 0;
 
   case ACL_TYPE_CANON_USER:
-    user = driver->get_user(rgw_user{xml_grant.id});
-    if (user->load_user(dpp, y) < 0) {
+    owner.id = parse_owner(xml_grant.id);
+    if (read_owner_display_name(dpp, y, driver, owner.id,
+                                owner.display_name) < 0) {
       ldpp_dout(dpp, 10) << "grant user does not exist: " << xml_grant.id << dendl;
       err_msg = "Invalid CanonicalUser id";
       return -EINVAL;
     }
-    grant.set_canon(user->get_id(), user->get_display_name(), perm);
+    grant.set_canon(owner.id, owner.display_name, perm);
     return 0;
 
   case ACL_TYPE_GROUP:
@@ -590,21 +633,18 @@ int parse_policy(const DoutPrefixProvider* dpp, optional_yield y,
     return -EINVAL;
   }
 
+  ACLOwner& owner = policy.get_owner();
+  owner.id = parse_owner(xml_owner->id);
+
   // owner must exist
-  std::unique_ptr<rgw::sal::User> user =
-      driver->get_user(rgw_user{xml_owner->id});
-  if (user->load_user(dpp, y) < 0) {
-    ldpp_dout(dpp, 10) << "acl owner does not exist" << dendl;
+  int r = read_owner_display_name(dpp, y, driver, owner.id, owner.display_name);
+  if (r < 0) {
+    ldpp_dout(dpp, 10) << "acl owner " << owner.id << " does not exist" << dendl;
     err_msg = "Invalid Owner ID";
     return -EINVAL;
   }
-
-  ACLOwner& owner = policy.get_owner();
-  owner.id = xml_owner->id;
   if (!xml_owner->display_name.empty()) {
     owner.display_name = xml_owner->display_name;
-  } else {
-    owner.display_name = user->get_display_name();
   }
 
   const auto xml_acl = static_cast<ACLOwner_S3*>(
@@ -619,7 +659,7 @@ int parse_policy(const DoutPrefixProvider* dpp, optional_yield y,
   ACLGrant_S3* xml_grant = static_cast<ACLGrant_S3*>(iter.get_next());
   while (xml_grant) {
     ACLGrant grant;
-    int r = resolve_grant(dpp, y, driver, *xml_grant, grant, err_msg);
+    r = resolve_grant(dpp, y, driver, *xml_grant, grant, err_msg);
     if (r < 0) {
       return r;
     }
@@ -641,7 +681,7 @@ int create_canned_acl(const ACLOwner& owner,
                       const std::string& canned_acl,
                       RGWAccessControlPolicy& policy)
 {
-  if (owner.id == rgw_user("anonymous")) {
+  if (owner.id == parse_owner("anonymous")) {
     policy.set_owner(bucket_owner);
   } else {
     policy.set_owner(owner);
@@ -650,6 +690,7 @@ int create_canned_acl(const ACLOwner& owner,
 }
 
 int create_policy_from_headers(const DoutPrefixProvider* dpp,
+                               optional_yield y,
                                rgw::sal::Driver* driver,
                                const ACLOwner& owner,
                                const RGWEnv& env,
@@ -659,7 +700,7 @@ int create_policy_from_headers(const DoutPrefixProvider* dpp,
   auto& acl = policy.get_acl();
 
   for (const s3_acl_header* p = acl_header_perms; p->rgw_perm; p++) {
-    int r = parse_acl_header(dpp, driver, env, p, acl);
+    int r = parse_acl_header(dpp, y, driver, env, p, acl);
     if (r < 0) {
       return r;
     }

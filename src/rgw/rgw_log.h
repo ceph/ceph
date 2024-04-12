@@ -6,6 +6,7 @@
 #include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
 #include "common/OutputDataSocket.h"
+#include "common/versioned_variant.h"
 #include <vector>
 #include <fstream>
 #include "rgw_sal_fwd.h"
@@ -75,8 +76,8 @@ struct rgw_log_entry {
   using headers_map = boost::container::flat_map<std::string, std::string>;
   using Clock = req_state::Clock;
 
-  rgw_user object_owner;
-  rgw_user bucket_owner;
+  rgw_owner object_owner;
+  rgw_owner bucket_owner;
   std::string bucket;
   Clock::time_point time;
   std::string remote_addr;
@@ -101,11 +102,16 @@ struct rgw_log_entry {
   std::string subuser;
   bool temp_url {false};
   delete_multi_obj_op_meta delete_multi_obj_meta;
+  rgw_account_id account_id;
+  std::string role_id;
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(14, 5, bl);
-    encode(object_owner.id, bl);
-    encode(bucket_owner.id, bl);
+    ENCODE_START(15, 5, bl);
+    // old object/bucket owner ids, encoded in full in v8
+    std::string empty_owner_id;
+    encode(empty_owner_id, bl);
+    encode(empty_owner_id, bl);
+
     encode(bucket, bl);
     encode(time, bl);
     encode(remote_addr, bl);
@@ -123,8 +129,9 @@ struct rgw_log_entry {
     encode(bytes_received, bl);
     encode(bucket_id, bl);
     encode(obj, bl);
-    encode(object_owner, bl);
-    encode(bucket_owner, bl);
+    // transparently converted from rgw_user to rgw_owner
+    ceph::converted_variant::encode(object_owner, bl);
+    ceph::converted_variant::encode(bucket_owner, bl);
     encode(x_headers, bl);
     encode(trans_id, bl);
     encode(token_claims, bl);
@@ -133,13 +140,17 @@ struct rgw_log_entry {
     encode(subuser, bl);
     encode(temp_url, bl);
     encode(delete_multi_obj_meta, bl);
+    encode(account_id, bl);
+    encode(role_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &p) {
-    DECODE_START_LEGACY_COMPAT_LEN(14, 5, 5, p);
-    decode(object_owner.id, p);
+    DECODE_START_LEGACY_COMPAT_LEN(15, 5, 5, p);
+    std::string object_owner_id;
+    std::string bucket_owner_id;
+    decode(object_owner_id, p);
     if (struct_v > 3)
-      decode(bucket_owner.id, p);
+      decode(bucket_owner_id, p);
     decode(bucket, p);
     decode(time, p);
     decode(remote_addr, p);
@@ -176,8 +187,12 @@ struct rgw_log_entry {
       decode(obj, p);
     }
     if (struct_v >= 8) {
-      decode(object_owner, p);
-      decode(bucket_owner, p);
+      // transparently converted from rgw_user to rgw_owner
+      ceph::converted_variant::decode(object_owner, p);
+      ceph::converted_variant::decode(bucket_owner, p);
+    } else {
+      object_owner = parse_owner(object_owner_id);
+      bucket_owner = parse_owner(bucket_owner_id);
     }
     if (struct_v >= 9) {
       decode(x_headers, p);
@@ -198,6 +213,10 @@ struct rgw_log_entry {
     }
     if (struct_v >= 14) {
       decode(delete_multi_obj_meta, p);
+    }
+    if (struct_v >= 15) {
+      decode(account_id, p);
+      decode(role_id, p);
     }
     DECODE_FINISH(p);
   }

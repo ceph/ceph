@@ -65,6 +65,7 @@ extern "C" {
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"
 #include "rgw_data_access.h"
+#include "rgw_account.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -143,6 +144,9 @@ void usage()
   cout << "  user check                       check user info\n";
   cout << "  user stats                       show user stats as accounted by quota subsystem\n";
   cout << "  user list                        list users\n";
+  cout << "  user policy attach               attach a managed policy\n";
+  cout << "  user policy detach               detach a managed policy\n";
+  cout << "  user policy list attached        list attached managed policies\n";
   cout << "  caps add                         add user capabilities\n";
   cout << "  caps rm                          remove user capabilities\n";
   cout << "  subuser create                   create a new subuser\n" ;
@@ -150,6 +154,12 @@ void usage()
   cout << "  subuser rm                       remove subuser\n";
   cout << "  key create                       create access key\n";
   cout << "  key rm                           remove access key\n";
+  cout << "  account create                   create a new account\n";
+  cout << "  account modify                   modify an existing account\n";
+  cout << "  account get                      get account info\n";
+  cout << "  account stats                    dump account storage stats\n";
+  cout << "  account rm                       remove an account\n";
+  cout << "  account list                     list all account ids\n";
   cout << "  bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)\n";
   cout << "  bucket limit check               show bucket sharding stats\n";
   cout << "  bucket link                      link bucket to specified user\n";
@@ -187,9 +197,9 @@ void usage()
   cout << "  period list                      list all periods\n";
   cout << "  period update                    update the staging period\n";
   cout << "  period commit                    commit the staging period\n";
-  cout << "  quota set                        set quota params\n";
-  cout << "  quota enable                     enable quota\n";
-  cout << "  quota disable                    disable quota\n";
+  cout << "  quota set                        set quota params for a user/bucket/account\n";
+  cout << "  quota enable                     enable quota for a user/bucket/account\n";
+  cout << "  quota disable                    disable quota for a user/bucket/account\n";
   cout << "  ratelimit get                    get ratelimit params\n";
   cout << "  ratelimit set                    set ratelimit params\n";
   cout << "  ratelimit enable                 enable ratelimit\n";
@@ -294,6 +304,9 @@ void usage()
   cout << "  role-policy list                 list policies attached to a role\n";
   cout << "  role-policy get                  get the specified inline policy document embedded with the given role\n";
   cout << "  role-policy delete               remove policy attached to a role\n";
+  cout << "  role policy attach               attach a managed policy\n";
+  cout << "  role policy detach               detach a managed policy\n";
+  cout << "  role policy list attached        list attached managed policies\n";
   cout << "  role update                      update max_session_duration of a role\n";
   cout << "  reshard add                      schedule a resharding of a bucket\n";
   cout << "  reshard list                     list all bucket resharding or scheduled to be resharded\n";
@@ -330,6 +343,12 @@ void usage()
   cout << "   --uid=<id>                        user id\n";
   cout << "   --new-uid=<id>                    new user id\n";
   cout << "   --subuser=<name>                  subuser name\n";
+  cout << "   --account-name=<name>             account name\n";
+  cout << "   --account-id=<id>                 account id\n";
+  cout << "   --max-users                       max number of users for an account\n";
+  cout << "   --max-roles                       max number of roles for an account\n";
+  cout << "   --max-groups                      max number of groups for an account\n";
+  cout << "   --max-access-keys                 max number of keys per user for an account\n";
   cout << "   --access-key=<key>                S3 access key\n";
   cout << "   --email=<email>                   user's email address\n";
   cout << "   --secret/--secret-key=<key>       specify secret key\n";
@@ -471,6 +490,8 @@ void usage()
   cout << "   --policy-name                 name of the policy document\n";
   cout << "   --policy-doc                  permission policy document\n";
   cout << "   --path-prefix                 path prefix for filtering roles\n";
+  cout << "   --description                 Role description\n";
+  cout << "   --policy-arn                  ARN of a managed policy\n";
   cout << "\nMFA options:\n";
   cout << "   --totp-serial                 a string that represents the ID of a TOTP token\n";
   cout << "   --totp-seed                   the secret seed that is used to calculate the TOTP\n";
@@ -645,6 +666,9 @@ enum class OPT {
   USER_CHECK,
   USER_STATS,
   USER_LIST,
+  USER_POLICY_ATTACH,
+  USER_POLICY_DETACH,
+  USER_POLICY_LIST_ATTACHED,
   SUBUSER_CREATE,
   SUBUSER_MODIFY,
   SUBUSER_RM,
@@ -819,6 +843,9 @@ enum class OPT {
   ROLE_POLICY_LIST,
   ROLE_POLICY_GET,
   ROLE_POLICY_DELETE,
+  ROLE_POLICY_ATTACH,
+  ROLE_POLICY_DETACH,
+  ROLE_POLICY_LIST_ATTACHED,
   ROLE_UPDATE,
   RESHARD_ADD,
   RESHARD_LIST,
@@ -846,7 +873,13 @@ enum class OPT {
   SCRIPT_PACKAGE_ADD,
   SCRIPT_PACKAGE_RM,
   SCRIPT_PACKAGE_LIST,
-  SCRIPT_PACKAGE_RELOAD
+  SCRIPT_PACKAGE_RELOAD,
+  ACCOUNT_CREATE,
+  ACCOUNT_MODIFY,
+  ACCOUNT_GET,
+  ACCOUNT_STATS,
+  ACCOUNT_RM,
+  ACCOUNT_LIST,
 };
 
 }
@@ -864,6 +897,9 @@ static SimpleCmd::Commands all_cmds = {
   { "user check", OPT::USER_CHECK },
   { "user stats", OPT::USER_STATS },
   { "user list", OPT::USER_LIST },
+  { "user policy attach", OPT::USER_POLICY_ATTACH },
+  { "user policy detach", OPT::USER_POLICY_DETACH },
+  { "user policy list attached", OPT::USER_POLICY_LIST_ATTACHED },
   { "subuser create", OPT::SUBUSER_CREATE },
   { "subuser modify", OPT::SUBUSER_MODIFY },
   { "subuser rm", OPT::SUBUSER_RM },
@@ -1052,6 +1088,9 @@ static SimpleCmd::Commands all_cmds = {
   { "role-policy get", OPT::ROLE_POLICY_GET },
   { "role policy delete", OPT::ROLE_POLICY_DELETE },
   { "role-policy delete", OPT::ROLE_POLICY_DELETE },
+  { "role policy attach", OPT::ROLE_POLICY_ATTACH },
+  { "role policy detach", OPT::ROLE_POLICY_DETACH },
+  { "role policy list attached", OPT::ROLE_POLICY_LIST_ATTACHED },
   { "role update", OPT::ROLE_UPDATE },
   { "reshard bucket", OPT::BUCKET_RESHARD },
   { "reshard add", OPT::RESHARD_ADD },
@@ -1083,6 +1122,12 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
   { "script-package reload", OPT::SCRIPT_PACKAGE_RELOAD },
+  { "account create", OPT::ACCOUNT_CREATE },
+  { "account modify", OPT::ACCOUNT_MODIFY },
+  { "account get", OPT::ACCOUNT_GET },
+  { "account stats", OPT::ACCOUNT_STATS },
+  { "account rm", OPT::ACCOUNT_RM },
+  { "account list", OPT::ACCOUNT_LIST },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -1128,7 +1173,7 @@ static void show_perm_policy(string perm_policy, Formatter* formatter)
   formatter->flush(cout);
 }
 
-static void show_policy_names(std::vector<string> policy_names, Formatter* formatter)
+static void show_policy_names(const std::vector<string>& policy_names, Formatter* formatter)
 {
   formatter->open_array_section("PolicyNames");
   for (const auto& it : policy_names) {
@@ -1138,24 +1183,14 @@ static void show_policy_names(std::vector<string> policy_names, Formatter* forma
   formatter->flush(cout);
 }
 
-static void show_role_info(rgw::sal::RGWRole* role, Formatter* formatter)
+static void show_policy_arns(const boost::container::flat_set<std::string>& arns,
+                             Formatter* formatter)
 {
-  formatter->open_object_section("role");
-  role->dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-}
-
-static void show_roles_info(vector<std::unique_ptr<rgw::sal::RGWRole>>& roles, Formatter* formatter)
-{
-  formatter->open_array_section("Roles");
-  for (const auto& it : roles) {
-    formatter->open_object_section("role");
-    it->dump(formatter);
-    formatter->close_section();
+  formatter->open_array_section("AttachedPolicies");
+  for (const auto& arn : arns) {
+    formatter->dump_string("PolicyArn", arn);
   }
   formatter->close_section();
-  formatter->flush(cout);
 }
 
 static void show_reshard_status(
@@ -3156,8 +3191,6 @@ class SyncPolicyContext
 
   rgw_sync_policy_info *policy{nullptr};
 
-  std::optional<rgw_user> owner;
-
 public:
   SyncPolicyContext(rgw::sal::ConfigStore* cfgstore,
                     std::optional<rgw_bucket> _bucket)
@@ -3182,8 +3215,6 @@ public:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
-
-    owner = bucket->get_info().owner;
 
     if (!bucket->get_info().sync_policy) {
       rgw_sync_policy_info new_policy;
@@ -3216,10 +3247,6 @@ public:
 
   rgw_sync_policy_info& get_policy() {
     return *policy;
-  }
-
-  std::optional<rgw_user>& get_owner() {
-    return owner;
   }
 };
 
@@ -3336,6 +3363,8 @@ int main(int argc, const char **argv)
   std::unique_ptr<rgw::sal::User> user;
   string tenant;
   string user_ns;
+  string account_name;
+  rgw_account_id account_id;
   rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
@@ -3354,6 +3383,8 @@ int main(int argc, const char **argv)
   std::optional<string> opt_zonegroup_name, opt_zonegroup_id;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix, max_session_duration;
+  std::string description;
+  std::string policy_arn;
   std::string redirect_zone;
   bool redirect_zone_set = false;
   list<string> endpoints;
@@ -3398,8 +3429,11 @@ int main(int argc, const char **argv)
   int fix = false;
   int remove_bad = false;
   int check_head_obj_locator = false;
-  int max_buckets = -1;
-  bool max_buckets_specified = false;
+  std::optional<int> max_buckets;
+  std::optional<int> max_users;
+  std::optional<int> max_roles;
+  std::optional<int> max_groups;
+  std::optional<int> max_access_keys;
   map<string, bool> categories;
   string caps;
   int check_objects = false;
@@ -3416,6 +3450,8 @@ int main(int argc, const char **argv)
   bool admin_specified = false;
   int system = false;
   bool system_specified = false;
+  int account_root = false;
+  bool account_root_specified = false;
   int shard_id = -1;
   bool specified_shard_id = false;
   string client_id;
@@ -3589,6 +3625,34 @@ int main(int argc, const char **argv)
       opt_tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--user_ns", (char*)NULL)) {
       user_ns = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--account-name", (char*)NULL)) {
+      account_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--account-id", (char*)NULL)) {
+      account_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-users", (char*)NULL)) {
+      max_users = ceph::parse<int>(val);
+      if (!max_users) {
+        cerr << "ERROR: failed to parse --max-users" << std::endl;
+        return EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-roles", (char*)NULL)) {
+      max_roles = ceph::parse<int>(val);
+      if (!max_roles) {
+        cerr << "ERROR: failed to parse --max-roles" << std::endl;
+        return EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-groups", (char*)NULL)) {
+      max_groups = ceph::parse<int>(val);
+      if (!max_groups) {
+        cerr << "ERROR: failed to parse --max-groups" << std::endl;
+        return EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-access-keys", (char*)NULL)) {
+      max_access_keys = ceph::parse<int>(val);
+      if (!max_access_keys) {
+        cerr << "ERROR: failed to parse --max-access-keys" << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
@@ -3645,6 +3709,8 @@ int main(int argc, const char **argv)
       admin_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &system, NULL, "--system", (char*)NULL)) {
       system_specified = true;
+    } else if (ceph_argparse_binary_flag(args, i, &account_root, NULL, "--account-root", (char*)NULL)) {
+      account_root_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &verbose, NULL, "--verbose", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &staging, NULL, "--staging", (char*)NULL)) {
@@ -3658,12 +3724,11 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*)NULL)) {
       min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
-      max_buckets = (int)strict_strtol(val.c_str(), 10, &err);
-      if (!err.empty()) {
-        cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
+      max_buckets = ceph::parse<int>(val);
+      if (!max_buckets) {
+        cerr << "ERROR: failed to parse max buckets" << std::endl;
         return EINVAL;
       }
-      max_buckets_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
       max_entries = (int)strict_strtol(val.c_str(), 10, &err);
       max_entries_specified = true;
@@ -3973,8 +4038,12 @@ int main(int argc, const char **argv)
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
       path_prefix = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--policy-arn", (char*)NULL)) {
+      policy_arn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-session-duration", (char*)NULL)) {
       max_session_duration = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--description", (char*)NULL)) {
+      description = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-serial", (char*)NULL)) {
       totp_serial = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-pin", (char*)NULL)) {
@@ -4186,6 +4255,11 @@ int main(int argc, const char **argv)
     std::set<OPT> readonly_ops_list = {
                          OPT::USER_INFO,
 			 OPT::USER_STATS,
+			 OPT::USER_LIST,
+			 OPT::USER_POLICY_LIST_ATTACHED,
+			 OPT::ACCOUNT_GET,
+			 OPT::ACCOUNT_STATS,
+			 OPT::ACCOUNT_LIST,
 			 OPT::BUCKETS_LIST,
 			 OPT::BUCKET_LIMIT_CHECK,
 			 OPT::BUCKET_LAYOUT,
@@ -4244,6 +4318,7 @@ int main(int argc, const char **argv)
 			 OPT::ROLE_LIST,
 			 OPT::ROLE_POLICY_LIST,
 			 OPT::ROLE_POLICY_GET,
+			 OPT::ROLE_POLICY_LIST_ATTACHED,
 			 OPT::RESHARD_LIST,
 			 OPT::RESHARD_STATUS,
 			 OPT::PUBSUB_TOPIC_LIST,
@@ -4337,6 +4412,9 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::ROLE_POLICY_LIST
                           && opt_cmd != OPT::ROLE_POLICY_GET
                           && opt_cmd != OPT::ROLE_POLICY_DELETE
+                          && opt_cmd != OPT::ROLE_POLICY_ATTACH
+                          && opt_cmd != OPT::ROLE_POLICY_DETACH
+                          && opt_cmd != OPT::ROLE_POLICY_LIST_ATTACHED
                           && opt_cmd != OPT::ROLE_UPDATE
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
@@ -4350,7 +4428,13 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_TOPIC_STATS
 			  && opt_cmd != OPT::SCRIPT_PUT
 			  && opt_cmd != OPT::SCRIPT_GET
-			  && opt_cmd != OPT::SCRIPT_RM) {
+			  && opt_cmd != OPT::SCRIPT_RM
+                          && opt_cmd != OPT::ACCOUNT_CREATE
+                          && opt_cmd != OPT::ACCOUNT_MODIFY
+                          && opt_cmd != OPT::ACCOUNT_GET
+                          && opt_cmd != OPT::ACCOUNT_STATS
+                          && opt_cmd != OPT::ACCOUNT_RM
+                          && opt_cmd != OPT::ACCOUNT_LIST) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -6369,7 +6453,9 @@ int main(int argc, const char **argv)
   resolve_zone_ids_opt(opt_dest_zone_names, opt_dest_zone_ids);
 
   bool non_master_cmd = (!driver->is_meta_master() && !yes_i_really_mean_it);
-  std::set<OPT> non_master_ops_list = {OPT::USER_CREATE, OPT::USER_RM, 
+  std::set<OPT> non_master_ops_list = {OPT::ACCOUNT_CREATE,
+                                        OPT::ACCOUNT_MODIFY, OPT::ACCOUNT_RM,
+                                        OPT::USER_CREATE, OPT::USER_RM,
                                         OPT::USER_MODIFY, OPT::USER_ENABLE,
                                         OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
                                         OPT::SUBUSER_MODIFY, OPT::SUBUSER_RM,
@@ -6380,7 +6466,9 @@ int main(int argc, const char **argv)
                                         OPT::MFA_REMOVE, OPT::MFA_RESYNC,
                                         OPT::CAPS_ADD, OPT::CAPS_RM,
                                         OPT::ROLE_CREATE, OPT::ROLE_DELETE,
-                                        OPT::ROLE_POLICY_PUT, OPT::ROLE_POLICY_DELETE};
+                                        OPT::ROLE_POLICY_PUT, OPT::ROLE_POLICY_DELETE,
+                                        OPT::ROLE_POLICY_ATTACH, OPT::ROLE_POLICY_DETACH,
+                                        OPT::USER_POLICY_ATTACH, OPT::USER_POLICY_DETACH};
 
   bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
                                 non_master_cmd);
@@ -6429,14 +6517,17 @@ int main(int argc, const char **argv)
   if (gen_secret_key)
     user_op.set_gen_secret(); // assume that a key pair should be created
 
-  if (max_buckets_specified)
-    user_op.set_max_buckets(max_buckets);
+  if (max_buckets)
+    user_op.set_max_buckets(*max_buckets);
 
   if (admin_specified)
      user_op.set_admin(admin);
 
   if (system_specified)
     user_op.set_system(system);
+
+  if (account_root_specified)
+    user_op.set_account_root(account_root);
 
   if (set_perm)
     user_op.set_perm(perm_mask);
@@ -6486,6 +6577,10 @@ int main(int argc, const char **argv)
   if (!tags.empty()) {
     user_op.set_placement_tags(tags);
   }
+  user_op.path = path;
+
+  user_op.account_id = account_id;
+  bucket_op.account_id = account_id;
 
   // RGWUser to use for user operations
   RGWUser ruser;
@@ -6725,23 +6820,23 @@ int main(int argc, const char **argv)
         cerr << "ERROR: assume role policy document is empty" << std::endl;
         return -EINVAL;
       }
-      bufferlist bl = bufferlist::static_from_string(assume_role_doc);
       try {
         const rgw::IAM::Policy p(
-	  g_ceph_context, tenant, bl,
+	  g_ceph_context, nullptr, assume_role_doc,
 	  g_ceph_context->_conf.get_val<bool>(
 	    "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
         cerr << "failed to parse policy: " << e.what() << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, path,
-                                                                 assume_role_doc, max_session_duration);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id, path,
+                                                                 assume_role_doc, description, max_session_duration);
       ret = role->create(dpp(), true, "", null_yield);
       if (ret < 0) {
         return -ret;
       }
-      show_role_info(role.get(), formatter.get());
+      encode_json("role", role->get_info(), formatter.get());
+      formatter->flush(cout);
       return 0;
     }
   case OPT::ROLE_DELETE:
@@ -6750,7 +6845,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->delete_obj(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6764,12 +6859,13 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
       }
-      show_role_info(role.get(), formatter.get());
+      encode_json("role", role->get_info(), formatter.get());
+      formatter->flush(cout);
       return 0;
     }
   case OPT::ROLE_TRUST_POLICY_MODIFY:
@@ -6784,9 +6880,8 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      bufferlist bl = bufferlist::static_from_string(assume_role_doc);
       try {
-        const rgw::IAM::Policy p(g_ceph_context, tenant, bl,
+        const rgw::IAM::Policy p(g_ceph_context, nullptr, assume_role_doc,
 				 g_ceph_context->_conf.get_val<bool>(
 				   "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
@@ -6794,7 +6889,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6809,12 +6904,49 @@ int main(int argc, const char **argv)
     }
   case OPT::ROLE_LIST:
     {
-      vector<std::unique_ptr<rgw::sal::RGWRole>> result;
-      ret = driver->get_roles(dpp(), null_yield, path_prefix, tenant, result);
-      if (ret < 0) {
-        return -ret;
+      rgw::sal::RoleList listing;
+      listing.next_marker = marker;
+
+      int32_t remaining = std::numeric_limits<int32_t>::max();
+      if (max_entries_specified) {
+        remaining = max_entries;
+        formatter->open_object_section("result");
       }
-      show_roles_info(result, formatter.get());
+      formatter->open_array_section("Roles");
+
+      do {
+        constexpr int32_t max_chunk = 100;
+        int32_t count = std::min(max_chunk, remaining);
+
+        if (!account_id.empty()) {
+          // list roles in the account
+          ret = driver->list_account_roles(dpp(), null_yield, account_id,
+                                           path_prefix, listing.next_marker,
+                                           count, listing);
+        } else {
+          // list roles in the tenant
+          ret = driver->list_roles(dpp(), null_yield, tenant, path_prefix,
+                                   listing.next_marker, count, listing);
+        }
+        if (ret < 0) {
+          return -ret;
+        }
+        for (const auto& info : listing.roles) {
+          encode_json("member", info, formatter.get());
+        }
+        formatter->flush(cout);
+        remaining -= listing.roles.size();
+      } while (!listing.next_marker.empty() && remaining > 0);
+
+      formatter->close_section(); // Roles
+
+      if (max_entries_specified) {
+        if (!listing.next_marker.empty()) {
+          encode_json("next-marker", listing.next_marker, formatter.get());
+        }
+        formatter->close_section(); // result
+      }
+      formatter->flush(cout);
       return 0;
     }
   case OPT::ROLE_POLICY_PUT:
@@ -6834,19 +6966,17 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      bufferlist bl;
       if (!infile.empty()) {
+        bufferlist bl;
         int ret = read_input(infile, bl);
         if (ret < 0) {
           cerr << "ERROR: failed to read input policy document: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
         perm_policy_doc = bl.to_str();
-      } else {
-        bl = bufferlist::static_from_string(perm_policy_doc);
       }
       try {
-        const rgw::IAM::Policy p(g_ceph_context, tenant, bl,
+        const rgw::IAM::Policy p(g_ceph_context, nullptr, perm_policy_doc,
 				 g_ceph_context->_conf.get_val<bool>(
 				   "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
@@ -6854,7 +6984,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6873,7 +7003,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: Role name is empty" << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6893,7 +7023,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       int ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6917,7 +7047,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6933,7 +7063,97 @@ int main(int argc, const char **argv)
       cout << "Policy: " << policy_name << " successfully deleted for role: "
            << role_name << std::endl;
       return 0;
-  }
+    }
+  case OPT::ROLE_POLICY_ATTACH:
+    {
+      if (role_name.empty()) {
+        cerr << "role name is empty" << std::endl;
+        return EINVAL;
+      }
+      if (policy_arn.empty()) {
+        cerr << "policy arn is empty" << std::endl;
+        return EINVAL;
+      }
+      try {
+        if (!rgw::IAM::get_managed_policy(g_ceph_context, policy_arn)) {
+          cerr << "unrecognized policy arn " << policy_arn << std::endl;
+          return ENOENT;
+        }
+      } catch (rgw::IAM::PolicyParseException& e) {
+        cerr << "failed to parse managed policy: " << e.what() << std::endl;
+        return EINVAL;
+      }
+
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
+      ret = role->get(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      if (role->get_info().account_id.empty()) {
+        std::cerr << "Managed policies are only supported for account roles" << std::endl;
+        return EINVAL;
+      }
+
+      auto &policies = role->get_info().managed_policies;
+      const bool inserted = policies.arns.insert(policy_arn).second;
+      if (!inserted) {
+        cout << "That managed policy is already attached." << std::endl;
+        return EEXIST;
+      }
+      ret = role->update(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "Managed policy attached successfully" << std::endl;
+      return 0;
+    }
+  case OPT::ROLE_POLICY_DETACH:
+    {
+      if (role_name.empty()) {
+        cerr << "role name is empty" << std::endl;
+        return EINVAL;
+      }
+      if (policy_arn.empty()) {
+        cerr << "policy arn is empty" << std::endl;
+        return EINVAL;
+      }
+
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
+      ret = role->get(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      // insert the policy arn. if it's already there, just return success
+      auto &policies = role->get_info().managed_policies;
+      auto i = policies.arns.find(policy_arn);
+      if (i == policies.arns.end()) {
+        cout << "That managed policy is not attached." << std::endl;
+        return ENOENT;
+      }
+      policies.arns.erase(i);
+
+      ret = role->update(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      cout << "Managed policy detached successfully" << std::endl;
+      return 0;
+    }
+  case OPT::ROLE_POLICY_LIST_ATTACHED:
+    {
+      if (role_name.empty()) {
+        cerr << "ERROR: Role name is empty" << std::endl;
+        return EINVAL;
+      }
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
+      ret = role->get(dpp(), null_yield);
+      if (ret < 0) {
+        return -ret;
+      }
+      show_policy_arns(role->get_info().managed_policies.arns, formatter.get());
+      formatter->flush(cout);
+      return 0;
+    }
   case OPT::ROLE_UPDATE:
     {
       if (role_name.empty()) {
@@ -6941,7 +7161,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -7375,7 +7595,7 @@ int main(int argc, const char **argv)
 	return -r;
       }
       formatter->dump_string("bucket_id", entry.bucket_id);
-      formatter->dump_string("bucket_owner", entry.bucket_owner.to_str());
+      formatter->dump_string("bucket_owner", to_string(entry.bucket_owner));
       formatter->dump_string("bucket", entry.bucket);
 
       uint64_t agg_time = 0;
@@ -8790,7 +9010,8 @@ next:
   }
 
   if (opt_cmd == OPT::USER_CHECK) {
-    check_bad_user_bucket_mapping(driver, *user.get(), fix, null_yield, dpp());
+    check_bad_owner_bucket_mapping(driver, user->get_id(), user->get_tenant(),
+                                   fix, null_yield, dpp());
   }
 
   if (opt_cmd == OPT::USER_STATS) {
@@ -8809,7 +9030,7 @@ next:
 	  "so at most one of the two should be specified" << std::endl;
 	return EINVAL;
       }
-      ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->user->reset_bucket_stats(dpp(), user->get_id(), null_yield);
+      ret = driver->reset_stats(dpp(), null_yield, user->get_id());
       if (ret < 0) {
 	cerr << "ERROR: could not reset user stats: " << cpp_strerror(-ret) <<
 	  std::endl;
@@ -8824,14 +9045,15 @@ next:
           cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
-        ret = bucket->sync_user_stats(dpp(), null_yield, nullptr);
+        ret = bucket->sync_owner_stats(dpp(), null_yield, nullptr);
         if (ret < 0) {
           cerr << "ERROR: could not sync bucket stats: " <<
 	    cpp_strerror(-ret) << std::endl;
           return -ret;
         }
       } else {
-        int ret = rgw_user_sync_all_stats(dpp(), driver, user.get(), null_yield);
+        int ret = rgw_sync_all_stats(dpp(), null_yield, driver,
+                                     user->get_id(), user->get_tenant());
         if (ret < 0) {
           cerr << "ERROR: could not sync user stats: " <<
 	    cpp_strerror(-ret) << std::endl;
@@ -8840,11 +9062,25 @@ next:
       }
     }
 
+    int ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      cerr << "User has not been initialized or user does not exist" << std::endl;
+      return -ret;
+    }
+
+    const RGWUserInfo& info = user->get_info();
+    rgw_owner owner = info.user_id;
+    if (!info.account_id.empty()) {
+      cerr << "Reading stats for user account " << info.account_id << std::endl;
+      owner = info.account_id;
+    }
+
     constexpr bool omit_utilized_stats = false;
     RGWStorageStats stats(omit_utilized_stats);
     ceph::real_time last_stats_sync;
     ceph::real_time last_stats_update;
-    int ret = user->read_stats(dpp(), null_yield, &stats, &last_stats_sync, &last_stats_update);
+    ret = driver->load_stats(dpp(), null_yield, owner, stats,
+                             last_stats_sync, last_stats_update);
     if (ret < 0) {
       if (ret == -ENOENT) { /* in case of ENOENT */
         cerr << "User has not been initialized or user does not exist" << std::endl;
@@ -8864,6 +9100,115 @@ next:
       encode_json("last_stats_update", last_update_ut, formatter.get());
     }
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT::USER_POLICY_ATTACH) {
+    if (rgw::sal::User::empty(user)) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return EINVAL;
+    }
+    if (policy_arn.empty()) {
+      cerr << "policy arn is empty" << std::endl;
+      return EINVAL;
+    }
+    ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      return -ret;
+    }
+    if (user->get_info().account_id.empty()) {
+      std::cerr << "Managed policies are only supported for account users" << std::endl;
+      return EINVAL;
+    }
+
+    try {
+      if (!rgw::IAM::get_managed_policy(g_ceph_context, policy_arn)) {
+        cerr << "unrecognized policy arn " << policy_arn << std::endl;
+        return ENOENT;
+      }
+    } catch (rgw::IAM::PolicyParseException& e) {
+      cerr << "failed to parse managed policy: " << e.what() << std::endl;
+      return EINVAL;
+    }
+
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+    const bool inserted = policies.arns.insert(policy_arn).second;
+    if (!inserted) {
+      cout << "That managed policy is already attached." << std::endl;
+      return EEXIST;
+    }
+
+    bufferlist in_bl;
+    encode(policies, in_bl);
+    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
+
+    ret = user->store_user(dpp(), null_yield, false);
+    if (ret < 0) {
+      return -ret;
+    }
+    cout << "Managed policy attached successfully" << std::endl;
+    return 0;
+  }
+  if (opt_cmd == OPT::USER_POLICY_DETACH) {
+    if (rgw::sal::User::empty(user)) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return EINVAL;
+    }
+    if (policy_arn.empty()) {
+      cerr << "policy arn is empty" << std::endl;
+      return EINVAL;
+    }
+    ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+
+    auto i = policies.arns.find(policy_arn);
+    if (i == policies.arns.end()) {
+      cout << "That managed policy is not attached." << std::endl;
+      return ENOENT;
+    }
+    policies.arns.erase(i);
+
+    bufferlist in_bl;
+    encode(policies, in_bl);
+    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
+
+    ret = user->store_user(dpp(), null_yield, false);
+    if (ret < 0) {
+      return -ret;
+    }
+    cout << "Managed policy detached successfully" << std::endl;
+    return 0;
+  }
+  if (opt_cmd == OPT::USER_POLICY_LIST_ATTACHED) {
+    if (rgw::sal::User::empty(user)) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return -EINVAL;
+    }
+    ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+
+    show_policy_arns(policies.arns, formatter.get());
+    formatter->flush(cout);
+    return 0;
   }
 
   if (opt_cmd == OPT::METADATA_GET) {
@@ -8898,9 +9243,32 @@ next:
     }
   }
 
-  if (opt_cmd == OPT::METADATA_LIST || opt_cmd == OPT::USER_LIST) {
+  if (opt_cmd == OPT::METADATA_LIST ||
+      opt_cmd == OPT::USER_LIST ||
+      opt_cmd == OPT::ACCOUNT_LIST) {
     if (opt_cmd == OPT::USER_LIST) {
       metadata_key = "user";
+
+      if (!account_id.empty() || !account_name.empty()) {
+        // list users by account
+        rgw::account::AdminOpState op_state;
+        op_state.account_id = account_id;
+        op_state.tenant = tenant;
+        op_state.account_name = account_name;
+
+        std::string err_msg;
+        int ret = rgw::account::list_users(
+            dpp(), driver, op_state, path_prefix, marker,
+            max_entries_specified, max_entries, err_msg,
+            stream_flusher, null_yield);
+        if (ret < 0)  {
+          cerr << "ERROR: " << err_msg << std::endl;
+          return -ret;
+        }
+        return 0;
+      }
+    } else if (opt_cmd == OPT::ACCOUNT_LIST) {
+      metadata_key = "account";
     }
     void *handle;
     int max = 1000;
@@ -9939,11 +10307,9 @@ next:
 
     if (!rgw::sal::User::empty(user)) {
       pipe->params.user = user->get_id();
-    } else if (pipe->params.user.empty()) {
-      auto owner = sync_policy_ctx.get_owner();
-      if (owner) {
-        pipe->params.user = *owner;
-      }
+    } else if (pipe->params.mode == rgw_sync_pipe_params::MODE_USER) {
+      cerr << "ERROR: missing --uid for --mode=user" << std::endl;
+      return EINVAL;
     }
 
     ret = sync_policy_ctx.write_policy();
@@ -10284,11 +10650,6 @@ next:
   bool quota_op = (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE || opt_cmd == OPT::QUOTA_DISABLE);
 
   if (quota_op) {
-    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
-      cerr << "ERROR: bucket name or uid is required for quota operation" << std::endl;
-      return EINVAL;
-    }
-
     if (!bucket_name.empty()) {
       if (!quota_scope.empty() && quota_scope != "bucket") {
         cerr << "ERROR: invalid quota scope specification." << std::endl;
@@ -10305,6 +10666,36 @@ next:
         cerr << "ERROR: invalid quota scope specification. Please specify either --quota-scope=bucket, or --quota-scope=user" << std::endl;
         return EINVAL;
       }
+    } else if (!account_id.empty() || !account_name.empty()) {
+      // set account quota
+      rgw::account::AdminOpState op_state;
+      op_state.account_id = account_id;
+      op_state.tenant = tenant;
+      op_state.account_name = account_name;
+
+      if (opt_cmd == OPT::QUOTA_ENABLE) {
+        op_state.quota_enabled = true;
+      } else if (opt_cmd == OPT::QUOTA_DISABLE) {
+        op_state.quota_enabled = false;
+      }
+      if (have_max_objects) {
+        op_state.quota_max_objects = std::max<int64_t>(-1, max_objects);
+      }
+      if (have_max_size) {
+        op_state.quota_max_size = std::max<int64_t>(-1, rgw_rounded_kb(max_size) * 1024);
+      }
+
+      std::string err_msg;
+      ret = rgw::account::modify(dpp(), driver, op_state, err_msg,
+                                 stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to set account quota with "
+            << cpp_strerror(-ret) << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    } else {
+      cerr << "ERROR: bucket name or uid or account is required for quota operation" << std::endl;
+      return EINVAL;
     }
   }
 
@@ -10649,7 +11040,8 @@ next:
         return -ret;
       }
     } else {
-      RGWPubSub ps(driver, tenant, *site);
+      const std::string& account = !account_id.empty() ? account_id : tenant;
+      RGWPubSub ps(driver, account, *site);
       const RGWPubSub::Bucket b(ps, bucket.get());
       ret = b.get_topics(dpp(), result, null_yield);
       if (ret < 0 && ret != -ENOENT) {
@@ -10662,8 +11054,16 @@ next:
   }
 
   if (opt_cmd == OPT::PUBSUB_TOPIC_LIST) {
-    RGWPubSub ps(driver, tenant, *site);
+    const std::string& account = !account_id.empty() ? account_id : tenant;
+    RGWPubSub ps(driver, account, *site);
     std::string next_token = marker;
+
+    std::optional<rgw_owner> owner;
+    if (!rgw::sal::User::empty(user)) {
+      owner = user->get_id();
+    } else if (!account_id.empty()) {
+      owner = rgw_account_id{account_id};
+    }
 
     formatter->open_object_section("result");
     formatter->open_array_section("topics");
@@ -10676,7 +11076,7 @@ next:
         return -ret;
       }
       for (const auto& [_, topic] : result.topics) {
-        if (!rgw::sal::User::empty(user) && user->get_id() != topic.user) {
+        if (owner && *owner != topic.owner) {
           continue;
         }
         std::set<std::string> subscribed_buckets;
@@ -10713,7 +11113,8 @@ next:
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
       return EINVAL;
     }
-    RGWPubSub ps(driver, tenant, *site);
+    const std::string& account = !account_id.empty() ? account_id : tenant;
+    RGWPubSub ps(driver, account, *site);
 
     rgw_pubsub_topic topic;
     std::set<std::string> subscribed_buckets;
@@ -10757,7 +11158,8 @@ next:
         return -ret;
       }
     } else {
-      RGWPubSub ps(driver, tenant, *site);
+      const std::string& account = !account_id.empty() ? account_id : tenant;
+      RGWPubSub ps(driver, account, *site);
       const RGWPubSub::Bucket b(ps, bucket.get());
       ret = b.get_topics(dpp(), bucket_topics, null_yield);
       if (ret < 0 && ret != -ENOENT) {
@@ -10784,18 +11186,12 @@ next:
       return -EINVAL;
     }
 
-    RGWPubSub ps(driver, tenant, *site);
+    const std::string& account = !account_id.empty() ? account_id : tenant;
+    RGWPubSub ps(driver, account, *site);
 
     ret = ps.remove_topic(dpp(), topic_name, null_yield);
     if (ret < 0) {
       cerr << "ERROR: could not remove topic: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    
-    ret = rgw::notify::remove_persistent_topic(
-        dpp(), static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_notif_pool_ctx(), topic_name, null_yield);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not remove persistent topic: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
   }
@@ -10824,7 +11220,8 @@ next:
       ret = remove_notification_v2(dpp(), driver, bucket.get(), notification_id,
                                    null_yield);
     } else {
-      RGWPubSub ps(driver, tenant, *site);
+      const std::string& account = !account_id.empty() ? account_id : tenant;
+      RGWPubSub ps(driver, account, *site);
 
       rgw_pubsub_bucket_topics bucket_topics;
       const RGWPubSub::Bucket b(ps, bucket.get());
@@ -10848,11 +11245,25 @@ next:
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
       return EINVAL;
     }
+    const std::string& account = !account_id.empty() ? account_id : tenant;
+    RGWPubSub ps(driver, account, *site);
+
+    rgw_pubsub_topic topic;
+    ret = ps.get_topic(dpp(), topic_name, topic, null_yield, nullptr);
+    if (ret < 0) {
+      cerr << "ERROR: could not get topic: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    if (topic.dest.persistent_queue.empty()) {
+      cerr << "This topic does not have a persistent queue." << std::endl;
+      return ENOENT;
+    }
 
     rgw::notify::rgw_topic_stats stats;
-    ret = rgw::notify::get_persistent_queue_stats_by_topic_name(
-        dpp(), static_cast<rgw::sal::RadosStore *>(driver)->getRados()->get_notif_pool_ctx(), topic_name,
-        stats, null_yield);
+    ret = rgw::notify::get_persistent_queue_stats(
+        dpp(), static_cast<rgw::sal::RadosStore *>(driver)->getRados()->get_notif_pool_ctx(),
+        topic.dest.persistent_queue, stats, null_yield);
     if (ret < 0) {
       cerr << "ERROR: could not get persistent queue: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -11011,6 +11422,78 @@ next:
     return EPERM;
 #endif
   }
+
+  if (opt_cmd == OPT::ACCOUNT_CREATE ||
+      opt_cmd == OPT::ACCOUNT_MODIFY ||
+      opt_cmd == OPT::ACCOUNT_GET ||
+      opt_cmd == OPT::ACCOUNT_STATS ||
+      opt_cmd == OPT::ACCOUNT_RM)
+  {
+    auto op_state = rgw::account::AdminOpState{
+      .account_id = account_id,
+      .tenant = tenant,
+      .account_name = account_name,
+      .email = user_email,
+      .max_users = max_users,
+      .max_roles = max_roles,
+      .max_groups = max_groups,
+      .max_access_keys = max_access_keys,
+      .max_buckets = max_buckets,
+    };
+
+    std::string err_msg;
+    if (opt_cmd == OPT::ACCOUNT_CREATE) {
+      ret = rgw::account::create(dpp(), driver, op_state, err_msg,
+                                 stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to create account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT::ACCOUNT_MODIFY) {
+      ret = rgw::account::modify(dpp(), driver, op_state, err_msg,
+                                 stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to modify account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT::ACCOUNT_GET) {
+      ret = rgw::account::info(dpp(), driver, op_state, err_msg,
+                               stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to read account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT::ACCOUNT_STATS) {
+      ret = rgw::account::stats(dpp(), driver, op_state,
+                                sync_stats, reset_stats, err_msg,
+                                stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to read account stats with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT::ACCOUNT_RM) {
+      ret = rgw::account::remove(dpp(), driver, op_state, err_msg,
+                                 stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to remove account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    }
+  }
+
   return 0;
 }
 

@@ -468,38 +468,71 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
 
 bool is_non_s3_op(RGWOpType op_type)
 {
-  if (op_type == RGW_STS_GET_SESSION_TOKEN ||
-      op_type == RGW_STS_ASSUME_ROLE ||
-      op_type == RGW_STS_ASSUME_ROLE_WEB_IDENTITY ||
-      op_type == RGW_OP_CREATE_ROLE ||
-      op_type == RGW_OP_DELETE_ROLE ||
-      op_type == RGW_OP_GET_ROLE ||
-      op_type == RGW_OP_MODIFY_ROLE_TRUST_POLICY ||
-      op_type == RGW_OP_LIST_ROLES ||
-      op_type == RGW_OP_PUT_ROLE_POLICY ||
-      op_type == RGW_OP_GET_ROLE_POLICY ||
-      op_type == RGW_OP_LIST_ROLE_POLICIES ||
-      op_type == RGW_OP_DELETE_ROLE_POLICY ||
-      op_type == RGW_OP_PUT_USER_POLICY ||
-      op_type == RGW_OP_GET_USER_POLICY ||
-      op_type == RGW_OP_LIST_USER_POLICIES ||
-      op_type == RGW_OP_DELETE_USER_POLICY ||
-      op_type == RGW_OP_CREATE_OIDC_PROVIDER ||
-      op_type == RGW_OP_DELETE_OIDC_PROVIDER ||
-      op_type == RGW_OP_GET_OIDC_PROVIDER ||
-      op_type == RGW_OP_LIST_OIDC_PROVIDERS ||
-      op_type == RGW_OP_PUBSUB_TOPIC_CREATE ||
-      op_type == RGW_OP_PUBSUB_TOPICS_LIST ||
-      op_type == RGW_OP_PUBSUB_TOPIC_GET ||
-      op_type == RGW_OP_PUBSUB_TOPIC_SET ||
-      op_type == RGW_OP_PUBSUB_TOPIC_DELETE ||
-      op_type == RGW_OP_TAG_ROLE ||
-      op_type == RGW_OP_LIST_ROLE_TAGS ||
-      op_type == RGW_OP_UNTAG_ROLE ||
-      op_type == RGW_OP_UPDATE_ROLE) {
+  switch (op_type) {
+  case RGW_STS_GET_SESSION_TOKEN:
+  case RGW_STS_ASSUME_ROLE:
+  case RGW_STS_ASSUME_ROLE_WEB_IDENTITY:
+  case RGW_OP_CREATE_ROLE:
+  case RGW_OP_DELETE_ROLE:
+  case RGW_OP_GET_ROLE:
+  case RGW_OP_MODIFY_ROLE_TRUST_POLICY:
+  case RGW_OP_LIST_ROLES:
+  case RGW_OP_PUT_ROLE_POLICY:
+  case RGW_OP_GET_ROLE_POLICY:
+  case RGW_OP_LIST_ROLE_POLICIES:
+  case RGW_OP_DELETE_ROLE_POLICY:
+  case RGW_OP_ATTACH_ROLE_POLICY:
+  case RGW_OP_DETACH_ROLE_POLICY:
+  case RGW_OP_LIST_ATTACHED_ROLE_POLICIES:
+  case RGW_OP_PUT_USER_POLICY:
+  case RGW_OP_GET_USER_POLICY:
+  case RGW_OP_LIST_USER_POLICIES:
+  case RGW_OP_DELETE_USER_POLICY:
+  case RGW_OP_ATTACH_USER_POLICY:
+  case RGW_OP_DETACH_USER_POLICY:
+  case RGW_OP_LIST_ATTACHED_USER_POLICIES:
+  case RGW_OP_CREATE_OIDC_PROVIDER:
+  case RGW_OP_DELETE_OIDC_PROVIDER:
+  case RGW_OP_GET_OIDC_PROVIDER:
+  case RGW_OP_LIST_OIDC_PROVIDERS:
+  case RGW_OP_PUBSUB_TOPIC_CREATE:
+  case RGW_OP_PUBSUB_TOPICS_LIST:
+  case RGW_OP_PUBSUB_TOPIC_GET:
+  case RGW_OP_PUBSUB_TOPIC_SET:
+  case RGW_OP_PUBSUB_TOPIC_DELETE:
+  case RGW_OP_TAG_ROLE:
+  case RGW_OP_LIST_ROLE_TAGS:
+  case RGW_OP_UNTAG_ROLE:
+  case RGW_OP_UPDATE_ROLE:
+
+  case RGW_OP_CREATE_USER:
+  case RGW_OP_GET_USER:
+  case RGW_OP_UPDATE_USER:
+  case RGW_OP_DELETE_USER:
+  case RGW_OP_LIST_USERS:
+  case RGW_OP_CREATE_ACCESS_KEY:
+  case RGW_OP_UPDATE_ACCESS_KEY:
+  case RGW_OP_DELETE_ACCESS_KEY:
+  case RGW_OP_LIST_ACCESS_KEYS:
+  case RGW_OP_CREATE_GROUP:
+  case RGW_OP_GET_GROUP:
+  case RGW_OP_UPDATE_GROUP:
+  case RGW_OP_DELETE_GROUP:
+  case RGW_OP_LIST_GROUPS:
+  case RGW_OP_ADD_USER_TO_GROUP:
+  case RGW_OP_REMOVE_USER_FROM_GROUP:
+  case RGW_OP_LIST_GROUPS_FOR_USER:
+  case RGW_OP_PUT_GROUP_POLICY:
+  case RGW_OP_GET_GROUP_POLICY:
+  case RGW_OP_LIST_GROUP_POLICIES:
+  case RGW_OP_DELETE_GROUP_POLICY:
+  case RGW_OP_ATTACH_GROUP_POLICY:
+  case RGW_OP_DETACH_GROUP_POLICY:
+  case RGW_OP_LIST_ATTACHED_GROUP_POLICIES:
     return true;
+  default:
+    return false;
   }
-  return false;
 }
 
 int parse_v4_credentials(const req_info& info,                     /* in */

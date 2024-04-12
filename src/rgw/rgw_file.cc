@@ -1872,7 +1872,7 @@ namespace rgw {
       }
     }
     processor = get_driver()->get_atomic_writer(this, state->yield, state->object.get(),
-					 state->bucket_owner.id,
+					 state->bucket_owner,
 					 &state->dest_placement, 0, state->req_id);
 
     op_ret = processor->prepare(state->yield);

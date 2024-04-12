@@ -478,21 +478,27 @@ def connection2():
     return conn
 
 
-def another_user(tenant=None):
+def another_user(user=None, tenant=None, account=None):
     access_key = str(time.time())
     secret_key = str(time.time())
-    uid = UID_PREFIX + str(time.time())
+    uid = user or UID_PREFIX + str(time.time())
+    cmd = ['user', 'create', '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', 'Superman']
+    arn = f'arn:aws:iam:::user/{uid}'
     if tenant:
-        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
-    else:
-        _, result = admin(['user', 'create', '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'], get_config_cluster())
+        cmd += ['--tenant', tenant]
+        arn = f'arn:aws:iam::{tenant}:user/{uid}'
+    if account:
+        cmd += ['--account-id', account, '--account-root']
+        arn = f'arn:aws:iam::{account}:user/Superman'
 
+    _, result = admin(cmd, get_config_cluster())
     assert_equal(result, 0)
+
     conn = S3Connection(aws_access_key_id=access_key,
                   aws_secret_access_key=secret_key,
                       is_secure=False, port=get_config_port(), host=get_config_host(), 
                       calling_format='boto.s3.connection.OrdinaryCallingFormat')
-    return conn
+    return conn, arn
 
 ##############
 # bucket notifications tests
@@ -621,7 +627,7 @@ def test_ps_s3_topic_admin_on_master():
     parsed_result = json.loads(result[0])
     assert_equal(parsed_result['arn'], topic_arn3)
     matches = [tenant, UID_PREFIX]
-    assert_true( all([x in parsed_result['user'] for x in matches]))
+    assert_true( all([x in parsed_result['owner'] for x in matches]))
 
     # delete topic 3
     _, result = admin(['topic', 'rm', '--topic', topic_name+'_3', '--tenant', tenant], get_config_cluster())
@@ -3064,13 +3070,18 @@ def test_ps_s3_persistent_cleanup():
     http_server.close()
 
 
-def wait_for_queue_to_drain(topic_name):
+def wait_for_queue_to_drain(topic_name, tenant=None, account=None):
     retries = 0
     entries = 1
     start_time = time.time()
     # topic stats
+    cmd = ['topic', 'stats', '--topic', topic_name]
+    if tenant:
+        cmd += ['--tenant', tenant]
+    if account:
+        cmd += ['--account-id', account]
     while entries > 0:
-        result = admin(['topic', 'stats', '--topic', topic_name], get_config_cluster())
+        result = admin(cmd, get_config_cluster())
         assert_equal(result[1], 0)
         parsed_result = json.loads(result[0])
         entries = parsed_result['Topic Stats']['Entries']
@@ -3799,9 +3810,8 @@ def test_ps_s3_persistent_multiple_endpoints():
     conn.delete_bucket(bucket_name)
     http_server.close()
 
-def persistent_notification(endpoint_type):
+def persistent_notification(endpoint_type, conn, account=None):
     """ test pushing persistent notification """
-    conn = connection()
     zonegroup = get_config_zonegroup()
 
     # create bucket
@@ -3872,7 +3882,7 @@ def persistent_notification(endpoint_type):
 
     keys = list(bucket.list())
 
-    wait_for_queue_to_drain(topic_name)
+    wait_for_queue_to_drain(topic_name, account=account)
 
     receiver.verify_s3_events(keys, exact_match=exact_match, deletions=False)
 
@@ -3888,7 +3898,7 @@ def persistent_notification(endpoint_type):
     time_diff = time.time() - start_time
     print('average time for deletion + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
 
-    wait_for_queue_to_drain(topic_name)
+    wait_for_queue_to_drain(topic_name, account=account)
 
     receiver.verify_s3_events(keys, exact_match=exact_match, deletions=True)
 
@@ -3906,19 +3916,38 @@ def persistent_notification(endpoint_type):
 @attr('http_test')
 def test_ps_s3_persistent_notification_http():
     """ test pushing persistent notification http """
-    persistent_notification('http')
+    conn = connection()
+    persistent_notification('http', conn)
 
+@attr('http_test')
+def test_ps_s3_persistent_notification_http_account():
+    """ test pushing persistent notification via http for account user """
+
+    account = 'RGW77777777777777777'
+    user = UID_PREFIX + 'test'
+
+    _, result = admin(['account', 'create', '--account-id', account, '--account-name', 'testacct'], get_config_cluster())
+    assert_true(result in [0, 17]) # EEXIST okay if we rerun
+
+    conn, _ = another_user(user=user, account=account)
+    try:
+        persistent_notification('http', conn, account)
+    finally:
+        admin(['user', 'rm', '--uid', user], get_config_cluster())
+        admin(['account', 'rm', '--account-id', account], get_config_cluster())
 
 @attr('amqp_test')
 def test_ps_s3_persistent_notification_amqp():
     """ test pushing persistent notification amqp """
-    persistent_notification('amqp')
+    conn = connection()
+    persistent_notification('amqp', conn)
 
 
 @attr('kafka_test')
 def test_ps_s3_persistent_notification_kafka():
     """ test pushing persistent notification kafka """
-    persistent_notification('kafka')
+    conn = connection()
+    persistent_notification('kafka', conn)
 
 
 def random_string(length):
@@ -4318,7 +4347,7 @@ def test_ps_s3_multiple_topics_notification():
 def test_ps_s3_topic_permissions():
     """ test s3 topic set/get/delete permissions """
     conn1 = connection()
-    conn2 = another_user()
+    conn2, arn2 = another_user()
     zonegroup = get_config_zonegroup()
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
@@ -4328,7 +4357,7 @@ def test_ps_s3_topic_permissions():
             {
                 "Sid": "Statement",
                 "Effect": "Deny",
-                "Principal": "*",
+                "Principal": {"AWS": arn2},
                 "Action": ["sns:Publish", "sns:SetTopicAttributes", "sns:GetTopicAttributes", "sns:DeleteTopic", "sns:CreateTopic"],
                 "Resource": f"arn:aws:sns:{zonegroup}::{topic_name}"
             }
@@ -4344,12 +4373,12 @@ def test_ps_s3_topic_permissions():
     try:
         # 2nd user tries to override the topic
         topic_arn = topic_conf2.set_config()
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
@@ -4360,12 +4389,12 @@ def test_ps_s3_topic_permissions():
     try:
         # 2nd user tries to set the attribute
         status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
@@ -4390,12 +4419,12 @@ def test_ps_s3_topic_permissions():
     try:
         # 2nd user tries to delete the topic
         status = topic_conf2.del_config(topic_arn=topic_arn)
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
@@ -4427,7 +4456,7 @@ def test_ps_s3_topic_permissions():
 def test_ps_s3_topic_no_permissions():
     """ test s3 topic set/get/delete permissions """
     conn1 = connection()
-    conn2 = another_user()
+    conn2, _ = another_user()
     zonegroup = 'default'
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
@@ -4442,12 +4471,12 @@ def test_ps_s3_topic_no_permissions():
     try:
         # 2nd user tries to override the topic
         topic_arn = topic_conf2.set_config()
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
@@ -4458,12 +4487,12 @@ def test_ps_s3_topic_no_permissions():
     try:
         # 2nd user tries to set the attribute
         status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
@@ -4481,12 +4510,12 @@ def test_ps_s3_topic_no_permissions():
     try:
         # 2nd user tries to delete the topic
         status = topic_conf2.del_config(topic_arn=topic_arn)
-        assert False, "'AccessDenied' error is expected"
+        assert False, "'AuthorizationError' error is expected"
     except ClientError as err:
         if 'Error' in err.response:
-            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+            assert_equal(err.response['Error']['Code'], 'AuthorizationError')
         else:
-            assert_equal(err.response['Code'], 'AccessDenied')
+            assert_equal(err.response['Code'], 'AuthorizationError')
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
