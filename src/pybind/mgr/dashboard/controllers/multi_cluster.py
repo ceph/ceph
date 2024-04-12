@@ -72,9 +72,11 @@ class MultiCluster(RESTController):
             cluster_token = self.check_cluster_connection(url, payload, username,
                                                           ssl_verify, ssl_certificate)
 
+            cors_endpoints_string = self.get_cors_endpoints_string(hub_url)
+
             self._proxy('PUT', url, 'ui-api/multi-cluster/set_cors_endpoint',
-                        payload={'url': hub_url}, token=cluster_token, verify=ssl_verify,
-                        cert=ssl_certificate)
+                        payload={'url': cors_endpoints_string}, token=cluster_token,
+                        verify=ssl_verify, cert=ssl_certificate)
 
             fsid = self._proxy('GET', url, 'api/health/get_cluster_fsid', token=cluster_token)
 
@@ -103,6 +105,26 @@ class MultiCluster(RESTController):
             return True
 
         return False
+
+    def get_cors_endpoints_string(self, hub_url):
+        parsed_url = urlparse(hub_url)
+        hostname = parsed_url.hostname
+        cors_endpoints_set = set()
+        cors_endpoints_set.add(hub_url)
+
+        orch = OrchClient.instance()
+        inventory_hosts = [host.to_json() for host in orch.hosts.list()]
+
+        for host in inventory_hosts:
+            host_addr = host['addr']
+            host_ip_url = hub_url.replace(hostname, host_addr)
+            host_hostname_url = hub_url.replace(hostname, host['hostname'])
+
+            cors_endpoints_set.add(host_ip_url)
+            cors_endpoints_set.add(host_hostname_url)
+
+        cors_endpoints_string = ", ".join(cors_endpoints_set)
+        return cors_endpoints_string
 
     def check_cluster_connection(self, url, payload, username, ssl_verify, ssl_certificate):
         try:
