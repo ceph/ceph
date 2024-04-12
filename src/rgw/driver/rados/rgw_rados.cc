@@ -77,6 +77,7 @@
 #include "rgw_realm_watcher.h"
 #include "rgw_reshard.h"
 #include "rgw_cr_rados.h"
+#include "topic_migration.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
@@ -1100,6 +1101,7 @@ void RGWRados::finalize()
 
   if (run_notification_thread) {
     rgw::notify::shutdown();
+    v1_topic_migration.stop();
   }
 }
 
@@ -1354,38 +1356,45 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (run_notification_thread) {
-    ret = rgw::notify::init(cct, driver, dpp);
+    ret = rgw::notify::init(cct, driver, *svc.site, dpp);
     if (ret < 0 ) {
       ldpp_dout(dpp, 1) << "ERROR: failed to initialize notification manager" << dendl;
+      return ret;
+    }
+
+    using namespace rgw;
+    if (svc.site->is_meta_master() &&
+        all_zonegroups_support(*svc.site, zone_features::notification_v2)) {
+      spawn::spawn(v1_topic_migration, [this] (spawn::yield_context yield) {
+            DoutPrefix dpp{cct, dout_subsys, "v1 topic migration: "};
+            rgwrados::topic_migration::migrate(&dpp, driver, v1_topic_migration, yield);
+          });
+      v1_topic_migration.start(1);
     }
   }
 
   return ret;
 }
 
-int RGWRados::init_svc(bool raw, const DoutPrefixProvider *dpp)
+int RGWRados::init_svc(bool raw, const DoutPrefixProvider *dpp,
+                       const rgw::SiteConfig& site)
 {
   if (raw) {
-    return svc.init_raw(cct, driver, use_cache, null_yield, dpp);
+    return svc.init_raw(cct, driver, use_cache, null_yield, dpp, site);
   }
 
-  return svc.init(cct, driver, use_cache, run_sync_thread, null_yield, dpp);
-}
-
-int RGWRados::init_ctl(const DoutPrefixProvider *dpp)
-{
-  return ctl.init(&svc, driver, dpp);
+  return svc.init(cct, driver, use_cache, run_sync_thread, null_yield, dpp, site);
 }
 
 /** 
  * Initialize the RADOS instance and prepare to do other ops
  * Returns 0 on success, -ERR# on failure.
  */
-int RGWRados::init_begin(const DoutPrefixProvider *dpp)
+int RGWRados::init_begin(CephContext* _cct, const DoutPrefixProvider *dpp,
+                         const rgw::SiteConfig& site)
 {
-  int ret;
-
-  ret = driver->init_neorados(dpp);
+  set_context(_cct);
+  int ret = driver->init_neorados(dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to initialize neorados (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
@@ -1396,13 +1405,13 @@ int RGWRados::init_begin(const DoutPrefixProvider *dpp)
     return ret;
   }
 
-  ret = init_svc(false, dpp);
+  ret = init_svc(false, dpp, site);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
   }
 
-  ret = init_ctl(dpp);
+  ret = ctl.init(&svc, driver, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to init ctls (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;

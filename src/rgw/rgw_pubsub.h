@@ -389,6 +389,7 @@ struct rgw_pubsub_dest {
   void dump(Formatter *f) const;
   void dump_xml(Formatter *f) const;
   std::string to_json_str() const;
+  void decode_json(JSONObj* obj);
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_dest)
 
@@ -435,6 +436,7 @@ struct rgw_pubsub_topic {
   void dump(Formatter *f) const;
   void dump_xml(Formatter *f) const;
   void dump_xml_as_attributes(Formatter *f) const;
+  void decode_json(JSONObj* obj);
 
   bool operator<(const rgw_pubsub_topic& t) const {
     return to_str().compare(t.to_str());
@@ -558,14 +560,19 @@ class RGWPubSub
 
   rgw::sal::Driver* const driver;
   const std::string tenant;
+  bool use_notification_v2 = false;
 
-  int read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result, 
-      RGWObjVersionTracker* objv_tracker, optional_yield y) const;
-  int write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
-			RGWObjVersionTracker* objv_tracker, optional_yield y) const;
+  int read_topics_v1(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result,
+                     RGWObjVersionTracker* objv_tracker, optional_yield y) const;
+  int write_topics_v1(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
+                      RGWObjVersionTracker* objv_tracker, optional_yield y) const;
 
 public:
   RGWPubSub(rgw::sal::Driver* _driver, const std::string& tenant);
+
+ RGWPubSub(rgw::sal::Driver* _driver,
+           const std::string& _tenant,
+           const rgw::SiteConfig& site);
 
   class Bucket {
     friend class RGWPubSub;
@@ -594,19 +601,13 @@ public:
     int get_topics(const DoutPrefixProvider *dpp, rgw_pubsub_bucket_topics& result, optional_yield y) const {
       return read_topics(dpp, result, nullptr, y);
     }
-    // get a bucket_topic with by its name and populate it into "result"
-    // return -ENOENT if the topic does not exists
-    // return 0 on success, error code otherwise
-    int get_notification_by_id(const DoutPrefixProvider *dpp, const std::string& notification_id, rgw_pubsub_topic_filter& result, optional_yield y) const;
     // adds a topic + filter (event list, and possibly name metadata or tags filters) to a bucket
     // assigning a notification name is optional (needed for S3 compatible notifications)
     // if the topic already exist on the bucket, the filter event list may be updated
     // for S3 compliant notifications the version with: s3_filter and notif_name should be used
     // return -ENOENT if the topic does not exists
     // return 0 on success, error code otherwise
-    int create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, 
-        const rgw::notify::EventTypeList& events, optional_yield y) const;
-    int create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, 
+    int create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name,
         const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y) const;
     // remove a topic and filter from bucket
     // if the topic does not exists on the bucket it is a no-op (considered success)
@@ -619,15 +620,23 @@ public:
     int remove_notifications(const DoutPrefixProvider *dpp, optional_yield y) const;
   };
 
-  // get the list of topics
-  // return 0 on success or if no topic was associated with the bucket, error code otherwise
-  int get_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result, optional_yield y) const {
-    return read_topics(dpp, result, nullptr, y);
-  }
-  // get a topic with by its name and populate it into "result"
-  // return -ENOENT if the topic does not exists 
+  // get a paginated list of topics
   // return 0 on success, error code otherwise
-  int get_topic(const DoutPrefixProvider *dpp, const std::string& name, rgw_pubsub_topic& result, optional_yield y) const;
+  int get_topics(const DoutPrefixProvider* dpp,
+                 const std::string& start_marker, int max_items,
+                 rgw_pubsub_topics& result, std::string& next_marker,
+                 optional_yield y) const;
+
+  // get a topic with by its name and populate it into "result"
+  // return -ENOENT if the topic does not exists
+  // return 0 on success, error code otherwise.
+  // if |subscribed_buckets| valid, then for notification_v2 read the bucket
+  // topic mapping object.
+  int get_topic(const DoutPrefixProvider* dpp,
+                const std::string& name,
+                rgw_pubsub_topic& result,
+                optional_yield y,
+                std::set<std::string>* subscribed_buckets) const;
   // create a topic with a name only
   // if the topic already exists it is a no-op (considered success)
   // return 0 on success, error code otherwise
@@ -639,6 +648,18 @@ public:
   // if the topic does not exists it is a no-op (considered success)
   // return 0 on success, error code otherwise
   int remove_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const;
+  // remove a topic according to its name
+  // if the topic does not exists it is a no-op (considered success)
+  // return 0 on success, error code otherwise
+  int remove_topic_v2(const DoutPrefixProvider* dpp,
+                      const std::string& name,
+                      optional_yield y) const;
+  // create a topic with a name only
+  // if the topic already exists it is a no-op (considered success)
+  // return 0 on success, error code otherwise
+  int create_topic(const DoutPrefixProvider* dpp,
+                   const rgw_pubsub_topic& topic,
+                   optional_yield y) const;
 };
 
 namespace rgw::notify {
@@ -649,3 +670,30 @@ namespace rgw::notify {
   // Used in case the topic is using the default global value for dumping in a formatter
   constexpr static const std::string_view DEFAULT_CONFIG{"None"};
 }
+
+std::string topic_to_unique(const std::string& topic,
+                            const std::string& notification);
+
+std::optional<rgw_pubsub_topic_filter> find_unique_topic(
+    const rgw_pubsub_bucket_topics& bucket_topics,
+    const std::string& notif_name);
+
+// Delete the bucket notification if |notification_id| is passed, else delete
+// all the bucket notifications for the given |bucket| and update the topic
+// bucket mapping.
+int remove_notification_v2(const DoutPrefixProvider* dpp,
+                           rgw::sal::Driver* driver,
+                           rgw::sal::Bucket* bucket,
+                           const std::string& notification_id,
+                           optional_yield y);
+
+int get_bucket_notifications(const DoutPrefixProvider* dpp,
+                             rgw::sal::Bucket* bucket,
+                             rgw_pubsub_bucket_topics& bucket_topics);
+
+// format and parse topic metadata keys as tenant:name
+std::string get_topic_metadata_key(std::string_view topic_name,
+                                   std::string_view tenant);
+void parse_topic_metadata_key(const std::string& key,
+                              std::string& tenant_name,
+                              std::string& topic_name);

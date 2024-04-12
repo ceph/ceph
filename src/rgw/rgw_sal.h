@@ -44,7 +44,7 @@ class RGWCompressionInfo;
 struct rgw_pubsub_topics;
 struct rgw_pubsub_bucket_topics;
 class RGWZonePlacementInfo;
-
+struct rgw_pubsub_topic;
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
 
@@ -302,18 +302,68 @@ class Driver {
         rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) = 0;
     /** No-req_state variant (e.g., rgwlc) */
     virtual std::unique_ptr<Notification> get_notification(
-    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj,
-    rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant,
-    std::string& _req_id, optional_yield y) = 0;
+        const DoutPrefixProvider* dpp,
+        rgw::sal::Object* obj,
+        rgw::sal::Object* src_obj,
+        const rgw::notify::EventTypeList& event_types,
+        rgw::sal::Bucket* _bucket,
+        std::string& _user_id,
+        std::string& _user_tenant,
+        std::string& _req_id,
+        optional_yield y) = 0;
     /** Read the topic config entry into @a data and (optionally) @a objv_tracker */
     virtual int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** check if the v1 topics object exists */
+    virtual int stat_topics_v1(const std::string& tenant, optional_yield y, const DoutPrefixProvider *dpp) = 0;
     /** Write @a info and (optionally) @a objv_tracker into the config */
     virtual int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) = 0;
     /** Remove the topic config, optionally a specific version */
     virtual int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
         optional_yield y,const DoutPrefixProvider *dpp) = 0;
+    /** Read the topic config entry into data and (optionally) objv_tracker */
+    virtual int read_topic_v2(const std::string& topic_name,
+                              const std::string& tenant,
+                              rgw_pubsub_topic& topic,
+                              RGWObjVersionTracker* objv_tracker,
+                              optional_yield y,
+                              const DoutPrefixProvider* dpp) = 0;
+    /** Write topic info and @a objv_tracker into the config */
+    virtual int write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+                               RGWObjVersionTracker& objv_tracker,
+                               optional_yield y,
+                               const DoutPrefixProvider* dpp) = 0;
+    /** Remove the topic config, optionally a specific version */
+    virtual int remove_topic_v2(const std::string& topic_name,
+                                const std::string& tenant,
+                                RGWObjVersionTracker& objv_tracker,
+                                optional_yield y,
+                                const DoutPrefixProvider* dpp) = 0;
+    /** Update the bucket-topic mapping in the store, if |add_mapping|=true then
+     * adding the |bucket_key| |topic| mapping to store, else delete the
+     * |bucket_key| |topic| mapping from the store.  The |bucket_key| is
+     * in the format |tenant_name + "/" + bucket_name| if tenant is not empty
+     * else |bucket_name|*/
+    virtual int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                            const std::string& bucket_key,
+                                            bool add_mapping,
+                                            optional_yield y,
+                                            const DoutPrefixProvider* dpp) = 0;
+    /** Remove the |bucket_key| from bucket-topic mapping in the store, for all
+    the topics under |bucket_topics|*/
+    virtual int remove_bucket_mapping_from_topics(
+        const rgw_pubsub_bucket_topics& bucket_topics,
+        const std::string& bucket_key,
+        optional_yield y,
+        const DoutPrefixProvider* dpp) = 0;
+    /** Get the bucket-topic mapping from the backend store. The |bucket_keys|
+     * are in the format |tenant_name + "/" + bucket_name| if tenant is not
+     * empty else |bucket_name|*/
+    virtual int get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                         std::set<std::string>& bucket_keys,
+                                         optional_yield y,
+                                         const DoutPrefixProvider* dpp) = 0;
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
     /** Get access to the coroutine registry.  Used to create new coroutine managers */

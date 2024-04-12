@@ -544,6 +544,24 @@ int RGWSI_MDLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key
   return current_log->add_entry(dpp, hash_key, section, key, bl, y);
 }
 
+int RGWSI_MDLog::complete_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                                const std::string& section, const std::string& key,
+                                const RGWObjVersionTracker* objv)
+{
+  RGWMetadataLogData entry;
+  if (objv) {
+    entry.read_version = objv->read_version;
+    entry.write_version = objv->write_version;
+  }
+  entry.status = MDLOG_STATUS_COMPLETE;
+
+  bufferlist bl;
+  encode(entry, bl);
+
+  const std::string hash_key = fmt::format("{}:{}", section, key);
+  return add_entry(dpp, hash_key, section, key, bl, y);
+}
+
 int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)
 {
   ceph_assert(current_log); // must have called init()

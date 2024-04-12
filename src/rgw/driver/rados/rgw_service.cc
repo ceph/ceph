@@ -37,6 +37,8 @@
 #include "rgw_sal_rados.h"
 #include "rgw_user.h"
 #include "rgw_role.h"
+#include "rgw_pubsub.h"
+#include "topic.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -124,7 +126,6 @@ int RGWServices_Def::init(CephContext *cct,
   user_rados->init(driver->getRados()->get_rados_handle(), zone.get(), sysobj.get(), sysobj_cache.get(),
                    meta.get(), meta_be_sobj.get(), sync_modules.get());
   role_rados->init(zone.get(), meta.get(), meta_be_sobj.get(), sysobj.get());
-
   can_shutdown = true;
 
   int r = finisher->start(y, dpp);
@@ -255,7 +256,6 @@ int RGWServices_Def::init(CephContext *cct,
       ldout(cct, 0) << "ERROR: failed to start role_rados service (" << cpp_strerror(-r) << dendl;
       return r;
     }
-
   }
 
   /* cache or core services will be started by sysobj */
@@ -305,9 +305,10 @@ void RGWServices_Def::shutdown()
   has_shutdown = true;
 }
 
-int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp)
+int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool have_cache, bool raw, bool run_sync, optional_yield y, const DoutPrefixProvider *dpp, const rgw::SiteConfig& _site)
 {
   cct = _cct;
+  site = &_site;
 
   int r = _svc.init(cct, driver, have_cache, raw, run_sync, y, dpp);
   if (r < 0) {
@@ -404,6 +405,13 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver, const DoutPrefix
   bucket_meta_handler->init(svc.bucket, bucket.get());
   bi_meta_handler->init(svc.zone, svc.bucket, svc.bi);
 
+  meta.topic_cache = std::make_unique<RGWChainedCacheImpl<rgwrados::topic::cache_entry>>();
+  meta.topic_cache->init(svc.cache);
+
+  meta.topic = rgwrados::topic::create_metadata_handler(
+      *svc.sysobj, svc.cache, *svc.mdlog, svc.zone->get_zone_params(),
+      *meta.topic_cache);
+
   RGWOTPMetadataHandlerBase *otp_handler = static_cast<RGWOTPMetadataHandlerBase *>(meta.otp.get());
   otp_handler->init(svc.zone, svc.meta_be_otp, svc.otp);
 
@@ -436,6 +444,8 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixPr
   meta.bucket_instance = _ctl.meta.bucket_instance.get();
   meta.otp = _ctl.meta.otp.get();
   meta.role = _ctl.meta.role.get();
+  meta.topic = _ctl.meta.topic.get();
+  meta.topic_cache = _ctl.meta.topic_cache.get();
 
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();
@@ -468,6 +478,12 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixPr
   r = meta.role->attach(meta.mgr);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start init otp ctl (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+  r = meta.topic->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init topic ctl ("
+                  << cpp_strerror(-r) << dendl;
     return r;
   }
   return 0;

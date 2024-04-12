@@ -417,14 +417,18 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* ob
   return next->get_notification(obj, src_obj, s, event_type, y, object_name);
 }
 
-std::unique_ptr<Notification> POSIXDriver::get_notification(const DoutPrefixProvider* dpp,
-                              rgw::sal::Object* obj, rgw::sal::Object* src_obj,
-                              rgw::notify::EventType event_type,
-                              rgw::sal::Bucket* _bucket,
-                              std::string& _user_id, std::string& _user_tenant,
-                              std::string& _req_id, optional_yield y)
-{
-  return next->get_notification(dpp, obj, src_obj, event_type, _bucket, _user_id, _user_tenant, _req_id, y);
+std::unique_ptr<Notification> POSIXDriver::get_notification(
+    const DoutPrefixProvider* dpp,
+    rgw::sal::Object* obj,
+    rgw::sal::Object* src_obj,
+    const rgw::notify::EventTypeList& event_types,
+    rgw::sal::Bucket* _bucket,
+    std::string& _user_id,
+    std::string& _user_tenant,
+    std::string& _req_id,
+    optional_yield y) {
+  return next->get_notification(dpp, obj, src_obj, event_types, _bucket,
+                                _user_id, _user_tenant, _req_id, y);
 }
 
 int POSIXDriver::close()
