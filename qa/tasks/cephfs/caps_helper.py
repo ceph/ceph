@@ -10,8 +10,8 @@ class CapsHelper(CephFSTestCase):
     def run_mon_cap_tests(self, moncap, keyring):
         keyring_path = self.fs.admin_remote.mktemp(data=keyring)
 
-        fsls = self.run_cluster_cmd(f'fs ls --id {self.client_id} -k '
-                                    f'{keyring_path}')
+        fsls = self.get_ceph_cmd_stdout(f'fs ls --id {self.client_id} -k '
+                                        f'{keyring_path}')
 
         # we need to check only for default FS when fsname clause is absent
         # in MON/MDS caps
@@ -70,7 +70,7 @@ class CapsHelper(CephFSTestCase):
                                      errmsg='permission denied')
 
     def get_mon_cap_from_keyring(self, client_name):
-        keyring = self.run_cluster_cmd(cmd=f'auth get {client_name}')
+        keyring = self.get_ceph_cmd_stdout(f'auth get {client_name}')
         for line in keyring.split('\n'):
             if 'caps mon' in line:
                 return line[line.find(' = "') + 4 : -1]
