@@ -93,6 +93,7 @@ class RedisDriverFixture: public ::testing::Test {
       ASSERT_NE(cacheDriver, nullptr);
       ASSERT_NE(conn, nullptr);
 
+      env->cct->_conf->rgw_local_cache_address = "127.0.0.1:6379";
       cacheDriver->initialize(env->dpp);
 
       bl.append("test data");

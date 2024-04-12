@@ -120,7 +120,7 @@ class LFUDAPolicy : public CachePolicy {
     std::thread tc;
 
     int sendRemote(const DoutPrefixProvider* dpp, CacheBlock *victim, std::string remoteCacheAddress, std::string key, bufferlist* out_bl, optional_yield y);
-    int getMinAvgWeight(const DoutPrefixProvider* dpp, int minAvgWeight, std::string cache_address, optional_yield y);
+    int getMinAvgWeight(const DoutPrefixProvider* dpp, int& minAvgWeight, std::string& cache_address, optional_yield y);
     CacheBlock* get_victim_block(const DoutPrefixProvider* dpp, optional_yield y);
     int age_sync(const DoutPrefixProvider* dpp, optional_yield y); 
     int local_weight_sync(const DoutPrefixProvider* dpp, optional_yield y); 
