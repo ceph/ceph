@@ -51,6 +51,7 @@
 #include "librbd/io/ReadResult.h"
 #include <algorithm>
 #include <string>
+#include <utility>
 #include <vector>
 
 #ifdef WITH_LTTNG
@@ -1607,6 +1608,17 @@ namespace librbd {
   Image::~Image()
   {
     close();
+  }
+
+  Image::Image(Image&& rhs) noexcept : ctx{std::exchange(rhs.ctx, nullptr)}
+  {
+  }
+
+  Image& Image::operator=(Image&& rhs) noexcept
+  {
+    Image tmp(std::move(rhs));
+    std::swap(ctx, tmp.ctx);
+    return *this;
   }
 
   int Image::close()
