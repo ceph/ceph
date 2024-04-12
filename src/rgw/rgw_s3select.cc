@@ -236,8 +236,7 @@ void aws_response_handler::send_success_response()
 }
 
 void aws_response_handler::send_error_response_rgw_formatter(const char* error_code,
-    const char* error_message,
-    const char* resource_id)
+    const char* error_message)
 {
   set_req_state_err(s, 0);
   dump_errno(s, 400);
@@ -246,8 +245,9 @@ void aws_response_handler::send_error_response_rgw_formatter(const char* error_c
   s->formatter->open_object_section("Error");
   s->formatter->dump_string("Code", error_code);
   s->formatter->dump_string("Message", error_message);
-  s->formatter->dump_string("Resource", "#Resource#");
-  s->formatter->dump_string("RequestId", resource_id);
+  if (!s->trans_id.empty())
+    s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->dump_string("HostId", s->host_id);
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -429,7 +429,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
 
   if (s3select_syntax.get_error_description().empty() == false) {
     //error-flow (syntax-error)
-    m_aws_response_handler.send_error_response_rgw_formatter(s3select_syntax_error,s3select_syntax.get_error_description().c_str(),s3select_resource_id);
+    m_aws_response_handler.send_error_response_rgw_formatter(s3select_syntax_error,s3select_syntax.get_error_description().c_str());
     ldpp_dout(this, 10) << "s3-select query: failed to prase the following query {" << query << "}" << dendl;
     ldpp_dout(this, 10) << "s3-select query: syntax-error {" << s3select_syntax.get_error_description() << "}" << dendl;
     return -1;
@@ -446,7 +446,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
 
     if (status < 0) {
       //error flow(processing-time)
-      m_aws_response_handler.send_error_response_rgw_formatter(s3select_processTime_error,m_s3_csv_object.get_error_description().c_str(),s3select_resource_id);
+      m_aws_response_handler.send_error_response_rgw_formatter(s3select_processTime_error,m_s3_csv_object.get_error_description().c_str());
       
       ldpp_dout(this, 10) << "s3-select query: failed to process query; {" << m_s3_csv_object.get_error_description() << "}" << dendl;
       return -1;
@@ -527,8 +527,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
   if (m_json_datatype.compare("DOCUMENT") != 0) {
     const char* s3select_json_error_msg = "s3-select query: wrong json dataType should use DOCUMENT; ";
     m_aws_response_handler.send_error_response_rgw_formatter(s3select_json_error,
-      s3select_json_error_msg,
-      s3select_resource_id);
+      s3select_json_error_msg);
     ldpp_dout(this, 10) << s3select_json_error_msg << dendl;
     return -EINVAL;
   } 
@@ -538,8 +537,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
   if (s3select_syntax.get_error_description().empty() == false) {
   //SQL statement is wrong(syntax).
     m_aws_response_handler.send_error_response_rgw_formatter(s3select_syntax_error,
-      s3select_syntax.get_error_description().c_str(),
-      s3select_resource_id);
+      s3select_syntax.get_error_description().c_str());
     ldpp_dout(this, 10) << "s3-select query: failed to prase query; {" << s3select_syntax.get_error_description() << "}" << dendl;
     return -EINVAL;
   }
@@ -560,8 +558,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
     ldpp_dout(this, 10) << "S3select: failed to process JSON object: " << e.what() << dendl;
     m_aws_response_handler.get_sql_result().append(e.what());
     m_aws_response_handler.send_error_response_rgw_formatter(s3select_processTime_error,
-	e.what(),
-     	s3select_resource_id);
+	e.what());
     return -EINVAL;
   }
   uint32_t length_post_processing = m_aws_response_handler.get_sql_result().size();
@@ -569,8 +566,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
   if (status < 0) {
     //error flow(processing-time)
     m_aws_response_handler.send_error_response_rgw_formatter(s3select_processTime_error,
-	m_s3_json_object.get_error_description().c_str(),
-     	s3select_resource_id);
+	m_s3_json_object.get_error_description().c_str());
     ldpp_dout(this, 10) << "s3-select query: failed to process query; {" << m_s3_json_object.get_error_description() << "}" << dendl;
     return -EINVAL;
   }
