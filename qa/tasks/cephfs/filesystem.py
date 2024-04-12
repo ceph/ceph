@@ -1144,8 +1144,13 @@ class FilesystemBase(MDSClusterBase):
     def rank_repaired(self, rank):
         self.run_ceph_cmd("mds", "repaired", "{}:{}".format(self.id, rank))
 
-    def rank_fail(self, rank=0):
-        self.run_ceph_cmd("mds", "fail", "{}:{}".format(self.id, rank))
+    def rank_fail(self, rank=0, confirm=True):
+        cmd = f'mds fail {self.id}:{rank}'
+        try:
+            self.run_ceph_cmd(args=cmd)
+        except CommandFailedError:
+            cmd += ' --yes--i-really-mean-it'
+            self.run_ceph_cmd(args=cmd)
 
     def rank_is_running(self, rank=0, status=None):
         name = self.get_rank(rank=rank, status=status)['name']
