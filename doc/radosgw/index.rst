@@ -49,7 +49,9 @@ Cluster with one API and then retrieve that data with the other API.
    Configuring Pools <pools>
    Config Reference <config-ref>
    Admin Guide <admin>
+   User Accounts <account>
    S3 API <s3>
+   IAM API <iam>
    Data caching and CDN <rgw-cache.rst>
    Swift API <swift>
    Admin Ops API <adminops>

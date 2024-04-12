@@ -264,4 +264,136 @@ struct cls_user_complete_stats_sync_op {
 WRITE_CLASS_ENCODER(cls_user_complete_stats_sync_op)
 
 
+struct cls_user_account_resource_add_op {
+  cls_user_account_resource entry;
+  bool exclusive = false;
+  uint32_t limit = 0;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(entry, bl);
+    encode(exclusive, bl);
+    encode(limit, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(entry, bl);
+    decode(exclusive, bl);
+    decode(limit, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_account_resource_add_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_account_resource_add_op)
+
+struct cls_user_account_resource_get_op {
+  std::string name;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(name, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(name, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_account_resource_get_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_account_resource_get_op)
+
+struct cls_user_account_resource_get_ret {
+  cls_user_account_resource entry;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(entry, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(entry, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_account_resource_get_ret*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_account_resource_get_ret)
+
+struct cls_user_account_resource_rm_op {
+  std::string name;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(name, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(name, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_account_resource_rm_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_account_resource_rm_op)
+
+struct cls_user_account_resource_list_op {
+  std::string marker;
+  std::string path_prefix;
+  uint32_t max_entries = 0;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(marker, bl);
+    encode(path_prefix, bl);
+    encode(max_entries, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(marker, bl);
+    decode(path_prefix, bl);
+    decode(max_entries, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_account_resource_list_op*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_account_resource_list_op)
+
+struct cls_user_account_resource_list_ret {
+  std::vector<cls_user_account_resource> entries;
+  bool truncated = false;
+  std::string marker;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(entries, bl);
+    encode(truncated, bl);
+    encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(entries, bl);
+    decode(truncated, bl);
+    decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_account_resource_list_ret*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_user_account_resource_list_ret)
+
 #endif

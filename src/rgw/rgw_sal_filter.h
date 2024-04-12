@@ -16,7 +16,6 @@
 #pragma once
 
 #include "rgw_sal.h"
-#include "rgw_oidc_provider.h"
 #include "rgw_role.h"
 
 namespace rgw { namespace sal {
@@ -156,10 +155,133 @@ public:
   virtual int get_user_by_swift(const DoutPrefixProvider* dpp, const
 				std::string& user_str, optional_yield y,
 				std::unique_ptr<User>* user) override;
+
+  int load_account_by_id(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         std::string_view id,
+                         RGWAccountInfo& info,
+                         Attrs& attrs,
+                         RGWObjVersionTracker& objv) override;
+  int load_account_by_name(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           std::string_view tenant,
+                           std::string_view name,
+                           RGWAccountInfo& info,
+                           Attrs& attrs,
+                           RGWObjVersionTracker& objv) override;
+  int load_account_by_email(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view email,
+                            RGWAccountInfo& info,
+                            Attrs& attrs,
+                            RGWObjVersionTracker& objv) override;
+  int store_account(const DoutPrefixProvider* dpp,
+                    optional_yield y, bool exclusive,
+                    const RGWAccountInfo& info,
+                    const RGWAccountInfo* old_info,
+                    const Attrs& attrs,
+                    RGWObjVersionTracker& objv) override;
+  int delete_account(const DoutPrefixProvider* dpp,
+                     optional_yield y,
+                     const RGWAccountInfo& info,
+                     RGWObjVersionTracker& objv) override;
+
+  int load_stats(const DoutPrefixProvider* dpp,
+                 optional_yield y,
+                 const rgw_owner& owner,
+                 RGWStorageStats& stats,
+                 ceph::real_time& last_synced,
+                 ceph::real_time& last_updated) override;
+  int load_stats_async(const DoutPrefixProvider* dpp,
+                       const rgw_owner& owner,
+                       boost::intrusive_ptr<ReadStatsCB> cb) override;
+  int reset_stats(const DoutPrefixProvider *dpp,
+                  optional_yield y,
+                  const rgw_owner& owner) override;
+  int complete_flush_stats(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           const rgw_owner& owner) override;
+  int load_owner_by_email(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view email,
+                          rgw_owner& owner) override;
+  int count_account_roles(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          uint32_t& count) override;
+  int list_account_roles(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         std::string_view account_id,
+                         std::string_view path_prefix,
+                         std::string_view marker,
+                         uint32_t max_items,
+                         RoleList& listing) override;
+  int load_account_user_by_name(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                std::string_view account_id,
+                                std::string_view tenant,
+                                std::string_view username,
+                                std::unique_ptr<User>* user) override;
+  int count_account_users(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          uint32_t& count) override;
+  int list_account_users(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         std::string_view account_id,
+                         std::string_view tenant,
+                         std::string_view path_prefix,
+                         std::string_view marker,
+                         uint32_t max_items,
+                         UserList& listing) override;
+
+  int load_group_by_id(const DoutPrefixProvider* dpp,
+                       optional_yield y,
+                       std::string_view id,
+                       RGWGroupInfo& info, Attrs& attrs,
+                       RGWObjVersionTracker& objv) override;
+  int load_group_by_name(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         std::string_view account_id,
+                         std::string_view name,
+                         RGWGroupInfo& info, Attrs& attrs,
+                         RGWObjVersionTracker& objv) override;
+  int store_group(const DoutPrefixProvider* dpp, optional_yield y,
+                  const RGWGroupInfo& info, const Attrs& attrs,
+                  RGWObjVersionTracker& objv, bool exclusive,
+                  const RGWGroupInfo* old_info) override;
+  int remove_group(const DoutPrefixProvider* dpp, optional_yield y,
+                   const RGWGroupInfo& info,
+                   RGWObjVersionTracker& objv) override;
+  int list_group_users(const DoutPrefixProvider* dpp,
+                       optional_yield y,
+                       std::string_view tenant,
+                       std::string_view id,
+                       std::string_view marker,
+                       uint32_t max_items,
+                       UserList& listing) override;
+  int count_account_groups(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           std::string_view account_id,
+                           uint32_t& count) override;
+  int list_account_groups(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          std::string_view path_prefix,
+                          std::string_view marker,
+                          uint32_t max_items,
+                          GroupList& listing) override;
+
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
   std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;
   int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                   std::unique_ptr<Bucket>* bucket, optional_yield y) override;
+  int list_buckets(const DoutPrefixProvider* dpp,
+                   const rgw_owner& owner, const std::string& tenant,
+                   const std::string& marker, const std::string& end_marker,
+                   uint64_t max, bool need_stats, BucketList& buckets,
+                   optional_yield y) override;
+
   virtual bool is_meta_master() override;
   virtual Zone* get_zone() override { return zone.get(); }
   virtual std::string zone_unique_id(uint64_t unique_num) override;
@@ -221,6 +343,15 @@ public:
                       optional_yield y,
                       const DoutPrefixProvider* dpp) override {
     return next->remove_topic_v2(topic_name, tenant, objv_tracker, y, dpp);
+  }
+  int list_account_topics(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          std::string_view marker,
+                          uint32_t max_items,
+                          TopicList& listing) override {
+    return next->list_account_topics(dpp, y, account_id, marker,
+                                     max_items, listing);
   }
   int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
                                   const std::string& bucket_key,
@@ -298,27 +429,42 @@ public:
   virtual std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) override;
   virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					    std::string tenant,
+					    rgw_account_id account_id,
 					    std::string path="",
 					    std::string trust_policy="",
-					    std::string
-					    max_session_duration_str="",
+					    std::string description="",
+					    std::string max_session_duration_str="",
                 std::multimap<std::string,std::string> tags={}) override;
   virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
   virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
-  virtual int get_roles(const DoutPrefixProvider *dpp,
-			optional_yield y,
-			const std::string& path_prefix,
-			const std::string& tenant,
-			std::vector<std::unique_ptr<RGWRole>>& roles) override;
-  virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() override;
-  virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
-				 const std::string& tenant,
-				 std::vector<std::unique_ptr<RGWOIDCProvider>>&
-				 providers, optional_yield y) override;
+  virtual int list_roles(const DoutPrefixProvider *dpp,
+			 optional_yield y,
+			 const std::string& tenant,
+			 const std::string& path_prefix,
+			 const std::string& marker,
+			 uint32_t max_items,
+			 RoleList& listing) override;
+  int store_oidc_provider(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          const RGWOIDCProviderInfo& info,
+                          bool exclusive) override;
+  int load_oidc_provider(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         std::string_view tenant,
+                         std::string_view url,
+                         RGWOIDCProviderInfo& info) override;
+  int delete_oidc_provider(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           std::string_view tenant,
+                           std::string_view url) override;
+  int get_oidc_providers(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         std::string_view tenant,
+                         std::vector<RGWOIDCProviderInfo>& providers) override;
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule
 				  *ptail_placement_rule,
 				  const std::string& unique_tag,
@@ -327,7 +473,7 @@ public:
   virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
@@ -356,11 +502,6 @@ public:
   virtual std::unique_ptr<User> clone() override {
     return std::make_unique<FilterUser>(*this);
   }
-  virtual int list_buckets(const DoutPrefixProvider* dpp,
-			   const std::string& marker, const std::string& end_marker,
-			   uint64_t max, bool need_stats, BucketList& buckets,
-			   optional_yield y) override;
-
   virtual std::string& get_display_name() override { return next->get_display_name(); }
   virtual const std::string& get_tenant() override { return next->get_tenant(); }
   virtual void set_tenant(std::string& _t) override { next->set_tenant(_t); }
@@ -382,13 +523,6 @@ public:
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs&
 				    new_attrs, optional_yield y) override;
-  virtual int read_stats(const DoutPrefixProvider *dpp,
-			 optional_yield y, RGWStorageStats* stats,
-			 ceph::real_time* last_stats_sync = nullptr,
-			 ceph::real_time* last_stats_update = nullptr) override;
-  virtual int read_stats_async(const DoutPrefixProvider *dpp,
-			       boost::intrusive_ptr<ReadStatsCB> cb) override;
-  virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
   virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 			 uint64_t end_epoch, uint32_t max_entries,
 			 bool* is_truncated, RGWUsageIter& usage_iter,
@@ -402,6 +536,9 @@ public:
   virtual int remove_user(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int verify_mfa(const std::string& mfa_str, bool* verified,
 			 const DoutPrefixProvider* dpp, optional_yield y) override;
+  int list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                  std::string_view marker, uint32_t max_items,
+                  GroupList& listing) override;
 
   RGWUserInfo& get_info() override { return next->get_info(); }
   virtual void print(std::ostream& out) const override { return next->print(out); }
@@ -447,15 +584,15 @@ public:
   virtual int read_stats_async(const DoutPrefixProvider *dpp,
 			       const bucket_index_layout_generation& idx_layout,
 			       int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx) override;
-  int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                      RGWBucketEnt* ent) override;
+  int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                       RGWBucketEnt* ent) override;
   int check_bucket_shards(const DoutPrefixProvider* dpp,
                           uint64_t num_objs, optional_yield y) override;
-  virtual int chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner,
+  virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
 		    optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
 		       ceph::real_time mtime, optional_yield y) override;
-  virtual const rgw_user& get_owner() const override;
+  virtual const rgw_owner& get_owner() const override;
   virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota,
 			  uint64_t obj_size, optional_yield y,
@@ -585,7 +722,8 @@ public:
   virtual int delete_object(const DoutPrefixProvider* dpp,
 			    optional_yield y,
 			    uint32_t flags) override;
-  virtual int copy_object(User* user,
+  virtual int copy_object(const ACLOwner& owner,
+               const rgw_user& remote_user,
                req_info* info, const rgw_zone_id& source_zone,
 	       rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -673,10 +811,15 @@ public:
   virtual bool have_instance(void) override { return next->have_instance(); }
   virtual void clear_instance() override { return next->clear_instance(); }
 
-  virtual int swift_versioning_restore(bool& restored,   /* out */
-				       const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
-				    optional_yield y) override;
+  virtual int swift_versioning_restore(const ACLOwner& owner,
+                                       const rgw_user& remote_user,
+                                       bool& restored,
+                                       const DoutPrefixProvider* dpp,
+                                       optional_yield y) override;
+  virtual int swift_versioning_copy(const ACLOwner& owner,
+                                    const rgw_user& remote_user,
+                                    const DoutPrefixProvider* dpp,
+                                    optional_yield y) override;
 
   virtual std::unique_ptr<ReadOp> get_read_op() override;
   virtual std::unique_ptr<DeleteOp> get_delete_op() override;
@@ -767,7 +910,7 @@ public:
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  rgw::sal::Object* obj,
-			  const rgw_user& owner,
+			  const ACLOwner& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;

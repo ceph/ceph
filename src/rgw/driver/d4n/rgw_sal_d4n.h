@@ -17,7 +17,6 @@
 
 #include "rgw_sal_filter.h"
 #include "rgw_sal.h"
-#include "rgw_oidc_provider.h"
 #include "rgw_role.h"
 #include "common/dout.h" 
 #include "rgw_aio_throttle.h"
@@ -61,7 +60,7 @@ class D4NFilterDriver : public FilterDriver {
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
@@ -178,7 +177,8 @@ class D4NFilterObject : public FilterObject {
 								    driver(_driver) {}
     virtual ~D4NFilterObject() = default;
 
-    virtual int copy_object(User* user,
+    virtual int copy_object(const ACLOwner& owner,
+               const rgw_user& remote_user,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,

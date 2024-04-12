@@ -615,9 +615,9 @@ struct AWSSyncConfig {
                   const rgw_obj_key& obj) {
     string bucket_str;
     string owner;
-    if (!bucket_info.owner.tenant.empty()) {
-      bucket_str = owner = bucket_info.owner.tenant + "-";
-      owner += bucket_info.owner.id;
+    if (!bucket_info.bucket.tenant.empty()) {
+      bucket_str = owner = bucket_info.bucket.tenant + "-";
+      owner += to_string(bucket_info.owner);
     }
     bucket_str += bucket_info.bucket.name;
 

@@ -46,27 +46,32 @@ struct RGWAccessKey {
   std::string key; // SecretKey
   std::string subuser;
   bool active = true;
+  ceph::real_time create_date;
 
   RGWAccessKey() {}
   RGWAccessKey(std::string _id, std::string _key)
     : id(std::move(_id)), key(std::move(_key)) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(4, 2, bl);
     encode(id, bl);
     encode(key, bl);
     encode(subuser, bl);
     encode(active, bl);
+    encode(create_date, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(3, 2, 2, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(4, 2, 2, bl);
      decode(id, bl);
      decode(key, bl);
      decode(subuser, bl);
      if (struct_v >= 3) {
        decode(active, bl);
+     }
+     if (struct_v >= 4) {
+       decode(create_date, bl);
      }
      DECODE_FINISH(bl);
   }

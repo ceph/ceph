@@ -11,6 +11,7 @@
 #include "common/ceph_context.h"
 #include "rgw_rados.h"
 #include "rgw_metadata.h"
+#include "rgw_iam_managed_policy.h"
 
 class RGWRados;
 
@@ -23,20 +24,25 @@ struct RGWRoleInfo
   std::string arn;
   std::string creation_date;
   std::string trust_policy;
+  // map from PolicyName to an inline policy document from PutRolePolicy
   std::map<std::string, std::string> perm_policy_map;
+  // set of managed policy arns from AttachRolePolicy
+  rgw::IAM::ManagedPolicies managed_policies;
   std::string tenant;
-  uint64_t max_session_duration;
+  std::string description;
+  uint64_t max_session_duration = 0;
   std::multimap<std::string,std::string> tags;
   std::map<std::string, bufferlist> attrs;
   RGWObjVersionTracker objv_tracker;
   real_time mtime;
+  rgw_account_id account_id;
 
   RGWRoleInfo() = default;
 
   ~RGWRoleInfo() = default;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(id, bl);
     encode(name, bl);
     encode(path, bl);
@@ -46,11 +52,14 @@ struct RGWRoleInfo
     encode(perm_policy_map, bl);
     encode(tenant, bl);
     encode(max_session_duration, bl);
+    encode(account_id, bl);
+    encode(description, bl);
+    encode(managed_policies, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(id, bl);
     decode(name, bl);
     decode(path, bl);
@@ -63,6 +72,11 @@ struct RGWRoleInfo
     }
     if (struct_v >= 3) {
       decode(max_session_duration, bl);
+    }
+    if (struct_v >= 4) {
+      decode(account_id, bl);
+      decode(description, bl);
+      decode(managed_policies, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -98,8 +112,10 @@ public:
 
   RGWRole(std::string name,
               std::string tenant,
+              rgw_account_id account_id,
               std::string path="",
               std::string trust_policy="",
+              std::string description="",
               std::string max_session_duration_str="",
               std::multimap<std::string,std::string> tags={});
 
@@ -114,10 +130,12 @@ public:
   const std::string& get_id() const { return info.id; }
   const std::string& get_name() const { return info.name; }
   const std::string& get_tenant() const { return info.tenant; }
+  const rgw_account_id& get_account_id() const { return info.account_id; }
   const std::string& get_path() const { return info.path; }
   const std::string& get_create_date() const { return info.creation_date; }
   const std::string& get_assume_role_policy() const { return info.trust_policy;}
   const uint64_t& get_max_session_duration() const { return info.max_session_duration; }
+  RGWObjVersionTracker& get_objv_tracker() { return info.objv_tracker; }
   const RGWObjVersionTracker& get_objv_tracker() const { return info.objv_tracker; }
   const real_time& get_mtime() const { return info.mtime; }
   std::map<std::string, bufferlist>& get_attrs() { return info.attrs; }
@@ -140,8 +158,6 @@ public:
   boost::optional<std::multimap<std::string,std::string>> get_tags();
   void erase_tags(const std::vector<std::string>& tagKeys);
   void update_max_session_duration(const std::string& max_session_duration_str);
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
 
   static const std::string& get_names_oid_prefix();
   static const std::string& get_info_oid_prefix();

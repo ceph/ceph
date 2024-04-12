@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "sqliteDB.h"
+#include "rgw_account.h"
 
 using namespace std;
 
@@ -421,12 +422,8 @@ static int list_bucket(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt
   op.bucket.info.placement_rule = op.bucket.ent.placement_rule;
   op.bucket.info.creation_time = op.bucket.ent.creation_time;
 
-  op.bucket.info.owner.id = (const char*)sqlite3_column_text(stmt, OwnerID);
-  op.bucket.info.owner.tenant = op.bucket.ent.bucket.tenant;
-
-  if (op.name == "GetBucket") {
-    op.bucket.info.owner.ns = (const char*)sqlite3_column_text(stmt, Bucket_User_NS);
-  }
+  const char* owner_id = (const char*)sqlite3_column_text(stmt, OwnerID);
+  op.bucket.info.owner = parse_owner(owner_id);
 
   op.bucket.info.flags = sqlite3_column_int(stmt, Flags);
   op.bucket.info.zonegroup = (const char*)sqlite3_column_text(stmt, Zonegroup);
@@ -1339,7 +1336,7 @@ int SQLInsertBucket::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
 
   // user_id here is copied as OwnerID in the bucket table.
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_id, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.owner.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
@@ -1567,7 +1564,7 @@ int SQLUpdateBucket::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   }
 
   SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.user.user_id, sdb);
-  SQL_BIND_TEXT(dpp, *stmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+  SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.owner.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
@@ -1732,7 +1729,7 @@ int SQLListUserBuckets::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *p
 
   if (params->op.query_str != "all") { 
     SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.user.user_id, sdb);
-    SQL_BIND_TEXT(dpp, *pstmt, index, params->op.user.uinfo.user_id.id.c_str(), sdb);
+    SQL_BIND_TEXT(dpp, *pstmt, index, params->op.bucket.owner.c_str(), sdb);
   }
 
   SQL_BIND_INDEX(dpp, *pstmt, index, p_params.op.bucket.min_marker, sdb);

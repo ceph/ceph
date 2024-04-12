@@ -6,6 +6,8 @@ overrides:
         setgroup: ceph
         rgw crypt require ssl: false
         debug rgw: 20
+        rgw sts key: abcdefghijklmnop
+        rgw s3 auth use sts: true
   rgw:
     compression type: random
 

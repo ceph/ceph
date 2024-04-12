@@ -171,14 +171,13 @@ namespace rgw::swift {
 
 int create_container_policy(const DoutPrefixProvider *dpp,
                             rgw::sal::Driver* driver,
-                            const rgw_user& id,
-                            const std::string& name,
+                            const ACLOwner& owner,
                             const char* read_list,
                             const char* write_list,
                             uint32_t& rw_mask,
                             RGWAccessControlPolicy& policy)
 {
-  policy.create_default(id, name);
+  policy.create_default(owner.id, owner.display_name);
   auto& acl = policy.get_acl();
 
   if (read_list) {
@@ -245,7 +244,7 @@ void format_container_acls(const RGWAccessControlPolicy& policy,
     std::string id;
     std::string url_spec;
     if (const auto user = grant.get_user(); user) {
-      id = user->id.to_str();
+      id = to_string(user->id);
     } else if (const auto group = grant.get_group(); group) {
       if (group->type == ACL_GROUP_ALL_USERS) {
         id = SWIFT_GROUP_ALL_USERS;
@@ -279,12 +278,11 @@ void format_container_acls(const RGWAccessControlPolicy& policy,
 
 int create_account_policy(const DoutPrefixProvider* dpp,
                           rgw::sal::Driver* driver,
-                          const rgw_user& id,
-                          const std::string& name,
+                          const ACLOwner& owner,
                           const std::string& acl_str,
                           RGWAccessControlPolicy& policy)
 {
-  policy.create_default(id, name);
+  policy.create_default(owner.id, owner.display_name);
   auto& acl = policy.get_acl();
 
   JSONParser parser;
@@ -342,7 +340,7 @@ auto format_account_acl(const RGWAccessControlPolicy& policy)
       if (owner.id == user->id) {
         continue;
       }
-      id = user->id.to_str();
+      id = to_string(user->id);
     } else if (const auto group = grant.get_group(); group) {
       if (group->type != ACL_GROUP_ALL_USERS) {
         continue;

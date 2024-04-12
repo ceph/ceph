@@ -33,15 +33,19 @@ class FakeIdentity : public Identity {
 public:
   FakeIdentity() = default;
 
+  ACLOwner get_aclowner() const override {
+    return {};
+  }
+
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
   };
 
-  bool is_admin_of(const rgw_user& uid) const override {
+  bool is_admin_of(const rgw_owner& o) const override {
     return false;
   }
 
-  bool is_owner_of(const rgw_user& uid) const override {
+  bool is_owner_of(const rgw_owner& uid) const override {
     return false;
   }
 
@@ -61,11 +65,21 @@ public:
     return "";
   }
 
+  const std::string& get_tenant() const override {
+    static std::string empty;
+    return empty;
+  }
+
+  const std::optional<RGWAccountInfo>& get_account() const override {
+    static const std::optional<RGWAccountInfo> empty;
+    return empty;
+  }
+
   void to_str(std::ostream& out) const override {
     return;
   }
 
-  bool is_identity(const flat_set<Principal>& ids) const override {
+  bool is_identity(const Principal& p) const override {
     return false;
   }
 };
@@ -81,18 +95,6 @@ public:
   }
 
   virtual int read_attrs(const DoutPrefixProvider *dpp, optional_yield y) override {
-    return 0;
-  }
-
-  virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y, RGWStorageStats* stats, ceph::real_time *last_stats_sync, ceph::real_time *last_stats_update) override {
-    return 0;
-  }
-
-  virtual int read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<sal::ReadStatsCB> cb) override {
-    return 0;
-  }
-
-  virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) override {
     return 0;
   }
 
@@ -119,6 +121,11 @@ public:
     return 0;
   }
   virtual int verify_mfa(const std::string& mfa_str, bool* verified, const DoutPrefixProvider* dpp, optional_yield y) override {
+    return 0;
+  }
+  int list_groups(const DoutPrefixProvider* dpp, optional_yield y,
+                  std::string_view marker, uint32_t max_items,
+                  rgw::sal::GroupList& listing) override {
     return 0;
   }
   virtual ~TestUser() = default;
@@ -358,8 +365,7 @@ TEST(TestRGWLua, Bucket)
   info.bucket.name = "myname";
   info.bucket.marker = "mymarker";
   info.bucket.bucket_id = "myid";
-  info.owner.id = "myuser";
-  info.owner.tenant = "mytenant";
+  info.owner = rgw_user{"mytenant", "myuser"};
   s.bucket.reset(new sal::RadosBucket(nullptr, info));
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
@@ -663,8 +669,7 @@ TEST(TestRGWLua, Acl)
     end
 
     assert(Request.UserAcl.Owner.DisplayName == "jack black", Request.UserAcl.Owner.DisplayName)
-    assert(Request.UserAcl.Owner.User.Id == "black", Request.UserAcl.Owner.User.Id)
-    assert(Request.UserAcl.Owner.User.Tenant == "jack", Request.UserAcl.Owner.User.Tenant)
+    assert(Request.UserAcl.Owner.User == "jack$black", Request.UserAcl.Owner.User)
     assert(#Request.UserAcl.Grants == 7)
     print_grant("", Request.UserAcl.Grants[""])
     for k, v in pairs(Request.UserAcl.Grants) do
@@ -726,8 +731,7 @@ TEST(TestRGWLua, UseFunction)
 	const std::string script = R"(
 		function print_owner(owner)
   		print("Owner Display Name: " .. owner.DisplayName)
-  		print("Owner Id: " .. owner.User.Id)
-  		print("Owner Tenanet: " .. owner.User.Tenant)
+  		print("Owner Id: " .. owner.User)
 		end
 
 		print_owner(Request.ObjectOwner)
@@ -1577,8 +1581,7 @@ TEST(TestRGWLua, DifferentContextUser)
   s.user.reset(new sal::RadosUser(nullptr, rgw_user("tenant1", "user1")));
   RGWBucketInfo info;
   info.bucket.name = "bucket1";
-  info.owner.id = "user2";
-  info.owner.tenant = "tenant2";
+  info.owner = rgw_user{"tenant2", "user2"};
   s.bucket.reset(new sal::RadosBucket(nullptr, info));
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);

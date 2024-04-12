@@ -40,7 +40,9 @@ class WebTokenEngine : public rgw::auth::Engine {
 
   bool is_cert_valid(const std::vector<std::string>& thumbprints, const std::string& cert) const;
 
-  std::unique_ptr<rgw::sal::RGWOIDCProvider> get_provider(const DoutPrefixProvider *dpp, const std::string& role_arn, const std::string& iss, optional_yield y) const;
+  int load_provider(const DoutPrefixProvider *dpp, optional_yield y,
+                    const std::string& role_arn, const std::string& iss,
+                    RGWOIDCProviderInfo& info) const;
 
   std::string get_role_tenant(const std::string& role_arn) const;
 
@@ -99,13 +101,17 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_web_identity( CephContext* cct,
                                     const req_state* s,
+                                    const std::string& role_id,
                                     const std::string& role_session,
                                     const std::string& role_tenant,
                                     const std::unordered_multimap<std::string, std::string>& token,
                                     boost::optional<std::multimap<std::string, std::string>> role_tags,
-                                    boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags) const override {
+                                    boost::optional<std::set<std::pair<std::string, std::string>>> principal_tags,
+                                    std::optional<RGWAccountInfo> account) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      rgw::auth::WebIdentityApplier(cct, driver, role_session, role_tenant, token, role_tags, principal_tags));
+      rgw::auth::WebIdentityApplier(cct, driver, role_id, role_session,
+                                    role_tenant, token, role_tags,
+                                    principal_tags, std::move(account)));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 

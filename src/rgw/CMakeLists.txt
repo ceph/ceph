@@ -57,6 +57,7 @@ set(librgw_common_srcs
   services/svc_user_rados.cc
   services/svc_zone.cc
   services/svc_zone_utils.cc
+  rgw_account.cc
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
@@ -103,12 +104,15 @@ set(librgw_common_srcs
   rgw_quota.cc
   rgw_resolve.cc
   rgw_rest.cc
+  rgw_rest_account.cc
   rgw_rest_client.cc
   rgw_rest_config.cc
   rgw_rest_conn.cc
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
   rgw_rest_role.cc
+  rgw_rest_iam_group.cc
+  rgw_rest_iam_user.cc
   rgw_rest_s3.cc
   rgw_rest_pubsub.cc
   rgw_rest_zero.cc
@@ -127,6 +131,7 @@ set(librgw_common_srcs
   rgw_crypt.cc
   rgw_crypt_sanitize.cc
   rgw_iam_policy.cc
+  rgw_iam_managed_policy.cc
   rgw_rest_user_policy.cc
   rgw_zone.cc
   rgw_sts.cc
@@ -148,7 +153,11 @@ set(librgw_common_srcs
   rgw_tracer.cc
   rgw_lua_background.cc
   rgw_data_access.cc
+  driver/rados/account.cc
+  driver/rados/buckets.cc
   driver/rados/cls_fifo_legacy.cc
+  driver/rados/group.cc
+  driver/rados/groups.cc
   driver/rados/rgw_bucket.cc
   driver/rados/rgw_bucket_sync.cc
   driver/rados/rgw_cr_rados.cc
@@ -193,9 +202,12 @@ set(librgw_common_srcs
   driver/rados/rgw_trim_mdlog.cc
   driver/rados/rgw_user.cc
   driver/rados/rgw_zone.cc
+  driver/rados/roles.cc
   driver/rados/sync_fairness.cc
   driver/rados/topic.cc
-  driver/rados/topic_migration.cc)
+  driver/rados/topic_migration.cc
+  driver/rados/topics.cc
+  driver/rados/users.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
@@ -290,7 +302,8 @@ target_link_libraries(rgw_common
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     spawn
-    ${FMT_LIB})
+    ${FMT_LIB}
+    OpenSSL::SSL)
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
@@ -310,8 +323,7 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   # used by rgw_amqp.cc
   target_link_libraries(rgw_common
     PRIVATE
-      RabbitMQ::RabbitMQ
-      OpenSSL::SSL)
+      RabbitMQ::RabbitMQ)
 endif()
 if(WITH_OPENLDAP)
   target_link_libraries(rgw_common
@@ -467,10 +479,6 @@ target_link_libraries(radosgw PRIVATE
   kmip
   ${ALLOC_LIBS})
 
-if(WITH_RADOSGW_BEAST_OPENSSL)
-  # used by rgw_asio_frontend.cc
-  target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
-endif()
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs

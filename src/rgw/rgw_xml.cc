@@ -431,6 +431,20 @@ void decode_xml_obj(utime_t& val, XMLObj *obj)
   }
 }
 
+void decode_xml_obj(ceph::real_time& val, XMLObj *obj)
+{
+  const std::string s = obj->get_data();
+  uint64_t epoch;
+  uint64_t nsec;
+  int r = utime_t::parse_date(s, &epoch, &nsec);
+  if (r == 0) {
+    using namespace std::chrono;
+    val = real_time{seconds(epoch) + nanoseconds(nsec)};
+  } else {
+    throw RGWXMLDecoder::err("failed to decode real_time");
+  }
+}
+
 void encode_xml(const char *name, const string& val, Formatter *f)
 {
   f->dump_string(name, val);

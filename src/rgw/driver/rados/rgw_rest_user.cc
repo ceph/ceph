@@ -22,6 +22,7 @@ using namespace std;
 
 int fetch_access_keys_from_master(const DoutPrefixProvider* dpp, req_state* s,
                                   std::map<std::string, RGWAccessKey>& keys,
+                                  ceph::real_time& create_date,
                                   optional_yield y)
 {
   bufferlist data;
@@ -36,6 +37,7 @@ int fetch_access_keys_from_master(const DoutPrefixProvider* dpp, req_state* s,
   RGWUserInfo ui;
   ui.decode_json(&jp);
   keys = std::move(ui.access_keys);
+  create_date = ui.create_date;
   return 0;
 }
 
@@ -159,6 +161,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   bool gen_key;
   bool suspended;
   bool system;
+  bool account_root = false;
   bool exclusive;
 
   int32_t max_buckets;
@@ -181,10 +184,13 @@ void RGWOp_User_Create::execute(optional_yield y)
   RESTArgs::get_bool(s, "suspended", false, &suspended);
   RESTArgs::get_int32(s, "max-buckets", default_max_buckets, &max_buckets);
   RESTArgs::get_bool(s, "system", false, &system);
+  RESTArgs::get_bool(s, "account-root", false, &account_root);
   RESTArgs::get_bool(s, "exclusive", false, &exclusive);
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
+  RESTArgs::get_string(s, "account-id", "", &op_state.account_id);
+  RESTArgs::get_string(s, "path", "", &op_state.path);
 
   if (!s->user->get_info().system && system) {
     ldpp_dout(this, 0) << "cannot set system flag by non-system user" << dendl;
@@ -237,6 +243,9 @@ void RGWOp_User_Create::execute(optional_yield y)
   if (s->info.args.exists("system"))
     op_state.set_system(system);
 
+  if (s->info.args.exists("account-root"))
+    op_state.set_account_root(account_root);
+
   if (s->info.args.exists("exclusive"))
     op_state.set_exclusive(exclusive);
 
@@ -258,7 +267,9 @@ void RGWOp_User_Create::execute(optional_yield y)
   }
 
   if (!s->penv.site->is_meta_master()) {
-    op_ret = fetch_access_keys_from_master(this, s, op_state.op_access_keys, y);
+    op_state.create_date.emplace();
+    op_ret = fetch_access_keys_from_master(this, s, op_state.op_access_keys,
+                                           *op_state.create_date, y);
     if (op_ret < 0) {
       return;
     }
@@ -302,6 +313,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   bool gen_key;
   bool suspended;
   bool system;
+  bool account_root = false;
   bool email_set;
   bool quota_set;
   int32_t max_buckets;
@@ -321,9 +333,12 @@ void RGWOp_User_Modify::execute(optional_yield y)
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
 
   RESTArgs::get_bool(s, "system", false, &system);
+  RESTArgs::get_bool(s, "account-root", false, &account_root);
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
+  RESTArgs::get_string(s, "account-id", "", &op_state.account_id);
+  RESTArgs::get_string(s, "path", "", &op_state.path);
 
   if (!s->user->get_info().system && system) {
     ldpp_dout(this, 0) << "cannot set system flag by non-system user" << dendl;
@@ -373,6 +388,9 @@ void RGWOp_User_Modify::execute(optional_yield y)
   if (s->info.args.exists("system"))
     op_state.set_system(system);
 
+  if (s->info.args.exists("account-root"))
+    op_state.set_account_root(account_root);
+
   if (!op_mask_str.empty()) {
     uint32_t op_mask;
     int ret = rgw_parse_op_type_list(op_mask_str, &op_mask);
@@ -402,7 +420,9 @@ void RGWOp_User_Modify::execute(optional_yield y)
   }
   
   if (!s->penv.site->is_meta_master()) {
-    op_ret = fetch_access_keys_from_master(this, s, op_state.op_access_keys, y);
+    op_state.create_date.emplace();
+    op_ret = fetch_access_keys_from_master(this, s, op_state.op_access_keys,
+                                           *op_state.create_date, y);
     if (op_ret < 0) {
       return;
     }

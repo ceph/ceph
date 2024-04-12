@@ -2614,7 +2614,6 @@ class RGWUserPermHandler {
   rgw_user uid;
 
   struct _info {
-    RGWUserInfo user_info;
     rgw::IAM::Environment env;
     std::unique_ptr<rgw::auth::Identity> identity;
     RGWAccessControlPolicy user_acl;
@@ -2638,27 +2637,23 @@ class RGWUserPermHandler {
                                         uid(handler->uid),
                                         info(handler->info) {}
     int operate() override {
-      auto user_ctl = sync_env->driver->getRados()->ctl.user;
-
-      ret = user_ctl->get_info_by_uid(sync_env->dpp, uid, &info->user_info, null_yield);
+      auto user = sync_env->driver->get_user(uid);
+      ret = user->load_user(sync_env->dpp, null_yield);
       if (ret < 0) {
         return ret;
       }
 
-      info->identity = rgw::auth::transform_old_authinfo(sync_env->cct,
-                                                         uid,
-                                                         RGW_PERM_FULL_CONTROL,
-                                                         false, /* system_request? */
-                                                         TYPE_RGW);
-
-      map<string, bufferlist> uattrs;
-
-      ret = user_ctl->get_attrs_by_uid(sync_env->dpp, uid, &uattrs, null_yield);
-      if (ret == 0) {
-        ret = RGWUserPermHandler::policy_from_attrs(sync_env->cct, uattrs, &info->user_acl);
+      auto result = rgw::auth::transform_old_authinfo(
+          sync_env->dpp, null_yield, sync_env->driver, user.get());
+      if (!result) {
+        return result.error();
       }
+      info->identity = std::move(result).value();
+
+      ret = RGWUserPermHandler::policy_from_attrs(
+          sync_env->cct, user->get_attrs(), &info->user_acl);
       if (ret == -ENOENT) {
-        info->user_acl.create_default(uid, info->user_info.display_name);
+        info->user_acl.create_default(uid, user->get_display_name());
       }
 
       return 0;
@@ -2849,7 +2844,7 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
     rgw_user& acl_translation_owner = params.dest.acl_translation->owner;
     if (!acl_translation_owner.empty()) {
       if (params.mode == rgw_sync_pipe_params::MODE_USER &&
-          acl_translation_owner != dest_bucket_info.owner) {
+          rgw_owner{acl_translation_owner} != dest_bucket_info.owner) {
         ldout(cct, 0) << "ERROR: " << __func__ << ": acl translation was requested, but user (" << acl_translation_owner
           << ") is not dest bucket owner (" << dest_bucket_info.owner << ")" << dendl;
         return -EPERM;
@@ -3125,8 +3120,8 @@ public:
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
-  RGWMetadataHandler *alloc_bucket_meta_handler() override {
-    return RGWArchiveBucketMetaHandlerAllocator::alloc();
+  RGWMetadataHandler *alloc_bucket_meta_handler(librados::Rados& rados) override {
+    return RGWArchiveBucketMetaHandlerAllocator::alloc(rados);
   }
   RGWBucketInstanceMetadataHandlerBase *alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver) override {
     return RGWArchiveBucketInstanceMetaHandlerAllocator::alloc(driver);

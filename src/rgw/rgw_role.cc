@@ -50,8 +50,10 @@ void RGWRoleInfo::dump(Formatter *f) const
   encode_json("Path", path, f);
   encode_json("Arn", arn, f);
   encode_json("CreateDate", creation_date, f);
+  encode_json("Description", description, f);
   encode_json("MaxSessionDuration", max_session_duration, f);
   encode_json("AssumeRolePolicyDocument", trust_policy, f);
+  encode_json("AccountId", account_id, f);
   if (!perm_policy_map.empty()) {
     f->open_array_section("PermissionPolicies");
     for (const auto& it : perm_policy_map) {
@@ -59,6 +61,13 @@ void RGWRoleInfo::dump(Formatter *f) const
       encode_json("PolicyName", it.first, f);
       encode_json("PolicyValue", it.second, f);
       f->close_section();
+    }
+    f->close_section();
+  }
+  if (!managed_policies.arns.empty()) {
+    f->open_array_section("ManagedPermissionPolicies");
+    for (const auto& arn : managed_policies.arns) {
+      encode_json("PolicyArn", arn, f);
     }
     f->close_section();
   }
@@ -81,8 +90,10 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("Path", path, obj);
   JSONDecoder::decode_json("Arn", arn, obj);
   JSONDecoder::decode_json("CreateDate", creation_date, obj);
+  JSONDecoder::decode_json("Description", description, obj);
   JSONDecoder::decode_json("MaxSessionDuration", max_session_duration, obj);
   JSONDecoder::decode_json("AssumeRolePolicyDocument", trust_policy, obj);
+  JSONDecoder::decode_json("AccountId", account_id, obj);
 
   auto tags_iter = obj->find_first("Tags");
   if (!tags_iter.end()) {
@@ -97,8 +108,8 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
     }
   }
 
-  auto perm_policy_iter = obj->find_first("PermissionPolicies");
-  if (!perm_policy_iter.end()) {
+  if (auto perm_policy_iter = obj->find_first("PermissionPolicies");
+      !perm_policy_iter.end()) {
     JSONObj* perm_policies = *perm_policy_iter;
     auto iter = perm_policies->find_first();
 
@@ -110,6 +121,13 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
     }
   }
 
+  if (auto p = obj->find_first("ManagedPermissionPolicies"); !p.end()) {
+    for (auto iter = (*p)->find_first(); !iter.end(); ++iter) {
+      std::string arn = (*iter)->get_data();
+      this->managed_policies.arns.insert(std::move(arn));
+    }
+  }
+
   if (auto pos = name.find('$'); pos != std::string::npos) {
     tenant = name.substr(0, pos);
     name = name.substr(pos+1);
@@ -118,12 +136,15 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
 
 RGWRole::RGWRole(std::string name,
               std::string tenant,
+              rgw_account_id account_id,
               std::string path,
               std::string trust_policy,
+              std::string description,
               std::string max_session_duration_str,
               std::multimap<std::string,std::string> tags)
 {
   info.name = std::move(name);
+  info.account_id = std::move(account_id);
   info.path = std::move(path);
   info.trust_policy = std::move(trust_policy);
   info.tenant = std::move(tenant);
@@ -131,6 +152,7 @@ RGWRole::RGWRole(std::string name,
   if (this->info.path.empty())
     this->info.path = "/";
   extract_name_tenant(this->info.name);
+  info.description = std::move(description);
   if (max_session_duration_str.empty()) {
     info.max_session_duration = SESSION_DURATION_MIN;
   } else {
@@ -167,16 +189,6 @@ int RGWRole::get_by_id(const DoutPrefixProvider *dpp, optional_yield y)
   }
 
   return 0;
-}
-
-void RGWRole::dump(Formatter *f) const
-{
-  info.dump(f);
-}
-
-void RGWRole::decode_json(JSONObj *obj)
-{
-  info.decode_json(obj);
 }
 
 bool RGWRole::validate_max_session_duration(const DoutPrefixProvider* dpp)
@@ -419,7 +431,8 @@ public:
     auto* driver = mdo->get_driver();
     info.mtime = mtime;
     std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(info);
-    int ret = role->create(dpp, true, info.id, y);
+    constexpr bool exclusive = false;
+    int ret = role->create(dpp, exclusive, info.id, y);
     if (ret == -EEXIST) {
       ret = role->update(dpp, y);
     }

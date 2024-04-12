@@ -117,7 +117,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   RGWRados* const store;
   RGWBucketInfo& bucket_info;
   rgw_placement_rule tail_placement_rule;
-  rgw_user owner;
+  ACLOwner owner;
   RGWObjectCtx& obj_ctx;
   rgw_obj head_obj;
 
@@ -135,7 +135,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   ManifestObjectProcessor(Aio *aio, RGWRados* store,
                           RGWBucketInfo& bucket_info,
                           const rgw_placement_rule *ptail_placement_rule,
-                          const rgw_user& owner, RGWObjectCtx& _obj_ctx,
+                          const ACLOwner& owner, RGWObjectCtx& _obj_ctx,
                           const rgw_obj& _head_obj,
                           const DoutPrefixProvider* dpp,
                           optional_yield y,
@@ -151,7 +151,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
         }
       }
 
-  void set_owner(const rgw_user& _owner) {
+  void set_owner(const ACLOwner& _owner) {
     owner = _owner;
   }
 
@@ -177,7 +177,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   AtomicObjectProcessor(Aio *aio, RGWRados* store,
                         RGWBucketInfo& bucket_info,
                         const rgw_placement_rule *ptail_placement_rule,
-                        const rgw_user& owner,
+                        const ACLOwner& owner,
                         RGWObjectCtx& obj_ctx, const rgw_obj& _head_obj,
                         std::optional<uint64_t> olh_epoch,
                         const std::string& unique_tag,
@@ -222,7 +222,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   MultipartObjectProcessor(Aio *aio, RGWRados* store,
                            RGWBucketInfo& bucket_info,
                            const rgw_placement_rule *ptail_placement_rule,
-                           const rgw_user& owner, RGWObjectCtx& obj_ctx,
+                           const ACLOwner& owner, RGWObjectCtx& obj_ctx,
                            const rgw_obj& _head_obj,
                            const std::string& upload_id, uint64_t part_num,
                            const std::string& part_num_str,
@@ -266,7 +266,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     AppendObjectProcessor(Aio *aio, RGWRados* store,
                           RGWBucketInfo& bucket_info,
                           const rgw_placement_rule *ptail_placement_rule,
-                          const rgw_user& owner, RGWObjectCtx& obj_ctx,
+                          const ACLOwner& owner, RGWObjectCtx& obj_ctx,
                           const rgw_obj& _head_obj,
                           const std::string& unique_tag, uint64_t position,
                           uint64_t *cur_accounted_size,

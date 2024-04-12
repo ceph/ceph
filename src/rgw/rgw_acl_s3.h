@@ -39,6 +39,7 @@ int create_canned_acl(const ACLOwner& owner,
 
 /// Construct a policy from x-amz-grant-* request headers.
 int create_policy_from_headers(const DoutPrefixProvider* dpp,
+                               optional_yield y,
                                rgw::sal::Driver* driver,
                                const ACLOwner& owner,
                                const RGWEnv& env,

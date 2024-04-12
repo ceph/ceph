@@ -705,7 +705,9 @@ extern void end_header(req_state *s,
 		       bool force_no_error = false);
 extern void dump_start(req_state *s);
 extern void list_all_buckets_start(req_state *s);
-extern void dump_owner(req_state *s, const rgw_user& id,
+extern void dump_owner(req_state *s, const std::string& id,
+                       const std::string& name, const char *section = NULL);
+extern void dump_owner(req_state *s, const rgw_owner& id,
                        const std::string& name, const char *section = NULL);
 inline void dump_urlsafe(req_state *s, bool encode_key, const char* key, const std::string& val, bool encode_slash = true) {
   if (encode_key) {

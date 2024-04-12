@@ -21,6 +21,7 @@
 #include "common/ceph_json.h"
 
 #include "rgw_rest.h"
+#include "rgw_account.h"
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
 #include "jwt-cpp/jwt.h"
@@ -79,8 +80,9 @@ WebTokenEngine::get_role_name(const string& role_arn) const
   return role_name;
 }
 
-std::unique_ptr<rgw::sal::RGWOIDCProvider>
-WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss, optional_yield y) const
+int WebTokenEngine::load_provider(const DoutPrefixProvider* dpp, optional_yield y,
+                                  const string& role_arn, const string& iss,
+                                  RGWOIDCProviderInfo& info) const
 {
   string tenant = get_role_tenant(role_arn);
 
@@ -99,16 +101,8 @@ WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_a
   } else {
     idp_url.erase(pos, 7);
   }
-  auto provider_arn = rgw::ARN(idp_url, "oidc-provider", tenant);
-  string p_arn = provider_arn.to_string();
-  std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
-  provider->set_arn(p_arn);
-  provider->set_tenant(tenant);
-  auto ret = provider->get(dpp, y);
-  if (ret < 0) {
-    return nullptr;
-  }
-  return provider;
+
+  return driver->load_oidc_provider(dpp, y, tenant, idp_url, info);
 }
 
 bool
@@ -248,8 +242,9 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     }
 
     string role_arn = s->info.args.get("RoleArn");
-    auto provider = get_provider(dpp, role_arn, iss, y);
-    if (! provider) {
+    RGWOIDCProviderInfo provider;
+    int r = load_provider(dpp, y, role_arn, iss, provider);
+    if (r < 0) {
       ldpp_dout(dpp, 0) << "Couldn't get oidc provider info using input iss" << iss << dendl;
       throw -EACCES;
     }
@@ -265,17 +260,15 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
         throw -EINVAL;
       }
     }
-    vector<string> client_ids = provider->get_client_ids();
-    vector<string> thumbprints = provider->get_thumbprints();
-    if (! client_ids.empty()) {
+    if (! provider.client_ids.empty()) {
       bool found = false;
       for (auto& it : aud) {
-        if (is_client_id_valid(client_ids, it)) {
+        if (is_client_id_valid(provider.client_ids, it)) {
           found = true;
           break;
         }
       }
-      if (! found && ! is_client_id_valid(client_ids, client_id) && ! is_client_id_valid(client_ids, azp)) {
+      if (! found && ! is_client_id_valid(provider.client_ids, client_id) && ! is_client_id_valid(provider.client_ids, azp)) {
         ldpp_dout(dpp, 0) << "Client id in token doesn't match with that registered with oidc provider" << dendl;
         throw -EACCES;
       }
@@ -284,7 +277,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     if (decoded.has_algorithm()) {
       auto& algorithm = decoded.get_algorithm();
       try {
-        validate_signature(dpp, decoded, algorithm, iss, thumbprints, y);
+        validate_signature(dpp, decoded, algorithm, iss, provider.thumbprints, y);
       } catch (...) {
         throw -EACCES;
       }
@@ -496,14 +489,37 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
       string role_arn = s->info.args.get("RoleArn");
       string role_tenant = get_role_tenant(role_arn);
       string role_name = get_role_name(role_arn);
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, role_tenant);
+
+      rgw_account_id role_account;
+      if (rgw::account::validate_id(role_tenant)) {
+        role_account = std::move(role_tenant);
+        role_tenant.clear();
+      }
+
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, role_tenant, role_account);
       int ret = role->get(dpp, y);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "Role not found: name:" << role_name << " tenant: " << role_tenant << dendl;
         return result_t::deny(-EACCES);
       }
+
+      std::optional<RGWAccountInfo> account;
+      if (!role_account.empty()) {
+        account.emplace();
+        rgw::sal::Attrs attrs; // ignored
+        RGWObjVersionTracker objv; // ignored
+        ret = driver->load_account_by_id(dpp, y, role_account,
+                                         *account, attrs, objv);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "Role account " << role_account << " not found" << dendl;
+          return result_t::deny(-EACCES);
+        }
+      }
+
       boost::optional<multimap<string,string>> role_tags = role->get_tags();
-      auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, role_tenant, *t, role_tags, princ_tags);
+      auto apl = apl_factory->create_apl_web_identity(
+          cct, s, role->get_id(), role_session, role_tenant,
+          *t, role_tags, princ_tags, std::move(account));
       return result_t::grant(std::move(apl));
     }
     return result_t::deny(-EACCES);
@@ -527,12 +543,14 @@ int RGWREST_STS::verify_permission(optional_yield y)
     return ret;
   }
   string policy = role->get_assume_role_policy();
-  buffer::list bl = buffer::list::static_from_string(policy);
 
   //Parse the policy
   //TODO - This step should be part of Role Creation
   try {
-    const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl, false);
+    // resource policy is not restricted to the current tenant
+    const std::string* policy_tenant = nullptr;
+
+    const rgw::IAM::Policy p(s->cct, policy_tenant, policy, false);
     if (!s->principal_tags.empty()) {
       auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, boost::none);
       if (res != rgw::IAM::Effect::Allow) {
@@ -621,7 +639,7 @@ void RGWSTSGetSessionToken::execute(optional_yield y)
   op_ret = std::move(ret);
   //Dump the output
   if (op_ret == 0) {
-    s->formatter->open_object_section("GetSessionTokenResponse");
+    s->formatter->open_object_section_in_ns("GetSessionTokenResponse", RGW_REST_STS_XMLNS);
     s->formatter->open_object_section("GetSessionTokenResult");
     s->formatter->open_object_section("Credentials");
     creds.dump(s->formatter);
@@ -648,10 +666,9 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   }
 
   if (! policy.empty()) {
-    bufferlist bl = bufferlist::static_from_string(policy);
     try {
       const rgw::IAM::Policy p(
-	s->cct, s->user->get_tenant(), bl,
+	s->cct, nullptr, policy,
 	s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     }
     catch (rgw::IAM::PolicyParseException& e) {
@@ -677,7 +694,7 @@ void RGWSTSAssumeRoleWithWebIdentity::execute(optional_yield y)
 
   //Dump the output
   if (op_ret == 0) {
-    s->formatter->open_object_section("AssumeRoleWithWebIdentityResponse");
+    s->formatter->open_object_section_in_ns("AssumeRoleWithWebIdentityResponse", RGW_REST_STS_XMLNS);
     s->formatter->open_object_section("AssumeRoleWithWebIdentityResult");
     encode_json("SubjectFromWebIdentityToken", response.sub , s->formatter);
     encode_json("Audience", response.aud , s->formatter);
@@ -710,10 +727,9 @@ int RGWSTSAssumeRole::get_params()
   }
 
   if (! policy.empty()) {
-    bufferlist bl = bufferlist::static_from_string(policy);
     try {
       const rgw::IAM::Policy p(
-	s->cct, s->user->get_tenant(), bl,
+	s->cct, nullptr, policy,
 	s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     }
     catch (rgw::IAM::PolicyParseException& e) {
@@ -738,7 +754,7 @@ void RGWSTSAssumeRole::execute(optional_yield y)
   op_ret = std::move(response.retCode);
   //Dump the output
   if (op_ret == 0) {
-    s->formatter->open_object_section("AssumeRoleResponse");
+    s->formatter->open_object_section_in_ns("AssumeRoleResponse", RGW_REST_STS_XMLNS);
     s->formatter->open_object_section("AssumeRoleResult");
     s->formatter->open_object_section("Credentials");
     response.creds.dump(s->formatter);

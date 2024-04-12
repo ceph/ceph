@@ -197,6 +197,8 @@ struct RGWCtlDef {
     std::unique_ptr<RGWMetadataHandler> otp;
     std::unique_ptr<RGWMetadataHandler> role;
     std::unique_ptr<RGWMetadataHandler> topic;
+    std::unique_ptr<RGWMetadataHandler> account;
+    std::unique_ptr<RGWMetadataHandler> group;
 
     std::unique_ptr<RGWChainedCacheImpl<rgwrados::topic::cache_entry>> topic_cache;
 
@@ -211,7 +213,8 @@ struct RGWCtlDef {
   RGWCtlDef();
   ~RGWCtlDef();
 
-  int init(RGWServices& svc, rgw::sal::Driver* driver, const DoutPrefixProvider *dpp);
+  int init(RGWServices& svc, rgw::sal::Driver* driver,
+           librados::Rados& rados, const DoutPrefixProvider *dpp);
 };
 
 struct RGWCtl {
@@ -237,5 +240,6 @@ struct RGWCtl {
   RGWBucketCtl *bucket{nullptr};
   RGWOTPCtl *otp{nullptr};
 
-  int init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixProvider *dpp);
+  int init(RGWServices *_svc, rgw::sal::Driver* driver,
+           librados::Rados& rados, const DoutPrefixProvider *dpp);
 };
