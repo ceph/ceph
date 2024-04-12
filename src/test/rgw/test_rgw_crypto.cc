@@ -806,6 +806,7 @@ TEST(TestRGWCrypto, verify_Encrypt_Decrypt)
     decrypt.flush();
     ASSERT_EQ(get_sink.get_sink().length(), test_size);
     ASSERT_EQ(get_sink.get_sink(), std::string_view((char*)test_in,test_size));
+    delete[] test_in;
   }
   while (test_size < 20000);
 }
