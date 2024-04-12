@@ -471,7 +471,8 @@ def build_branch(args):
         custom_fields = []
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_SHAMAN_BUILD, 'value': branch})
         custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_RUNS, 'value': branch})
-        custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_RELEASE, 'value': args.qa_release})
+        if args.qa_release:
+            custom_fields.append({'id': REDMINE_CUSTOM_FIELD_ID_QA_RELEASE, 'value': args.qa_release})
 
         G.git.push(CI_REMOTE_URL, branch) # for shaman
         G.git.push(CI_REMOTE_URL, tag.name) # for archival
@@ -513,7 +514,7 @@ def main():
     parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
     parser.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
     parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
-    parser.add_argument('--qa-release', dest='qa_release', action='store', default='main', help='QA release for tracker')
+    parser.add_argument('--qa-release', dest='qa_release', action='store', help='QA release for tracker')
     parser.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
