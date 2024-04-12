@@ -1,6 +1,0 @@
----
-
-devices:
-  - '/dev/sdb'
-  - '/dev/sdc'
-osd_scenario: "collocated"

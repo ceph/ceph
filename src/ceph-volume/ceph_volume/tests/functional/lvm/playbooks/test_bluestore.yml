@@ -18,20 +18,20 @@
   become: yes
   tasks:
     - name: mark osds down
-      command: "ceph --cluster {{ cluster }} osd down osd.{{ item }}"
+      command: "ceph osd down osd.{{ item }}"
       with_items:
         - 0
         - 2
 
     - name: destroy osd.2
-      command: "ceph --cluster {{ cluster }} osd destroy osd.2 --yes-i-really-mean-it"
+      command: "ceph osd destroy osd.2 --yes-i-really-mean-it"
       register: result
       retries: 30
       delay: 1
       until: result is succeeded
 
     - name: destroy osd.0
-      command: "ceph --cluster {{ cluster }} osd destroy osd.0 --yes-i-really-mean-it"
+      command: "ceph osd destroy osd.0 --yes-i-really-mean-it"
       register: result
       retries: 30
       delay: 1
@@ -44,7 +44,7 @@
 
     # osd.2 device
     - name: zap /dev/vdd1
-      command: "ceph-volume --cluster {{ cluster }} lvm zap /dev/vdd1 --destroy"
+      command: "ceph-volume lvm zap /dev/vdd1 --destroy"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
@@ -60,18 +60,18 @@
         state: present
 
     - name: redeploy osd.2 using /dev/vdd1
-      command: "ceph-volume --cluster {{ cluster }} lvm create --bluestore --data /dev/vdd1 --osd-id 2"
+      command: "ceph-volume lvm create --bluestore --data /dev/vdd1 --osd-id 2"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     # osd.0 device (zap without --destroy that removes the LV)
     - name: zap test_group/data-lv1
-      command: "ceph-volume --cluster {{ cluster }} lvm zap test_group/data-lv1"
+      command: "ceph-volume lvm zap test_group/data-lv1"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     - name: prepare osd.0 again using test_group/data-lv1
-      command: "ceph-volume --cluster {{ cluster }} lvm prepare --bluestore --data test_group/data-lv1 --osd-id 0"
+      command: "ceph-volume lvm prepare --bluestore --data test_group/data-lv1 --osd-id 0"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
@@ -151,11 +151,11 @@
 
     # zapping the first lv shouldn't remove the vg, allowing the second zap to succeed
     - name: zap test_zap/data-lv1
-      command: "ceph-volume --cluster {{ cluster }} lvm zap --destroy test_zap/data-lv1"
+      command: "ceph-volume lvm zap --destroy test_zap/data-lv1"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
     - name: zap test_zap/data-lv2
-      command: "ceph-volume --cluster {{ cluster }} lvm zap --destroy test_zap/data-lv2"
+      command: "ceph-volume lvm zap --destroy test_zap/data-lv2"
       environment:
         CEPH_VOLUME_DEBUG: 1
