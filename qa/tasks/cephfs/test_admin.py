@@ -1,10 +1,10 @@
 import errno
 import json
 import logging
-import time
 import uuid
 from io import StringIO
 from os.path import join as os_path_join
+from time import sleep
 
 from teuthology.exceptions import CommandFailedError
 from teuthology.contextutil import safe_while
@@ -33,7 +33,7 @@ class TestLabeledPerfCounters(CephFSTestCase):
             return counters[0]
 
         # sleep a bit so that we get updated clients...
-        time.sleep(10)
+        sleep(10)
 
         # lookout for clients...
         dump = self.fs.rank_tell(["counter", "dump"])
@@ -854,7 +854,7 @@ class TestDump(CephFSTestCase):
             self.fs.set_joinable(b)
             b = not b
 
-        time.sleep(10) # for tick/compaction
+        sleep(10) # for tick/compaction
 
         try:
             self.fs.status(epoch=epoch)
@@ -878,7 +878,7 @@ class TestDump(CephFSTestCase):
 
         # force a new fsmap
         self.fs.set_joinable(False)
-        time.sleep(10) # for tick/compaction
+        sleep(10) # for tick/compaction
 
         status = self.fs.status()
         log.debug(f"new epoch is {status['epoch']}")
@@ -1285,20 +1285,20 @@ class TestFsAuthorize(CephFSTestCase):
     def test_single_path_r(self):
         PERM = 'r'
         FS_AUTH_CAPS = (('/', PERM),)
-        self.captester = CapTester()
-        self.setup_test_env(FS_AUTH_CAPS)
+        self.captester = CapTester(self.mount_a, '/')
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
 
-        self.captester.run_mon_cap_tests(self.fs, self.client_id)
-        self.captester.run_mds_cap_tests(PERM)
+        self._remount(keyring)
+        self.captester.run_cap_tests(self.fs, self.client_id, PERM)
 
     def test_single_path_rw(self):
         PERM = 'rw'
         FS_AUTH_CAPS = (('/', PERM),)
-        self.captester = CapTester()
-        self.setup_test_env(FS_AUTH_CAPS)
+        self.captester = CapTester(self.mount_a, '/')
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
 
-        self.captester.run_mon_cap_tests(self.fs, self.client_id)
-        self.captester.run_mds_cap_tests(PERM)
+        self._remount(keyring)
+        self.captester.run_cap_tests(self.fs, self.client_id, PERM)
 
     def test_single_path_rootsquash(self):
         if not isinstance(self.mount_a, FuseMount):
@@ -1307,9 +1307,10 @@ class TestFsAuthorize(CephFSTestCase):
 
         PERM = 'rw'
         FS_AUTH_CAPS = (('/', PERM, 'root_squash'),)
-        self.captester = CapTester()
-        self.setup_test_env(FS_AUTH_CAPS)
+        self.captester = CapTester(self.mount_a, '/')
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
 
+        self._remount(keyring)
         # testing MDS caps...
         # Since root_squash is set in client caps, client can read but not
         # write even thought access level is set to "rw".
@@ -1362,8 +1363,10 @@ class TestFsAuthorize(CephFSTestCase):
         self.mount_a.remount(cephfs_name=self.fs.name)
         PERM = 'rw'
         FS_AUTH_CAPS = (('/', PERM),)
-        self.captester = CapTester()
-        self.setup_test_env(FS_AUTH_CAPS)
+        self.captester = CapTester(self.mount_a, '/')
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
+
+        self._remount(keyring)
         self.captester.run_mds_cap_tests(PERM)
 
     def test_multiple_path_r(self):
@@ -1371,31 +1374,32 @@ class TestFsAuthorize(CephFSTestCase):
         FS_AUTH_CAPS = (('/dir1/dir12', PERM), ('/dir2/dir22', PERM))
         for c in FS_AUTH_CAPS:
             self.mount_a.run_shell(f'mkdir -p .{c[0]}')
-        self.captesters = (CapTester(), CapTester())
-        self.setup_test_env(FS_AUTH_CAPS)
+        self.captesters = (CapTester(self.mount_a, '/dir1/dir12'),
+                           CapTester(self.mount_a, '/dir2/dir22'))
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
 
-        self.run_cap_test_one_by_one(FS_AUTH_CAPS)
+        self._remount_and_run_tests(FS_AUTH_CAPS, keyring)
 
     def test_multiple_path_rw(self):
         PERM = 'rw'
         FS_AUTH_CAPS = (('/dir1/dir12', PERM), ('/dir2/dir22', PERM))
         for c in FS_AUTH_CAPS:
             self.mount_a.run_shell(f'mkdir -p .{c[0]}')
-        self.captesters = (CapTester(), CapTester())
-        self.setup_test_env(FS_AUTH_CAPS)
+        self.captesters = (CapTester(self.mount_a, '/dir1/dir12'),
+                           CapTester(self.mount_a, '/dir2/dir22'))
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
 
-        self.run_cap_test_one_by_one(FS_AUTH_CAPS)
+        self._remount_and_run_tests(FS_AUTH_CAPS, keyring)
 
-    def run_cap_test_one_by_one(self, fs_auth_caps):
-        keyring = self.run_ceph_cmd(f'auth get {self.client_name}')
+    def _remount_and_run_tests(self, fs_auth_caps, keyring):
         for i, c in enumerate(fs_auth_caps):
             self.assertIn(i, (0, 1))
             PATH = c[0]
             PERM = c[1]
             self._remount(keyring, PATH)
             # actual tests...
-            self.captesters[i].run_mon_cap_tests(self.fs, self.client_id)
-            self.captesters[i].run_mds_cap_tests(PERM, PATH)
+            self.captesters[i].run_cap_tests(self.fs, self.client_id, PERM,
+                                             PATH)
 
     def tearDown(self):
         self.mount_a.umount_wait()
@@ -1408,24 +1412,6 @@ class TestFsAuthorize(CephFSTestCase):
         self.mount_a.remount(client_id=self.client_id,
                              client_keyring_path=keyring_path,
                              cephfs_mntpt=path)
-
-    def setup_for_single_path(self, fs_auth_caps):
-        self.captester.write_test_files((self.mount_a,), '/')
-        keyring = self.fs.authorize(self.client_id, fs_auth_caps)
-        self._remount(keyring)
-
-    def setup_for_multiple_paths(self, fs_auth_caps):
-        for i, c in enumerate(fs_auth_caps):
-            PATH = c[0]
-            self.captesters[i].write_test_files((self.mount_a,), PATH)
-
-        self.fs.authorize(self.client_id, fs_auth_caps)
-
-    def setup_test_env(self, fs_auth_caps):
-        if len(fs_auth_caps) == 1:
-            self.setup_for_single_path(fs_auth_caps[0])
-        else:
-            self.setup_for_multiple_paths(fs_auth_caps)
 
 
 class TestAdminCommandIdempotency(CephFSTestCase):

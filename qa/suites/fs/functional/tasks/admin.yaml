@@ -10,3 +10,4 @@ tasks:
       fail_on_skip: false
       modules:
         - tasks.cephfs.test_admin
+        - tasks.cephfs.admin.test_fs_swap
