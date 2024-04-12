@@ -1149,13 +1149,13 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION);
     if (! req_sse.empty()) {
 
-      if (s->cct->_conf->rgw_crypt_require_ssl &&
-          !rgw_transport_is_secure(s->cct, *s->info.env)) {
-        ldpp_dout(s, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
-        return -ERR_INVALID_REQUEST;
-      }
-
       if (req_sse == "aws:kms") {
+        if (s->cct->_conf->rgw_crypt_require_ssl &&
+            !rgw_transport_is_secure(s->cct, *s->info.env)) {
+          ldpp_dout(s, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
+          return -ERR_INVALID_REQUEST;
+        }
+
         std::string_view context =
           crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_CONTEXT);
         std::string cooked_context;
@@ -1469,11 +1469,6 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
 
   /* SSE-S3 */
   if (stored_mode == "AES256") {
-    if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !rgw_transport_is_secure(s->cct, *s->info.env)) {
-      ldpp_dout(s, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
-      return -ERR_INVALID_REQUEST;
-    }
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
