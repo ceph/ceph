@@ -13626,30 +13626,36 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
 
     lov.add_xlock(&in->quiescelock); /* !! */
 
-    if (splitauth) {
-      // xlock the file to let the Fb clients stay with buffered writes.
-      // While this will unnecesarily revoke rd caps, it's not as
-      // big of an overhead compared to having the Fb clients flush
-      // their buffers, which evidently can lead to the quiesce timeout
-      // We'll drop the lock after all clients conform to this request
-      // so the file will be still readable during the quiesce after
-      // the interested clients receive their Fr back
-      //
-      // NB: this will also wrlock the versionlock
-      lov.add_xlock(&in->filelock);
+    if (in->is_auth()) {
+      if (splitauth) {
+        // xlock the file to let the Fb clients stay with buffered writes.
+        // While this will unnecesarily revoke rd caps, it's not as
+        // big of an overhead compared to having the Fb clients flush
+        // their buffers, which evidently can lead to the quiesce timeout
+        // We'll drop the lock after all clients conform to this request
+        // so the file will be still readable during the quiesce after
+        // the interested clients receive their Fr back
+        //
+        // NB: this will also wrlock the versionlock
+        lov.add_xlock(&in->filelock);
+      } else {
+        // if splitauth == false then we won't drop the lock after acquisition (see below)
+        // we can't afford keeping it as xlock for a long time, so we'll have to deal
+        // with the potential quiesce timeout on high-load systems.
+        // The reason we're OK with this is that splitauth is enabled by default,
+        // and really should not be ever disabled outside of the test setups
+        // TODO: consider removing the `splitauth` config option completely.
+        lov.add_rdlock(&in->filelock);
+      }
+      // The rest of caps-related locks - rdlock to revoke write caps
+      lov.add_rdlock(&in->authlock);
+      lov.add_rdlock(&in->linklock);
+      lov.add_rdlock(&in->xattrlock);
     } else {
-      // if splitauth == false then we won't drop the lock after acquisition (see below)
-      // we can't afford keeping it as xlock for a long time, so we'll have to deal
-      // with the potential quiesce timeout on high-load systems.
-      // The reason we're OK with this is that splitauth is enabled by default,
-      // and really should not be ever disabled outside of the test setups
-      // TODO: consider removing the `splitauth` config option completely.
-      lov.add_rdlock(&in->filelock);
+      // replica will follow suite and move to LOCK_LOCK state
+      // as a result of the auth taking the above locks.
     }
-    // The rest of caps-related locks - rdlock to revoke write caps
-    lov.add_rdlock(&in->authlock);
-    lov.add_rdlock(&in->linklock);
-    lov.add_rdlock(&in->xattrlock);
+
     if (!mds->locker->acquire_locks(mdr, lov, nullptr, {in}, false, true)) {
       return;
     }
@@ -13667,7 +13673,7 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
       return;
     }
 
-    if (splitauth) {
+    if (in->is_auth() && splitauth) {
       /* Once we have the queiscelock, we no longer need these locks.  However,
        * if splitauth==false, the replicas do not try quiescing so we must keep
        * them locked.
