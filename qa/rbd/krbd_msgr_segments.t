@@ -76,9 +76,9 @@ Cloned bios (dm-snapshot.ko, based on generic/081):
   $ sudo xfs_io -f -c 'pwrite 0 5M' /mnt/file1 >/dev/null
   $ sudo umount /mnt
   $ sudo vgremove -f vg_img
-    Logical volume "lv_snap" successfully removed
-    Logical volume "lv_img" successfully removed
-    Volume group "vg_img" successfully removed
+    Logical volume "lv_snap" successfully removed* (glob)
+    Logical volume "lv_img" successfully removed* (glob)
+    Volume group "vg_img" successfully removed* (glob)
   $ sudo pvremove $DEV
     Labels on physical volume "/dev/rbd?" successfully wiped* (glob)
   $ sudo rbd unmap $DEV
