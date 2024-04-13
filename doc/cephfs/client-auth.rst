@@ -90,14 +90,14 @@ following command:
 
    ceph-fuse -n client.foo mnt -r /bar
 
-Free space reporting
+Reporting free space 
 --------------------
 
-When a client is mounting a sub-directory, by default the used space (``df``)
-is calculated from the quota on that sub-directory rather than reporting the
-overall amount of space used on the cluster.
+When a client has mounted a sub-directory, the used space (``df``) is
+calculated from the quota on that sub-directory rather than from the overall
+amount of space used on the CephFS file system.
 
-To make the client report the overall usage of the file system and not just the
+To make the client report the overall usage of the file system and not only the
 quota usage on the mounted sub-directory, set the following config option on
 the client::
 
