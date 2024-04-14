@@ -19,7 +19,8 @@ InterruptibleOperation::template interruptible_future<>
 CommonClientRequest::recover_missings(
   Ref<PG> &pg,
   const hobject_t& soid,
-  std::set<snapid_t> &&snaps)
+  std::set<snapid_t> &&snaps,
+  const osd_reqid_t& reqid)
 {
   LOG_PREFIX(CommonClientRequest::recover_missings);
   if (!pg->is_primary()) {
@@ -28,17 +29,17 @@ CommonClientRequest::recover_missings(
     return seastar::now();
   }
   return do_recover_missing(
-    pg, soid.get_head()
-  ).then_interruptible([snaps=std::move(snaps), pg, soid]() mutable {
+    pg, soid.get_head(), reqid
+  ).then_interruptible([snaps=std::move(snaps), pg, soid, reqid]() mutable {
     return pg->obc_loader.with_obc<RWState::RWREAD>(
       soid.get_head(),
-      [snaps=std::move(snaps), pg, soid](auto head, auto) mutable {
+      [snaps=std::move(snaps), pg, soid, reqid](auto head, auto) mutable {
       return seastar::do_with(
 	std::move(snaps),
-	[pg, soid, head](auto &snaps) mutable {
+	[pg, soid, head, reqid](auto &snaps) mutable {
 	return InterruptibleOperation::interruptor::do_for_each(
 	  snaps,
-	  [pg, soid, head](auto &snap) mutable ->
+	  [pg, soid, head, reqid](auto &snap) mutable ->
 	  InterruptibleOperation::template interruptible_future<> {
 	  auto coid = head->obs.oi.soid;
 	  coid.snap = snap;
@@ -50,7 +51,7 @@ CommonClientRequest::recover_missings(
 	   * we skip the oid as there is no corresponding clone to recover.
 	   * See https://tracker.ceph.com/issues/63821 */
 	  if (oid) {
-	    return do_recover_missing(pg, *oid);
+	    return do_recover_missing(pg, *oid, reqid);
 	  } else {
 	    return seastar::now();
 	  }
@@ -64,19 +65,29 @@ CommonClientRequest::recover_missings(
 
 typename InterruptibleOperation::template interruptible_future<>
 CommonClientRequest::do_recover_missing(
-  Ref<PG>& pg, const hobject_t& soid)
+  Ref<PG>& pg,
+  const hobject_t& soid,
+  const osd_reqid_t& reqid)
 {
   eversion_t ver;
   assert(pg->is_primary());
-  logger().debug("{} check for recovery, {}", __func__, soid);
+  logger().debug("{} reqid {} check for recovery, {}",
+                 __func__, reqid, soid);
   if (!pg->is_unreadable_object(soid, &ver) &&
       !pg->is_degraded_or_backfilling_object(soid)) {
+    logger().debug("{} reqid {} nothing to recover {}",
+                   __func__, reqid, soid);
     return seastar::now();
   }
-  logger().debug("{} need to wait for recovery, {}", __func__, soid);
+  logger().debug("{} reqid {} need to wait for recovery, {} version {}",
+                 __func__, reqid, soid, ver);
   if (pg->get_recovery_backend()->is_recovering(soid)) {
+    logger().debug("{} reqid {} object {} version {}, already recovering",
+                   __func__, reqid, soid, ver);
     return pg->get_recovery_backend()->get_recovering(soid).wait_for_recovered();
   } else {
+    logger().debug("{} reqid {} object {} version {}, starting recovery",
+                   __func__, reqid, soid, ver);
     auto [op, fut] =
       pg->get_shard_services().start_operation<UrgentRecovery>(
         soid, ver, pg, pg->get_shard_services(), pg->get_osdmap_epoch());

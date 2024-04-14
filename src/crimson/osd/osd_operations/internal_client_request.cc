@@ -69,7 +69,7 @@ seastar::future<> InternalClientRequest::start()
           return enter_stage<interruptor>(
             client_pp().recover_missing);
         }).then_interruptible([this] {
-          return do_recover_missing(pg, get_target_oid());
+          return do_recover_missing(pg, get_target_oid(), osd_reqid_t());
         }).then_interruptible([this] {
           return enter_stage<interruptor>(
             client_pp().get_obc);
