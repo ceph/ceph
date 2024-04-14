@@ -15,10 +15,14 @@ struct CommonClientRequest {
   recover_missings(
     Ref<PG> &pg,
     const hobject_t& soid,
-    std::set<snapid_t> &&snaps);
+    std::set<snapid_t> &&snaps,
+    const osd_reqid_t& reqid);
 
   static InterruptibleOperation::template interruptible_future<>
-  do_recover_missing(Ref<PG>& pg, const hobject_t& soid);
+  do_recover_missing(
+    Ref<PG>& pg,
+    const hobject_t& soid,
+    const osd_reqid_t& reqid);
 
   static bool should_abort_request(
     const crimson::Operation& op, std::exception_ptr eptr);
