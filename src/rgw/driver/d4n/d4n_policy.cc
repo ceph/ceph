@@ -131,7 +131,7 @@ int LFUDAPolicy::init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_
   return result;
 }
 
-int LFUDAPolicy::getMinAvgWeight(const DoutPrefixProvider* dpp, int minAvgWeight, std::string cache_address, optional_yield y) {
+int LFUDAPolicy::getMinAvgWeight(const DoutPrefixProvider* dpp, int& minAvgWeight, std::string& cache_address, optional_yield y) {
   response<std::string, std::string, std::string> resp;
 
   try { 
@@ -333,19 +333,39 @@ int LFUDAPolicy::sendRemote(const DoutPrefixProvider* dpp, CacheBlock *victim, s
   std::string bucketName = victim->cacheObj.bucketName;
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << ": bucket name is: " << bucketName << dendl;                          
  
-  /*
-  map<std::string, RGWAccessKey> accessKeys =  user->get_info().access_keys;
-  accesskey->id = accessKeys.begin()->second.id;
-  accesskey->key = accessKeys.begin()->second.key;
-  */
+  RGWAccessKey accessKey;
+  std::string findKey;
+  
+  if (key[0] == 'D') {
+    findKey = key.substr(2, key.length());
+  } else {
+    findKey = key;
+  }
+  
+  auto it = entries_map.find(findKey);
+  if (it == entries_map.end()) {
+    return -ENOENT;
+  }
+  auto user = it->second->user;
+  std::unique_ptr<rgw::sal::User> c_user = driver->get_user(user);
+  int ret = c_user->load_user(dpp, y);
+  if (ret < 0) {
+    return -EPERM;
+  }
+
+  if (c_user->get_info().access_keys.empty()) {
+    return -EINVAL;
+  }
+
+  accessKey.id = c_user->get_info().access_keys.begin()->second.id;
+  accessKey.key = c_user->get_info().access_keys.begin()->second.key;
 
   HostStyle host_style = PathStyle;
   std::map<std::string, std::string> extra_headers;                                                            
 
   auto sender = new RGWRESTStreamRWRequest(dpp->get_cct(), "PUT", remoteCacheAddress, &cb, NULL, NULL, "", host_style);
 
-  //TODO: AMIN: the second arg which is nullptr should be accesskey. Use rgw_user in cacheblock to create it.
-  int ret = sender->send_request(dpp, nullptr, extra_headers, "admin/remoted4n/"+bucketName+"/"+key, nullptr, out_bl);                 
+  ret = sender->send_request(dpp, &accessKey, extra_headers, "admin/remoted4n/"+bucketName+"/"+key, nullptr, out_bl);                 
   if (ret < 0) {                                                                                      
     delete sender;                                                                                       
     return ret;                                                                                       
@@ -421,10 +441,9 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       return -ENOENT;
     }
 
-    //int avgWeight = weightSum / entries_map.size();
-    int avgWeight;
+    int minAvgWeight = 0;
     std::string remoteCacheAddress;
-    if (getMinAvgWeight(dpp, avgWeight, remoteCacheAddress, y) < 0){
+    if (getMinAvgWeight(dpp, minAvgWeight, remoteCacheAddress, y) < 0){
       ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Could not retrieve min average weight." << dendl;
       delete victim;
       return -ENOENT;
@@ -448,9 +467,8 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
         }
       }
 
-      if (it->second->localWeight > avgWeight) {
+      if (it->second->localWeight > minAvgWeight) {
 	// TODO: push victim block to remote cache
-	// add remote cache host to host list
 	bufferlist out_bl;
         rgw::sal::Attrs obj_attrs;
 
@@ -484,7 +502,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Block " << key << " has been evicted." << dendl;
 
-    weightSum = (avgWeight * entries_map.size()) - it->second->localWeight;
+    weightSum = (minAvgWeight * entries_map.size()) - it->second->localWeight;
 
     age = std::max(it->second->localWeight, age);
 

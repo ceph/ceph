@@ -52,7 +52,7 @@ public:
   void execute(optional_yield y) override;
   void send_response() override;
   const char* name() const override { return "set_remoted4n"; }
-  //RGWOpType get_type() override { return RGW_OP_ADMIN_SET_METADATA; }
+  RGWOpType get_type() override { return RGW_OP_PUT_OBJ; } // Sam: is this correct? 
 };
 
 class RGWOp_RemoteD4N_Delete : public RGWRESTOp {
@@ -89,7 +89,5 @@ public:
   RGWHandler_REST* get_handler(rgw::sal::Driver* driver,
 			       req_state* const s,
                                const rgw::auth::StrategyRegistry& auth_registry,
-                               const std::string& frontend_prefix) override {
-    return new RGWHandler_RemoteD4N(auth_registry);
-  }
+                               const std::string& frontend_prefix) override;
 };

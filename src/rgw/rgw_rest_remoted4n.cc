@@ -390,3 +390,9 @@ RGWOp *RGWHandler_RemoteD4N::op_delete() {
   return new RGWOp_RemoteD4N_Delete;
 }
 
+RGWHandler_REST* RGWRESTMgr_RemoteD4N::get_handler(rgw::sal::Driver* driver,
+			     req_state* const s,
+			     const rgw::auth::StrategyRegistry& auth_registry,
+			     const std::string& frontend_prefix) {
+  return new RGWHandler_RemoteD4N(auth_registry);
+}
