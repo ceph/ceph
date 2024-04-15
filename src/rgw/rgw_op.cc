@@ -4649,7 +4649,8 @@ void RGWPostObj::execute(optional_yield y)
 
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
-    = driver->get_notification(s->object.get(), s->src_object.get(), s, rgw::notify::ObjectCreatedPost, y);
+    = driver->get_notification(s->object.get(), s->src_object.get(), s,
+			       rgw::notify::ObjectCreatedPost, y);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
     return;
@@ -4700,10 +4701,13 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
 
+    std::unique_ptr<rgw::putobj::RGWPutObj_Cksum> cksum_filter;
+    std::unique_ptr<rgw::sal::DataProcessor> encrypt;
+
     /* No filters by default. */
     rgw::sal::DataProcessor *filter = processor.get();
 
-    std::unique_ptr<rgw::sal::DataProcessor> encrypt;
+    /* last filter runs first */
     op_ret = get_encrypt_filter(&encrypt, filter);
     if (op_ret < 0) {
       return;
@@ -4724,6 +4728,20 @@ void RGWPostObj::execute(optional_yield y)
       }
     }
 
+    /* XXX no lua filter? */
+
+    /* optional streaming checksum */
+    try {
+      cksum_filter =
+	rgw::putobj::RGWPutObj_Cksum::Factory(filter, *s->info.env);
+    } catch (const rgw::io::Exception& e) {
+      op_ret = e.code().value();
+      return;
+    }
+    if (cksum_filter) {
+      filter = &*cksum_filter;
+    }
+
     bool again;
     do {
       ceph::bufferlist data;
@@ -4738,6 +4756,7 @@ void RGWPostObj::execute(optional_yield y)
         break;
       }
 
+      /* XXXX we should modernize to use component buffers? */
       hash.Update((const unsigned char *)data.c_str(), data.length());
       op_ret = filter->process(std::move(data), ofs);
       if (op_ret < 0) {
@@ -4809,16 +4828,41 @@ void RGWPostObj::execute(optional_yield y)
       emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
     }
 
-    /* TODO:  implement POST checksums */
+    if (cksum_filter) {
+      auto cksum_verify =
+          cksum_filter->verify(*s->info.env); // valid or no supplied cksum
+      cksum = get<1>(cksum_verify);
+      if (std::get<0>(cksum_verify)) {
+        buffer::list cksum_bl;
+        cksum->encode(cksum_bl);
+        emplace_attr(RGW_ATTR_CKSUM, std::move(cksum_bl));
+      } else {
+        /* content checksum mismatch */
+        const auto &hdr = cksum_filter->header();
+        ldpp_dout(this, 4) << fmt::format("{} content checksum mismatch",
+                                          hdr.second)
+                           << fmt::format(
+                                  "\n\tcalculated={} != \n\texpected={}",
+                                  cksum->to_armor(),
+                                  cksum_filter->expected(*s->info.env))
+                           << dendl;
+        op_ret = -ERR_INVALID_REQUEST;
+        return;
+      }
+    }
+
     const req_context rctx{this, s->yield, s->trace.get()};
     op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(),
-				 attrs, rgw::cksum::no_cksum,
+				 attrs, cksum,
 				 (delete_at ? *delete_at : real_time()),
 				 nullptr, nullptr, nullptr, nullptr, nullptr,
 				 rctx, rgw::sal::FLAG_LOG_OP);
     if (op_ret < 0) {
       return;
     }
+
+    /* XXX shouldn't we have an op-counter update here? */
+
   } while (is_next_file_to_upload());
 
   // send request to notification manager
@@ -4827,8 +4871,7 @@ void RGWPostObj::execute(optional_yield y)
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
-}
-
+} /* RGWPostObj::execute() */
 
 void RGWPutMetadataAccount::filter_out_temp_url(map<string, bufferlist>& add_attrs,
                                                 const set<string>& rmattr_names,

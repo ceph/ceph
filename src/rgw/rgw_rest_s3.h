@@ -303,6 +303,12 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   std::string get_current_filename() const override;
   std::string get_current_content_type() const override;
 
+  inline void put_prop(const std::string_view k, const std::string_view v) {
+    /* assume the caller will mangle the key name, if required */
+    auto& map = const_cast<env_map_t&>(s->info.env->get_map());
+    map.insert(env_map_t::value_type(k, v));
+  }
+
 public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() override {}
