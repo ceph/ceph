@@ -35,10 +35,9 @@ void excl_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_excl();
 }
 
-seastar::future<> excl_lock_from_read::lock()
+void excl_lock_from_read::lock()
 {
   static_cast<tri_mutex*>(this)->promote_from_read();
-  return seastar::now();
 }
 
 void excl_lock_from_read::unlock()
@@ -46,24 +45,14 @@ void excl_lock_from_read::unlock()
   static_cast<tri_mutex*>(this)->demote_to_read();
 }
 
-seastar::future<> excl_lock_from_write::lock()
+void excl_lock_from_write::lock()
 {
   static_cast<tri_mutex*>(this)->promote_from_write();
-  return seastar::now();
 }
 
 void excl_lock_from_write::unlock()
 {
   static_cast<tri_mutex*>(this)->demote_to_write();
-}
-
-seastar::future<> excl_lock_from_excl::lock()
-{
-  return seastar::now();
-}
-
-void excl_lock_from_excl::unlock()
-{
 }
 
 tri_mutex::~tri_mutex()
