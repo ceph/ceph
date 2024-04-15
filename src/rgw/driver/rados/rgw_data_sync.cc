@@ -2881,6 +2881,64 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
                                            prule);
 }
 
+class RGWStatSourceObjCR : public RGWCoroutine {
+  CephContext *cct;
+  RGWAsyncRadosProcessor *async_rados;
+  rgw::sal::RadosStore* store;
+  rgw_zone_id local_zone;
+  rgw_zone_id source_zone;
+
+  rgw_bucket_sync_pipe& sync_pipe;
+  rgw_obj_key key;
+
+  ceph::real_time *pmtime;
+  uint64_t *psize;
+  std::map<std::string, bufferlist> *pattrs;
+  std::map<std::string, std::string> *pheaders;
+
+public:
+  RGWStatSourceObjCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
+                     const rgw_zone_id& _local_zone,
+                     const rgw_zone_id& _source_zone,
+                     rgw_bucket_sync_pipe& _sync_pipe,
+                     const rgw_obj_key& _key,
+                     ceph::real_time *_pmtime,
+                     uint64_t *_psize,
+                     std::map<std::string, bufferlist> *_pattrs) : RGWCoroutine(_store->ctx()), cct(_store->ctx()),
+                                       async_rados(_async_rados), store(_store),
+                                       local_zone(_local_zone), source_zone(_source_zone),
+                                       sync_pipe(_sync_pipe),
+                                       key(_key),
+                                       pmtime(_pmtime),
+                                       psize(_psize),
+                                       pattrs(_pattrs) {}
+
+  int operate(const DoutPrefixProvider *dpp) override {
+    reenter(this) {
+      if (source_zone != local_zone) {
+        yield call(new RGWStatRemoteObjCR(async_rados, store,
+                                          source_zone,
+                                          sync_pipe.info.source_bs.bucket, key,
+                                          pmtime, psize,
+                                          nullptr, pattrs, nullptr));
+        if (retcode < 0) {
+          return set_cr_error(retcode);
+        }
+      } else {
+        ldout(cct, 20) << "RGWStatSourceObjCR(): local zone operation: stat " << sync_pipe.info.source_bs.bucket << "/" << key << dendl;
+        yield call(new RGWStatObjCR(dpp, async_rados, store,
+                                    sync_pipe.source_bucket_info,
+                                    key, psize, pmtime, pattrs));
+      }
+
+      return set_cr_done();
+    }
+
+    return 0;
+  }
+};
+
+
 class RGWObjFetchCR : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
@@ -2897,9 +2955,7 @@ class RGWObjFetchCR : public RGWCoroutine {
 
   ceph::real_time src_mtime;
   uint64_t src_size;
-  string src_etag;
   map<string, bufferlist> src_attrs;
-  map<string, string> src_headers;
 
   std::optional<rgw_user> param_user;
   rgw_sync_pipe_params::Mode param_mode;
@@ -2960,16 +3016,15 @@ public:
            * we need to fetch info about source object, so that we can determine
            * the correct policy configuration. This can happen if there are multiple
            * policy rules, and some depend on the object tagging */
-          yield call(new RGWStatRemoteObjCR(sync_env->async_rados,
+          yield call(new RGWStatSourceObjCR(sync_env->async_rados,
                                             sync_env->driver,
+                                            sync_env->svc->zone->get_zone().id,
                                             sc->source_zone,
-                                            sync_pipe.info.source_bs.bucket,
+                                            sync_pipe,
                                             key,
                                             &src_mtime,
                                             &src_size,
-                                            &src_etag,
-                                            &src_attrs,
-                                            &src_headers));
+                                            &src_attrs));
           if (retcode < 0) {
             return set_cr_error(retcode);
           }
