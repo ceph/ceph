@@ -10623,6 +10623,7 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
     ceph_assert(srcdnl->is_remote() || srcdnl->is_referent());
     rollback.orig_src.remote_ino = srcdnl->get_remote_ino();
     rollback.orig_src.remote_d_type = srcdnl->get_remote_d_type();
+    rollback.orig_src.referent_ino = srcdnl->get_referent_inode()->ino();
   }
   
   rollback.orig_dest.dirfrag = destdn->get_dir()->dirfrag();
@@ -10634,6 +10635,7 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
   else if (destdnl->is_remote() || destdnl->is_referent()) {
     rollback.orig_dest.remote_ino = destdnl->get_remote_ino();
     rollback.orig_dest.remote_d_type = destdnl->get_remote_d_type();
+    rollback.orig_dest.referent_ino = destdnl->get_referent_inode()->ino();
   }
   
   if (straydn) {
@@ -10990,12 +10992,16 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
     dout(10) << " destdir not found" << dendl;
 
   CInode *in = NULL;
+  CInode *referent_in = NULL;
   if (rollback.orig_src.ino) {
     in = mdcache->get_inode(rollback.orig_src.ino);
     if (in && in->is_dir())
       ceph_assert(srcdn && destdn);
-  } else
+  } else {
     in = mdcache->get_inode(rollback.orig_src.remote_ino);
+    if (rollback.orig_src.referent_ino)
+      referent_in = mdcache->get_inode(rollback.orig_src.referent_ino);
+  }
 
   CDir *straydir = NULL;
   CDentry *straydn = NULL;
@@ -11014,12 +11020,15 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
   }
 
   CInode *target = NULL;
+  CInode *target_referent_in = NULL;
   if (rollback.orig_dest.ino) {
     target = mdcache->get_inode(rollback.orig_dest.ino);
     if (target)
       ceph_assert(destdn && straydn);
-  } else if (rollback.orig_dest.remote_ino)
+  } else if (rollback.orig_dest.remote_ino) {
     target = mdcache->get_inode(rollback.orig_dest.remote_ino);
+    target_referent_in = mdcache->get_inode(rollback.orig_dest.referent_ino);
+  }
 
   // can't use is_auth() in the resolve stage
   mds_rank_t whoami = mds->get_nodeid();
@@ -11042,9 +11051,11 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
     if (rollback.orig_src.ino) {
       ceph_assert(in);
       srcdn->push_projected_linkage(in);
-    } else
-      srcdn->push_projected_linkage(rollback.orig_src.remote_ino,
-				    rollback.orig_src.remote_d_type);
+    } else {
+      if (rollback.orig_src.referent_ino)
+	ceph_assert(referent_in);
+      srcdn->push_projected_linkage(referent_in, rollback.orig_src.remote_ino);
+    }
   }
 
   map<client_t,ref_t<MClientSnap>> splits[2];
@@ -11107,8 +11118,9 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequ
     if (rollback.orig_dest.ino && target) {
       destdn->push_projected_linkage(target);
     } else if (rollback.orig_dest.remote_ino) {
-      destdn->push_projected_linkage(rollback.orig_dest.remote_ino,
-				     rollback.orig_dest.remote_d_type);
+      if (rollback.orig_dest.referent_ino)
+	ceph_assert(target_referent_in);
+      destdn->push_projected_linkage(target_referent_in, rollback.orig_dest.remote_ino);
     } else {
       // the dentry will be trimmed soon, it's ok to have wrong linkage
       if (rollback.orig_dest.ino)
