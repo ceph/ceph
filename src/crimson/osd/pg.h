@@ -376,6 +376,7 @@ public:
   void check_blocklisted_watchers() final;
   void clear_primary_state() final {
     recovery_finisher = nullptr;
+    projected_log = PGLog::IndexedLog();
   }
 
   void queue_check_readable(epoch_t last_peering_reset,
@@ -826,8 +827,15 @@ public:
     const eversion_t version;
     const int err;
   };
+  PGLog::IndexedLog projected_log;
   interruptible_future<std::optional<complete_op_t>>
   already_complete(const osd_reqid_t& reqid);
+  bool check_in_progress_op(
+    const osd_reqid_t& reqid,
+    eversion_t *version,
+    version_t *user_version,
+    int *return_code,
+    std::vector<pg_log_op_return_item_t> *op_returns) const;
   int get_recovery_op_priority() const {
     int64_t pri = 0;
     get_pgpool().info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);

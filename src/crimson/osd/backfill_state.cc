@@ -125,7 +125,6 @@ void BackfillState::Enqueuing::maybe_update_range()
     logger().info("{}: bi is current", __func__);
     ceph_assert(primary_bi.version == pg().get_projected_last_update());
   } else if (primary_bi.version >= peering_state().get_log_tail()) {
-#if 0
     if (peering_state().get_pg_log().get_log().empty() &&
         pg().get_projected_log().empty()) {
       /* Because we don't move log_tail on split, the log might be
@@ -137,13 +136,11 @@ void BackfillState::Enqueuing::maybe_update_range()
       ceph_assert(primary_bi.version == eversion_t());
       return;
     }
-#endif
     logger().debug("{}: bi is old, ({}) can be updated with log to {}",
                    __func__,
                    primary_bi.version,
                    pg().get_projected_last_update());
-    logger().debug("{}: scanning pg log first", __func__);
-    peering_state().scan_log_after(primary_bi.version,
+    auto func =
       [&](const pg_log_entry_t& e) {
         logger().debug("maybe_update_range(lambda): updating from version {}",
                        e.version);
@@ -160,7 +157,11 @@ void BackfillState::Enqueuing::maybe_update_range()
             primary_bi.objects.erase(e.soid);
           }
         }
-      });
+      };
+    logger().debug("{}: scanning pg log first", __func__);
+    peering_state().scan_log_after(primary_bi.version, func);
+    logger().debug("{}: scanning projected log", __func__);
+    pg().get_projected_log().scan_log_after(primary_bi.version, func);
     primary_bi.version = pg().get_projected_last_update();
   } else {
     ceph_abort_msg(
