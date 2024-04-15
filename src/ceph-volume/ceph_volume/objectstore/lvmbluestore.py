@@ -249,8 +249,8 @@ class LvmBlueStore(BlueStore):
             tags['ceph.%s_uuid' % device_type] = lv_uuid
             tags['ceph.%s_device' % device_type] = path
             lv.set_tags(tags)
-        elif disk.is_device(device_name):
-            # We got a disk, create an lv
+        elif disk.is_partition(device_name) or disk.is_device(device_name):
+            # We got a disk or a partition, create an lv
             lv_type = "osd-{}".format(device_type)
             name_uuid = system.generate_uuid()
             kwargs = {
