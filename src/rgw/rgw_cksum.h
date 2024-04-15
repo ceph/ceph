@@ -206,7 +206,25 @@ namespace rgw { namespace cksum {
 	return ck.type;
     }
     return Type::none;
-  }
+  } /* parse_cksum_type */
+
+  static inline Type parse_cksum_type_hdr(const std::string_view hdr_name) {
+    auto pos = hdr_name.find("x-amz-checksum-", 0);
+    if (pos == std::string::npos) {
+      return Type::none;
+    }
+    constexpr int8_t psz = sizeof("x-amz-checksum-") - 1;
+    if ((hdr_name.size() - psz) > 0 ) {
+      std::string ck_name{hdr_name.substr(psz)};
+      return parse_cksum_type(ck_name.c_str());
+    }
+    return Type::none;
+  } /* parse_cksum_type_hdr */
+
+  static inline bool is_checksum_hdr(const std::string_view hdr_name) {
+    return hdr_name == "x-amz-checksum-algorithm" ||
+      parse_cksum_type_hdr(hdr_name) != Type::none;
+  } /* is_cksum_hdr */
 
   class Digest {
   public:

@@ -2964,22 +2964,33 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
   } while (!done);
 
   for (auto &p: parts) {
-    if (! boost::istarts_with(p.first, "x-amz-server-side-encryption")) {
-      continue;
+    if (boost::istarts_with(p.first, "x-amz-server-side-encryption")) {
+      bufferlist &d { p.second.data };
+      std::string v { rgw_trim_whitespace(std::string_view(d.c_str(), d.length())) };
+      rgw_set_amz_meta_header(s->info.crypt_attribute_map, p.first, v, OVERWRITE);
     }
-    bufferlist &d { p.second.data };
-    std::string v { rgw_trim_whitespace(std::string_view(d.c_str(), d.length())) };
-    rgw_set_amz_meta_header(s->info.crypt_attribute_map, p.first, v, OVERWRITE);
-  }
+    /* checksum headers */
+    auto& k = p.first;
+    auto cksum_type =  rgw::cksum::parse_cksum_type_hdr(k);
+    if (cksum_type != rgw::cksum::Type::none) {
+      put_prop("HTTP_X_AMZ_CHECKSUM_ALGORITHM",
+	       safe_upcase_str(to_string(cksum_type)));
+      bufferlist& d = p.second.data;
+      std::string v {
+	rgw_trim_whitespace(std::string_view(d.c_str(), d.length()))};
+      put_prop(ys_header_mangle(fmt::format("HTTP-{}", k)), v);
+    }
+  } /* each part */
 
   int r = get_encryption_defaults(s);
   if (r < 0) {
-    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << r << dendl;
+    ldpp_dout(this, 5)
+      << __func__ << "(): get_encryption_defaults() returned ret=" << r << dendl;
     return r;
   }
 
   ldpp_dout(this, 20) << "adding bucket to policy env: " << s->bucket->get_name()
-		    << dendl;
+		      << dendl;
   env.add_var("bucket", s->bucket->get_name());
 
   string object_str;
@@ -3012,7 +3023,8 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
   if (! storage_class.empty()) {
     s->dest_placement.storage_class = storage_class;
     if (!driver->valid_placement(s->dest_placement)) {
-      ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << s->dest_placement.to_str() << dendl;
+      ldpp_dout(this, 0) << "NOTICE: invalid dest placement: "
+			 << s->dest_placement.to_str() << dendl;
       err_msg = "The storage class you specified is not valid";
       return -EINVAL;
     }
@@ -3062,14 +3074,11 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
   if (r < 0)
     return r;
 
-
   min_len = post_policy.min_length;
   max_len = post_policy.max_length;
 
-
-
   return 0;
-}
+} /* RGWPostObj_Objstore_S3::get_params() */
 
 int RGWPostObj_ObjStore_S3::get_tags()
 {
