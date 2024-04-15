@@ -1530,6 +1530,7 @@ private:
 
   DecayCounter quiesce_counter;
   uint64_t quiesce_threshold;
+  bool quiesce_early_cap_recall;
   std::chrono::milliseconds quiesce_sleep;
 };
 

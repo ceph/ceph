@@ -92,6 +92,15 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_cache_quiesce_early_cap_recall
+  type: bool
+  level: advanced
+  desc: configure quiesce to preemptively recall caps
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_cache_release_free_interval
   type: secs
   level: dev

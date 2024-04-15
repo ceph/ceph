@@ -4051,6 +4051,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_cache_reservation",
     "mds_cache_quiesce_decay_rate",
     "mds_cache_quiesce_threshold",
+    "mds_cache_quiesce_early_cap_recall",
     "mds_cache_quiesce_sleep",
     "mds_cache_trim_decay_rate",
     "mds_cap_acquisition_throttle_retry_request_time",
