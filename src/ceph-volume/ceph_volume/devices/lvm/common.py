@@ -36,6 +36,13 @@ def rollback_osd(args, osd_id=None):
 
 
 common_args = {
+    '--objectstore': {
+        'dest': 'objectstore',
+        'help': 'The OSD objectstore.',
+        'default': 'bluestore',
+        'choices': ['bluestore', 'seastore'],
+        'type': str,
+    },
     '--data': {
         'help': 'OSD data path. A physical device or logical volume',
         'required': True,
@@ -86,7 +93,7 @@ common_args = {
 bluestore_args = {
     '--bluestore': {
         'action': 'store_true',
-        'help': 'Use the bluestore objectstore',
+        'help': 'Use the bluestore objectstore. (DEPRECATED: use --objectstore instead)',
     },
     '--block.db': {
         'dest': 'block_db',
