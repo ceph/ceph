@@ -913,8 +913,8 @@ options:
 - name: rgw_ldap_uri
   type: str
   level: advanced
-  desc: Space-separated list of LDAP servers in URI format.
-  default: ldaps://<ldap.your.domain>
+  desc: Space-separated list of LDAP servers in URI format, e.g., "ldaps://<ldap.your.domain>".
+  default:
   services:
   - rgw
   with_legacy: true
