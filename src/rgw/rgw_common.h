@@ -22,10 +22,13 @@
 #include <unordered_map>
 
 #include <fmt/format.h>
+#include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
 #include "common/tracer.h"
+#include "common/versioned_variant.h"
 #include "rgw_acl.h"
 #include "rgw_bucket_layout.h"
 #include "rgw_cors.h"
@@ -150,6 +153,7 @@ using ceph::crypto::MD5;
 /* IAM Policy */
 #define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
 #define RGW_ATTR_USER_POLICY    RGW_ATTR_PREFIX "user-policy"
+#define RGW_ATTR_MANAGED_POLICY RGW_ATTR_PREFIX "managed-policy"
 #define RGW_ATTR_PUBLIC_ACCESS  RGW_ATTR_PREFIX "public-access"
 
 /* RGW File Attributes */
@@ -212,7 +216,16 @@ static inline const char* to_mime_type(const RGWFormat f)
 #define RGW_REST_WEBSITE     0x8
 #define RGW_REST_STS            0x10
 #define RGW_REST_IAM            0x20
-#define RGW_REST_SNS            0x30
+#define RGW_REST_SNS            0x40
+
+inline constexpr const char* RGW_REST_IAM_XMLNS =
+    "https://iam.amazonaws.com/doc/2010-05-08/";
+
+inline constexpr const char* RGW_REST_SNS_XMLNS =
+    "https://sns.amazonaws.com/doc/2010-03-31/";
+
+inline constexpr const char* RGW_REST_STS_XMLNS =
+    "https://sts.amazonaws.com/doc/2011-06-15/";
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
@@ -312,6 +325,7 @@ static inline const char* to_mime_type(const RGWFormat f)
 #define ERR_INVALID_OBJECT_STATE			 2222
 #define ERR_PRESIGNED_URL_EXPIRED			 2223
 #define ERR_PRESIGNED_URL_DISABLED     2224
+#define ERR_AUTHORIZATION        2225 // SNS 403 AuthorizationError
 
 #define ERR_BUSY_RESHARDING      2300
 #define ERR_NO_SUCH_ENTITY       2301
@@ -322,6 +336,7 @@ static inline const char* to_mime_type(const RGWFormat f)
 #define ERR_INVALID_IDENTITY_TOKEN  2401
 
 #define ERR_NO_SUCH_TAG_SET 2402
+#define ERR_ACCOUNT_EXISTS 2403
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
@@ -514,6 +529,7 @@ enum RGWIdentityType
   TYPE_LDAP=3,
   TYPE_ROLE=4,
   TYPE_WEB=5,
+  TYPE_ROOT=6, // account root user
 };
 
 void encode_json(const char *name, const rgw_placement_rule& val, ceph::Formatter *f);
@@ -571,21 +587,24 @@ struct RGWUserInfo
   int32_t max_buckets;
   uint32_t op_mask;
   RGWUserCaps caps;
-  __u8 admin;
-  __u8 system;
+  __u8 admin = 0;
+  __u8 system = 0;
   rgw_placement_rule default_placement;
   std::list<std::string> placement_tags;
   std::map<int, std::string> temp_url_keys;
   RGWQuota quota;
   uint32_t type;
   std::set<std::string> mfa_ids;
+  rgw_account_id account_id;
+  std::string path = "/";
+  ceph::real_time create_date;
+  std::multimap<std::string, std::string> tags;
+  boost::container::flat_set<std::string, std::less<>> group_ids;
 
   RGWUserInfo()
     : suspended(0),
       max_buckets(RGW_DEFAULT_MAX_BUCKETS),
       op_mask(RGW_OP_TYPE_ALL),
-      admin(0),
-      system(0),
       type(TYPE_NONE) {
   }
 
@@ -601,7 +620,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(22, 9, bl);
+     ENCODE_START(23, 9, bl);
      encode((uint64_t)0, bl); // old auid
      std::string access_key;
      std::string secret_key;
@@ -648,10 +667,15 @@ struct RGWUserInfo
        encode(assumed_role_arn, bl);
      }
      encode(user_id.ns, bl);
+     encode(account_id, bl);
+     encode(path, bl);
+     encode(create_date, bl);
+     encode(tags, bl);
+     encode(group_ids, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(22, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(23, 9, 9, bl);
      if (struct_v >= 2) {
        uint64_t old_auid;
        decode(old_auid, bl);
@@ -738,6 +762,15 @@ struct RGWUserInfo
     } else {
       user_id.ns.clear();
     }
+    if (struct_v >= 23) {
+      decode(account_id, bl);
+      decode(path, bl);
+      decode(create_date, bl);
+      decode(tags, bl);
+      decode(group_ids, bl);
+    } else {
+      path = "/";
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -746,6 +779,99 @@ struct RGWUserInfo
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)
+
+// user account metadata
+struct RGWAccountInfo {
+  rgw_account_id id;
+  std::string tenant;
+  std::string name;
+  std::string email;
+  RGWQuotaInfo quota;
+
+  static constexpr int32_t DEFAULT_USER_LIMIT = 1000;
+  int32_t max_users = DEFAULT_USER_LIMIT;
+
+  static constexpr int32_t DEFAULT_ROLE_LIMIT = 1000;
+  int32_t max_roles = DEFAULT_ROLE_LIMIT;
+
+  static constexpr int32_t DEFAULT_GROUP_LIMIT = 1000;
+  int32_t max_groups = DEFAULT_GROUP_LIMIT;
+
+  static constexpr int32_t DEFAULT_BUCKET_LIMIT = 1000;
+  int32_t max_buckets = DEFAULT_BUCKET_LIMIT;
+
+  static constexpr int32_t DEFAULT_ACCESS_KEY_LIMIT = 4;
+  int32_t max_access_keys = DEFAULT_ACCESS_KEY_LIMIT;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(id, bl);
+    encode(tenant, bl);
+    encode(name, bl);
+    encode(email, bl);
+    encode(quota, bl);
+    encode(max_users, bl);
+    encode(max_roles, bl);
+    encode(max_groups, bl);
+    encode(max_buckets, bl);
+    encode(max_access_keys, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(id, bl);
+    decode(tenant, bl);
+    decode(name, bl);
+    decode(email, bl);
+    decode(quota, bl);
+    decode(max_users, bl);
+    decode(max_roles, bl);
+    decode(max_groups, bl);
+    decode(max_buckets, bl);
+    decode(max_access_keys, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter* f) const;
+  void decode_json(JSONObj* obj);
+  static void generate_test_instances(std::list<RGWAccountInfo*>& o);
+};
+WRITE_CLASS_ENCODER(RGWAccountInfo)
+
+// user group metadata
+struct RGWGroupInfo {
+  std::string id;
+  std::string tenant;
+  std::string name;
+  std::string path;
+  rgw_account_id account_id;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(id, bl);
+    encode(tenant, bl);
+    encode(name, bl);
+    encode(path, bl);
+    encode(account_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(id, bl);
+    decode(tenant, bl);
+    decode(name, bl);
+    decode(path, bl);
+    decode(account_id, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter* f) const;
+  void decode_json(JSONObj* obj);
+  static void generate_test_instances(std::list<RGWGroupInfo*>& o);
+};
+WRITE_CLASS_ENCODER(RGWGroupInfo)
 
 /// `RGWObjVersionTracker`
 /// ======================
@@ -898,7 +1024,7 @@ class RGWSI_Zone;
 
 struct RGWBucketInfo {
   rgw_bucket bucket;
-  rgw_user owner;
+  rgw_owner owner;
   uint32_t flags{0};
   std::string zonegroup;
   ceph::real_time creation_time;
@@ -973,7 +1099,7 @@ WRITE_CLASS_ENCODER(RGWBucketInfo)
 struct RGWBucketEntryPoint
 {
   rgw_bucket bucket;
-  rgw_user owner;
+  rgw_owner owner;
   ceph::real_time creation_time;
   bool linked;
 
@@ -983,13 +1109,19 @@ struct RGWBucketEntryPoint
   RGWBucketEntryPoint() : linked(false), has_bucket_info(false) {}
 
   void encode(bufferlist& bl) const {
+    const rgw_user* user = std::get_if<rgw_user>(&owner);
     ENCODE_START(10, 8, bl);
     encode(bucket, bl);
-    encode(owner.id, bl);
+    if (user) {
+      encode(user->id, bl);
+    } else {
+      encode(std::string{}, bl); // empty user id
+    }
     encode(linked, bl);
     uint64_t ctime = (uint64_t)real_clock::to_time_t(creation_time);
     encode(ctime, bl);
-    encode(owner, bl);
+    // 'rgw_user owner' converted to 'rgw_owner'
+    ceph::converted_variant::encode(owner, bl);
     encode(creation_time, bl);
     ENCODE_FINISH(bl);
   }
@@ -1004,7 +1136,8 @@ struct RGWBucketEntryPoint
     }
     has_bucket_info = false;
     decode(bucket, bl);
-    decode(owner.id, bl);
+    std::string user_id;
+    decode(user_id, bl);
     decode(linked, bl);
     uint64_t ctime;
     decode(ctime, bl);
@@ -1012,7 +1145,9 @@ struct RGWBucketEntryPoint
       creation_time = real_clock::from_time_t((time_t)ctime);
     }
     if (struct_v >= 9) {
-      decode(owner, bl);
+      ceph::converted_variant::decode(owner, bl);
+    } else {
+      owner = rgw_user{"", user_id};
     }
     if (struct_v >= 10) {
       decode(creation_time, bl);
@@ -1137,6 +1272,7 @@ struct req_state : DoutPrefixProvider {
   std::string src_bucket_name;
   std::unique_ptr<rgw::sal::Object> src_object;
   ACLOwner bucket_owner;
+  // Resource owner for the authenticated identity, initialized in authorize()
   ACLOwner owner;
 
   std::string zonegroup_name;
@@ -1195,7 +1331,7 @@ struct req_state : DoutPrefixProvider {
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
   boost::optional<PublicAccessBlockConfiguration> bucket_access_conf;
-  std::vector<rgw::IAM::Policy> iam_user_policies;
+  std::vector<rgw::IAM::Policy> iam_identity_policies;
 
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */
@@ -1626,13 +1762,16 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 					const RGWAccessControlPolicy& object_acl,
 					const int perm);
 
-/** Check if the req_state's user has the necessary permissions
- * to do the requested action */
-rgw::IAM::Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
-			  const std::vector<rgw::IAM::Policy>& user_policies,
-                          const rgw::IAM::Environment& env,
-                          const uint64_t op,
-                          const rgw::ARN& arn);
+// determine whether a request is allowed or denied within an account
+rgw::IAM::Effect evaluate_iam_policies(
+    const DoutPrefixProvider* dpp,
+    const rgw::IAM::Environment& env,
+    const rgw::auth::Identity& identity,
+    bool account_root, uint64_t op, const rgw::ARN& arn,
+    const boost::optional<rgw::IAM::Policy>& resource_policy,
+    const std::vector<rgw::IAM::Policy>& identity_policies,
+    const std::vector<rgw::IAM::Policy>& session_policies);
+
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             req_state * const s,
                             const RGWAccessControlPolicy& user_acl,
@@ -1656,14 +1795,17 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
 bool verify_bucket_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
-  const rgw_bucket& bucket,
+  const rgw::ARN& arn,
   const RGWAccessControlPolicy& user_acl,
   const RGWAccessControlPolicy& bucket_acl,
   const boost::optional<rgw::IAM::Policy>& bucket_policy,
   const std::vector<rgw::IAM::Policy>& identity_policies,
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
-bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op);
+bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state* s,
+                              const rgw::ARN& arn, uint64_t op);
+bool verify_bucket_permission(const DoutPrefixProvider* dpp,
+                              req_state* s, uint64_t op);
 bool verify_bucket_permission_no_policy(
   const DoutPrefixProvider* dpp,
   req_state * const s,
@@ -1673,8 +1815,6 @@ bool verify_bucket_permission_no_policy(
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
                                         req_state * const s,
 					const int perm);
-int verify_bucket_owner_or_policy(req_state* const s,
-				  const uint64_t op);
 extern bool verify_object_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,

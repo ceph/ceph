@@ -115,6 +115,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool oidc_pool;
   rgw_pool notif_pool;
   rgw_pool topics_pool;
+  rgw_pool account_pool;
+  rgw_pool group_pool;
 
   RGWAccessKey system_key;
 
@@ -178,6 +180,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(oidc_pool, bl);
     encode(notif_pool, bl);
     encode(topics_pool, bl);
+    encode(account_pool, bl);
+    encode(group_pool, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -253,8 +257,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
     }
     if (struct_v >= 15) {
       decode(topics_pool, bl);
+      decode(account_pool, bl);
+      decode(group_pool, bl);
     } else {
       topics_pool = name + ".rgw.meta:topics";
+      account_pool = name + ".rgw.meta:accounts";
+      group_pool = name + ".rgw.meta:groups";
     }
     DECODE_FINISH(bl);
   }

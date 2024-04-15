@@ -69,8 +69,7 @@ void RGWOp_Metadata_Get::execute(optional_yield y) {
 }
 
 void RGWOp_Metadata_Get_Myself::execute(optional_yield y) {
-  const std::string owner_id = s->owner.id.to_str();
-  s->info.args.append("key", owner_id);
+  s->info.args.append("key", to_string(s->owner.id));
 
   return RGWOp_Metadata_Get::execute(y);
 }

@@ -29,6 +29,8 @@
 
 #include "common/errno.h"
 
+#include "account.h"
+#include "group.h"
 #include "rgw_bucket.h"
 #include "rgw_cr_rados.h"
 #include "rgw_datalog.h"
@@ -374,7 +376,8 @@ RGWCtlDef::_meta::_meta() {}
 RGWCtlDef::_meta::~_meta() {}
 
 
-int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver, const DoutPrefixProvider *dpp)
+int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
+                    librados::Rados& rados, const DoutPrefixProvider *dpp)
 {
   meta.mgr.reset(new RGWMetadataManager(svc.meta));
 
@@ -382,15 +385,19 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver, const DoutPrefix
 
   auto sync_module = svc.sync_modules->get_sync_module();
   if (sync_module) {
-    meta.bucket.reset(sync_module->alloc_bucket_meta_handler());
+    meta.bucket.reset(sync_module->alloc_bucket_meta_handler(rados));
     meta.bucket_instance.reset(sync_module->alloc_bucket_instance_meta_handler(driver));
   } else {
-    meta.bucket.reset(RGWBucketMetaHandlerAllocator::alloc());
+    meta.bucket.reset(RGWBucketMetaHandlerAllocator::alloc(rados));
     meta.bucket_instance.reset(RGWBucketInstanceMetaHandlerAllocator::alloc(driver));
   }
 
   meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
   meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(driver, svc.role);
+  meta.account = rgwrados::account::create_metadata_handler(
+      *svc.sysobj, svc.zone->get_zone_params());
+  meta.group = rgwrados::group::create_metadata_handler(
+      *svc.sysobj, rados, svc.zone->get_zone_params());
 
   user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
   bucket.reset(new RGWBucketCtl(svc.zone,
@@ -409,8 +416,8 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver, const DoutPrefix
   meta.topic_cache->init(svc.cache);
 
   meta.topic = rgwrados::topic::create_metadata_handler(
-      *svc.sysobj, svc.cache, *svc.mdlog, svc.zone->get_zone_params(),
-      *meta.topic_cache);
+      *svc.sysobj, svc.cache, *svc.mdlog, rados,
+      svc.zone->get_zone_params(), *meta.topic_cache);
 
   RGWOTPMetadataHandlerBase *otp_handler = static_cast<RGWOTPMetadataHandlerBase *>(meta.otp.get());
   otp_handler->init(svc.zone, svc.meta_be_otp, svc.otp);
@@ -427,12 +434,13 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver, const DoutPrefix
   return 0;
 }
 
-int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixProvider *dpp)
+int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver,
+                 librados::Rados& rados, const DoutPrefixProvider *dpp)
 {
   svc = _svc;
   cct = svc->cct;
 
-  int r = _ctl.init(*svc, driver, dpp);
+  int r = _ctl.init(*svc, driver, rados, dpp);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to start init ctls (" << cpp_strerror(-r) << dendl;
     return r;
@@ -477,13 +485,26 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixPr
 
   r = meta.role->attach(meta.mgr);
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start init otp ctl (" << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "ERROR: failed to start init meta.role ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
+
+  r = _ctl.meta.account->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init meta.account ctl (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
   r = meta.topic->attach(meta.mgr);
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed to start init topic ctl ("
                   << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  r = _ctl.meta.group->attach(meta.mgr);
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start init meta.group ctl (" << cpp_strerror(-r) << dendl;
     return r;
   }
   return 0;
