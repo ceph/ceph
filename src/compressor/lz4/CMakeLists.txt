@@ -6,6 +6,7 @@ set(lz4_sources
 )
 
 add_library(ceph_lz4 SHARED ${lz4_sources})
+add_dependencies(ceph_lz4 prebuild-targets)
 target_link_libraries(ceph_lz4
   PRIVATE LZ4::LZ4 compressor $<$<PLATFORM_ID:Windows>:ceph-common>)
 if(HAVE_QATZIP AND HAVE_QAT)

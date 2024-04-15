@@ -8,6 +8,7 @@ set(ceph_immutable_object_cache_files
   Types.cc
   )
 add_library(ceph_immutable_object_cache_lib STATIC ${ceph_immutable_object_cache_files})
+add_dependencies(ceph_immutable_object_cache_lib prebuild-targets)
 
 add_executable(ceph-immutable-object-cache
   main.cc)

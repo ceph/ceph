@@ -1,6 +1,11 @@
 include(GetGitRevisionDescription)
 include(CheckCXXCompilerFlag)
 
+# Pre build targets
+# We make sure dependencies of this target run before everything else, or at
+# least those who requires them.
+add_custom_target(prebuild-targets)
+
 # for erasure and compressor plugins
 set(CEPH_INSTALL_PKGLIBDIR ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME})
 set(CEPH_INSTALL_FULL_PKGLIBDIR ${CMAKE_INSTALL_FULL_LIBDIR}/${PROJECT_NAME})
@@ -445,7 +450,7 @@ set_source_files_properties(ceph_ver.c
 add_library(common-objs OBJECT ${libcommon_files})
 target_compile_definitions(common-objs PRIVATE
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
-add_dependencies(common-objs legacy-option-headers)
+add_dependencies(common-objs prebuild-targets)
 
 if(WITH_JAEGER)
   add_dependencies(common-objs jaeger_base)
@@ -543,7 +548,7 @@ endif()
 
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
-add_dependencies(common legacy-option-headers)
+add_dependencies(common prebuild-targets)
 if(WITH_JAEGER)
 add_dependencies(common jaeger_base)
 endif()
@@ -561,7 +566,7 @@ if(ENABLE_COVERAGE)
   target_link_libraries(ceph-common gcov)
 endif(ENABLE_COVERAGE)
 
-add_dependencies(ceph-common legacy-option-headers)
+add_dependencies(ceph-common prebuild-targets)
 
 if(WITH_JAEGER)
 add_dependencies(ceph-common jaeger_base)
@@ -620,6 +625,7 @@ add_subdirectory(osdc)
 add_subdirectory(perfglue)
 
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
+add_dependencies(rados_snap_set_diff_obj prebuild-targets)
 
 option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
@@ -670,7 +676,7 @@ set(ceph_mon_srcs
   ceph_mon.cc)
 add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
-add_dependencies(ceph-mon erasure_code_plugins)
+add_dependencies(ceph-mon prebuild-targets erasure_code_plugins)
 target_link_libraries(ceph-mon mon os global-static ceph-common
   ${ALLOC_LIBS}
   ${EXTRALIBS}
@@ -701,7 +707,7 @@ set(ceph_osd_srcs
   ceph_osd.cc)
 
 add_executable(ceph-osd ${ceph_osd_srcs})
-add_dependencies(ceph-osd erasure_code_plugins extblkdev_plugins)
+add_dependencies(ceph-osd prebuild-targets erasure_code_plugins extblkdev_plugins)
 target_link_libraries(ceph-osd osd os global-static common
   ${ALLOC_LIBS}
   ${BLKID_LIBRARIES})
@@ -720,6 +726,7 @@ if (WITH_CEPHFS)
   set(ceph_mds_srcs
     ceph_mds.cc)
   add_executable(ceph-mds ${ceph_mds_srcs})
+  add_dependencies(ceph-mds prebuild-targets)
   target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static ceph-common
     Boost::thread
     ${ALLOC_LIBS})
@@ -809,6 +816,7 @@ add_subdirectory(client)
 if(WITH_LIBCEPHFS)
   set(libcephfs_srcs libcephfs.cc)
   add_library(cephfs ${CEPH_SHARED} ${libcephfs_srcs})
+  add_dependencies(cephfs prebuild-targets)
   target_link_libraries(cephfs PRIVATE client ceph-common
     ${CRYPTO_LIBS} ${EXTRALIBS})
   if(ENABLE_SHARED)
@@ -832,6 +840,7 @@ if(WITH_LIBCEPHFS)
     ceph_syn.cc
     client/SyntheticClient.cc)
   add_executable(ceph-syn ${ceph_syn_srcs})
+  add_dependencies(ceph-syn prebuild-targets)
   target_link_libraries(ceph-syn client global-static ceph-common)
   install(TARGETS ceph-syn DESTINATION bin)
   if(LINUX)
@@ -842,6 +851,7 @@ endif(WITH_LIBCEPHFS)
 if(WITH_LIBCEPHSQLITE)
   set(cephsqlite_srcs libcephsqlite.cc SimpleRADOSStriper.cc)
   add_library(cephsqlite ${CEPH_SHARED} ${cephsqlite_srcs})
+  add_dependencies(cephsqlite prebuild-targets)
   target_link_libraries(cephsqlite PRIVATE cls_lock_client librados ceph-common SQLite3::SQLite3 ${EXTRALIBS})
   set_target_properties(cephsqlite PROPERTIES
     CXX_VISIBILITY_PRESET hidden
@@ -858,6 +868,7 @@ if(WITH_FUSE)
     ceph_fuse.cc
     client/fuse_ll.cc)
   add_executable(ceph-fuse ${ceph_fuse_srcs})
+  add_dependencies(ceph-fuse prebuild-targets)
   target_link_libraries(ceph-fuse FUSE::FUSE
     ${GSSAPI_LIBRARIES} client ceph-common global-static ${EXTRALIBS})
   set_target_properties(ceph-fuse PROPERTIES
@@ -877,6 +888,7 @@ if(WITH_RBD)
     add_library(krbd STATIC krbd.cc
       $<TARGET_OBJECTS:parse_secret_objs>)
     target_link_libraries(krbd keyutils::keyutils)
+    add_dependencies(krbd prebuild-targets)
   endif()
   add_subdirectory(librbd)
   if(WITH_FUSE)

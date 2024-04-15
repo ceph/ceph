@@ -2,6 +2,7 @@ add_library(rbd_mirror_types STATIC
   image_map/Types.cc
   instance_watcher/Types.cc
   leader_watcher/Types.cc)
+add_dependencies(rbd_mirror_types prebuild-targets)
 
 set(rbd_mirror_internal
   ClusterWatcher.cc
@@ -67,9 +68,11 @@ set(rbd_mirror_internal
 add_library(rbd_mirror_internal STATIC
   ${rbd_mirror_internal}
   $<TARGET_OBJECTS:common_prioritycache_obj>)
+add_dependencies(rbd_mirror_internal prebuild-targets)
 
 add_executable(rbd-mirror
   main.cc)
+add_dependencies(rbd-mirror prebuild-targets)
 target_link_libraries(rbd-mirror
   rbd_mirror_internal
   rbd_mirror_types

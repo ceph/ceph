@@ -1,4 +1,5 @@
 find_package(nl REQUIRED genl)
 add_executable(rbd-nbd rbd-nbd.cc)
+add_dependencies(rbd-nbd prebuild-targets)
 target_link_libraries(rbd-nbd librbd librados global nl::genl)
 install(TARGETS rbd-nbd DESTINATION bin)

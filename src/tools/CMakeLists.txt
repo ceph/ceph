@@ -10,6 +10,7 @@ if(WIN32)
   list(APPEND rados_srcs ../common/win32/code_page.rc)
 endif()
 add_executable(rados ${rados_srcs})
+add_dependencies(rados prebuild-targets)
 
 target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 if(WITH_LIBRADOSSTRIPER)
@@ -30,14 +31,17 @@ endif()
 
 if(WITH_TESTS)
 add_executable(ceph_scratchtool scratchtool.c)
+add_dependencies(ceph_scratchtool prebuild-targets)
 target_link_libraries(ceph_scratchtool librados global)
 install(TARGETS ceph_scratchtool DESTINATION bin)
 
 add_executable(ceph_scratchtoolpp scratchtoolpp.cc)
+add_dependencies(ceph_scratchtoolpp prebuild-targets)
 target_link_libraries(ceph_scratchtoolpp librados global)
 install(TARGETS ceph_scratchtoolpp DESTINATION bin)
 
 add_executable(ceph_radosacl radosacl.cc)
+add_dependencies(ceph_radosacl prebuild-targets)
 target_link_libraries(ceph_radosacl librados global)
 install(TARGETS ceph_radosacl DESTINATION bin)
 
@@ -47,6 +51,7 @@ install(PROGRAMS
 endif(WITH_TESTS)
 
 add_executable(ceph-osdomap-tool ceph_osdomap_tool.cc)
+add_dependencies(ceph-osdomap-tool prebuild-targets)
 target_link_libraries(ceph-osdomap-tool os global Boost::program_options)
 install(TARGETS ceph-osdomap-tool DESTINATION bin)
 
@@ -54,6 +59,7 @@ add_executable(ceph-monstore-tool
   ceph_monstore_tool.cc
   ../auth/cephx/CephxKeyServer.cc
   ../mgr/mgr_commands.cc)
+add_dependencies(ceph-monstore-tool prebuild-targets)
 target_link_libraries(ceph-monstore-tool os global Boost::program_options)
 install(TARGETS ceph-monstore-tool DESTINATION bin)
 
@@ -61,6 +67,7 @@ add_executable(ceph-objectstore-tool
   ceph_objectstore_tool.cc
   rebuild_mondb.cc
   RadosDump.cc)
+add_dependencies(ceph-objectstore-tool prebuild-targets)
 target_link_libraries(ceph-objectstore-tool osd os global Boost::program_options ${CMAKE_DL_LIBS})
 if(WITH_FUSE)
   target_link_libraries(ceph-objectstore-tool FUSE::FUSE)
@@ -70,6 +77,7 @@ install(TARGETS ceph-objectstore-tool DESTINATION bin)
 if(WITH_LIBCEPHFS)
 if(WITH_TESTS)
   add_executable(ceph-client-debug ceph-client-debug.cc)
+  add_dependencies(ceph-client-debug prebuild-targets)
   target_link_libraries(ceph-client-debug cephfs global client)
   install(TARGETS ceph-client-debug DESTINATION bin)
 endif(WITH_TESTS)
@@ -78,26 +86,31 @@ endif(WITH_LIBCEPHFS)
 add_executable(ceph-kvstore-tool
   kvstore_tool.cc
   ceph_kvstore_tool.cc)
+add_dependencies(ceph-kvstore-tool prebuild-targets)
 target_link_libraries(ceph-kvstore-tool os global)
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
 
 set(ceph_conf_srcs ceph_conf.cc)
 add_executable(ceph-conf ${ceph_conf_srcs})
+add_dependencies(ceph-conf prebuild-targets)
 target_link_libraries(ceph-conf global)
 install(TARGETS ceph-conf DESTINATION bin)
 
 set(crushtool_srcs crushtool.cc)
 add_executable(crushtool ${crushtool_srcs})
+add_dependencies(crushtool prebuild-targets)
 target_link_libraries(crushtool global)
 install(TARGETS crushtool DESTINATION bin)
 
 set(monmaptool_srcs monmaptool.cc)
 add_executable(monmaptool ${monmaptool_srcs})
+add_dependencies(monmaptool prebuild-targets)
 target_link_libraries(monmaptool global)
 install(TARGETS monmaptool DESTINATION bin)
 
 set(osdomaptool_srcs osdmaptool.cc)
 add_executable(osdmaptool ${osdomaptool_srcs})
+add_dependencies(osdmaptool prebuild-targets)
 target_link_libraries(osdmaptool global)
 install(TARGETS osdmaptool DESTINATION bin)
 
@@ -105,6 +118,7 @@ install(PROGRAMS crushdiff DESTINATION bin)
 
 set(ceph-diff-sorted_srcs ceph-diff-sorted.cc)
 add_executable(ceph-diff-sorted ${ceph-diff-sorted_srcs})
+add_dependencies(ceph-diff-sorted prebuild-targets)
 set_target_properties(ceph-diff-sorted PROPERTIES
   SKIP_RPATH TRUE
   INSTALL_RPATH "")
@@ -113,18 +127,21 @@ install(TARGETS ceph-diff-sorted DESTINATION bin)
 if(WITH_TESTS)
 set(ceph_psim_srcs psim.cc)
 add_executable(ceph_psim ${ceph_psim_srcs})
+add_dependencies(ceph_psim prebuild-targets)
 target_link_libraries(ceph_psim global)
 install(TARGETS ceph_psim DESTINATION bin)
 endif(WITH_TESTS)
 
 set(ceph_authtool_srcs ceph_authtool.cc)
 add_executable(ceph-authtool ${ceph_authtool_srcs})
+add_dependencies(ceph-authtool prebuild-targets)
 target_link_libraries(ceph-authtool global ${EXTRALIBS} ${CRYPTO_LIBS})
 install(TARGETS ceph-authtool DESTINATION bin)
 
 if(WITH_TESTS)
 set(ceph_dedup_tool_srcs ceph_dedup_tool.cc)
 add_executable(ceph-dedup-tool ${ceph_dedup_tool_srcs})
+add_dependencies(ceph-dedup-tool prebuild-targets)
 target_link_libraries(ceph-dedup-tool
   librados
   global

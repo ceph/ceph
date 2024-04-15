@@ -1,12 +1,14 @@
 add_library(common_buffer_obj OBJECT
   buffer.cc)
+add_dependencies(common_buffer_obj prebuild-targets)
 
 add_library(common_texttable_obj OBJECT
   TextTable.cc)
+add_dependencies(common_texttable_obj prebuild-targets)
 
 add_library(common_prioritycache_obj OBJECT
   PriorityCache.cc)
-add_dependencies(common_prioritycache_obj legacy-option-headers)
+add_dependencies(common_prioritycache_obj prebuild-targets)
 
 if(WIN32)
   add_library(dlfcn_win32 STATIC win32/dlfcn.cc win32/errno.cc)
@@ -183,6 +185,7 @@ endif()
 
 add_library(common-common-objs OBJECT
   ${common_srcs})
+add_dependencies(common-common-objs prebuild-targets)
 # Let's not rely on the default system headers and point Cmake to the
 # retrieved OpenSSL location. This is especially important when cross
 # compiling (e.g. targeting Windows).
@@ -193,7 +196,7 @@ target_compile_definitions(common-common-objs PRIVATE
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\""
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
-add_dependencies(common-common-objs legacy-option-headers)
+add_dependencies(common_prioritycache_obj prebuild-targets)
 
 set(common_mountcephfs_srcs
   armor.c
@@ -202,6 +205,7 @@ set(common_mountcephfs_srcs
   addr_parsing.c)
 add_library(common_mountcephfs_objs OBJECT
   ${common_mountcephfs_srcs})
+add_dependencies(common_mountcephfs_objs prebuild-targets)
 
 
 set(crc32_srcs
@@ -231,6 +235,7 @@ elseif(HAVE_ARMV8_CRC)
 endif(HAVE_INTEL)
 
 add_library(crc32 OBJECT ${crc32_srcs})
+add_dependencies(crc32 prebuild-targets)
 
 if(HAVE_ARMV8_CRC)
   set_target_properties(crc32 PROPERTIES
@@ -240,9 +245,11 @@ target_link_libraries(crc32
   arch)
 
 add_library(common_utf8 STATIC utf8.c)
+add_dependencies(common_utf8 prebuild-targets)
 
 if(HAVE_KEYUTILS)
   set(parse_secret_srcs
     secret.c)
   add_library(parse_secret_objs OBJECT ${parse_secret_srcs})
+  add_dependencies(parse_secret_objs prebuild-targets)
 endif()

@@ -10,4 +10,5 @@ set(libclient_srcs
   posix_acl.cc
   Delegation.cc)
 add_library(client STATIC ${libclient_srcs})
+add_dependencies(client prebuild-targets)
 target_link_libraries(client osdc)

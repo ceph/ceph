@@ -264,6 +264,7 @@ if(WITH_RADOSGW_D4N)
 endif()
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
+add_dependencies(rgw_common prebuild-targets)
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
@@ -408,7 +409,7 @@ set_source_files_properties(rgw_iam_policy.cc PROPERTIES
 
 add_library(rgw_a STATIC
     ${rgw_a_srcs})
-
+add_dependencies(rgw_a prebuild-targets)
 target_compile_definitions(rgw_a PUBLIC "-DCLS_CLIENT_HIDE_IOCTX")
 
 target_include_directories(rgw_a
@@ -448,6 +449,7 @@ set(rgw_schedulers_srcs
   rgw_dmclock_async_scheduler.cc)
 
 add_library(rgw_schedulers STATIC ${rgw_schedulers_srcs})
+add_dependencies(rgw_schedulers prebuild-targets)
 target_link_libraries(rgw_schedulers
   PUBLIC dmclock::dmclock spawn)
 
@@ -455,6 +457,7 @@ set(radosgw_srcs
   rgw_main.cc)
 
 add_executable(radosgw ${radosgw_srcs})
+add_dependencies(radosgw prebuild-targets)
 
 if(WITH_RADOSGW_ARROW_FLIGHT)
   # target_compile_definitions(radosgw PUBLIC WITH_ARROW_FLIGHT)
@@ -493,6 +496,7 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
 
 add_executable(radosgw-admin ${radosgw_admin_srcs})
+add_dependencies(radosgw-admin prebuild-targets)
 target_link_libraries(radosgw-admin ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
@@ -523,6 +527,7 @@ install(TARGETS radosgw-es DESTINATION bin)
 set(radosgw_token_srcs
   rgw_token.cc)
 add_executable(radosgw-token ${radosgw_token_srcs})
+add_dependencies(radosgw-token prebuild-targets)
 target_link_libraries(radosgw-token librados
   global)
 install(TARGETS radosgw-token DESTINATION bin)
@@ -530,6 +535,7 @@ install(TARGETS radosgw-token DESTINATION bin)
 set(radosgw_object_expirer_srcs
   rgw_object_expirer.cc)
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
+add_dependencies(radosgw-object-expirer prebuild-targets)
 target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client

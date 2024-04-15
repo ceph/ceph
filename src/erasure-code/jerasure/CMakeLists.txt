@@ -5,6 +5,7 @@ set(jerasure_utils_src
   ErasureCodeJerasure.cc)
 
 add_library(jerasure_utils OBJECT ${jerasure_utils_src})
+add_dependencies(jerasure_utils prebuild-targets)
 
 # Set the CFLAGS correctly for gf-complete based on SIMD compiler support
 set(GF_COMPILE_FLAGS)
@@ -66,6 +67,7 @@ if(HAVE_ARM_NEON OR HAVE_ARMV8_SIMD)
 endif()
 
 add_library(gf-complete_objs OBJECT ${gf-complete_srcs})
+add_dependencies(gf-complete_objs prebuild-targets)
 set_target_properties(gf-complete_objs PROPERTIES 
   COMPILE_FLAGS "${SIMD_COMPILE_FLAGS}")
 set_target_properties(gf-complete_objs PROPERTIES 
@@ -79,6 +81,7 @@ set(jerasure_srcs
   jerasure/src/reed_sol.c
   jerasure_init.cc)
 add_library(jerasure_objs OBJECT ${jerasure_srcs}) 
+add_dependencies(jerasure_objs prebuild-targets)
 
 set(ec_jerasure_objs
   $<TARGET_OBJECTS:gf-complete_objs>
@@ -87,6 +90,7 @@ set(ec_jerasure_objs
   $<TARGET_OBJECTS:erasure_code_objs>)
 
 add_library(ec_jerasure SHARED ${ec_jerasure_objs})
+add_dependencies(ec_jerasure prebuild-targets)
 set_target_properties(ec_jerasure PROPERTIES
   INSTALL_RPATH "")
 target_link_libraries(ec_jerasure ${EXTRALIBS})
@@ -96,6 +100,7 @@ install(TARGETS ec_jerasure DESTINATION ${erasure_plugin_dir})
 foreach(flavor ${jerasure_legacy_flavors})
   set(plugin_name "ec_jerasure_${flavor}")
   add_library(${plugin_name} SHARED ${ec_jerasure_objs})
+  add_dependencies(${plugin_name} prebuild-targets)
   set_target_properties(${plugin_name} PROPERTIES
     INSTALL_RPATH "")
   install(TARGETS ${plugin_name} DESTINATION ${erasure_plugin_dir})

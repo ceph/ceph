@@ -10,6 +10,7 @@ set(shec_utils_srcs
   determinant.c)
 
 add_library(shec_utils OBJECT ${shec_utils_srcs})
+add_dependencies(shec_utils prebuild-targets)
 
 set(ec_shec_objs
   $<TARGET_OBJECTS:gf-complete_objs>
@@ -17,6 +18,7 @@ set(ec_shec_objs
   $<TARGET_OBJECTS:shec_utils>)
 
 add_library(ec_shec SHARED ${ec_shec_objs})
+add_dependencies(ec_shec prebuild-targets)
 set_target_properties(ec_shec PROPERTIES
   INSTALL_RPATH "")
 target_link_libraries(ec_shec ${EXTRALIBS})
@@ -30,4 +32,5 @@ foreach(flavor ${jerasure_legacy_flavors})
     INSTALL_RPATH "")
   install(TARGETS ${plugin_name} DESTINATION ${erasure_plugin_dir})
   add_dependencies(ec_shec ${plugin_name})
+  add_dependencies(${plugin_name} prebuild-targets)
 endforeach()

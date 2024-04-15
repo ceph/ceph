@@ -5,6 +5,7 @@ set(extblkdev_plugin_dir ${CEPH_INSTALL_PKGLIBDIR}/extblkdev)
 add_subdirectory(vdo)
 
 add_library(extblkdev STATIC ExtBlkDevPlugin.cc)
+add_dependencies(extblkdev prebuild-targets)
 
 if(NOT WIN32)
 find_package(cap)

@@ -5,6 +5,7 @@ set(exporter_srcs
   util.cc
   )
 add_executable(ceph-exporter ${exporter_srcs})
+add_dependencies(ceph-exporter prebuild-targets)
 target_link_libraries(ceph-exporter
   global-static ceph-common)
 install(TARGETS ceph-exporter DESTINATION bin)

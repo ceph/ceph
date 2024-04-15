@@ -5,6 +5,7 @@ set(openssl_crypto_plugin_srcs
   openssl_crypto_plugin.cc)
 
 add_library(ceph_crypto_openssl SHARED ${openssl_crypto_plugin_srcs})
+add_dependencies(ceph_crypto_openssl prebuild-targets)
 target_link_libraries(ceph_crypto_openssl
     PRIVATE OpenSSL::Crypto
     $<$<PLATFORM_ID:Windows>:ceph-common>

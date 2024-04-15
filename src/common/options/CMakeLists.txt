@@ -1,5 +1,7 @@
+# A custom target using comon_options_srcs will generate YAML files and its
+# corresponding source files and header files. Remove the headers target to
+# prevent headers from generating twice.
 set(common_options_srcs build_options.cc)
-set(legacy_options_headers)
 set(options_yamls)
 
 # to mimic the behavior of file(CONFIGURE ...)
@@ -31,8 +33,7 @@ function(add_options name)
   set(options_yamls ${options_yamls} PARENT_SCOPE)
   set(cc_file "${name}_options.cc")
   set(h_file "${PROJECT_BINARY_DIR}/include/${name}_legacy_options.h")
-  add_custom_command(PRE_BUILD
-    OUTPUT ${cc_file} ${h_file}
+  add_custom_command(OUTPUT ${cc_file} ${h_file}
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/y2c.py
       --input ${yaml_file}
       --output ${cc_file}
@@ -41,8 +42,6 @@ function(add_options name)
       DEPENDS ${yaml_file})
   list(APPEND common_options_srcs ${cc_file})
   set(common_options_srcs ${common_options_srcs} PARENT_SCOPE)
-  list(APPEND legacy_options_headers ${h_file})
-  set(legacy_options_headers ${legacy_options_headers} PARENT_SCOPE)
 endfunction()
 
 set(osd_erasure_code_plugins "jerasure" "lrc")
@@ -104,8 +103,9 @@ add_options(rgw)
 
 add_library(common-options-objs OBJECT
   ${common_options_srcs})
-add_custom_target(legacy-option-headers
-  DEPENDS ${legacy_options_headers})
+
+# Make common-options-objs as a pre-build requirement.
+add_dependencies(prebuild-targets common-options-objs)
 
 include(AddCephTest)
 add_ceph_test(validate-options

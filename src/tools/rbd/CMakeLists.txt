@@ -61,6 +61,7 @@ endif()
 
 add_executable(rbd ${rbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
+add_dependencies(rbd prebuild-targets)
 set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
 target_link_libraries(rbd
   cls_journal_client

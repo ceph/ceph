@@ -9,6 +9,7 @@ if(WIN32)
 endif()
 
 add_library(unit-main OBJECT unit.cc)
+add_dependencies(unit-main prebuild-targets)
 target_include_directories(unit-main PRIVATE
   $<TARGET_PROPERTY:GTest::GTest,INTERFACE_INCLUDE_DIRECTORIES>)
 

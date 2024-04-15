@@ -9,4 +9,4 @@ set(librados_test_stub_srcs
   TestRadosClient.cc
   TestWatchNotify.cc)
 add_library(rados_test_stub STATIC ${librados_test_stub_srcs})
-
+add_dependencies(rados_test_stub prebuild-targets)

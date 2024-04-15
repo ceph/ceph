@@ -8,12 +8,14 @@ else()
 endif()
 
 add_library(libglobal_objs OBJECT ${libglobal_srcs})
-add_dependencies(libglobal_objs legacy-option-headers)
+add_dependencies(libglobal_objs prebuild-targets)
 
 add_library(global-static STATIC
   $<TARGET_OBJECTS:libglobal_objs>)
+add_dependencies(global-static prebuild-targets)
 target_link_libraries(global-static common)
 
 add_library(global STATIC
   $<TARGET_OBJECTS:libglobal_objs>)
+add_dependencies(global prebuild-targets)
 target_link_libraries(global ceph-common ${EXTRALIBS})

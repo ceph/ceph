@@ -9,6 +9,7 @@ set(cephfs_journal_tool_srcs
   RoleSelector.cc
   MDSUtility.cc)
 add_executable(cephfs-journal-tool ${cephfs_journal_tool_srcs})
+add_dependencies(cephfs-journal-tool prebuild-targets)
 target_link_libraries(cephfs-journal-tool librados mds osdc global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
@@ -18,6 +19,7 @@ set(cephfs-meta-injection_srcs
   RoleSelector.cc
   MDSUtility.cc)
 add_executable(cephfs-meta-injection ${cephfs-meta-injection_srcs})
+add_dependencies(cephfs-meta-injection prebuild-targets)
 target_link_libraries(cephfs-meta-injection librados mds osdc global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
@@ -27,6 +29,7 @@ set(cephfs_table_tool_srcs
   RoleSelector.cc
   MDSUtility.cc)
 add_executable(cephfs-table-tool ${cephfs_table_tool_srcs})
+add_dependencies(cephfs-table-tool prebuild-targets)
 target_link_libraries(cephfs-table-tool librados mds osdc global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
@@ -37,6 +40,7 @@ set(cephfs_data_scan_srcs
   PgFiles.cc
   MDSUtility.cc)
 add_executable(cephfs-data-scan ${cephfs_data_scan_srcs})
+add_dependencies(cephfs-data-scan prebuild-targets)
 target_link_libraries(cephfs-data-scan librados cephfs mds osdc global
   cls_cephfs_client
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})

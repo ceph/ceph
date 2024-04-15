@@ -41,6 +41,7 @@ target_link_libraries(mon
   kv
   heap_profiler
   ${FMT_LIB})
+add_dependencies(mon prebuild-targets)
 if(WITH_JAEGER)
   target_link_libraries(mon jaeger_base)
 endif()

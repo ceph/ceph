@@ -1,5 +1,6 @@
 add_library(mgr_cap_obj OBJECT
   MgrCap.cc)
+add_dependencies(mgr_cap_obj prebuild-targets)
 
 if(WITH_MGR)
   set(mgr_srcs
@@ -34,6 +35,7 @@ if(WITH_MGR)
     mgr_commands.cc
     $<TARGET_OBJECTS:mgr_cap_obj>)
   add_executable(ceph-mgr ${mgr_srcs})
+  add_dependencies(ceph-mgr prebuild-targets)
   target_compile_definitions(ceph-mgr PRIVATE PY_SSIZE_T_CLEAN)
   if(WITH_LIBCEPHSQLITE)
     target_link_libraries(ceph-mgr cephsqlite SQLite3::SQLite3)

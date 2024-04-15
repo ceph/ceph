@@ -15,6 +15,7 @@ add_library(rbd_types STATIC
 if (WITH_RBD_RWL)
   target_link_libraries(rbd_types
     PUBLIC pmdk::pmemobj)
+  add_dependencies(rbd_types prebuild-targets)
 endif()
 
 set(librbd_internal_srcs
@@ -220,9 +221,11 @@ if(LINUX AND HAVE_LIBCRYPTSETUP)
 endif()
 
 add_library(rbd_api STATIC librbd.cc)
+add_dependencies(rbd_api prebuild-targets)
 add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
+add_dependencies(rbd_internal prebuild-targets)
 if(WITH_LTTNG)
   # librbd.cc includes tracing/librbd.h
   add_dependencies(rbd_api librbd-tp)
@@ -249,6 +252,7 @@ set(rbd_plugin_parent_cache_srcs
   plugin/ParentCache.cc)
 add_library(librbd_plugin_parent_cache SHARED
   ${rbd_plugin_parent_cache_srcs})
+add_dependencies(librbd_plugin_parent_cache prebuild-targets)
 target_link_libraries(librbd_plugin_parent_cache PRIVATE
   ceph_immutable_object_cache_lib ceph-common librbd
   libneorados
@@ -297,6 +301,7 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
 
   add_library(librbd_plugin_pwl_cache SHARED
     ${rbd_plugin_pwl_srcs})
+  add_dependencies(librbd_plugin_pwl_cache prebuild-targets)
   target_link_libraries(librbd_plugin_pwl_cache PRIVATE
     blk
     ceph-common
@@ -309,6 +314,7 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     target_link_libraries(librbd_plugin_pwl_cache
       PUBLIC pmdk::pmemobj
       PRIVATE pmdk::pmem)
+    add_dependencies(librbd_plugin_pwl_cache prebuild-targets)
   endif()
 
   set_target_properties(librbd_plugin_pwl_cache PROPERTIES
@@ -321,6 +327,7 @@ endif()
 
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)
+add_dependencies(librbd prebuild-targets)
 if(WITH_LTTNG)
   add_dependencies(librbd librbd-tp)
 endif()

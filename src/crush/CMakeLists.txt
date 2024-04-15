@@ -9,3 +9,4 @@ set(crush_srcs
   CrushLocation.cc)
 
 add_library(crush_objs OBJECT ${crush_srcs})
+add_dependencies(crush_objs prebuild-targets)

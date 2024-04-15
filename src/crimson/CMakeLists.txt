@@ -127,6 +127,8 @@ add_library(crimson-common STATIC
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:common-options-objs>)
 
+add_dependencies(crimson-common prebuild-targets)
+
 target_compile_definitions(crimson-common PRIVATE
   "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
@@ -199,6 +201,7 @@ target_link_libraries(crimson
   PUBLIC
     crimson-common
     crimson::cflags)
+add_dependencies(crimson prebuild-targets)
 add_subdirectory(admin)
 add_subdirectory(os)
 add_subdirectory(osd)

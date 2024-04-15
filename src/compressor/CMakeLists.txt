@@ -1,6 +1,6 @@
 add_library(compressor_objs OBJECT Compressor.cc)
 add_dependencies(compressor_objs common-objs)
-add_dependencies(compressor_objs legacy-option-headers)
+add_dependencies(compressor_objs prebuild-targets)
 
 if(HAVE_QATZIP AND HAVE_QAT)
   add_library(qat_compressor OBJECT QatAccel.cc)
@@ -10,6 +10,7 @@ if(HAVE_QATZIP AND HAVE_QAT)
                         QAT::zip
                        )
 endif()
+add_dependencies(compressor_objs prebuild-targets)
 
 ## compressor plugins
 

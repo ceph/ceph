@@ -6,4 +6,4 @@ target_link_libraries(crimson-admin
   crimson::cflags
   Boost::MPL)
 add_dependencies(crimson-admin
-  legacy-option-headers)
+  prebuild-targets)

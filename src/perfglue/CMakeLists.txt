@@ -1,6 +1,7 @@
 if(ALLOCATOR STREQUAL "tcmalloc")
   add_library(heap_profiler STATIC
     heap_profiler.cc)
+  add_dependencies(heap_profiler prebuild-targets)
   target_link_libraries(heap_profiler
     gperftools::tcmalloc)
 else()
@@ -14,9 +15,11 @@ if(WITH_PROFILER)
   find_package(gperftools 2.6.2 REQUIRED profiler)
   add_library(cpu_profiler STATIC
     cpu_profiler.cc)
+  add_dependencies(cpu_profiler prebuild-targets)
   target_link_libraries(cpu_profiler
     gperftools::profiler)
 else()
   add_library(cpu_profiler STATIC
     disabled_stubs.cc)
+  add_dependencies(cpu_profiler prebuild-targets)
 endif()

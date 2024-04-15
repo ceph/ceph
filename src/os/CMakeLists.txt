@@ -47,6 +47,7 @@ if(HAVE_LIBZFS)
 endif()
 
 add_library(os STATIC ${libos_srcs})
+add_dependencies(os prebuild-targets)
 target_link_libraries(os blk)
 
 target_link_libraries(os heap_profiler kv)

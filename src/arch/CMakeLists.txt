@@ -10,3 +10,4 @@ elseif(HAVE_PPC64LE OR HAVE_PPC64 OR HAVE_PPC)
 endif()
 
 add_library(arch OBJECT ${arch_srcs})
+add_dependencies(arch prebuild-targets)

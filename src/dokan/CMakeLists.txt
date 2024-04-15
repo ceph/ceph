@@ -5,6 +5,7 @@ set(ceph_dokan_srcs
   options.cc
   ../common/win32/code_page.rc)
 add_executable(ceph-dokan ${ceph_dokan_srcs})
+add_dependencies(ceph-dokan prebuild-targets)
 target_link_libraries(ceph-dokan ${DOKAN_LIBRARIES}
   ${GSSAPI_LIBRARIES}
   cephfs ceph-common global ${EXTRALIBS})
