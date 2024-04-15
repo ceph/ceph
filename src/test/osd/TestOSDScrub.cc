@@ -196,6 +196,7 @@ TEST(TestOSDScrub, scrub_time_permit) {
   now = utime_t(mktime(&tm), 0);
   ret = osd->scrub_time_permit(now);
   ASSERT_FALSE(ret);
+  mc.shutdown();
 }
 
 // Local Variables:
