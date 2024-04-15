@@ -73,12 +73,17 @@ CommonClientRequest::do_recover_missing(
   assert(pg->is_primary());
   logger().debug("{} reqid {} check for recovery, {}",
                  __func__, reqid, soid);
-  if (!pg->is_unreadable_object(soid, &ver) &&
+  auto &peering_state = pg->get_peering_state();
+  auto &missing_loc = peering_state.get_missing_loc();
+  bool needs_recovery = missing_loc.needs_recovery(soid, &ver);
+  if (!pg->is_unreadable_object(soid) &&
       !pg->is_degraded_or_backfilling_object(soid)) {
     logger().debug("{} reqid {} nothing to recover {}",
                    __func__, reqid, soid);
     return seastar::now();
   }
+  ceph_assert(needs_recovery);
+
   logger().debug("{} reqid {} need to wait for recovery, {} version {}",
                  __func__, reqid, soid, ver);
   if (pg->get_recovery_backend()->is_recovering(soid)) {
