@@ -783,6 +783,10 @@ PG::submit_transaction(
   ceph_assert(log_entries.rbegin()->version >= projected_last_update);
   projected_last_update = log_entries.rbegin()->version;
 
+  for (auto &&entry: log_entries) {
+    projected_log.add(entry);
+  }
+
   auto [submitted, all_completed] = backend->mutate_object(
       peering_state.get_acting_recovery_backfill(),
       std::move(obc),
@@ -1345,23 +1349,25 @@ void PG::log_operation(
   if (is_primary()) {
     ceph_assert(trim_to <= peering_state.get_last_update_ondisk());
   }
-  /* TODO: when we add snap mapper and projected log support,
-   * we'll likely want to update them here.
-   *
-   * See src/osd/PrimaryLogPG.h:log_operation for how classic
-   * handles these cases.
-   */
 #if 0
   if (transaction_applied) {
-    //TODO:
+    /* TODO: implement update_snap_map.
+    *
+    * See src/osd/PrimaryLogPG.h:log_operation for how classic
+    * handles these cases.
+    */
     //update_snap_map(logv, t);
   }
+#endif
   auto last = logv.rbegin();
   if (is_primary() && last != logv.rend()) {
+    logger().debug("{} on primary, trimming projected log",
+                   __func__);
     projected_log.skip_can_rollback_to_to_head();
-    projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
+    projected_log.trim(shard_services.get_cct(), last->version,
+                       nullptr, nullptr, nullptr);
   }
-#endif
+
   if (!is_primary()) { // && !is_ec_pg()
     replica_clear_repop_obc(logv);
   }
@@ -1630,8 +1636,8 @@ PG::already_complete(const osd_reqid_t& reqid)
   int ret;
   std::vector<pg_log_op_return_item_t> op_returns;
 
-  if (peering_state.get_pg_log().get_log().get_request(
-	reqid, &version, &user_version, &ret, &op_returns)) {
+  if (check_in_progress_op(
+        reqid, &version, &user_version, &ret, &op_returns)) {
     complete_op_t dupinfo{
       user_version,
       version,
@@ -1642,6 +1648,21 @@ PG::already_complete(const osd_reqid_t& reqid)
   } else {
     return seastar::make_ready_future<std::optional<complete_op_t>>(std::nullopt);
   }
+}
+
+bool PG::check_in_progress_op(
+  const osd_reqid_t& reqid,
+  eversion_t *version,
+  version_t *user_version,
+  int *return_code,
+  std::vector<pg_log_op_return_item_t> *op_returns
+  ) const
+{
+  return (
+    projected_log.get_request(reqid, version, user_version, return_code,
+                              op_returns) ||
+    peering_state.get_pg_log().get_log().get_request(
+      reqid, version, user_version, return_code, op_returns));
 }
 
 }
