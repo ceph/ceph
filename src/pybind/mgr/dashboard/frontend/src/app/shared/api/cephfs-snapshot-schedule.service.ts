@@ -150,7 +150,7 @@ export class CephfsSnapshotScheduleService {
             retentionCopy: this.parseRetentionCopy(snapItem?.retention),
             retention: Object.values(snapItem?.retention || [])?.length
               ? Object.entries(snapItem.retention)
-                  ?.map?.(([frequency, interval]) => `${interval}${frequency.toLocaleUpperCase()}`)
+                  ?.map?.(([frequency, interval]) => `${interval}${frequency}`)
                   .join(' ')
               : '-'
           })),
