@@ -6,6 +6,8 @@ overrides:
       - mon down
       - mons down
       - out of quorum
+    log-only-match:
+      - CEPHADM_
 roles:
 - - host.a
   - osd.0

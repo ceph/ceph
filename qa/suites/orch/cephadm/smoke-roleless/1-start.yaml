@@ -22,3 +22,5 @@ overrides:
     conf:
       osd:
         osd shutdown pgref assert: true
+    log-only-match:
+      - CEPHADM_
