@@ -275,11 +275,15 @@ Client ``someuser`` is authorized for only one file system:
         caps mon = "allow r"
         caps osd = "allow rw tag cephfs data=cephfs"
 
-Mounting ``cephfs1`` with ``someuser`` works:
+Mounting ``cephfs1`` on the already-created mountpoint  ``/mnt/cephfs1``  with
+``someuser`` works:
 
 .. prompt:: bash #
 
    sudo ceph-fuse /mnt/cephfs1 -n client.someuser -k ceph.client.someuser.keyring --client-fs=cephfs
+
+.. note:: If ``/mnt/cephfs`` does not exist prior to running the above command,
+   create it by running ``mkdir /mnt/cephfs1``.
 
 ::
 
