@@ -1572,20 +1572,18 @@ class RGWAsyncStatObj : public RGWAsyncRadosRequest {
   const DoutPrefixProvider *dpp;
   rgw::sal::RadosStore* store;
   RGWBucketInfo bucket_info;
-  rgw_obj obj;
+  rgw_obj_key key;
   uint64_t *psize;
   real_time *pmtime;
-  uint64_t *pepoch;
-  RGWObjVersionTracker *objv_tracker;
+  std::map<std::string, bufferlist> *pattrs;
 protected:
   int _send_request(const DoutPrefixProvider *dpp) override;
 public:
   RGWAsyncStatObj(const DoutPrefixProvider *dpp, RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* store,
-                  const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize = nullptr,
-                  real_time *pmtime = nullptr, uint64_t *pepoch = nullptr,
-                  RGWObjVersionTracker *objv_tracker = nullptr)
-	  : RGWAsyncRadosRequest(caller, cn), dpp(dpp), store(store), obj(obj), psize(psize),
-	  pmtime(pmtime), pepoch(pepoch), objv_tracker(objv_tracker) {}
+                  const RGWBucketInfo& _bucket_info, const rgw_obj_key& key, uint64_t *psize,
+                  real_time *pmtime, std::map<std::string, bufferlist> *pattrs)
+	  : RGWAsyncRadosRequest(caller, cn), dpp(dpp), store(store), key(key), psize(psize),
+	  pmtime(pmtime), pattrs(pattrs) {}
 };
 
 class RGWStatObjCR : public RGWSimpleCoroutine {
@@ -1593,17 +1591,15 @@ class RGWStatObjCR : public RGWSimpleCoroutine {
   rgw::sal::RadosStore* store;
   RGWAsyncRadosProcessor *async_rados;
   RGWBucketInfo bucket_info;
-  rgw_obj obj;
+  rgw_obj_key key;
   uint64_t *psize;
   real_time *pmtime;
-  uint64_t *pepoch;
-  RGWObjVersionTracker *objv_tracker;
+  std::map<std::string, bufferlist> *pattrs;
   RGWAsyncStatObj *req = nullptr;
  public:
   RGWStatObjCR(const DoutPrefixProvider *dpp, RGWAsyncRadosProcessor *async_rados, rgw::sal::RadosStore* store,
-	  const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize = nullptr,
-	  real_time* pmtime = nullptr, uint64_t *pepoch = nullptr,
-	  RGWObjVersionTracker *objv_tracker = nullptr);
+	  const RGWBucketInfo& _bucket_info, const rgw_obj_key& key, uint64_t *psize = nullptr,
+	  real_time* pmtime = nullptr, std::map<std::string, bufferlist> *pattrs = nullptr);
   ~RGWStatObjCR() override {
     request_cleanup();
   }

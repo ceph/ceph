@@ -1062,20 +1062,35 @@ int RGWSyncLogTrimCR::request_complete()
 
 int RGWAsyncStatObj::_send_request(const DoutPrefixProvider *dpp)
 {
-  rgw_raw_obj raw_obj;
-  store->getRados()->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
-  return store->getRados()->raw_obj_stat(dpp, raw_obj, psize, pmtime, pepoch,
-                             nullptr, nullptr, objv_tracker, null_yield);
+  auto bucket = store->get_bucket(bucket_info);
+  std::unique_ptr<rgw::sal::Object> o = bucket->get_object(key);
+  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(o->get_read_op());
+
+  read_op->params.high_precision_time = true;
+  read_op->params.lastmod = pmtime;
+
+  int ret = read_op->prepare(null_yield, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (psize) {
+    *psize = o->get_obj_size();
+  }
+
+  if (pattrs) {
+    *pattrs = o->get_attrs();
+  }
+
+  return 0;
 }
 
 RGWStatObjCR::RGWStatObjCR(const DoutPrefixProvider *dpp,
                            RGWAsyncRadosProcessor *async_rados, rgw::sal::RadosStore* store,
-                           const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize,
-                           real_time* pmtime, uint64_t *pepoch,
-                           RGWObjVersionTracker *objv_tracker)
+                           const RGWBucketInfo& _bucket_info, const rgw_obj_key& key, uint64_t *psize,
+                           real_time* pmtime, std::map<std::string, bufferlist> *pattrs)
   : RGWSimpleCoroutine(store->ctx()), dpp(dpp), store(store), async_rados(async_rados),
-    bucket_info(_bucket_info), obj(obj), psize(psize), pmtime(pmtime), pepoch(pepoch),
-    objv_tracker(objv_tracker)
+    bucket_info(_bucket_info), key(key), psize(psize), pattrs(pattrs)
 {
 }
 
@@ -1090,7 +1105,7 @@ void RGWStatObjCR::request_cleanup()
 int RGWStatObjCR::send_request(const DoutPrefixProvider *dpp)
 {
   req = new RGWAsyncStatObj(dpp, this, stack->create_completion_notifier(),
-                            store, bucket_info, obj, psize, pmtime, pepoch, objv_tracker);
+                            store, bucket_info, key, psize, pmtime, pattrs);
   async_rados->queue(req);
   return 0;
 }
