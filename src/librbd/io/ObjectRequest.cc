@@ -902,6 +902,11 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
     if (end_snap_id <= first_snap_id) {
       // don't include deltas from the starting snapshots, but we iterate over
       // it to track its existence and size
+      // Note: if the image is a clone and a copyup was performed on the
+      // object, the older snaps will be updated with the parent data.
+      // When called by snapshot based rbd-mirror, the diff in the older snap is ignored
+      // as it was processed earlier, causing the snapshot_delta to not include
+      // the parent data.
       ldout(cct, 20) << "skipping prior snapshot " << dendl;
       continue;
     }

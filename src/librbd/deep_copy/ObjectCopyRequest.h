@@ -112,6 +112,10 @@ private:
 
   io::Extents m_image_extents;
   io::ImageArea m_image_area = io::ImageArea::DATA;
+ 
+  io::Extents m_parent_extents;
+  io::Extents m_copyup_extent_map;
+  ceph::bufferlist m_copyup_data;
 
   io::SnapshotDelta m_snapshot_delta;
 
@@ -125,6 +129,7 @@ private:
   std::map<librados::snap_t, bool> m_dst_object_may_exist;
 
   io::AsyncOperation* m_src_async_op = nullptr;
+  io::ReadExtents m_read_extents;
 
   void send_list_snaps();
   void handle_list_snaps(int r);
@@ -134,6 +139,12 @@ private:
 
   void send_update_object_map();
   void handle_update_object_map(int r);
+
+  void copyup();
+  void handle_copyup(int r);
+
+  void copyup2();
+  void handle_copyup2(int r);
 
   void process_copyup();
   void send_write_object();
