@@ -47,11 +47,11 @@ public:
 
 /// shared/exclusive mutual exclusion
 ///
-/// this lock design uses reader and writer is entirely and completely
-/// independent of the conventional reader/writer lock usage. Here, what we
-/// mean is that we can pipeline reads, and we can pipeline writes, but we
-/// cannot allow a read while writes are in progress or a write while reads are
-/// in progress. Any rmw operation is therefore exclusive.
+/// Unlike reader/write lock, tri_mutex does not enforce the exclusive access
+/// of write operations, on the contrary, multiple write operations are allowed
+/// to hold the same tri_mutex at the same time. Here, what we mean is that we
+/// can pipeline reads, and we can pipeline writes, but we cannot allow a read
+/// while writes are in progress or a write while reads are in progress.
 ///
 /// tri_mutex is based on seastar::shared_mutex, but instead of two kinds of
 /// waiters, tri_mutex keeps track of three kinds of lock users:
