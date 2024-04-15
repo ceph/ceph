@@ -5,7 +5,6 @@
 #include <string>
 #include <sstream>
 #include <algorithm>
-#include "include/buffer_fwd.h"
 #include "common/Formatter.h"
 #include "common/iso_8601.h"
 #include "common/async/completion.h"
@@ -55,6 +54,7 @@ bool get_bool(const RGWHTTPArgs& args, const std::string& name, bool default_val
 
 class RGWPubSubHTTPEndpoint : public RGWPubSubEndpoint {
 private:
+  CephContext* const cct;
   const std::string endpoint;
   typedef unsigned ack_level_t;
   ack_level_t ack_level; // TODO: not used for now
@@ -64,8 +64,8 @@ private:
   static const ack_level_t ACK_LEVEL_NON_ERROR = 1;
 
 public:
-  RGWPubSubHTTPEndpoint(const std::string& _endpoint, const RGWHTTPArgs& args) : 
-    endpoint(_endpoint), verify_ssl(get_bool(args, "verify-ssl", true)), cloudevents(get_bool(args, "cloudevents", false)) 
+  RGWPubSubHTTPEndpoint(const std::string& _endpoint, const RGWHTTPArgs& args, CephContext* _cct) : 
+    cct(_cct), endpoint(_endpoint), verify_ssl(get_bool(args, "verify-ssl", true)), cloudevents(get_bool(args, "cloudevents", false)) 
   {
     bool exists;
     const auto& str_ack_level = args.get("http-ack-level", &exists);
@@ -82,7 +82,7 @@ public:
     }
   }
 
-  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
+  int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
     bufferlist read_bl;
     RGWPostHTTPData request(cct, "POST", endpoint, &read_bl, verify_ssl);
     const auto post_data = json_format_pubsub_event(event);
@@ -172,7 +172,6 @@ private:
     Broker,
     Routable
   };
-  CephContext* const cct;
   const std::string endpoint;
   const std::string topic;
   const std::string exchange;
@@ -224,9 +223,7 @@ private:
 public:
   RGWPubSubAMQPEndpoint(const std::string& _endpoint,
       const std::string& _topic,
-      const RGWHTTPArgs& args,
-      CephContext* _cct) : 
-        cct(_cct),
+      const RGWHTTPArgs& args) : 
         endpoint(_endpoint), 
         topic(_topic),
         exchange(get_exchange(args)),
@@ -236,7 +233,7 @@ public:
     }
   }
 
-  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
+  int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
     if (ack_level == ack_level_t::None) {
       return amqp::publish(conn_id, topic, json_format_pubsub_event(event));
     } else {
@@ -276,7 +273,6 @@ private:
     None,
     Broker,
   };
-  CephContext* const cct;
   const std::string topic;
   const ack_level_t ack_level;
   std::string conn_name;
@@ -298,9 +294,7 @@ private:
 public:
   RGWPubSubKafkaEndpoint(const std::string& _endpoint,
       const std::string& _topic,
-      const RGWHTTPArgs& args,
-      CephContext* _cct) : 
-        cct(_cct),
+      const RGWHTTPArgs& args) : 
         topic(_topic),
         ack_level(get_ack_level(args)) {
     if (!kafka::connect(conn_name, _endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), 
@@ -309,7 +303,7 @@ public:
     }
   }
 
-  int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
+  int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
     if (ack_level == ack_level_t::None) {
       return kafka::publish(conn_name, topic, json_format_pubsub_event(event));
     } else {
@@ -371,7 +365,7 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
     CephContext* cct) {
   const auto& schema = get_schema(endpoint);
   if (schema == WEBHOOK_SCHEMA) {
-    return Ptr(new RGWPubSubHTTPEndpoint(endpoint, args));
+    return std::make_unique<RGWPubSubHTTPEndpoint>(endpoint, args, cct);
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
   } else if (schema == AMQP_SCHEMA) {
     bool exists;
@@ -380,7 +374,7 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
       version = AMQP_0_9_1;
     }
     if (version == AMQP_0_9_1) {
-      return Ptr(new RGWPubSubAMQPEndpoint(endpoint, topic, args, cct));
+      return std::make_unique<RGWPubSubAMQPEndpoint>(endpoint, topic, args);
     } else if (version == AMQP_1_0) {
       throw configuration_error("AMQP: v1.0 not supported");
       return nullptr;
@@ -391,7 +385,7 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
   } else if (schema == KAFKA_SCHEMA) {
-      return Ptr(new RGWPubSubKafkaEndpoint(endpoint, topic, args, cct));
+      return std::make_unique<RGWPubSubKafkaEndpoint>(endpoint, topic, args);
 #endif
   }
 

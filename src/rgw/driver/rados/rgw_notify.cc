@@ -273,7 +273,7 @@ private:
           cct);
       ldpp_dout(this, 20) << "INFO: push endpoint created: " << event_entry.push_endpoint <<
         " for entry: " << entry.marker << dendl;
-      const auto ret = push_endpoint->send_to_completion_async(cct, event_entry.event, optional_yield(io_context, yield));
+      const auto ret = push_endpoint->send(event_entry.event, optional_yield(io_context, yield));
       if (ret < 0) {
         ldpp_dout(this, 5) << "WARNING: push entry: " << entry.marker << " to endpoint: " << event_entry.push_endpoint 
           << " failed. error: " << ret << " (will retry)" << dendl;
@@ -1175,8 +1175,7 @@ int publish_commit(rgw::sal::Object* obj,
 	  dpp->get_cct());
         ldpp_dout(res.dpp, 20) << "INFO: push endpoint created: "
 			       << topic.cfg.dest.push_endpoint << dendl;
-        const auto ret = push_endpoint->send_to_completion_async(
-	  dpp->get_cct(), event_entry.event, res.yield);
+        const auto ret = push_endpoint->send(event_entry.event, res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1)
               << "ERROR: push to endpoint " << topic.cfg.dest.push_endpoint
