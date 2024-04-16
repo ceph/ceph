@@ -1580,7 +1580,7 @@ class CephFSMount(object):
         if kwargs.pop('sudo', False):
             kwargs['args'].insert(0, 'sudo')
             kwargs['omit_sudo'] = False
-        self.run_shell(**kwargs)
+        return self.run_shell(**kwargs)
 
     def getfattr(self, path, attr, **kwargs):
         """
