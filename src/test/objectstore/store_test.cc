@@ -8854,6 +8854,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredAndClone) {
   hoid.hobj.pool = -1;
   ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
   hoid2.hobj.pool = -1;
+  C_SaferCond c1;
 
   ObjectStore::CollectionHandle ch = store->create_new_collection(cid);
   {
@@ -8873,13 +8874,14 @@ TEST_P(StoreTestSpecificAUSize, DeferredAndClone) {
     ASSERT_EQ(r, 0);
   }
   {
+    cerr << "Clone range object" << std::endl;
     ObjectStore::Transaction t;
     t.clone_range(cid, hoid, hoid2, 0, 3, 0);
-    cerr << "Clone range object" << std::endl;
+    t.register_on_commit(&c1);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
  }
- sleep(1);
+ c1.wait();
  {
     bufferlist bl, expected;
     r = store->read(ch, hoid2, 0, 3, bl);
@@ -8921,6 +8923,7 @@ TEST_P(StoreTestSpecificAUSize, DeferredAndClone2) {
   hoid.hobj.pool = -1;
   ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
   hoid2.hobj.pool = -1;
+  C_SaferCond c1, c2;
 
   ObjectStore::CollectionHandle ch = store->create_new_collection(cid);
   {
@@ -8936,28 +8939,25 @@ TEST_P(StoreTestSpecificAUSize, DeferredAndClone2) {
     bl.append(std::string(0x10000, 'h'));
     t.write(cid, hoid, 0, bl.length(), bl,
             CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    t.register_on_commit(&c1);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  sleep(1);
+  c1.wait();
 
   {
+    cerr << "Overwrite some and clone range object" << std::endl;
     ObjectStore::Transaction t;
     bufferlist bl;
     bl.append(std::string(0x400, 'z'));
     t.write(cid, hoid, 0, bl.length(), bl,
             CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
-    r = queue_transaction(store, ch, std::move(t));
-    ASSERT_EQ(r, 0);
-  }
-  {
-    ObjectStore::Transaction t;
     t.clone_range(cid, hoid, hoid2, 0, 0x10000, 0);
-    cerr << "Clone range object" << std::endl;
+    t.register_on_commit(&c2);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
  }
- sleep(1);
+ c2.wait();
  {
     bufferlist bl, expected;
     r = store->read(ch, hoid2, 0, 0x1000, bl);
