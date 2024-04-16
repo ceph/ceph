@@ -12,6 +12,7 @@ overrides:
       - MDS_UP_LESS_THAN_MAX
       - filesystem is online with fewer MDS than max_mds
       - POOL_APP_NOT_ENABLED
+      - do not have an application enabled
       - overall HEALTH_
       - Replacing daemon
       - deprecated feature inline_data
