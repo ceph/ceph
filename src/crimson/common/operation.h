@@ -528,18 +528,18 @@ public:
     if (wait_fut.has_value()) {
       return wait_fut.value().then([this, &stage, t=std::move(t)] () mutable {
         auto fut = t.maybe_record_blocking(stage.enter(t), stage);
-        exit();
         return std::move(fut).then(
           [this, t=std::move(t)](auto &&barrier_ref) mutable {
+          exit();
           barrier = std::move(barrier_ref);
           return seastar::now();
         });
       });
     } else {
         auto fut = t.maybe_record_blocking(stage.enter(t), stage);
-        exit();
         return std::move(fut).then(
           [this, t=std::move(t)](auto &&barrier_ref) mutable {
+          exit();
           barrier = std::move(barrier_ref);
           return seastar::now();
         });
