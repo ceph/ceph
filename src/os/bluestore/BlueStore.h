@@ -304,7 +304,7 @@ public:
     uint16_t state;             ///< STATE_*
     uint16_t cache_private = 0; ///< opaque (to us) value used by Cache impl
     uint32_t flags;             ///< FLAG_*
-    uint64_t seq;
+    TransContext* txc;
     uint32_t offset, length;
     ceph::buffer::list data;
     std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
@@ -314,16 +314,16 @@ public:
 
     static std::atomic<uint64_t> total;
 
-    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, uint32_t l,
-	   unsigned f = 0)
-      : space(space), state(s), flags(f), seq(q), offset(o), length(l) { total++; }
-    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, ceph::buffer::list& b,
-	   unsigned f = 0)
-      : space(space), state(s), flags(f), seq(q), offset(o),
+    Buffer(BufferSpace *space, unsigned s, TransContext* _txc,
+           uint32_t o, uint32_t l, unsigned f = 0)
+      : space(space), state(s), flags(f), txc(_txc), offset(o), length(l) { total++; }
+    Buffer(BufferSpace *space, unsigned s, TransContext* _txc,
+           uint32_t o, ceph::buffer::list& b, unsigned f = 0)
+      : space(space), state(s), flags(f), txc(_txc), offset(o),
 	length(b.length()), data(b) { total++; }
-    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, ceph::buffer::list&& b,
-	   unsigned f = 0)
-      : space(space), state(s), flags(f), seq(q), offset(o),
+    Buffer(BufferSpace *space, unsigned s, TransContext* _txc,
+           uint32_t o, ceph::buffer::list&& b, unsigned f = 0)
+      : space(space), state(s), flags(f), txc(_txc), offset(o),
 	length(b.length()), data(std::move(b)) { total++; }
 
     ~Buffer() { total--; }
@@ -361,7 +361,7 @@ public:
 
     void dump(ceph::Formatter *f) const {
       f->dump_string("state", get_state_name(state));
-      f->dump_unsigned("seq", seq);
+      f->dump_unsigned("txc", (uint64_t)txc);
       f->dump_unsigned("offset", offset);
       f->dump_unsigned("length", length);
       f->dump_unsigned("data_length", data.length());
@@ -436,27 +436,28 @@ public:
                  uint32_t offset, uint32_t length);
 
     void write(BufferCacheShard* cache,
-               uint64_t seq, uint32_t offset, ceph::buffer::list&& bl,
+               TransContext* txc, uint32_t offset, ceph::buffer::list&& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
       uint16_t cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache,
-                  new Buffer(this, Buffer::STATE_WRITING, seq, offset, std::move(bl), flags),
+                  new Buffer(this, Buffer::STATE_WRITING, txc, offset, std::move(bl), flags),
                   cache_private, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
       cache->_trim();
     }
     void write(BufferCacheShard* cache,
-               uint64_t seq, uint32_t offset, ceph::buffer::list& bl,
+               TransContext* txc, uint32_t offset, ceph::buffer::list& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
       uint16_t cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache,
-                  new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl, flags),
+                  new Buffer(this, Buffer::STATE_WRITING, txc, offset, bl, flags),
                   cache_private, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1,
                   nullptr);
       cache->_trim();
     }
-    void _finish_write(BufferCacheShard* cache, uint64_t seq, uint32_t offset, uint32_t length);
+    void _finish_write(BufferCacheShard* cache, TransContext* txc,
+                       uint32_t offset, uint32_t length);
     void did_read(BufferCacheShard* cache,
                   uint32_t offset, ceph::buffer::list&& bl) {
       std::lock_guard l(cache->lock);
@@ -506,22 +507,24 @@ public:
     using write_list_t = mempool::bluestore_writing::list<WriteEntry>;
 
     ceph::mutex lock = ceph::make_mutex("BlueStore::Writings::lock");
-    mempool::bluestore_writing::map<uint64_t, write_list_t> seq_to_buf; // seq no -> list of <onode, offset, length>
+
+    // TransContext -> list of <onode, offset, length>
+    mempool::bluestore_writing::map<void*, write_list_t> txc_to_buf;
 
   public:
     ~Writings() {
       // sanity
-      ceph_assert(seq_to_buf.empty());
+      ceph_assert(txc_to_buf.empty());
     }
     void add_writing(Onode* o, Buffer* b) {
       std::lock_guard l(lock);
-      seq_to_buf[b->seq].emplace_back(o, b);
+      txc_to_buf[b->txc].emplace_back(o, b);
     }
-    void finish_writing(uint64_t seq);
+    void finish_writing(TransContext* txc);
 
     bool empty() {
       std::lock_guard l(lock);
-      return seq_to_buf.empty();
+      return txc_to_buf.empty();
     }
   } writings;
 
@@ -1432,7 +1435,7 @@ public:
     void rewrite_omap_key(const std::string& old, std::string *out);
     void decode_omap_key(const std::string& key, std::string *user_key);
 
-    void finish_write(uint64_t seq, uint32_t offset, uint32_t length);
+    void finish_write(TransContext* txc, uint32_t offset, uint32_t length);
 
 private:
     void _decode(const ceph::buffer::list& v);
@@ -1897,7 +1900,6 @@ private:
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
 
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
-    std::vector<uint64_t> writing_seqs; ///< indicate these on io completion
 
     KeyValueDB::Transaction t; ///< then we will commit this
     std::list<Context*> oncommits;  ///< more commit completions
@@ -1913,7 +1915,7 @@ private:
     IOContext ioc;
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
-    uint64_t seq = 0;
+    //uint64_t seq = 0;
     ceph::mono_clock::time_point start;
     ceph::mono_clock::time_point last_stamp;
 
@@ -2140,8 +2142,6 @@ private:
     BlueStore *store;
     coll_t cid;
 
-    uint64_t last_seq = 0;
-
     std::atomic_int txc_with_unstable_io = {0};  ///< num txcs with unstable io
 
     std::atomic_int kv_committing_serially = {0};
@@ -2158,13 +2158,11 @@ private:
 
     void queue_new(TransContext *txc) {
       std::lock_guard l(qlock);
-      txc->seq = ++last_seq;
       q.push_back(*txc);
     }
     void undo_queue(TransContext* txc) {
       std::lock_guard l(qlock);
       ceph_assert(&q.back() == txc);
-      --last_seq;
       q.pop_back();
     }
 
@@ -2893,9 +2891,8 @@ private:
     ceph::buffer::list&& bl,
     unsigned flags) {
     onode->bc.write(onode->c->cache,
-                    txc->seq, offset, std::move(bl),
+                    txc, offset, std::move(bl),
 		    flags);
-    txc->writing_seqs.push_back(txc->seq);
   }
 
   void _buffer_cache_write(
@@ -2905,9 +2902,8 @@ private:
     ceph::buffer::list& bl,
     unsigned flags) {
     onode->bc.write(onode->c->cache,
-                    txc->seq, offset, bl,
+                    txc, offset, bl,
 		    flags);
-    txc->writing_seqs.push_back(txc->seq);
   }
 
   int _collection_list(

@@ -1737,11 +1737,11 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache,
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
 	  _add_buffer(cache,
-	              new Buffer(this, b->state, b->seq, end, bl, b->flags),
+	              new Buffer(this, b->state, b->txc, end, bl, b->flags),
 	              0, 0, b);
 	} else {
 	  _add_buffer(cache,
-	              new Buffer(this, b->state, b->seq, end, tail, b->flags),
+	              new Buffer(this, b->state, b->txc, end, tail, b->flags),
 	              0, 0, b);
 	}
 	if (!b->is_writing()) {
@@ -1774,10 +1774,10 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache,
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
       _add_buffer(cache,
-                  new Buffer(this, b->state, b->seq, end, bl, b->flags), 0, 0, b);
+                  new Buffer(this, b->state, b->txc, end, bl, b->flags), 0, 0, b);
     } else {
       _add_buffer(cache,
-                  new Buffer(this, b->state, b->seq, end, keep, b->flags), 0, 0, b);
+                  new Buffer(this, b->state, b->txc, end, keep, b->flags), 0, 0, b);
     }
     __rm_buffer(cache, &*i);
     cache->_audit("discard end 2");
@@ -1859,10 +1859,10 @@ void BlueStore::BufferSpace::read(
 }
 
 void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache,
-                                           uint64_t seq,
+                                           TransContext* txc,
                                            uint32_t offset, uint32_t len)
 {
-  ldout(cache->cct, 10) << __func__ << " seq " << seq
+  ldout(cache->cct, 10) << __func__ << " txc " << txc
                         << std::hex << " 0x" << offset << "~" << len << std::dec
                         << dendl;
 
@@ -1873,7 +1873,7 @@ void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache,
     Buffer* b = &*i;
     i++;
     ceph_assert(b->end() > offset);
-    if (b->seq == seq && b->is_writing()) {
+    if (b->txc == txc && b->is_writing()) {
       ldout(cache->cct, 20) << __func__ << " finish " << *b
                             << dendl;
       if (b->flags & Buffer::FLAG_NOCACHE) {
@@ -1937,7 +1937,7 @@ void BlueStore::BufferSpace::_dup_writing(TransContext* txc, Collection* collect
         offset_to_copy = b->offset + front;
       }
     }
-    Buffer* to_b = new Buffer(&onode->bc, b->state, b->seq, offset_to_copy,
+    Buffer* to_b = new Buffer(&onode->bc, b->state, b->txc, offset_to_copy,
                               std::move(buffer_to_copy), b->flags);
     ldout(cache->cct, 20) << __func__ << " offset=" << std::hex << offset
                           << " length=" << std::hex << length << " buffer=" << *to_b << dendl;
@@ -1958,10 +1958,10 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::BufferSpace& bc)
 }
 
 // Writings
-void BlueStore::Writings::finish_writing(uint64_t seq)
+void BlueStore::Writings::finish_writing(TransContext* txc)
 {
   // We might get a race when onode cloning/overwriting put more
-  // WriteEntries with the same seq_no while finish_writing() is in progress
+  // WriteEntries with the same txc while finish_writing() is in progress
   // (and after finished list has been already filled).
   // So we might want to repeat processing for these new onodes.
   // The proposed processing scheme below is apparently valid:
@@ -1973,20 +1973,20 @@ void BlueStore::Writings::finish_writing(uint64_t seq)
     finished.clear();
     {
       std::lock_guard l(lock);
-      auto it = seq_to_buf.find(seq);
-      if (it != seq_to_buf.end()) {
+      auto it = txc_to_buf.find(txc);
+      if (it != txc_to_buf.end()) {
         finished.swap(it->second);
-        seq_to_buf.erase(it);
+        txc_to_buf.erase(it);
       }
     }
     for (auto& e : finished) {
-      e.onode->finish_write(seq, e.offset, e.length);
+      e.onode->finish_write(txc, e.offset, e.length);
     }
 
-    // If 'finished' is not empty - new entries could appear in seq_to_buf
+    // If 'finished' is not empty - new entries could appear in txc_to_buf
     // after the last swap. Hence we need to reiterate. And this could even
     // need multiple iterations.
-    // But if 'finished' list is empty - no more entries matching the seq_no
+    // But if 'finished' list is empty - no more entries matching the txc
     // would appear (previous onode::finish_write() calls would be logical
     // "walls" as they acquires relevant onode cache's locks).
     // So we're safe to exit the loop.
@@ -4760,7 +4760,7 @@ void BlueStore::Onode::decode_omap_key(const string& key, string *user_key)
   *user_key = key.substr(pos);
 }
 
-void BlueStore::Onode::finish_write(uint64_t seq, uint32_t offset, uint32_t length)
+void BlueStore::Onode::finish_write(TransContext* txc, uint32_t offset, uint32_t length)
 {
   while (true) {
     BufferCacheShard *cache = c->cache;
@@ -4772,13 +4772,13 @@ void BlueStore::Onode::finish_write(uint64_t seq, uint32_t offset, uint32_t leng
 	       << dendl;
       continue;
     }
-    ldout(c->store->cct, 10) << __func__ << " seq " << seq << std::hex
+    ldout(c->store->cct, 10) << __func__ << " txc " << txc << std::hex
                              << " 0x" << offset << "~" << length << std::dec
                              << dendl;
-    bc._finish_write(cache, seq, offset, length);
+    bc._finish_write(cache, txc, offset, length);
     break;
   }
-  ldout(c->store->cct, 10) << __func__ << " done " << seq << dendl;
+  ldout(c->store->cct, 10) << __func__ << " done " << txc << dendl;
 }
 
 // =======================================================
@@ -13373,13 +13373,15 @@ BlueStore::TransContext *BlueStore::_txc_create(
     txc->trace.init("TransContext", &trace_endpoint,
                     &osd_op->pg_trace);
     txc->trace.event("txc create");
-    txc->trace.keyval("txc seq", txc->seq);
+    //txc->trace.keyval("txc seq", txc->seq);
+    txc->trace.keyval("txc", txc);
   }
 #endif
 
   osr->queue_new(txc);
   dout(20) << __func__ << " osr " << osr << " = " << txc
-	   << " seq " << txc->seq << dendl;
+	  // << " seq " << txc->seq
+           << dendl;
   return txc;
 }
 
@@ -13723,7 +13725,7 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
 	bluestore,
 	transaction_kv_submit_latency,
 	txc->osr->get_sequencer_id(),
-	txc->seq,
+	(uint64_t)txc,
 	sync_submit_transaction,
 	ceph::to_seconds<double>(mono_clock::now() - start));
     }
@@ -13773,11 +13775,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
   ceph_assert(txc->get_state() == TransContext::STATE_FINISHING);
 
-  for (auto &seq : txc->writing_seqs) {
-    ldout(cct, 0) << __func__ << " " << seq << dendl;
-    writings.finish_writing(seq);
-  }
-  txc->writing_seqs.clear();
+  writings.finish_writing(txc);
 
   while (!txc->removed_collections.empty()) {
     _queue_reap_collection(txc->removed_collections.front());
@@ -14267,7 +14265,7 @@ void BlueStore::_kv_sync_thread()
 	    bluestore,
 	    transaction_kv_sync_latency,
 	    txc->osr->get_sequencer_id(),
-	    txc->seq,
+	    (uint64_t)txc,
 	    kv_committing.size(),
 	    deferred_done.size(),
 	    deferred_stable.size(),
@@ -17894,7 +17892,7 @@ void BlueStore::BlueStoreThrottle::emit_initial_tracepoint(
       bluestore,
       transaction_initial_state,
       txc.osr->get_sequencer_id(),
-      txc.seq,
+      (uint64_t)&txc,
       throttle_bytes.get_current(),
       throttle_deferred_bytes.get_current(),
       pending_kv_ios,
@@ -17907,7 +17905,7 @@ void BlueStore::BlueStoreThrottle::emit_initial_tracepoint(
       bluestore,
       transaction_initial_state_rocksdb,
       txc.osr->get_sequencer_id(),
-      txc.seq,
+      (uint64_t)&txc,
       rocksdb_base_level,
       rocksdb_estimate_pending_compaction_bytes,
       rocksdb_cur_size_all_mem_tables,
@@ -17935,7 +17933,7 @@ mono_clock::duration BlueStore::BlueStoreThrottle::log_state_latency(
       bluestore,
       transaction_state_duration,
       txc.osr->get_sequencer_id(),
-      txc.seq,
+      (uint64_t)&txc,
       state,
       ceph::to_seconds<double>(lat));
   }
@@ -17979,7 +17977,7 @@ void BlueStore::BlueStoreThrottle::complete_kv(TransContext &txc)
       bluestore,
       transaction_commit_latency,
       txc.osr->get_sequencer_id(),
-      txc.seq,
+      (uint64_t)&txc,
       ceph::to_seconds<double>(mono_clock::now() - txc.start));
   }
 }
@@ -17998,7 +17996,7 @@ void BlueStore::BlueStoreThrottle::complete(TransContext &txc)
       bluestore,
       transaction_total_duration,
       txc.osr->get_sequencer_id(),
-      txc.seq,
+      (uint64_t)&txc,
       ceph::to_seconds<double>(lat));
   }
 }
