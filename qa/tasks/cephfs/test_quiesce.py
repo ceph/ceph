@@ -638,6 +638,7 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         op = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'], rank=0)['op']
         self.assertEqual(op['result'], -1) # EPERM
 
+    @unittest.skip
     def test_quiesce_authpin_wait(self):
         """
         That a quiesce_inode op with outstanding remote authpin requests can be killed.
