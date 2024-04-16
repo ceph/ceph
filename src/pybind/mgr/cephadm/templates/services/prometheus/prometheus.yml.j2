@@ -41,6 +41,10 @@ scrape_configs:
     tls_config:
       ca_file: mgr_prometheus_cert.pem
     honor_labels: true
+    relabel_configs:
+    - source_labels: [instance]
+      target_label: instance
+      replacement: 'ceph_cluster'
     http_sd_configs:
     - url: {{ mgr_prometheus_sd_url }}
       basic_auth:
@@ -54,6 +58,9 @@ scrape_configs:
     - source_labels: [__address__]
       target_label: cluster
       replacement: {{ cluster_fsid }}
+    - source_labels: [instance]
+      target_label: instance
+      replacement: 'ceph_cluster'
     http_sd_configs:
     - url: {{ mgr_prometheus_sd_url }}
 {% endif %}
