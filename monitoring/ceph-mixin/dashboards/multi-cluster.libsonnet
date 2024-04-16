@@ -29,17 +29,17 @@ local g = import 'grafonnet/grafana.libsonnet';
 
     .addTemplate(
       $.addTemplateSchema(
-      'cluster',
-      '$datasource',
-      'label_values(ceph_health_status, %s)' % $._config.clusterLabel,
-      1,
-      true,
-      1,
-      'cluster',
-      '(.*)',
-      if !$._config.showMultiCluster then 'variable' else '',
-      multi=true,
-      allValues='.*',
+        'cluster',
+        '$datasource',
+        'label_values(ceph_health_status, %s)' % $._config.clusterLabel,
+        1,
+        true,
+        1,
+        'cluster',
+        '(.*)',
+        if !$._config.showMultiCluster then 'variable' else '',
+        multi=true,
+        allValues='.*',
       ),
     )
 
@@ -806,7 +806,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           },
         ]).addTargets([
           $.addTargetSchema(
-            expr='ALERTS{alertstate="firing", %(matchers)s}}'  % $.matchers(),
+            expr='ALERTS{alertstate="firing", %(matchers)s}}' % $.matchers(),
             datasource={ type: 'prometheus', uid: '$datasource' },
             format='table',
             hide=false,
