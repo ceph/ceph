@@ -1399,7 +1399,7 @@ def exec_test():
         log.info('\nrunning vstart.sh now...')
         # usually, i get vstart.sh running completely in less than 100
         # seconds.
-        remote.run(args=args, env=vstart_env, timeout=(3 * 60))
+        remote.run(args=args, env=vstart_env, timeout=(5 * 60))
         log.info('\nvstart.sh finished running')
 
         # Wait for OSD to come up so that subsequent injectargs etc will
