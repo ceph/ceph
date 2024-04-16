@@ -1494,10 +1494,16 @@ class NvmeofServiceSpec(ServiceSpec):
                 raise SpecValidationError(
                     'Invalid SPDK log level. Valid values are: DEBUG, INFO, WARNING, ERROR, NOTICE')
 
-        if self.spdk_ping_interval_in_seconds < 1.0:
+        if (
+            self.spdk_ping_interval_in_seconds
+            and self.spdk_ping_interval_in_seconds < 1.0
+        ):
             raise SpecValidationError("SPDK ping interval should be at least 1 second")
 
-        if self.allowed_consecutive_spdk_ping_failures < 1:
+        if (
+            self.allowed_consecutive_spdk_ping_failures
+            and self.allowed_consecutive_spdk_ping_failures < 1
+        ):
             raise SpecValidationError("Allowed consecutive SPDK ping failures should be at least 1")
 
         if self.state_update_interval_sec < 0:
