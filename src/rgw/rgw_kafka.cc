@@ -42,7 +42,7 @@ inline int rd_kafka_err2errno(rd_kafka_resp_err_t err) {
   case RD_KAFKA_RESP_ERR_MSG_SIZE_TOO_LARGE:
     return EMSGSIZE;
   case RD_KAFKA_RESP_ERR__QUEUE_FULL:
-    return ENOBUFS;                                                                                                                                                                                                                           
+    return ENOBUFS;
   default:
     return EIO;
   }
@@ -155,6 +155,29 @@ struct connection_t {
   }
 };
 
+// convert int status to string - including RGW specific values
+std::string status_to_string(int s) {
+  switch (s) {
+    case STATUS_OK:
+        return "STATUS_OK";
+    case STATUS_CONNECTION_CLOSED:
+      return "RGW_KAFKA_STATUS_CONNECTION_CLOSED";
+    case STATUS_QUEUE_FULL:
+      return "RGW_KAFKA_STATUS_QUEUE_FULL";
+    case STATUS_MAX_INFLIGHT:
+      return "RGW_KAFKA_STATUS_MAX_INFLIGHT";
+    case STATUS_MANAGER_STOPPED:
+      return "RGW_KAFKA_STATUS_MANAGER_STOPPED";
+    case STATUS_CONF_ALLOC_FAILED:
+      return "RGW_KAFKA_STATUS_CONF_ALLOC_FAILED";
+    case STATUS_CONF_REPLCACE:
+      return "RGW_KAFKA_STATUS_CONF_REPLCACE";
+    case STATUS_CONNECTION_IDLE:
+      return "RGW_KAFKA_STATUS_CONNECTION_IDLE";
+  }
+  return std::string(rd_kafka_err2str((rd_kafka_resp_err_t)s));
+}
+
 void message_callback(rd_kafka_t* rk, const rd_kafka_message_t* rkmessage, void* opaque) {
   ceph_assert(opaque);
 
@@ -162,10 +185,10 @@ void message_callback(rd_kafka_t* rk, const rd_kafka_message_t* rkmessage, void*
   const auto result = rkmessage->err;
 
   if (rkmessage->err == 0) {
-      ldout(conn->cct, 20) << "Kafka run: ack received with result=" << 
+      ldout(conn->cct, 20) << "Kafka run: ack received with result=" <<
         rd_kafka_err2str(result) << dendl;
   } else {
-      ldout(conn->cct, 1) << "Kafka run: nack received with result=" << 
+      ldout(conn->cct, 1) << "Kafka run: nack received with result=" <<
         rd_kafka_err2str(result) << dendl;
   }
 
@@ -235,7 +258,7 @@ bool new_producer(connection_t* conn) {
   // however, testing with librdkafka v1.6.1 did not expire the message in that case. hence, a value of zero is changed to 1ms
   constexpr std::uint64_t min_message_timeout = 1;
   const auto message_timeout = std::max(min_message_timeout, conn->cct->_conf->rgw_kafka_message_timeout);
-  if (rd_kafka_conf_set(conf.get(), "message.timeout.ms", 
+  if (rd_kafka_conf_set(conf.get(), "message.timeout.ms",
         std::to_string(message_timeout).c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
 
   // get list of brokers based on the bootstrap broker
@@ -391,7 +414,7 @@ private:
       topic = rd_kafka_topic_new(conn->producer, message->topic.c_str(), nullptr);
       if (!topic) {
         const auto err = rd_kafka_last_error();
-        ldout(conn->cct, 1) << "Kafka publish: failed to create topic: " << message->topic << " error: " 
+        ldout(conn->cct, 1) << "Kafka publish: failed to create topic: " << message->topic << " error: "
           << rd_kafka_err2str(err) << "(" << err << ")" << dendl;
         if (message->cb) {
           message->cb(-rd_kafka_err2errno(err));
@@ -478,7 +501,7 @@ private:
 
         // Checking the connection idleness
         if(conn->timestamp.sec() + conn->cct->_conf->rgw_kafka_connection_idle < ceph_clock_now()) {
-          ldout(conn->cct, 20) << "kafka run: deleting a connection that was idle for: " << 
+          ldout(conn->cct, 20) << "kafka run: deleting a connection that was idle for: " <<
             conn->cct->_conf->rgw_kafka_connection_idle << " seconds. last activity was at: " << conn->timestamp << dendl;
           std::lock_guard lock(connections_lock);
           conn->status = STATUS_CONNECTION_IDLE;
@@ -549,7 +572,9 @@ public:
           bool use_ssl,
           bool verify_ssl,
           boost::optional<const std::string&> ca_location,
-          boost::optional<const std::string&> mechanism) {
+          boost::optional<const std::string&> mechanism,
+          boost::optional<const std::string&> topic_user_name,
+          boost::optional<const std::string&> topic_password) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
@@ -561,6 +586,21 @@ public:
       // TODO: increment counter
       ldout(cct, 1) << "Kafka connect: URL parsing failed" << dendl;
       return false;
+    }
+
+    // check if username/password was already supplied via topic attributes
+    // and if also provided as part of the endpoint URL issue a warning
+    if (topic_user_name.has_value()) {
+      if (!user.empty()) {
+        ldout(cct, 5) << "Kafka connect: username provided via both topic attributes and endpoint URL: using topic attributes" << dendl;
+      }
+      user = topic_user_name.get();
+    }
+    if (topic_password.has_value()) {
+      if (!password.empty()) {
+        ldout(cct, 5) << "Kafka connect: password provided via both topic attributes and endpoint URL: using topic attributes" << dendl;
+      }
+      password = topic_password.get();
     }
 
     // this should be validated by the regex in parse_url()
@@ -695,10 +735,12 @@ void shutdown() {
 
 bool connect(std::string& broker, const std::string& url, bool use_ssl, bool verify_ssl,
         boost::optional<const std::string&> ca_location,
-        boost::optional<const std::string&> mechanism) {
+        boost::optional<const std::string&> mechanism,
+        boost::optional<const std::string&> user_name,
+        boost::optional<const std::string&> password) {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
-  return s_manager->connect(broker, url, use_ssl, verify_ssl, ca_location, mechanism);
+  return s_manager->connect(broker, url, use_ssl, verify_ssl, ca_location, mechanism, user_name, password);
 }
 
 int publish(const std::string& conn_name,
