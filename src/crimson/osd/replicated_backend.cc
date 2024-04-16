@@ -44,7 +44,7 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
 				       std::vector<pg_log_entry_t>&& log_entries)
 {
   LOG_PREFIX(ReplicatedBackend::_submit_transaction);
-  DEBUGDPP("object {}, {}", dpp, hoid);
+  DEBUGDPP("object {}", dpp, hoid);
 
   const ceph_tid_t tid = shard_services.get_tid();
   auto pending_txn =
