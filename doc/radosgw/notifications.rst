@@ -182,6 +182,8 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.13.key=max_retries&Attributes.entry.13.value=<retries number>]
    [&Attributes.entry.14.key=retry_sleep_duration&Attributes.entry.14.value=<sleep seconds>]
    [&Attributes.entry.15.key=Policy&Attributes.entry.15.value=<policy-JSON-string>]
+   [&Attributes.entry.16.key=user-name&Attributes.entry.16.value=<user-name-string>]
+   [&Attributes.entry.17.key=password&Attributes.entry.17.value=<password-string>]
 
 Request parameters:
 
@@ -270,6 +272,10 @@ Request parameters:
  - user/password: This should be provided over HTTPS. If not, the config parameter `rgw_allow_notification_secrets_in_cleartext` must be `true` in order to create topics.
  - user/password: This should be provided together with ``use-ssl``. If not, the broker credentials will be sent over insecure transport.
  - mechanism: may be provided together with user/password (default: ``PLAIN``). The supported SASL mechanisms are:
+ - ``user-name``: User name to use when connecting to the Kafka broker. If both this parameter and URI user are provided then this parameter overrides the URI user.
+    The same security considerations are in place for this parameter as are for user/password.
+ - ``password``: Password to use when connecting to the Kafka broker. If both this parameter and URI password are provided then this parameter overrides the URI password.
+    The same security considerations are in place for this parameter as are for user/password.
 
   - PLAIN
   - SCRAM-SHA-256
