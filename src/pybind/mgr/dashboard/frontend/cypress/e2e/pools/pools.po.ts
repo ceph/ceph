@@ -44,7 +44,6 @@ export class PoolPageHelper extends PageHelper {
   edit_pool_configuration(name: string, bpsLimit: string) {
     this.navigateEdit(name);
 
-    cy.get('.collapsible').click();
     cy.get('cd-rbd-configuration-form')
       .get('input[name=rbd_qos_bps_limit]')
       .clear()
@@ -53,7 +52,6 @@ export class PoolPageHelper extends PageHelper {
 
     this.navigateEdit(name);
 
-    cy.get('.collapsible').click();
     cy.get('cd-rbd-configuration-form')
       .get('input[name=rbd_qos_bps_limit]')
       .should('have.value', bpsLimit);

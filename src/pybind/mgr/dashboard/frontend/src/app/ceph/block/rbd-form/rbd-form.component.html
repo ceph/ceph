@@ -219,29 +219,6 @@
           </div>
         </div>
 
-        <!-- Features -->
-        <div class="form-group row"
-             formGroupName="features">
-          <label i18n
-                 class="cd-col-form-label"
-                 for="features">Features</label>
-          <div class="cd-col-form-input">
-            <div class="custom-control custom-checkbox"
-                 *ngFor="let feature of featuresList">
-              <input type="checkbox"
-                     class="custom-control-input"
-                     id="{{ feature.key }}"
-                     name="{{ feature.key }}"
-                     formControlName="{{ feature.key }}">
-              <label class="custom-control-label"
-                     for="{{ feature.key }}">{{ feature.desc }}</label>
-              <cd-helper *ngIf="feature.helperHtml"
-                         html="{{ feature.helperHtml }}">
-              </cd-helper>
-            </div>
-          </div>
-        </div>
-
         <!-- Mirroring -->
         <div class="form-group row">
           <div class="cd-col-form-offset">
@@ -300,9 +277,31 @@
 
         <!-- Advanced -->
         <cd-form-advanced-fieldset>
+          <!-- Features -->
+          <div class="form-group row"
+               formGroupName="features">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="features">Features</label>
+            <div class="cd-col-form-input">
+              <div class="custom-control custom-checkbox"
+                   *ngFor="let feature of featuresList">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       id="{{ feature.key }}"
+                       name="{{ feature.key }}"
+                       formControlName="{{ feature.key }}">
+                <label class="custom-control-label"
+                       for="{{ feature.key }}">{{ feature.desc }}</label>
+                <cd-helper *ngIf="feature.helperHtml"
+                           html="{{ feature.helperHtml }}">
+                </cd-helper>
+              </div>
+            </div>
+          </div>
+
           <h4 class="cd-header"
               i18n>Striping</h4>
-
           <!-- Object Size -->
           <div class="form-group row">
             <label i18n
