@@ -1,5 +1,4 @@
 export enum RetentionFrequency {
-  Minutely = 'm',
   Hourly = 'h',
   Daily = 'd',
   Weekly = 'w',
