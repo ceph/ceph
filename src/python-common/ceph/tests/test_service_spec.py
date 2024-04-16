@@ -383,6 +383,14 @@ spec:
   privacy_protocol: AES
   snmp_destination: 192.168.1.42:162
   snmp_version: V3
+---
+service_type: grafana
+service_name: grafana
+placement:
+  count: 1
+spec:
+  anonymous_access: false
+  initial_admin_password: password
 """.split('---\n'))
 def test_yaml(y):
     data = yaml.safe_load(y)

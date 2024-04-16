@@ -1317,7 +1317,7 @@ class GrafanaSpec(MonitoringSpec):
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
                  initial_admin_password: Optional[str] = None,
-                 anonymous_access: Optional[bool] = True,
+                 anonymous_access: bool = True,
                  extra_container_args: Optional[List[str]] = None,
                  extra_entrypoint_args: Optional[List[str]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1338,6 +1338,24 @@ class GrafanaSpec(MonitoringSpec):
                        'must be set to true. Otherwise the grafana dashboard will '
                        'be inaccessible.')
             raise SpecValidationError(err_msg)
+
+    def to_json(self) -> "OrderedDict[str, Any]":
+        json_dict = super(GrafanaSpec, self).to_json()
+        if not self.anonymous_access:
+            # This field was added as a boolean that defaults
+            # to True, which makes it get dropped when the user
+            # sets it to False and it is converted to json. This means
+            # the in memory version of the spec will have the option set
+            # correctly, but the persistent version we store in the config-key
+            # store will always drop this option. It's already been backported to
+            # some release versions, or we'd probably just rename it to
+            # no_anonymous_access and default it to False. This block is to
+            # handle this option specially and in the future, we should avoid
+            # boolean fields that default to True.
+            if 'spec' not in json_dict:
+                json_dict['spec'] = {}
+            json_dict['spec']['anonymous_access'] = False
+        return json_dict
 
 
 yaml.add_representer(GrafanaSpec, ServiceSpec.yaml_representer)
