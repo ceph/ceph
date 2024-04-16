@@ -3003,6 +3003,8 @@ void MDSRankDispatcher::handle_asok_command(
     mdcache->cache_status(f);
   } else if (command == "quiesce path") {
     r = command_quiesce_path(f, cmdmap, *css);
+  } else if (command == "lock path") {
+    r = command_lock_path(f, cmdmap, *css);
   } else if (command == "dump tree") {
     command_dump_tree(cmdmap, *css, f);
   } else if (command == "dump loads") {
@@ -3530,6 +3532,30 @@ int MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::ost
     f->dump_object("op", *mdr);
   }
   f->dump_object("state", *qs);
+  f->close_section();
+  return 0;
+}
+
+int MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::ostream& ss)
+{
+  std::string path;
+  {
+    bool got = cmd_getval(cmdmap, "path", path);
+    if (!got) {
+      ss << "missing path";
+      return -CEPHFS_EINVAL;
+    }
+  }
+
+  std::vector<std::string> locks;
+  cmd_getval(cmdmap, "locks", locks);
+
+  f->open_object_section("lock");
+  {
+    std::lock_guard l(mds_lock);
+    auto mdr = mdcache->lock_path(filepath(path), locks);
+    f->dump_object("op", *mdr);
+  }
   f->close_section();
   return 0;
 }
