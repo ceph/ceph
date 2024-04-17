@@ -2030,3 +2030,192 @@ tests:
         exp_annotations:
           summary: Fan error(s) detected
           description: "Fan error(s) detected. Check `ceph health detail`."
+
+  # new rbdmirror alerts tests
+  # RBD Mirror Alerts
+  # alert: CephRBDMirrorImagesPerDaemonHigh
+ - interval: 1m
+   input_series:
+     - series: 'ceph_rbd_mirror_snapshot_image_snapshots{ceph_daemon="client.admin.40628", image="image1", namespace="default", pool="data"}'
+       values: '0+0x20 1+1x130'
+     - series: 'ceph_rbd_mirror_snapshot_image_snapshots{ceph_daemon="client.admin.40628", image="image2", namespace="default", pool="data"}'
+       values: '1+1x130 131+0x20'
+   # prometheus query test
+   promql_expr_test:
+     # negative test where there are no samples
+     - expr: sum by (ceph_daemon, namespace) (ceph_rbd_mirror_snapshot_image_snapshots) > 100
+       eval_time: 50m
+       exp_samples:
+     # second positive test
+     - expr: sum by (ceph_daemon, namespace) (ceph_rbd_mirror_snapshot_image_snapshots) > 100
+       eval_time: 70m
+       exp_samples:
+         - labels: '{ceph_daemon="client.admin.40628", namespace="default"}'
+           value: 121
+   # prometheus alert test
+   alert_rule_test:
+     # negative test
+     - eval_time: 30m
+       alertname: CephRBDMirrorImagesPerDaemonHigh
+       exp_alerts:
+     # positive test where alert is fired
+     - eval_time: 70m
+       alertname: CephRBDMirrorImagesPerDaemonHigh
+       exp_alerts:
+       - exp_labels:
+           oid: "1.3.6.1.4.1.50495.1.2.1.10.2"
+           severity: "critical"
+           type: "ceph_default"
+           ceph_daemon: "client.admin.40628"
+           namespace: "default"
+         exp_annotations:
+           description: "Number of image replications per daemon is not suppossed to go beyond threshold 100"
+           summary: "Number of image replications are now above 100"
+
+ # alert: CephRBDMirrorImagesNotInSync
+ - interval: 1m
+   input_series:
+     - series: 'ceph_rbd_mirror_snapshot_image_local_timestamp{ceph_daemon="client.admin.40628",image="image1",namespace="default",pool="data"}'
+       values: '1.678+0x20 2.03+0x20 3.21+0x20'
+     - series: 'ceph_rbd_mirror_snapshot_image_remote_timestamp{ceph_daemon="client.admin.40628",image="image1",namespace="default",pool="data"}'
+       values: '1.678+0x20 2.03+0x20 2.03+0x20'
+   # prometheus query test
+   promql_expr_test:
+     # negative test where there are no samples
+     - expr: sum by (ceph_daemon, image, namespace, pool) (topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0
+       eval_time: 30m
+       exp_samples:
+       # second positive test
+     - expr: sum by (ceph_daemon, image, namespace, pool) (topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0
+       eval_time: 45m
+       exp_samples:
+         - labels: '{ceph_daemon="client.admin.40628", image="image1", namespace="default", pool="data"}'
+           value: 1.1800000000000002
+   # prometheus alert test
+   alert_rule_test:
+     # negative test
+     - eval_time: 20m
+       alertname: CephRBDMirrorImagesNotInSync
+       exp_alerts:
+     # positive test where alert is fired
+     - eval_time: 50m
+       alertname: CephRBDMirrorImagesNotInSync
+       exp_alerts:
+         - exp_labels:
+             image: "image1"
+             pool: "data"
+             oid: "1.3.6.1.4.1.50495.1.2.1.10.3"
+             severity: "critical"
+             type: "ceph_default"
+             ceph_daemon: "client.admin.40628"
+             namespace: "default"
+           exp_annotations:
+             description: "Both local and remote RBD mirror images should be in sync."
+             summary: "Some of the RBD mirror images are not in sync with the remote counter parts."
+
+ # alert: CephRBDMirrorImagesNotInSyncVeryHigh
+ - interval: 1m
+   input_series:
+     - series: 'ceph_rbd_mirror_snapshot_image_local_timestamp{ceph_daemon="client.admin.40628",image="image1",namespace="default",pool="data"}'
+       values: '1.678+0x20 2.03+0x20 3.21+0x20'
+     - series: 'ceph_rbd_mirror_snapshot_image_remote_timestamp{ceph_daemon="client.admin.40628",image="image1",namespace="default",pool="data"}'
+       values: '1.678+0x20 2.03+0x20 2.03+0x20'
+     - series: 'ceph_rbd_mirror_snapshot_image_local_timestamp{ceph_daemon="client.admin.40628",image="image2",namespace="default",pool="data"}'
+       values: '2.189+0x20 3.301+0x14 3.301+0x26'
+     - series: 'ceph_rbd_mirror_snapshot_image_remote_timestamp{ceph_daemon="client.admin.40628",image="image2",namespace="default",pool="data"}'
+       values: '2.189+0x20 3.301+0x14 7.13+0x26'
+     - series: 'ceph_rbd_mirror_snapshot_image_local_timestamp{ceph_daemon="client.admin.40628",image="image3",namespace="default",pool="data"}'
+       values: '2.189+0x20 3.301+0x14 3.301+0x26'
+     - series: 'ceph_rbd_mirror_snapshot_image_remote_timestamp{ceph_daemon="client.admin.40628",image="image3",namespace="default",pool="data"}'
+       values: '2.189+0x20 3.301+0x14 7.13+0x26'
+     - series: 'ceph_rbd_mirror_snapshot_image_local_timestamp{ceph_daemon="client.admin.40628",image="image4",namespace="default",pool="data"}'
+       values: '2.189+0x65'
+     - series: 'ceph_rbd_mirror_snapshot_image_remote_timestamp{ceph_daemon="client.admin.40628",image="image4",namespace="default",pool="data"}'
+       values: '2.189+0x65'
+     - series: 'ceph_rbd_mirror_snapshot_snapshots{ceph_daemon="client.admin.40628"}'
+       values: '1+0x20 2+0x45'
+   # prometheus query test
+   promql_expr_test:
+     # test each query individually
+     # query 1
+     - expr: count by (ceph_daemon) ((topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0)
+       eval_time: 45m
+       exp_samples:
+         - labels: '{ceph_daemon="client.admin.40628"}'
+           value: 3
+     # query 2
+     - expr: sum by (ceph_daemon) (ceph_rbd_mirror_snapshot_snapshots) * .1
+       eval_time: 45m
+       exp_samples:
+         - labels: '{ceph_daemon="client.admin.40628"}'
+           value: 0.2
+   # prometheus alert test
+   alert_rule_test:
+     # negative test
+     - eval_time: 2m
+       alertname: CephRBDMirrorImagesNotInSyncVeryHigh
+       exp_alerts:
+      # positive test where alert is fired
+     - eval_time: 50m
+       alertname: CephRBDMirrorImagesNotInSyncVeryHigh
+       exp_alerts:
+         - exp_labels:
+             ceph_daemon: "client.admin.40628"
+             oid: "1.3.6.1.4.1.50495.1.2.1.10.4"
+             severity: "critical"
+             type: "ceph_default"
+           exp_annotations:
+             description: "More than 10% of the images have synchronization problems"
+             summary: "Number of unsynchronized images are very high."
+
+ # alert: "CephRBDMirrorImageTransferBandwidthHigh"
+ - interval: 1m
+   input_series:
+     - series: 'ceph_rbd_mirror_journal_replay_bytes{ceph_daemon="client.admin.40628"}'
+       values: '0+0x10 1+0x5 10+30x25 736+200x30'
+   # prometheus query test
+   promql_expr_test:
+     # test each couple of rates
+     # rate 1
+     - expr: rate(ceph_rbd_mirror_journal_replay_bytes[5m])
+       eval_time: 5m
+       exp_samples:
+         - labels: '{ceph_daemon="client.admin.40628"}'
+           value: 0.0
+     # rate 2
+     - expr: rate(ceph_rbd_mirror_journal_replay_bytes[5m])
+       eval_time: 20m
+       exp_samples:
+         - labels: '{ceph_daemon="client.admin.40628"}'
+           value: 0.33
+     # rate 3
+     - expr: rate(ceph_rbd_mirror_journal_replay_bytes[5m])
+       eval_time: 40m
+       exp_samples:
+         - labels: '{ceph_daemon="client.admin.40628"}'
+           value: 0.5
+     # rate 4
+     - expr: rate(ceph_rbd_mirror_journal_replay_bytes[5m])
+       eval_time: 50m
+       exp_samples:
+         - labels: '{ceph_daemon="client.admin.40628"}'
+           value: 3.3333333333333335
+   # prometheus alert test
+   alert_rule_test:
+     # negative test
+     - eval_time: 2m
+       alertname: CephRBDMirrorImageTransferBandwidthHigh
+       exp_alerts:
+      # positive test where alert is fired
+     - eval_time: 50m
+       alertname: CephRBDMirrorImageTransferBandwidthHigh
+       exp_alerts:
+       - exp_labels:
+           ceph_daemon: "client.admin.40628"
+           oid: "1.3.6.1.4.1.50495.1.2.1.10.5"
+           severity: "warning"
+           type: "ceph_default"
+         exp_annotations:
+           description: "Detected a heavy increase in bandwidth for rbd replications (over 80%) in the last 30 min. This might not be a problem, but it is good to review the number of images being replicated simultaneously"
+           summary: "The replication network usage has been increased over 80% in the last 30 minutes. Review the number of images being replicated. This alert will be cleaned automatically after 30 minutes"
+
