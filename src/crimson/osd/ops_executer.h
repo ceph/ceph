@@ -261,6 +261,8 @@ private:
     OSDriver& osdriver,
     ceph::os::Transaction& txn);
 
+  void maybe_adjust_clone_overlap();
+
   static interruptible_future<> snap_map_remove(
     const hobject_t& soid,
     SnapMapper& snap_mapper,
