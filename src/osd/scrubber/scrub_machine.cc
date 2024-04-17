@@ -214,6 +214,7 @@ sc::result Session::react(const IntervalChanged&)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "Session::react(const IntervalChanged&)" << dendl;
 
+  ceph_assert(m_reservations);
   m_reservations->discard_remote_reservations();
   return transit<NotActive>();
 }
@@ -267,7 +268,9 @@ sc::result ReservingReplicas::react(const ReplicaGrant& ev)
   dout(10) << "ReservingReplicas::react(const ReplicaGrant&)" << dendl;
   const auto& m = ev.m_op->get_req<MOSDScrubReserve>();
 
-  if (context<Session>().m_reservations->handle_reserve_grant(*m, ev.m_from)) {
+  auto& session = context<Session>();
+  ceph_assert(session.m_reservations);
+  if (session.m_reservations->handle_reserve_grant(*m, ev.m_from)) {
     // we are done with the reservation process
     return transit<ActiveScrubbing>();
   }
@@ -279,6 +282,7 @@ sc::result ReservingReplicas::react(const ReplicaReject& ev)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   auto& session = context<Session>();
   dout(10) << "ReservingReplicas::react(const ReplicaReject&)" << dendl;
+  ceph_assert(session.m_reservations);
   const auto m = ev.m_op->get_req<MOSDScrubReserve>();
 
   // Verify that the message is from the replica we were expecting a reply from,
@@ -306,6 +310,8 @@ sc::result ReservingReplicas::react(const ReservationTimeout&)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   auto& session = context<Session>();
   dout(10) << "ReservingReplicas::react(const ReservationTimeout&)" << dendl;
+  ceph_assert(session.m_reservations);
+
   session.m_reservations->log_failure_and_duration(scrbcnt_resrv_timed_out);
 
   const auto msg = fmt::format(
