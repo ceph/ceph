@@ -785,7 +785,9 @@ class ManagedPolicyTest : public ::testing::Test {
 protected:
   intrusive_ptr<CephContext> cct;
 public:
-  ManagedPolicyTest() : cct(new CephContext(CEPH_ENTITY_TYPE_CLIENT)) {}
+  ManagedPolicyTest() {
+    cct.reset(new CephContext(CEPH_ENTITY_TYPE_CLIENT), false);
+  }
 };
 
 TEST_F(ManagedPolicyTest, IAMFullAccess)
