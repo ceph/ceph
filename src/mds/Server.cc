@@ -2647,9 +2647,14 @@ void Server::dispatch_client_request(const MDRequestRef& mdr)
       auto it = mdr->batch_op_map->find(mask);
       auto new_batch_head = it->second->find_new_head();
       if (!new_batch_head) {
-	mdr->batch_op_map->erase(it);
-	return;
+        mdr->batch_op_map->erase(it);
+        dout(10) << __func__ << ": mask '" << mask
+                 << "' batch head is killed and there is no follower" << dendl;
+        return;
       }
+      dout(10) << __func__ << ": mask '" << mask
+               << "' batch head is killed and queue a new one "
+               << *new_batch_head << dendl;
       mds->finisher->queue(new C_MDS_RetryRequest(mdcache, new_batch_head));
       return;
     } else {
