@@ -172,7 +172,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
   getFrame() {
     this.settingsService
       .validateGrafanaDashboardUrl(this.uid)
-      .subscribe((data: any) => (this.dashboardExist = data === 200));
+      .subscribe((data: any) => (this.dashboardExist = data === 200 || data === 401)); // 401 because grafana API shows unauthorized when anonymous access is disabled
     if (this.type === 'metrics') {
       this.url = `${this.baseUrl}${this.uid}/${this.grafanaPath}&refresh=2s&var-datasource=${this.datasource}${this.mode}&${this.time}`;
     } else {
