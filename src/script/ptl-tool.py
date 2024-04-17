@@ -494,6 +494,14 @@ def build_branch(args):
         issue = R.issue.create(**issue_kwargs)
         log.info("created redmine qa issue: %s", issue.url)
 
+
+        for pr in prs:
+            log.debug(f"Posting QA Run in comment for ={pr}")
+            endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
+            body = f"This PR is under test in [{issue.url}]({issue.url})."
+            r = session.post(endpoint, auth=gitauth(), data=json.dumps({'body':body}))
+            log.debug(f"= {r}")
+
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
     default_base = 'main'
