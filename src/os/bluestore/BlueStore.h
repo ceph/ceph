@@ -368,7 +368,6 @@ public:
     }
   };
   struct BufferCacheShard;
-  class Writings;
 
   /// map logical extent range (object) onto buffers
   struct BufferSpace {
@@ -494,39 +493,6 @@ public:
     }
     friend std::ostream& operator<<(std::ostream& out, const BufferSpace& bc);
   };
-
-  class Writings {
-    struct WriteEntry {
-      Onode* onode;
-      uint32_t offset;
-      uint32_t length;
-      WriteEntry(Onode* _o, Buffer* b)
-        : onode(_o), offset(b->offset), length(b->length) {}
-    };
-
-    using write_list_t = mempool::bluestore_writing::list<WriteEntry>;
-
-    ceph::mutex lock = ceph::make_mutex("BlueStore::Writings::lock");
-
-    // TransContext -> list of <onode, offset, length>
-    mempool::bluestore_writing::map<void*, write_list_t> txc_to_buf;
-
-  public:
-    ~Writings() {
-      // sanity
-      ceph_assert(txc_to_buf.empty());
-    }
-    void add_writing(Onode* o, Buffer* b) {
-      std::lock_guard l(lock);
-      txc_to_buf[b->txc].emplace_back(o, b);
-    }
-    void finish_writing(TransContext* txc);
-
-    bool empty() {
-      std::lock_guard l(lock);
-      return txc_to_buf.empty();
-    }
-  } writings;
 
   struct SharedBlobSet;
 
@@ -1547,10 +1513,9 @@ private:
     std::atomic<uint64_t> num_extents = {0};
     std::atomic<uint64_t> num_blobs = {0};
     uint64_t buffer_bytes = 0;
-    Writings& writings;
   public:
     BufferCacheShard(BlueStore* store)
-      : CacheShard(store->cct), writings(store->writings) {
+      : CacheShard(store->cct) {
     }
     virtual ~BufferCacheShard() {
       ceph_assert(num_blobs == 0);
@@ -1564,7 +1529,6 @@ private:
     virtual void _touch(Buffer *b) = 0;
     virtual void _adjust_size(Buffer *b, int64_t delta) = 0;
 
-    Writings& get_writings() { return writings; }
     uint64_t _get_bytes() {
       return buffer_bytes;
     }
@@ -1929,6 +1893,21 @@ private:
 #ifdef WITH_BLKIN
     ZTracer::Trace trace;
 #endif
+
+    ceph::mutex writings_lock = ceph::make_mutex("BlueStore::TransContextWritings::lock");
+    struct WriteObserverEntry {
+      Onode* onode;
+      uint32_t offset;
+      uint32_t length;
+      WriteObserverEntry(Onode* _o, uint32_t off, uint32_t len)
+        : onode(_o), offset(off), length(len) {}
+    };
+    using write_list_t = mempool::bluestore_writing::list<WriteObserverEntry>;
+    write_list_t writings;
+    bool were_writings = false;
+
+    bool add_writing(Onode* o, uint32_t off, uint32_t len);
+    void finish_writing();
 
     explicit TransContext(CephContext* cct, Collection *c, OpSequencer *o,
 			  std::list<Context*> *on_commits)
