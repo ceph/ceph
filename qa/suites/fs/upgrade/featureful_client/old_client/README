@@ -1,0 +1,7 @@
+This suite checks if an upgraded mds can evict older clients after the file
+system is set with `required_client_features`, specifically `metric_collect`.
+So, octopus clients do not support `metric_collect` and the test verifies
+this.
+
+This suite upgrades to quincy, once quincy reaches EOL, this suite will need
+to be removed.
