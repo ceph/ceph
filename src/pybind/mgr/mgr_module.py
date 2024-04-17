@@ -18,6 +18,7 @@ import subprocess
 import threading
 from collections import defaultdict
 from enum import IntEnum, Enum
+import os
 import rados
 import re
 import socket
@@ -845,6 +846,8 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
                                  'warning', '']))
         cls.MODULE_OPTIONS.append(
             Option(name='log_to_file', type='bool', default=False, runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='sqlite3_killpoint', level=OptionLevel.DEV, type='int', default=0, runtime=True))
         if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
             cls.MODULE_OPTIONS.append(
                 Option(name='log_to_cluster', type='bool', default=False,
@@ -1047,6 +1050,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                                  'warning', '']))
         cls.MODULE_OPTIONS.append(
             Option(name='log_to_file', type='bool', default=False, runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='sqlite3_killpoint', level=OptionLevel.DEV, type='int', default=0, runtime=True))
         if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
             cls.MODULE_OPTIONS.append(
                 Option(name='log_to_cluster', type='bool', default=False,
@@ -1212,13 +1217,20 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         SELECT value FROM MgrModuleKV WHERE key = '__version';
         """
 
+        kv = self.get_module_option('sqlite3_killpoint')
         with db:
             self.create_skeleton_schema(db)
+            if kv == 1:
+                os._exit(120)
             cur = db.execute(SQL)
             row = cur.fetchone()
             self.maybe_upgrade(db, int(row['value']))
             assert cur.fetchone() is None
             cur.close()
+            if kv == 2:
+                os._exit(120)
+        if kv == 3:
+            os._exit(120)
 
     def configure_db(self, db: sqlite3.Connection) -> None:
         db.execute('PRAGMA FOREIGN_KEYS = 1')
