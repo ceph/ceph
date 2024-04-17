@@ -518,16 +518,9 @@ void MDSRank::quiesce_agent_setup() {
 
       if (!inserted) {
         dout(3) << "duplicate quiesce request for root '" << it->first << "'" << dendl;
-        // we must update the request id so that old one can't cancel this request.
-        it->second.first = req_id;
-        if (it->second.second) {
-          it->second.second->complete(-EINTR);
-          it->second.second = c;
-        } else {
-          // if we have no context, it means we've completed it
-          // since we weren't inserted, we must have successfully quiesced
-          c->complete(0);
-        }
+        // report error for the duplicate request, just as MDCache would do
+        c->complete(-EINPROGRESS);
+        return std::nullopt;
       } else if (debug_rank && (debug_rank != whoami)) {
         // the root was pinned to a different rank
         // we should acknowledge the quiesce regardless of the other flags
