@@ -1577,10 +1577,10 @@ class CephadmAgent(DaemonForm):
                                               data=data,
                                               endpoint='/data',
                                               ssl_ctx=self.ssl_ctx)
-                response_json = json.loads(response)
                 if status != 200:
                     logger.error(f'HTTP error {status} while querying agent endpoint: {response}')
-                    raise RuntimeError
+                    raise RuntimeError(f'non-200 response <{status}> from agent endpoint: {response}')
+                response_json = json.loads(response)
                 total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
                 logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
             except Exception as e:
