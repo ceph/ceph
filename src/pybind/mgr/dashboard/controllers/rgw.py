@@ -870,9 +870,12 @@ edit_role_form = Form(path='/edit',
         "MaxSessionDuration": {'cellTemplate': 'duration'},
         "RoleId": {'isHidden': True},
         "AssumeRolePolicyDocument": {'isHidden': True},
-        "PermissionPolicies": {'isHidden': True}
+        "PermissionPolicies": {'isHidden': True},
+        "Description": {'isHidden': True},
+        "AccountId": {'isHidden': True}
     },
-    detail_columns=['RoleId', 'AssumeRolePolicyDocument', 'PermissionPolicies'],
+    detail_columns=['RoleId', 'Description',
+                    'AssumeRolePolicyDocument', 'PermissionPolicies', 'AccountId'],
     meta=CRUDMeta()
 )
 class RgwUserRole(NamedTuple):
@@ -884,6 +887,8 @@ class RgwUserRole(NamedTuple):
     MaxSessionDuration: int
     AssumeRolePolicyDocument: str
     PermissionPolicies: List
+    Description: str
+    AccountId: str
 
 
 @APIRouter('/rgw/realm', Scope.RGW)
