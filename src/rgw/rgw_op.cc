@@ -1408,8 +1408,8 @@ static int get_owner_quota_info(DoutPrefixProvider* dpp,
         RGWObjVersionTracker objv; // ignored
         int r = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
         if (r >= 0) {
-          // no bucket quota
           quotas.user_quota = info.quota;
+          quotas.bucket_quota = info.bucket_quota;
         }
         return r;
       }), owner);
