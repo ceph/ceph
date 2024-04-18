@@ -46,37 +46,46 @@ using object_scan_info_t = std::map<const Blob*, scan_blob_element_t>;
 
 void Estimator::reset()
 {
-  gain = 0;
-  cost = 0;
+  new_size = 0;
+  uncompressed_size = 0;
+  compressed_occupied = 0;
+  compressed_size = 0;
+  total_uncompressed_size = 0;
+  total_compressed_occupied = 0;
+  total_compressed_size = 0;
+  actual_compressed = 0;
+  actual_compressed_plus_pad = 0;
   extra_recompress.clear();
 }
-inline void Estimator::batch(const BlueStore::Extent* e, uint32_t _gain)
+inline void Estimator::batch(const BlueStore::Extent* e, uint32_t gain)
 {
   using P = BlueStore::printer;
   const Blob *h_Blob = &(*e->blob);
   const bluestore_blob_t &h_bblob = h_Blob->get_blob();
   if (h_bblob.is_compressed()) {
-    cost += e->length * h_bblob.get_compressed_payload_length() / h_bblob.get_logical_length();
+    compressed_size += e->length * h_bblob.get_compressed_payload_length() / h_bblob.get_logical_length();
+    compressed_occupied += gain;
   } else {
-    // for regular blobs we extrapolate from past compression
-    cost += e->length * expected_compression_factor;
+    uncompressed_size += e->length;
   }
-  gain += _gain;
-  dout(20) << "ire extent=" << e->print(P::NICK) << " gain=" << gain << " cost=" << cost << dendl;
-}
-
-inline uint32_t Estimator::estimate(uint32_t new_data)
-{
-  uint32_t cost;
-  cost = new_data * expected_compression_factor;
-  return cost;
+  dout(25) << __func__ << " extent=" << e->print(P::NICK) << " gain=" << gain << dendl;
 }
 
 inline bool Estimator::is_worth()
 {
-  bool take = gain > cost;
-  gain = 0;
-  cost = 0;
+  uint32_t cost = uncompressed_size * expected_compression_factor +
+                  compressed_size * expected_recompression_error;
+  uint32_t gain = uncompressed_size + compressed_occupied;
+  double need_ratio = bluestore->cct->_conf->bluestore_recompression_min_gain;
+  bool take = gain > cost * need_ratio;
+  if (take) {
+    total_uncompressed_size += uncompressed_size;
+    total_compressed_occupied += compressed_occupied;
+    total_compressed_size += compressed_size;
+  }
+  uncompressed_size = 0;
+  compressed_occupied = 0;
+  compressed_size = 0;
   return take;
 }
 
@@ -87,6 +96,7 @@ inline bool Estimator::is_worth(const BlueStore::Extent* e)
   ceph_assert(!h_bblob.is_compressed());
   ceph_assert(!h_bblob.is_shared());
   // for now assume it always worth
+  total_uncompressed_size += e->length;
   return true;
 }
 
@@ -103,7 +113,7 @@ inline void Estimator::mark_main(uint32_t location, uint32_t length)
   dout(25) << "main data compress: " << std::hex
     << location << "~" << length << std::dec << dendl;
   extra_recompress.emplace(location, length);
-
+  new_size = length;
 }
 
 void Estimator::get_regions(std::vector<region_t>& regions)
@@ -135,27 +145,30 @@ void Estimator::get_regions(std::vector<region_t>& regions)
   }
 }
 
-void Estimator::split_and_compress(
+int32_t Estimator::split_and_compress(
   CompressorRef compr,
   uint32_t max_blob_size,
   ceph::buffer::list& data_bl,
   Writer::blob_vec& bd)
 {
+  uint32_t au_size = bluestore->min_alloc_size;
   uint32_t size = data_bl.length();
   ceph_assert(size > 0);
   uint32_t blobs = (size + max_blob_size - 1) / max_blob_size;
-  uint32_t blob_size = p2roundup(size / blobs, (uint32_t)bluestore->min_alloc_size);
+  uint32_t blob_size = p2roundup(size / blobs, au_size);
   std::vector<uint32_t> blob_sizes(blobs);
   for (auto& i: blob_sizes) {
     i = std::min(size, blob_size);
     size -= i;
   }
-
+  int32_t disk_needed = 0;
+  uint32_t bl_src_off = 0;
   for (auto& i: blob_sizes) {
     bd.emplace_back();
     bd.back().real_length = i;
     bd.back().compressed_length = 0;
-    data_bl.splice(0, i, &bd.back().object_data);
+    bd.back().object_data.substr_of(data_bl, bl_src_off, i);
+    bl_src_off += i;
     // FIXME: memory alignment here is bad
     bufferlist t;
     std::optional<int32_t> compressor_message;
@@ -169,11 +182,37 @@ void Estimator::split_and_compress(
     bd.back().disk_data.claim_append(t);
     uint32_t len = bd.back().disk_data.length();
     bd.back().compressed_length = len;
-    uint32_t rem = p2nphase<uint32_t>(len, bluestore->min_alloc_size);
+    uint32_t rem = p2nphase(len, au_size);
     if (rem > 0) {
       bd.back().disk_data.append_zero(rem);
     }
+    actual_compressed += len;
+    actual_compressed_plus_pad += len + rem;
+    disk_needed += len + rem;
   }
+  return disk_needed;
+}
+
+void Estimator::finish()
+{
+  dout(25) << "new_size=" << new_size
+          << " unc_size=" << total_uncompressed_size
+          << " comp_cost=" << total_compressed_size << dendl;
+  uint32_t sum = new_size + total_uncompressed_size + total_compressed_size;
+  double expected =
+    (new_size + total_uncompressed_size) * expected_compression_factor +
+    total_compressed_size * expected_recompression_error;
+  double size_misprediction = double(expected - actual_compressed) / actual_compressed;
+  double size_misprediction_weighted = 1.0 / sum * size_misprediction * 0.01;
+  expected_compression_factor -= (new_size + total_uncompressed_size) * size_misprediction_weighted;
+  expected_recompression_error -= total_compressed_size * size_misprediction_weighted;
+
+  double expected_pad = actual_compressed * expected_pad_expansion;
+  double pad_misprediction = (expected_pad - actual_compressed_plus_pad) / actual_compressed;
+  expected_pad_expansion -= pad_misprediction * 0.01;
+  dout(25) << "exp_comp_factor=" << expected_compression_factor
+           << " exp_recomp_err=" << expected_recompression_error
+           << " exp_pad_exp=" << expected_pad_expansion << dendl;
 }
 
 class BlueStore::Scanner::Scan {
@@ -203,10 +242,6 @@ private:
   bool is_end(const exmp_cit &it) const {
     return it == extent_map->extent_map.end();
   }
-  struct gain_cost {
-    uint32_t gain = 0;
-    uint32_t cost = 0;
-  };
   // range that has aready been processed
   uint32_t done_left;
   uint32_t done_right;
@@ -218,8 +253,6 @@ private:
   uint32_t scanned_right;
   exmp_cit scanned_left_it;  // <- points to first in scanned range
   exmp_cit scanned_right_it; // <- points to first outside scanned range
-  std::set<const Extent *> extra_recompress;
-  double expected_compression_factor = 0.5;
   void scan_for_compressed_blobs(exmp_cit start, exmp_cit finish);
   bool maybe_expand_scan_range(const exmp_cit &it, uint32_t &left, uint32_t &right);
   void remove_consumed_blobs();

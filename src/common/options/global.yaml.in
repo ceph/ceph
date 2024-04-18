@@ -4650,6 +4650,21 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_recompression_min_gain
+  type: float
+  level: advanced
+  desc: Required estimated gain for accepting extents for recompressing.
+  long_desc: Partial writes over compressed blobs have high cost. New data requires
+    new allocation units, but whole old blob must remain. To combat it BlueStore
+    looks around write position to find blobs that will make it profitable to read
+    and recompress.
+  fmt_desc: A float value, (size_exact_released / size_expected_after_compression).
+  default: 1.2
+  see_also:
+  - bluestore_compression_max_blob_size
+  flags:
+  - runtime
+  with_legacy: true
 # Specifies minimum expected amount of saved allocation units
 # per single blob to enable compressed blobs garbage collection
 - name: bluestore_gc_enable_blob_threshold

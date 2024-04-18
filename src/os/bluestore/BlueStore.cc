@@ -17035,7 +17035,10 @@ int BlueStore::_do_write_v2(
         uint32_t this_segment_begin = p2align(write_offset, segment_size);
         uint32_t this_segment_end = this_segment_begin + segment_size;
         uint32_t write_length = std::min(this_segment_end, end) - write_offset;
-        _do_write_v2_compressed(txc, c, o, wctx, write_offset, write_length, bl,
+        bufferlist chunk;
+        chunk.substr_of(bl, 0, write_length);
+        bl.splice(0, write_length);
+        _do_write_v2_compressed(txc, c, o, wctx, write_offset, write_length, chunk,
                                 this_segment_begin, this_segment_end);
         write_offset += write_length;
       };
@@ -17132,16 +17135,24 @@ int BlueStore::_do_write_v2_compressed(
     }
     ceph_assert(data_bl.length() == i.length);
     Writer::blob_vec bd;
-    estimator.split_and_compress(compr, data_bl, bd);
+    int32_t disk_for_compressed;
+    int32_t disk_for_raw;
+    uint32_t au_size = min_alloc_size;
+    disk_for_compressed = estimator->split_and_compress(compr, max_blob_size, data_bl, bd);
+    disk_for_raw = p2roundup(i.offset + i.length, au_size) - p2align(i.offset, au_size);
     BlueStore::Writer wr(this, txc, &wctx, o);
-    wr.do_write_with_blobs(
-      i.offset, i.offset + i.length, i.offset + i.length, bd);
+    if (disk_for_compressed < disk_for_raw) {
+      wr.do_write_with_blobs(i.offset, i.offset + i.length, i.offset + i.length, bd);
+    } else {
+      wr.do_write(i.offset, data_bl);
+    }
     txc->statfs_delta += wr.statfs_delta;
     // update shared blobs
     for (auto b: wr.shared_changed) {
       txc->write_shared_blob(b);
     }
   }
+  estimator->finish();
   uint32_t changes_start = regions.front().offset;
   uint32_t changes_end = regions.back().offset + regions.back().length;
   o->extent_map.compress_extent_map(changes_start, changes_end - changes_start);
