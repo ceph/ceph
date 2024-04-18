@@ -6298,6 +6298,7 @@ WRITE_CLASS_ENCODER(ScrubMap)
 struct ScrubMapBuilder {
   bool deep = false;
   std::vector<hobject_t> ls;
+  bool metadata_done = false;
   size_t pos = 0;
   int64_t data_pos = 0;
   std::string omap_pos;
@@ -6322,6 +6323,7 @@ struct ScrubMapBuilder {
 
   void next_object() {
     ++pos;
+    metadata_done = false;
     data_pos = 0;
     omap_pos.clear();
     omap_keys = 0;
@@ -6333,6 +6335,7 @@ struct ScrubMapBuilder {
     if (pos.pos < pos.ls.size()) {
       out << " " << pos.ls[pos.pos];
     }
+    out << " metadata_done " << pos.metadata_done;
     if (pos.data_pos < 0) {
       out << " byte " << pos.data_pos;
     }
