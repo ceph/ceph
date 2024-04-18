@@ -328,6 +328,29 @@ TEST(RGWCksum, DigestBL)
     ASSERT_EQ(cksum1.to_string(), cksum3.to_string());
   } /* for t1, ... */
 }
+
+
+
+
+  //foop
+TEST(RGWCksum, CtorUnarmor)
+{
+  auto t = cksum::Type::sha256;
+  DigestVariant dv = rgw::cksum::digest_factory(t);
+  Digest *digest = get_digest(dv);
+
+  ASSERT_NE(digest, nullptr);
+
+  digest->Update((const unsigned char *) lorem.c_str(),
+		 lorem.length());
+
+  auto cksum1 = rgw::cksum::finalize_digest(digest, t);
+  auto armored_text1 = cksum1.to_armor();
+  auto cksum2 = rgw::cksum::Cksum(cksum1.type, armored_text1.c_str());
+
+  ASSERT_EQ(armored_text1, cksum2.to_armor());
+}
+
 } /* namespace */
 
 int main(int argc, char *argv[])
