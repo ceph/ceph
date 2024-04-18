@@ -1188,12 +1188,15 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
         return r;
       }
       if (enable_down) {
-        if (!mon.osdmon()->is_writeable()) {
+        bool has_active = !!pending_map.active_gid;
+        if (has_active && !mon.osdmon()->is_writeable()) {
           mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
           return false;
         }
         pending_map.flags |= MgrMap::FLAG_DOWN;
-        plugged |= drop_active();
+        if (has_active) {
+          plugged |= drop_active();
+        }
       } else {
         pending_map.flags &= ~(MgrMap::FLAG_DOWN);
       }
