@@ -3018,6 +3018,7 @@ void RGWAccountInfo::dump(Formatter * const f) const
   encode_json("name", name, f);
   encode_json("email", email, f);
   encode_json("quota", quota, f);
+  encode_json("bucket_quota", bucket_quota, f);
   encode_json("max_users", max_users, f);
   encode_json("max_roles", max_roles, f);
   encode_json("max_groups", max_groups, f);
@@ -3032,6 +3033,7 @@ void RGWAccountInfo::decode_json(JSONObj* obj)
   JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("email", email, obj);
   JSONDecoder::decode_json("quota", quota, obj);
+  JSONDecoder::decode_json("bucket_quota", bucket_quota, obj);
   JSONDecoder::decode_json("max_users", max_users, obj);
   JSONDecoder::decode_json("max_roles", max_roles, obj);
   JSONDecoder::decode_json("max_groups", max_groups, obj);

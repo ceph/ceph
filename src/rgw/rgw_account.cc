@@ -227,14 +227,22 @@ int modify(const DoutPrefixProvider* dpp,
     info.max_buckets = *op_state.max_buckets;
   }
 
-  if (op_state.quota_max_size) {
-    info.quota.max_size = *op_state.quota_max_size;
+  RGWQuotaInfo* pquota = nullptr;
+  if (op_state.quota_scope == "account") {
+    pquota = &info.quota;
+  } else if (op_state.quota_scope == "bucket") {
+    pquota = &info.bucket_quota;
   }
-  if (op_state.quota_max_objects) {
-    info.quota.max_objects = *op_state.quota_max_objects;
-  }
-  if (op_state.quota_enabled) {
-    info.quota.enabled = *op_state.quota_enabled;
+  if (pquota) {
+    if (op_state.quota_max_size) {
+      pquota->max_size = *op_state.quota_max_size;
+    }
+    if (op_state.quota_max_objects) {
+      pquota->max_objects = *op_state.quota_max_objects;
+    }
+    if (op_state.quota_enabled) {
+      pquota->enabled = *op_state.quota_enabled;
+    }
   }
 
   constexpr bool exclusive = false;
