@@ -118,8 +118,8 @@ struct MDSCapMatch {
   MDSCapMatch(const std::string& fsname_, const std::string& path_,
 	      bool root_squash_, int64_t uid_=MDS_AUTH_UID_ANY,
 	      const std::vector<gid_t>& gids_={}) {
-    fs_name = std::move(fsname_);
-    path = std::move(path_);
+    fs_name = fsname_;
+    path = path_;
     root_squash = root_squash_;
     uid = (uid_ == 0) ? -1 : uid_;
     gids = gids_;
