@@ -3086,8 +3086,9 @@ def wait_for_queue_to_drain(topic_name, tenant=None, account=None):
         parsed_result = json.loads(result[0])
         entries = parsed_result['Topic Stats']['Entries']
         retries += 1
+        time_diff = time.time() - start_time
+        log.info('queue %s has %d entries after %ds', topic_name, entries, time_diff)
         if retries > 30:
-            time_diff = time.time() - start_time
             log.warning('queue %s still has %d entries after %ds', topic_name, entries, time_diff)
             assert_equal(entries, 0)
         time.sleep(5)
@@ -4635,6 +4636,111 @@ def test_ps_s3_notification_push_kafka_security_ssl_sasl_scram():
 @attr('kafka_security_test')
 def test_ps_s3_notification_push_kafka_security_sasl_scram():
     kafka_security('SASL_PLAINTEXT', mechanism='SCRAM-SHA-256')
+
+
+@attr('http_test')
+def test_persistent_ps_s3_reload():
+    """ do a realm reload while we send notifications """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    # make sure there is nothing to migrate
+    print('delete all topics')
+    delete_all_topics(conn, '', get_config_cluster())
+
+    # create random port for the http server
+    host = get_ip()
+    http_port = random.randint(10000, 20000)
+    print('start http server')
+    http_server = HTTPServerWithEvents((host, http_port), delay=2)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name1 = bucket_name + TOPIC_SUFFIX + '_1'
+
+    # create s3 topics
+    endpoint_address = 'http://'+host+':'+str(http_port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic_conf1 = PSTopicS3(conn, topic_name1, zonegroup, endpoint_args=endpoint_args)
+    topic_arn1 = topic_conf1.set_config()
+    # 2nd topic is unused
+    topic_name2 = bucket_name + TOPIC_SUFFIX + '_2'
+    topic_conf2 = PSTopicS3(conn, topic_name2, zonegroup, endpoint_args=endpoint_args)
+    topic_arn2 = topic_conf2.set_config()
+
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn1,
+                        'Events': []
+                        }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # topic stats
+    result = admin(['topic', 'stats', '--topic', topic_name1], get_config_cluster())
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
+    assert_equal(result[1], 0)
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key('key-'+str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    time_diff = time.time() - start_time
+    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    wait_for_queue_to_drain(topic_name1)
+
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key('another-key-'+str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    time_diff = time.time() - start_time
+    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    # do a reload
+    print('do reload')
+    result = admin(['zonegroup', 'modify', '--enable-feature=notification_v2'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'update'], get_config_cluster())
+    assert_equal(result[1], 0)
+    result = admin(['period', 'commit'], get_config_cluster())
+    assert_equal(result[1], 0)
+
+    wait_for_queue_to_drain(topic_name1)
+    # verify events
+    keys = list(bucket.list())
+    http_server.verify_s3_events(keys, exact_match=False)
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf1.del_config()
+    topic_conf2.del_config()
+    # delete objects from the bucket
+    client_threads = []
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+    http_server.close()
 
 
 @attr('data_path_v2_test')

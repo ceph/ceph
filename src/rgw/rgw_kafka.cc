@@ -671,14 +671,15 @@ public:
 
 // singleton manager
 // note that the manager itself is not a singleton, and multiple instances may co-exist
-// TODO make the pointer atomic in allocation and deallocation to avoid race conditions
 static Manager* s_manager = nullptr;
+static std::shared_mutex s_manager_mutex;
 
 static const size_t MAX_CONNECTIONS_DEFAULT = 256;
 static const size_t MAX_INFLIGHT_DEFAULT = 8192; 
 static const size_t MAX_QUEUE_DEFAULT = 8192;
 
 bool init(CephContext* cct) {
+  std::unique_lock lock(s_manager_mutex);
   if (s_manager) {
     return false;
   }
@@ -688,6 +689,7 @@ bool init(CephContext* cct) {
 }
 
 void shutdown() {
+  std::unique_lock lock(s_manager_mutex);
   delete s_manager;
   s_manager = nullptr;
 }
@@ -695,6 +697,7 @@ void shutdown() {
 bool connect(std::string& broker, const std::string& url, bool use_ssl, bool verify_ssl,
         boost::optional<const std::string&> ca_location,
         boost::optional<const std::string&> mechanism) {
+  std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
   return s_manager->connect(broker, url, use_ssl, verify_ssl, ca_location, mechanism);
 }
@@ -702,6 +705,7 @@ bool connect(std::string& broker, const std::string& url, bool use_ssl, bool ver
 int publish(const std::string& conn_name,
     const std::string& topic,
     const std::string& message) {
+  std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return STATUS_MANAGER_STOPPED;
   return s_manager->publish(conn_name, topic, message);
 }
@@ -710,41 +714,49 @@ int publish_with_confirm(const std::string& conn_name,
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb) {
+  std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return STATUS_MANAGER_STOPPED;
   return s_manager->publish_with_confirm(conn_name, topic, message, cb);
 }
 
 size_t get_connection_count() {
+  std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return 0;
   return s_manager->get_connection_count();
 }
   
 size_t get_inflight() {
+  std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return 0;
   return s_manager->get_inflight();
 }
 
 size_t get_queued() {
+  std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return 0;
   return s_manager->get_queued();
 }
 
 size_t get_dequeued() {
+  std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return 0;
   return s_manager->get_dequeued();
 }
 
 size_t get_max_connections() {
+  std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return MAX_CONNECTIONS_DEFAULT;
   return s_manager->max_connections;
 }
 
 size_t get_max_inflight() {
+  std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return MAX_INFLIGHT_DEFAULT;
   return s_manager->max_inflight;
 }
 
 size_t get_max_queue() {
+  std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return MAX_QUEUE_DEFAULT;
   return s_manager->max_queue;
 }

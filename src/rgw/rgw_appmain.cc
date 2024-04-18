@@ -59,12 +59,6 @@
 #include "rgw_kmip_client_impl.h"
 #include "rgw_perf_counters.h"
 #include "rgw_signal.h"
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-#include "rgw_amqp.h"
-#endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
-#include "rgw_kafka.h"
-#endif
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight_frontend.h"
 #endif
@@ -555,20 +549,6 @@ void rgw::AppMain::init_tracepoints()
   tracing::rgw::tracer.init(dpp->get_cct(), "rgw");
 } /* init_tracepoints() */
 
-void rgw::AppMain::init_notification_endpoints()
-{
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-  if (!rgw::amqp::init(dpp->get_cct())) {
-    derr << "ERROR: failed to initialize AMQP manager" << dendl;
-  }
-#endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
-  if (!rgw::kafka::init(dpp->get_cct())) {
-    derr << "ERROR: failed to initialize Kafka manager" << dendl;
-  }
-#endif
-} /* init_notification_endpoints */
-
 void rgw::AppMain::init_lua()
 {
   rgw::sal::Driver* driver = env.driver;
@@ -645,12 +625,6 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   rgw::curl::cleanup_curl();
   g_conf().remove_observer(implicit_tenant_context.get());
   implicit_tenant_context.reset(); // deletes
-#ifdef WITH_RADOSGW_AMQP_ENDPOINT
-  rgw::amqp::shutdown();
-#endif
-#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
-  rgw::kafka::shutdown();
-#endif
   rgw_perf_stop(g_ceph_context);
   ratelimiter.reset(); // deletes--ensure this happens before we destruct
 } /* AppMain::shutdown */
