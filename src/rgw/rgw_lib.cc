@@ -548,7 +548,6 @@ namespace rgw {
       return r;
     }
 
-    main.init_notification_endpoints();
     main.init_lua();
 
     return 0;

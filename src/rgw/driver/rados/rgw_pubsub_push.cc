@@ -5,6 +5,7 @@
 #include <string>
 #include <sstream>
 #include <algorithm>
+#include <curl/curl.h>
 #include "common/Formatter.h"
 #include "common/iso_8601.h"
 #include "common/async/completion.h"
@@ -22,6 +23,8 @@
 #include <boost/algorithm/string.hpp>
 #include <functional>
 #include "rgw_perf_counters.h"
+
+#define dout_subsys ceph_subsys_rgw_notification
 
 using namespace rgw;
 
@@ -51,6 +54,9 @@ bool get_bool(const RGWHTTPArgs& args, const std::string& name, bool default_val
   }
   return value;
 }
+
+static std::unique_ptr<RGWHTTPManager> s_http_manager;
+static std::shared_mutex s_http_manager_mutex;
 
 class RGWPubSubHTTPEndpoint : public RGWPubSubEndpoint {
 private:
@@ -83,6 +89,11 @@ public:
   }
 
   int send(const rgw_pubsub_s3_event& event, optional_yield y) override {
+    std::shared_lock lock(s_http_manager_mutex);
+    if (!s_http_manager) {
+      ldout(cct, 1) << "ERROR: send failed. http endpoint manager not running" << dendl;
+      return -ESRCH;
+    }
     bufferlist read_bl;
     RGWPostHTTPData request(cct, "POST", endpoint, &read_bl, verify_ssl);
     const auto post_data = json_format_pubsub_event(event);
@@ -101,7 +112,10 @@ public:
     request.set_send_length(post_data.length());
     request.append_header("Content-Type", "application/json");
     if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
-    const auto rc = RGWHTTP::process(&request, y);
+    auto rc = s_http_manager->add_request(&request);
+    if (rc == 0) {
+      rc = request.wait(y);
+    }
     if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
     // TODO: use read_bl to process return code and handle according to ack level
     return rc;
@@ -396,5 +410,50 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
 
   throw configuration_error("unknown schema in: " + endpoint);
   return nullptr;
+}
+
+bool init_http_manager(CephContext* cct) {
+  std::unique_lock lock(s_http_manager_mutex);
+  if (s_http_manager) return false;
+  s_http_manager = std::make_unique<RGWHTTPManager>(cct);
+  return (s_http_manager->start() == 0);
+}
+
+void shutdown_http_manager() {
+  std::unique_lock lock(s_http_manager_mutex);
+  if (s_http_manager) {
+    s_http_manager->stop();
+    s_http_manager.reset();
+  }
+}
+
+bool RGWPubSubEndpoint::init_all(CephContext* cct) {
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+  if (!amqp::init(cct)) {
+    ldout(cct, 1) << "ERROR: failed to init amqp endpoint manager" << dendl;
+    return false;
+  }
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  if (!kafka::init(cct)) {
+    ldout(cct, 1) << "ERROR: failed to init kafka endpoint manager" << dendl;
+    return false;
+  }
+#endif
+  if (!init_http_manager(cct)) {
+    ldout(cct, 1) << "ERROR: failed to init http endpoint manager" << dendl;
+    return false;
+  }
+  return true;
+}
+
+void RGWPubSubEndpoint::shutdown_all() {
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+  amqp::shutdown();
+#endif
+#ifdef WITH_RADOSGW_KAFKA_ENDPOINT
+  kafka::shutdown();
+#endif
+  shutdown_http_manager();
 }
 

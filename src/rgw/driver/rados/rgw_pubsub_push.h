@@ -40,5 +40,11 @@ public:
     configuration_error(const std::string& what_arg) : 
       std::logic_error("pubsub endpoint configuration error: " + what_arg) {}
   };
+
+  // init all supported endpoints
+  static bool init_all(CephContext* cct);
+  // shutdown all supported endpoints
+  static void shutdown_all();
+
 };
 
