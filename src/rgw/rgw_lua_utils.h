@@ -292,10 +292,9 @@ template<typename MapType>
 typename MapType::iterator* create_iterator_metadata(lua_State* L, const std::string_view name, 
     const typename MapType::iterator& start_it, const typename MapType::iterator& end_it) {
   using Iterator = typename MapType::iterator;
-  const std::string qualified_name = get_iterator_name(name);
   // create metatable for userdata
   // metatable is created before the userdata to save on allocation if the metatable already exists
-  const auto metatable_is_new = luaL_newmetatable(L, qualified_name.c_str());
+  const auto metatable_is_new = luaL_newmetatable(L, get_iterator_name(name).c_str());
   const auto metatable_pos = lua_gettop(L);
   int userdata_pos;
   Iterator* new_it = nullptr;
