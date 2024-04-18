@@ -24,8 +24,6 @@ public:
 
   // Prepare for new write
   void reset();
-  // return estimated size if data gets compressed
-  uint32_t estimate(uint32_t new_data);
   // Inform estimator that an extent is a candidate for recompression.
   // Estimator has to calculate (guess) the cost (size) of the referenced data.
   // 'gain' is the size that will be released should extent be recompressed.
@@ -48,21 +46,29 @@ public:
   };
   void get_regions(std::vector<region_t>& regions);
 
-  void split_and_compress(
+  int32_t split_and_compress(
     CompressorRef compr,
     uint32_t max_blob_size,
     ceph::buffer::list& data_bl,
     Writer::blob_vec& bd);
 
+  void finish();
+
 private:
   BlueStore* bluestore;
   double expected_compression_factor = 0.5;
-  uint32_t min_alloc_size;
-  // gain = size on disk (after release or taken if no compression)
-  // cost = size estimated on disk after compression
-  uint32_t cost = 0;
-  uint32_t gain = 0;
-
+  double expected_recompression_error = 1.1;
+  double expected_pad_expansion = 1.1;
+  uint32_t new_size = 0;              // fresh data to write
+  uint32_t uncompressed_size = 0;     // data that was not compressed
+  uint32_t compressed_size = 0;       // data of compressed size
+  uint32_t compressed_occupied = 0;   // disk size that will be freed
+  uint32_t total_uncompressed_size = 0;
+  uint32_t total_compressed_size = 0;
+  uint32_t total_compressed_occupied = 0;
+  // accumulated size of compressed, used in feedback learn stage
+  uint32_t actual_compressed = 0;
+  uint32_t actual_compressed_plus_pad = 0;
   std::map<uint32_t, uint32_t> extra_recompress;
 };
 
