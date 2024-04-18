@@ -468,7 +468,7 @@ void usage()
   cout << "\nQuota options:\n";
   cout << "   --max-objects                 specify max objects (negative value to disable)\n";
   cout << "   --max-size                    specify max size (in B/K/M/G/T, negative value to disable)\n";
-  cout << "   --quota-scope                 scope of quota (bucket, user)\n";
+  cout << "   --quota-scope                 scope of quota (bucket, user, account)\n";
   cout << "\nRate limiting options:\n";
   cout << "   --max-read-ops                specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
   cout << "   --max-read-bytes              specify max bytes per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
@@ -10672,6 +10672,13 @@ next:
       op_state.account_id = account_id;
       op_state.tenant = tenant;
       op_state.account_name = account_name;
+
+      if (quota_scope != "bucket" && quota_scope != "account") {
+        cerr << "ERROR: invalid quota scope specification. Please specify "
+            "either --quota-scope=bucket or --quota-scope=account" << std::endl;
+        return EINVAL;
+      }
+      op_state.quota_scope = quota_scope;
 
       if (opt_cmd == OPT::QUOTA_ENABLE) {
         op_state.quota_enabled = true;

@@ -153,8 +153,13 @@ To view account stats::
 
 To enable an account quota::
 
-	radosgw-admin quota set --account-id={accountid} --max-size=10G
-	radosgw-admin quota enable --account-id={accountid}
+	radosgw-admin quota set --quota-scope=account --account-id={accountid} --max-size=10G
+	radosgw-admin quota enable --quota-scope=account --account-id={accountid}
+
+To enable a bucket quota for the account::
+
+	radosgw-admin quota set --quota-scope=bucket --account-id={accountid} --max-objects=1000000
+	radosgw-admin quota enable --quota-scope=bucket --account-id={accountid}
 
 Migrate an existing User into an Account
 ----------------------------------------
