@@ -73,6 +73,10 @@
   more. Existing users can be adopted into new accounts. This process is optional
   but irreversible. See https://docs.ceph.com/en/squid/radosgw/account and
   https://docs.ceph.com/en/squid/radosgw/iam for details.
+* rgw: On startup, radosgw and radosgw-admin now validate the ``rgw_realm``
+  config option. Previously, they would ignore invalid or missing realms and
+  go on to load a zone/zonegroup in a different realm. If startup fails with
+  a  "failed to load realm" error, fix or remove the ``rgw_realm`` option.
 * CephFS: Running the command "ceph fs authorize" for an existing entity now
   upgrades the entity's capabilities instead of printing an error. It can now
   also change read/write permissions in a capability that the entity already
