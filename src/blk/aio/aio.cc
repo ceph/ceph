@@ -53,7 +53,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
       cur->aio.aiocb.aio_sigevent.sigev_notify = SIGEV_KEVENT;
       cur->aio.aiocb.aio_sigevent.sigev_notify_kqueue = ctx;
       cur->aio.aiocb.aio_sigevent.sigev_value.sival_ptr = &(*cur);
-      r = aio_read(&cur->aio.aiocb);
+      r = aio_write(&cur->aio.aiocb);
     } else {
       struct sigevent sev;
       sev.sigev_notify = SIGEV_KEVENT;
