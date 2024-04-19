@@ -228,6 +228,7 @@ class QuiesceTestCase(CephFSTestCase):
         visited = set()
         locks_expected = set([
           "iquiesce",
+          "ipolicy",
         ])
         if not splitauth:
             locks_expected.add('iauth')
@@ -263,6 +264,9 @@ class QuiesceTestCase(CephFSTestCase):
                             self.assertEqual(lock['flags'], 4)
                             self.assertEqual(lock['lock']['state'], 'lock')
                             self.assertEqual(lock['lock']['num_xlocks'], 1)
+                        elif lock_type == "ipolicy":
+                            self.assertEqual(lock['flags'], 1)
+                            self.assertEqual(lock['lock']['state'][:4], 'sync')
                         elif lock_type in ("ifile", "iauth", "ilink", "ixattr"):
                             self.assertFalse(splitauth)
                             self.assertEqual(lock['flags'], 1)
