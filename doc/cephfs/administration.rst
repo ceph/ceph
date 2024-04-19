@@ -210,7 +210,11 @@ respawn as standbys. The file system will be left in a degraded state.
 ::
 
     # For all ranks, 0-N:
-    ceph mds fail <fs_name>:<n>
+    ceph mds fail <fs_name>:<n> {--yes-i-really-mean-it}
+
+.. note:: Note that confirmation flag is optional because it is only required
+   when the MDS is active and has health warning MDS_TRIM or
+   MDS_CACHE_OVERSIZED.
 
 Once all ranks are inactive, the file system may also be deleted or left in
 this state for other purposes (perhaps disaster recovery).
