@@ -50,6 +50,7 @@ enum class OperationTypeCode {
   background_recovery_sub,
   internal_client_request,
   historic_client_request,
+  historic_slow_client_request,
   logmissing_request,
   logmissing_request_reply,
   snaptrim_event,
@@ -72,6 +73,7 @@ static constexpr const char* const OP_NAMES[] = {
   "background_recovery_sub",
   "internal_client_request",
   "historic_client_request",
+  "historic_slow_client_request",
   "logmissing_request",
   "logmissing_request_reply",
   "snaptrim_event",
@@ -230,7 +232,6 @@ struct OSDOperationRegistry : OperationRegistryT<
   size_t dump_slowest_historic_client_requests(ceph::Formatter* f) const;
 
 private:
-  op_list::const_iterator last_of_recents;
   size_t num_recent_ops = 0;
   size_t num_slow_ops = 0;
 };
