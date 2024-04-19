@@ -280,6 +280,16 @@ class LocalRemoteProcess(object):
         else:
             return False
 
+    def poll(self):
+        if self.finished:
+            if self.exitstatus is not None:
+                if self.check_status and self.exitstatus != 0:
+                    raise CommandFailedError(self.args, self.exitstatus)
+                else:
+                    return self.exitstatus
+        else:
+            return None
+
     def kill(self):
         log.debug("kill ")
         if self.subproc.pid and not self.finished:
