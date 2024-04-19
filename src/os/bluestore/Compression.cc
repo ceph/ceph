@@ -41,6 +41,25 @@ struct scan_blob_element_t {
   exmp_cit leftmost_extent;      // leftmost extent that refers the blob
   exmp_cit rightmost_extent;     // rightmost extent that refers the blob
   bool     rejected = false;     // blob checked and rejected for recompression
+  scan_blob_element_t(
+    uint32_t blob_use_size,
+    uint32_t visited_size,
+    uint32_t consumed_size,
+    uint32_t consumed_saved_size,
+    uint32_t blob_left,
+    uint32_t blob_right,
+    exmp_cit leftmost_extent,
+    exmp_cit rightmost_extent,
+    bool rejected = false)
+    : blob_use_size(blob_use_size)
+    , visited_size(visited_size)
+    , consumed_size(consumed_size)
+    , consumed_saved_size(consumed_saved_size)
+    , blob_left(blob_left)
+    , blob_right(blob_right)
+    , leftmost_extent(leftmost_extent)
+    , rightmost_extent(rightmost_extent)
+    , rejected(rejected) {}
 };
 using object_scan_info_t = std::map<const Blob*, scan_blob_element_t>;
 
@@ -239,6 +258,8 @@ public:
   struct exmp_logical_offset {
     const Scan &ow;
     const exmp_cit &cit;
+    exmp_logical_offset(const Scan& ow, const exmp_cit& cit)
+    : ow(ow), cit(cit) {}
   };
   friend std::ostream &operator<<(std::ostream &out,
                                   const exmp_logical_offset &lo);
