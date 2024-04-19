@@ -10,6 +10,9 @@ overrides:
       mgr:
         debug ms: 1
         debug cephsqlite: 20
+      client:
+        debug ms: 1
+        debug cephsqlite: 20
 
 tasks:
   - cephfs_test_runner:
