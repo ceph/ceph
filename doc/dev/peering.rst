@@ -261,4 +261,5 @@ Use the `gen_state_diagram.py <https://github.com/ceph/ceph/blob/master/doc/scri
 
 Sample state model:
 
-.. graphviz:: peering_graph.generated.dot
+.. image:: peering_graph.generated.svg
+
