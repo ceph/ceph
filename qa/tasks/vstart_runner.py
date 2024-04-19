@@ -584,7 +584,7 @@ class LocalDaemon(object):
 
         self.proc = self.controller.run(args=[
             os.path.join(BIN_PREFIX, "ceph-{0}".format(self.daemon_type)),
-            "-i", self.daemon_id])
+            "-i", self.daemon_id, "-f"], wait=False)
 
     def signal(self, sig, silent=False):
         if not self.running():
