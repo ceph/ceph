@@ -541,6 +541,9 @@ fi
 if $for_make_check; then
     mkdir -p install-deps-cache
     top_srcdir=$(pwd)
+    if [ -n "$XDG_CACHE_HOME" ]; then
+        ORIGINAL_XDG_CACHE_HOME=$XDG_CACHE_HOME
+    fi
     export XDG_CACHE_HOME=$top_srcdir/install-deps-cache
     wip_wheelhouse=wheelhouse-wip
     #
@@ -551,6 +554,11 @@ if $for_make_check; then
     done
     rm -rf $top_srcdir/install-deps-python3
     rm -rf $XDG_CACHE_HOME
+    if [ -n "$ORIGINAL_XDG_CACHE_HOME" ]; then
+        XDG_CACHE_HOME=$ORIGINAL_XDG_CACHE_HOME
+    else
+        unset XDG_CACHE_HOME
+    fi
     type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
 
