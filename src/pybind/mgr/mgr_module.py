@@ -558,6 +558,11 @@ if TYPE_CHECKING:
 # common/options.h: value_t
 OptionValue = Optional[Union[bool, int, float, str]]
 
+class OptionLevel(IntEnum):
+    BASIC = 0
+    ADVANCED = 1
+    DEV = 2
+    UNKNOWN = 3
 
 class Option(Dict):
     """
@@ -568,6 +573,7 @@ class Option(Dict):
     def __init__(
             self,
             name: str,
+            level: OptionLevel = OptionLevel.ADVANCED,
             default: OptionValue = None,
             type: 'OptionTypeLabel' = 'str',
             desc: Optional[str] = None,
