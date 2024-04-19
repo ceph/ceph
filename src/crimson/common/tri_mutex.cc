@@ -3,6 +3,8 @@
 
 #include "tri_mutex.h"
 
+#include <seastar/util/later.hh>
+
 seastar::future<> read_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_read();
@@ -36,7 +38,7 @@ void excl_lock::unlock()
 seastar::future<> excl_lock_from_read::lock()
 {
   static_cast<tri_mutex*>(this)->promote_from_read();
-  return seastar::make_ready_future<>();
+  return seastar::now();
 }
 
 void excl_lock_from_read::unlock()
@@ -47,7 +49,7 @@ void excl_lock_from_read::unlock()
 seastar::future<> excl_lock_from_write::lock()
 {
   static_cast<tri_mutex*>(this)->promote_from_write();
-  return seastar::make_ready_future<>();
+  return seastar::now();
 }
 
 void excl_lock_from_write::unlock()
@@ -57,7 +59,7 @@ void excl_lock_from_write::unlock()
 
 seastar::future<> excl_lock_from_excl::lock()
 {
-  return seastar::make_ready_future<>();
+  return seastar::now();
 }
 
 void excl_lock_from_excl::unlock()
@@ -72,7 +74,7 @@ tri_mutex::~tri_mutex()
 seastar::future<> tri_mutex::lock_for_read()
 {
   if (try_lock_for_read()) {
-    return seastar::make_ready_future<>();
+    return seastar::now();
   }
   waiters.emplace_back(seastar::promise<>(), type_t::read);
   return waiters.back().pr.get_future();
@@ -113,7 +115,7 @@ void tri_mutex::demote_to_read()
 seastar::future<> tri_mutex::lock_for_write()
 {
   if (try_lock_for_write()) {
-    return seastar::make_ready_future<>();
+    return seastar::now();
   }
   waiters.emplace_back(seastar::promise<>(), type_t::write);
   return waiters.back().pr.get_future();
@@ -156,7 +158,7 @@ void tri_mutex::demote_to_write()
 seastar::future<> tri_mutex::lock_for_excl()
 {
   if (try_lock_for_excl()) {
-    return seastar::make_ready_future<>();
+    return seastar::now();
   }
   waiters.emplace_back(seastar::promise<>(), type_t::exclusive);
   return waiters.back().pr.get_future();
