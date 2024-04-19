@@ -112,6 +112,8 @@ template<class A, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::multiset<A,Comp,Alloc>& iset);
 template<class A, class B, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::map<A,B,Comp,Alloc>& m);
+template<class A, class B, class Hash, class KeyEqual>
+inline std::ostream& operator<<(std::ostream& out, const std::unordered_map<A,B,Hash, KeyEqual>& m);
 template<class A, class B, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::multimap<A,B,Comp,Alloc>& m);
 }
@@ -251,6 +253,22 @@ inline std::ostream& operator<<(std::ostream& out, const std::multiset<A,Comp,Al
 
 template<class A, class B, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::map<A,B,Comp,Alloc>& m)
+{
+  out << "{";
+  for (auto it = m.begin();
+       it != m.end();
+       ++it) {
+    if (it != m.begin()) out << ",";
+    out << it->first << "=" << it->second;
+  }
+  out << "}";
+  return out;
+}
+
+template <class A, class B, class Hash, class KeyEqual>
+inline std::ostream&
+operator<<(std::ostream& out,
+	   const std::unordered_map<A, B, Hash, KeyEqual>& m)
 {
   out << "{";
   for (auto it = m.begin();
