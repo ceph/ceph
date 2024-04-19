@@ -153,6 +153,10 @@ CountersContainer get(req_state *s) {
       key = ceph::perf_counters::key_create(rgw_user_op_counters_key, {{"user", s->user->get_id().id}, {"tenant", s->user->get_tenant()}});
     }
     counters.user_counters = user_counters_cache->get(key);
+    if (counters.user_counters) {
+      auto expiration = s->cct->_conf->rgw_op_counters_dump_expiration;
+      counters.user_counters->time_alive = std::chrono::seconds(expiration);
+    }
   }
 
   if (bucket_counters_cache && !s->bucket_name.empty()) {
@@ -162,6 +166,10 @@ CountersContainer get(req_state *s) {
       key = ceph::perf_counters::key_create(rgw_bucket_op_counters_key, {{"bucket", s->bucket_name}, {"tenant", s->bucket_tenant}});
     }
     counters.bucket_counters = bucket_counters_cache->get(key);
+    if (counters.bucket_counters) {
+      auto expiration = s->cct->_conf->rgw_op_counters_dump_expiration;
+      counters.bucket_counters->time_alive = std::chrono::seconds(expiration);
+    }
   }
 
   return counters;
