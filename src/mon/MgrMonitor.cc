@@ -1199,6 +1199,9 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
         }
       } else {
         pending_map.flags &= ~(MgrMap::FLAG_DOWN);
+        if (pending_map.active_gid == 0) {
+          promote_standby();
+        }
       }
     } else {
       return -EINVAL;
