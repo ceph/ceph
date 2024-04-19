@@ -297,6 +297,7 @@ overwrite_ops_t prepare_ops_list(
   interval_set<uint64_t> pre_alloc_addr_removed, pre_alloc_addr_remapped;
   if (delta_based_overwrite_max_extent_size) {
     for (auto &r : ops.to_remove) {
+      // TODO: Introduce LBAMapping::is_data_stable() to include EXIST_CLEAN extents
       if (r->is_stable() && !r->is_zero_reserved()) {
 	pre_alloc_addr_removed.insert(r->get_key(), r->get_length());
 
