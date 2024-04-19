@@ -1318,48 +1318,49 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
     op_ret = -ERR_SERVICE_UNAVAILABLE;
     return;
   }
-
-  if (configurations.list.empty()) {
-    op_ret = remove_notification_v2(this, driver, s->bucket.get(),
-                                    /*delete all notif=true*/ "", y);
-    return;
-  }
-  rgw_pubsub_bucket_topics bucket_topics;
-  op_ret = get_bucket_notifications(this, s->bucket.get(), bucket_topics);
-  if (op_ret < 0) {
-    ldpp_dout(this, 1)
-        << "failed to load existing bucket notification on bucket: "
-        << s->bucket << ", ret = " << op_ret << dendl;
-    return;
-  }
-  for (const auto& c : configurations.list) {
-    const auto& notif_name = c.id;
-
-    const auto arn = rgw::ARN::parse(c.topic_arn);
-    if (!arn) { // already validated above
-      continue;
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    if (configurations.list.empty()) {
+      return remove_notification_v2(this, driver, s->bucket.get(),
+                                    /*delete all notif=true*/"", y);
     }
-    const auto& topic_name = arn->resource;
-
-    auto t = topics.find(*arn);
-    if (t == topics.end()) {
-      continue;
+    rgw_pubsub_bucket_topics bucket_topics;
+    int ret = get_bucket_notifications(this, s->bucket.get(), bucket_topics);
+    if (ret < 0) {
+      ldpp_dout(this, 1)
+            << "failed to load existing bucket notification on bucket: "
+              << s->bucket << ", ret = " << ret << dendl;
+      return ret;
     }
-    auto& topic_info = t->second;
+    for (const auto &c : configurations.list) {
+      const auto &notif_name = c.id;
 
-    auto& topic_filter =
+      const auto arn = rgw::ARN::parse(c.topic_arn);
+      if (!arn) { // already validated above
+        continue;
+      }
+      const auto &topic_name = arn->resource;
+
+      auto t = topics.find(*arn);
+      if (t == topics.end()) {
+        continue;
+      }
+      auto &topic_info = t->second;
+
+      auto &topic_filter =
         bucket_topics.topics[topic_to_unique(topic_name, notif_name)];
-    topic_filter.topic = topic_info;
-    topic_filter.events = c.events;
-    topic_filter.s3_id = notif_name;
-    topic_filter.s3_filter = c.filter;
-  }
-  // finally store all the bucket notifications as attr.
-  bufferlist bl;
-  bucket_topics.encode(bl);
-  rgw::sal::Attrs& attrs = s->bucket->get_attrs();
-  attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
-  op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
+      topic_filter.topic = topic_info;
+      topic_filter.events = c.events;
+      topic_filter.s3_id = notif_name;
+      topic_filter.s3_filter = c.filter;
+    }
+    // finally store all the bucket notifications as attr.
+    bufferlist bl;
+    bucket_topics.encode(bl);
+    rgw::sal::Attrs &attrs = s->bucket->get_attrs();
+    attrs[RGW_ATTR_BUCKET_NOTIFICATION] = std::move(bl);
+    return s->bucket->merge_and_store_attrs(this, attrs, y);
+  }, y);
+
   if (op_ret < 0) {
     ldpp_dout(this, 4)
         << "Failed to store RGW_ATTR_BUCKET_NOTIFICATION on bucket="
