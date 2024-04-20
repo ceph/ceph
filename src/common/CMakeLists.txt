@@ -6,7 +6,7 @@ add_library(common_texttable_obj OBJECT
 
 add_library(common_prioritycache_obj OBJECT
   PriorityCache.cc)
-add_dependencies(common_prioritycache_obj legacy-option-headers)
+target_link_libraries(common_prioritycache_obj legacy-option-headers)
 
 if(WIN32)
   add_library(dlfcn_win32 STATIC win32/dlfcn.cc win32/errno.cc)
@@ -193,7 +193,7 @@ target_compile_definitions(common-common-objs PRIVATE
   "CEPH_INSTALL_FULL_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_INSTALL_DATADIR=\"${CEPH_INSTALL_DATADIR}\""
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
-add_dependencies(common-common-objs legacy-option-headers)
+target_link_libraries(common-common-objs legacy-option-headers)
 
 set(common_mountcephfs_srcs
   armor.c

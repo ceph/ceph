@@ -443,9 +443,9 @@ set(libcommon_files
 set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
+target_link_libraries(common-objs legacy-option-headers)
 target_compile_definitions(common-objs PRIVATE
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
-add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
   add_dependencies(common-objs jaeger_base)
@@ -542,8 +542,9 @@ if(WITH_BLUESTORE_PMEM OR WITH_RBD_RWL)
 endif()
 
 add_library(common STATIC ${ceph_common_objs})
-target_link_libraries(common ${ceph_common_deps})
-add_dependencies(common legacy-option-headers)
+target_link_libraries(common
+  ${ceph_common_deps}
+  legacy-option-headers)
 if(WITH_JAEGER)
 add_dependencies(common jaeger_base)
 endif()
@@ -561,7 +562,7 @@ if(ENABLE_COVERAGE)
   target_link_libraries(ceph-common gcov)
 endif(ENABLE_COVERAGE)
 
-add_dependencies(ceph-common legacy-option-headers)
+target_link_libraries(ceph-common legacy-option-headers)
 
 if(WITH_JAEGER)
 add_dependencies(ceph-common jaeger_base)
