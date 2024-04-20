@@ -104,8 +104,10 @@ add_options(rgw)
 
 add_library(common-options-objs OBJECT
   ${common_options_srcs})
-add_custom_target(legacy-option-headers
-  DEPENDS ${legacy_options_headers})
+add_library(legacy-option-headers INTERFACE)
+target_sources(legacy-option-headers
+  PRIVATE
+    ${legacy_options_headers})
 
 include(AddCephTest)
 add_ceph_test(validate-options
