@@ -13,6 +13,7 @@ from io import StringIO
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
+from teuthology.contextutil import safe_while
 from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
@@ -54,18 +55,20 @@ class TestVolumesHelper(CephFSTestCase):
         args = tuple(args)
 
         count = 0
-        while count < max_count:
-            result = json.loads(self._fs_cmd(*args))
-            current_state = result["status"]["state"]
-            if current_state in states:
-                return
 
-            log.info(f'current clone state = {current_state}')
-            count += 1
-            time.sleep(sleep)
+        msg = (f'Executed cmd "{args}" {max_count} times; clone was never in '
+               f'"{states}" state(s).')
 
-        raise WrongCloneStatus(f'Executed cmd "{args}" {max_count} times. '
-                               f'Clone was never in "{states}" state(s).')
+        with safe_while(sleep=sleep, tries=max_count, action=msg) as proceed:
+            while proceed():
+                result = json.loads(self._fs_cmd(*args))
+                current_state = result["status"]["state"]
+                if current_state in states:
+                    return
+
+                log.info(f'current clone state = {current_state}')
+                count += 1
+                time.sleep(sleep)
 
     def _get_clone_status(self, clone, clone_group=None):
         args = ["clone", "status", self.volname, clone]
