@@ -327,7 +327,7 @@ def build_branch(args):
 
     G = git.Repo(args.git)
 
-    if args.create_qa:
+    if args.create_qa or args.update_qa:
         log.info("connecting to %s", REDMINE_ENDPOINT)
         R = Redmine(REDMINE_ENDPOINT, username=REDMINE_USER, key=REDMINE_API_KEY)
         log.debug("connected")
@@ -452,7 +452,7 @@ def build_branch(args):
             tag = git.refs.tag.Tag.create(G, tag_name)
             log.info("Created tag %s" % tag)
 
-    if args.create_qa:
+    if args.create_qa or args.update_qa:
         if not created_branch:
             log.error("branch already exists!")
             sys.exit(1)
@@ -490,17 +490,36 @@ def build_branch(args):
           "subject": branch,
           "watcher_user_ids": user['id'],
         }
-        log.debug("creating issue with kwargs: %s", issue_kwargs)
-        issue = R.issue.create(**issue_kwargs)
-        log.info("created redmine qa issue: %s", issue.url)
 
+        if args.update_qa:
+            issue = R.issue.get(args.update_qa)
+            if issue.project.id != project.id:
+                log.error(f"issue {issue.url} project {issue.project} does not match {project}")
+                sys.exit(1)
+            if issue.tracker.id != tracker.id:
+                log.error(f"issue {issue.url} tracker {issue.tracker} does not match {tracker}")
+                sys.exit(1)
 
-        for pr in prs:
-            log.debug(f"Posting QA Run in comment for ={pr}")
-            endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
-            body = f"This PR is under test in [{issue.url}]({issue.url})."
-            r = session.post(endpoint, auth=gitauth(), data=json.dumps({'body':body}))
-            log.debug(f"= {r}")
+            log.debug("updating issue with kwargs: %s", issue_kwargs)
+            notes = f"""
+            Updating branch to {branch}.
+            """
+            if R.issue.update(issue.id, **issue_kwargs):
+                log.info("updated redmine qa issue: %s", issue.url)
+            else:
+                log.error(f"failed to update {issue}")
+                sys.exit(1)
+        elif args.create_qa:
+            log.debug("creating issue with kwargs: %s", issue_kwargs)
+            issue = R.issue.create(**issue_kwargs)
+            log.info("created redmine qa issue: %s", issue.url)
+
+            for pr in prs:
+                log.debug(f"Posting QA Run in comment for ={pr}")
+                endpoint = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{pr}/comments"
+                body = f"This PR is under test in [{issue.url}]({issue.url})."
+                r = session.post(endpoint, auth=gitauth(), data=json.dumps({'body':body}))
+                log.debug(f"= {r}")
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
@@ -528,13 +547,18 @@ def main():
     parser.add_argument('--qa-release', dest='qa_release', action='store', help='QA release for tracker')
     parser.add_argument('--qa-tags', dest='qa_tags', action='store', help='QA tags for tracker')
     parser.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
+    parser.add_argument('--update-qa', dest='update_qa', action='store', help='update QA run ticket')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
+
+    if args.create_qa and args.update_qa:
+        log.error("--create-qa and --update-qa are mutually exclusive switches")
+        sys.exit(1)
 
     if args.debug:
         log.setLevel(logging.DEBUG)
 
-    if args.create_qa and Redmine is None:
+    if (args.create_qa or args.update_qa) and Redmine is None:
         log.error("redmine library is not available so cannot create qa tracker ticket")
         sys.exit(1)
 
