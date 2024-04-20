@@ -16,11 +16,11 @@ setup(
     license='LGPLv2+',
     keywords='ceph',
     url="https://github.com/ceph/ceph",
-    zip_safe = False,
-    install_requires=(	
-        'pyyaml',	
+    zip_safe=False,
+    install_requires=(
+        'pyyaml',
     ),
-    classifiers = [
+    classifiers=[
         'Intended Audience :: Developer',
         'Operating System :: POSIX :: Linux',
         'License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)',
