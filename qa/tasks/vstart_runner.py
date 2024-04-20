@@ -489,6 +489,12 @@ sudo() {
 
         if wait:
             proc.wait(timeout)
+        if stderr:
+            stderr = stderr.getvalue().strip()
+            log.info(f'stderr -\n{stderr}')
+        if stdout:
+            stdout = stdout.getvalue().strip()
+            log.info(f'stdout -\n{stdout}')
 
         return proc
 
