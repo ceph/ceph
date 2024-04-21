@@ -260,10 +260,10 @@ OsdScrub::LoadTracker::LoadTracker(
 ///\todo replace with Knuth's algo (to reduce the numerical error)
 std::optional<double> OsdScrub::LoadTracker::update_load_average()
 {
-  auto hb_interval = conf->osd_heartbeat_interval;
-  int n_samples = std::chrono::duration_cast<seconds>(24h).count();
+  int64_t hb_interval = conf->osd_heartbeat_interval;
+  int64_t n_samples = std::chrono::duration_cast<seconds>(24h).count();
   if (hb_interval > 1) {
-    n_samples = std::max(n_samples / hb_interval, 1L);
+    n_samples = std::max(n_samples / hb_interval, int64_t(1));
   }
 
   double loadavg;
