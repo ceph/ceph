@@ -431,11 +431,9 @@ void ReplicatedRecoveryBackend::prepare_pull(
   const auto missing_iter = local_missing.get_items().find(soid);
   auto m = pg.get_missing_loc_shards();
   pg_shard_t fromshard = *(m[soid].begin());
-  const auto& last_backfill =
-    pg.get_peering_state().get_peer_info(fromshard).last_backfill;
 
   pull_op.recovery_info =
-    set_recovery_info(soid, head_obc->ssc, last_backfill);
+    set_recovery_info(soid, head_obc->ssc);
   pull_op.soid = soid;
   pull_op.recovery_progress.data_complete = false;
   pull_op.recovery_progress.omap_complete =
@@ -452,8 +450,7 @@ void ReplicatedRecoveryBackend::prepare_pull(
 
 ObjectRecoveryInfo ReplicatedRecoveryBackend::set_recovery_info(
   const hobject_t& soid,
-  const crimson::osd::SnapSetContextRef ssc,
-  const hobject_t& last_backfill)
+  const crimson::osd::SnapSetContextRef ssc)
 {
   pg_missing_tracker_t local_missing = pg.get_local_missing();
   const auto missing_iter = local_missing.get_items().find(soid);
@@ -463,7 +460,7 @@ ObjectRecoveryInfo ReplicatedRecoveryBackend::set_recovery_info(
     assert(ssc);
     recovery_info.ss = ssc->snapset;
     auto subsets = crimson::osd::calc_clone_subsets(
-      ssc->snapset, soid, local_missing, last_backfill);
+      ssc->snapset, soid, local_missing, pg.get_info().last_backfill);
     crimson::osd::set_subsets(subsets, recovery_info);
     logger().debug("{}: pulling {}", __func__, recovery_info);
     ceph_assert(ssc->snapset.clone_size.count(soid.snap));
