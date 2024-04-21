@@ -715,6 +715,8 @@ class TestIoctx(object):
             self.ioctx.operate_write_op(write_op, 'abc')
 
     def test_locator(self):
+        if os.getenv("CRIMSON_COMPAT") != None:
+            return
         self.ioctx.set_locator_key("bar")
         self.ioctx.write('foo', b'contents1')
         objects = [i for i in self.ioctx.list_objects()]
