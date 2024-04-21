@@ -38,6 +38,7 @@ NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
   Dispatcher(g_ceph_context),
   osdmap_epoch(0),
   gwmap_epoch(0),
+  last_map_time(std::chrono::steady_clock::now()),
   monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(g_ceph_context, "async", entity_name_t::CLIENT(-1), "client", getpid())),
   objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
@@ -232,9 +233,22 @@ void NVMeofGwMonitorClient::send_beacon()
   monc.send_mon_message(std::move(m));
 }
 
+void NVMeofGwMonitorClient::disconnect_panic()
+{
+  auto disconnect_panic_duration = g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_beacon_grace").count();
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(now - last_map_time).count();
+  if (elapsed_seconds > disconnect_panic_duration) {
+    dout(4) << "Triggering a panic upon disconnection from the monitor, elapsed " << elapsed_seconds << ", configured disconnect panic duration " << disconnect_panic_duration << dendl;
+    throw std::runtime_error("Lost connection to the monitor (mon).");
+  }
+}
+
 void NVMeofGwMonitorClient::tick()
 {
   dout(0) << dendl;
+
+  disconnect_panic();
   send_beacon();
 
   timer.add_event_after(
@@ -270,6 +284,8 @@ void NVMeofGwMonitorClient::shutdown()
 
 void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
 {
+  last_map_time = std::chrono::steady_clock::now(); // record time of last monitor message
+
   auto &new_map = nmap->get_map();
   gwmap_epoch = nmap->get_gwmap_epoch();
   auto group_key = std::make_pair(pool, group);

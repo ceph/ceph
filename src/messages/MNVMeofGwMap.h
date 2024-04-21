@@ -19,6 +19,9 @@
 #include "mon/NVMeofGwMap.h"
 
 class MNVMeofGwMap final : public Message {
+private:
+  static constexpr int VERSION = 1;
+
 protected:
   std::map<NvmeGroupKey, NvmeGwMap> map;
   epoch_t                           gwmap_epoch;
@@ -42,11 +45,15 @@ public:
 
   void decode_payload() override {
     auto p = payload.cbegin();
+    int version;
+    decode(version, p);
+    ceph_assert(version == VERSION);
     decode(gwmap_epoch, p);
     decode(map, p);
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
+    encode(VERSION, payload);
     encode(gwmap_epoch, payload);
     encode(map, payload);
   }
