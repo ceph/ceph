@@ -711,7 +711,7 @@ void Locker::_drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue,
     MDSCacheObject *obj = lock->get_parent();
 
     if (it->is_xlock()) {
-      if (obj->is_auth()) {
+      if (obj->is_auth() || lock->is_locallock()) {
 	bool ni = false;
 	xlock_finish(it++, mut, &ni);
 	if (ni)
