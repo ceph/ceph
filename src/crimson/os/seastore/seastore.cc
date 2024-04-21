@@ -566,6 +566,12 @@ seastar::future<store_statfs_t> SeaStore::stat() const
   });
 }
 
+seastar::future<store_statfs_t> SeaStore::pool_statfs(int64_t pool_id) const
+{
+   //TODO
+   return SeaStore::stat();
+}
+
 TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
 SeaStore::Shard::get_coll_bits(CollectionRef ch, Transaction &t) const
 {
@@ -777,6 +783,14 @@ SeaStore::Shard::open_collection(const coll_t& cid)
       return seastar::make_ready_future<CollectionRef>();
     }
   });
+}
+
+seastar::future<>
+SeaStore::Shard::set_collection_opts(CollectionRef c,
+                                        const pool_opts_t& opts)
+{
+  //TODO
+  return seastar::now();
 }
 
 seastar::future<std::vector<coll_core_t>>
