@@ -38,7 +38,9 @@ private:
   std::string server_cert;
   std::string client_cert;
   epoch_t     osdmap_epoch; // last awaited osdmap_epoch
-  epoch_t     gwmap_epoch; // last received gw map epoch
+  epoch_t     gwmap_epoch;  // last received gw map epoch
+  std::chrono::time_point<std::chrono::steady_clock>
+              last_map_time; // used to panic on disconnect
 
 protected:
   ceph::async::io_context_pool poolctx;
@@ -75,6 +77,7 @@ public:
   void shutdown();
   int main(std::vector<const char *> args);
   void tick();
+  void disconnect_panic();
 
   void handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> m);
 };
