@@ -22,6 +22,7 @@
 #include "common/utf8.h"
 
 #include "rgw_oidc_provider.h"
+#include "rgw_quota.h"
 #include "rgw_role.h"
 #include "rgw_sal.h"
 
@@ -135,6 +136,10 @@ int create(const DoutPrefixProvider* dpp,
   if (op_state.max_buckets) {
     info.max_buckets = *op_state.max_buckets;
   }
+
+  const ConfigProxy& conf = dpp->get_cct()->_conf;
+  rgw_apply_default_account_quota(info.quota, conf);
+  rgw_apply_default_bucket_quota(info.bucket_quota, conf);
 
   // account id is optional, but must be valid
   if (op_state.account_id.empty()) {

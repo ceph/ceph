@@ -2300,6 +2300,31 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_account_default_quota_max_objects
+  type: int
+  level: basic
+  desc: Account quota max objects
+  long_desc: The default quota configuration for total number of objects for a single
+    account. A negative number means 'unlimited'.
+  fmt_desc: Default max number of objects for a account. This includes all
+    objects in all buckets owned by the account. Set on new accounts
+    if no other quota is specified. Has no effect on existing accounts.
+  default: -1
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_account_default_quota_max_size
+  type: int
+  level: basic
+  desc: Account quota max size
+  long_desc: The default quota configuration for total size of objects for a single
+    account. A negative number means 'unlimited'.
+  fmt_desc: The value for account max size quota in bytes set on new accounts,
+    if no other quota is specified.  Has no effect on existing accounts.
+  default: -1
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_multipart_min_part_size
   type: size
   level: advanced
