@@ -1655,22 +1655,24 @@ struct PITest : ::testing::Test {
     RequiredPredicate rec_pred(min_to_peer);
     MapPredicate map_pred(osd_states);
 
+    auto correct_pcontdec = std::make_unique<RequiredPredicate>(rec_pred);
     PI::PriorSet correct(
       ec_pool,
       probe,
       down,
       blocked_by,
       pg_down,
-      new RequiredPredicate(rec_pred));
+      correct_pcontdec.get());
 
     PastIntervals compact;
     for (auto &&i: intervals) {
       compact.add_interval(ec_pool, i);
     }
+    auto compact_ps_pcontdec = std::make_unique<RequiredPredicate>(rec_pred);
     PI::PriorSet compact_ps = compact.get_prior_set(
       ec_pool,
       last_epoch_started,
-      new RequiredPredicate(rec_pred),
+      compact_ps_pcontdec.get(),
       map_pred,
       up,
       acting,
