@@ -40,7 +40,7 @@ ReplicatedRecoveryBackend::recover_object(
       recovery_waiter.obc = obc;
       recovery_waiter.obc->wait_recovery_read();
       return maybe_push_shards(head, soid, need);
-    }).handle_error_interruptible(
+    }, false).handle_error_interruptible(
       crimson::osd::PG::load_obc_ertr::all_same_way([soid](auto& code) {
       // TODO: may need eio handling?
       logger().error("recover_object saw error code {}, ignoring object {}",
@@ -824,7 +824,7 @@ ReplicatedRecoveryBackend::_handle_pull_response(
                            pull_info.obc->ssc);
         }
         return crimson::osd::PG::load_obc_ertr::now();
-      }).handle_error_interruptible(crimson::ct_error::assert_all{});
+      }, false).handle_error_interruptible(crimson::ct_error::assert_all{});
   };
   return prepare_waiter.then_interruptible(
     [this, &pull_info, &push_op, t, response]() mutable {
