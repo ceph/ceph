@@ -80,6 +80,7 @@ BootstrapRequest<I>::BootstrapRequest(
     PoolMetaCache *pool_meta_cache,
     std::string *local_group_id,
     std::string *remote_group_id,
+    std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
     GroupCtx *local_group_ctx,
     std::list<std::pair<librados::IoCtx, ImageReplayer<I> *>> *image_replayers,
     std::map<std::pair<int64_t, std::string>, ImageReplayer<I> *> *image_replayer_index,
@@ -99,6 +100,7 @@ BootstrapRequest<I>::BootstrapRequest(
     m_pool_meta_cache(pool_meta_cache),
     m_local_group_id(local_group_id),
     m_remote_group_id(remote_group_id),
+    m_local_group_snaps(local_group_snaps),
     m_local_group_ctx(local_group_ctx),
     m_image_replayers(image_replayers),
     m_image_replayer_index(image_replayer_index),
@@ -301,7 +303,7 @@ void BootstrapRequest<I>::list_remote_group_snapshots() {
       &BootstrapRequest<I>::handle_list_remote_group_snapshots>(this);
 
   auto req = librbd::group::ListSnapshotsRequest<I>::create(m_remote_io_ctx,
-      *m_remote_group_id, true, true, &m_remote_group_snaps, ctx);
+      *m_remote_group_id, true, true, &remote_group_snaps, ctx);
   req->send();
 }
 
@@ -323,7 +325,7 @@ void BootstrapRequest<I>::handle_list_remote_group_snapshots(int r) {
 
   if (m_remote_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED) {
     cls::rbd::MirrorSnapshotState state;
-    r = get_last_mirror_snapshot_state(m_remote_group_snaps, &state);
+    r = get_last_mirror_snapshot_state(remote_group_snaps, &state);
     if (r == -ENOENT) {
       derr << "failed to find remote mirror group snapshot" << dendl;
       finish(-EINVAL);
@@ -688,7 +690,7 @@ void BootstrapRequest<I>::list_local_group_snapshots() {
       &BootstrapRequest<I>::handle_list_local_group_snapshots>(this);
 
   auto req = librbd::group::ListSnapshotsRequest<I>::create(m_local_io_ctx,
-      *m_local_group_id, true, true, &m_local_group_snaps, ctx);
+      *m_local_group_id, true, true, &local_group_snaps, ctx);
   req->send();
 }
 
@@ -708,16 +710,20 @@ void BootstrapRequest<I>::handle_list_local_group_snapshots(int r) {
     return;
   }
 
+  for (auto it : local_group_snaps) {
+    m_local_group_snaps->insert(make_pair(it.id, it));
+  }
+
   if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_ENABLED) {
     cls::rbd::MirrorSnapshotState state;
-    r = get_last_mirror_snapshot_state(m_local_group_snaps, &state);
+    r = get_last_mirror_snapshot_state(local_group_snaps, &state);
     if (r == -ENOENT) {
       derr << "failed to find local mirror group snapshot" << dendl;
     } else {
       if (state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
         // if local snapshot is primary demoted, check if there is demote snapshot
         // in remote, if not then split brain
-        if (!is_demoted_snap_exists(m_remote_group_snaps)) {
+        if (!is_demoted_snap_exists(remote_group_snaps)) {
           finish(-EEXIST);
           return;
         }
