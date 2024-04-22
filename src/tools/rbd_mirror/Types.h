@@ -183,6 +183,8 @@ struct GroupCtx {
     virtual ~Listener() {
     }
 
+    virtual void list_remote_group_snapshots(Context *on_finish) = 0;
+
     virtual void create_mirror_snapshot_start(
         const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
         void *arg, int64_t *local_group_pool_id, std::string *local_group_id,
