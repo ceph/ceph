@@ -109,3 +109,14 @@ TEST(TestURL, WithPath)
     ASSERT_TRUE(parse_url_authority(url, host, user, password));
 }
 
+TEST(TestURL, KafkaMultipleBroker)
+{
+    std::string host;
+    std::string user;
+    std::string password;
+    const std::string url = "kafka://example.com:9092,example1.com:9092";
+    ASSERT_TRUE(parse_url_authority(url, host, user, password));
+    ASSERT_TRUE(user.empty());
+    ASSERT_TRUE(password.empty());
+    EXPECT_STREQ(host.c_str(), "example.com:9092,example1.com:9092"); 
+}
