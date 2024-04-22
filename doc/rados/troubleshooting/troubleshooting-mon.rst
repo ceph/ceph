@@ -493,10 +493,10 @@ trying to connect to Ceph daemons. For example::
 
 It might also be necessary to add rules to iptables on your Ceph hosts to
 ensure that clients are able to access the TCP ports associated with your Ceph
-monitors (default: port 6789) and Ceph OSDs (default: 6800 through 7300). For
+monitors (default: port 6789) and Ceph OSDs (default: 6800 through 7568). For
 example::
 
-    iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:7300 -j ACCEPT
+    iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:7568 -j ACCEPT
 
 
 Monitor Store Failures
