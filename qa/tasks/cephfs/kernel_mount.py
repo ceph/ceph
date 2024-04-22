@@ -204,11 +204,6 @@ class KernelMount(CephFSMount):
         """
         assert self.is_mounted()
 
-    def teardown(self):
-        super(KernelMount, self).teardown()
-        if self.is_mounted():
-            self.umount()
-
     def _get_debug_dir(self):
         """
         Get the debugfs folder for this mount

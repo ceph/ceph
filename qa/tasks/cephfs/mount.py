@@ -1383,6 +1383,9 @@ class CephFSMount(object):
         log.info("Terminating background process")
         self.kill_background()
 
+        if self.is_mounted():
+            self.umount()
+
     def _kill_background(self, p):
         if p.stdin:
             p.stdin.close()
