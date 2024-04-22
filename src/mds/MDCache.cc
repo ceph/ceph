@@ -13625,6 +13625,7 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
     MutationImpl::LockOpVec lov;
 
     lov.add_xlock(&in->quiescelock); /* !! */
+    lov.add_rdlock(&in->policylock); /* for F_QUIESCE_BLOCK test */
 
     if (in->is_auth()) {
       if (splitauth) {
