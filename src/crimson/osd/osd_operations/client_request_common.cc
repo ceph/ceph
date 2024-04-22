@@ -31,6 +31,9 @@ CommonClientRequest::recover_missings(
   return do_recover_missing(
     pg, soid.get_head(), reqid
   ).then_interruptible([snaps=std::move(snaps), pg, soid, reqid]() mutable {
+    if (snaps.empty()) {
+      return ObjectContextLoader::load_obc_iertr::now();
+    }
     return pg->obc_loader.with_obc<RWState::RWREAD>(
       soid.get_head(),
       [snaps=std::move(snaps), pg, soid, reqid](auto head, auto) mutable {
