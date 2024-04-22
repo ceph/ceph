@@ -47,6 +47,7 @@ public:
       PoolMetaCache *pool_meta_cache,
       std::string *local_group_id,
       std::string *remote_group_id,
+      std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
       GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers,
       std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> *image_replayer_index,
@@ -55,7 +56,8 @@ public:
       threads, local_io_ctx, remote_io_ctx, global_group_id, local_mirror_uuid,
       instance_watcher, local_status_updater, remote_status_updater,
       cache_manager_handler, pool_meta_cache, local_group_id, remote_group_id,
-      local_group_ctx, image_replayers, image_replayer_index, on_finish);
+      local_group_snaps, local_group_ctx, image_replayers, image_replayer_index,
+      on_finish);
   }
 
   BootstrapRequest(
@@ -71,6 +73,7 @@ public:
       PoolMetaCache *pool_meta_cache,
       std::string *local_group_id,
       std::string *remote_group_id,
+      std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
       GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers,
       std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> *image_replayer_index,
@@ -166,6 +169,7 @@ private:
   PoolMetaCache *m_pool_meta_cache;
   std::string *m_local_group_id;
   std::string *m_remote_group_id;
+  std::map<std::string, cls::rbd::GroupSnapshot> *m_local_group_snaps;
   GroupCtx *m_local_group_ctx;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *m_image_replayers;
   std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> *m_image_replayer_index;
@@ -177,8 +181,8 @@ private:
   bool m_local_group_id_by_name = false;
   cls::rbd::MirrorGroup m_remote_mirror_group;
   cls::rbd::MirrorGroup m_local_mirror_group;
-  std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
-  std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
+  std::vector<cls::rbd::GroupSnapshot> remote_group_snaps;
+  std::vector<cls::rbd::GroupSnapshot> local_group_snaps;
   bool m_remote_mirror_group_primary = false;
   bool m_local_mirror_group_primary = false;
   std::list<cls::rbd::GroupImageStatus> m_images;
