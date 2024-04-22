@@ -4132,6 +4132,9 @@ void PeeringState::merge_new_log_entries(
       pmissing,
       NULL,
       dpp);
+    // keep peer_info up to date
+    if (pinfo.last_complete == pinfo.last_update)
+      pinfo.last_complete = info.last_update;
     pinfo.last_update = info.last_update;
     pinfo.stats.stats_invalid = pinfo.stats.stats_invalid || invalidate_stats;
     rebuild_missing = rebuild_missing || invalidate_stats;
