@@ -171,6 +171,10 @@ private:
     Listener(GroupReplayer *group_replayer) : group_replayer(group_replayer) {
     }
 
+    void list_remote_group_snapshots(Context *on_finish) override {
+      group_replayer->list_remote_group_snapshots(on_finish);
+    }
+
     void create_mirror_snapshot_start(
         const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
         void *arg, int64_t *local_group_pool_id, std::string *local_group_id,
@@ -242,6 +246,7 @@ private:
   std::map<std::pair<int64_t, std::string>, ImageReplayer<ImageCtxT> *> m_image_replayer_index;
   std::map<std::string, cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::map<std::string, cls::rbd::GroupSnapshot> m_remote_group_snaps;
+  std::vector<cls::rbd::GroupSnapshot> remote_group_snaps;
   std::map<std::string, int> m_get_remote_group_snap_ret_vals;
   std::map<std::string, std::map<ImageReplayer<ImageCtxT> *, Context *>> m_create_snap_requests;
   std::set<std::string> m_pending_snap_create;
@@ -291,6 +296,14 @@ private:
   void set_mirror_group_status_update(cls::rbd::MirrorGroupStatusState state,
                                       const std::string &desc);
 
+  void create_regular_group_snapshot(const std::string &remote_snap_name,
+                                     const std::string &remote_snap_id,
+                                     std::vector<cls::rbd::GroupImageStatus> *local_images,
+                                     Context *on_finish);
+  void handle_create_regular_group_snapshot(int r, Context *on_finish);
+  void list_remote_group_snapshots(Context *on_finish);
+  void handle_list_remote_group_snapshots(int r, Context *on_finish);
+  int local_group_image_list_by_id(std::vector<cls::rbd::GroupImageStatus> *image_ids);
   void create_mirror_snapshot_start(
       const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
       ImageReplayer<ImageCtxT> *image_replayer, int64_t *local_group_pool_id,
