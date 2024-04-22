@@ -1505,6 +1505,8 @@ static int bucket_stats(rgw::sal::Store* store,
     return ret;
   }
 
+  const RGWBucketInfo& bucket_info = bucket->get_info();
+
   string bucket_ver, master_ver;
   string max_marker;
   ret = bucket->read_stats(dpp, RGW_NO_SHARD, &bucket_ver, &master_ver, stats, &max_marker);
@@ -1518,15 +1520,22 @@ static int bucket_stats(rgw::sal::Store* store,
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket->get_name());
-  formatter->dump_int("num_shards",
-		      bucket->get_info().layout.current_index.layout.normal.num_shards);
   formatter->dump_string("tenant", bucket->get_tenant());
+  formatter->dump_string("versioning",
+                         bucket->versioned()
+                         ? (bucket->versioning_enabled() ? "enabled" : "suspended")
+                         : "off");
   formatter->dump_string("zonegroup", bucket->get_info().zonegroup);
   formatter->dump_string("placement_rule", bucket->get_info().placement_rule.to_str());
   ::encode_json("explicit_placement", bucket->get_key().explicit_placement, formatter);
   formatter->dump_string("id", bucket->get_bucket_id());
   formatter->dump_string("marker", bucket->get_marker());
   formatter->dump_stream("index_type") << bucket->get_info().layout.current_index.layout.type;
+  formatter->dump_int("index_generation", bucket->get_info().layout.current_index.gen);
+  formatter->dump_int("num_shards",
+		      bucket->get_info().layout.current_index.layout.normal.num_shards);
+  formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
+  formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
   ::encode_json("owner", bucket->get_info().owner, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
