@@ -301,6 +301,9 @@ private:
   void get_local_image_state();
   void handle_get_local_image_state(int r);
 
+  void refresh_remote_group_snapshot_list();
+  void handle_refresh_remote_group_snapshot_list(int r);
+
   void create_group_snap_start();
   void handle_create_group_snap_start(int r);
 
