@@ -12,6 +12,7 @@ struct ReplayerListener {
   virtual ~ReplayerListener() {}
 
   virtual void handle_notification() = 0;
+  virtual void list_remote_group_snapshots(Context *on_finish) = 0;
 
   virtual void create_mirror_snapshot_start(
       const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,

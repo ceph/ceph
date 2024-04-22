@@ -209,6 +209,15 @@ struct ImageReplayer<I>::ReplayerListener
     image_replayer->handle_replayer_notification();
   }
 
+  void list_remote_group_snapshots(Context *on_finish) override {
+    if (local_group_ctx == nullptr) {
+      on_finish->complete(0);
+      return;
+    }
+
+    local_group_ctx->listener->list_remote_group_snapshots(on_finish);
+  }
+
   void create_mirror_snapshot_start(
       const cls::rbd::MirrorSnapshotNamespace &remote_group_snap_ns,
       int64_t *local_group_pool_id, std::string *local_group_id,

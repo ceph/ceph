@@ -947,7 +947,7 @@ void Replayer<I>::handle_get_remote_image_state(int r) {
     return;
   }
 
-  create_group_snap_start();
+  refresh_remote_group_snapshot_list();
 }
 
 template <typename I>
@@ -978,14 +978,38 @@ void Replayer<I>::handle_get_local_image_state(int r) {
 }
 
 template <typename I>
-void Replayer<I>::create_group_snap_start() {
-
+void Replayer<I>::refresh_remote_group_snapshot_list() {
   if (!m_remote_mirror_snap_ns.group_spec.is_valid() ||
       m_remote_mirror_snap_ns.group_snap_id.empty()) {
     create_non_primary_snapshot();
     return;
   }
 
+  dout(10) << dendl;
+
+  auto ctx = new LambdaContext(
+    [this](int r) {
+      handle_refresh_remote_group_snapshot_list(r);
+  });
+
+  m_replayer_listener->list_remote_group_snapshots(ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_refresh_remote_group_snapshot_list(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    dout(15) << "restarting replayer" << dendl;
+    load_local_image_meta();
+    return;
+  }
+
+  create_group_snap_start();
+}
+
+template <typename I>
+void Replayer<I>::create_group_snap_start() {
   dout(10) << dendl;
 
   auto ctx = create_context_callback<
@@ -1002,8 +1026,13 @@ void Replayer<I>::handle_create_group_snap_start(int r) {
 
   if (r < 0 && r != -EEXIST) {
     if (r == -EAGAIN) {
-      dout(15) << "restarting replayer" << dendl;
-      load_local_image_meta();
+      auto ctx = new LambdaContext(
+        [this](int r) {
+          // retry after 1 sec
+          refresh_remote_group_snapshot_list();
+        });
+      std::lock_guard timer_locker{m_threads->timer_lock};
+      m_threads->timer->add_event_after(1, ctx);
     } else if (r == -ESTALE) {
       dout(15) << "waiting for shut down" << dendl;
       handle_replay_complete(r, "waiting for shut down");
