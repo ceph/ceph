@@ -234,6 +234,10 @@ void Locker::detect_dead_locks(const MDRequestRef& mdr, int lock_type)
   bool any_waiter = false;
   bool order_messy = false;
 
+  if (!g_conf().get_val<bool>("mds_detect_deadlocks")) {
+    return;
+  }
+
   dout(15) << "detect_dead_locks " << *mdr << dendl;
   for (auto it = mdr->locks.begin(); it != mdr->locks.end(); ) {
     SimpleLock *lock = it->lock;

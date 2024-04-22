@@ -457,6 +457,16 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_detect_deadlocks
+  type: bool
+  level: advanced
+  desc: flag to detect deadlocks between requests.
+  fmt_desc: To enable it to detect deadlocks between requests.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_tick_interval
   type: float
   level: advanced
