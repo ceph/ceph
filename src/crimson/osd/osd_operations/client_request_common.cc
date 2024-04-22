@@ -17,7 +17,7 @@ namespace crimson::osd {
 
 InterruptibleOperation::template interruptible_future<>
 CommonClientRequest::recover_missings(
-  Ref<PG> &pg,
+  Ref<PG> pg,
   const hobject_t& soid,
   std::set<snapid_t> &&snaps,
   const osd_reqid_t& reqid)
@@ -32,43 +32,43 @@ CommonClientRequest::recover_missings(
     pg, soid.get_head(), reqid
   ).then_interruptible([snaps=std::move(snaps), pg, soid, reqid]() mutable {
     if (snaps.empty()) {
-      return ObjectContextLoader::load_obc_iertr::now();
+      return InterruptibleOperation::interruptor::now();
     }
-    return pg->obc_loader.with_obc<RWState::RWREAD>(
-      soid.get_head(),
-      [snaps=std::move(snaps), pg, soid, reqid](auto head, auto) mutable {
-      return seastar::do_with(
-	std::move(snaps),
-	[pg, soid, head, reqid](auto &snaps) mutable {
-	return InterruptibleOperation::interruptor::do_for_each(
-	  snaps,
-	  [pg, soid, head, reqid](auto &snap) mutable ->
-	  InterruptibleOperation::template interruptible_future<> {
-	  auto coid = head->obs.oi.soid;
-	  coid.snap = snap;
-	  auto oid = resolve_oid(head->get_head_ss(), coid);
-	  /* Rollback targets may legitimately not exist if, for instance,
-	   * the object is an rbd block which happened to be sparse and
-	   * therefore non-existent at the time of the specified snapshot.
-	   * In such a case, rollback will simply delete the object.  Here,
-	   * we skip the oid as there is no corresponding clone to recover.
-	   * See https://tracker.ceph.com/issues/63821 */
-	  if (oid) {
-	    return do_recover_missing(pg, *oid, reqid);
-	  } else {
-	    return seastar::now();
-	  }
-	});
-      });
+    return seastar::do_with(
+      std::move(snaps),
+      [pg, soid, reqid](auto& snaps) {
+      return pg->obc_loader.with_obc<RWState::RWREAD>(
+        soid.get_head(),
+        [&snaps, pg, soid, reqid](auto head, auto) {
+        return InterruptibleOperation::interruptor::do_for_each(
+          snaps,
+          [pg, soid, head, reqid](auto &snap)
+          -> InterruptibleOperation::template interruptible_future<> {
+          auto coid = head->obs.oi.soid;
+          coid.snap = snap;
+          auto oid = resolve_oid(head->get_head_ss(), coid);
+          /* Rollback targets may legitimately not exist if, for instance,
+           * the object is an rbd block which happened to be sparse and
+           * therefore non-existent at the time of the specified snapshot.
+           * In such a case, rollback will simply delete the object.  Here,
+           * we skip the oid as there is no corresponding clone to recover.
+           * See https://tracker.ceph.com/issues/63821 */
+          if (oid) {
+            return do_recover_missing(pg, *oid, reqid);
+          } else {
+            return seastar::now();
+          }
+        });
+      }).handle_error_interruptible(
+        crimson::ct_error::assert_all("unexpected error")
+      );
     });
-  }).handle_error_interruptible(
-    crimson::ct_error::assert_all("unexpected error")
-  );
+  });
 }
 
 typename InterruptibleOperation::template interruptible_future<>
 CommonClientRequest::do_recover_missing(
-  Ref<PG>& pg,
+  Ref<PG> pg,
   const hobject_t& soid,
   const osd_reqid_t& reqid)
 {
