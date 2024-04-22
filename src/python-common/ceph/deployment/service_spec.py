@@ -1317,9 +1317,9 @@ class NvmeofServiceSpec(ServiceSpec):
                  state_update_notify: Optional[bool] = True,
                  state_update_interval_sec: Optional[int] = 5,
                  enable_spdk_discovery_controller: Optional[bool] = False,
-                 omap_file_lock_duration: Optional[int] = 60,
-                 omap_file_lock_retries: Optional[int] = 15,
-                 omap_file_lock_retry_sleep_interval: Optional[int] = 5,
+                 omap_file_lock_duration: Optional[int] = 20,
+                 omap_file_lock_retries: Optional[int] = 30,
+                 omap_file_lock_retry_sleep_interval: Optional[float] = 1.0,
                  omap_file_update_reloads: Optional[int] = 10,
                  enable_prometheus_exporter: Optional[bool] = True,
                  bdevs_per_cluster: Optional[int] = 32,
@@ -1499,6 +1499,42 @@ class NvmeofServiceSpec(ServiceSpec):
 
         if self.allowed_consecutive_spdk_ping_failures < 1:
             raise SpecValidationError("Allowed consecutive SPDK ping failures should be at least 1")
+
+        if self.state_update_interval_sec < 0:
+            raise SpecValidationError("State update interval can't be negative")
+
+        if self.omap_file_lock_duration < 0:
+            raise SpecValidationError("OMAP file lock duration can't be negative")
+
+        if self.omap_file_lock_retries < 0:
+            raise SpecValidationError("OMAP file lock retries can't be negative")
+
+        if self.omap_file_update_reloads < 0:
+            raise SpecValidationError("OMAP file reloads can't be negative")
+
+        if self.spdk_timeout < 0.0:
+            raise SpecValidationError("SPDK timeout can't be negative")
+
+        if self.conn_retries < 0:
+            raise SpecValidationError("Connection retries can't be negative")
+
+        if self.max_log_file_size_in_mb < 0:
+            raise SpecValidationError("Log file size can't be negative")
+
+        if self.max_log_files_count < 0:
+            raise SpecValidationError("Log files count can't be negative")
+
+        if self.max_log_directory_backups < 0:
+            raise SpecValidationError("Log file directory backups can't be negative")
+
+        if self.monitor_timeout < 0.0:
+            raise SpecValidationError("Monitor timeout can't be negative")
+
+        if self.port and self.port < 0:
+            raise SpecValidationError("Port can't be negative")
+
+        if self.discovery_port and self.discovery_port < 0:
+            raise SpecValidationError("Discovery port can't be negative")
 
 
 yaml.add_representer(NvmeofServiceSpec, ServiceSpec.yaml_representer)
