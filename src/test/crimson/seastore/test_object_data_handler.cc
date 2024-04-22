@@ -213,6 +213,15 @@ struct object_data_handler_test_t:
       }
     }
   }
+  std::list<LBAMappingRef> get_mappings(
+    Transaction &t,
+    objaddr_t offset,
+    extent_len_t length) {
+    auto ret = with_trans_intr(t, [&](auto &t) {
+      return tm->get_pins(t, offset, length);
+    }).unsafe_get0();
+    return ret;
+  }
   std::list<LBAMappingRef> get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
@@ -758,7 +767,7 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
 
     t = create_mutate_transaction();
     { 
-      auto pins = get_mappings(base, len);
+      auto pins = get_mappings(*t, base, len);
       assert(pins.size() == 1);
       auto pin1 = remap_pin(*t, std::move(pins.front()), 4096, 8192);
       auto ext = get_extent(*t, base + 4096, 4096 * 2);
