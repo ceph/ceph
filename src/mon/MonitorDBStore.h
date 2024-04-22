@@ -739,9 +739,21 @@ class MonitorDBStore
   /// @brief Creates a backup of the database
   /// @param backup_path location to create backup at
   /// @return true on success
-  bool backup(const std::string& backup_path) {
-    return db->backup(backup_path);
+  KeyValueDB::BackupStats backup() {
+    return db->backup(g_conf().get_val<std::string>("mon_backup_path"));
   }
+
+  /// @brief Cleanup old backups
+  /// @param backup_path location to backups path
+  /// @return true on success
+  KeyValueDB::BackupCleanupStats backup_cleanup() {
+    return db->backup_cleanup(
+      g_conf().get_val<std::string>("mon_backup_path"),
+      g_conf().get_val<uint64_t>("mon_backup_keep_last"),
+      g_conf().get_val<uint64_t>("mon_backup_keep_hourly"),
+      g_conf().get_val<uint64_t>("mon_backup_keep_daily"));
+  }
+
 
   /// @brief Restores a the backup with given version from backup_path
   /// @param cct ceph context
