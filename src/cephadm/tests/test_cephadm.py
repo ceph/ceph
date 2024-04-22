@@ -380,6 +380,7 @@ class TestCephAdm(object):
         _deploy_daemon = funkypatch.patch('cephadm.deploy_daemon')
         funkypatch.patch('cephadm.make_var_run')
         funkypatch.patch('cephadmlib.file_utils.make_run_dir')
+        funkypatch.patch('os.mkdir')
         _migrate_sysctl = funkypatch.patch('cephadm.migrate_sysctl_dir')
         funkypatch.patch(
             'cephadm.check_unit',
