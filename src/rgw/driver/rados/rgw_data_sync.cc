@@ -1135,9 +1135,9 @@ public:
     std::string sz_id = sc->source_zone.id;
     std::string lz_id = sc->env->svc->zone->get_zone_params().get_id();
     return ceph::perf_counters::key_create(rgw_sync_delta_counters_key,
-        {{"local-zone-id", lz_id},
-        {"source-zone-id", sz_id},
-        {"shard-id", std::to_string(shard_id)}});
+        {{"local_zone_id", lz_id},
+        {"source_zone_id", sz_id},
+        {"shard_id", std::to_string(shard_id)}});
   }
 
   RGWCoroutine* store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp, const real_time& last_update) override {
