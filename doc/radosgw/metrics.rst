@@ -27,7 +27,7 @@ The following metrics related to S3 or Swift operations are tracked per Ceph Obj
      - Counter
      - Number of bytes put
    * - put_obj_lat
-     - Guage
+     - Gauge
      - Total latency of put operations
    * - get_obj_ops
      - Counter
@@ -36,7 +36,7 @@ The following metrics related to S3 or Swift operations are tracked per Ceph Obj
      - Counter
      - Number of bytes from get requests
    * - get_obj_lat
-     - Guage
+     - Gauge
      - Total latency of get operations
    * - del_obj_ops
      - Counter
@@ -45,13 +45,13 @@ The following metrics related to S3 or Swift operations are tracked per Ceph Obj
      - Counter
      - Number of bytes deleted
    * - del_obj_lat
-     - Guage
+     - Gauge
      - Total latency of delete object operations
    * - del_bucket_ops
      - Counter
      - Number of delete bucket operations
    * - del_bucket_lat
-     - Guage
+     - Gauge
      - Total latency of delete bucket operations
    * - copy_obj_ops
      - Counter
@@ -60,19 +60,19 @@ The following metrics related to S3 or Swift operations are tracked per Ceph Obj
      - Counter
      - Number of bytes copied
    * - copy_obj_lat
-     - Guage
+     - Gauge
      - Total latency of copy object operations
    * - list_object_ops
      - Counter
      - Number of list object operations
    * - list_object_lat
-     - Guage
+     - Gauge
      - Total latency of list object operations
    * - list_bucket_ops
      - Counter
      - Number of list bucket operations
    * - list_bucket_lat
-     - Guage
+     - Gauge
      - Total latency of list bucket operations
 
 There are three different sections in the output of the ``counter dump`` and ``counter schema`` commands that show the op metrics and their information.
