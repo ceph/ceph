@@ -20,6 +20,7 @@
 #include "common/lru_map.h"
 
 #include "rgw/rgw_quota_types.h"
+#include "rgw/rgw_user_types.h"
 #include "common/async/yield_context.h"
 #include "rgw_sal_fwd.h"
 
@@ -47,3 +48,4 @@ public:
 // apply default quotas from configuration
 void rgw_apply_default_bucket_quota(RGWQuotaInfo& quota, const ConfigProxy& conf);
 void rgw_apply_default_user_quota(RGWQuotaInfo& quota, const ConfigProxy& conf);
+void rgw_apply_default_account_quota(RGWQuotaInfo& quota, const ConfigProxy& conf);
