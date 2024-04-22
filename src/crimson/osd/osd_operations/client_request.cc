@@ -260,8 +260,43 @@ ClientRequest::process_op(
   co_await ihref.enter_stage<interruptor>(
     client_pp(*pg).recover_missing, *this
   );
-  co_await recover_missings(pg, m->get_hobj(),
-                            snaps_need_to_recover(), m->get_reqid());
+  if (!pg->is_primary()) {
+    DEBUGDPP(
+      "Skipping recover_missings on non primary pg for soid {}",
+      *pg, m->get_hobj());
+  } else {
+    co_await do_recover_missing(pg, m->get_hobj().get_head(), m->get_reqid());
+    std::set<snapid_t> snaps = snaps_need_to_recover();
+    if (!snaps.empty()) {
+      auto with_obc = pg->obc_loader.with_obc<RWState::RWREAD>(
+        m->get_hobj().get_head(),
+        [&snaps, pg, this](auto head, auto) {
+        return InterruptibleOperation::interruptor::do_for_each(
+          snaps,
+          [head, pg, this](auto &snap)
+          -> InterruptibleOperation::template interruptible_future<> {
+          auto coid = head->obs.oi.soid;
+          coid.snap = snap;
+          auto oid = resolve_oid(head->get_head_ss(), coid);
+          /* Rollback targets may legitimately not exist if, for instance,
+           * the object is an rbd block which happened to be sparse and
+           * therefore non-existent at the time of the specified snapshot.
+           * In such a case, rollback will simply delete the object.  Here,
+           * we skip the oid as there is no corresponding clone to recover.
+           * See https://tracker.ceph.com/issues/63821 */
+          if (oid) {
+            return do_recover_missing(pg, *oid, m->get_reqid());
+          } else {
+            return seastar::now();
+          }
+        });
+      }).handle_error_interruptible(
+        crimson::ct_error::assert_all("unexpected error")
+      );
+      // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98401
+      co_await std::move(with_obc);
+    }
+  }
 
   DEBUGDPP("{}.{}: checking already_complete",
 	   *pg, *this, this_instance_id);
