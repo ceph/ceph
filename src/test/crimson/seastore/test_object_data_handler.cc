@@ -221,6 +221,38 @@ struct object_data_handler_test_t:
     return ret;
   }
 
+  using remap_entry = TransactionManager::remap_entry;
+  LBAMappingRef remap_pin(
+    Transaction &t,
+    LBAMappingRef &&opin,
+    extent_len_t new_offset,
+    extent_len_t new_len) {
+    auto pin = with_trans_intr(t, [&](auto& trans) {
+      return tm->remap_pin<ObjectDataBlock>(
+        trans, std::move(opin), std::array{
+          remap_entry(new_offset, new_len)}
+      ).si_then([](auto ret) {
+        return std::move(ret[0]);
+      });
+    }).handle_error(crimson::ct_error::eagain::handle([] {
+      LBAMappingRef t = nullptr;
+      return t;
+    }), crimson::ct_error::pass_further_all{}).unsafe_get0();
+    EXPECT_TRUE(pin);
+    return pin;
+  }
+
+  ObjectDataBlockRef get_extent(
+    Transaction &t,
+    laddr_t addr,
+    extent_len_t len) {
+    auto ext = with_trans_intr(t, [&](auto& trans) {
+	return tm->read_extent<ObjectDataBlock>(trans, addr, len);
+	}).unsafe_get0();
+    EXPECT_EQ(addr, ext->get_laddr());
+    return ext;
+  }
+
   seastar::future<> set_up_fut() final {
     onode = new TestOnode(
       DEFAULT_OBJECT_DATA_RESERVATION,
@@ -237,11 +269,11 @@ struct object_data_handler_test_t:
     return tm_teardown();
   }
 
-  void set_overwrite_threshold() {
+  void enable_delta_based_overwrite() {
     crimson::common::local_conf().set_val("seastore_data_delta_based_overwrite",
       "16777216").get();
   }
-  void unset_overwrite_threshold() {
+  void disable_delta_based_overwrite() {
     crimson::common::local_conf().set_val("seastore_data_delta_based_overwrite", "0").get();
   }
 
@@ -436,8 +468,9 @@ TEST_P(object_data_handler_test_t, multi_write)
 TEST_P(object_data_handler_test_t, delta_over_multi_write)
 {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     test_multi_write();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -451,8 +484,9 @@ TEST_P(object_data_handler_test_t, write_hole)
 TEST_P(object_data_handler_test_t, delta_over_write_hole)
 {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     test_write_hole();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -466,9 +500,9 @@ TEST_P(object_data_handler_test_t, overwrite_single)
 TEST_P(object_data_handler_test_t, delta_over_overwrite_single)
 {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     test_overwrite_single();
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -482,9 +516,9 @@ TEST_P(object_data_handler_test_t, overwrite_double)
 TEST_P(object_data_handler_test_t, delta_over_overwrite_double)
 {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     test_overwrite_double();
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -498,9 +532,9 @@ TEST_P(object_data_handler_test_t, overwrite_partial)
 TEST_P(object_data_handler_test_t, delta_over_overwrite_partial)
 {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     test_overwrite_partial();
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -514,9 +548,9 @@ TEST_P(object_data_handler_test_t, unaligned_write)
 TEST_P(object_data_handler_test_t, delta_over_unaligned_write)
 {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     test_unaligned_write();
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -530,9 +564,9 @@ TEST_P(object_data_handler_test_t, unaligned_overwrite)
 TEST_P(object_data_handler_test_t, delta_over_unaligned_overwrite)
 {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     test_unaligned_overwrite();
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -546,9 +580,9 @@ TEST_P(object_data_handler_test_t, truncate)
 TEST_P(object_data_handler_test_t, delta_over_truncate)
 {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     test_truncate();
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -560,9 +594,9 @@ TEST_P(object_data_handler_test_t, no_remap) {
 
 TEST_P(object_data_handler_test_t, no_overwrite) {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     write_same();
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -586,13 +620,13 @@ TEST_P(object_data_handler_test_t, remap_left) {
 
 TEST_P(object_data_handler_test_t, overwrite_right) {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     write_right();
 
     auto pins = get_mappings(0, 128<<10);
     EXPECT_EQ(pins.size(), 1);
     read(0, 128<<10);
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -616,12 +650,12 @@ TEST_P(object_data_handler_test_t, remap_right) {
 
 TEST_P(object_data_handler_test_t, overwrite_left) {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     write_left();
     auto pins = get_mappings(0, 128<<10);
     EXPECT_EQ(pins.size(), 1);
     read(0, 128<<10);
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -644,12 +678,12 @@ TEST_P(object_data_handler_test_t, remap_right_left) {
 
 TEST_P(object_data_handler_test_t, overwrite_right_left) {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     write_right_left();
     auto pins = get_mappings(0, 128<<10);
     EXPECT_EQ(pins.size(), 1);
     read(0, 128<<10);
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -672,12 +706,12 @@ TEST_P(object_data_handler_test_t, multiple_remap) {
 
 TEST_P(object_data_handler_test_t, multiple_overwrite) {
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     multiple_write();
     auto pins = get_mappings(0, 128<<10);
     EXPECT_EQ(pins.size(), 1);
     read(0, 128<<10);
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
   });
 }
 
@@ -686,7 +720,7 @@ TEST_P(object_data_handler_test_t, random_overwrite) {
   constexpr size_t BSIZE = 4<<10;
   constexpr size_t BLOCKS = TOTAL / BSIZE;
   run_async([this] {
-    set_overwrite_threshold();
+    enable_delta_based_overwrite();
     size_t wsize = std::uniform_int_distribution<>(10, BSIZE - 1)(gen);
     uint8_t div[3] = {1, 2, 4};
     uint8_t block_num = div[std::uniform_int_distribution<>(0, 2)(gen)];
@@ -709,7 +743,93 @@ TEST_P(object_data_handler_test_t, random_overwrite) {
       logger().info("random_writes: {} done replaying/checking", i);
     }
     read(0, 4<<20);
-    unset_overwrite_threshold();
+    disable_delta_based_overwrite();
+  });
+}
+
+TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
+  run_async([this] {
+    enable_delta_based_overwrite();
+    auto t = create_mutate_transaction();
+    auto base = 4096 * 4;
+    auto len = 4096 * 6;
+    write(*t, base, len, 'a');
+    submit_transaction(std::move(t));
+
+    t = create_mutate_transaction();
+    { 
+      auto pins = get_mappings(base, len);
+      assert(pins.size() == 1);
+      auto pin1 = remap_pin(*t, std::move(pins.front()), 4096, 8192);
+      auto ext = get_extent(*t, base + 4096, 4096 * 2);
+      ASSERT_TRUE(ext->is_exist_clean());
+      ext = tm->get_mutable_extent(*t, ext)->cast<ObjectDataBlock>();
+
+      auto l = 4096;
+      memset(
+	known_contents.c_str() + base + 4096,
+	'z',
+	l);
+      bufferlist bl;
+      bl.append(
+	bufferptr(
+	  known_contents,
+	  base + 4096,
+	  l));
+
+      ext->overwrite(0, bl);
+      ASSERT_TRUE(ext->is_exist_mutation_pending());
+    }
+    submit_transaction(std::move(t));
+    read(base + 4096, 4096);
+    read(base + 4096, 8192);
+    restart();
+    epm->check_usage();
+    read(base + 4096, 8192);
+
+    t = create_mutate_transaction();
+    base = 0;
+    len = 4096 * 3;
+    write(*t, base, len, 'a');
+    submit_transaction(std::move(t));
+
+    t = create_mutate_transaction();
+    write(*t, base + 4096, 4096, 'b');
+    read(*t, base + 1024, 4096 + 1024);
+    write(*t, base + 8192, 4096, 'c');
+    read(*t, base + 2048, 8192);
+    write(*t, base, 4096, 'd');
+    write(*t, base + 4096, 4096, 'x');
+    submit_transaction(std::move(t));
+    read(base + 1024, 8192 - 1024);
+    read(base, 4096 * 3);
+    restart();
+    epm->check_usage();
+    read(base, 4096 * 3);
+
+    auto t1 = create_mutate_transaction();
+    write(*t1, base + 4096, 4096, 'e');
+    read(*t1, base + 4096, 4096);
+    auto t2 = create_read_transaction();
+    bufferlist committed = with_trans_intr(*t2, [&](auto &t) {
+      return ObjectDataHandler(MAX_OBJECT_SIZE).read(
+        ObjectDataHandler::context_t{
+          *tm,
+          t,
+          *onode
+        },
+        base + 4096,
+        4096);
+    }).unsafe_get0();
+    bufferlist pending;
+    pending.append(
+      bufferptr(
+	known_contents,
+	base + 4096,
+	4096));
+    EXPECT_EQ(committed.length(), pending.length());
+    EXPECT_NE(committed, pending);
+    disable_delta_based_overwrite();
   });
 }
 
