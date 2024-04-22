@@ -59,6 +59,9 @@ static const char* sharding_def_dir = "sharding";
 static const char* sharding_def_file = "sharding/def";
 static const char* sharding_recreate = "sharding/recreate_columns";
 static const char* resharding_column_lock = "reshardingXcommencingXlocked";
+// since multiple concurrent backup_engine operations are problematic
+static ceph::mutex backup_lock = ceph::make_mutex("RocksDBStore::backup_lock");
+
 
 static bufferlist to_bufferlist(rocksdb::Slice in) {
   bufferlist bl;
@@ -2007,23 +2010,46 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
   return 0;
 }
 
-bool RocksDBStore::backup(const std::string& path)
+KeyValueDB::BackupStats RocksDBStore::backup(const std::string& path)
 {
+  ldout(cct, 20) << __func__ << "start backup action" << dendl;
+  std::lock_guard backup_locker{backup_lock};
   rocksdb::BackupEngine* backup_engine;
   rocksdb::Status s = rocksdb::BackupEngine::Open(
     rocksdb::BackupEngineOptions(path),
     rocksdb::Env::Default(),
     &backup_engine);
+  KeyValueDB::BackupStats rv;
   if (!backup_engine || !s.ok()) {
-    derr << __func__ << "Can't create backup_engine: " << s.ToString() << dendl;
-    ldout(db->cct, 0) << __func__ << "Can't create backup_engine: " << s.ToString() << dendl;
-    return false;
+    ldout(cct, 0) << __func__ << "can't create backup_engine: " << s.ToString() << dendl;
+    rv.msg = s.ToString();
+    rv.error = true;
+    return rv;
   }
-  s = backup_engine->CreateNewBackup(db);
+  rocksdb::BackupID new_backup;
+  rocksdb::BackupInfo new_backup_info;
+  rocksdb::CreateBackupOptions new_backup_options;
+  
+  s = backup_engine->CreateNewBackupWithMetadata(new_backup_options, db, "", &new_backup);
+  rv.msg = s.ToString();
   if (!s.ok()) {
-    ldout(db->cct, 0) << __func__ << "Can't create backup: " << s.ToString() << dendl;
+    ldout(cct, 0) << __func__ << "can't create backup: " << s.ToString() << dendl;
+    rv.error = true;
+    return rv;
+  } else {
+    ldout(cct, 10) << __func__ << "created backup successfully: " << s.ToString() << dendl;
+    rv.msg = s.ToString();
   }
-  return s.ok();
+  s = backup_engine->GetBackupInfo(new_backup, &new_backup_info);
+  if (!s.ok()) {
+    ldout(cct, 0) << __func__ << "can't get backup info: " << s.ToString() << dendl;
+    rv.error = true;
+    rv.msg = s.ToString();
+    return rv;
+  }
+  rv.size = new_backup_info.size;
+  rv.number_files = new_backup_info.number_files;
+  return rv;
 }
 
 bool RocksDBStore::restore_backup(CephContext *cct, const std::string &path, const std::string &backup_path, const std::string& version)
@@ -2032,11 +2058,11 @@ bool RocksDBStore::restore_backup(CephContext *cct, const std::string &path, con
   rocksdb::Status s = rocksdb::BackupEngineReadOnly::Open(rocksdb::Env::Default(), rocksdb::BackupEngineOptions(path), &backup_engine);
   const rocksdb::RestoreOptions options = rocksdb::RestoreOptions();
   if (!s.ok()) {
-    derr << __func__ << "Can't open backup folder: " << s.ToString() << dendl;
+    derr << __func__ << "can't open backup folder: " << s.ToString() << dendl;
     return false;
   }
   if (version == "-1") {
-    derr << "Restore last valid backup" << dendl;
+    derr << "restore last valid backup" << dendl;
     s = backup_engine->RestoreDBFromLatestBackup(
         options,
         backup_path,
@@ -2060,6 +2086,105 @@ bool RocksDBStore::restore_backup(CephContext *cct, const std::string &path, con
   }
   return s.ok();
 };
+
+bool compare_backupinfo_by_timestamp (rocksdb::BackupInfo a, rocksdb::BackupInfo b)
+{
+  return (a.timestamp > b.timestamp);
+}
+
+struct TimeBucket {
+  utime_t start;
+  utime_t end;
+  rocksdb::BackupID backup_id;
+};
+
+KeyValueDB::BackupCleanupStats RocksDBStore::cleanup_backups(const std::string& path, uint64_t keep_last, uint64_t keep_hourly, uint64_t keep_daily)
+{
+  ldout(cct, 20) << __func__ << "start backup action" << dendl;
+  std::lock_guard backup_locker{backup_lock};
+  BackupCleanupStats rv;
+  rocksdb::BackupEngine* backup_engine;
+  rocksdb::Status s = rocksdb::BackupEngine::Open(
+    rocksdb::BackupEngineOptions(path),
+    rocksdb::Env::Default(),
+    &backup_engine);
+  if (!backup_engine || !s.ok()) {
+    // cleaning backups when folder is not available is minor problem
+    ldout(cct, 20) << __func__ << "can't clean bauckups: " << s.ToString() << dendl;
+    rv.error = true;
+    return rv;
+  }
+  // remove corrupted backups first
+  std::vector<rocksdb::BackupID> corrupt_backup_ids;
+  std::vector<rocksdb::BackupID> keep_backups;
+  std::vector<rocksdb::BackupID> daily_backups;
+  std::vector<rocksdb::BackupID> hourly_backups;
+  std::vector<rocksdb::BackupID> last_backups;
+
+  backup_engine->GetCorruptedBackups(&corrupt_backup_ids);
+  if (corrupt_backup_ids.size() > 0) {
+    for (rocksdb::BackupID backup_id : corrupt_backup_ids) {
+      ldout(cct, 5) << __func__ << "delete corrupted backup: " << backup_id << dendl;
+      backup_engine->DeleteBackup(backup_id);
+      rv.corrupted++;
+    };
+  }
+  ldout(cct, 20) << __func__ << "collect garbage: " << dendl;
+  //backup_engine->GarbageCollect();
+
+  std::vector<rocksdb::BackupInfo> backup_infos;
+  backup_engine->GetBackupInfo(&backup_infos);
+
+  if (!backup_infos.size()) {
+    return rv;
+  }
+  std::stable_sort (backup_infos.begin(), backup_infos.end(), compare_backupinfo_by_timestamp);
+  utime_t now = ceph_clock_now();
+  std::vector<TimeBucket> buckets;
+
+  utime_t start = now.round_to_hour();
+  for(uint64_t i = 0; i < keep_hourly; i++) {
+    buckets.push_back(TimeBucket(start, start - utime_t(3600.0 - 1.0, 0), 0));
+    start -= 3600.0;
+  }
+  start = now.round_to_day();
+  for(uint64_t i = 0; i < keep_daily; i++) {
+    buckets.push_back(TimeBucket(start, start - utime_t(86400.0 - 1.0, 0), 0));
+    start -= 86400.0;
+  }
+
+  // keep last n backups
+  for (size_t i = 0; i < backup_infos.size(); i++)
+  {
+    rocksdb::BackupInfo bi = backup_infos[i];
+    if ( i < keep_last) {
+      keep_backups.push_back(bi.backup_id);
+      continue;
+    }
+    utime_t ts = utime_t(bi.timestamp, 0);
+    for (TimeBucket bucket: buckets) {
+      if (ts >= bucket.end && ts <= bucket.start && bucket.backup_id == 0) {
+        bucket.backup_id = bi.backup_id;
+        keep_backups.push_back(bi.backup_id);
+      }
+    }
+  }
+  buckets.clear();
+  rv.kept = keep_backups.size();
+
+  for (size_t i = 0; i < backup_infos.size(); i++)
+  {
+    rocksdb::BackupInfo bi = backup_infos[i];
+    if(std::find(keep_backups.begin(), keep_backups.end(), bi.backup_id) != keep_backups.end()) {
+        continue;
+    } else {
+        ldout(cct, 10) << __func__ << "delete old backup: " << bi.backup_id << dendl;
+        backup_engine->DeleteBackup(bi.backup_id);
+        rv.deleted++;
+    }
+  }
+  return rv;
+}
 
 
 void RocksDBStore::compact()

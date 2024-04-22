@@ -1110,11 +1110,61 @@ options:
   flags:
   - no_mon_update
   with_legacy: true
-- name: mon_backup
+- name: mon_backup_path
   type: str
   level: advanced
   desc: path to mon database backups
   fmt_desc: The monitor's backup location.
+  default: /var/backups/ceph/mon/$cluster-$id
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_auto_backup
+  type: bool
+  level: advanced
+  desc: automatically trigger backups on important database changes
+  default: false
+  services:
+  - mon
+  flags:
+  - runtime
+  with_legacy: true
+- name: mon_backup_keep_last
+  type: int
+  level: advanced
+  desc: keep last N backups
+  fmt_desc: Keep the last backups of the monitor database
+  default: 5
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_keep_hourly
+  type: int
+  level: advanced
+  desc: keep N hourly backups
+  fmt_desc: Keep the hourly backups of the monitor database
+  default: 5
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_keep_daily
+  type: int
+  level: advanced
+  desc: keep last daily backups
+  fmt_desc: Keep a one backup of every specified days
+  default: 7
+  services:
+  - mon
+  flags:
+  - no_mon_update
+- name: mon_backup_interval
+  type: int
+  level: advanced
+  desc: automatic backups very N minutes
+  fmt_desc: Trigger backups every N minutes
   services:
   - mon
   flags:

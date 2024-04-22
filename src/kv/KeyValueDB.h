@@ -22,6 +22,22 @@
  */
 class KeyValueDB {
 public:
+  struct BackupCleanupStats {
+    bool error;
+    uint32_t corrupted;
+    uint32_t deleted;
+    uint32_t kept;
+    uint64_t size;
+    uint64_t freed;
+  };
+
+  struct BackupStats {
+    bool error;
+    std::string msg;
+    uint64_t size;
+    uint64_t number_files;
+  };
+
   class TransactionImpl {
   public:
     /// Set Keys
@@ -383,7 +399,10 @@ public:
   }
 
   /// creates a kv database backup in directory path. Returns true on success
-  virtual bool backup(const std::string& path) { return false; }
+  virtual BackupStats backup(const std::string& path) { return BackupStats{}; }
+
+  /// cleanup old backups. Returns true on success
+  virtual BackupCleanupStats backup_cleanup(const std::string& path, uint64_t keep_last, uint64_t keep_hourly, uint64_t keep_daily) { return BackupCleanupStats{}; }
 
   /// restore from backup the specified backup version
   static bool restore_backup(CephContext *cct, const std::string &type, const std::string &path, const std::string &backup_location, const std::string& version);

@@ -1970,26 +1970,6 @@ options:
   services:
   - mon
   with_legacy: true
-- name: mon_backup_path
-  type: str
-  level: advanced
-  desc: directory in which mon backups should be placed
-  default: /var/backups/ceph-mon
-  services:
-  - mon
-  flags:
-  - runtime
-  with_legacy: true
-- name: mon_auto_backup
-  type: bool
-  level: advanced
-  desc: automatically trigger backups on important database changes
-  default: false
-  services:
-  - mon
-  flags:
-  - runtime
-  with_legacy: true
 - name: mon_debug_extra_checks
   type: bool
   level: dev

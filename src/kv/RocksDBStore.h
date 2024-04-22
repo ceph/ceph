@@ -111,11 +111,13 @@ public:
 		 uint32_t hash_l, uint32_t hash_h)
       : name(name), shard_cnt(shard_cnt), options(options), hash_l(hash_l), hash_h(hash_h) {}
   };
+
 private:
   friend std::ostream& operator<<(std::ostream& out, const ColumnFamily& cf);
 
   bool must_close_default_cf = false;
   rocksdb::ColumnFamilyHandle *default_cf = nullptr;
+  ceph::mutex backup_lock = ceph::make_mutex("RocksDBStore::Backup");;
 
   /// column families in use, name->handles
   struct prefix_shards {
@@ -207,7 +209,8 @@ public:
     return cct->_conf.get_val<uint64_t>("rocksdb_delete_range_threshold");
   }
 
-  bool backup(const std::string& path) override;
+  KeyValueDB::BackupStats backup(const std::string& path) override;
+  struct KeyValueDB::BackupCleanupStats cleanup_backups(const std::string& path, uint64_t keep_last, uint64_t keep_hourly, uint64_t keep_daily);
   bool restore_backup(CephContext *cct, const std::string &path, const std::ostream &backup_location, const std::string& version);
 
   void compact() override;

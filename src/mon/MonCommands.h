@@ -1509,4 +1509,8 @@ COMMAND_WITH_FLAG("backup",
             "backups mon database",
             "mon", "rwx",
             FLAG(TELL))
+COMMAND_WITH_FLAG("backup_cleanup",
+            "delete old backups",
+            "mon", "rwx",
+            FLAG(TELL))
 
