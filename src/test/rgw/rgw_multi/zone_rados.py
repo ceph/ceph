@@ -170,6 +170,9 @@ class RadosZone(Zone):
               return out['TopicConfigurations']
             return []
 
+        def head_object(self, bucket_name, obj_name):
+            return self.s3_client.head_object(Bucket=bucket_name, Key=obj_name)
+
     def get_conn(self, credentials):
         return self.Conn(self, credentials)
 
