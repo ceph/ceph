@@ -967,7 +967,6 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     initial_obs.oi.mtime, // will be replaced in `apply_to()`
     0
   };
-  osd_op_params->at_version.version++;
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
 
   return cloning_ctx;
@@ -1049,6 +1048,8 @@ ObjectContextRef OpsExecuter::prepare_clone(
   clone_obs.oi.prior_version = obc->obs.oi.version;
   clone_obs.oi.copy_user_bits(obc->obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
+
+  osd_op_params->at_version.version++;
 
   auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(std::move(coid));
   ceph_assert(!existed);
