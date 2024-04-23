@@ -5,6 +5,7 @@ import os
 import re
 import secrets
 import tempfile
+import time
 import unittest
 from io import StringIO
 import os.path
@@ -588,6 +589,26 @@ class TestQuiesce(QuiesceTestCase):
         dfc2 = p['mds']['dir_fetch_complete']
         self.assertGreater(dfc2, dfc1)
 
+        self._wait_for_quiesce_complete(reqid)
+        self._verify_quiesce(root=self.subvolume)
+
+    def test_quiesce_dir_fragment(self):
+        """
+        That quiesce completes with fragmentation in the background.
+        """
+
+        self.config_set('mds', 'mds_bal_split_size', '10')
+        self.config_set('mds', 'mds_bal_merge_size', '1') # do not merge
+        self.config_set('mds', 'mds_bal_split_bits', '1')
+        self._configure_subvolume()
+        self._client_background_workload()
+
+        # time for the workload to get busy
+        time.sleep(5)
+
+        J = self.fs.rank_tell("quiesce", "path", self.subvolume)
+        log.debug(f"{J}")
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce(root=self.subvolume)
 
