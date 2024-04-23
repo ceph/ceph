@@ -5479,7 +5479,7 @@ static int resync_encrypted_multipart(const DoutPrefixProvider* dpp,
   };
 
   return store->set_attrs(dpp, &obj_ctx, bucket_info, state.obj,
-                          add_attrs, nullptr, y, set_mtime);
+                          add_attrs, nullptr, y, true, set_mtime);
 }
 
 static void try_resync_encrypted_multipart(const DoutPrefixProvider* dpp,
@@ -6483,13 +6483,14 @@ int RGWRados::set_attr(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBuc
 {
   map<string, bufferlist> attrs;
   attrs[name] = bl;
-  return set_attrs(dpp, octx, bucket_info, obj, attrs, NULL, y);
+  return set_attrs(dpp, octx, bucket_info, obj, attrs, NULL, y, true);
 }
 
 int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBucketInfo& bucket_info, const rgw_obj& src_obj,
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs,
                         optional_yield y,
+                        bool log_op,
                         ceph::real_time set_mtime /* = zero() */)
 {
   rgw_obj obj = src_obj;
@@ -6561,7 +6562,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
     string tag;
     append_rand_alpha(cct, tag, tag, 32);
     state->write_tag = tag;
-    r = index_op.prepare(dpp, CLS_RGW_OP_ADD, &state->write_tag, y);
+    r = index_op.prepare(dpp, CLS_RGW_OP_ADD, &state->write_tag, y, log_op);
 
     if (r < 0)
       return r;
@@ -6617,9 +6618,9 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
       int64_t poolid = ioctx.get_id();
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
                             mtime, etag, content_type, storage_class, owner,
-                            RGWObjCategory::Main, nullptr, y);
+                            RGWObjCategory::Main, nullptr, y, nullptr, false, log_op);
     } else {
-      int ret = index_op.cancel(dpp, nullptr, y);
+      int ret = index_op.cancel(dpp, nullptr, y, log_op);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: complete_update_index_cancel() returned ret=" << ret << dendl;
       }

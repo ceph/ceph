@@ -1928,36 +1928,34 @@ def test_role_delete_sync():
                       zone.iam_conn.get_role, RoleName=role_name)
         log.info(f'success, zone: {zone.name} does not have role: {role_name}')
 
-def test_object_acl():
+def test_replication_status():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
-    primary = zonegroup_conns.rw_zones[0]
-    secondary = zonegroup_conns.rw_zones[1]
+    zone = zonegroup_conns.rw_zones[0]
 
-    bucket = primary.create_bucket(gen_bucket_name())
-    log.debug('created bucket=%s', bucket.name)
-
-    # upload a dummy object and wait for sync.
-    k = new_key(primary, bucket, 'dummy')
+    bucket = zone.conn.create_bucket(gen_bucket_name())
+    obj_name = "a"
+    k = new_key(zone, bucket.name, obj_name)
     k.set_contents_from_string('foo')
     zonegroup_meta_checkpoint(zonegroup)
-    zonegroup_data_checkpoint(zonegroup_conns)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
-    #check object on secondary before setacl
-    bucket2 = get_bucket(secondary, bucket.name)
-    before_set_acl = bucket2.get_acl(k)
-    assert(len(before_set_acl.acl.grants) == 1)
+    head_res = zone.head_object(bucket.name, obj_name)
+    log.info("checking if object has PENDING ReplicationStatus")
+    assert(head_res["ReplicationStatus"] == "PENDING")
 
-    #set object acl on primary and wait for sync.
-    bucket.set_canned_acl('public-read', key_name=k)
-    log.debug('set acl=%s', bucket.name)
+    bilog_autotrim(zone.zone)
     zonegroup_data_checkpoint(zonegroup_conns)
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
-    #check object secondary after setacl
-    bucket2 = get_bucket(secondary, bucket.name)
-    after_set_acl = bucket2.get_acl(k)
-    assert(len(after_set_acl.acl.grants) == 2) # read grant added on AllUsers
+    head_res = zone.head_object(bucket.name, obj_name)
+    log.info("checking if object has COMPLETED ReplicationStatus")
+    assert(head_res["ReplicationStatus"] == "COMPLETED")
+
+    log.info("checking that ReplicationStatus update did not write a bilog")
+    bilog = bilog_list(zone.zone, bucket.name)
+    assert(len(bilog) == 0)
+
 
 @attr('fails_with_rgw')
 @attr('data_sync_init')

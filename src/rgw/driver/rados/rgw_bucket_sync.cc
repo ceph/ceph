@@ -984,6 +984,19 @@ void RGWBucketSyncPolicyHandler::get_pipes(std::set<rgw_sync_bucket_pipe> *_sour
   }
 }
 
+bool RGWBucketSyncPolicyHandler::bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags) {
+  if (bucket_exports_data()) {
+    for (auto& entry : target_pipes.pipe_map) {
+      auto& filter = entry.second.params.source.filter;
+      if (filter.check_prefix(obj_name) && filter.check_tags(tags.get_tags())) {
+	return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 bool RGWBucketSyncPolicyHandler::bucket_exports_data() const
 {
   if (!bucket) {

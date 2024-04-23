@@ -402,6 +402,7 @@ public:
     return target_hints;
   }
 
+  bool bucket_exports_object(const std::string& obj_name, const RGWObjTags& tags);
   bool bucket_exports_data() const;
   bool bucket_imports_data() const;
 
