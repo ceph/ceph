@@ -132,6 +132,7 @@ README*                                         @ceph/doc-writers
 /src/test/run-rbd*                              @ceph/rbd
 /src/test/test_rbd*                             @ceph/rbd
 /src/tools/rbd*                                 @ceph/rbd
+/systemd/ceph-rbd-mirror*                       @ceph/rbd
 /systemd/rbdmap.service.in                      @ceph/rbd
 /udev/50-rbd.rules                              @ceph/rbd
 
