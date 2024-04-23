@@ -819,6 +819,7 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   // entry.
   assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
   std::vector<pg_log_entry_t> log_entries;
+  osd_op_params->at_version.version++;
   log_entries.emplace_back(
     obc->obs.exists ?
       pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
@@ -829,7 +830,6 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
     osd_op_params->req_id,
     osd_op_params->mtime,
     op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
-  osd_op_params->at_version.version++;
   if (op_info.allows_returnvec()) {
     // also the per-op values are recorded in the pg log
     log_entries.back().set_op_returns(ops);
@@ -1041,14 +1041,13 @@ ObjectContextRef OpsExecuter::prepare_clone(
   const hobject_t& coid)
 {
   ceph_assert(pg->is_primary());
+  osd_op_params->at_version.version++;
   ObjectState clone_obs{coid};
   clone_obs.exists = true;
   clone_obs.oi.version = osd_op_params->at_version;
   clone_obs.oi.prior_version = obc->obs.oi.version;
   clone_obs.oi.copy_user_bits(obc->obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
-
-  osd_op_params->at_version.version++;
 
   auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(std::move(coid));
   ceph_assert(!existed);
