@@ -777,6 +777,10 @@ private:
 
 public:
   cached_map_t get_osdmap() const { return peering_state.get_osdmap(); }
+  eversion_t get_cur_version() {
+    return eversion_t(get_osdmap_epoch(),
+		      projected_last_update.version);
+  }
   eversion_t get_next_version() {
     return eversion_t(get_osdmap_epoch(),
 		      projected_last_update.version + 1);
