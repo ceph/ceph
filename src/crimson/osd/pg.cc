@@ -483,50 +483,52 @@ void PG::on_active_actmap()
 {
   logger().debug("{}: {} snap_trimq={}", *this, __func__, snap_trimq);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
-  // loops until snap_trimq is empty or SNAPTRIM_ERROR.
-  Ref<PG> pg_ref = this;
-  std::ignore = seastar::do_until(
-    [this] { return snap_trimq.empty()
-                    || peering_state.state_test(PG_STATE_SNAPTRIM_ERROR);
-    },
-    [this] {
-      peering_state.state_set(PG_STATE_SNAPTRIM);
+  if (peering_state.is_active() && peering_state.is_clean()) {
+    // loops until snap_trimq is empty or SNAPTRIM_ERROR.
+    Ref<PG> pg_ref = this;
+    std::ignore = seastar::do_until(
+      [this] { return snap_trimq.empty()
+                      || peering_state.state_test(PG_STATE_SNAPTRIM_ERROR);
+      },
+      [this] {
+        peering_state.state_set(PG_STATE_SNAPTRIM);
+        publish_stats_to_osd();
+        const auto to_trim = snap_trimq.range_start();
+        snap_trimq.erase(to_trim);
+        const auto needs_pause = !snap_trimq.empty();
+        return seastar::repeat([to_trim, needs_pause, this] {
+          logger().debug("{}: going to start SnapTrimEvent, to_trim={}",
+                         *this, to_trim);
+          return shard_services.start_operation<SnapTrimEvent>(
+            this,
+            snap_mapper,
+            to_trim,
+            needs_pause
+          ).second.handle_error(
+            crimson::ct_error::enoent::handle([this] {
+              logger().error("{}: ENOENT saw, trimming stopped", *this);
+              peering_state.state_set(PG_STATE_SNAPTRIM_ERROR);
+              publish_stats_to_osd();
+              return seastar::make_ready_future<seastar::stop_iteration>(
+                seastar::stop_iteration::yes);
+            }), crimson::ct_error::eagain::handle([this] {
+              logger().info("{}: EAGAIN saw, trimming restarted", *this);
+              return seastar::make_ready_future<seastar::stop_iteration>(
+                seastar::stop_iteration::no);
+            })
+          );
+        }).then([this, trimmed=to_trim] {
+          logger().debug("{}: trimmed snap={}", *this, trimmed);
+        });
+      }
+    ).finally([this, pg_ref=std::move(pg_ref)] {
+      logger().debug("{}: PG::on_active_actmap() finished trimming",
+                     *this);
+      peering_state.state_clear(PG_STATE_SNAPTRIM);
+      peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
       publish_stats_to_osd();
-      const auto to_trim = snap_trimq.range_start();
-      snap_trimq.erase(to_trim);
-      const auto needs_pause = !snap_trimq.empty();
-      return seastar::repeat([to_trim, needs_pause, this] {
-        logger().debug("{}: going to start SnapTrimEvent, to_trim={}",
-                       *this, to_trim);
-        return shard_services.start_operation<SnapTrimEvent>(
-          this,
-          snap_mapper,
-          to_trim,
-          needs_pause
-        ).second.handle_error(
-          crimson::ct_error::enoent::handle([this] {
-            logger().error("{}: ENOENT saw, trimming stopped", *this);
-            peering_state.state_set(PG_STATE_SNAPTRIM_ERROR);
-            publish_stats_to_osd();
-            return seastar::make_ready_future<seastar::stop_iteration>(
-              seastar::stop_iteration::yes);
-          }), crimson::ct_error::eagain::handle([this] {
-            logger().info("{}: EAGAIN saw, trimming restarted", *this);
-            return seastar::make_ready_future<seastar::stop_iteration>(
-              seastar::stop_iteration::no);
-          })
-        );
-      }).then([this, trimmed=to_trim] {
-        logger().debug("{}: trimmed snap={}", *this, trimmed);
-      });
-    }
-  ).finally([this, pg_ref=std::move(pg_ref)] {
-    logger().debug("{}: PG::on_active_actmap() finished trimming",
-                   *this);
-    peering_state.state_clear(PG_STATE_SNAPTRIM);
-    peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
-    publish_stats_to_osd();
-  });
+    });
+  }
 }
 
 void PG::on_active_advmap(const OSDMapRef &osdmap)
