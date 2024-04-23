@@ -22,6 +22,7 @@
 #include "common/utf8.h"
 
 #include "rgw_oidc_provider.h"
+#include "rgw_quota.h"
 #include "rgw_role.h"
 #include "rgw_sal.h"
 
@@ -136,6 +137,10 @@ int create(const DoutPrefixProvider* dpp,
     info.max_buckets = *op_state.max_buckets;
   }
 
+  const ConfigProxy& conf = dpp->get_cct()->_conf;
+  rgw_apply_default_account_quota(info.quota, conf);
+  rgw_apply_default_bucket_quota(info.bucket_quota, conf);
+
   // account id is optional, but must be valid
   if (op_state.account_id.empty()) {
     info.id = generate_id(dpp->get_cct());
@@ -227,14 +232,22 @@ int modify(const DoutPrefixProvider* dpp,
     info.max_buckets = *op_state.max_buckets;
   }
 
-  if (op_state.quota_max_size) {
-    info.quota.max_size = *op_state.quota_max_size;
+  RGWQuotaInfo* pquota = nullptr;
+  if (op_state.quota_scope == "account") {
+    pquota = &info.quota;
+  } else if (op_state.quota_scope == "bucket") {
+    pquota = &info.bucket_quota;
   }
-  if (op_state.quota_max_objects) {
-    info.quota.max_objects = *op_state.quota_max_objects;
-  }
-  if (op_state.quota_enabled) {
-    info.quota.enabled = *op_state.quota_enabled;
+  if (pquota) {
+    if (op_state.quota_max_size) {
+      pquota->max_size = *op_state.quota_max_size;
+    }
+    if (op_state.quota_max_objects) {
+      pquota->max_objects = *op_state.quota_max_objects;
+    }
+    if (op_state.quota_enabled) {
+      pquota->enabled = *op_state.quota_enabled;
+    }
   }
 
   constexpr bool exclusive = false;

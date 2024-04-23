@@ -538,8 +538,9 @@ users.** If a default quota is set in the Ceph Object Gateway Config, then that
 quota is set for all subsequently-created users, and that quota is enabled. See
 ``rgw_bucket_default_quota_max_objects``,
 ``rgw_bucket_default_quota_max_size``, ``rgw_user_default_quota_max_objects``,
-and ``rgw_user_default_quota_max_size`` in `Ceph Object Gateway Config
-Reference`_
+``rgw_user_default_quota_max_size``, ``rgw_account_default_quota_max_objects``,
+and ``rgw_account_default_quota_max_size`` in `Ceph Object Gateway Config
+Reference`_.
 
 Quota Cache
 -----------

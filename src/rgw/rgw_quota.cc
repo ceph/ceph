@@ -1019,6 +1019,18 @@ void rgw_apply_default_user_quota(RGWQuotaInfo& quota, const ConfigProxy& conf)
   }
 }
 
+void rgw_apply_default_account_quota(RGWQuotaInfo& quota, const ConfigProxy& conf)
+{
+  if (conf->rgw_account_default_quota_max_objects >= 0) {
+    quota.max_objects = conf->rgw_account_default_quota_max_objects;
+    quota.enabled = true;
+  }
+  if (conf->rgw_account_default_quota_max_size >= 0) {
+    quota.max_size = conf->rgw_account_default_quota_max_size;
+    quota.enabled = true;
+  }
+}
+
 void RGWQuotaInfo::dump(Formatter *f) const
 {
   f->dump_bool("enabled", enabled);

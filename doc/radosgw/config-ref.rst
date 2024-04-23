@@ -53,6 +53,8 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 .. confval:: rgw_bucket_default_quota_max_size
 .. confval:: rgw_user_default_quota_max_objects
 .. confval:: rgw_user_default_quota_max_size
+.. confval:: rgw_account_default_quota_max_objects
+.. confval:: rgw_account_default_quota_max_size
 .. confval:: rgw_verify_ssl
 .. confval:: rgw_max_chunk_size
 
