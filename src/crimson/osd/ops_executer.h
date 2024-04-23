@@ -529,6 +529,9 @@ OpsExecuter::flush_changes_n_do_ops_effects(
       txn
     ).then_interruptible([mut_func=std::move(mut_func),
                           this](auto&& log_entries) mutable {
+      if (auto log_rit = log_entries.rbegin(); log_rit != log_entries.rend()) {
+        ceph_assert(log_rit->version == osd_op_params->at_version);
+      }
       auto [submitted, all_completed] =
         std::forward<MutFunc>(mut_func)(std::move(txn),
                                         std::move(obc),
