@@ -753,6 +753,7 @@ int PeerReplayer::remote_file_op(const std::string &dir_root, const std::string 
       if (m_perf_counters) {
 	m_perf_counters->inc(l_cephfs_mirror_peer_replayer_sync_bytes, stx.stx_size);
       }
+      inc_sync_bytes(dir_root, stx.stx_size);
     } else if (S_ISLNK(stx.stx_mode)) {
       // free the remote link before relinking
       r = ceph_unlinkat(m_remote_mount, fh.r_fd_dir_root, epath.c_str(), 0);
@@ -1800,6 +1801,9 @@ void PeerReplayer::peer_status(Formatter *f) {
       if (sync_stat.last_sync_duration) {
         f->dump_float("sync_duration", *sync_stat.last_sync_duration);
         f->dump_stream("sync_time_stamp") << sync_stat.last_synced;
+      }
+      if (sync_stat.last_sync_bytes) {
+	f->dump_unsigned("sync_bytes", *sync_stat.last_sync_bytes);
       }
       f->close_section();
     }
