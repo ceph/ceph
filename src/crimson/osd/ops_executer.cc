@@ -1089,6 +1089,8 @@ ObjectContextRef OpsExecuter::prepare_clone(
   clone_obs.oi.copy_user_bits(initial_obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
 
+  osd_op_params->at_version.version++;
+
   auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(std::move(coid));
   ceph_assert(!existed);
 
