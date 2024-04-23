@@ -1080,8 +1080,18 @@ def ceph_osds(ctx, config):
                 short_dev = dev
             log.info('Deploying %s on %s with %s...' % (
                 osd, remote.shortname, dev))
-            _shell(ctx, cluster_name, remote, [
-                'ceph-volume', 'lvm', 'zap', dev])
+            remote.run(
+                args=[
+                    'sudo',
+                    ctx.cephadm,
+                    '--image', ctx.ceph[cluster_name].image,
+                    'ceph-volume',
+                    '-c', '/etc/ceph/{}.conf'.format(cluster_name),
+                    '-k', '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+                    '--fsid', ctx.ceph[cluster_name].fsid,
+                    '--', 'lvm', 'zap', dev
+                ]
+            )
             add_osd_args = ['ceph', 'orch', 'daemon', 'add', 'osd',
                             remote.shortname + ':' + short_dev]
             osd_method = config.get('osd_method')
