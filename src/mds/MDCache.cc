@@ -11684,6 +11684,10 @@ bool MDCache::can_fragment(CInode *diri, const std::vector<CDir*>& dirs)
     dout(7) << "can_fragment: i won't fragment mdsdir or .ceph" << dendl;
     return false;
   }
+  if (diri->is_quiesced()) {
+    dout(7) << "can_fragment: directory inode is quiesced" << dendl;
+    return false;
+  }
 
   for (const auto& dir : dirs) {
     if (dir->scrub_is_in_progress()) {
@@ -12086,6 +12090,16 @@ void MDCache::dispatch_fragment_dir(const MDRequestRef& mdr)
     mdr->aborted = true;
 
   if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
+    /* If quiescelock cannot be wrlocked, we cannot block with tree frozen.
+     * Otherwise, this can create deadlock where some quiesce_inode requests
+     * (on inodes in the dirfrag) are blocked on a frozen tree and the
+     * fragment_dir request is blocked on the queiscelock for the directory
+     * inode's quiescelock.
+     */
+    if (!mdr->is_wrlocked(&diri->quiescelock) && !diri->quiescelock.can_wrlock()) {
+      mdr->aborted = true;
+    }
+
     if (!mdr->aborted) {
       MutationImpl::LockOpVec lov;
       lov.add_wrlock(&diri->dirfragtreelock);
@@ -12103,7 +12117,8 @@ void MDCache::dispatch_fragment_dir(const MDRequestRef& mdr)
   }
 
   if (mdr->aborted) {
-    dout(10) << " can't auth_pin " << *diri << ", requeuing dir "
+    dout(10) << " can't auth_pin or acquire quiescelock on "
+             << *diri << ", requeuing dir "
 	     << info.dirs.front()->dirfrag() << dendl;
     if (info.bits > 0)
       mds->balancer->queue_split(info.dirs.front(), false);
