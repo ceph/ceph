@@ -18,6 +18,9 @@ static constexpr pg_feature_vec_t PG_FEATURE_INCARNATION_1 = 0ull;
 #define PG_HAVE_FEATURE(x, name)				\
   (((x) & (PG_FEATUREMASK_##name)) == (PG_FEATUREMASK_##name))
 
+DEFINE_PG_FEATURE(0, 1, PCT)
+
 static constexpr pg_feature_vec_t PG_FEATURE_NONE = 0ull;
-static constexpr pg_feature_vec_t PG_FEATURE_CLASSIC_ALL = 0ull;
 static constexpr pg_feature_vec_t PG_FEATURE_CRIMSON_ALL = 0ull;
+static constexpr pg_feature_vec_t PG_FEATURE_CLASSIC_ALL =
+  PG_FEATURE_PCT;

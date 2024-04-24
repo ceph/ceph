@@ -1942,6 +1942,16 @@ public:
     bool async);
 
   /**
+   * update_pct
+   *
+   * Updates pg_committed_to.  Generally invoked on replica on
+   * receipt of MODPGPCT from primary.
+   */
+  void update_pct(eversion_t pct) {
+    pg_committed_to = pct;
+  }
+
+  /**
    * retrieve the min last_backfill among backfill targets
    */
   hobject_t earliest_backfill() const;
