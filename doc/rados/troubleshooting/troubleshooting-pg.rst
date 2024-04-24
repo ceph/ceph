@@ -573,11 +573,11 @@ and Ceph :ref:`Clock Settings <mon-config-ref-clock>` for more information.
 More Information on PG Repair
 -----------------------------
 Ceph stores and updates the checksums of objects stored in the cluster. When a
-scrub is performed on a PG, the OSD attempts to choose an authoritative copy
-from among its replicas. Only one of the possible cases is consistent. After
-performing a deep scrub, Ceph calculates the checksum of an object that is read
-from disk and compares it to the checksum that was previously recorded. If the
-current checksum and the previously recorded checksum do not match, that
+scrub is performed on a PG, the lead OSD attempts to choose an authoritative
+copy from among its replicas. Only one of the possible cases is consistent.
+After performing a deep scrub, Ceph calculates the checksum of each object that
+is read from disk and compares it to the checksum that was previously recorded.
+If the current checksum and the previously recorded checksum do not match, that
 mismatch is considered to be an inconsistency. In the case of replicated pools,
 any mismatch between the checksum of any replica of an object and the checksum
 of the authoritative copy means that there is an inconsistency. The discovery
@@ -585,10 +585,10 @@ of these inconsistencies cause a PG's state to be set to ``inconsistent``.
 
 The ``pg repair`` command attempts to fix inconsistencies of various kinds. If
 ``pg repair`` finds an inconsistent PG, it attempts to overwrite the digest of
-the inconsistent copy with the digest of the authoritative copy. If ``pg
-repair`` finds an inconsistent replicated pool, it marks the inconsistent copy
-as missing. In the case of replicated pools, recovery is beyond the scope of
-``pg repair``.
+the inconsistent copy with the digest of the authoritative copy. When ``pg
+repair`` finds an inconsistent copy in a replicated pool, it marks the
+inconsistent copy as missing. In the case of replicated pools, recovery is
+beyond the scope of ``pg repair``.
 
 In the case of erasure-coded and BlueStore pools, Ceph will automatically
 perform repairs if ``osd_scrub_auto_repair`` (default ``false``) is set to
