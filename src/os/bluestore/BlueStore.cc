@@ -6012,7 +6012,7 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
   }
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
-    _read_main_bdev_label(cct, bdev, p, fsid, &bdev_label, &bdev_label_valid_locations,
+    _read_multi_bdev_label(cct, bdev, p, fsid, &bdev_label, &bdev_label_valid_locations,
       &bdev_label_multi, &bdev_label_epoch);
   }
   if (!bdev_label_valid_locations.empty()) {
@@ -6035,7 +6035,7 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
   }
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
-    _read_main_bdev_label(cct, bdev, p, fsid, &bdev_label, &bdev_label_valid_locations,
+    _read_multi_bdev_label(cct, bdev, p, fsid, &bdev_label, &bdev_label_valid_locations,
       &bdev_label_multi, &bdev_label_epoch);
   }
   if (!bdev_label_valid_locations.empty()) {
@@ -6470,7 +6470,7 @@ int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
   unique_ptr<BlockDevice> bdev(BlockDevice::create(cct, bdev_path, nullptr, nullptr, nullptr, nullptr));
   int r = bdev->open(bdev_path);
   if (r == 0) {
-    r = _read_main_bdev_label(cct, bdev.get(), bdev_path, uuid_d(), &label);
+    r = _read_multi_bdev_label(cct, bdev.get(), bdev_path, uuid_d(), &label);
   }
   if (r == 0) {
     *fsid = label.osd_uuid;
@@ -6620,7 +6620,7 @@ int BlueStore::_read_bdev_label(
   1    When some, but not all labels are read
   -ENOENT Otherwise
 */
-int BlueStore::_read_main_bdev_label(
+int BlueStore::_read_multi_bdev_label(
   CephContext* cct,
   BlockDevice* bdev,
   const string& path,
@@ -6680,7 +6680,7 @@ int BlueStore::_read_main_bdev_label(
         }
       } else {
         derr << __func__ << " label at 0x" << std::hex << position << std::dec
-             << " is multi=yes but no epoch=" << dendl;
+             << " is multi=yes but no epoch" << dendl;
       }
     } else if (r == 0) {
       derr << __func__ << " label at 0x" << std::hex << position << std::dec
@@ -6826,7 +6826,7 @@ int BlueStore::_set_main_bdev_label()
 int BlueStore::_check_main_bdev_label()
 {
   string block_path = path + "/block";
-  int r = _read_main_bdev_label(cct, bdev, block_path, fsid, &bdev_label,
+  int r = _read_multi_bdev_label(cct, bdev, block_path, fsid, &bdev_label,
     &bdev_label_valid_locations, &bdev_label_multi, &bdev_label_epoch);
   if (r < 0)
     return r;
@@ -6846,16 +6846,21 @@ int BlueStore::_check_main_bdev_label()
 }
 
 int BlueStore::read_bdev_label(
-  CephContext* cct, const std::string &path,
-  bluestore_bdev_label_t *label, uint64_t disk_position)
+  CephContext* cct,
+  const std::string &path,
+  bluestore_bdev_label_t* out_label,
+  std::vector<uint64_t>* out_valid_positions,
+  bool* out_is_multi,
+  int64_t* out_epoch)
 {
   unique_ptr<BlockDevice> bdev(BlockDevice::create(
     cct, path, nullptr, nullptr, nullptr, nullptr));
   int r = bdev->open(path);
   if (r < 0)
     return r;
-  r = BlueStore::_read_bdev_label(
-    cct, bdev.get(), path, label, disk_position);
+  uuid_d fsid;
+  r = BlueStore::_read_multi_bdev_label(
+    cct, bdev.get(), path, fsid, out_label, out_valid_positions, out_is_multi, out_epoch);
   bdev->close();
   return r;
 }

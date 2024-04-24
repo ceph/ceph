@@ -694,7 +694,11 @@ int main(int argc, char **argv)
   }
   else if (action == "set-label-key") {
     bluestore_bdev_label_t label;
-    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label);
+    std::vector<uint64_t> valid_positions;
+    bool is_multi = false;
+    int64_t epoch = -1;
+    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label,
+      &valid_positions, &is_multi, &epoch);
     if (r < 0) {
       cerr << "unable to read label for " << devs.front() << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -716,16 +720,32 @@ int main(int argc, char **argv)
     } else {
       label.meta[key] = value;
     }
-    r = BlueStore::write_bdev_label(cct.get(), devs.front(), label);
-    if (r < 0) {
-      cerr << "unable to write label for " << devs.front() << ": "
-	   << cpp_strerror(r) << std::endl;
-      exit(EXIT_FAILURE);
+    if (is_multi) {
+      epoch++;
+      label.meta["epoch"] = std::to_string(epoch);
+    }
+    bool wrote_at_least_one = false;
+    for (uint64_t position : valid_positions) {
+      r = BlueStore::write_bdev_label(cct.get(), devs.front(), label, position);
+      if (r < 0) {
+        cerr << "unable to write label for " << devs.front()
+             << " at 0x" << std::hex << position << std::dec
+             << ": " << cpp_strerror(r) << std::endl;
+      } else {
+        wrote_at_least_one = true;
+      }
+    }
+    if (!wrote_at_least_one) {
+        exit(EXIT_FAILURE);
     }
   }
   else if (action == "rm-label-key") {
     bluestore_bdev_label_t label;
-    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label);
+    std::vector<uint64_t> valid_positions;
+    bool is_multi = false;
+    int64_t epoch = -1;
+    int r = BlueStore::read_bdev_label(cct.get(), devs.front(), &label,
+      &valid_positions, &is_multi, &epoch);
     if (r < 0) {
       cerr << "unable to read label for " << devs.front() << ": "
 	   << cpp_strerror(r) << std::endl;
@@ -736,11 +756,23 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     label.meta.erase(key);
-    r = BlueStore::write_bdev_label(cct.get(), devs.front(), label);
-    if (r < 0) {
-      cerr << "unable to write label for " << devs.front() << ": "
-	   << cpp_strerror(r) << std::endl;
-      exit(EXIT_FAILURE);
+    if (is_multi) {
+      epoch++;
+      label.meta["epoch"] = std::to_string(epoch);
+    }
+    bool wrote_at_least_one = false;
+    for (uint64_t position : valid_positions) {
+      r = BlueStore::write_bdev_label(cct.get(), devs.front(), label, position);
+      if (r < 0) {
+        cerr << "unable to write label for " << devs.front()
+             << " at 0x" << std::hex << position << std::dec
+             << ": " << cpp_strerror(r) << std::endl;
+      } else {
+        wrote_at_least_one = true;
+      }
+    }
+    if (!wrote_at_least_one) {
+        exit(EXIT_FAILURE);
     }
   }
   else if (action == "bluefs-bdev-sizes") {

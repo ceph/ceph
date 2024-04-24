@@ -2780,14 +2780,14 @@ private:
                                const std::string& desc, bool create);
   int _set_main_bdev_label();
   int _check_main_bdev_label();
-  static int _read_main_bdev_label(
+  static int _read_multi_bdev_label(
     CephContext* cct,
     BlockDevice* bdev,
     const std::string& path,
     uuid_d fsid,
     bluestore_bdev_label_t *out_label,
     std::vector<uint64_t>* out_valid_positions = nullptr,
-    bool* out_is_cloned = nullptr,
+    bool* out_is_multi = nullptr,
     int64_t* out_epoch = nullptr);
   int _set_bdev_label_size(const std::string& path, uint64_t size);
   void _main_bdev_label_try_reserve();
@@ -3428,8 +3428,12 @@ public:
         std::vector<uint64_t>({disk_position}));
     }
   static int read_bdev_label(
-    CephContext* cct, const std::string &path,
-    bluestore_bdev_label_t *label, uint64_t disk_position = 0);
+    CephContext* cct,
+    const std::string &path,
+    bluestore_bdev_label_t *out_label,
+    std::vector<uint64_t>* out_valid_positions = nullptr,
+    bool* out_is_cloned = nullptr,
+    int64_t* out_epoch = nullptr);
   static int write_bdev_label(
     CephContext* cct, const std::string &path,
     const bluestore_bdev_label_t& label, uint64_t disk_position = 0);

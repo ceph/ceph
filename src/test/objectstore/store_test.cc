@@ -221,12 +221,24 @@ class MultiLabelTest : public StoreTestDeferredSetup {
   }
   bool read_bdev_label(bluestore_bdev_label_t* label, uint64_t position) {
     string bdev_path = get_data_dir() + "/block";
-    int r = BlueStore::read_bdev_label(g_ceph_context, bdev_path, label, position);
+    unique_ptr<BlockDevice> bdev(BlockDevice::create(
+      g_ceph_context, bdev_path, nullptr, nullptr, nullptr, nullptr));
+    int r = bdev->open(bdev_path);
+    if (r < 0)
+      return r;
+    r = BlueStore::debug_read_bdev_label(g_ceph_context, bdev.get(), bdev_path, label, position);
+    bdev->close();
     return r;
   }
   bool write_bdev_label(const bluestore_bdev_label_t& label, uint64_t position) {
     string bdev_path = get_data_dir() + "/block";
-    int r = BlueStore::write_bdev_label(g_ceph_context, bdev_path, label, position);
+    unique_ptr<BlockDevice> bdev(BlockDevice::create(
+      g_ceph_context, bdev_path, nullptr, nullptr, nullptr, nullptr));
+    int r = bdev->open(bdev_path);
+    if (r < 0)
+      return r;
+    r = BlueStore::debug_write_bdev_label(g_ceph_context, bdev.get(), bdev_path, label, position);
+    bdev->close();
     return r;
   }
   protected:
