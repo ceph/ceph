@@ -499,6 +499,8 @@ void OSDService::shutdown_reserver()
 
 void OSDService::shutdown()
 {
+  pg_timer.stop();
+
   mono_timer.suspend();
 
   {
