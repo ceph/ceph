@@ -90,10 +90,6 @@ Similarly, two options control whether IPv4 and IPv6 addresses are used:
   * :confval:`ms_bind_ipv6` [default: false] controls whether a daemon binds
     to an IPv6 address
 
-.. note:: The ability to bind to multiple ports has paved the way for
-   dual-stack IPv4 and IPv6 support.  That said, dual-stack operation is
-   not yet supported as of Quincy v17.2.0.
-
 Connection modes
 ----------------
 
