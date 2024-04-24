@@ -576,22 +576,31 @@ def ceph_crash(ctx, config):
 def pull_image(ctx, config):
     cluster_name = config['cluster']
     log.info(f'Pulling image {ctx.ceph[cluster_name].image} on all hosts...')
-    run.wait(
-        ctx.cluster.run(
-            args=[
-                'sudo',
-                ctx.cephadm,
-                '--image', ctx.ceph[cluster_name].image,
-                'pull',
-            ],
-            wait=False,
-        )
-    )
+    cmd = [
+        'sudo',
+        ctx.cephadm,
+        '--image',
+        ctx.ceph[cluster_name].image,
+        'pull',
+    ]
+    if config.get('registry-login'):
+        registry = config['registry-login']
+        login_cmd = [
+            'sudo',
+            ctx.cephadm,
+            'registry-login',
+            '--registry-url', registry['url'],
+            '--registry-username', registry['username'],
+            '--registry-password', registry['password'],
+        ]
+        cmd = login_cmd + [run.Raw('&&')] + cmd
+    run.wait(ctx.cluster.run(args=cmd, wait=False))
 
     try:
         yield
     finally:
         pass
+
 
 @contextlib.contextmanager
 def setup_ca_signed_keys(ctx, config):
