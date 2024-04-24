@@ -18,13 +18,15 @@
 #include "common/debug.h"
 #include "jerasure_init.h"
 
+#ifdef __cplusplus
 extern "C" {
+#endif
+
 #include "galois.h"
-}
 
 #define dout_context g_ceph_context
 
-extern "C" int jerasure_init(int count, int *words)
+int jerasure_init(int count, int *words)
 {
   for(int i = 0; i < count; i++) {
     int r = galois_init_default_field(words[i]);
@@ -35,3 +37,7 @@ extern "C" int jerasure_init(int count, int *words)
   }
   return 0;
 }
+
+#ifdef __cplusplus
+}
+#endif
