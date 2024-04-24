@@ -7443,15 +7443,16 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask,
   r = make_request(req, perms, target);
   ldout(cct, 10) << __func__ << " res is " << r << dendl;
 
-  if (r == 0 && (*target)->is_symlink()) {
-    auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
+  auto inode = *target;
+  if (r == 0 && inode->is_symlink()) {
+    auto fscrypt_denc = fscrypt->get_fname_denc(inode->fscrypt_ctx, &inode->fscrypt_key_validator, true);
     if (fscrypt_denc) {
       string slname;
-      int ret = fscrypt_denc->get_decrypted_symlink((*target)->symlink, &slname);
+      int ret = fscrypt_denc->get_decrypted_symlink(inode->symlink, &slname);
       if (ret < 0) {
         ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
       }
-      (*target)->symlink_plain = slname;
+      inode->symlink_plain = slname;
     }
   }
 
