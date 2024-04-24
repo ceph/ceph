@@ -73,6 +73,9 @@ void ClientRequest::dump_detail(Formatter *f) const
   std::apply([f] (auto... event) {
     (..., event.dump(f));
   }, tracking_events);
+  std::apply([f] (auto... event) {
+    (..., event.dump(f));
+  }, get_instance_handle()->pg_tracking_events);
 }
 
 ConnectionPipeline &ClientRequest::get_connection_pipeline()
