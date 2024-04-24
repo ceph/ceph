@@ -632,6 +632,39 @@ flush()
     admin_daemons "${cluster}" ${cmd}
 }
 
+get_pool_status_json()
+{
+    local cluster="$1"
+    local pool="$2"
+
+    CEPH_ARGS='' rbd --cluster "${cluster}" mirror pool status "${pool}" --verbose --format json
+}
+
+test_health_state()
+{
+    local cluster="$1"
+    local pool="$2"
+    local state="$3"
+
+    local status
+    status="$(get_pool_status_json "${cluster}" "${pool}")"
+    jq -e '.summary.health == "'"${state}"'"' <<< "${status}"
+}
+
+wait_for_health_state()
+{
+    local cluster="$1"
+    local pool="$2"
+    local state="$3"
+    local s
+
+    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
+        sleep "${s}"
+        test_health_state "${cluster}" "${pool}" "${state}" && return 0
+    done
+    return 1
+}
+
 test_image_replay_state()
 {
     local cluster=$1
