@@ -137,7 +137,8 @@ struct TimeEvent : Event<T> {
 template <typename T>
 class BlockerT : public Blocker {
 public:
-  struct BlockingEvent : Event<typename T::BlockingEvent> {
+  struct BlockingEvent : Event<BlockingEvent>,
+                         boost::intrusive::list_base_hook<> {
     using Blocker = std::decay_t<T>;
 
     struct ExitBarrierEvent : TimeEvent<ExitBarrierEvent> {
@@ -168,7 +169,7 @@ public:
       TriggerI(BlockingEvent& event) : event(event) {}
 
       template <class FutureT>
-      auto maybe_record_blocking(FutureT&& fut, const T& blocker) {
+      auto maybe_record_blocking(FutureT&& fut, T& blocker) {
         if (!fut.available()) {
 	  // a full blown call via vtable. that's the cost for templatization
 	  // avoidance. anyway, most of the things actually have the type
@@ -186,10 +187,13 @@ public:
       virtual ~TriggerI() = default;
     protected:
       // it's for the sake of erasing the OpT type
-      virtual void record_blocking(const T& blocker) = 0;
+      virtual void record_blocking(T& blocker) = 0;
 
-      static void record_unblocking(BlockingEvent& event, const T& blocker) {
-	assert(event.internal_backend.blocker == &blocker);
+      static void record_unblocking(BlockingEvent& event, T& blocker) {
+        if (event.internal_backend.blocker) {
+          assert(event.internal_backend.blocker == &blocker);
+          blocker.delete_event(event);
+        }
 	event.internal_backend.blocker = nullptr;
       }
 
@@ -201,7 +205,7 @@ public:
       Trigger(BlockingEvent& event, const OpT& op) : TriggerI(event), op(op) {}
 
       template <class FutureT>
-      auto maybe_record_blocking(FutureT&& fut, const T& blocker) {
+      auto maybe_record_blocking(FutureT&& fut, T& blocker) {
         if (!fut.available()) {
 	  // no need for the dynamic dispatch! if we're lucky, a compiler
 	  // should collapse all these abstractions into a bunch of movs.
@@ -225,8 +229,9 @@ public:
       }
 
     protected:
-      void record_blocking(const T& blocker) override {
+      void record_blocking(T& blocker) override {
 	this->event.trigger(op, blocker);
+        blocker.add_event(this->event);
       }
 
       const OpT& op;
@@ -244,16 +249,29 @@ public:
     }
   };
 
-  virtual ~BlockerT() = default;
+  virtual ~BlockerT() {
+    for (auto &event : event_list) {
+      event.internal_backend.blocker = nullptr;
+    }
+    event_list.clear();
+  }
   template <class TriggerT, class... Args>
   decltype(auto) track_blocking(TriggerT&& trigger, Args&&... args) {
     return std::forward<TriggerT>(trigger).maybe_record_blocking(
-      std::forward<Args>(args)..., static_cast<const T&>(*this));
+      std::forward<Args>(args)..., *(static_cast<T*>(this)));
   }
 
 private:
   const char *get_type_name() const final {
     return static_cast<const T*>(this)->type_name;
+  }
+  using event_list_t = boost::intrusive::list<BlockingEvent>;
+  event_list_t event_list;
+  void add_event(BlockingEvent& event) {
+    event_list.push_back(event);
+  }
+  void delete_event(BlockingEvent& event) {
+    event_list.erase(event_list_t::s_iterator_to(event));
   }
 };
 
@@ -271,7 +289,7 @@ struct AggregateBlockingEvent {
   public:
     template <class FutureT>
     auto maybe_record_blocking(FutureT&& fut,
-			       const typename T::Blocker& blocker) {
+			       typename T::Blocker& blocker) {
       // AggregateBlockingEvent is supposed to be used on relatively cold
       // paths (recovery), so we don't need to worry about the dynamic
       // polymothps / dynamic memory's overhead.
