@@ -26,4 +26,8 @@ export class HealthService {
   getOrchestratorName() {
     return this.http.get('api/health/get_orchestrator_name');
   }
+
+  getTelemetryStatus() {
+    return this.http.get('api/health/get_telemetry_status');
+  }
 }
