@@ -385,6 +385,7 @@ public:
   }
 
   ~Transaction() {
+    get_handle().exit();
     on_destruct(*this);
     invalidate_clear_write_set();
   }
@@ -422,6 +423,7 @@ public:
     if (!has_reset) {
       has_reset = true;
     }
+    get_handle().exit();
   }
 
   bool did_reset() const {
