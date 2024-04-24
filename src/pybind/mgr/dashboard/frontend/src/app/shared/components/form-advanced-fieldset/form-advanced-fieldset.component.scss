@@ -1,0 +1,22 @@
+/*
+  Overrides the active and focus states of bootstrap accordion,
+  in order to align the accordion css with rest of the form.
+
+  Summary of overrides:
+  - font-size was 1 rem
+  - color was blue when higlighted
+  - border,outlines and box-shadow were set
+  - accordion down button in active form was a blue svg icon
+
+ */
+.cd-form-advanced-fieldset-buttton {
+  --bs-accordion-btn-active-icon: var(--bs-accordion-btn-icon);
+  background-color: inherit;
+  border: hidden;
+  border-color: inherit;
+  box-shadow: none;
+  color: inherit;
+  font-size: inherit;
+  outline: 0;
+  text-decoration: none;
+}
