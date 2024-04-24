@@ -1222,6 +1222,9 @@ class Filesystem(MDSCluster):
         kwargs.pop('status', None) # not useful
         try:
             out = self.get_ceph_cmd_stdout("tell", f"mds.{mds_id}", *args, **kwargs)
+            out = out.strip()
+            if len(out) == 0:
+                return {}
             return json.loads(out)
         except json.decoder.JSONDecodeError:
             log.error("could not decode: {}".format(out))
