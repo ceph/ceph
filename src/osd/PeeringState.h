@@ -1507,6 +1507,18 @@ public:
   std::set<pg_shard_t> peer_log_requested; ///< logs i've requested (and start stamps)
   std::set<pg_shard_t> peer_missing_requested; ///< missing sets requested
 
+  /// not constexpr because classic/crimson might differ
+  const pg_feature_vec_t local_pg_acting_features;
+  
+  /**
+   * acting_pg_features
+   *
+   * PG specific features common to entire acting set.  Valid only on primary
+   * after activation.
+   */
+  pg_feature_vec_t pg_acting_features;
+
+
   /// features supported by all peers
   uint64_t peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   /// features supported by acting set
@@ -1765,6 +1777,7 @@ public:
     spg_t spgid,
     const PGPool &pool,
     OSDMapRef curmap,
+    pg_feature_vec_t supported_pg_acting_features,
     DoutPrefixProvider *dpp,
     PeeringListener *pl);
 
@@ -2467,6 +2480,8 @@ public:
   /// Get feature vector common to up/acting set
   uint64_t get_min_upacting_features() const { return upacting_features; }
 
+  /// Get pg features common to acting set
+  pg_feature_vec_t get_pg_acting_features() const { return pg_acting_features; }
 
   // Flush control interface
 private:
