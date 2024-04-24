@@ -140,14 +140,17 @@ public:
   struct BlockingEvent : Event<typename T::BlockingEvent> {
     using Blocker = std::decay_t<T>;
 
+    struct ExitBarrierEvent : TimeEvent<ExitBarrierEvent> {
+    } exit_barrier_event;
+
     struct Backend {
       // `T` is based solely to let implementations to discriminate
       // basing on the type-of-event.
-      virtual void handle(typename T::BlockingEvent&, const Operation&, const T&) = 0;
+      virtual void handle(BlockingEvent&, const Operation&, const T&) = 0;
     };
 
     struct InternalBackend : Backend {
-      void handle(typename T::BlockingEvent&,
+      void handle(BlockingEvent&,
                   const Operation&,
                   const T& blocker) override {
         this->timestamp = ceph_clock_now();
@@ -213,12 +216,21 @@ public:
 
       const OpT &get_op() { return op; }
 
+      template <class FutureT>
+      decltype(auto) maybe_record_exit_barrier(FutureT&& fut) {
+        if (!fut.available()) {
+	  this->event.exit_barrier_event.trigger(this->op);
+	}
+	return std::forward<FutureT>(fut);
+      }
+
     protected:
       void record_blocking(const T& blocker) override {
 	this->event.trigger(op, blocker);
       }
 
       const OpT& op;
+
     };
 
     void dump(ceph::Formatter *f) const {
@@ -228,6 +240,7 @@ public:
 	internal_backend.timestamp,
 	internal_backend.blocker,
 	f);
+      exit_barrier_event.dump(f);
     }
   };
 
@@ -645,29 +658,6 @@ private:
  */
 template <class T>
 class OrderedConcurrentPhaseT : public PipelineStageIT<T> {
-  using base_t = PipelineStageIT<T>;
-public:
-  struct BlockingEvent : base_t::BlockingEvent {
-    using base_t::BlockingEvent::BlockingEvent;
-
-    struct ExitBarrierEvent : TimeEvent<ExitBarrierEvent> {};
-
-    template <class OpT>
-    struct Trigger : base_t::BlockingEvent::template Trigger<OpT> {
-      using base_t::BlockingEvent::template Trigger<OpT>::Trigger;
-
-      template <class FutureT>
-      decltype(auto) maybe_record_exit_barrier(FutureT&& fut) {
-        if (!fut.available()) {
-	  exit_barrier_event.trigger(this->op);
-	}
-	return std::forward<FutureT>(fut);
-      }
-
-      ExitBarrierEvent exit_barrier_event;
-    };
-  };
-
 private:
   void dump_detail(ceph::Formatter *f) const final {}
 
