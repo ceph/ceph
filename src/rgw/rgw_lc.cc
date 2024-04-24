@@ -1413,7 +1413,6 @@ public:
     if (iter != obj_state->attrset.end()) {
       etag = rgw_bl_str(iter->second);
     }
-<<<<<<< HEAD
 
     rgw::notify::EventTypeList event_types;
     if (bucket->versioned() && oc.o.is_current() && !oc.o.is_delete_marker()) {
