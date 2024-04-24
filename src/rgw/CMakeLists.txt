@@ -296,6 +296,7 @@ target_link_libraries(rgw_common
   PUBLIC
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
+    Boost::coroutine
     Boost::context
     ${FMT_LIB}
     OpenSSL::SSL)
