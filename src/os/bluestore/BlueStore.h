@@ -2776,7 +2776,7 @@ private:
   static int _read_bdev_label(
     CephContext* cct, BlockDevice* bdev, const std::string &path,
     bluestore_bdev_label_t *label, uint64_t disk_position = BDEV_FIRST_LABEL_POSITION);
-  int _check_or_set_bdev_label(const std::string& path, BlockDevice* bdev, uint64_t size,
+  int _check_or_set_bdev_label(BlockDevice* bdev, const std::string& path,
                                const std::string& desc, bool create);
   int _set_main_bdev_label();
   int _check_main_bdev_label();

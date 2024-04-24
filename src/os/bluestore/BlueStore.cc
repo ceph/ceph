@@ -6635,18 +6635,18 @@ int BlueStore::_read_main_bdev_label(
   ceph_assert(out_label);
   // go and try read all possible bdev labels.
   // if only first bdev label is correct, it must not have "multi=yes" key.
+  bool any_fsid = cct->_conf->bluestore_debug_permit_any_bdev_label;
   int64_t epoch = -1;
   bool all_labels_valid = true;
   for (uint64_t position : bdev_label_positions) {
     bluestore_bdev_label_t label;
     int r = _read_bdev_label(cct, bdev, path, &label, position);
-    if (r == 0 && (fsid.is_zero() || label.osd_uuid == fsid)) {
+    if (r == 0 && (fsid.is_zero() || label.osd_uuid == fsid || any_fsid)) {
       auto i = label.meta.find("multi");
       bool is_multi = i != label.meta.end() && i->second == "yes";
       if (position == BDEV_FIRST_LABEL_POSITION && !is_multi) {
         // we have a single-label case
         *out_label = label;
-        is_multi = false;
         if (out_is_multi) {
           *out_is_multi = false;
         }
@@ -6659,28 +6659,28 @@ int BlueStore::_read_main_bdev_label(
         // for not base bdev position, it has to be cloned to be considered
         continue;
       }
-      fsid = label.osd_uuid; //from now on, only accept same fsid
+      //from now on, only accept same fsid, unless overriden by config
+      fsid = label.osd_uuid;
       i = label.meta.find("epoch");
       if (i != label.meta.end()) {
         int64_t v = atoll(i->second.c_str());
         if (v > epoch) {
           epoch = v;
           *out_label = label;
-          if (out_epoch) {
-            *out_epoch = epoch;
-          }
-          is_multi = true;
-          if (out_is_multi) {
-            *out_is_multi = true;
-          }
           if(out_valid_positions) {
             // clear out old versions
             out_valid_positions->clear();
           }
+        } else if (v < epoch) {
+          derr << __func__ << " label at 0x" << std::hex << position << std::dec
+               << " has outdated epoch=" << v << " current=" << epoch << dendl;
         }
         if(v == epoch && out_valid_positions) {
           out_valid_positions->push_back(position);
         }
+      } else {
+        derr << __func__ << " label at 0x" << std::hex << position << std::dec
+             << " is multi=yes but no epoch=" << dendl;
       }
     } else if (r == 0) {
       derr << __func__ << " label at 0x" << std::hex << position << std::dec
@@ -6692,7 +6692,14 @@ int BlueStore::_read_main_bdev_label(
       all_labels_valid = false;
     }
   }
-  if (epoch == -1) {
+  if (epoch != -1) {
+    if (out_epoch) {
+      *out_epoch = epoch;
+    }
+    if (out_is_multi) {
+      *out_is_multi = true;
+    }
+  } else {
     // not even one label read properly
     derr << "No valid bdev label found" << dendl;
     return -ENOENT;
@@ -6760,13 +6767,13 @@ void BlueStore::_main_bdev_label_remove(Allocator* an_alloc)
 }
 
 int BlueStore::_check_or_set_bdev_label(
-  const string& path, BlockDevice* bdev,
-  uint64_t size, const string& desc, bool create)
+  BlockDevice* bdev, const string& path,
+  const string& desc, bool create)
 {
   bluestore_bdev_label_t label;
   if (create) {
     label.osd_uuid = fsid;
-    label.size = size;
+    label.size = bdev->get_size();
     label.btime = ceph_clock_now();
     label.description = desc;
     int r = _write_bdev_label(cct, bdev, path, label);
@@ -7394,14 +7401,12 @@ int BlueStore::_minimal_open_bluefs(bool create)
 
     if (bluefs->bdev_support_label(BlueFS::BDEV_DB)) {
       r = _check_or_set_bdev_label(
-	bfn,
         bluefs->get_block_device(BlueFS::BDEV_DB),
-	bluefs->get_block_device_size(BlueFS::BDEV_DB),
+        bfn,
         "bluefs db", create);
       if (r < 0) {
-        derr << __func__
-	      << " check block device(" << bfn << ") label returned: "
-              << cpp_strerror(r) << dendl;
+        derr << __func__ << " check block device(" << bfn
+             << ") label returned: " << cpp_strerror(r) << dendl;
         goto free_bluefs;
       }
     }
@@ -7442,13 +7447,12 @@ int BlueStore::_minimal_open_bluefs(bool create)
 
     if (bluefs->bdev_support_label(BlueFS::BDEV_WAL)) {
       r = _check_or_set_bdev_label(
-	bfn,
         bluefs->get_block_device(BlueFS::BDEV_WAL),
-	bluefs->get_block_device_size(BlueFS::BDEV_WAL),
+        bfn,
         "bluefs wal", create);
       if (r < 0) {
         derr << __func__ << " check block device(" << bfn
-              << ") label returned: " << cpp_strerror(r) << dendl;
+             << ") label returned: " << cpp_strerror(r) << dendl;
         goto free_bluefs;
       }
     }
@@ -8546,9 +8550,8 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
 
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
       r = _check_or_set_bdev_label(
-	p,
         bluefs->get_block_device(BlueFS::BDEV_NEWWAL),
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
+        p,
         "bluefs wal",
 	true);
       ceph_assert(r == 0);
@@ -8568,9 +8571,8 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
 
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
       r = _check_or_set_bdev_label(
-	p,
         bluefs->get_block_device(BlueFS::BDEV_NEWDB),
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
+        p,
         "bluefs db",
 	true);
       ceph_assert(r == 0);
@@ -8698,9 +8700,8 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
 
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
       r = _check_or_set_bdev_label(
-	dev_path,
         bluefs->get_block_device(BlueFS::BDEV_NEWWAL),
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
+        dev_path,
         "bluefs wal",
 	true);
       ceph_assert(r == 0);
@@ -8717,9 +8718,8 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
 
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
       r = _check_or_set_bdev_label(
-	dev_path,
         bluefs->get_block_device(BlueFS::BDEV_NEWDB),
-	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
+        dev_path,
         "bluefs db",
 	true);
       ceph_assert(r == 0);
