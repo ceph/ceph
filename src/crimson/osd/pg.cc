@@ -124,6 +124,7 @@ PG::PG(
 	pool,
 	name),
       osdmap,
+      PG_FEATURE_CRIMSON_ALL,
       this,
       this),
     scrubber(*this),

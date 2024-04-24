@@ -109,6 +109,7 @@ PeeringState::PeeringState(
   spg_t spgid,
   const PGPool &_pool,
   OSDMapRef curmap,
+  pg_feature_vec_t supported_pg_acting_features,
   DoutPrefixProvider *dpp,
   PeeringListener *pl)
   : state_history(*pl),
@@ -122,6 +123,8 @@ PeeringState::PeeringState(
     pg_whoami(pg_whoami),
     info(spgid),
     pg_log(cct),
+    local_pg_acting_features(supported_pg_acting_features),
+    pg_acting_features(local_pg_acting_features),
     last_require_osd_release(curmap->require_osd_release),
     missing_loc(spgid, this, dpp, cct),
     machine(this, cct, spgid, dpp, pl, &state_history)
@@ -346,6 +349,10 @@ bool PeeringState::proc_replica_notify(const pg_shard_t &from, const pg_notify_t
     if (is_clean()) {
       purge_strays();
     }
+  }
+
+  if (is_acting(from)) {
+    pg_acting_features &= notify.pg_features;
   }
 
   // was this a new info?  if so, update peers!
@@ -748,6 +755,7 @@ void PeeringState::on_new_interval()
   // initialize features
   acting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
   upacting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  pg_acting_features = local_pg_acting_features;
   for (auto p = acting.begin(); p != acting.end(); ++p) {
     if (*p == CRUSH_ITEM_NONE)
       continue;
@@ -3205,7 +3213,8 @@ void PeeringState::fulfill_query(const MQuery& query, PeeringCtxWrapper &rctx)
 	query.query_epoch,
 	get_osdmap_epoch(),
 	notify_info.second,
-	past_intervals));
+	past_intervals,
+	local_pg_acting_features));
   } else {
     update_history(query.query.history);
     fulfill_log(query.from, query.query, query.query_epoch);
@@ -4802,7 +4811,8 @@ boost::statechart::result PeeringState::Reset::react(const ActMap&)
 	ps->get_osdmap_epoch(),
 	ps->get_osdmap_epoch(),
 	ps->info,
-	ps->past_intervals));
+	ps->past_intervals,
+	ps->local_pg_acting_features));
   }
 
   ps->update_heartbeat_peers();
@@ -6530,7 +6540,8 @@ boost::statechart::result PeeringState::ReplicaActive::react(const ActMap&)
 	ps->get_osdmap_epoch(),
 	ps->get_osdmap_epoch(),
 	ps->info,
-	ps->past_intervals));
+	ps->past_intervals,
+	ps->local_pg_acting_features));
   }
   return discard_event();
 }
@@ -6667,7 +6678,8 @@ boost::statechart::result PeeringState::Stray::react(const ActMap&)
 	ps->get_osdmap_epoch(),
 	ps->get_osdmap_epoch(),
 	ps->info,
-	ps->past_intervals));
+	ps->past_intervals,
+	ps->local_pg_acting_features));
   }
   return discard_event();
 }
@@ -6897,6 +6909,7 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
       psdout(20) << "Common peer features: " << hex << ps->get_min_peer_features() << dec << dendl;
       psdout(20) << "Common acting features: " << hex << ps->get_min_acting_features() << dec << dendl;
       psdout(20) << "Common upacting features: " << hex << ps->get_min_upacting_features() << dec << dendl;
+      psdout(20) << "Common pg_acting_features: " << hex << ps->get_pg_acting_features() << dec << dendl;
       post_event(GotInfo());
     }
   }

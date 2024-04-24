@@ -51,6 +51,7 @@
 #include "librados/ListObjectImpl.h"
 #include "compressor/Compressor.h"
 #include "osd_perf_counters.h"
+#include "pg_features.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -3790,6 +3791,7 @@ struct pg_notify_t {
   shard_id_t to;
   shard_id_t from;
   PastIntervals past_intervals;
+  pg_feature_vec_t pg_features = PG_FEATURE_NONE;
   pg_notify_t() :
     query_epoch(0), epoch_sent(0), to(shard_id_t::NO_SHARD),
     from(shard_id_t::NO_SHARD) {}
@@ -3799,11 +3801,12 @@ struct pg_notify_t {
     epoch_t query_epoch,
     epoch_t epoch_sent,
     const pg_info_t &info,
-    const PastIntervals& pi)
+    const PastIntervals& pi,
+    pg_feature_vec_t pg_features)
     : query_epoch(query_epoch),
       epoch_sent(epoch_sent),
       info(info), to(to), from(from),
-      past_intervals(pi) {
+      past_intervals(pi), pg_features(pg_features) {
     ceph_assert(from == info.pgid.shard);
   }
   void encode(ceph::buffer::list &bl) const;
