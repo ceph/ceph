@@ -316,28 +316,8 @@ def _fetch_cephadm_from_chachra(ctx, config, cluster_name):
             sha1=sha1,
     )
     log.info("Discovered cachra url: %s", url)
-    ctx.cluster.run(
-        args=[
-            'curl', '--silent', '-L', url,
-            run.Raw('>'),
-            ctx.cephadm,
-            run.Raw('&&'),
-            'ls', '-l',
-            ctx.cephadm,
-        ],
-    )
+    _download_cephadm(ctx, url)
 
-    # sanity-check the resulting file and set executable bit
-    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
-    ctx.cluster.run(
-        args=[
-            'test', '-s', ctx.cephadm,
-            run.Raw('&&'),
-            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
-            run.Raw('&&'),
-            'chmod', '+x', ctx.cephadm,
-        ],
-    )
 
 def _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name):
     branch = config.get('compiled_cephadm_branch', 'reef')
@@ -365,6 +345,11 @@ def _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name):
             branch=branch,
     )
     log.info("Discovered cachra url: %s", url)
+    _download_cephadm(ctx, url)
+
+
+def _download_cephadm(ctx, url):
+    log.info("Downloading cephadm from url: %s", url)
     ctx.cluster.run(
         args=[
             'curl', '--silent', '-L', url,
