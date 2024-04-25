@@ -235,22 +235,22 @@
         "UsageStatsSummary": {
             "type": "structure",
             "members": {
-		        "QuotaMaxBytes":{"shape":"QuotaMaxBytes"},
-		        "QuotaMaxBuckets":{"shape": "QuotaMaxBuckets"},
-		        "QuotaMaxObjCount":{"shape":"QuotaMaxObjCount"},
-		        "QuotaMaxBytesPerBucket":{"shape":"QuotaMaxBytesPerBucket"},
+                "QuotaMaxBytes":{"shape":"QuotaMaxBytes"},
+                "QuotaMaxBuckets":{"shape": "QuotaMaxBuckets"},
+                "QuotaMaxObjCount":{"shape":"QuotaMaxObjCount"},
+                "QuotaMaxBytesPerBucket":{"shape":"QuotaMaxBytesPerBucket"},
                 "QuotaMaxObjCountPerBucket":{"shape":"QuotaMaxObjCountPerBucket"},
-		        "TotalBytes":{"shape":"TotalBytes"},
+                "TotalBytes":{"shape":"TotalBytes"},
                 "TotalBytesRounded":{"shape":"TotalBytesRounded"},
                 "TotalEntries":{"shape":"TotalEntries"}
             }
         },
         "QuotaMaxBytes":{"type":"integer"},
-	    "QuotaMaxBuckets":{"type": "integer"},
-	    "QuotaMaxObjCount":{"type":"integer"},
-	    "QuotaMaxBytesPerBucket":{"type":"integer"},
-	    "QuotaMaxObjCountPerBucket":{"type":"integer"},
-	    "TotalBytesRounded":{"type":"integer"},
+        "QuotaMaxBuckets":{"type": "integer"},
+        "QuotaMaxObjCount":{"type":"integer"},
+        "QuotaMaxBytesPerBucket":{"type":"integer"},
+        "QuotaMaxObjCountPerBucket":{"type":"integer"},
+        "TotalBytesRounded":{"type":"integer"},
         "TotalBytes":{"type":"integer"},
         "TotalEntries":{"type":"integer"}
     },
