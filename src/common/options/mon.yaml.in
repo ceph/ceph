@@ -1349,6 +1349,14 @@ options:
   with_legacy: true
   see_also:
   - osd_heartbeat_use_min_delay_socket
+- name: nvmeof_mon_client_disconnect_panic
+  type: secs
+  level: advanced
+  desc: The duration, expressed in seconds, after which the nvmeof gateway
+    should trigger a panic if it loses connection to the monitor
+  default: 100
+  services:
+  - mon
 - name: nvmeof_mon_client_tick_period
   type: secs
   level: advanced

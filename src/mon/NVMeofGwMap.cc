@@ -36,7 +36,7 @@ void NVMeofGwMap::to_gmap(std::map<NvmeGroupKey, NvmeGwMap>& Gmap) const {
             const auto& gw_id = gw_created_pair.first;
             const auto& gw_created  = gw_created_pair.second;
 
-            auto gw_state = NvmeGwState(gw_created.ana_grp_id, epoch);
+            auto gw_state = NvmeGwState(gw_created.ana_grp_id, epoch, gw_created.availability);
             for (const auto& sub: gw_created.subsystems) {
                 gw_state.subsystems.insert({sub.nqn, NqnState(sub.nqn, gw_created.sm_state, gw_created )});
             }
@@ -109,6 +109,7 @@ int NVMeofGwMap::process_gw_map_gw_down(const NvmeGwId &gw_id, const NvmeGroupKe
             st.standby_state(i);
         }
         propose_pending = true; // map should reflect that gw becames unavailable
+        if (propose_pending) validate_gw_map(group_key);
     }
     else {
         dout(1)  << __FUNCTION__ << "ERROR GW-id was not found in the map " << gw_id << dendl;
@@ -152,6 +153,7 @@ void NVMeofGwMap::process_gw_map_ka(const NvmeGwId &gw_id, const NvmeGroupKey& g
           fsm_handle_gw_alive (gw_id, group_key, gw_state->second, st.sm_state[i], i, last_osd_epoch, propose_pending);
         }
     }
+    if (propose_pending) validate_gw_map(group_key);
 }
 
 
@@ -191,6 +193,9 @@ void NVMeofGwMap::handle_abandoned_ana_groups(bool& propose)
                 {
                     find_failback_gw(gw_id, group_key, propose);
                 }
+            }
+            if (propose) {
+                validate_gw_map(group_key);
             }
     }
 }
@@ -453,6 +458,7 @@ void NVMeofGwMap::fsm_handle_gw_delete (const NvmeGwId &gw_id, const NvmeGroupKe
             ceph_assert(false);
         }
     }
+    if (map_modified) validate_gw_map(group_key);
 }
 
 void NVMeofGwMap::fsm_handle_to_expired(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId grpid,  bool &map_modified)
@@ -494,6 +500,7 @@ void NVMeofGwMap::fsm_handle_to_expired(const NvmeGwId &gw_id, const NvmeGroupKe
         dout(1) << " Expired GW_WAIT_FAILOVER_PREPARED timer from GW " << gw_id << " ANA groupId: "<< grpid << dendl;
         ceph_assert(false);
     }
+    if (map_modified) validate_gw_map(group_key);
 }
 
 NvmeGwCreated& NVMeofGwMap::find_already_created_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key)
@@ -553,6 +560,34 @@ int NVMeofGwMap::blocklist_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_k
         return 1;
     }
     return 0;
+}
+
+void  NVMeofGwMap::validate_gw_map(const NvmeGroupKey& group_key)
+{
+   NvmeAnaGrpId anas[MAX_SUPPORTED_ANA_GROUPS];
+   int i = 0;
+   int max_groups = 0;
+   for (auto& gw_created_pair: Created_gws[group_key]) {
+        auto& st = gw_created_pair.second;
+        anas[i++] = st.ana_grp_id;
+   }
+   max_groups = i;
+   for(int i = 0; i < max_groups; i++)
+   {
+       int ana_group = anas[i];
+       int count = 0;
+       for (auto& gw_created_pair: Created_gws[group_key]) {
+           auto& st = gw_created_pair.second;
+           if (st.sm_state[ana_group] == GW_STATES_PER_AGROUP_E::GW_ACTIVE_STATE){
+               count ++;
+               if(count == 2) {
+                   dout(1) << "number active states per ana-group " << ana_group << "more than 1 in pool-group " << group_key << dendl;
+                   dout(1) << Created_gws[group_key] << dendl;
+                   ceph_assert(false);
+               }
+           }
+       }
+   }
 }
 
 void NVMeofGwMap::update_active_timers( bool &propose_pending ){
