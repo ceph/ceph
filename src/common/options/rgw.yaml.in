@@ -290,7 +290,7 @@ options:
   desc: Max number of items in RGW metadata cache.
   long_desc: When full, the RGW metadata cache evicts least recently used entries.
   fmt_desc: The number of entries in the Ceph Object Gateway cache.
-  default: 10000
+  default: 25000
   services:
   - rgw
   see_also:
