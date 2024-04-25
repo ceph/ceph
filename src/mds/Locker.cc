@@ -1710,7 +1710,8 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
   dout(7) << "wrlock_force  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   lock->get_wrlock(true);
-  mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+  auto it = mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+  it->flags |= MutationImpl::LockOp::WRLOCK; // may already remote_wrlocked
 }
 
 bool Locker::wrlock_try(SimpleLock *lock, const MutationRef& mut, client_t client)
@@ -1914,7 +1915,8 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
 	    in && in->issued_caps_need_gather(lock))) { // xlocker does not hold shared cap
 	lock->set_state(LOCK_XLOCK);
 	lock->get_xlock(mut, client);
-	mut->emplace_lock(lock, MutationImpl::LockOp::XLOCK);
+	auto it = mut->emplace_lock(lock, MutationImpl::LockOp::XLOCK);
+	ceph_assert(it->is_xlock());
 	mut->finish_locking(lock);
 	return true;
       }
@@ -4981,7 +4983,8 @@ void Locker::scatter_writebehind(ScatterLock *lock)
 
   // forcefully take a wrlock
   lock->get_wrlock(true);
-  mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+  auto it = mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+  ceph_assert(it->is_wrlock());
 
   in->pre_cow_old_inode();  // avoid cow mayhem
 
@@ -5373,7 +5376,8 @@ bool Locker::local_xlock_start(LocalLockC *lock, MDRequestRef& mut)
   }
 
   lock->get_xlock(mut, mut->get_client());
-  mut->emplace_lock(lock, MutationImpl::LockOp::XLOCK);
+  auto it = mut->emplace_lock(lock, MutationImpl::LockOp::XLOCK);
+  ceph_assert(it->is_xlock());
   return true;
 }
 
