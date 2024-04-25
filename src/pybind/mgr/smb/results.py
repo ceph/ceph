@@ -26,11 +26,13 @@ class Result:
         self.status = status
 
     def to_simplified(self) -> Simplified:
-        ds: Simplified = dict(self.status or {})
+        ds: Simplified = {}
         ds['resource'] = self.src.to_simplified()
-        ds['success'] = self.success
+        if self.status:
+            ds.update(self.status)
         if self.msg:
             ds['msg'] = self.msg
+        ds['success'] = self.success
         return ds
 
     def mgr_return_value(self) -> int:
@@ -77,8 +79,8 @@ class ResultGroup:
 
     def to_simplified(self) -> Simplified:
         return {
-            'success': self.success,
             'results': [r.to_simplified() for r in self._contents],
+            'success': self.success,
         }
 
     def mgr_return_value(self) -> int:
