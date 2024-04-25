@@ -86,7 +86,7 @@ inline std::ostream& operator<<(std::ostream& os, const NqnState value) {
 }
 
 inline std::ostream& operator<<(std::ostream& os, const NvmeGwState value) {
-    os <<  "NvmeGwState { group id: " << value.group_id <<  " gw_map_epoch " <<  value.gw_map_epoch
+    os <<  "NvmeGwState { group id: " << value.group_id <<  " gw_map_epoch " <<  value.gw_map_epoch << " availablilty "<< value.availability
         << " GwSubsystems: [ ";
     for (const auto& sub: value.subsystems) os << sub.second << " ";
     os << " ] }";
@@ -239,6 +239,7 @@ inline void encode(const NvmeGwState& state,  ceph::bufferlist &bl) {
     encode(state.group_id, bl);
     encode(state.gw_map_epoch, bl);
     encode (state.subsystems, bl);
+    encode((uint32_t)state.availability, bl);
     ENCODE_FINISH(bl);
 }
 
@@ -247,6 +248,9 @@ inline  void decode(NvmeGwState& state,  ceph::bufferlist::const_iterator& bl) {
     decode(state.group_id, bl);
     decode(state.gw_map_epoch, bl);
     decode(state.subsystems, bl);
+    uint32_t avail;
+    decode(avail, bl);
+    state.availability = (GW_AVAILABILITY_E)avail;
     DECODE_FINISH(bl);
 }
 

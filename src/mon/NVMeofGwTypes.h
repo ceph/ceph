@@ -152,13 +152,14 @@ struct NvmeGwState {
     NvmeAnaGrpId              group_id;
     epoch_t                   gw_map_epoch;
     GwSubsystems              subsystems;
-
-    NvmeGwState(NvmeAnaGrpId id, epoch_t epoch):
+    GW_AVAILABILITY_E         availability;
+    NvmeGwState(NvmeAnaGrpId id, epoch_t epoch, GW_AVAILABILITY_E available):
         group_id(id),
-        gw_map_epoch(epoch)
+        gw_map_epoch(epoch),
+        availability(available)
     {};
 
-    NvmeGwState() : NvmeGwState(REDUNDANT_GW_ANA_GROUP_ID, 0) {};
+    NvmeGwState() : NvmeGwState(REDUNDANT_GW_ANA_GROUP_ID, 0, GW_AVAILABILITY_E::GW_UNAVAILABLE) {};
 };
 
 struct NvmeGwMetaData {

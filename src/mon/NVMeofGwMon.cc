@@ -332,6 +332,7 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
 
         if( map.Created_gws[group_key].size()){
             f->open_object_section("common");
+            f->dump_unsigned("epoch", map.epoch);
             f->dump_string("pool", pool);
             f->dump_string("group", group);
             f->dump_unsigned("num gws", map.Created_gws[group_key].size());

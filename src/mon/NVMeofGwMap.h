@@ -64,6 +64,7 @@ private:
 
     int  get_timer   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid);
     void cancel_timer(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid);
+    void validate_gw_map(const NvmeGroupKey& group_key);
 
 public:
     void encode(ceph::buffer::list &bl) const {

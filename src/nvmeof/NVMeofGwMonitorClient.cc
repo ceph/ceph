@@ -235,12 +235,12 @@ void NVMeofGwMonitorClient::send_beacon()
 
 void NVMeofGwMonitorClient::disconnect_panic()
 {
-  auto disconnect_panic_duration = g_conf().get_val<std::chrono::seconds>("mon_nvmeofgw_beacon_grace").count();
+  auto disconnect_panic_duration = g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_disconnect_panic").count();
   auto now = std::chrono::steady_clock::now();
   auto elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(now - last_map_time).count();
   if (elapsed_seconds > disconnect_panic_duration) {
     dout(4) << "Triggering a panic upon disconnection from the monitor, elapsed " << elapsed_seconds << ", configured disconnect panic duration " << disconnect_panic_duration << dendl;
-    throw std::runtime_error("Lost connection to the monitor (mon).");
+    throw std::runtime_error("Lost connection to the monitor (beacon timeout).");
   }
 }
 
@@ -314,10 +314,19 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     }
   }
 
-  // Make sure we do not get out of order state changes from the monitor
   if (got_old_gw_state && got_new_gw_state) {
     dout(0) << "got_old_gw_state: " << old_gw_state << "got_new_gw_state: " << new_gw_state << dendl;
+    // Make sure we do not get out of order state changes from the monitor
     ceph_assert(new_gw_state.gw_map_epoch >= old_gw_state.gw_map_epoch);
+
+    // If the monitor previously identified this gateway as accessible but now
+    // flags it as unavailable, it suggests that the gateway lost connection
+    // to the monitor.
+    if (old_gw_state.availability == GW_AVAILABILITY_E::GW_AVAILABLE &&
+	new_gw_state.availability == GW_AVAILABILITY_E::GW_UNAVAILABLE) {
+      dout(4) << "Triggering a panic upon disconnection from the monitor, gw state - unavailable" << dendl;
+      throw std::runtime_error("Lost connection to the monitor (gw map unavailable).");
+    }
   }
 
   // Gather all state changes
