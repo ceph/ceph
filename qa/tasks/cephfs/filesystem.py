@@ -233,10 +233,15 @@ class CephClusterBase(RunCephCmd):
         (result,) = self._ctx.cluster.only(first_mon).remotes.keys()
         return result
 
-    def __init__(self, ctx) -> None:
+    def __init__(self, ctx, cluster_name='ceph') -> None:
         self._ctx = ctx
-        self.mon_manager = CephManager(self.admin_remote, ctx=ctx,
-                                       logger=log.getChild('ceph_manager'))
+        try:
+            manager = ctx.managers[cluster_name]
+        except Exception as e:
+            log.warn(f"Couldn't get a manager for cluster {cluster_name} from the context; exception: {e}")
+            manager = CephManager(self.admin_remote, ctx=ctx,
+                                  logger=log.getChild('ceph_manager'))
+        self.mon_manager = manager
 
     def get_config(self, key, service_type=None):
         """
@@ -308,8 +313,8 @@ class MDSClusterBase(CephClusterBase):
     as a separate instance outside of your (multiple) Filesystem instances.
     """
 
-    def __init__(self, ctx):
-        super(MDSClusterBase, self).__init__(ctx)
+    def __init__(self, ctx, cluster_name='ceph'):
+        super(MDSClusterBase, self).__init__(ctx, cluster_name=cluster_name)
 
     @property
     def mds_ids(self):
@@ -534,13 +539,13 @@ class FilesystemBase(MDSClusterBase):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False,
+    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False, cluster_name='ceph',
                  **kwargs):
         """
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
         yes_i_really_really_mean_it: bool and fs_ops: list[str]
         """
-        super(FilesystemBase, self).__init__(ctx)
+        super(FilesystemBase, self).__init__(ctx, cluster_name=cluster_name)
 
         self.name = name
         self.id = None
