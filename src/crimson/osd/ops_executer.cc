@@ -970,18 +970,28 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
   osd_op_params->at_version.version++;
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
 
-  // update most recent clone_overlap and usage stats
-  assert(cloning_ctx->new_snapset.clones.size() > 0);
-  // In classic, we check for evicted clones before
-  // adjusting the clone_overlap.
-  // This check is redundant here since `clone_obc`
-  // was just created (See prepare_clone()).
-  interval_set<uint64_t> &newest_overlap =
-    cloning_ctx->new_snapset.clone_overlap.rbegin()->second;
-  osd_op_params->modified_ranges.intersection_of(newest_overlap);
-  delta_stats.num_bytes += osd_op_params->modified_ranges.size();
-  newest_overlap.subtract(osd_op_params->modified_ranges);
   return cloning_ctx;
+}
+
+void OpsExecuter::update_clone_overlap() {
+  interval_set<uint64_t> *newest_overlap;
+  if (cloning_ctx) {
+    newest_overlap =
+      &cloning_ctx->new_snapset.clone_overlap.rbegin()->second;
+  } else if (op_info.may_write() 
+    && obc->obs.exists 
+    && !snapc.snaps.empty() 
+    && !obc->ssc->snapset.clones.empty()) {
+    newest_overlap =
+      &obc->ssc->snapset.clone_overlap.rbegin()->second;
+  } else {
+    return;
+  }
+
+  assert(osd_op_params);
+  osd_op_params->modified_ranges.intersection_of(*newest_overlap);
+  newest_overlap->subtract(osd_op_params->modified_ranges);
+  delta_stats.num_bytes += osd_op_params->modified_ranges.size();
 }
 
 void OpsExecuter::CloningContext::apply_to(
@@ -1002,6 +1012,7 @@ OpsExecuter::flush_clone_metadata(
 {
   assert(!txn.empty());
   auto maybe_snap_mapped = interruptor::now();
+  update_clone_overlap();
   if (cloning_ctx) {
     std::move(*cloning_ctx).apply_to(log_entries, *obc);
     const auto& coid = log_entries.front().soid;
