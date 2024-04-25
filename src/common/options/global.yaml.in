@@ -6508,7 +6508,7 @@ options:
     some of them will belongs to more then one shards. The encoding for such case
     is inefficient (spanning blobs). Segmentation of data prevents blobs from crossing
     specific separation lines, preventing spanning blobs altogether.
-  default: 0
+  default: 262144
   with_legacy: true
 - name: jaeger_tracing_enable
   type: bool
