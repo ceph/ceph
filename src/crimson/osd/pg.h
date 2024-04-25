@@ -603,6 +603,9 @@ private:
     const hobject_t& oid,
     eversion_t& v);
   void check_blocklisted_obc_watchers(ObjectContextRef &obc);
+  interruptible_future<seastar::stop_iteration> trim_snap(
+    snapid_t to_trim,
+    bool needs_pause);
 
 private:
   PG_OSDMapGate osdmap_gate;
