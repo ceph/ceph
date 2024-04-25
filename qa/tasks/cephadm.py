@@ -208,7 +208,10 @@ def normalize_hostnames(ctx):
 def download_cephadm(ctx, config, ref):
     cluster_name = config['cluster']
 
-    if config.get('cephadm_mode') != 'cephadm-package':
+    if 'cephadm_binary_url' in config:
+        url = config['cephadm_binary_url']
+        _download_cephadm(ctx, url)
+    elif config.get('cephadm_mode') != 'cephadm-package':
         if ctx.config.get('redhat'):
             _fetch_cephadm_from_rpm(ctx)
         # TODO: come up with a sensible way to detect if we need an "old, uncompiled"
