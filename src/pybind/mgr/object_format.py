@@ -309,6 +309,11 @@ class ObjectFormatAdapter:
     serialization. If the object can not be safely serialized an exception will
     be raised.
 
+    By default both JSON and YAML output will use sorted keys. This behavior
+    can be toggled via the `sort_json` and `sort_yaml` keyword arguments.
+    If set to None, the internal default (sorted) will be used. Otherwise,
+    explicitly set them to true or false as desired.
+
     NOTE: Some code may use methods named like `to_json` to return a JSON
     string. If that is the case, you should not use that method with the
     ObjectFormatAdapter. Do not set compatible=True for objects of this type.
@@ -319,10 +324,18 @@ class ObjectFormatAdapter:
         obj: Any,
         json_indent: Optional[int] = DEFAULT_JSON_INDENT,
         compatible: bool = False,
+        *,
+        sort_json: Optional[bool] = None,
+        sort_yaml: Optional[bool] = None,
     ) -> None:
         self.obj = obj
         self._compatible = compatible
         self.json_indent = json_indent
+        # For our sorting options None means use the internal default.  For
+        # compatibility reasons means setting True for json and leaving yaml
+        # dumper built-in default untouched.
+        self.sort_json: bool = True if sort_json is None else sort_json
+        self.sort_yaml = sort_yaml
 
     def _fetch_json_data(self) -> Any:
         # if the data object provides a specific simplified representation for
@@ -338,7 +351,9 @@ class ObjectFormatAdapter:
     def format_json(self) -> str:
         """Return a JSON formatted string representing the input object."""
         return json.dumps(
-            self._fetch_json_data(), indent=self.json_indent, sort_keys=True
+            self._fetch_json_data(),
+            indent=self.json_indent,
+            sort_keys=self.sort_json,
         )
 
     def _fetch_yaml_data(self) -> Any:
@@ -350,7 +365,10 @@ class ObjectFormatAdapter:
 
     def format_yaml(self) -> str:
         """Return a YAML formatted string representing the input object."""
-        return yaml.safe_dump(self._fetch_yaml_data())
+        kwargs: Dict[str, Any] = {}
+        if self.sort_yaml is not None:
+            kwargs['sort_keys'] = self.sort_yaml
+        return yaml.safe_dump(self._fetch_yaml_data(), **kwargs)
 
     format_json_pretty = format_json
 
