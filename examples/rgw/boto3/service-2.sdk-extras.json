@@ -23,6 +23,17 @@
             "output": {"shape": "GetUsageStatsOutput"},
             "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/serviceops#get-usage-stats",
             "documentation":"<p>Get usage stats for the user</p>"
+        },
+        "GetObject":{
+            "httpChecksum":{
+                "responseAlgorithms":[
+                    "CRC32",
+                    "CRC32C",
+                    "SHA256",
+                    "SHA1",
+                    "BLAKE3"
+                ]
+            }
         }
     },
     "shapes": {
@@ -252,7 +263,144 @@
         "QuotaMaxObjCountPerBucket":{"type":"integer"},
         "TotalBytesRounded":{"type":"integer"},
         "TotalBytes":{"type":"integer"},
-        "TotalEntries":{"type":"integer"}
+        "TotalEntries":{"type":"integer"},
+        "Checksum":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>"
+                }
+            }
+        },
+        "ChecksumAlgorithm":{
+            "enum":[
+                "CRC32",
+                "CRC32C",
+                "SHA1",
+                "SHA256",
+                "BLAKE3"
+            ]
+        },
+        "ChecksumBLAKE3":{"type":"string"},
+        "CompleteMultipartUploadOutput":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>"
+                }
+            }
+        },
+        "CompleteMultipartUploadRequest":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 32-bit CRC32 checksum of the object. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html\">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>",
+                    "location":"header",
+                    "locationName":"x-amz-checksum-blake3"
+                }
+            }
+        },
+        "CompletedPart":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>"
+                }
+            }
+        },
+        "CopyObjectResult":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>"
+                }
+            }
+        },
+        "CopyPartResult":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>"
+                }
+            }
+        },
+        "GetObjectOutput":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>",
+                    "location":"header",
+                    "locationName":"x-amz-checksum-blake3"
+                }
+            }
+        },
+        "HeadObjectOutput":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>",
+                    "location":"header",
+                    "locationName":"x-amz-checksum-blake3"
+                }
+            }
+        },
+        "ObjectPart":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>"
+                }
+            }
+        },
+        "Part":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>"
+                }
+            }
+        },
+        "PutObjectOutput":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>",
+                    "location":"header",
+                    "locationName":"x-amz-checksum-blake3"
+                }
+            }
+        },
+        "PutObjectRequest":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 256-bit BLAKE3 checksum of the object. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html\">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>",
+                    "location":"header",
+                    "locationName":"x-amz-checksum-blake3"
+                }
+            }
+        },
+        "UploadPartOutput":{
+            "type":"structure",
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>The base64-encoded, 256-bit BLAKE3 checksum of the object. This will only be present if it was uploaded with the object. With multipart uploads, this may not be a checksum value of the object. For more information about how checksums are calculated with multipart uploads, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html#large-object-checksums\"> Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension.</p>",
+                    "location":"header",
+                    "locationName":"x-amz-checksum-blake3"
+                }
+            }
+        },
+        "UploadPartRequest":{
+            "members":{
+                "ChecksumBLAKE3":{
+                    "shape":"ChecksumBLAKE3",
+                    "documentation":"<p>This header can be used as a data integrity check to verify that the data received is the same data that was originally sent. This header specifies the base64-encoded, 256-bit BLAKE3 checksum of the object. For more information, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/userguide/checking-object-integrity.html\">Checking object integrity</a> in the <i>Amazon S3 User Guide</i>. This checksum algorithm is a Ceph RGW extension..</p>",
+                    "location":"header",
+                    "locationName":"x-amz-checksum-blake3"
+                }
+            }
+        }
     },
     "documentation":"<p/>"
 }
