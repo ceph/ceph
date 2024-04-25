@@ -596,11 +596,11 @@ void PGBackend::update_size_and_usage(object_stat_sum_t& delta_stats,
   if (write_full) {
     if (oi.size) {
       ch.insert(0, oi.size);
-    } else if (length) {
-      ch.insert(offset, length);
     }
-    modified.union_of(ch);
+  } else if (length) {
+    ch.insert(offset, length);
   }
+  modified.union_of(ch);
   if (write_full ||
       (offset + length > oi.size && length)) {
     uint64_t new_size = offset + length;
