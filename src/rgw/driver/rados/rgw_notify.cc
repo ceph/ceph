@@ -19,6 +19,7 @@
 #include "rgw_perf_counters.h"
 #include "services/svc_zone.h"
 #include "common/dout.h"
+#include "rgw_url.h"
 #include <chrono>
 
 #define dout_subsys ceph_subsys_rgw_notification
@@ -27,9 +28,14 @@ namespace rgw::notify {
   
 static inline std::ostream& operator<<(std::ostream& out,
                                        const event_entry_t& e) {
+  std::string host;
+  std::string user;
+  std::string password;
+  parse_url_authority(e.push_endpoint, host, user, password);
   return out << "notification id: '" << e.event.configurationId
              << "', topic: '" << e.arn_topic
-             << "', endpoint: '" << e.push_endpoint
+             << "', endpoint: '" << host
+             << "', endpoint_user: '" << user
              << "', bucket_owner: '" << e.event.bucket_ownerIdentity
              << "', bucket: '" << e.event.bucket_name
              << "', object: '" << e.event.object_key
