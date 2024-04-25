@@ -631,6 +631,13 @@ public:
 		   rgw::sal::Lifecycle::LCHead& head,
 		   rgw::sal::Lifecycle::LCEntry& entry,
 		   time_t start_date);
+  int check_if_shard_done(const std::string& lc_shard,
+ 			 rgw::sal::Lifecycle::LCHead& head,
+       int worker_ix);
+  int update_head(const std::string& lc_shard,
+			 rgw::sal::Lifecycle::LCHead& head,
+			 rgw::sal::Lifecycle::LCEntry& entry,
+			 time_t start_date, int worker_ix);
   int process(int index, int max_lock_secs, LCWorker* worker, bool once);
   int process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     const std::string& bucket_entry_marker, bool once);
