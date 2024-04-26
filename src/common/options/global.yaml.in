@@ -5011,6 +5011,13 @@ options:
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L=min_write_buffer_number_to_merge=32 P=min_write_buffer_number_to_merge=32
+- name: bluestore_async_db_compaction
+  type: bool
+  level: dev
+  desc: Perform DB compaction requests asynchronously
+  long_desc: 'How to perform DB compactions triggered either through async socket or
+    by OSD initialization procedure on start.'
+  default: true
 - name: bluestore_qfsck_on_mount
   type: bool
   level: dev
