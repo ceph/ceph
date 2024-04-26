@@ -430,21 +430,25 @@ void ExtentPlacementManager::BackgroundProcess::start_background()
 seastar::future<>
 ExtentPlacementManager::BackgroundProcess::stop_background()
 {
-  return seastar::futurize_invoke([this] {
+  LOG_PREFIX(BackgroundProcess::stop_background);
+  return seastar::futurize_invoke([this, FNAME] {
     if (!is_running()) {
       if (state != state_t::HALT) {
+        INFO("isn't RUNNING or HALT, STOP");
         state = state_t::STOP;
+      } else {
+        INFO("isn't RUNNING, already HALT");
       }
       return seastar::now();
     }
+    INFO("is RUNNING, going to HALT...");
     auto ret = std::move(*process_join);
     process_join.reset();
     state = state_t::HALT;
     assert(!is_running());
     do_wake_background();
     return ret;
-  }).then([this] {
-    LOG_PREFIX(BackgroundProcess::stop_background);
+  }).then([this, FNAME] {
     INFO("done, {}, {}",
          JournalTrimmerImpl::stat_printer_t{*trimmer, true},
          AsyncCleaner::stat_printer_t{*main_cleaner, true});
@@ -452,18 +456,21 @@ ExtentPlacementManager::BackgroundProcess::stop_background()
       INFO("done, cold_cleaner: {}",
            AsyncCleaner::stat_printer_t{*cold_cleaner, true});
     }
-    // run_until_halt() can be called at HALT
   });
 }
 
 seastar::future<>
 ExtentPlacementManager::BackgroundProcess::run_until_halt()
 {
+  // unit test only
+  LOG_PREFIX(BackgroundProcess::run_until_halt);
   ceph_assert(state == state_t::HALT);
   assert(!is_running());
   if (is_running_until_halt) {
+    WARN("already running");
     return seastar::now();
   }
+  INFO("started...");
   is_running_until_halt = true;
   return seastar::do_until(
     [this] {
@@ -479,7 +486,9 @@ ExtentPlacementManager::BackgroundProcess::run_until_halt()
     [this] {
       return do_background_cycle();
     }
-  );
+  ).finally([FNAME] {
+    INFO("finished");
+  });
 }
 
 seastar::future<>
@@ -498,6 +507,12 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
   if (res.is_successful()) {
     return seastar::now();
   } else {
+    LOG_PREFIX(BackgroundProcess::reserve_projected_usage);
+    DEBUG("blocked: inline={}, main={}, cold={}, usage={}",
+          res.reserve_inline_success,
+          res.cleaner_result.reserve_main_success,
+          res.cleaner_result.reserve_cold_success,
+          usage);
     abort_io_usage(usage, res);
     if (!res.reserve_inline_success) {
       ++stats.io_blocked_count_trim;
@@ -509,24 +524,45 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     ++stats.io_blocked_count;
     stats.io_blocked_sum += stats.io_blocking_num;
 
-    return seastar::repeat([this, usage] {
+    return seastar::repeat([this, usage, FNAME] {
+      DEBUG("setup and wait blocking_io...");
       blocking_io = seastar::promise<>();
       return blocking_io->get_future(
-      ).then([this, usage] {
+      ).then([this, usage, FNAME] {
         ceph_assert(!blocking_io);
         auto res = try_reserve_io(usage);
         if (res.is_successful()) {
+          DEBUG("unblocked");
           assert(stats.io_blocking_num == 1);
           --stats.io_blocking_num;
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         } else {
+          DEBUG("blocked again: inline={}, main={}, cold={}, usage={}",
+                res.reserve_inline_success,
+                res.cleaner_result.reserve_main_success,
+                res.cleaner_result.reserve_cold_success,
+                usage);
           abort_io_usage(usage, res);
           return seastar::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::no);
         }
       });
     });
+  }
+}
+
+void
+ExtentPlacementManager::BackgroundProcess::maybe_wake_blocked_io()
+{
+  if (!is_ready()) {
+    return;
+  }
+  LOG_PREFIX(ExtentPlacementManager::maybe_wake_blocked_io);
+  if (!should_block_io() && blocking_io) {
+    DEBUG("");
+    blocking_io->set_value();
+    blocking_io = std::nullopt;
   }
 }
 
@@ -657,6 +693,7 @@ void ExtentPlacementManager::BackgroundProcess::abort_io_usage(
 seastar::future<>
 ExtentPlacementManager::BackgroundProcess::do_background_cycle()
 {
+  LOG_PREFIX(BackgroundProcess::do_background_cycle);
   assert(is_ready());
   bool should_trim = trimmer->should_trim();
   bool proceed_trim = false;
@@ -684,20 +721,19 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
   }
 
   if (proceed_trim) {
+    DEBUG("started trimming...");
     return trimmer->trim(
-    ).finally([this, trim_usage] {
+    ).finally([this, trim_usage, FNAME] {
+      DEBUG("finished trimming");
       abort_cleaner_usage(trim_usage, {true, true});
     });
   } else {
+    assert(!proceed_trim);
+    bool should_clean_main_for_trim =
+      should_trim && !trim_reserve_res.reserve_main_success;
     bool should_clean_main =
-      main_cleaner_should_run() ||
-      // make sure cleaner will start
-      // when the trimmer should run but
-      // failed to reserve space.
-      (should_trim && !proceed_trim &&
-       !trim_reserve_res.reserve_main_success);
+      main_cleaner_should_run() || should_clean_main_for_trim;
     bool proceed_clean_main = false;
-
     auto main_cold_usage = main_cleaner->get_reclaim_size_per_cycle();
     if (should_clean_main) {
       if (has_cold_tier()) {
@@ -707,12 +743,15 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
       }
     }
 
+    bool should_clean_cold_for_trim =
+      should_trim && !trim_reserve_res.reserve_cold_success;
+    bool should_clean_cold_for_main =
+      should_clean_main && !proceed_clean_main;
     bool proceed_clean_cold = false;
     if (has_cold_tier() &&
         (cold_cleaner->should_clean_space() ||
-         (should_trim && !proceed_trim &&
-          !trim_reserve_res.reserve_cold_success) ||
-         (should_clean_main && !proceed_clean_main))) {
+         should_clean_cold_for_trim ||
+         should_clean_cold_for_main)) {
       proceed_clean_cold = true;
     }
 
@@ -720,29 +759,44 @@ ExtentPlacementManager::BackgroundProcess::do_background_cycle()
       ceph_abort("no background process will start");
     }
     return seastar::when_all(
-      [this, proceed_clean_main, main_cold_usage] {
+      [this, FNAME, proceed_clean_main,
+       should_clean_main_for_trim, main_cold_usage] {
         if (!proceed_clean_main) {
           return seastar::now();
         }
+        DEBUG("started clean main... "
+              "should_clean={}, for_trim={}, for_fast_evict={}",
+              main_cleaner->should_clean_space(),
+              should_clean_main_for_trim,
+              main_cleaner_should_fast_evict());
         return main_cleaner->clean_space(
         ).handle_error(
           crimson::ct_error::assert_all{
             "do_background_cycle encountered invalid error in main clean_space"
           }
-        ).finally([this, main_cold_usage] {
+        ).finally([this, main_cold_usage, FNAME] {
+          DEBUG("finished clean main");
           abort_cold_usage(main_cold_usage, true);
         });
       },
-      [this, proceed_clean_cold] {
+      [this, FNAME, proceed_clean_cold,
+       should_clean_cold_for_trim, should_clean_cold_for_main] {
         if (!proceed_clean_cold) {
           return seastar::now();
         }
+        DEBUG("started clean cold... "
+              "should_clean={}, for_trim={}, for_main={}",
+              cold_cleaner->should_clean_space(),
+              should_clean_cold_for_trim,
+              should_clean_cold_for_main);
         return cold_cleaner->clean_space(
         ).handle_error(
           crimson::ct_error::assert_all{
             "do_background_cycle encountered invalid error in cold clean_space"
           }
-        );
+        ).finally([FNAME] {
+          DEBUG("finished clean cold");
+        });
       }
     ).discard_result();
   }

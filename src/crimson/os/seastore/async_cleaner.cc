@@ -1162,7 +1162,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
     auto &segment_info = segments[seg_id];
-    INFO("reclaim {} {} start, usage={}, time_bound={}",
+    INFO("reclaim start... {} {}, usage={}, time_bound={}",
          seg_id, segment_info,
          space_tracker->calc_utilization(seg_id),
          sea_time_point_printer_t{segments.get_time_bound()});
@@ -1239,7 +1239,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
               d, pavail_ratio, runs);
         if (reclaim_state->is_complete()) {
           auto segment_to_release = reclaim_state->get_segment_id();
-          INFO("reclaim {} finish, reclaimed alive/total={}",
+          INFO("reclaim finish {}, reclaimed alive/total={}",
                segment_to_release,
                stats.reclaiming_bytes/(double)segments.get_segment_size());
           stats.reclaimed_bytes += stats.reclaiming_bytes;
@@ -1263,7 +1263,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
             segments.mark_empty(segment_to_release);
             auto new_usage = calc_utilization(segment_to_release);
             adjust_segment_util(old_usage, new_usage);
-            INFO("released {}, {}",
+            INFO("reclaim released {}, {}",
                  segment_to_release, stat_printer_t{*this, false});
             background_callback->maybe_wake_blocked_io();
           });
