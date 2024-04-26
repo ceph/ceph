@@ -13,12 +13,12 @@ struct seastar_test_suite_t : public ::testing::Test {
 
   template <typename Func>
   void run(Func &&func) {
-    return seastar_env.run(std::forward<Func>(func));
+    seastar_env.run(std::forward<Func>(func));
   }
 
   template <typename Func>
   void run_ertr(Func &&func) {
-    return run(
+    run(
       [func=std::forward<Func>(func)]() mutable {
 	return std::invoke(std::move(func)).handle_error(
 	  crimson::ct_error::assert_all("error"));
@@ -40,23 +40,23 @@ struct seastar_test_suite_t : public ::testing::Test {
     };
   }
 
-  auto run_scl(auto &&f) {
-    return run([this, f=std::forward<decltype(f)>(f)]() mutable {
+  void run_scl(auto &&f) {
+    run([this, f=std::forward<decltype(f)>(f)]() mutable {
       return std::invoke(scl(std::move(f)));
     });
   }
 
-  auto run_ertr_scl(auto &&f) {
-    return run_ertr(scl(std::forward<decltype(f)>(f)));
+  void run_ertr_scl(auto &&f) {
+    run_ertr(scl(std::forward<decltype(f)>(f)));
   }
 
   virtual seastar::future<> set_up_fut() { return seastar::now(); }
   void SetUp() final {
-    return run([this] { return set_up_fut(); });
+    run([this] { return set_up_fut(); });
   }
 
   virtual seastar::future<> tear_down_fut() { return seastar::now(); }
   void TearDown() final {
-    return run([this] { return tear_down_fut(); });
+    run([this] { return tear_down_fut(); });
   }
 };
