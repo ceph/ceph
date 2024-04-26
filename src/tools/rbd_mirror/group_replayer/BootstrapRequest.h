@@ -45,6 +45,7 @@ public:
       MirrorStatusUpdater<ImageCtxT> *remote_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache *pool_meta_cache,
+      std::string *local_group_id,
       std::string *remote_group_id,
       GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers,
@@ -53,8 +54,8 @@ public:
     return new BootstrapRequest(
       threads, local_io_ctx, remote_io_ctx, global_group_id, local_mirror_uuid,
       instance_watcher, local_status_updater, remote_status_updater,
-      cache_manager_handler, pool_meta_cache, remote_group_id, local_group_ctx,
-      image_replayers, image_replayer_index, on_finish);
+      cache_manager_handler, pool_meta_cache, local_group_id, remote_group_id,
+      local_group_ctx, image_replayers, image_replayer_index, on_finish);
   }
 
   BootstrapRequest(
@@ -68,6 +69,7 @@ public:
       MirrorStatusUpdater<ImageCtxT> *remote_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache *pool_meta_cache,
+      std::string *local_group_id,
       std::string *remote_group_id,
       GroupCtx *local_group_ctx,
       std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *image_replayers,
@@ -162,6 +164,7 @@ private:
   MirrorStatusUpdater<ImageCtxT> *m_remote_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
   PoolMetaCache *m_pool_meta_cache;
+  std::string *m_local_group_id;
   std::string *m_remote_group_id;
   GroupCtx *m_local_group_ctx;
   std::list<std::pair<librados::IoCtx, ImageReplayer<ImageCtxT> *>> *m_image_replayers;
@@ -171,7 +174,6 @@ private:
   std::atomic<bool> m_canceled = false;
 
   std::string m_group_name;
-  std::string m_local_group_id;
   bool m_local_group_id_by_name = false;
   cls::rbd::MirrorGroup m_remote_mirror_group;
   cls::rbd::MirrorGroup m_local_mirror_group;
