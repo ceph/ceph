@@ -238,6 +238,52 @@ bool GroupReplayer<I>::needs_restart() const {
 }
 
 template <typename I>
+void GroupReplayer<I>::sync_group_names() {
+  dout(10) << dendl;
+
+  std::string local_group_name;
+  std::string remote_group_name;
+  int r = librbd::cls_client::dir_get_name(&m_local_io_ctx,
+                                           RBD_GROUP_DIRECTORY,
+                                           m_local_group_id,
+                                           &local_group_name);
+  if (r < 0) {
+    derr << "failed to retrieve local group name: "
+         << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  r = librbd::cls_client::dir_get_name(&m_remote_group_peer.io_ctx,
+                                       RBD_GROUP_DIRECTORY,
+                                       m_remote_group_id,
+                                       &remote_group_name);
+  if (r < 0) {
+    derr << "failed to retrieve remote group name: "
+         << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  if (local_group_name != remote_group_name) {
+    dout(5) << "group renamed. local group name: " << local_group_name
+            << ", remote group name: " << remote_group_name << dendl;
+
+    r = librbd::cls_client::group_dir_rename(&m_local_io_ctx,
+                                             RBD_GROUP_DIRECTORY,
+                                             local_group_name,
+                                             remote_group_name,
+                                             m_local_group_id);
+    if (r < 0) {
+      derr << "error renaming group from directory"
+           << cpp_strerror(r) << dendl;
+      return;
+    }
+
+    m_local_group_name = remote_group_name;
+    reregister_admin_socket_hook();
+  }
+}
+
+template <typename I>
 image_replayer::HealthState GroupReplayer<I>::get_health_state() const {
   // TODO: Implement something like m_mirror_image_status_state for group
   return image_replayer::HEALTH_STATE_OK;
@@ -489,8 +535,8 @@ void GroupReplayer<I>::bootstrap_group() {
     m_threads, m_local_io_ctx, m_remote_group_peer.io_ctx, m_global_group_id,
     m_local_mirror_uuid, m_instance_watcher, m_local_status_updater,
     m_remote_group_peer.mirror_status_updater, m_cache_manager_handler,
-    m_pool_meta_cache, &m_remote_group_id, &m_local_group_ctx,
-    &m_image_replayers, &m_image_replayer_index, ctx);
+    m_pool_meta_cache, &m_local_group_id, &m_remote_group_id,
+    &m_local_group_ctx, &m_image_replayers, &m_image_replayer_index, ctx);
 
   request->get();
   m_bootstrap_request = request;
