@@ -1988,6 +1988,7 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 
 void RocksDBStore::compact()
 {
+  dout(2) << __func__ << " starting" << dendl;
   logger->inc(l_rocksdb_compact);
   rocksdb::CompactRangeOptions options;
   db->CompactRange(options, default_cf, nullptr, nullptr);
@@ -1999,6 +2000,7 @@ void RocksDBStore::compact()
 	nullptr, nullptr);
     }
   }
+  dout(2) << __func__ << " completed" << dendl;
 }
 
 void RocksDBStore::compact_thread_entry()
