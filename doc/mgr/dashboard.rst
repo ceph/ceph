@@ -1257,6 +1257,14 @@ You can disable it again by::
 
   $ ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr False
 
+.. warning::
+
+   If you attempt to activate redirection by using the command above and you
+   get the error message ``EINVAL: unrecognized config option
+   'mgr/dashboard/redirect_resolve_ip_addr'``, then you might be running a
+   release of Ceph prior to version 17.2.6. This feature was introduced in
+   17.2.6, in this commit: https://github.com/ceph/ceph/pull/48219.
+
 HAProxy example configuration
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
