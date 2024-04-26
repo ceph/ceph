@@ -623,12 +623,13 @@ int QuiesceDbManager::leader_process_request(RequestContext* req_ctx)
     }
 
     if (request.await) {
+      // quiesce-await is only allowed for sets that are quiescing or quiesced.
       // this check may have a false negative for a quiesced set
       // that will be released in another request in the same batch
       // in that case, this await will be enqueued but then found and completed
       // with the same error in `leader_upkeep_awaits`
-      if ((set.is_releasing() || set.is_released()) && !request.is_release()) {
-        dout(2) << dset("can't quiesce-await a set that was released (") << set.rstate.state << ")" << dendl;
+      if (set.rstate.state > QS_QUIESCED && !request.is_release()) {
+        dout(2) << dset("can't quiesce-await a set in the state: ") << set.rstate.state << dendl;
         return EPERM;
       }
 
@@ -1055,7 +1056,7 @@ QuiesceTimeInterval QuiesceDbManager::leader_upkeep_awaits()
           break;
         case QS_EXPIRED:
         case QS_TIMEDOUT:
-          rc = ETIMEDOUT; 
+          rc = ETIMEDOUT;
           break;
         case QS_QUIESCED:
           rc = 0; // fallthrough
