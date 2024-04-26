@@ -532,13 +532,6 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   return 0;
 }
 
-bool BlueFS::bdev_support_label(unsigned id)
-{
-  ceph_assert(id < bdev.size());
-  ceph_assert(bdev[id]);
-  return bdev[id]->supported_bdev_label();
-}
-
 uint64_t BlueFS::get_block_device_size(unsigned id) const
 {
   if (id < bdev.size() && bdev[id])

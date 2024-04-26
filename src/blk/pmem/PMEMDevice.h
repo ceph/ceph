@@ -41,7 +41,6 @@ class PMEMDevice : public BlockDevice {
 public:
   PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv);
 
-  bool supported_bdev_label() override { return !devdax_device; }
   void aio_submit(IOContext *ioc) override;
 
   int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const override;

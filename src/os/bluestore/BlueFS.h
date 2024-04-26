@@ -741,7 +741,6 @@ public:
 
   int add_block_device(unsigned bdev, const std::string& path, bool trim,
 		       bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
-  bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev) const;
 
   // handler for discard event
