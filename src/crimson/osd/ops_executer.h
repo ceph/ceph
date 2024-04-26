@@ -187,7 +187,6 @@ private:
   abstracted_msg_t msg;
   crimson::net::ConnectionXcoreRef conn;
   std::optional<osd_op_params_t> osd_op_params;
-  bool user_modify = false;
   ceph::os::Transaction txn;
 
   size_t num_read = 0;    ///< count read ops
@@ -424,7 +423,7 @@ public:
     MutFunc&& mut_func) &&;
   std::vector<pg_log_entry_t> prepare_transaction(
     const std::vector<OSDOp>& ops);
-  void fill_op_params_bump_pg_version();
+  void fill_op_params_bump_pg_version(modified_by m);
 
   ObjectContextRef get_obc() const {
     return obc;
@@ -520,7 +519,7 @@ OpsExecuter::flush_changes_n_do_ops_effects(
     ceph_assert(want_mutate);
   }
   if (want_mutate) {
-    if (user_modify) {
+    if (osd_op_params->user_modify) {
       osd_op_params->user_at_version = osd_op_params->at_version.version;
     }
     maybe_mutated = flush_clone_metadata(
