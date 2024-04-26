@@ -78,6 +78,7 @@ BootstrapRequest<I>::BootstrapRequest(
     MirrorStatusUpdater<I> *remote_status_updater,
     journal::CacheManagerHandler *cache_manager_handler,
     PoolMetaCache *pool_meta_cache,
+    std::string *local_group_id,
     std::string *remote_group_id,
     GroupCtx *local_group_ctx,
     std::list<std::pair<librados::IoCtx, ImageReplayer<I> *>> *image_replayers,
@@ -96,6 +97,7 @@ BootstrapRequest<I>::BootstrapRequest(
     m_remote_status_updater(remote_status_updater),
     m_cache_manager_handler(cache_manager_handler),
     m_pool_meta_cache(pool_meta_cache),
+    m_local_group_id(local_group_id),
     m_remote_group_id(remote_group_id),
     m_local_group_ctx(local_group_ctx),
     m_image_replayers(image_replayers),
@@ -503,7 +505,7 @@ void BootstrapRequest<I>::handle_get_local_group_id(int r) {
   if (r == 0) {
     auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_group_get_group_id_finish(
-        &iter, &m_local_group_id);
+        &iter, m_local_group_id);
   }
 
   if (r < 0) {
@@ -525,7 +527,7 @@ void BootstrapRequest<I>::get_local_group_name() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::dir_get_name_start(&op, m_local_group_id);
+  librbd::cls_client::dir_get_name_start(&op, *m_local_group_id);
   m_out_bl.clear();
   auto comp = create_rados_callback<
       BootstrapRequest<I>,
@@ -607,7 +609,7 @@ void BootstrapRequest<I>::handle_get_local_group_id_by_name(int r) {
 
   if (r == 0) {
     auto iter = m_out_bl.cbegin();
-    r = librbd::cls_client::dir_get_id_finish(&iter, &m_local_group_id);
+    r = librbd::cls_client::dir_get_id_finish(&iter, m_local_group_id);
   }
 
   if (r < 0) {
@@ -625,7 +627,7 @@ void BootstrapRequest<I>::get_local_mirror_group() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_group_get_start(&op, m_local_group_id);
+  librbd::cls_client::mirror_group_get_start(&op, *m_local_group_id);
   m_out_bl.clear();
   auto comp = create_rados_callback<
       BootstrapRequest<I>,
@@ -686,7 +688,7 @@ void BootstrapRequest<I>::list_local_group_snapshots() {
       &BootstrapRequest<I>::handle_list_local_group_snapshots>(this);
 
   auto req = librbd::group::ListSnapshotsRequest<I>::create(m_local_io_ctx,
-      m_local_group_id, true, true, &m_local_group_snaps, ctx);
+      *m_local_group_id, true, true, &m_local_group_snaps, ctx);
   req->send();
 }
 
@@ -760,7 +762,7 @@ void BootstrapRequest<I>::list_local_group() {
       &BootstrapRequest<I>::handle_list_local_group>(this);
   m_out_bl.clear();
   int r = m_local_io_ctx.aio_operate(
-      librbd::util::group_header_name(m_local_group_id), comp, &op, &m_out_bl);
+      librbd::util::group_header_name(*m_local_group_id), comp, &op, &m_out_bl);
   ceph_assert(r == 0);
   comp->release();
 }
@@ -907,7 +909,7 @@ void BootstrapRequest<I>::remove_local_image_from_group() {
       &BootstrapRequest<I>::handle_remove_local_image_from_group>(this);
 
   auto req = librbd::group::RemoveImageRequest<I>::create(
-      m_local_io_ctx, m_local_group_id, m_image_io_ctx, image_id, ctx);
+      m_local_io_ctx, *m_local_group_id, m_image_io_ctx, image_id, ctx);
   req->send();
 }
 
@@ -982,7 +984,7 @@ void BootstrapRequest<I>::disable_local_mirror_group() {
 
   librados::ObjectWriteOperation op;
   m_local_mirror_group.state = cls::rbd::MIRROR_GROUP_STATE_DISABLING;
-  librbd::cls_client::mirror_group_set(&op, m_local_group_id,
+  librbd::cls_client::mirror_group_set(&op, *m_local_group_id,
                                        m_local_mirror_group);
 
   auto comp = create_rados_callback<
@@ -1018,7 +1020,7 @@ void BootstrapRequest<I>::remove_local_mirror_group() {
   dout(10) << dendl;
 
   librados::ObjectWriteOperation op;
-  librbd::cls_client::mirror_group_remove(&op, m_local_group_id);
+  librbd::cls_client::mirror_group_remove(&op, *m_local_group_id);
 
   auto comp = create_rados_callback<
       BootstrapRequest<I>,
@@ -1050,9 +1052,9 @@ void BootstrapRequest<I>::handle_remove_local_mirror_group(int r) {
 
 template <typename I>
 void BootstrapRequest<I>::remove_local_group() {
-  dout(10) << m_group_name << " " << m_local_group_id << dendl;
+  dout(10) << m_group_name << " " << *m_local_group_id << dendl;
 
-  ceph_assert(!m_local_group_id.empty());
+  ceph_assert(!m_local_group_id->empty());
   ceph_assert(!m_group_name.empty());
 
   librados::ObjectWriteOperation op;
@@ -1062,7 +1064,7 @@ void BootstrapRequest<I>::remove_local_group() {
       &BootstrapRequest<I>::handle_remove_local_group>(this);
 
   int r = m_local_io_ctx.aio_operate(
-      librbd::util::group_header_name(m_local_group_id), comp, &op);
+      librbd::util::group_header_name(*m_local_group_id), comp, &op);
   ceph_assert(r == 0);
   comp->release();
 }
@@ -1085,7 +1087,7 @@ void BootstrapRequest<I>::remove_local_group_id() {
   dout(10) << dendl;
 
   librados::ObjectWriteOperation op;
-  librbd::cls_client::group_dir_remove(&op, m_group_name, m_local_group_id);
+  librbd::cls_client::group_dir_remove(&op, m_group_name, *m_local_group_id);
 
   auto comp = create_rados_callback<
       BootstrapRequest<I>,
@@ -1109,15 +1111,14 @@ void BootstrapRequest<I>::handle_remove_local_group_id(int r) {
   finish(0);
 }
 
-
 template <typename I>
 void BootstrapRequest<I>::create_local_group_id() {
   dout(10) << dendl;
 
-  m_local_group_id = librbd::util::generate_uuid(m_local_io_ctx);
+  *m_local_group_id = librbd::util::generate_image_id(m_local_io_ctx);
 
   librados::ObjectWriteOperation op;
-  librbd::cls_client::group_dir_add(&op, m_group_name, m_local_group_id);
+  librbd::cls_client::group_dir_add(&op, m_group_name, *m_local_group_id);
 
   auto comp = create_rados_callback<
       BootstrapRequest<I>,
@@ -1152,7 +1153,7 @@ void BootstrapRequest<I>::create_local_group() {
       &BootstrapRequest<I>::handle_create_local_group>(this);
 
   int r = m_local_io_ctx.aio_operate(
-      librbd::util::group_header_name(m_local_group_id), comp, &op);
+      librbd::util::group_header_name(*m_local_group_id), comp, &op);
   ceph_assert(r == 0);
   comp->release();
 }
@@ -1182,7 +1183,7 @@ void BootstrapRequest<I>::create_local_mirror_group() {
   m_local_mirror_group = {m_global_group_id,
                           m_remote_mirror_group.mirror_image_mode,
                           cls::rbd::MIRROR_GROUP_STATE_ENABLED};
-  librbd::cls_client::mirror_group_set(&op, m_local_group_id,
+  librbd::cls_client::mirror_group_set(&op, *m_local_group_id,
                                        m_local_mirror_group);
   auto comp = create_rados_callback<
       BootstrapRequest<I>,
@@ -1266,7 +1267,7 @@ void BootstrapRequest<I>::finish(int r) {
     if (m_local_mirror_group.state == cls::rbd::MIRROR_GROUP_STATE_DISABLED) {
       r = -ENOENT;
     } else {
-      *m_local_group_ctx = {m_group_name, m_local_group_id, m_global_group_id,
+      *m_local_group_ctx = {m_group_name, *m_local_group_id, m_global_group_id,
                             m_local_mirror_group_primary, m_local_io_ctx};
       r = create_replayers();
     }
