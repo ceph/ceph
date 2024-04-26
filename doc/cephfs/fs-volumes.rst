@@ -1010,15 +1010,41 @@ Note that the commands above are all non-blocking. If we want to wait for the qu
 to reach the `QUIESCED` state, we should await it at some point. ``--await`` can be given
 along with other arguments to let the system know our intention.
 
-Technically, there are two types of await: `quiesce await` and `release await`. The former
-is the default, and the latter can only be achieved with ``--release`` present in the argument list.
-To avoid confision, it is not permitted to issue a `quiesce await` when the set is already `RELEASING`
-or `RELEASED`. Trying to ``--release`` a set that is not `QUIESCED` is an ``EPERM`` error as well, regardless
-of whether await is requested alongside. However, it's not an error to `release await` 
-an already released set, or to `quiesce await` a `QUIESCED` one.
+There are two types of await: `quiesce await` and `release await`. The former is the default,
+and the latter can only be achieved with ``--release`` present in the argument list.
+To avoid confision, it is not permitted to issue a `quiesce await` when the set is not `QUIESCING`.
+Trying to ``--release`` a set that is not `QUIESCED` is an ``EPERM`` error as well, regardless
+of whether await is requested alongside. However, it's not an error to `release await`
+an already released set, or to `quiesce await` a `QUIESCED` one - those are successful no-ops.
 
-When awaiting, one may also specify a maximum duration that they would like this await request to block for,
-not affecting the two intrinsic timeouts discussed above. If the target awaited state isn't reached
+Since a set is awaited after the application of the ``--await``-augmented command, the await operation
+may mask a successful result with its own error. A good example is trying to cancel-await a set:
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce fs1 --set-id set1 --cancel --await
+  {
+      // ...
+      "sets": {
+          "set1": {
+              // ...
+              "state": {
+                  "name": "CANCELED",
+                  "age": 0
+              },
+              // ...
+          }
+      }
+  }
+  Error EPERM: 
+
+Although ``--cancel`` will succeed syncrhonously for a set in an active state, awaiting a canceled
+set is not permitted, hence this call will result in an ``EPERM``. This is deliberately different from 
+returning a ``EINVAL`` error, denoting an error on the user's side, to simplify the system's behavior
+when ``--await`` is requested. As a result, it's also a simpler model for the user to work with.
+
+When awaiting, one may specify a maximum duration that they would like this await request to block for,
+orthogonally to the two intrinsic set timeouts discussed above. If the target awaited state isn't reached
 within the specified duration, then ``EINPROGRESS`` is returned. For that, one should use the argument
 ``--await-for=<seconds>``. One could think of ``--await`` as equivalent to ``--await-for=Infinity``.
 While it doesn't make sense to specify both arguments, it is not considered an error. If
