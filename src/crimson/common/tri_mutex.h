@@ -27,43 +27,38 @@ public:
 // promote from read to excl
 class excl_lock_from_read {
 public:
-  seastar::future<> lock();
+  void lock();
   void unlock();
 };
 
 // promote from write to excl
 class excl_lock_from_write {
 public:
-  seastar::future<> lock();
-  void unlock();
-};
-
-// promote from excl to excl
-class excl_lock_from_excl {
-public:
-  seastar::future<> lock();
+  void lock();
   void unlock();
 };
 
 /// shared/exclusive mutual exclusion
 ///
-/// this lock design uses reader and writer is entirely and completely
-/// independent of the conventional reader/writer lock usage. Here, what we
-/// mean is that we can pipeline reads, and we can pipeline writes, but we
-/// cannot allow a read while writes are in progress or a write while reads are
-/// in progress. Any rmw operation is therefore exclusive.
+/// Unlike reader/write lock, tri_mutex does not enforce the exclusive access
+/// of write operations, on the contrary, multiple write operations are allowed
+/// to hold the same tri_mutex at the same time. Here, what we mean is that we
+/// can pipeline reads, and we can pipeline writes, but we cannot allow a read
+/// while writes are in progress or a write while reads are in progress.
 ///
 /// tri_mutex is based on seastar::shared_mutex, but instead of two kinds of
 /// waiters, tri_mutex keeps track of three kinds of lock users:
 /// - readers
 /// - writers
 /// - exclusive users
+///
+/// For lock promotion, a read or a write lock is only allowed to be promoted
+/// atomically upon the first locking.
 class tri_mutex : private read_lock,
                           write_lock,
                           excl_lock,
                           excl_lock_from_read,
-                          excl_lock_from_write,
-                          excl_lock_from_excl
+                          excl_lock_from_write
 {
 public:
   tri_mutex() = default;
@@ -84,9 +79,6 @@ public:
   excl_lock_from_write& excl_from_write() {
     return *this;
   }
-  excl_lock_from_excl& excl_from_excl() {
-    return *this;
-  }
 
   // for shared readers
   seastar::future<> lock_for_read();
@@ -99,8 +91,8 @@ public:
   }
 
   // for shared writers
-  seastar::future<> lock_for_write(bool greedy);
-  bool try_lock_for_write(bool greedy) noexcept;
+  seastar::future<> lock_for_write();
+  bool try_lock_for_write() noexcept;
   void unlock_for_write();
   void promote_from_write();
   void demote_to_write();

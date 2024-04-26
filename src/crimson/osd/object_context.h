@@ -121,12 +121,21 @@ private:
   bool recovery_read_marker = false;
 
   template <typename Lock, typename Func>
-  auto _with_lock(Lock&& lock, Func&& func) {
+  auto _with_lock(Lock& lock, Func&& func) {
     Ref obc = this;
     return lock.lock().then([&lock, func = std::forward<Func>(func), obc]() mutable {
       return seastar::futurize_invoke(func).finally([&lock, obc] {
 	lock.unlock();
       });
+    });
+  }
+
+  template <typename Lock, typename Func>
+  auto _with_promoted_lock(Lock& lock, Func&& func) {
+    Ref obc = this;
+    lock.lock();
+    return seastar::futurize_invoke(func).finally([&lock, obc] {
+      lock.unlock();
     });
   }
 
@@ -196,11 +205,11 @@ public:
       auto wrapper = ::crimson::interruptible::interruptor<InterruptCond>::wrap_function(std::forward<Func>(func));
       switch (Type) {
       case RWState::RWWRITE:
-	return _with_lock(lock.excl_from_write(), std::move(wrapper));
+	return _with_promoted_lock(lock.excl_from_write(), std::move(wrapper));
       case RWState::RWREAD:
-	return _with_lock(lock.excl_from_read(), std::move(wrapper));
+	return _with_promoted_lock(lock.excl_from_read(), std::move(wrapper));
       case RWState::RWEXCL:
-	return _with_lock(lock.excl_from_excl(), std::move(wrapper));
+	return seastar::futurize_invoke(std::move(wrapper));
       case RWState::RWNONE:
 	return _with_lock(lock.for_excl(), std::move(wrapper));
        default:
@@ -209,11 +218,11 @@ public:
     } else {
       switch (Type) {
       case RWState::RWWRITE:
-	return _with_lock(lock.excl_from_write(), std::forward<Func>(func));
+	return _with_promoted_lock(lock.excl_from_write(), std::forward<Func>(func));
       case RWState::RWREAD:
-	return _with_lock(lock.excl_from_read(), std::forward<Func>(func));
+	return _with_promoted_lock(lock.excl_from_read(), std::forward<Func>(func));
       case RWState::RWEXCL:
-	return _with_lock(lock.excl_from_excl(), std::forward<Func>(func));
+	return seastar::futurize_invoke(std::forward<Func>(func));
       case RWState::RWNONE:
 	return _with_lock(lock.for_excl(), std::forward<Func>(func));
        default:
