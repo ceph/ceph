@@ -99,6 +99,7 @@ public:
   }
 
   bool needs_restart() const;
+  void sync_group_names();
 
   image_replayer::HealthState get_health_state() const;
 
@@ -217,6 +218,7 @@ private:
   GroupCtx m_local_group_ctx;
   Peers m_peers;
   Peer<ImageCtxT> m_remote_group_peer;
+  std::string m_local_group_id;
   std::string m_remote_group_id;
 
   mutable ceph::mutex m_lock;
