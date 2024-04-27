@@ -363,11 +363,16 @@ RGWDataChangesLog::RGWDataChangesLog(CephContext* cct)
     prefix(get_prefix()),
     changes(cct->_conf->rgw_data_log_changes_size) {}
 
-RGWDataChangesLog::RGWDataChangesLog(CephContext* cct, bool log_data,
-				     neorados::RADOS* rados)
-  : cct(cct), rados(rados), log_data(log_data),
-    num_shards(cct->_conf->rgw_data_log_num_shards),
-    prefix(get_prefix()), changes(cct->_conf->rgw_data_log_changes_size) {}
+RGWDataChangesLog::RGWDataChangesLog(CephContext *cct, bool log_data,
+                                     neorados::RADOS *rados,
+                                     std::optional<int> num_shards,
+                                     std::optional<uint64_t> sem_max_keys)
+    : cct(cct), rados(rados), log_data(log_data),
+      num_shards(num_shards ? *num_shards :
+		 cct->_conf->rgw_data_log_num_shards),
+      prefix(get_prefix()), changes(cct->_conf->rgw_data_log_changes_size),
+      sem_max_keys(sem_max_keys ? *sem_max_keys :
+		   neorados::cls::sem_set::max_keys) {}
 
 
 void DataLogBackends::handle_init(entries_t e) {
