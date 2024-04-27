@@ -336,6 +336,20 @@ inline bool operator <(const BucketGen& l, const BucketGen& r) {
   }
 }
 
+inline std::ostream& operator <<(std::ostream& m, const BucketGen& bg) {
+  return m << "{" << bg.shard << ", " << bg.gen << "}";
+}
+
+namespace std {
+template <>
+struct hash<BucketGen> {
+  std::size_t operator ()(const BucketGen& bg) const noexcept {
+    return (hash<decltype(bg.shard)>{}(bg.shard) << 1)
+          ^ hash<decltype(bg.gen)>{}(bg.gen);
+  }
+};
+}
+
 class RGWDataChangesLog {
   friend class DataLogTestBase;
   friend DataLogBackends;
@@ -412,7 +426,9 @@ public:
   RGWDataChangesLog(CephContext* cct);
   // For testing.
   RGWDataChangesLog(CephContext* cct, bool log_data,
-		    neorados::RADOS* rados);
+		    neorados::RADOS* rados,
+		    std::optional<int> num_shards = std::nullopt,
+		    std::optional<uint64_t> sem_max_keys = std::nullopt);
   ~RGWDataChangesLog();
 
   asio::awaitable<void> start(const DoutPrefixProvider* dpp,
