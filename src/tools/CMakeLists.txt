@@ -78,7 +78,9 @@ endif(WITH_LIBCEPHFS)
 add_executable(ceph-kvstore-tool
   kvstore_tool.cc
   ceph_kvstore_tool.cc)
-target_link_libraries(ceph-kvstore-tool os global)
+target_link_libraries(ceph-kvstore-tool
+  legacy-option-headers
+  os global)
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
 
 set(ceph_conf_srcs ceph_conf.cc)
@@ -88,7 +90,9 @@ install(TARGETS ceph-conf DESTINATION bin)
 
 set(crushtool_srcs crushtool.cc)
 add_executable(crushtool ${crushtool_srcs})
-target_link_libraries(crushtool global)
+target_link_libraries(crushtool
+  legacy-option-headers
+  global)
 install(TARGETS crushtool DESTINATION bin)
 
 set(monmaptool_srcs monmaptool.cc)
