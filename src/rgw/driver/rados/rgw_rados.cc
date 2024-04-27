@@ -6747,6 +6747,12 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
   if (r < 0)
     return r;
 
+  if (manifest /* params.parts_count */) {
+      RGWObjManifest::obj_iterator end = manifest->obj_end(dpp);
+      auto cur_part_id = end.get_cur_part_id();
+      params.parts_count = (cur_part_id == 1) ? 1 : cur_part_id - 1;;
+  }
+
   if (!astate->exists) {
     return -ENOENT;
   }
