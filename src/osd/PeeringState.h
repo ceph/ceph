@@ -1557,8 +1557,7 @@ public:
 
   void update_heartbeat_peers();
   void query_unfound(Formatter *f, std::string state);
-  bool proc_replica_info(
-    pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
+  bool proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify);
   void remove_down_peer_info(const OSDMapRef &osdmap);
   void check_recovery_sources(const OSDMapRef& map);
   void set_last_peering_reset();

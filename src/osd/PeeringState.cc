@@ -314,9 +314,11 @@ void PeeringState::query_unfound(Formatter *f, string state)
   return;
 }
 
-bool PeeringState::proc_replica_info(
-  pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch)
+bool PeeringState::proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify)
 {
+  const pg_info_t &oinfo = notify.info;
+  const epoch_t send_epoch = notify.epoch_sent;
+
   auto p = peer_info.find(from);
   if (p != peer_info.end() && p->second.last_update == oinfo.last_update) {
     psdout(10) << " got dup osd." << from << " info "
@@ -4651,8 +4653,7 @@ PeeringState::Initial::Initial(my_context ctx)
 boost::statechart::result PeeringState::Initial::react(const MNotifyRec& notify)
 {
   DECLARE_LOCALS;
-  ps->proc_replica_info(
-    notify.from, notify.notify.info, notify.notify.epoch_sent);
+  ps->proc_replica_notify(notify.from, notify.notify);
   ps->set_last_peering_reset();
   return transit< Primary >();
 }
@@ -4895,8 +4896,7 @@ boost::statechart::result PeeringState::Primary::react(const MNotifyRec& notevt)
 {
   DECLARE_LOCALS;
   psdout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
-  ps->proc_replica_info(
-    notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
+  ps->proc_replica_notify(notevt.from, notevt.notify);
   return discard_event();
 }
 
@@ -6111,10 +6111,9 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
 		       << dendl;
   } else {
     psdout(10) << "Active: got notify from " << notevt.from
-		       << ", calling proc_replica_info and discover_all_missing"
+		       << ", calling proc_replica_notify and discover_all_missing"
 		       << dendl;
-    ps->proc_replica_info(
-      notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
+    ps->proc_replica_notify(notevt.from, notevt.notify);
     if (ps->have_unfound() || (ps->is_degraded() && ps->might_have_unfound.count(notevt.from))) {
       ps->discover_all_missing(
 	context<PeeringMachine>().get_recovery_ctx().msgs);
@@ -6873,8 +6872,7 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
   }
 
   epoch_t old_start = ps->info.history.last_epoch_started;
-  if (ps->proc_replica_info(
-	infoevt.from, infoevt.notify.info, infoevt.notify.epoch_sent)) {
+  if (ps->proc_replica_notify(infoevt.from, infoevt.notify)) {
     // we got something new ...
     PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
     if (old_start < ps->info.history.last_epoch_started) {
@@ -7267,8 +7265,7 @@ boost::statechart::result PeeringState::Incomplete::react(const AdvMap &advmap) 
 boost::statechart::result PeeringState::Incomplete::react(const MNotifyRec& notevt) {
   DECLARE_LOCALS;
   psdout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
-  if (ps->proc_replica_info(
-    notevt.from, notevt.notify.info, notevt.notify.epoch_sent)) {
+  if (ps->proc_replica_notify(notevt.from, notevt.notify)) {
     // We got something new, try again!
     return transit< GetLog >();
   } else {
