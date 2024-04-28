@@ -269,6 +269,11 @@ void do_simple_crypto() {
 }
 
 #if GTEST_HAS_DEATH_TEST && !defined(_WIN32)
+
+#ifndef __has_feature
+#define __has_feature(x) 0
+#endif
+
 TEST_F(ForkDeathTest, MD5) {
 #if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
   // sanitizer warns like:
