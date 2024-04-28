@@ -16,6 +16,7 @@
  */
 
 #include <errno.h>
+#include <memory>
 #include <stdlib.h>
 
 #include "crush/CrushWrapper.h"
@@ -91,7 +92,7 @@ TEST(ErasureCodeLrc, parse_rule)
 
 TEST(ErasureCodeTest, create_rule)
 {
-  CrushWrapper *c = new CrushWrapper;
+  auto c = std::make_unique<CrushWrapper>();
   c->create();
   int root_type = 3;
   c->set_type_name(root_type, "root");
