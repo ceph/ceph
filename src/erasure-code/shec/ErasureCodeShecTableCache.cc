@@ -58,7 +58,7 @@ ErasureCodeShecTableCache::~ErasureCodeShecTableCache()
             for (table_it = tables_it__->second.begin(); table_it != tables_it__->second.end(); ++table_it) {
               if (table_it->second) {
                 if (*(table_it->second)) {
-                  delete *(table_it->second);
+                  free(*(table_it->second));
                 }
                 delete table_it->second;
               }
