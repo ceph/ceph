@@ -85,7 +85,7 @@ namespace rgw::putobj {
       _digest->Update(reinterpret_cast<const unsigned char*>(ptr.c_str()),
                       ptr.length());
     }
-    return 0;
+    return Pipe::process(std::move(data), logical_offset);
   }
 
 } // namespace rgw::putobj
