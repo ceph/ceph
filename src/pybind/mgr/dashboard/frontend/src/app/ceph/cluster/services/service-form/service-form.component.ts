@@ -1,6 +1,6 @@
 import { HttpParams } from '@angular/common/http';
 import { Component, Input, OnInit, ViewChild } from '@angular/core';
-import { AbstractControl, Validators } from '@angular/forms';
+import { AbstractControl, UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbActiveModal, NgbModalRef, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
@@ -47,6 +47,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   readonly SNMP_DESTINATION_PATTERN = /^[^\:]+:[0-9]/;
   readonly SNMP_ENGINE_ID_PATTERN = /^[0-9A-Fa-f]{10,64}/g;
   readonly INGRESS_SUPPORTED_SERVICE_TYPES = ['rgw', 'nfs'];
+  readonly SMB_CONFIG_URI_PATTERN = /^(http:|https:|rados:|rados:mon-config-key:)/;
   @ViewChild(NgbTypeahead, { static: false })
   typeahead: NgbTypeahead;
 
@@ -85,6 +86,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   realmNames: string[];
   zonegroupNames: string[];
   zoneNames: string[];
+  smbFeaturesList = ['domain'];
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -146,6 +148,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           CdValidators.requiredIf({
             service_type: 'ingress'
           }),
+          CdValidators.requiredIf({
+            service_type: 'smb'
+          }),
           CdValidators.composeIf(
             {
               service_type: 'rgw'
@@ -205,6 +210,44 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           })
         ]
       ],
+      // smb
+      cluster_id: [
+        null,
+        [
+          CdValidators.requiredIf({
+            service_type: 'smb'
+          })
+        ]
+      ],
+      features: new CdFormGroup(
+        this.smbFeaturesList.reduce((acc: object, e) => {
+          acc[e] = new UntypedFormControl(false);
+          return acc;
+        }, {})
+      ),
+      config_uri: [
+        null,
+        [
+          CdValidators.composeIf(
+            {
+              service_type: 'smb'
+            },
+            [
+              Validators.required,
+              CdValidators.custom('configUriPattern', (value: string) => {
+                if (_.isEmpty(value)) {
+                  return false;
+                }
+                return !this.SMB_CONFIG_URI_PATTERN.test(value);
+              })
+            ]
+          )
+        ]
+      ],
+      custom_dns: [null],
+      join_sources: [null],
+      user_sources: [null],
+      include_ceph_users: [null],
       // Ingress
       backend_service: [
         null,
@@ -486,6 +529,28 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 this.serviceForm.get('ssl_key').setValue(response[0].spec?.ssl_key);
               }
               break;
+            case 'smb':
+              const smbSpecKeys = [
+                'cluster_id',
+                'config_uri',
+                'features',
+                'join_sources',
+                'user_sources',
+                'custom_dns',
+                'include_ceph_users'
+              ];
+              smbSpecKeys.forEach((key) => {
+                if (key === 'features') {
+                  if (response[0].spec?.features) {
+                    response[0].spec.features.forEach((feature) => {
+                      this.serviceForm.get(`features.${feature}`).setValue(true);
+                    });
+                  }
+                } else {
+                  this.serviceForm.get(key).setValue(response[0].spec[key]);
+                }
+              });
+              break;
             case 'snmp-gateway':
               const snmpCommonSpecKeys = ['snmp_version', 'snmp_destination'];
               snmpCommonSpecKeys.forEach((key) => {
@@ -751,6 +816,20 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
       case 'iscsi':
         serviceSpec['pool'] = values['pool'];
+        break;
+
+      case 'smb':
+        serviceSpec['cluster_id'] = values['cluster_id']?.trim();
+        serviceSpec['config_uri'] = values['config_uri']?.trim();
+        for (const feature in values['features']) {
+          if (values['features'][feature]) {
+            (serviceSpec['features'] = serviceSpec['features'] || []).push(feature);
+          }
+        }
+        serviceSpec['custom_dns'] = values['custom_dns']?.trim();
+        serviceSpec['join_sources'] = values['join_sources']?.trim();
+        serviceSpec['user_sources'] = values['user_sources']?.trim();
+        serviceSpec['include_ceph_users'] = values['include_ceph_users']?.trim();
         break;
 
       case 'snmp-gateway':
