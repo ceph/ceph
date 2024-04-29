@@ -286,6 +286,17 @@ struct object_data_handler_test_t:
     crimson::common::local_conf().set_val("seastore_data_delta_based_overwrite", "0").get();
   }
 
+  void disable_max_extent_size() {
+    epm->set_max_extent_size(16777216);
+    crimson::common::local_conf().set_val(
+      "seastore_max_data_allocation_size", "16777216").get();
+  }
+  void enable_max_extent_size() {
+    epm->set_max_extent_size(8192);
+    crimson::common::local_conf().set_val(
+      "seastore_max_data_allocation_size", "8192").get();
+  }
+
   laddr_t get_random_laddr(size_t block_size, laddr_t limit) {
     return block_size *
       std::uniform_int_distribution<>(0, (limit / block_size) - 1)(gen);
@@ -611,6 +622,7 @@ TEST_P(object_data_handler_test_t, no_overwrite) {
 
 TEST_P(object_data_handler_test_t, remap_left) {
   run_async([this] {
+    disable_max_extent_size();
     write_right();
 
     auto pins = get_mappings(0, 128<<10);
@@ -624,11 +636,13 @@ TEST_P(object_data_handler_test_t, remap_left) {
       i++;
     }
     read(0, 128<<10);
+    enable_max_extent_size();
   });
 }
 
 TEST_P(object_data_handler_test_t, overwrite_right) {
   run_async([this] {
+    disable_max_extent_size();
     enable_delta_based_overwrite();
     write_right();
 
@@ -636,11 +650,13 @@ TEST_P(object_data_handler_test_t, overwrite_right) {
     EXPECT_EQ(pins.size(), 1);
     read(0, 128<<10);
     disable_delta_based_overwrite();
+    enable_max_extent_size();
   });
 }
 
 TEST_P(object_data_handler_test_t, remap_right) {
   run_async([this] {
+    disable_max_extent_size();
     write_left();
 
     auto pins = get_mappings(0, 128<<10);
@@ -654,22 +670,26 @@ TEST_P(object_data_handler_test_t, remap_right) {
       i++;
     }
     read(0, 128<<10);
+    enable_max_extent_size();
   });
 }
 
 TEST_P(object_data_handler_test_t, overwrite_left) {
   run_async([this] {
+    disable_max_extent_size();
     enable_delta_based_overwrite();
     write_left();
     auto pins = get_mappings(0, 128<<10);
     EXPECT_EQ(pins.size(), 1);
     read(0, 128<<10);
     disable_delta_based_overwrite();
+    enable_max_extent_size();
   });
 }
 
 TEST_P(object_data_handler_test_t, remap_right_left) {
   run_async([this] {
+    disable_max_extent_size();
     write_right_left();
 
     auto pins = get_mappings(0, 128<<10);
@@ -682,22 +702,26 @@ TEST_P(object_data_handler_test_t, remap_right_left) {
       EXPECT_EQ(pin->get_key() - base, res[i]);
       i++;
     }
+    enable_max_extent_size();
   });
 }
 
 TEST_P(object_data_handler_test_t, overwrite_right_left) {
   run_async([this] {
+    disable_max_extent_size();
     enable_delta_based_overwrite();
     write_right_left();
     auto pins = get_mappings(0, 128<<10);
     EXPECT_EQ(pins.size(), 1);
     read(0, 128<<10);
     disable_delta_based_overwrite();
+    enable_max_extent_size();
   });
 }
 
 TEST_P(object_data_handler_test_t, multiple_remap) {
   run_async([this] {
+    disable_max_extent_size();
     multiple_write();
     auto pins = get_mappings(0, 128<<10);
     EXPECT_EQ(pins.size(), 3);
@@ -710,17 +734,20 @@ TEST_P(object_data_handler_test_t, multiple_remap) {
       i++;
     }
     read(0, 128<<10);
+    enable_max_extent_size();
   });
 }
 
 TEST_P(object_data_handler_test_t, multiple_overwrite) {
   run_async([this] {
+    disable_max_extent_size();
     enable_delta_based_overwrite();
     multiple_write();
     auto pins = get_mappings(0, 128<<10);
     EXPECT_EQ(pins.size(), 1);
     read(0, 128<<10);
     disable_delta_based_overwrite();
+    enable_max_extent_size();
   });
 }
 
@@ -758,6 +785,7 @@ TEST_P(object_data_handler_test_t, random_overwrite) {
 
 TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
   run_async([this] {
+    disable_max_extent_size();
     enable_delta_based_overwrite();
     auto t = create_mutate_transaction();
     auto base = 4096 * 4;
@@ -839,14 +867,20 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
     EXPECT_EQ(committed.length(), pending.length());
     EXPECT_NE(committed, pending);
     disable_delta_based_overwrite();
+    enable_max_extent_size();
   });
 }
 
 INSTANTIATE_TEST_SUITE_P(
   object_data_handler_test,
   object_data_handler_test_t,
-  ::testing::Values (
-    "segmented",
-    "circularbounded"
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::FULL_CHECK,
+      integrity_check_t::NONFULL_CHECK)
   )
 );

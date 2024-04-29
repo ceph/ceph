@@ -41,7 +41,7 @@ public:
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
   virtual alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<LogicalCachedExtentRef> &extents) = 0;
+    std::list<CachedExtentRef> &extents) = 0;
 
   using close_ertr = base_ertr;
   virtual close_ertr::future<> close() = 0;
@@ -74,7 +74,7 @@ public:
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<LogicalCachedExtentRef> &extents) final;
+    std::list<CachedExtentRef> &extents) final;
 
   close_ertr::future<> close() final {
     return write_guard.close().then([this] {
@@ -100,7 +100,7 @@ public:
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
-    std::list<LogicalCachedExtentRef> &extent);
+    std::list<CachedExtentRef> &extent);
 
   alloc_write_ertr::future<> write_record(
     Transaction& t,
@@ -126,7 +126,7 @@ public:
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
     Transaction &t,
-    std::list<LogicalCachedExtentRef> &extents) final;
+    std::list<CachedExtentRef> &extents) final;
 
   close_ertr::future<> close() final {
     return write_guard.close().then([this] {
@@ -166,7 +166,7 @@ public:
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
-    std::list<LogicalCachedExtentRef> &extent);
+    std::list<CachedExtentRef> &extent);
 
   RBMCleaner* rb_cleaner;
   seastar::gate write_guard;
@@ -223,7 +223,9 @@ class ExtentPlacementManager {
 public:
   ExtentPlacementManager()
     : ool_segment_seq_allocator(
-          std::make_unique<SegmentSeqAllocator>(segment_type_t::OOL))
+          std::make_unique<SegmentSeqAllocator>(segment_type_t::OOL)),
+      max_data_allocation_size(crimson::common::get_conf<Option::size_t>(
+	  "seastore_max_data_allocation_size"))
   {
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
@@ -352,6 +354,7 @@ public:
     rewrite_gen_t gen
 #endif
   ) {
+    LOG_PREFIX(ExtentPlacementManager::alloc_new_data_extents);
     assert(hint < placement_hint_t::NUM_HINTS);
     assert(is_target_rewrite_generation(gen));
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
@@ -379,10 +382,20 @@ public:
       auto addrs = data_writers_by_gen[
           generation_to_writer(gen)]->alloc_paddrs(length);
       for (auto &ext : addrs) {
-        auto bp = ceph::bufferptr(
-          buffer::create_page_aligned(ext.len));
-        bp.zero();
-        allocs.emplace_back(alloc_result_t{ext.start, std::move(bp), gen});
+        auto left = ext.len;
+        while (left > 0) {
+          auto len = std::min(max_data_allocation_size, left);
+          auto bp = ceph::bufferptr(buffer::create_page_aligned(len));
+          bp.zero();
+          auto start = ext.start.is_delayed()
+                        ? ext.start
+                        : ext.start + (ext.len - left);
+          allocs.emplace_back(alloc_result_t{start, std::move(bp), gen});
+          SUBDEBUGT(seastore_epm,
+                    "allocated {} {}B extent at {}, hint={}, gen={}",
+                    t, type, len, start, hint, gen);
+          left -= len;
+        }
       }
     }
     return allocs;
@@ -396,6 +409,14 @@ public:
       writer->prefill_fragmented_devices();
     }
   }
+
+  void set_max_extent_size(extent_len_t len) {
+    max_data_allocation_size = len;
+  }
+
+  extent_len_t get_max_extent_size() const {
+    return max_data_allocation_size;
+  }
 #endif
 
   /**
@@ -407,10 +428,10 @@ public:
    * usage is used to reserve projected space
    */
   using extents_by_writer_t =
-    std::map<ExtentOolWriter*, std::list<LogicalCachedExtentRef>>;
+    std::map<ExtentOolWriter*, std::list<CachedExtentRef>>;
   struct dispatch_result_t {
     extents_by_writer_t alloc_map;
-    std::list<LogicalCachedExtentRef> delayed_extents;
+    std::list<CachedExtentRef> delayed_extents;
     io_usage_t usage;
   };
 
@@ -439,7 +460,7 @@ public:
    */
   alloc_paddr_iertr::future<> write_preallocated_ool_extents(
     Transaction &t,
-    std::list<LogicalCachedExtentRef> extents);
+    std::list<CachedExtentRef> extents);
 
   seastar::future<> stop_background() {
     return background_process.stop_background();
@@ -562,7 +583,7 @@ private:
    * Specify the extent inline or ool
    * return true indicates inline otherwise ool
    */
-  bool dispatch_delayed_extent(LogicalCachedExtentRef& extent) {
+  bool dispatch_delayed_extent(CachedExtentRef& extent) {
     // TODO: all delayed extents are ool currently
     boost::ignore_unused(extent);
     return false;
@@ -1012,6 +1033,7 @@ private:
   BackgroundProcess background_process;
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
+  extent_len_t max_data_allocation_size = 0;
 
   friend class ::transaction_manager_test_t;
 };
