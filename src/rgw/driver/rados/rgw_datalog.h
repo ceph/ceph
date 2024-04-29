@@ -502,6 +502,7 @@ public:
   asio::awaitable<void>
   decrement_sems(int index,
 		 bc::flat_map<std::string, uint64_t>&& semcount);
+  asio::awaitable<void> recover_shard(const DoutPrefixProvider* dpp, int index);
   asio::awaitable<void> recover(const DoutPrefixProvider* dpp,
 				decltype(recovery_signal));
 };
