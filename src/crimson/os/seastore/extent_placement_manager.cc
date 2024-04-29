@@ -524,11 +524,10 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     ++stats.io_blocked_count;
     stats.io_blocked_sum += stats.io_blocking_num;
 
-    return seastar::repeat([this, usage, FNAME] {
-      DEBUG("setup and wait blocking_io...");
-      blocking_io = seastar::promise<>();
-      return blocking_io->get_future(
-      ).then([this, usage, FNAME] {
+    blocking_io = seastar::promise<>();
+    return blocking_io->get_future(
+    ).then([this, usage, FNAME] {
+      return seastar::repeat([this, usage, FNAME] {
         ceph_assert(!blocking_io);
         auto res = try_reserve_io(usage);
         if (res.is_successful()) {
@@ -544,8 +543,12 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
                 res.cleaner_result.reserve_cold_success,
                 usage);
           abort_io_usage(usage, res);
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::no);
+          blocking_io = seastar::promise<>();
+          return blocking_io->get_future(
+          ).then([] {
+            return seastar::make_ready_future<seastar::stop_iteration>(
+              seastar::stop_iteration::no);
+          });
         }
       });
     });
