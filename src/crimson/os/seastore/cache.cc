@@ -1083,7 +1083,8 @@ record_t Cache::prepare_record(
   const journal_seq_t &journal_dirty_tail)
 {
   LOG_PREFIX(Cache::prepare_record);
-  SUBTRACET(seastore_t, "enter", t);
+  SUBTRACET(seastore_t, "enter, journal_head={}, dirty_tail={}",
+            t, journal_head, journal_dirty_tail);
 
   auto trans_src = t.get_src();
   assert(!t.is_weak());

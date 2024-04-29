@@ -283,7 +283,7 @@ TransactionManager::submit_transaction(
   Transaction &t)
 {
   LOG_PREFIX(TransactionManager::submit_transaction);
-  SUBTRACET(seastore_t, "start", t);
+  SUBDEBUGT(seastore_t, "start, entering reserve_projected_usage", t);
   return trans_intr::make_interruptible(
     t.get_handle().enter(write_pipeline.reserve_projected_usage)
   ).then_interruptible([this, FNAME, &t] {
@@ -380,13 +380,14 @@ TransactionManager::do_submit_transaction(
   std::optional<journal_seq_t> trim_alloc_to)
 {
   LOG_PREFIX(TransactionManager::do_submit_transaction);
-  SUBTRACET(seastore_t, "start", tref);
+  SUBDEBUGT(seastore_t, "start, entering ool_writes", tref);
   return trans_intr::make_interruptible(
     tref.get_handle().enter(write_pipeline.ool_writes_and_lba_updates)
-  ).then_interruptible([this, &tref,
+  ).then_interruptible([this, FNAME, &tref,
 			dispatch_result = std::move(dispatch_result)] {
     return seastar::do_with(std::move(dispatch_result),
-			    [this, &tref](auto &dispatch_result) {
+			    [this, FNAME, &tref](auto &dispatch_result) {
+      SUBTRACET(seastore_t, "write delayed ool extents", tref);
       return epm->write_delayed_ool_extents(tref, dispatch_result.alloc_map
       ).handle_error_interruptible(
         crimson::ct_error::input_output_error::pass_further(),
@@ -409,11 +410,12 @@ TransactionManager::do_submit_transaction(
       });
     });
   }).si_then([this, FNAME, &tref] {
-    SUBTRACET(seastore_t, "about to prepare", tref);
+    SUBTRACET(seastore_t, "entering prepare", tref);
     return tref.get_handle().enter(write_pipeline.prepare);
   }).si_then([this, FNAME, &tref, trim_alloc_to=std::move(trim_alloc_to)]() mutable
 	      -> submit_transaction_iertr::future<> {
     if (trim_alloc_to && *trim_alloc_to != JOURNAL_SEQ_NULL) {
+      SUBTRACET(seastore_t, "trim backref_bufs to {}", tref, *trim_alloc_to);
       cache->trim_backref_bufs(*trim_alloc_to);
     }
 
@@ -424,7 +426,7 @@ TransactionManager::do_submit_transaction(
 
     tref.get_handle().maybe_release_collection_lock();
 
-    SUBTRACET(seastore_t, "about to submit to journal", tref);
+    SUBTRACET(seastore_t, "submitting record", tref);
     return journal->submit_record(std::move(record), tref.get_handle()
     ).safe_then([this, FNAME, &tref](auto submit_result) mutable {
       SUBDEBUGT(seastore_t, "committed with {}", tref, submit_result);

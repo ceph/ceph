@@ -1251,8 +1251,10 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     op_type_t::TRANSACTION,
     [this](auto &ctx) {
       return with_trans_intr(*ctx.transaction, [&, this](auto &t) {
+        LOG_PREFIX(SeaStore::Shard::do_transaction_no_callbacks);
+        SUBDEBUGT(seastore_t, "start with {} objects",
+                  t, ctx.iter.objects.size());
 #ifndef NDEBUG
-	LOG_PREFIX(SeaStore::Shard::do_transaction_no_callbacks);
 	TRACET(" transaction dump:\n", t);
 	JSONFormatter f(true);
 	f.open_object_section("transaction");
@@ -1311,7 +1313,9 @@ SeaStore::Shard::_do_transaction_step(
   std::vector<OnodeRef> &d_onodes,
   ceph::os::Transaction::iterator &i)
 {
+  LOG_PREFIX(SeaStore::Shard::_do_transaction_step);
   auto op = i.decode_op();
+  SUBTRACET(seastore_t, "got op {}", *ctx.transaction, op->op);
 
   using ceph::os::Transaction;
   if (op->op == Transaction::OP_NOP)
