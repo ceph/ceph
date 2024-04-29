@@ -164,7 +164,6 @@ set(librgw_common_srcs
   driver/rados/buckets.cc
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
-  driver/rados/cls_fifo_legacy.cc
   driver/rados/group.cc
   driver/rados/groups.cc
   driver/rados/rgw_bucket.cc
