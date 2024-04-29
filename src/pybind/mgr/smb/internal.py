@@ -5,11 +5,52 @@ from typing import Collection, Tuple, Type, TypeVar
 
 from . import resources
 from .enums import AuthMode, ConfigNS, State
-from .proto import ConfigEntry, ConfigStore, Self, Simplifiable, one
+from .proto import (
+    ConfigEntry,
+    ConfigStore,
+    ConfigStoreListing,
+    EntryKey,
+    Self,
+    Simplifiable,
+    one,
+)
 from .resources import SMBResource
 from .results import ErrorResult
 
 T = TypeVar('T')
+
+
+def cluster_key(cluster_id: str) -> EntryKey:
+    """Return store entry key for a cluster entry."""
+    return str(ConfigNS.CLUSTERS), cluster_id
+
+
+def share_key(cluster_id: str, share_id: str) -> EntryKey:
+    """Return store entry key for a share entry."""
+    return str(ConfigNS.SHARES), f'{cluster_id}.{share_id}'
+
+
+def join_auth_key(auth_id: str) -> EntryKey:
+    """Return store entry key for a join auth entry."""
+    return str(ConfigNS.JOIN_AUTHS), auth_id
+
+
+def users_and_groups_key(users_groups_id: str) -> EntryKey:
+    """Return store entry key for a users-and-groups entry."""
+    return str(ConfigNS.USERS_AND_GROUPS), users_groups_id
+
+
+def resource_key(resource: SMBResource) -> EntryKey:
+    """Return a store entry key for an smb resource object."""
+    if isinstance(resource, (resources.Cluster, resources.RemovedCluster)):
+        return cluster_key(resource.cluster_id)
+    elif isinstance(resource, (resources.Share, resources.RemovedShare)):
+        return share_key(resource.cluster_id, resource.share_id)
+    elif isinstance(resource, resources.JoinAuth):
+        return join_auth_key(resource.auth_id)
+    elif isinstance(resource, resources.UsersAndGroups):
+        return users_and_groups_key(resource.users_groups_id)
+    raise TypeError('not a valid smb resource')
 
 
 class ResourceEntry:
@@ -61,7 +102,7 @@ class ClusterEntry(ResourceEntry):
         return cls(cluster_id, store[str(cls.namespace), cluster_id])
 
     @classmethod
-    def ids(cls, store: ConfigStore) -> Collection[str]:
+    def ids(cls, store: ConfigStoreListing) -> Collection[str]:
         return store.contents(str(cls.namespace))
 
     def get_cluster(self) -> resources.Cluster:
@@ -118,7 +159,7 @@ class ShareEntry(ResourceEntry):
         return cls(key, store[str(cls.namespace), key])
 
     @classmethod
-    def ids(cls, store: ConfigStore) -> Collection[Tuple[str, str]]:
+    def ids(cls, store: ConfigStoreListing) -> Collection[Tuple[str, str]]:
         return [_split(k) for k in store.contents(str(cls.namespace))]
 
     def get_share(self) -> resources.Share:
@@ -135,7 +176,7 @@ class JoinAuthEntry(ResourceEntry):
         return cls(auth_id, store[str(cls.namespace), auth_id])
 
     @classmethod
-    def ids(cls, store: ConfigStore) -> Collection[str]:
+    def ids(cls, store: ConfigStoreListing) -> Collection[str]:
         return store.contents(str(cls.namespace))
 
     def get_join_auth(self) -> resources.JoinAuth:
@@ -154,11 +195,28 @@ class UsersAndGroupsEntry(ResourceEntry):
         return cls(auth_id, store[str(cls.namespace), auth_id])
 
     @classmethod
-    def ids(cls, store: ConfigStore) -> Collection[str]:
+    def ids(cls, store: ConfigStoreListing) -> Collection[str]:
         return store.contents(str(cls.namespace))
 
     def get_users_and_groups(self) -> resources.UsersAndGroups:
         return self.get_resource_type(resources.UsersAndGroups)
+
+
+def resource_entry(
+    store: ConfigStore, resource: SMBResource
+) -> ResourceEntry:
+    """Return a bound store entry object given a resource object."""
+    if isinstance(resource, (resources.Cluster, resources.RemovedCluster)):
+        return ClusterEntry.from_store(store, resource.cluster_id)
+    elif isinstance(resource, (resources.Share, resources.RemovedShare)):
+        return ShareEntry.from_store(
+            store, resource.cluster_id, resource.share_id
+        )
+    elif isinstance(resource, resources.JoinAuth):
+        return JoinAuthEntry.from_store(store, resource.auth_id)
+    elif isinstance(resource, resources.UsersAndGroups):
+        return UsersAndGroupsEntry.from_store(store, resource.users_groups_id)
+    raise TypeError('not a valid smb resource')
 
 
 def _split(share_key: str) -> Tuple[str, str]:
