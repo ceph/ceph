@@ -12085,15 +12085,20 @@ void MDCache::dispatch_fragment_dir(const MDRequestRef& mdr)
   if (mdr->more()->peer_error)
     mdr->aborted = true;
 
-  if (!mdr->aborted) {
-    MutationImpl::LockOpVec lov;
-    lov.add_wrlock(&diri->dirfragtreelock);
-    // prevent a racing gather on any other scatterlocks too
-    lov.lock_scatter_gather(&diri->nestlock);
-    lov.lock_scatter_gather(&diri->filelock);
-    if (!mds->locker->acquire_locks(mdr, lov, NULL, {}, true)) {
-      if (!mdr->aborted)
-	return;
+  if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
+    if (!mdr->aborted) {
+      MutationImpl::LockOpVec lov;
+      lov.add_wrlock(&diri->dirfragtreelock);
+      // prevent a racing gather on any other scatterlocks too
+      lov.lock_scatter_gather(&diri->nestlock);
+      lov.lock_scatter_gather(&diri->filelock);
+      if (mds->locker->acquire_locks(mdr, lov, NULL, {}, true)) {
+        mdr->locking_state |= MutationImpl::ALL_LOCKED;
+      } else {
+        if (!mdr->aborted) {
+	  return;
+        }
+      }
     }
   }
 
