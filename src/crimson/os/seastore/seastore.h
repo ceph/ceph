@@ -255,7 +255,6 @@ public:
 	    ctx.reset_preserve_handle(*transaction_manager);
 	    return std::invoke(f, ctx);
 	  }).handle_error(
-	    crimson::ct_error::eagain::pass_further{},
 	    crimson::ct_error::all_same_way([&ctx](auto e) {
 	      on_error(ctx.ext_transaction);
 	    })
