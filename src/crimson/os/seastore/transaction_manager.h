@@ -885,9 +885,7 @@ private:
 	crc);
       assert(ref->is_fully_loaded());
       bool inconsistent = false;
-      if (pin->is_indirect()) {
-	inconsistent = (pin->get_checksum() != 0);
-      } else if (full_extent_integrity_check) {
+      if (full_extent_integrity_check) {
 	inconsistent = (pin->get_checksum() != crc);
       } else { // !full_extent_integrity_check: remapped extent may be skipped
 	inconsistent = !(pin->get_checksum() == 0 ||
@@ -953,9 +951,7 @@ private:
 	crc);
       assert(ref->is_fully_loaded());
       bool inconsistent = false;
-      if (pin->is_indirect()) {
-	inconsistent = (pin->get_checksum() != 0);
-      } else if (full_extent_integrity_check) {
+      if (full_extent_integrity_check) {
 	inconsistent = (pin->get_checksum() != crc);
       } else { // !full_extent_integrity_check: remapped extent may be skipped
 	inconsistent = !(pin->get_checksum() == 0 ||
