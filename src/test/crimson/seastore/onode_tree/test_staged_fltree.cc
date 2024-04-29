@@ -1785,8 +1785,12 @@ TEST_P(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 INSTANTIATE_TEST_SUITE_P(
   d_seastore_tm_test,
   d_seastore_tm_test_t,
-  ::testing::Values (
-    "segmented",
-    "circularbounded"
+  ::testing::Combine(
+    ::testing::Values (
+      "segmented",
+      "circularbounded"
+    ),
+    ::testing::Values(
+      integrity_check_t::FULL_CHECK)
   )
 );
