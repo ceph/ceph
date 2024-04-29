@@ -247,7 +247,7 @@ class ClusterConfigHandler:
     def apply(self, inputs: Iterable[SMBResource]) -> ResultGroup:
         log.debug('applying changes to internal data store')
         results = ResultGroup()
-        for resource in self._order_inputs(inputs):
+        for resource in order_resources(inputs):
             try:
                 result = self._update_resource(resource)
             except ErrorResult as err:
@@ -323,26 +323,6 @@ class ClusterConfigHandler:
                     )
         log.debug("search found %d resources", len(out))
         return out
-
-    def _order_inputs(
-        self, inputs: Iterable[SMBResource]
-    ) -> List[SMBResource]:
-        """Sort resource objects by type so that the user can largely input
-        objects freely but that references map out cleanly.
-        """
-
-        def _keyfunc(r: SMBResource) -> int:
-            if isinstance(r, resources.RemovedShare):
-                return -2
-            if isinstance(r, resources.RemovedCluster):
-                return -1
-            if isinstance(r, resources.Share):
-                return 2
-            if isinstance(r, resources.Cluster):
-                return 1
-            return 0
-
-        return sorted(inputs, key=_keyfunc)
 
     def _update_resource(self, resource: SMBResource) -> Result:
         """Update the internal store with a new resource object."""
@@ -714,6 +694,27 @@ class ClusterConfigHandler:
             join_source_entries=join_source_entries,
             user_source_entries=user_source_entries,
         )
+
+
+def order_resources(
+    resource_objs: Iterable[SMBResource],
+) -> List[SMBResource]:
+    """Sort resource objects by type so that the user can largely input
+    objects freely but that references map out cleanly.
+    """
+
+    def _keyfunc(r: SMBResource) -> int:
+        if isinstance(r, resources.RemovedShare):
+            return -2
+        if isinstance(r, resources.RemovedCluster):
+            return -1
+        if isinstance(r, resources.Share):
+            return 2
+        if isinstance(r, resources.Cluster):
+            return 1
+        return 0
+
+    return sorted(resource_objs, key=_keyfunc)
 
 
 def _auth_refs(cluster: resources.Cluster) -> Collection[str]:
