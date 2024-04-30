@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import time
 from typing import Dict, Tuple, Any, List, cast, Optional
 from configparser import ConfigParser
 from io import StringIO
@@ -245,29 +246,55 @@ class NFSService(CephService):
         tmp_conf.write(self.mgr.get_minimal_ceph_conf())
         tmp_conf.write(f'\tkeyring = {tmp_keyring.name}\n')
         tmp_conf.flush()
-        try:
-            cmd: List[str] = [
-                'ganesha-rados-grace',
-                '--cephconf', tmp_conf.name,
-                '--userid', tmp_id,
-                '--pool', POOL_NAME,
-                '--ns', cast(str, spec.service_id),
-                action, nodeid,
-            ]
-            self.mgr.log.debug(cmd)
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    timeout=10)
-            if result.returncode:
-                self.mgr.log.warning(
-                    f'ganesha-rados-grace tool failed: {result.stderr.decode("utf-8")}'
-                )
-                raise RuntimeError(f'grace tool failed: {result.stderr.decode("utf-8")}')
 
-        finally:
+        def _clean_key(ent: str) -> None:
             self.mgr.check_mon_command({
                 'prefix': 'auth rm',
-                'entity': entity,
+                'entity': ent,
             })
+        # Since the sleep is at the end of the block,
+        # the last value in the list is slept for directly
+        # before exiting, so just putting an additional 0 in
+        # this will (assuming failure), try immediately, wait 1 second,
+        # try again, wait 5 seconds, try again, exit. We also need
+        # to make sure to clean up the auth key in both failure and
+        # success scenarios. Cleaning of the key therefore happens both
+        # in an "except" block if we're no longer going to retry in order
+        # to make sure the key is cleaned in failure cases and also after
+        # the loop entirely if it wasn't cleaned in an except block
+        # in order to clean it in success cases
+        for wait_time in [1, 5, 0]:
+            try:
+                cmd: List[str] = [
+                    'ganesha-rados-grace',
+                    '--cephconf', tmp_conf.name,
+                    '--userid', tmp_id,
+                    '--pool', POOL_NAME,
+                    '--ns', cast(str, spec.service_id),
+                    action, nodeid,
+                ]
+                self.mgr.log.debug(cmd)
+                result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        timeout=10)
+                if result.returncode:
+                    wrn_msg = f'ganesha-rados-grace tool failed: {result.stderr.decode("utf-8")}'
+                    if wait_time:
+                        wrn_msg += f'. Retrying in {wait_time} second(s)'
+                    self.mgr.log.warning(wrn_msg)
+                    if wait_time:
+                        time.sleep(wait_time)
+                    raise RuntimeError(f'grace tool failed: {result.stderr.decode("utf-8")}')
+                else:
+                    break
+            except Exception as e:
+                if not wait_time:
+                    # if we're here, we've completed our last attempt
+                    # and have still failed
+                    _clean_key(entity)
+                    raise e
+        # if we're here, the ganesha-rados-grace tool should have been
+        # run successfully
+        _clean_key(entity)
 
     def remove_rgw_keyring(self, daemon: DaemonDescription) -> None:
         assert daemon.daemon_id is not None
