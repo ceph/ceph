@@ -162,18 +162,17 @@ class JoinAuthValues(_RBase):
 class JoinSource(_RBase):
     """Represents data that can be used to join a system to Active Directory."""
 
-    source_type: JoinSourceType
-    auth: Optional[JoinAuthValues] = None
-    uri: str = ''
+    source_type: JoinSourceType = JoinSourceType.RESOURCE
     ref: str = ''
 
     def validate(self) -> None:
-        if self.ref:
+        if not self.ref:
+            raise ValueError('reference value must be specified')
+        else:
             validation.check_id(self.ref)
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
-        rc.uri.quiet = True
         rc.ref.quiet = True
         return rc
 
@@ -190,40 +189,21 @@ class UserGroupSettings(_RBase):
 class UserGroupSource(_RBase):
     """Represents data used to set up user/group settings for an instance."""
 
-    source_type: UserGroupSourceType
-    values: Optional[UserGroupSettings] = None
-    uri: str = ''
+    source_type: UserGroupSourceType = UserGroupSourceType.RESOURCE
     ref: str = ''
 
     def validate(self) -> None:
-        if self.source_type == UserGroupSourceType.INLINE:
-            pfx = 'inline User/Group configuration'
-            if self.values is None:
-                raise ValueError(pfx + ' requires values')
-            if self.uri:
-                raise ValueError(pfx + ' does not take a uri')
-            if self.ref:
-                raise ValueError(pfx + ' does not take a ref value')
-        if self.source_type == UserGroupSourceType.HTTP_URI:
-            pfx = 'http User/Group configuration'
-            if not self.uri:
-                raise ValueError(pfx + ' requires a uri')
-            if self.values:
-                raise ValueError(pfx + ' does not take inline values')
-            if self.ref:
-                raise ValueError(pfx + ' does not take a ref value')
         if self.source_type == UserGroupSourceType.RESOURCE:
-            pfx = 'resource reference User/Group configuration'
             if not self.ref:
-                raise ValueError(pfx + ' requires a ref value')
-            if self.uri:
-                raise ValueError(pfx + ' does not take a uri')
-            if self.values:
-                raise ValueError(pfx + ' does not take inline values')
+                raise ValueError('reference value must be specified')
+            else:
+                validation.check_id(self.ref)
+        else:
+            if self.ref:
+                raise ValueError('ref may not be specified')
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
-        rc.uri.quiet = True
         rc.ref.quiet = True
         return rc
 

@@ -1099,8 +1099,6 @@ def _save_pending_join_auths(
     for idx, src in enumerate(checked(cluster.domain_settings).join_sources):
         if src.source_type == JoinSourceType.RESOURCE:
             javalues = checked(arefs[src.ref].auth)
-        elif src.source_type == JoinSourceType.PASSWORD:
-            javalues = checked(src.auth)
         else:
             raise ValueError(
                 f'unsupported join source type: {src.source_type}'
@@ -1124,9 +1122,8 @@ def _save_pending_users_and_groups(
         if ugsv.source_type == UserGroupSourceType.RESOURCE:
             ugvalues = augs[ugsv.ref].values
             assert ugvalues
-        elif ugsv.source_type == UserGroupSourceType.INLINE:
-            ugvalues = ugsv.values
-            assert ugvalues
+        elif ugsv.source_type == UserGroupSourceType.EMPTY:
+            continue
         else:
             raise ValueError(
                 f'unsupported users/groups source type: {ugsv.source_type}'

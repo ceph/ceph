@@ -31,11 +31,7 @@ def test_internal_apply_cluster(thandler):
         auth_mode=smb.enums.AuthMode.USER,
         user_group_settings=[
             smb.resources.UserGroupSource(
-                source_type=smb.resources.UserGroupSourceType.INLINE,
-                values=smb.resources.UserGroupSettings(
-                    users=[],
-                    groups=[],
-                ),
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
     )
@@ -50,11 +46,7 @@ def test_cluster_add(thandler):
         auth_mode=smb.enums.AuthMode.USER,
         user_group_settings=[
             smb.resources.UserGroupSource(
-                source_type=smb.resources.UserGroupSourceType.INLINE,
-                values=smb.resources.UserGroupSettings(
-                    users=[],
-                    groups=[],
-                ),
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
     )
@@ -72,11 +64,7 @@ def test_internal_apply_cluster_and_share(thandler):
         auth_mode=smb.enums.AuthMode.USER,
         user_group_settings=[
             smb.resources.UserGroupSource(
-                source_type=smb.resources.UserGroupSourceType.INLINE,
-                values=smb.resources.UserGroupSettings(
-                    users=[],
-                    groups=[],
-                ),
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
     )
@@ -109,8 +97,7 @@ def test_internal_apply_remove_cluster(thandler):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             }
@@ -141,8 +128,7 @@ def test_internal_apply_remove_shares(thandler):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             },
@@ -222,8 +208,7 @@ def test_internal_apply_add_joinauth(thandler):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             }
@@ -254,8 +239,7 @@ def test_internal_apply_add_usergroups(thandler):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             }
@@ -286,8 +270,7 @@ def test_generate_config_basic(thandler):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             },
@@ -338,13 +321,19 @@ def test_generate_config_ad(thandler):
                     'realm': 'dom1.example.com',
                     'join_sources': [
                         {
-                            'source_type': 'password',
-                            'auth': {
-                                'username': 'testadmin',
-                                'password': 'Passw0rd',
-                            },
+                            'source_type': 'resource',
+                            'ref': 'foo1',
                         }
                     ],
+                },
+            },
+            'join_auths.foo1': {
+                'resource_type': 'ceph.smb.join.auth',
+                'auth_id': 'foo1',
+                'intent': 'present',
+                'auth': {
+                    'username': 'testadmin',
+                    'password': 'Passw0rd',
                 },
             },
             'shares.foo.s1': {
@@ -566,52 +555,6 @@ def test_apply_update_password(thandler):
     assert jdata == {'username': 'testadmin', 'password': 'Zm9vYmFyCg'}
 
 
-def test_apply_update_cluster_inline_pw(thandler):
-    test_apply_full_cluster_create(thandler)
-    to_apply = [
-        smb.resources.Cluster(
-            cluster_id='mycluster1',
-            auth_mode=smb.enums.AuthMode.ACTIVE_DIRECTORY,
-            domain_settings=smb.resources.DomainSettings(
-                realm='MYDOMAIN.EXAMPLE.ORG',
-                join_sources=[
-                    smb.resources.JoinSource(
-                        source_type=smb.enums.JoinSourceType.RESOURCE,
-                        ref='join1',
-                    ),
-                    smb.resources.JoinSource(
-                        source_type=smb.enums.JoinSourceType.PASSWORD,
-                        auth=smb.resources.JoinAuthValues(
-                            username='Jimmy',
-                            password='j4mb0ree!',
-                        ),
-                    ),
-                ],
-            ),
-        ),
-    ]
-
-    results = thandler.apply(to_apply)
-    assert results.success, results.to_simplified()
-    assert len(list(results)) == 1
-
-    assert 'mycluster1' in thandler.public_store.namespaces()
-    ekeys = list(thandler.public_store.contents('mycluster1'))
-    assert len(ekeys) == 5
-    assert 'cluster-info' in ekeys
-    assert 'config.smb' in ekeys
-    assert 'spec.smb' in ekeys
-    assert 'join.0.json' in ekeys
-    assert 'join.1.json' in ekeys
-
-    # we changed the password value. the store should reflect that
-    jdata = thandler.public_store['mycluster1', 'join.0.json'].get()
-    assert jdata == {'username': 'testadmin', 'password': 'Passw0rd'}
-    # we changed the password value. the store should reflect that
-    jdata2 = thandler.public_store['mycluster1', 'join.1.json'].get()
-    assert jdata2 == {'username': 'Jimmy', 'password': 'j4mb0ree!'}
-
-
 def test_apply_add_second_cluster(thandler):
     test_apply_full_cluster_create(thandler)
     to_apply = [
@@ -622,14 +565,19 @@ def test_apply_add_second_cluster(thandler):
                 realm='YOURDOMAIN.EXAMPLE.ORG',
                 join_sources=[
                     smb.resources.JoinSource(
-                        source_type=smb.enums.JoinSourceType.PASSWORD,
-                        auth=smb.resources.JoinAuthValues(
-                            username='Jimmy',
-                            password='j4mb0ree!',
-                        ),
+                        source_type=smb.enums.JoinSourceType.RESOURCE,
+                        ref='coolcluster',
                     ),
                 ],
             ),
+        ),
+        smb.resources.JoinAuth(
+            auth_id='coolcluster',
+            auth=smb.resources.JoinAuthValues(
+                username='Jimmy',
+                password='j4mb0ree!',
+            ),
+            linked_to_cluster='coolcluster',
         ),
         smb.resources.Share(
             cluster_id='coolcluster',
@@ -643,7 +591,7 @@ def test_apply_add_second_cluster(thandler):
 
     results = thandler.apply(to_apply)
     assert results.success, results.to_simplified()
-    assert len(list(results)) == 2
+    assert len(list(results)) == 3
 
     assert 'mycluster1' in thandler.public_store.namespaces()
     ekeys = list(thandler.public_store.contents('mycluster1'))
@@ -865,13 +813,14 @@ def test_apply_remove_all_clusters(thandler):
 def test_all_resources(thandler):
     test_apply_add_second_cluster(thandler)
     rall = thandler.all_resources()
-    assert len(rall) == 6
+    assert len(rall) == 7
     assert rall[0].resource_type == 'ceph.smb.cluster'
     assert rall[1].resource_type == 'ceph.smb.share'
     assert rall[2].resource_type == 'ceph.smb.share'
     assert rall[3].resource_type == 'ceph.smb.cluster'
     assert rall[4].resource_type == 'ceph.smb.share'
     assert rall[5].resource_type == 'ceph.smb.join.auth'
+    assert rall[6].resource_type == 'ceph.smb.join.auth'
 
 
 @pytest.mark.parametrize(
@@ -961,6 +910,10 @@ def test_all_resources(thandler):
                 {
                     'resource_type': 'ceph.smb.join.auth',
                     'auth_id': 'join1',
+                },
+                {
+                    'resource_type': 'ceph.smb.join.auth',
+                    'auth_id': 'coolcluster',
                 },
             ],
         ),
