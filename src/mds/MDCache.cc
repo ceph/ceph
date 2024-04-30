@@ -4177,7 +4177,7 @@ void MDCache::rejoin_send_rejoins()
       for (const auto& q : mdr->locks) {
 	auto lock = q.lock;
 	auto obj = lock->get_parent();
-	if (q.is_xlock() && !obj->is_auth()) {
+	if (q.is_xlock() && !obj->is_auth() && !lock->is_locallock()) {
 	  mds_rank_t who = obj->authority().first;
 	  if (rejoins.count(who) == 0) continue;
 	  const auto& rejoin = rejoins[who];
@@ -9898,7 +9898,7 @@ void MDCache::request_drop_foreign_locks(const MDRequestRef& mdr)
 
   for (auto it = mdr->locks.begin(); it != mdr->locks.end(); ) {
     SimpleLock *lock = it->lock;
-    if (it->is_xlock() && !lock->get_parent()->is_auth()) {
+    if (!lock->is_locallock() && it->is_xlock() && !lock->get_parent()->is_auth()) {
       dout(10) << "request_drop_foreign_locks forgetting lock " << *lock
 	       << " on " << lock->get_parent() << dendl;
       lock->put_xlock();
