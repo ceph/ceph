@@ -490,15 +490,24 @@ def test_cluster_create_ad1(tmodule):
     assert len(result.src.domain_settings.join_sources) == 1
     assert (
         result.src.domain_settings.join_sources[0].source_type
-        == smb.enums.JoinSourceType.PASSWORD
+        == smb.enums.JoinSourceType.RESOURCE
+    )
+    assert result.src.domain_settings.join_sources[0].ref.startswith('fizzle')
+    assert 'additional_results' in result.status
+    assert len(result.status['additional_results']) == 1
+    assert (
+        result.status['additional_results'][0]['resource']['resource_type']
+        == 'ceph.smb.join.auth'
     )
     assert (
-        result.src.domain_settings.join_sources[0].auth.username
-        == 'Administrator'
+        result.status['additional_results'][0]['resource'][
+            'linked_to_cluster'
+        ]
+        == 'fizzle'
     )
-    assert (
-        result.src.domain_settings.join_sources[0].auth.password == 'Passw0rd'
-    )
+    assert result.status['additional_results'][0]['resource'][
+        'auth_id'
+    ].startswith('fizzle')
 
 
 def test_cluster_create_ad2(tmodule):
