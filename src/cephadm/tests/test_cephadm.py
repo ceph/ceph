@@ -1239,7 +1239,7 @@ class TestMaintenance:
         ctx: _cephadm.CephadmContext = _cephadm.cephadm_init_ctx(
             ['host-maintenance', 'enter', '--fsid', TestMaintenance.fsid])
         ctx.container_engine = mock_podman()
-        retval = _cephadm.command_maintenance(ctx)
+        retval = _cephadm.change_maintenance_mode(ctx)
         assert retval.startswith('failed')
 
     @mock.patch('os.listdir', return_value=[])
@@ -1252,7 +1252,7 @@ class TestMaintenance:
         ctx: _cephadm.CephadmContext = _cephadm.cephadm_init_ctx(
             ['host-maintenance', 'enter', '--fsid', TestMaintenance.fsid])
         ctx.container_engine = mock_podman()
-        retval = _cephadm.command_maintenance(ctx)
+        retval = _cephadm.change_maintenance_mode(ctx)
         assert retval.startswith('failed')
 
     @mock.patch('os.listdir', return_value=[])
@@ -1267,7 +1267,7 @@ class TestMaintenance:
         ctx: _cephadm.CephadmContext = _cephadm.cephadm_init_ctx(
             ['host-maintenance', 'exit', '--fsid', TestMaintenance.fsid])
         ctx.container_engine = mock_podman()
-        retval = _cephadm.command_maintenance(ctx)
+        retval = _cephadm.change_maintenance_mode(ctx)
         assert retval.startswith('failed')
 
     @mock.patch('os.listdir', return_value=[])
@@ -1282,7 +1282,7 @@ class TestMaintenance:
         ctx: _cephadm.CephadmContext = _cephadm.cephadm_init_ctx(
             ['host-maintenance', 'exit', '--fsid', TestMaintenance.fsid])
         ctx.container_engine = mock_podman()
-        retval = _cephadm.command_maintenance(ctx)
+        retval = _cephadm.change_maintenance_mode(ctx)
         assert retval.startswith('failed')
 
 
