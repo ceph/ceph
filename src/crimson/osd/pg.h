@@ -425,6 +425,10 @@ public:
   void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
   void set_ready_to_merge_source(eversion_t lu) final {}
 
+  // seastar::future<> scrub_purged_snaps();
+  void queue_snap_retrim(snapid_t snap);
+  void kick_snap_trim();
+
   void on_active_actmap() final;
   void on_active_advmap(const OSDMapRef &osdmap) final;
 
