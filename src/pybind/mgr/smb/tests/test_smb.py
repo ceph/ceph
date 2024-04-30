@@ -39,11 +39,7 @@ def test_internal_apply_cluster(tmodule):
         auth_mode=smb.enums.AuthMode.USER,
         user_group_settings=[
             smb.resources.UserGroupSource(
-                source_type=smb.resources.UserGroupSourceType.INLINE,
-                values=smb.resources.UserGroupSettings(
-                    users=[],
-                    groups=[],
-                ),
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
     )
@@ -58,11 +54,7 @@ def test_cluster_add_cluster_ls(tmodule):
         auth_mode=smb.enums.AuthMode.USER,
         user_group_settings=[
             smb.resources.UserGroupSource(
-                source_type=smb.resources.UserGroupSourceType.INLINE,
-                values=smb.resources.UserGroupSettings(
-                    users=[],
-                    groups=[],
-                ),
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
     )
@@ -80,11 +72,7 @@ def test_internal_apply_cluster_and_share(tmodule):
         auth_mode=smb.enums.AuthMode.USER,
         user_group_settings=[
             smb.resources.UserGroupSource(
-                source_type=smb.resources.UserGroupSourceType.INLINE,
-                values=smb.resources.UserGroupSettings(
-                    users=[],
-                    groups=[],
-                ),
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
             ),
         ],
     )
@@ -117,8 +105,7 @@ def test_internal_apply_remove_cluster(tmodule):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             }
@@ -149,8 +136,7 @@ def test_internal_apply_remove_shares(tmodule):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             },
@@ -230,8 +216,7 @@ def test_internal_apply_add_joinauth(tmodule):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             }
@@ -262,8 +247,7 @@ def test_internal_apply_add_usergroups(tmodule):
                 'intent': 'present',
                 'user_group_settings': [
                     {
-                        'source_type': 'inline',
-                        'values': {'users': [], 'groups': []},
+                        'source_type': 'empty',
                     }
                 ],
             }
@@ -296,13 +280,19 @@ def _example_cfg_1(tmodule):
                     'realm': 'dom1.example.com',
                     'join_sources': [
                         {
-                            'source_type': 'password',
-                            'auth': {
-                                'username': 'testadmin',
-                                'password': 'Passw0rd',
-                            },
+                            'source_type': 'resource',
+                            'ref': 'foo',
                         }
                     ],
+                },
+            },
+            'join_auths.foo': {
+                'resource_type': 'ceph.smb.join.auth',
+                'auth_id': 'foo',
+                'intent': 'present',
+                'auth': {
+                    'username': 'testadmin',
+                    'password': 'Passw0rd',
                 },
             },
             'shares.foo.s1': {
