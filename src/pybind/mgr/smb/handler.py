@@ -1173,3 +1173,11 @@ def _cephx_data_entity(cluster_id: str) -> str:
     use for data access.
     """
     return f'client.smb.fs.cluster.{cluster_id}'
+
+
+def rand_name(prefix: str, max_len: int = 18, suffix_len: int = 8) -> str:
+    trunc = prefix[: (max_len - suffix_len)]
+    suffix = ''.join(
+        random.choice(string.ascii_lowercase) for _ in range(suffix_len)
+    )
+    return f'{trunc}{suffix}'
