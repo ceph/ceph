@@ -22,6 +22,20 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph_test_libcephfs
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+  add_executable(ceph_test_libcephfs_forwardauth
+    main.cc
+    forwardauth.cc
+  )
+  target_link_libraries(ceph_test_libcephfs_forwardauth
+    ceph-common
+    cephfs
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${CMAKE_DL_LIBS}
+    )
+  install(TARGETS ceph_test_libcephfs_forwardauth
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
   add_executable(ceph_test_libcephfs_snapdiff
     main.cc
     snapdiff.cc
