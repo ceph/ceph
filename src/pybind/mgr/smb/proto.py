@@ -18,7 +18,7 @@ from ceph.deployment.service_spec import SMBSpec
 
 # this uses a version check as opposed to a try/except because this
 # form makes mypy happy and try/except doesn't.
-if sys.version_info >= (3, 8):
+if sys.version_info >= (3, 8):  # pragma: no cover
     from typing import Protocol
 elif TYPE_CHECKING:  # pragma: no cover
     # typing_extensions will not be available for the real mgr server
@@ -29,7 +29,7 @@ else:  # pragma: no cover
         pass
 
 
-if sys.version_info >= (3, 11):
+if sys.version_info >= (3, 11):  # pragma: no cover
     from typing import Self
 elif TYPE_CHECKING:  # pragma: no cover
     # typing_extensions will not be available for the real mgr server
