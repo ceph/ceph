@@ -647,7 +647,8 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         That a quiesce_inode op with outstanding remote authpin requests can be killed.
         """
 
-        self.config_set('mds', 'mds_heartbeat_grace', '60')
+        self.config_set('mds', 'mds_heartbeat_grace', '120')
+        self.fs.set_session_timeout(240) # avoid spurious session warnings
         self._configure_subvolume()
         self.mount_a.setfattr(".", "ceph.dir.pin.distributed", "1")
         self._client_background_workload()
@@ -657,8 +658,8 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         p = self.mount_a.run_shell_payload("ls", stdout=StringIO())
         dirs = p.stdout.getvalue().strip().split()
 
-        # make rank 0 unresponsive to auth pin requests
-        p = self.run_ceph_cmd("tell", f"mds.{self.fs.id}:1", "lockup", "30000", wait=False)
+        # make rank 1 unresponsive to auth pin requests
+        p = self.run_ceph_cmd("tell", f"mds.{self.fs.id}:1", "lockup", "90000", wait=False)
 
         qops = []
         for d in dirs:
@@ -696,7 +697,7 @@ class TestQuiesceMultiRank(QuiesceTestCase):
 
         # verify some quiesce_inode ops still exist because authpin acks have not been received
         if not find_quiesce(True):
-            self.fail("did not find quiesce_inode op blocked on remote authpins!")
+            self.fail("did not find quiesce_inode op blocked on remote authpins! (did the lockup on rank 1 complete?)")
 
         # wait for sleep to complete
         p.wait()
