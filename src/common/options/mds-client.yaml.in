@@ -245,6 +245,14 @@ options:
   fmt_desc: If set to ``true``, clients read data directly from OSDs instead
     of using a local page cache.
   with_legacy: true
+- name: client_debug_force_send_request_to_rank
+  type: int
+  level: dev
+  default: -1
+  services:
+  - mds_client
+  fmt_desc: Set a value of the rank number, clients will always send client requests to this rank.
+  with_legacy: true
 - name: client_debug_inject_tick_delay
   type: secs
   level: dev

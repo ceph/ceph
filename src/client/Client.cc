@@ -1692,6 +1692,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
   __u32 hash = 0;
   bool is_hash = false;
   int issued = 0;
+  int rank;
 
   Inode *in = NULL;
   Dentry *de = NULL;
@@ -1700,6 +1701,19 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
     mds = req->resend_mds;
     ldout(cct, 10) << __func__ << " resend_mds specified as mds." << mds << dendl;
     goto out;
+  }
+
+  rank = cct->_conf->client_debug_force_send_request_to_rank;
+  if (unlikely(rank >= 0)) {
+    if (rank >= mdsmap->get_max_mds()) {
+      ldout(cct, 5) << __func__ << " invalid mds rank number " << rank
+                    << ", while there are " << mdsmap->get_max_mds()
+                    << " ranks at most" << dendl;
+    } else {
+      mds = rank;
+      ldout(cct, 10) << __func__ << " force sending requests to mds." << rank << dendl;
+      goto out;
+    }
   }
 
   if (cct->_conf->client_use_random_mds)
