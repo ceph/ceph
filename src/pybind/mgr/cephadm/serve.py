@@ -1374,6 +1374,7 @@ class CephadmServe:
                         ),
                         config_blobs=daemon_spec.final_config,
                     ).dump_json_str(),
+                    use_current_daemon_image=reconfig,
                 )
 
                 if daemon_spec.daemon_type == 'agent':
@@ -1518,11 +1519,12 @@ class CephadmServe:
                                 error_ok: Optional[bool] = False,
                                 image: Optional[str] = "",
                                 log_output: Optional[bool] = True,
+                                use_current_daemon_image: bool = False,
                                 ) -> Any:
         try:
             out, err, code = await self._run_cephadm(
                 host, entity, command, args, no_fsid=no_fsid, error_ok=error_ok,
-                image=image, log_output=log_output)
+                image=image, log_output=log_output, use_current_daemon_image=use_current_daemon_image)
             if code:
                 raise OrchestratorError(f'host {host} `cephadm {command}` returned {code}: {err}')
         except Exception as e:
@@ -1547,6 +1549,7 @@ class CephadmServe:
                            env_vars: Optional[List[str]] = None,
                            log_output: Optional[bool] = True,
                            timeout: Optional[int] = None,  # timeout in seconds
+                           use_current_daemon_image: bool = False,
                            ) -> Tuple[List[str], List[str], int]:
         """
         Run cephadm on the remote host with the given command + args
@@ -1567,7 +1570,10 @@ class CephadmServe:
         # Skip the image check for daemons deployed that are not ceph containers
         if not str(entity).startswith(bypass_image):
             if not image and entity is not cephadmNoImage:
-                image = self.mgr._get_container_image(entity)
+                image = self.mgr._get_container_image(
+                    entity,
+                    use_current_daemon_image=use_current_daemon_image
+                )
 
         final_args = []
 

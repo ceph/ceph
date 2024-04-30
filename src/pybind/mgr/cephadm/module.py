@@ -1589,9 +1589,27 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._kick_serve_loop()
         return HandleCommandResult()
 
-    def _get_container_image(self, daemon_name: str) -> Optional[str]:
+    def _get_container_image(self, daemon_name: str, use_current_daemon_image: bool = False) -> Optional[str]:
         daemon_type = daemon_name.split('.', 1)[0]  # type: ignore
         image: Optional[str] = None
+        # Try to use current image if specified. This is necessary
+        # because, if we're reconfiguring the daemon, we can
+        # run into issues during upgrade. For example if the default grafana
+        # image is changing and we pass the new image name when doing
+        # the reconfig, we could end up using the UID required by the
+        # new image as owner for the config files we write, while the
+        # unit.run will still reference the old image that requires those
+        # config files to be owned by a different UID
+        # Note that "current image" just means the one we picked up
+        # when we last ran "cephadm ls" on the host
+        if use_current_daemon_image:
+            try:
+                dd = self.cache.get_daemon(daemon_name=daemon_name)
+                if dd.container_image_name:
+                    return dd.container_image_name
+            except OrchestratorError:
+                self.log.debug(f'Could not find daemon {daemon_name} in cache '
+                               'while searching for its image')
         if daemon_type in CEPH_IMAGE_TYPES:
             # get container image
             image = str(self.get_foreign_ceph_option(
