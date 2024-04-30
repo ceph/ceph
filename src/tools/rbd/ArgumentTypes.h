@@ -55,6 +55,10 @@ static const std::string DEST_SNAPSHOT_NAME("dest-snap");
 static const std::string PATH("path");
 static const std::string FROM_SNAPSHOT_NAME("from-snap");
 static const std::string WHOLE_OBJECT("whole-object");
+static const std::string READ_OFFSET("read-offset");
+static const std::string READ_LENGTH("read-length");
+static const std::string OUTPUT_FROM_SNAPSHOT_NAME("output-from-snap");
+static const std::string OUTPUT_END_SNAPSHOT_NAME("output-end-snap");
 
 static const std::string IMAGE_FORMAT("image-format");
 static const std::string IMAGE_NEW_FORMAT("new-format");

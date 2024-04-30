@@ -123,7 +123,9 @@ private:
 
 
 int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
-		   const char *endsnapname, bool whole_object,
+		   const char *endsnapname, const char *out_fromsnapname,
+                   const char* out_endsnapname, uint64_t offset,
+                   uint64_t length, bool whole_object,
 		   int fd, bool no_progress, int export_format)
 {
   int r;
@@ -132,6 +134,12 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
   r = image.stat(info, sizeof(info));
   if (r < 0)
     return r;
+
+  if (length == 0) {
+    length = info.size - offset;
+  } else {
+    length = std::min(length, info.size - offset);
+  }
 
   {
     // header
@@ -143,10 +151,10 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
 
     __u8 tag;
     uint64_t len = 0;
-    if (fromsnapname) {
+    if (out_fromsnapname) {
       tag = RBD_DIFF_FROM_SNAP;
       encode(tag, bl);
-      std::string from(fromsnapname);
+      std::string from(out_fromsnapname);
       if (export_format == 2) {
 	len = from.length() + 4;
 	encode(len, bl);
@@ -154,10 +162,10 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
       encode(from, bl);
     }
 
-    if (endsnapname) {
+    if (out_endsnapname) {
       tag = RBD_DIFF_TO_SNAP;
       encode(tag, bl);
-      std::string to(endsnapname);
+      std::string to(out_endsnapname);
       if (export_format == 2) {
         len = to.length() + 4;
         encode(len, bl);
@@ -192,10 +200,10 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
       return r;
     }
   }
-  ExportDiffContext edc(&image, fd, info.size,
+  ExportDiffContext edc(&image, fd, length + offset,
                         g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
                         no_progress, export_format);
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
+  r = image.diff_iterate2(fromsnapname, offset, length, true, whole_object,
                           &C_ExportDiff::export_diff_cb, (void *)&edc);
   if (r < 0) {
     goto out;
@@ -223,7 +231,9 @@ out:
 }
 
 int do_export_diff(librbd::Image& image, const char *fromsnapname,
-                const char *endsnapname, bool whole_object,
+                const char *endsnapname, const char *out_fromsnapname,
+                const char* out_endsnapname, uint64_t offset,
+                uint64_t length, bool whole_object,
                 const char *path, bool no_progress)
 {
   int r;
@@ -236,7 +246,9 @@ int do_export_diff(librbd::Image& image, const char *fromsnapname,
   if (fd < 0)
     return -errno;
 
-  r = do_export_diff_fd(image, fromsnapname, endsnapname, whole_object, fd, no_progress, 1);
+  r = do_export_diff_fd(image, fromsnapname, endsnapname, out_fromsnapname,
+                        out_endsnapname, offset, length, whole_object, fd,
+                        no_progress, 1);
 
   if (fd != 1)
     close(fd);
@@ -260,7 +272,11 @@ void get_arguments_diff(po::options_description *positional,
   options->add_options()
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
      "snapshot starting point")
-    (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object");
+    (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object")
+    (at::READ_OFFSET.c_str(), po::value<uint64_t>, "offset in bytes")
+    (at::READ_LENGTH.c_str(), po::value<uint64_t>(), "length in bytes")
+    (at::OUTPUT_FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(), "from snapshot name in output diff")
+    (at::OUTPUT_END_SNAPSHOT_NAME.c_str(), po::value<std::string>(), "end snapshot name in output diff");
   at::add_no_progress_option(options);
 }
 
@@ -290,6 +306,26 @@ int execute_diff(const po::variables_map &vm,
     from_snap_name = vm[at::FROM_SNAPSHOT_NAME].as<std::string>();
   }
 
+  uint64_t read_offset;
+  if (vm.count(at::READ_OFFSET)) {
+    read_offset = vm[at::READ_OFFSET].as<uint64_t>();
+  }
+
+  uint64_t read_length;
+  if (vm.count(at::READ_LENGTH)) {
+    read_length = vm[at::READ_LENGTH].as<uint64_t>();
+  }
+
+  std::string output_from_snap_name;
+  if (vm.count(at::OUTPUT_FROM_SNAPSHOT_NAME)) {
+    output_from_snap_name = vm[at::OUTPUT_FROM_SNAPSHOT_NAME].as<std::string>();
+  }
+
+  std::string output_end_snap_name;
+  if (vm.count(at::OUTPUT_END_SNAPSHOT_NAME)) {
+    output_end_snap_name = vm[at::OUTPUT_END_SNAPSHOT_NAME].as<std::string>();
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
@@ -299,9 +335,15 @@ int execute_diff(const po::variables_map &vm,
     return r;
   }
 
+  char* fromsnapname = from_snap_name.empty() ? nullptr : from_snap_name.c_str();
+  char* endsnapname = snap_name.empty() ? nullptr : snap_name.c_str();
+
   r = do_export_diff(image,
-                     from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
-                     snap_name.empty() ? nullptr : snap_name.c_str(),
+                     fromsnapname,
+                     endsnapname,
+                     output_from_snap_name.empty() ? fromsnapname : output_from_snap_name.c_str(),
+                     output_end_snap_name.empty() ? endsnapname : output_end_snap_name.c_str(),
+                     read_offset, read_length,
                      vm[at::WHOLE_OBJECT].as<bool>(), path.c_str(),
                      vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
@@ -501,7 +543,8 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   const char *last_snap = NULL;
   for (size_t i = 0; i < snaps.size(); ++i) {
     utils::snap_set(image, snaps[i].name.c_str());
-    r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), false, fd, true, 2);
+    r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), last_snap,
+                          snaps[i].name.c_str(), 0, 0, false, fd, true, 2);
     if (r < 0) {
       return r;
     }
@@ -509,7 +552,7 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
     last_snap = snaps[i].name.c_str();
   }
   utils::snap_set(image, std::string(""));
-  r = do_export_diff_fd(image, last_snap, nullptr, false, fd, true, 2);
+  r = do_export_diff_fd(image, last_snap, nullptr, last_snap, nullptr, 0, 0, false, fd, true, 2);
   if (r < 0) {
     return r;
   }
