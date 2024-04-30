@@ -338,11 +338,21 @@ class JoinAuth(_RBase):
     auth_id: str
     intent: Intent = Intent.PRESENT
     auth: Optional[JoinAuthValues] = None
+    # linked resources can only be used by the resource they are linked to
+    # and are automatically removed when the "parent" resource is removed
+    linked_to_cluster: Optional[str] = None
 
     def validate(self) -> None:
         if not self.auth_id:
             raise ValueError('auth_id requires a value')
         validation.check_id(self.auth_id)
+        if self.linked_to_cluster is not None:
+            validation.check_id(self.linked_to_cluster)
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.linked_to_cluster.quiet = True
+        return rc
 
 
 @resourcelib.resource('ceph.smb.usersgroups')
@@ -352,11 +362,21 @@ class UsersAndGroups(_RBase):
     users_groups_id: str
     intent: Intent = Intent.PRESENT
     values: Optional[UserGroupSettings] = None
+    # linked resources can only be used by the resource they are linked to
+    # and are automatically removed when the "parent" resource is removed
+    linked_to_cluster: Optional[str] = None
 
     def validate(self) -> None:
         if not self.users_groups_id:
             raise ValueError('users_groups_id requires a value')
         validation.check_id(self.users_groups_id)
+        if self.linked_to_cluster is not None:
+            validation.check_id(self.linked_to_cluster)
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.linked_to_cluster.quiet = True
+        return rc
 
 
 # SMBResource is a union of all valid top-level smb resource types.
