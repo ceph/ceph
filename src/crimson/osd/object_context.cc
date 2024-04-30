@@ -53,6 +53,7 @@ std::optional<hobject_t> resolve_oid(
   if (oid.snap > ss.seq) {
     // Because oid.snap > ss.seq, we are trying to read from a snapshot
     // taken after the most recent write to this object. Read from head.
+    logger().debug("{} returning head", __func__);
     return oid.get_head();
   } else {
     // which clone would it be?
