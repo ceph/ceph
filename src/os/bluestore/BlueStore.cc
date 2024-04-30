@@ -12570,6 +12570,7 @@ int BlueStore::getattrs(
       r = -ENOENT;
       goto out;
     }
+    aset.clear();
     for (auto& i : o->onode.attrs) {
       aset.emplace(i.first.c_str(), i.second);
     }
