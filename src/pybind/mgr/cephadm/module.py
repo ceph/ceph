@@ -2259,8 +2259,9 @@ Then run the following:
             if service_name is not None and service_name != nm:
                 continue
 
-            if spec.service_type not in ['osd', 'node-proxy']:
-                size = spec.placement.get_target_count(self.cache.get_schedulable_hosts())
+            if spec.service_type == 'osd':
+                # osd counting is special
+                size = 0
             elif spec.service_type == 'node-proxy':
                 # we only deploy node-proxy daemons on hosts we have oob info for
                 # Let's make the expected daemon count `orch ls` displays reflect that
@@ -2268,8 +2269,7 @@ Then run the following:
                 oob_info_hosts = [h for h in schedulable_hosts if h.hostname in self.node_proxy_cache.oob.keys()]
                 size = spec.placement.get_target_count(oob_info_hosts)
             else:
-                # osd counting is special
-                size = 0
+                size = spec.placement.get_target_count(self.cache.get_schedulable_hosts())
 
             sm[nm] = orchestrator.ServiceDescription(
                 spec=spec,
