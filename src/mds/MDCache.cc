@@ -117,6 +117,10 @@ public:
   explicit MDCacheLogContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
 
+struct LockPathState {
+  std::vector<std::string> locks;
+};
+
 struct QuiesceInodeState {
   MDRequestRef qrmdr;
   std::shared_ptr<MDCache::QuiesceStatistics> qs;
@@ -9702,6 +9706,7 @@ MDRequestRef MDCache::request_start_internal(int op)
   switch (op) {
     case CEPH_MDS_OP_QUIESCE_PATH:
     case CEPH_MDS_OP_QUIESCE_INODE:
+    case CEPH_MDS_OP_LOCK_PATH:
       params.continuous = true;
       break;
     default:
@@ -9831,6 +9836,9 @@ void MDCache::dispatch_request(const MDRequestRef& mdr)
     case CEPH_MDS_OP_QUIESCE_INODE:
       dispatch_quiesce_inode(mdr);
       break;
+    case CEPH_MDS_OP_LOCK_PATH:
+      dispatch_lock_path(mdr);
+      break;
     case CEPH_MDS_OP_FRAGMENTDIR:
       dispatch_fragment_dir(mdr);
       break;
@@ -9954,6 +9962,12 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
     case CEPH_MDS_OP_QUIESCE_INODE: {
       auto* qisp = static_cast<QuiesceInodeStateRef*>(mdr->internal_op_private);
       delete qisp;
+      mdr->internal_op_private = nullptr;
+      break;
+    }
+    case CEPH_MDS_OP_LOCK_PATH: {
+      auto* lpp = static_cast<LockPathState*>(mdr->internal_op_private);
+      delete lpp;
       mdr->internal_op_private = nullptr;
       break;
     }
@@ -13895,6 +13909,99 @@ MDRequestRef MDCache::quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *
   return mdr;
 }
 
+void MDCache::dispatch_lock_path(const MDRequestRef& mdr)
+{
+  CInode* in = nullptr;
+  CF_MDS_RetryRequestFactory cf(this, mdr, true);
+  static const int ptflags = 0
+    | MDS_TRAVERSE_DISCOVER
+    | MDS_TRAVERSE_RDLOCK_PATH
+    | MDS_TRAVERSE_WANT_INODE
+    ;
+  int r = path_traverse(mdr, cf, mdr->get_filepath(), ptflags, nullptr, &in);
+  if (r > 0)
+    return;
+  if (r < 0) {
+    mds->server->respond_to_request(mdr, r);
+    return;
+  }
+
+  auto& lps = *static_cast<LockPathState*>(mdr->internal_op_private);
+
+  MutationImpl::LockOpVec lov;
+  for (const auto &lock : lps.locks) {
+    auto colonps = lock.find(':');
+    if (colonps == std::string::npos) {
+      mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+    auto lock_type = lock.substr(0, colonps);
+    auto lock_kind = lock.substr(colonps+1, lock.size());
+    dout(20) << "lock: " << lock_type << " " << lock_kind << dendl;
+
+    SimpleLock* l;
+    if (lock_type == "quiesce") {
+      l = &in->quiescelock;
+    } else if (lock_type == "snap") {
+      l = &in->snaplock;
+    } else if (lock_type == "policy") {
+      l = &in->policylock;
+    } else if (lock_type == "file") {
+      l = &in->filelock;
+    } else if (lock_type == "nest") {
+      l = &in->nestlock;
+    } else if (lock_type == "dft") {
+      l = &in->dirfragtreelock;
+    } else if (lock_type == "auth") {
+      l = &in->authlock;
+    } else if (lock_type == "link") {
+      l = &in->linklock;
+    } else if (lock_type == "xattr") {
+      l = &in->xattrlock;
+    } else if (lock_type == "flock") {
+      l = &in->flocklock;
+    } else {
+      mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+
+    if (lock_kind.size() != 1) {
+      mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+
+    switch (lock_kind[0]) {
+      case 'r':
+        lov.add_rdlock(l);
+        break;
+      case 'w':
+        lov.add_wrlock(l);
+        break;
+      case 'x':
+        lov.add_xlock(l);
+        break;
+      default:
+        mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
+        return;
+    }
+  }
+
+  if (!mds->locker->acquire_locks(mdr, lov, nullptr, {in}, false, true)) {
+    return;
+  }
+
+  /* deliberately leak until killed */
+}
+
+MDRequestRef MDCache::lock_path(filepath p, std::vector<std::string> locks)
+{
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_LOCK_PATH);
+  mdr->set_filepath(p);
+  mdr->internal_op_finish = new LambdaContext([](int r) {});
+  mdr->internal_op_private = new LockPathState{locks};
+  dispatch_request(mdr);
+  return mdr;
+}
 
 bool MDCache::dump_inode(Formatter *f, uint64_t number) {
   CInode *in = get_inode(number);

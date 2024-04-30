@@ -329,9 +329,6 @@ class QuiesceTestCase(CephFSTestCase):
         # check request/cap count is stopped
         # count inodes under /usr and count subops!
 
-    def reqid_tostr(self, reqid):
-        return f"{reqid['entity']['type']}.{reqid['entity']['num']}:{reqid['tid']}"
-
 class TestQuiesce(QuiesceTestCase):
     """
     Single rank functional tests.
@@ -348,7 +345,7 @@ class TestQuiesce(QuiesceTestCase):
         sleep(secrets.randbelow(30)+10)
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
 
         self._verify_quiesce()
@@ -364,7 +361,7 @@ class TestQuiesce(QuiesceTestCase):
         sleep(secrets.randbelow(30)+10)
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
 
         #path = os.path.normpath(os.path.join(self.mntpnt, ".."))
@@ -380,7 +377,7 @@ class TestQuiesce(QuiesceTestCase):
         """
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce()
 
@@ -391,7 +388,7 @@ class TestQuiesce(QuiesceTestCase):
         """
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce()
         ops = self.fs.get_ops()
@@ -422,7 +419,7 @@ class TestQuiesce(QuiesceTestCase):
         log.debug(f"{P}")
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
 
         P = self.fs.rank_tell(["ops"])
@@ -492,7 +489,7 @@ class TestQuiesce(QuiesceTestCase):
         path = self.mount_a.cephfs_mntpt + "/dir"
 
         J = self.fs.rank_tell(["quiesce", "path", path, '--wait'])
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid, path=path)
         self._verify_quiesce(root=path)
 
@@ -519,7 +516,7 @@ class TestQuiesce(QuiesceTestCase):
         self._configure_subvolume()
 
         op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume])['op']
-        op1_reqid = self.reqid_tostr(op1['reqid'])
+        op1_reqid = self._reqid_tostr(op1['reqid'])
         op2 = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'])['op']
         op1 = self.fs.get_op(op1_reqid)['type_data'] # for possible dup result
         log.debug(f"op1 = {op1}")
@@ -555,7 +552,7 @@ class TestQuiesce(QuiesceTestCase):
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
         log.debug(f"{J}")
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce(root=self.subvolume)
 
@@ -577,7 +574,7 @@ class TestQuiesce(QuiesceTestCase):
 
         J = self.fs.rank_tell(["quiesce", "path", self.subvolume])
         log.debug(f"{J}")
-        reqid = self.reqid_tostr(J['op']['reqid'])
+        reqid = self._reqid_tostr(J['op']['reqid'])
         self._wait_for_quiesce_complete(reqid)
         self._verify_quiesce(root=self.subvolume)
 
@@ -665,7 +662,7 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         for d in dirs:
             path = os.path.join(self.mntpnt, d)
             op = self.fs.rank_tell("quiesce", "path", path, rank=0)['op']
-            reqid = self.reqid_tostr(op['reqid'])
+            reqid = self._reqid_tostr(op['reqid'])
             log.info(f"created {reqid}")
             qops.append(reqid)
 
@@ -728,15 +725,49 @@ class TestQuiesceMultiRank(QuiesceTestCase):
             path = os.path.join(self.mntpnt, d)
             for r in self.ranks:
                 op = self.fs.rank_tell(["quiesce", "path", path], rank=r)['op']
-                reqid = self.reqid_tostr(op['reqid'])
+                reqid = self._reqid_tostr(op['reqid'])
                 log.info(f"created {reqid}")
                 ops.append((r, op, path))
         for rank, op, path in ops:
-            reqid = self.reqid_tostr(op['reqid'])
+            reqid = self._reqid_tostr(op['reqid'])
             log.debug(f"waiting for ({rank}, {reqid})")
             op = self._wait_for_quiesce_complete(reqid, rank=rank, path=path, status=status)
         for rank, op, path in ops:
             self._verify_quiesce(root=path, rank=rank, status=status)
+
+    def test_quiesce_block_replicated(self):
+        """
+        That an inode with quiesce.block is replicated.
+        """
+
+        self._configure_subvolume()
+
+        self.mount_a.run_shell_payload("mkdir -p dir1/dir2/dir3/dir4")
+
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+
+        self.mount_a.setfattr("dir1", "ceph.dir.pin", "1")
+        self.mount_a.setfattr("dir1/dir2/dir3", "ceph.dir.pin", "0") # force dir2 to be replicated
+        status = self._wait_subtrees([(self.mntpnt+"/dir1", 1), (self.mntpnt+"/dir1/dir2/dir3", 0)], status=status, rank=1)
+
+        op = self.fs.rank_tell("lock", "path", self.mntpnt+"/dir1/dir2", "policy:r", rank=1)
+        p = self.mount_a.setfattr("dir1/dir2", "ceph.quiesce.block", "1", wait=False)
+        sleep(2) # for req to block waiting for xlock on policylock
+        reqid = self._reqid_tostr(op['op']['reqid'])
+        self.fs.kill_op(reqid, rank=1)
+        p.wait()
+
+        ino1 = self.fs.read_cache(self.mntpnt+"/dir1/dir2", depth=0, rank=1)[0]
+        self.assertTrue(ino1['quiesce_block'])
+        self.assertTrue(ino1['is_auth'])
+        replicas = ino1['auth_state']['replicas']
+        self.assertIn("0", replicas)
+
+        ino0 = self.fs.read_cache(self.mntpnt+"/dir1/dir2", depth=0, rank=0)[0]
+        self.assertFalse(ino0['is_auth'])
+        self.assertTrue(ino0['quiesce_block'])
+
 
     # TODO: test for quiesce_counter
 
@@ -785,8 +816,8 @@ class TestQuiesceSplitAuth(QuiesceTestCase):
 
         op0 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=0)['op']
         op1 = self.fs.rank_tell(["quiesce", "path", self.subvolume], rank=1)['op']
-        reqid0 = self.reqid_tostr(op0['reqid'])
-        reqid1 = self.reqid_tostr(op1['reqid'])
+        reqid0 = self._reqid_tostr(op0['reqid'])
+        reqid1 = self._reqid_tostr(op1['reqid'])
         op0 = self._wait_for_quiesce_complete(reqid0, rank=0, timeout=300)
         op1 = self._wait_for_quiesce_complete(reqid1, rank=1, timeout=300)
         log.debug(f"op0 = {op0}")
