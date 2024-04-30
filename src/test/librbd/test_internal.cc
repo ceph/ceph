@@ -704,11 +704,10 @@ TEST_F(TestInternal, SnapshotCopyup)
   librados::snap_set_t snap_set;
   ASSERT_EQ(0, snap_ctx.list_snaps(ictx2->get_object_name(0), &snap_set));
 
-  uint64_t copyup_end = ictx2->enable_sparse_copyup ? 4096 * 5 : 1 << order;
   std::vector< std::pair<uint64_t,uint64_t> > expected_overlap =
     boost::assign::list_of(
       std::make_pair(0, 4096))(
-      std::make_pair(4096 * 2, copyup_end - 4096 * 2));
+      std::make_pair(4096 * 2, 4096 * 3));
   ASSERT_EQ(2U, snap_set.clones.size());
   ASSERT_NE(CEPH_NOSNAP, snap_set.clones[0].cloneid);
   ASSERT_EQ(2U, snap_set.clones[0].snaps.size());
