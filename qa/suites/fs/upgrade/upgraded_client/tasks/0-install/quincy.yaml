@@ -1,9 +1,9 @@
 meta:
 - desc: |
-   install ceph/nautilus latest
+   install ceph/quincy latest
 tasks:
 - install:
-    branch: nautilus
+    branch: quincy
     exclude_packages:
       - cephadm
       - ceph-mgr-cephadm
@@ -27,7 +27,7 @@ tasks:
       - NetworkManager
       - iproute
       - util-linux
-- print: "**** done installing nautilus"
+- print: "**** done installing quincy"
 - ceph:
     log-ignorelist:
       - overall HEALTH_
@@ -49,5 +49,5 @@ tasks:
         ms bind msgr2: false
 - exec:
     osd.0:
-      - ceph osd set-require-min-compat-client nautilus
+      - ceph osd set-require-min-compat-client quincy
 - print: "**** done ceph"
