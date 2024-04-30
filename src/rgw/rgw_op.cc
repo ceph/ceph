@@ -6543,12 +6543,14 @@ void RGWCompleteMultipart::execute(optional_yield y)
   rgw_placement_rule* dest_placement;
   op_ret = upload->get_info(this, s->yield, &dest_placement);
   if (op_ret < 0) {
-    /* XXX this fails inconsistently when !checksum */
+    /* XXX this fails consistently when !checksum */
     ldpp_dout(this, 0) <<
-      "ERROR: MultipartUpload::get_info() for placement failed "
+      "WARNING: MultipartUpload::get_info() for placement failed "
 		       << "ret=" << op_ret << dendl;
-    op_ret =  -ERR_INTERNAL_ERROR;
-    return;
+    if (upload->cksum_type != rgw::cksum::Type::none) {
+      op_ret =  -ERR_INTERNAL_ERROR;
+      return;
+    }
   }
 
   RGWCompressionInfo cs_info;
