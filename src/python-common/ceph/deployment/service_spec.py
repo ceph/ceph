@@ -2546,6 +2546,12 @@ class SMBSpec(ServiceSpec):
         # config-key store uri (example:
         # `rados:mon-config-key:smb/config/mycluster/join1.json`).
         join_sources: Optional[List[str]] = None,
+        # user_sources - a list of pseudo-uris that resolve to a (JSON) blob
+        # containing data the samba-container can use to create users (and/or
+        # groups). A ceph based samba container may typically use a rados uri
+        # or a mon config-key store uri (example:
+        # `rados:mon-config-key:smb/config/mycluster/join1.json`).
+        user_sources: Optional[List[str]] = None,
         # custom_dns -  a list of IP addresses that will be set up as custom
         # dns servers for the samba container.
         custom_dns: Optional[List[str]] = None,
@@ -2577,6 +2583,7 @@ class SMBSpec(ServiceSpec):
         self.features = features or []
         self.config_uri = config_uri
         self.join_sources = join_sources or []
+        self.user_sources = user_sources or []
         self.custom_dns = custom_dns or []
         self.include_ceph_users = include_ceph_users or []
         self.validate()
