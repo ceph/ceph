@@ -459,8 +459,6 @@ TransactionManager::do_submit_transaction(
 	ceph_assert(0 == "Hit error submitting to journal");
       })
     );
-  }).finally([&tref]() {
-      tref.get_handle().exit();
   });
 }
 
