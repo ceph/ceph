@@ -777,6 +777,10 @@ class Orchestrator(object):
         """set prometheus access information"""
         raise NotImplementedError()
 
+    def set_custom_prometheus_alerts(self, alerts_file: str) -> OrchResult[str]:
+        """set prometheus custom alerts files and schedule reconfig of prometheus"""
+        raise NotImplementedError()
+
     def set_prometheus_target(self, url: str) -> OrchResult[str]:
         """set prometheus target for multi-cluster"""
         raise NotImplementedError()
