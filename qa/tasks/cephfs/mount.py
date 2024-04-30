@@ -21,11 +21,10 @@ from tasks.cephfs.filesystem import Filesystem
 
 log = logging.getLogger(__name__)
 
-
 UMOUNT_TIMEOUT = 300
 
 
-class CephFSMount(object):
+class CephFSMountBase(object):
     def __init__(self, ctx, test_dir, client_id, client_remote,
                  client_keyring_path=None, hostfs_mntpt=None,
                  cephfs_name=None, cephfs_mntpt=None, brxnet=None,
@@ -1650,3 +1649,5 @@ class CephFSMount(object):
             subvol_paths = self.ctx.created_subvols[self.cephfs_name]
             path_to_mount = subvol_paths[mount_subvol_num]
             self.cephfs_mntpt = path_to_mount
+
+CephFSMount = CephFSMountBase
