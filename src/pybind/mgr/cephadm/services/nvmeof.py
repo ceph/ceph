@@ -84,6 +84,8 @@ class NvmeofService(CephService):
         Called after the daemon is removed.
         """
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
+        # to clean the keyring up
+        super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
         # TODO: remove config for dashboard nvmeof gateways if any
         # and any certificates being used for mTLS
 
