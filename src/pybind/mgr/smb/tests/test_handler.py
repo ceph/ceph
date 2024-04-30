@@ -1051,3 +1051,115 @@ def test_matching_resources(thandler, params):
 def test_invalid_resource_match_strs(thandler, txt):
     with pytest.raises(ValueError):
         thandler.matching_resources([txt])
+
+
+def test_apply_cluster_linked_auth(thandler):
+    to_apply = [
+        smb.resources.JoinAuth(
+            auth_id='join1',
+            auth=smb.resources.JoinAuthValues(
+                username='testadmin',
+                password='Passw0rd',
+            ),
+            linked_to_cluster='mycluster1',
+        ),
+        smb.resources.Cluster(
+            cluster_id='mycluster1',
+            auth_mode=smb.enums.AuthMode.ACTIVE_DIRECTORY,
+            domain_settings=smb.resources.DomainSettings(
+                realm='MYDOMAIN.EXAMPLE.ORG',
+                join_sources=[
+                    smb.resources.JoinSource(
+                        source_type=smb.enums.JoinSourceType.RESOURCE,
+                        ref='join1',
+                    ),
+                ],
+            ),
+            custom_dns=['192.168.76.204'],
+        ),
+        smb.resources.Share(
+            cluster_id='mycluster1',
+            share_id='homedirs',
+            name='Home Directries',
+            cephfs=smb.resources.CephFSStorage(
+                volume='cephfs',
+                subvolume='homedirs',
+                path='/',
+            ),
+        ),
+    ]
+    results = thandler.apply(to_apply)
+    assert results.success, results.to_simplified()
+    assert len(list(results)) == 3
+    assert ('clusters', 'mycluster1') in thandler.internal_store.data
+    assert ('shares', 'mycluster1.homedirs') in thandler.internal_store.data
+    assert ('join_auths', 'join1') in thandler.internal_store.data
+
+    to_apply = [
+        smb.resources.RemovedCluster(
+            cluster_id='mycluster1',
+        ),
+        smb.resources.RemovedShare(
+            cluster_id='mycluster1',
+            share_id='homedirs',
+        ),
+    ]
+    results = thandler.apply(to_apply)
+    assert results.success, results.to_simplified()
+    assert len(list(results)) == 2
+    assert ('clusters', 'mycluster1') not in thandler.internal_store.data
+    assert (
+        'shares',
+        'mycluster1.homedirs',
+    ) not in thandler.internal_store.data
+    assert ('join_auths', 'join1') not in thandler.internal_store.data
+
+
+def test_apply_cluster_bad_linked_auth(thandler):
+    to_apply = [
+        smb.resources.JoinAuth(
+            auth_id='join1',
+            auth=smb.resources.JoinAuthValues(
+                username='testadmin',
+                password='Passw0rd',
+            ),
+            linked_to_cluster='mycluster2',
+        ),
+        smb.resources.Cluster(
+            cluster_id='mycluster1',
+            auth_mode=smb.enums.AuthMode.ACTIVE_DIRECTORY,
+            domain_settings=smb.resources.DomainSettings(
+                realm='MYDOMAIN.EXAMPLE.ORG',
+                join_sources=[
+                    smb.resources.JoinSource(
+                        source_type=smb.enums.JoinSourceType.RESOURCE,
+                        ref='join1',
+                    ),
+                ],
+            ),
+            custom_dns=['192.168.76.204'],
+        ),
+    ]
+    results = thandler.apply(to_apply)
+    assert not results.success
+    rs = results.to_simplified()
+    assert len(rs['results']) == 2
+    assert rs['results'][0]['msg'] == 'linked_to_cluster id not valid'
+    assert rs['results'][1]['msg'] == 'join auth linked to different cluster'
+
+
+def test_rand_name():
+    name = smb.handler.rand_name('bob')
+    assert name.startswith('bob')
+    assert len(name) == 11
+    name = smb.handler.rand_name('carla')
+    assert name.startswith('carla')
+    assert len(name) == 13
+    name = smb.handler.rand_name('dangeresque')
+    assert name.startswith('dangeresqu')
+    assert len(name) == 18
+    name = smb.handler.rand_name('fhqwhgadsfhqwhgadsfhqwhgads')
+    assert name.startswith('fhqwhgadsf')
+    assert len(name) == 18
+    name = smb.handler.rand_name('')
+    assert len(name) == 8
