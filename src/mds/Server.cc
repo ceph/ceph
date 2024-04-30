@@ -4477,8 +4477,12 @@ void Server::handle_client_open(const MDRequestRef& mdr)
   if (!cur)
     return;
 
-  if (cur->is_frozen() || cur->state_test(CInode::STATE_EXPORTINGCAPS)) {
-    ceph_assert(!need_auth);
+  // In openc() the 'PATH_LOCKED' will be set and if the file exists then it will
+  // call open() dirrectly, but when the create requests need be handled in auth
+  // MDS but the current MDS is not auth because of the inode is under exporting
+  // and the auth is changed, we need to retry rdlock_path_pin_ref() and forward
+  // the requests to the auth.
+  if (need_auth || cur->is_frozen() || cur->state_test(CInode::STATE_EXPORTINGCAPS)) {
     mdr->locking_state &= ~(MutationImpl::PATH_LOCKED | MutationImpl::ALL_LOCKED);
     CInode *cur = rdlock_path_pin_ref(mdr, true);
     if (!cur)
