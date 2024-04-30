@@ -704,6 +704,34 @@ class TestQuiesceMultiRank(QuiesceTestCase):
                 if not find_quiesce(False):
                     break
 
+    def test_quiesce_block_file_replicated(self):
+        """
+        That a file inode with quiesce.block is replicated.
+        """
+
+        self._configure_subvolume()
+
+        self.mount_a.run_shell_payload("mkdir -p dir1/dir2/dir3/dir4")
+
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+
+        self.mount_a.setfattr("dir1", "ceph.dir.pin", "1")
+        self.mount_a.setfattr("dir1/dir2/dir3", "ceph.dir.pin", "0") # force dir2 to be replicated
+        status = self._wait_subtrees([(self.mntpnt+"/dir1", 1), (self.mntpnt+"/dir1/dir2/dir3", 0)], status=status, rank=1)
+
+        self.mount_a.setfattr("dir1/dir2", "ceph.quiesce.block", "1")
+
+        ino1 = self.fs.read_cache(self.mntpnt+"/dir1/dir2", depth=0, rank=1)[0]
+        self.assertTrue(ino1['quiesce_block'])
+        self.assertTrue(ino1['is_auth'])
+        replicas = ino1['auth_state']['replicas']
+        self.assertIn("0", replicas)
+
+        ino0 = self.fs.read_cache(self.mntpnt+"/dir1/dir2", depth=0, rank=0)[0]
+        self.assertFalse(ino0['is_auth'])
+        self.assertTrue(ino0['quiesce_block'])
+
     def test_quiesce_path_multirank(self):
         """
         That quiesce may complete with two ranks and a basic workload.
