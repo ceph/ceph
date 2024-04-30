@@ -1302,6 +1302,8 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
     return -EINVAL;
   if (!item_exists(src) || !item_exists(dst))
     return -EINVAL;
+  if (src == dst)
+    return -EINVAL;
   crush_bucket *a = get_bucket(src);
   crush_bucket *b = get_bucket(dst);
   if (is_parent_of(a->id, b->id) || is_parent_of(b->id, a->id)) {
