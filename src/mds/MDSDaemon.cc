@@ -360,6 +360,12 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "trim cache and optionally request client to release all caps and flush the journal");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("lock path"
+                                     " name=path,type=CephString,req=true"
+                                     " name=locks,type=CephString,n=N,req=false"
+				     ,asok_hook
+				     ,"lock a path");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("cache status",
                                      asok_hook,
                                      "show cache status");

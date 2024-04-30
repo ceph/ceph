@@ -629,6 +629,8 @@ private:
   }
   void add_quiesce(CInode* parent, CInode* in);
 
+  MDRequestRef lock_path(filepath p, std::vector<std::string> locks);
+
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
   bool dump_inode(Formatter *f, uint64_t number);
@@ -1472,6 +1474,8 @@ private:
 
   void dispatch_quiesce_path(const MDRequestRef& mdr);
   void dispatch_quiesce_inode(const MDRequestRef& mdr);
+
+  void dispatch_lock_path(const MDRequestRef& mdr);
 
   void upkeep_main(void);
 
