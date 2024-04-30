@@ -3068,6 +3068,9 @@ void Server::dispatch_peer_request(const MDRequestRef& mdr)
       SimpleLock *lock = mds->locker->get_lock(mdr->peer_request->get_lock_type(),
 					       mdr->peer_request->get_object_info());
 
+      // we shouldn't be getting peer requests about local locks
+      ceph_assert(!lock->is_locallock());
+
       if (!lock) {
 	dout(10) << "don't have object, dropping" << dendl;
 	ceph_abort_msg("don't have object"); // can this happen, if we auth pinned properly.
