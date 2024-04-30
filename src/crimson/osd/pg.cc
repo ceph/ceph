@@ -561,6 +561,80 @@ seastar::future<> PG::clear_temp_objects()
   }
 }
 
+void PG::trim_snaps()
+{
+  LOG_PREFIX(PG::trim_snaps);
+  DEBUG("snap_trimq={}", snap_trimq);
+
+  ceph_assert(peering_state.is_active() && peering_state.is_primary());
+
+  if (!peering_state.is_clean() ||
+      peering_state.state_test(PG_STATE_PREMERGE) ||
+      snap_trimq.empty() ||
+      get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM)) {
+    DEBUG("not ready for snap trim - clean:{} premerge:{} empty_trimq:{} nosnaptrim:{}",
+                   peering_state.is_clean(),
+                   peering_state.state_test(PG_STATE_PREMERGE),
+                   snap_trimq.empty(),
+                   get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM));
+    return;
+  }
+
+  peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
+
+  Ref<PG> pg_ref = this;
+  std::ignore = interruptor::with_interruption([this, FNAME] {
+    return interruptor::repeat(
+      [this]() -> interruptible_future<seastar::stop_iteration> {
+        if (snap_trimq.empty()
+            || peering_state.state_test(PG_STATE_SNAPTRIM_ERROR)) {
+          return seastar::make_ready_future<seastar::stop_iteration>(
+            seastar::stop_iteration::yes);
+        }
+        peering_state.state_set(PG_STATE_SNAPTRIM);
+        publish_stats_to_osd();
+        const auto to_trim = snap_trimq.range_start();
+        const auto needs_pause = !snap_trimq.empty();
+        return trim_snap(to_trim, needs_pause);
+      }
+    ).finally([this, FNAME] {
+      DEBUG("finished trimming");
+      peering_state.state_clear(PG_STATE_SNAPTRIM);
+      peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
+      publish_stats_to_osd();
+    });
+  }, [this, FNAME](std::exception_ptr eptr) {
+    DEBUG("snap trimming interrupted");
+    peering_state.state_clear(PG_STATE_SNAPTRIM);
+  }, pg_ref, pg_ref->get_osdmap_epoch());
+}
+
+void PG::queue_snap_retrims(const std::vector<snapid_t>& snaps)
+{
+  LOG_PREFIX(PG::queue_snap_retrims);
+  INFO("snaps={}", snaps);
+  if (!peering_state.is_primary() || !peering_state.is_active()) {
+    INFO("not primary or active, skipping snap retrims");
+    return;
+  }
+
+  size_t new_snaps = 0;
+  for (auto snap : snaps) {
+    if (!snap_trimq.contains(snap)) {
+      INFO("queuing snap {} for retrim", snap);
+      snap_trimq.insert(snap);
+      new_snaps++;
+    } else {
+      INFO("snap {} already in trimq", snap);
+    }
+  }
+
+  if (new_snaps > 0) {
+    INFO("queued {} new snaps for retrim", new_snaps);
+    trim_snaps();
+  }
+}
+
 PG::interruptible_future<seastar::stop_iteration> PG::trim_snap(
   snapid_t to_trim,
   bool needs_pause)

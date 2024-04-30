@@ -673,4 +673,50 @@ private:
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<DumpRecoveryReservationsHook>(crimson::osd::ShardServices& shard_services);
 
+class ScrubPurgedSnapsHook : public AdminSocketHook {
+public:
+  explicit ScrubPurgedSnapsHook(crimson::osd::OSD& osd) :
+    AdminSocketHook{"scrub_purged_snaps", "", "Scrub purged_snaps vs snapmapper index"},
+    osd(osd)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+                                      std::string_view,
+                                      ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(AdminSocketHook::ScrubPurgedSnapsHook);
+    INFO("scrubbing purged_snaps");
+    co_await osd.scrub_purged_snaps();
+    ceph::bufferlist bl;
+    bl.append("Scrub purged snaps\n"sv);
+    co_return tell_result_t{0, std::string{}, std::move(bl)};
+  }
+private:
+  crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<ScrubPurgedSnapsHook>(crimson::osd::OSD& osd);
+
+class ResetPurgedSnapsLastHook : public AdminSocketHook {
+public:
+  explicit ResetPurgedSnapsLastHook(crimson::osd::OSD& osd) :
+    AdminSocketHook{"reset_purged_snaps_last", "", "Reset the superblock's purged_snaps_last to 0"},
+    osd(osd)
+  {}
+  seastar::future<tell_result_t> call(const cmdmap_t&,
+                                      std::string_view,
+                                      ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(AdminSocketHook::ResetPurgedSnapsLastHook);
+    INFO("resetting purged_snaps_last");
+    co_await osd.reset_purged_snaps_last();
+    ceph::bufferlist bl;
+    bl.append("purged_snaps_last reset to 0\n"sv);
+    co_return tell_result_t{0, std::string{}, std::move(bl)};
+  }
+private:
+  crimson::osd::OSD& osd;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<ResetPurgedSnapsLastHook>(crimson::osd::OSD& osd);
+
 } // namespace crimson::admin

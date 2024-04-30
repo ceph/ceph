@@ -468,21 +468,23 @@ seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
 
 seastar::future<> OSDSingletonState::store_maps(
   ceph::os::Transaction& t,
-  epoch_t start, Ref<MOSDMap> m)
+  epoch_t start, Ref<MOSDMap> m,
+  std::map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>>& purged_snaps)
 {
   LOG_PREFIX(OSDSingletonState::store_maps);
   return seastar::do_with(
     std::map<epoch_t, local_cached_map_t>(),
-    [&t, FNAME, m, start, this](auto &added_maps) {
+    [&t, FNAME, m, start, &purged_snaps, this](auto &added_maps) {
     return seastar::do_for_each(
       boost::make_counting_iterator(start),
       boost::make_counting_iterator(m->get_last() + 1),
-      [&t, FNAME, m, this, &added_maps](epoch_t e) {
+      [&t, FNAME, m, this, &added_maps, &purged_snaps](epoch_t e) {
       if (auto p = m->maps.find(e); p != m->maps.end()) {
 	auto o = std::make_unique<OSDMap>();
 	o->decode(p->second);
 	INFO("storing osdmap.{}", e);
 	store_map_bl(t, e, std::move(std::move(p->second)));
+        purged_snaps[e] = o->get_new_purged_snaps();
 	added_maps.emplace(e, osdmaps.insert(e, std::move(o)));
 	return seastar::now();
       } else if (auto p = m->incremental_maps.find(e);
@@ -490,7 +492,7 @@ seastar::future<> OSDSingletonState::store_maps(
 	INFO("found osdmap.{} incremental map, loading osdmap.{}", e, e - 1);
 	ceph_assert(std::cmp_greater(e, 0u));
 	return load_map(e - 1).then(
-          [&added_maps, FNAME, e, bl=p->second, &t, this](auto o) mutable {
+          [&added_maps, FNAME, e, bl=p->second, &t, this, &purged_snaps](auto o) mutable {
 	  OSDMap::Incremental inc;
 	  auto i = bl.cbegin();
 	  inc.decode(i);
@@ -500,6 +502,7 @@ seastar::future<> OSDSingletonState::store_maps(
 	  o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
 	  INFO("storing osdmap.{}", o->get_epoch());
 	  store_map_bl(t, e, std::move(fbl));
+          purged_snaps[e] = o->get_new_purged_snaps();
 	  added_maps.emplace(e, osdmaps.insert(e, std::move(o)));
 	  return seastar::now();
 	});
@@ -519,7 +522,7 @@ seastar::future<> OSDSingletonState::store_maps(
 	     added_maps.begin()->first,
 	     added_maps.rbegin()->first);
 	meta_coll->store_final_pool_info(t, lastmap, added_maps);
-	return seastar::now();
+	return seastar::make_ready_future<>();
       });
     });
   });

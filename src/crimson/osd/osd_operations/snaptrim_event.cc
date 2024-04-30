@@ -96,6 +96,10 @@ SnapTrimEvent::start()
     if (to_trim.empty()) {
       // the legit ENOENT -> done
       logger().debug("{}: to_trim is empty! Stopping iteration", *this);
+      pg->get_peering_state().adjust_purged_snaps(
+      [this](auto &purged_snaps) {
+          purged_snaps.insert(snapid);
+      });
       co_return seastar::stop_iteration::yes;
     }
     for (const auto& object : to_trim) {

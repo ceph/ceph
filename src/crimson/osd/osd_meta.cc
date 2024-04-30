@@ -155,3 +155,7 @@ ghobject_t OSDMeta::superblock_oid()
 {
   return ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), 0)));
 }
+
+ghobject_t OSDMeta::purged_snaps_oid() {
+  return ghobject_t(hobject_t(sobject_t(object_t("purged_snaps"), 0)));
+}

@@ -175,40 +175,116 @@ public:
   static const char *PURGED_SNAP_EPOCH_PREFIX;
   static const char *PURGED_SNAP_PREFIX;
 
-#ifndef WITH_CRIMSON
   struct Scrubber {
-    CephContext *cct;
-    ObjectStore *store;
-    ObjectStore::CollectionHandle ch;
-    ghobject_t mapping_hoid;
-    ghobject_t purged_snaps_hoid;
+#ifdef WITH_CRIMSON
+    using CrimsonStoreT = crimson::os::FuturizedStore::Shard&;
+    using CollectionHandleT = crimson::os::FuturizedStore::Shard::CollectionRef;
+    struct OmapIterator {
+      using values_t = crimson::os::FuturizedStore::Shard::omap_values_t;
+    private:
+      values_t values;
+      values_t::const_iterator current;
+      bool loaded;
+    public:
+      OmapIterator() {
+        current = values.end();
+        loaded = false;
+      }
+      seastar::future<> load(CrimsonStoreT store, CollectionHandleT ch, 
+                           const ghobject_t& hoid, const std::string& start_key);
+      bool valid() const;
+      const std::string& key() const;
+      const ceph::buffer::list& value() const;
+      void next();
+      void seek(const std::string& seek_key, int seek_type);
+    };
+    struct OmapStore {
+      CrimsonStoreT crimson_store;
+      std::map<coll_t, std::unique_ptr<OmapIterator>> cache;
 
+      OmapStore(CrimsonStoreT store) 
+        : crimson_store(store) {}
+
+      int omap_iterate(
+        CollectionHandleT ch,
+        const ghobject_t& hoid,
+        ObjectStore::omap_iter_seek_t start_from,
+        std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> visitor);
+    };
+    using ObjectStoreT = OmapStore;
+    seastar::future<> load_data_async();
+    ~Scrubber() {
+      if (store) {
+        store->cache.erase(ch_m->get_cid());
+        store->cache.erase(ch_p->get_cid());
+        delete store;
+      }
+    }
+#else
+    using ObjectStoreT = ObjectStore;
+    using CollectionHandleT = ObjectStoreT::CollectionHandle;
+#endif
+
+    ObjectStoreT *store;
+    ghobject_t purged_snaps_hoid;
+    ghobject_t mapping_hoid;
+    std::vector<std::tuple<int64_t, snapid_t, uint32_t, shard_id_t>> stray;
+    Mapping mapping;
+    CollectionHandleT ch_p;
+    CollectionHandleT ch_m;
     int64_t pool;
     snapid_t begin, end;
-
-    bool _parse_p(std::string_view key, std::string_view value);
-
-    Mapping mapping;
     shard_id_t shard;
 
-    bool _parse_m(std::string_view key, std::string_view value);
-
-    std::vector<std::tuple<int64_t, snapid_t, uint32_t, shard_id_t>> stray;
-
+#ifndef WITH_CRIMSON
+    CephContext *cct;
     Scrubber(
       CephContext *cct,
       ObjectStore *store,
       ObjectStore::CollectionHandle& ch,
       ghobject_t mapping_hoid,
       ghobject_t purged_snaps_hoid)
-      : cct(cct),
-	store(store),
-	ch(ch),
-	mapping_hoid(mapping_hoid),
-	purged_snaps_hoid(purged_snaps_hoid) {}
-
+      : store(store),
+    purged_snaps_hoid(purged_snaps_hoid),
+    mapping_hoid(mapping_hoid),
+    ch_p(ch),
+    ch_m(ch),
+    cct(cct) {}
+#else
+    Scrubber(
+      CrimsonStoreT store,
+      CollectionHandleT ch_p,
+      CollectionHandleT ch_m,
+      ghobject_t purged_snaps_hoid,
+      ghobject_t mapping_hoid)
+      : store(new OmapStore(store)),
+        purged_snaps_hoid(std::move(purged_snaps_hoid)),
+        mapping_hoid(std::move(mapping_hoid)),
+        ch_p(std::move(ch_p)),
+        ch_m(std::move(ch_m)),
+        pool(-1),
+        begin(0), end(0),
+        shard(shard_id_t::NO_SHARD)
+    {
+      stray.reserve(256);
+    }
+#endif
+    bool _parse_p(std::string_view key, std::string_view value);
+    bool _parse_m(std::string_view key, std::string_view value);
     void run();
   };
+
+#ifndef WITH_CRIMSON
+  static std::string convert_legacy_key(
+    const std::string& old_key,
+    const bufferlist& value);
+
+  static int convert_legacy(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    ghobject_t hoid,
+    unsigned max);
 #endif
 
   static void record_purged_snaps(
@@ -300,6 +376,7 @@ private:
   }
 
   static bool is_mapping(const std::string &to_test);
+  static bool is_purged(const std::string &to_test);
 
   uint32_t mask_bits;
   const uint32_t match;
