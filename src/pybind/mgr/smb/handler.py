@@ -13,6 +13,8 @@ from typing import (
 )
 
 import logging
+import random
+import string
 import time
 
 from ceph.deployment.service_spec import SMBSpec
@@ -229,6 +231,26 @@ class _Staging:
             self.destination_store, cluster_id
         ).get_cluster()
 
+    def get_join_auth(self, auth_id: str) -> resources.JoinAuth:
+        ekey = (str(JoinAuthEntry.namespace), auth_id)
+        if ekey in self.incoming:
+            res = self.incoming[ekey]
+            assert isinstance(res, resources.JoinAuth)
+            return res
+        return JoinAuthEntry.from_store(
+            self.destination_store, auth_id
+        ).get_join_auth()
+
+    def get_users_and_groups(self, ug_id: str) -> resources.UsersAndGroups:
+        ekey = (str(UsersAndGroupsEntry.namespace), ug_id)
+        if ekey in self.incoming:
+            res = self.incoming[ekey]
+            assert isinstance(res, resources.UsersAndGroups)
+            return res
+        return UsersAndGroupsEntry.from_store(
+            self.destination_store, ug_id
+        ).get_users_and_groups()
+
     def save(self) -> ResultGroup:
         results = ResultGroup()
         for res in self.deleted.values():
@@ -335,6 +357,7 @@ class ClusterConfigHandler:
                 len(list(results)),
             )
             results = staging.save()
+            _prune_linked_entries(staging)
             self._sync_modified(results)
         return results
 
@@ -401,18 +424,25 @@ class ClusterConfigHandler:
     def _check(self, resource: SMBResource, staging: _Staging) -> Result:
         """Check/validate a staged resource."""
         log.debug('staging resource: %r', resource)
-        if isinstance(
-            resource, (resources.Cluster, resources.RemovedCluster)
-        ):
-            _check_cluster(resource, staging)
-        elif isinstance(resource, (resources.Share, resources.RemovedShare)):
-            _check_share(resource, staging, self._path_resolver)
-        elif isinstance(resource, resources.JoinAuth):
-            _check_join_auths(resource, staging)
-        elif isinstance(resource, resources.UsersAndGroups):
-            _check_users_and_groups(resource, staging)
-        else:
-            raise TypeError('not a valid smb resource')
+        try:
+            if isinstance(
+                resource, (resources.Cluster, resources.RemovedCluster)
+            ):
+                _check_cluster(resource, staging)
+            elif isinstance(
+                resource, (resources.Share, resources.RemovedShare)
+            ):
+                _check_share(resource, staging, self._path_resolver)
+            elif isinstance(resource, resources.JoinAuth):
+                _check_join_auths(resource, staging)
+            elif isinstance(resource, resources.UsersAndGroups):
+                _check_users_and_groups(resource, staging)
+            else:
+                raise TypeError('not a valid smb resource')
+        except ErrorResult as err:
+            log.debug('rejected resource: %r', resource)
+            return err
+        log.debug('checked resource: %r', resource)
         result = Result(resource, success=True, status={'checked': True})
         return result
 
@@ -711,6 +741,32 @@ def _check_cluster(cluster: ClusterRef, staging: _Staging) -> None:
         return
     assert isinstance(cluster, resources.Cluster)
     cluster.validate()
+    for auth_ref in _auth_refs(cluster):
+        auth = staging.get_join_auth(auth_ref)
+        if (
+            auth.linked_to_cluster
+            and auth.linked_to_cluster != cluster.cluster_id
+        ):
+            raise ErrorResult(
+                cluster,
+                msg="join auth linked to different cluster",
+                status={
+                    'other_cluster_id': auth.linked_to_cluster,
+                },
+            )
+    for ug_ref in _ug_refs(cluster):
+        ug = staging.get_users_and_groups(ug_ref)
+        if (
+            ug.linked_to_cluster
+            and ug.linked_to_cluster != cluster.cluster_id
+        ):
+            raise ErrorResult(
+                cluster,
+                msg="users and groups linked to different cluster",
+                status={
+                    'other_cluster_id': ug.linked_to_cluster,
+                },
+            )
 
 
 def _check_share(
@@ -746,9 +802,16 @@ def _check_join_auths(
 ) -> None:
     """Check that the JoinAuth resource can be updated."""
     if join_auth.intent == Intent.PRESENT:
-        return  # adding is always ok
+        return _check_join_auths_present(join_auth, staging)
+    return _check_join_auths_removed(join_auth, staging)
+
+
+def _check_join_auths_removed(
+    join_auth: resources.JoinAuth, staging: _Staging
+) -> None:
+    cids = set(ClusterEntry.ids(staging))
     refs_in_use: Dict[str, List[str]] = {}
-    for cluster_id in ClusterEntry.ids(staging):
+    for cluster_id in cids:
         cluster = staging.get_cluster(cluster_id)
         for ref in _auth_refs(cluster):
             refs_in_use.setdefault(ref, []).append(cluster_id)
@@ -763,14 +826,36 @@ def _check_join_auths(
         )
 
 
+def _check_join_auths_present(
+    join_auth: resources.JoinAuth, staging: _Staging
+) -> None:
+    if join_auth.linked_to_cluster:
+        cids = set(ClusterEntry.ids(staging))
+        if join_auth.linked_to_cluster not in cids:
+            raise ErrorResult(
+                join_auth,
+                msg='linked_to_cluster id not valid',
+                status={
+                    'unknown_id': join_auth.linked_to_cluster,
+                },
+            )
+
+
 def _check_users_and_groups(
     users_and_groups: resources.UsersAndGroups, staging: _Staging
 ) -> None:
     """Check that the UsersAndGroups resource can be updated."""
     if users_and_groups.intent == Intent.PRESENT:
-        return  # adding is always ok
+        return _check_users_and_groups_present(users_and_groups, staging)
+    return _check_users_and_groups_removed(users_and_groups, staging)
+
+
+def _check_users_and_groups_removed(
+    users_and_groups: resources.UsersAndGroups, staging: _Staging
+) -> None:
     refs_in_use: Dict[str, List[str]] = {}
-    for cluster_id in ClusterEntry.ids(staging):
+    cids = set(ClusterEntry.ids(staging))
+    for cluster_id in cids:
         cluster = staging.get_cluster(cluster_id)
         for ref in _ug_refs(cluster):
             refs_in_use.setdefault(ref, []).append(cluster_id)
@@ -783,6 +868,40 @@ def _check_users_and_groups(
                 'clusters': refs_in_use[users_and_groups.users_groups_id],
             },
         )
+
+
+def _check_users_and_groups_present(
+    users_and_groups: resources.UsersAndGroups, staging: _Staging
+) -> None:
+    if users_and_groups.linked_to_cluster:
+        cids = set(ClusterEntry.ids(staging))
+        if users_and_groups.linked_to_cluster not in cids:
+            raise ErrorResult(
+                users_and_groups,
+                msg='linked_to_cluster id not valid',
+                status={
+                    'unknown_id': users_and_groups.linked_to_cluster,
+                },
+            )
+
+
+def _prune_linked_entries(staging: _Staging) -> None:
+    cids = set(ClusterEntry.ids(staging))
+    for auth_id in JoinAuthEntry.ids(staging):
+        join_auth = staging.get_join_auth(auth_id)
+        if (
+            join_auth.linked_to_cluster
+            and join_auth.linked_to_cluster not in cids
+        ):
+            JoinAuthEntry.from_store(
+                staging.destination_store, auth_id
+            ).remove()
+    for ug_id in UsersAndGroupsEntry.ids(staging):
+        ug = staging.get_users_and_groups(ug_id)
+        if ug.linked_to_cluster and ug.linked_to_cluster not in cids:
+            UsersAndGroupsEntry.from_store(
+                staging.destination_store, ug_id
+            ).remove()
 
 
 def _auth_refs(cluster: resources.Cluster) -> Collection[str]:
