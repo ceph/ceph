@@ -1556,6 +1556,20 @@ def apply(ctx, config):
     )
 
 
+
+def _orch_ls(ctx, cluster_name):
+    r = _shell(
+        ctx=ctx,
+        cluster_name=cluster_name,
+        remote=ctx.ceph[cluster_name].bootstrap_remote,
+        args=[
+            'ceph', 'orch', 'ls', '-f', 'json',
+        ],
+        stdout=StringIO(),
+    )
+    return json.loads(r.stdout.getvalue())
+
+
 def wait_for_service(ctx, config):
     """
     Wait for a service to be fully started
@@ -1576,16 +1590,7 @@ def wait_for_service(ctx, config):
     )
     with contextutil.safe_while(sleep=1, tries=timeout) as proceed:
         while proceed():
-            r = _shell(
-                ctx=ctx,
-                cluster_name=cluster_name,
-                remote=ctx.ceph[cluster_name].bootstrap_remote,
-                args=[
-                    'ceph', 'orch', 'ls', '-f', 'json',
-                ],
-                stdout=StringIO(),
-            )
-            j = json.loads(r.stdout.getvalue())
+            j = _orch_ls(ctx, cluster_name)
             svc = None
             for s in j:
                 if s['service_name'] == service:
@@ -1597,6 +1602,28 @@ def wait_for_service(ctx, config):
                 )
                 if s['status']['running'] == s['status']['size']:
                     break
+
+
+def wait_for_service_not_present(ctx, config):
+    """Wait for a service to not be present.
+    Note that this doesn't ensure that the service was previously present.
+    """
+    cluster_name = config.get('cluster', 'ceph')
+    timeout = config.get('timeout', 120)
+    service = config.get('service')
+    assert service
+
+    log.info(
+        f'Waiting for {cluster_name} service {service} to be not present'
+        ' in service list'
+    )
+    with contextutil.safe_while(sleep=1, tries=timeout) as proceed:
+        while proceed():
+            j = _orch_ls(ctx, cluster_name)
+            services = {s['service_name'] for s in j}
+            log.debug('checking if %r in %r', service, services)
+            if service not in services:
+                break
 
 
 @contextlib.contextmanager
