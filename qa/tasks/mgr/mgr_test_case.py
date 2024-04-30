@@ -35,6 +35,17 @@ class MgrClusterBase(CephClusterBase):
         else:
             self.mon_manager.raw_cluster_cmd("mgr", "fail", mgr_id)
 
+    def set_down(self, yes='true'):
+        self.mon_manager.raw_cluster_cmd('mgr', 'set', 'down', str(yes))
+
+    def mgr_tell(self, *args, mgr_id=None, mgr_map=None):
+        if mgr_id is None:
+            if mgr_map is None:
+                mgr_map = self.get_mgr_map()
+            mgr_id = self.get_active_id(mgr_map=mgr_map)
+        J = self.mon_manager.raw_cluster_cmd("tell", f"mgr.{mgr_id}", *args)
+        return json.loads(J)
+
     def mgr_restart(self, mgr_id):
         self.mgr_daemons[mgr_id].restart()
 
@@ -50,11 +61,20 @@ class MgrClusterBase(CephClusterBase):
                 return c['addrvec']
         return None
 
-    def get_active_id(self):
-        return self.get_mgr_map()["active_name"]
+    def get_active_gid(self, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        return mgr_map["active_gid"]
 
-    def get_standby_ids(self):
-        return [s['name'] for s in self.get_mgr_map()["standbys"]]
+    def get_active_id(self, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        return mgr_map["active_name"]
+
+    def get_standby_ids(self, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        return [s['name'] for s in mgr_map["standbys"]]
 
     def set_module_conf(self, module, key, val):
         self.mon_manager.raw_cluster_cmd("config", "set", "mgr",
