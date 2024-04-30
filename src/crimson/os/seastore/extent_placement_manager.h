@@ -794,15 +794,7 @@ private:
       }
     }
 
-    void maybe_wake_blocked_io() final {
-      if (!is_ready()) {
-        return;
-      }
-      if (!should_block_io() && blocking_io) {
-        blocking_io->set_value();
-        blocking_io = std::nullopt;
-      }
-    }
+    void maybe_wake_blocked_io() final;
 
   private:
     // reserve helpers
@@ -848,12 +840,16 @@ private:
         || trimmer->should_trim();
     }
 
+    bool main_cleaner_should_fast_evict() const {
+      return has_cold_tier() &&
+         main_cleaner->can_clean_space() &&
+         eviction_state.is_fast_mode();
+    }
+
     bool main_cleaner_should_run() const {
       assert(is_ready());
       return main_cleaner->should_clean_space() ||
-        (has_cold_tier() &&
-         main_cleaner->can_clean_space() &&
-         eviction_state.is_fast_mode());
+        main_cleaner_should_fast_evict();
     }
 
     bool cold_cleaner_should_run() const {
