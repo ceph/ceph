@@ -1197,6 +1197,14 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         access_info = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(access_info))
 
+    @_cli_write_command('orch prometheus set-custom-alerts')
+    def _set_custom_prometheus_alerts(self, inbuf: Optional[str] = None) -> HandleCommandResult:
+        if not inbuf:
+            raise OrchestratorError('This command requires passing a file with "-i <filepath>"')
+        completion = self.set_custom_prometheus_alerts(inbuf)
+        out = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(out))
+
     @_cli_write_command('orch apply osd')
     def _apply_osd(self,
                    all_available_devices: bool = False,
