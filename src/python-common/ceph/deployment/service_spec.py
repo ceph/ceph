@@ -1494,40 +1494,76 @@ class NvmeofServiceSpec(ServiceSpec):
                 raise SpecValidationError(
                     'Invalid SPDK log level. Valid values are: DEBUG, INFO, WARNING, ERROR, NOTICE')
 
-        if self.spdk_ping_interval_in_seconds < 1.0:
+        if (
+            self.spdk_ping_interval_in_seconds
+            and self.spdk_ping_interval_in_seconds < 1.0
+        ):
             raise SpecValidationError("SPDK ping interval should be at least 1 second")
 
-        if self.allowed_consecutive_spdk_ping_failures < 1:
+        if (
+            self.allowed_consecutive_spdk_ping_failures
+            and self.allowed_consecutive_spdk_ping_failures < 1
+        ):
             raise SpecValidationError("Allowed consecutive SPDK ping failures should be at least 1")
 
-        if self.state_update_interval_sec < 0:
+        if (
+            self.state_update_interval_sec
+            and self.state_update_interval_sec < 0
+        ):
             raise SpecValidationError("State update interval can't be negative")
 
-        if self.omap_file_lock_duration < 0:
+        if (
+            self.omap_file_lock_duration
+            and self.omap_file_lock_duration < 0
+        ):
             raise SpecValidationError("OMAP file lock duration can't be negative")
 
-        if self.omap_file_lock_retries < 0:
+        if (
+            self.omap_file_lock_retries
+            and self.omap_file_lock_retries < 0
+        ):
             raise SpecValidationError("OMAP file lock retries can't be negative")
 
-        if self.omap_file_update_reloads < 0:
+        if (
+            self.omap_file_update_reloads
+            and self.omap_file_update_reloads < 0
+        ):
             raise SpecValidationError("OMAP file reloads can't be negative")
 
-        if self.spdk_timeout < 0.0:
+        if (
+            self.spdk_timeout
+            and self.spdk_timeout < 0.0
+        ):
             raise SpecValidationError("SPDK timeout can't be negative")
 
-        if self.conn_retries < 0:
+        if (
+            self.conn_retries
+            and self.conn_retries < 0
+        ):
             raise SpecValidationError("Connection retries can't be negative")
 
-        if self.max_log_file_size_in_mb < 0:
+        if (
+            self.max_log_file_size_in_mb
+            and self.max_log_file_size_in_mb < 0
+        ):
             raise SpecValidationError("Log file size can't be negative")
 
-        if self.max_log_files_count < 0:
+        if (
+            self.max_log_files_count
+            and self.max_log_files_count < 0
+        ):
             raise SpecValidationError("Log files count can't be negative")
 
-        if self.max_log_directory_backups < 0:
+        if (
+            self.max_log_directory_backups
+            and self.max_log_directory_backups < 0
+        ):
             raise SpecValidationError("Log file directory backups can't be negative")
 
-        if self.monitor_timeout < 0.0:
+        if (
+            self.monitor_timeout
+            and self.monitor_timeout < 0.0
+        ):
             raise SpecValidationError("Monitor timeout can't be negative")
 
         if self.port and self.port < 0:
