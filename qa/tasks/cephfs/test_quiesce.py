@@ -116,6 +116,7 @@ class QuiesceTestCase(CephFSTestCase):
             ops = self.fs.get_ops(locks=True, rank=rank, path=f"/tmp/mds.{rank}-ops", status=status)
             (fd, path) = tempfile.mkstemp(prefix=f"mds.{rank}-ops_", dir=self.archive)
             with os.fdopen(fd, "wt") as f:
+                os.fchmod(fd, 0o644)
                 f.write(f"{json.dumps(ops, indent=2)}")
                 log.error(f"ops written to {path}")
             raise
