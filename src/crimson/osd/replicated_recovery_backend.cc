@@ -429,8 +429,12 @@ void ReplicatedRecoveryBackend::prepare_pull(
 
   pg_missing_tracker_t local_missing = pg.get_local_missing();
   const auto missing_iter = local_missing.get_items().find(soid);
-  auto m = pg.get_missing_loc_shards();
-  pg_shard_t fromshard = *(m[soid].begin());
+  auto &m = pg.get_missing_loc_shards();
+  assert(m.contains(soid));
+  auto &locs = m.at(soid);
+  auto iter = locs.begin();
+  assert(iter != locs.end());
+  pg_shard_t fromshard = *(iter);
 
   pull_op.recovery_info =
     set_recovery_info(soid, head_obc->ssc);
