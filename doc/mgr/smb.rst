@@ -364,14 +364,7 @@ placement
 A join source object supports the following fields:
 
 source_type
-    One of ``password`` or ``resource``
-auth
-    Object. Required for ``source_type: password``. Fields:
-
-    username:
-        Required string. User with ability to join a system to AD.
-    password:
-        Required string. The AD user's password
+    Optional. Must be ``resource`` if specified.
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
     ``ceph.smb.join.auth`` resource
@@ -381,25 +374,14 @@ ref
 A user group source object supports the following fields:
 
 source_type
-    One of ``inline`` or ``resource``
-values
-    Object. Required for ``source_type: inline``. Fields:
-
-    users
-        List of objects. Fields:
-
-        username
-            A user name
-        password
-            A password
-    groups
-        List of objects. Fields:
-
-        name
-            The name of the group
+    Optional. One of ``resource`` (the default) or ``empty``
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
     ``ceph.smb.join.auth`` resource
+
+.. note::
+   The ``source_type`` ``empty`` is generally only for debugging and testing
+   the module and should not be needed in production deployments.
 
 The following is an example of a cluster configured for AD membership:
 
@@ -427,14 +409,8 @@ The following is an example of a cluster configured for standalone operation:
     cluster_id: rhumba
     auth_mode: user
     user_group_settings:
-      - source_type: inline
-        values:
-          users:
-            - name: chuckx
-              password: 3xample101
-            - name: steves
-              password: F00Bar123
-          groups: []
+      - source_type: resource
+        ref: ug1
     placement:
       hosts:
         - node6.mycluster.sink.test
@@ -534,6 +510,10 @@ auth
         Required string. User with ability to join a system to AD
     password
         Required string. The AD user's password
+linked_to_cluster:
+    Optional. A string containing a cluster id. If set, the resource may only
+    be used with the linked cluster and will automatically be removed when the
+    linked cluster is removed.
 
 Example:
 
@@ -564,7 +544,7 @@ values
     users
         List of objects. Fields:
 
-        username
+        name
             A user name
         password
             A password
@@ -573,6 +553,10 @@ values
 
         name
             The name of the group
+linked_to_cluster:
+    Optional. A string containing a cluster id. If set, the resource may only
+    be used with the linked cluster and will automatically be removed when the
+    linked cluster is removed.
 
 
 Example:
