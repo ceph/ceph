@@ -108,13 +108,13 @@ class QuiesceTestCase(CephFSTestCase):
             log.info(f"op:\n{op}")
             self._make_archive()
             cache = self.fs.read_cache(path, rank=rank, path=f"/tmp/mds.{rank}-cache", status=status)
-            (fd, path) = tempfile.mkstemp(prefix="cache", dir=self.archive)
+            (fd, path) = tempfile.mkstemp(prefix=f"mds.{rank}-cache_", dir=self.archive)
             with os.fdopen(fd, "wt") as f:
                 os.fchmod(fd, 0o644)
                 f.write(f"{json.dumps(cache, indent=2)}")
                 log.error(f"cache written to {path}")
             ops = self.fs.get_ops(locks=True, rank=rank, path=f"/tmp/mds.{rank}-ops", status=status)
-            (fd, path) = tempfile.mkstemp(prefix="ops", dir=self.archive)
+            (fd, path) = tempfile.mkstemp(prefix=f"mds.{rank}-ops_", dir=self.archive)
             with os.fdopen(fd, "wt") as f:
                 f.write(f"{json.dumps(ops, indent=2)}")
                 log.error(f"ops written to {path}")
