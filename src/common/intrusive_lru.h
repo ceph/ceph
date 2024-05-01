@@ -84,6 +84,9 @@ public:
   bool is_invalidated() const {
     return !is_referenced() && use_count > 0;
   }
+  auto get_use_count() const {
+    return use_count;
+  }
   boost::intrusive::set_member_hook<> set_hook;
   boost::intrusive::list_member_hook<> list_hook;
 
