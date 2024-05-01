@@ -9,18 +9,13 @@ These are exciting times in the Ceph community! Get involved!
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 |Channel               | Description                                     | Contact Info                                  |
 +======================+=================================================+===============================================+
-| **Blog**             | Check the Ceph Blog_ periodically to keep track | http://ceph.com/community/blog/               |
+| **Blog**             | Check the Ceph Blog_ periodically to keep track | https://ceph.com/community/blog/               |
 |                      | of Ceph progress and important announcements.   |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Planet Ceph**      | Check the blog aggregation on Planet Ceph for   | https://old.ceph.com/category/planet/         |
 |                      | interesting stories, information and            |                                               |
 |                      | experiences from the community. **NOTE: NO      |                                               |
 |                      | longer updated as of 2023.**                    |                                               |
-+----------------------+-------------------------------------------------+-----------------------------------------------+
-| **Wiki**             | Check the Ceph Wiki is a source for more        | http://wiki.ceph.com/                         |
-|                      | community and development related topics. You   |                                               |
-|                      | can find there information about blueprints,    |                                               |
-|                      | meetups, the Ceph Developer Summits and more.   |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **IRC**              | As you delve into Ceph, you may have questions  |                                               |
 |                      | or feedback for the Ceph development team. Ceph | - **Domain:**                                 |
@@ -66,13 +61,13 @@ These are exciting times in the Ceph community! Get involved!
 |                      | opt out of the email list at any time by        | - `Community Unsubscribe`_                    |
 |                      | unsubscribing. A simple email is all it takes!  | - `Mailing list archives`_                    |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
-| **Bug Tracker**      | You can help keep Ceph production worthy by     | http://tracker.ceph.com/projects/ceph         |
+| **Bug Tracker**      | You can help keep Ceph production worthy by     | https://tracker.ceph.com/projects/ceph         |
 |                      | filing and tracking bugs, and providing feature |                                               |
 |                      | requests using the Bug Tracker_.                |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
 | **Source Code**      | If you would like to participate in             |                                               |
-|                      | development, bug fixing, or if you just want    | - http://github.com/ceph/ceph                 |
-|                      | the very latest code for Ceph, you can get it   | - http://download.ceph.com/tarballs/          |
+|                      | development, bug fixing, or if you just want    | - https://github.com/ceph/ceph                 |
+|                      | the very latest code for Ceph, you can get it   | - https://download.ceph.com/tarballs/          |
 |                      | at http://github.com. See `Ceph Source Code`_   |                                               |
 |                      | for details on cloning from github.             |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
