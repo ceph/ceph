@@ -113,6 +113,9 @@
    - https://tracker.ceph.com/issues/67179
    - https://tracker.ceph.com/issues/66867
 
+* RGW: Added support for the `RestrictPublicBuckets` property of the S3 `PublicAccessBlock`
+  configuration.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
