@@ -78,10 +78,6 @@ FormatterAttrs::FormatterAttrs(const char *attr, ...)
 
 void Formatter::write_bin_data(const char*, int){}
 
-Formatter::Formatter() { }
-
-Formatter::~Formatter() { }
-
 Formatter *Formatter::create(std::string_view type,
 			     std::string_view default_type,
 			     std::string_view fallback)
