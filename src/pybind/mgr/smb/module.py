@@ -178,7 +178,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             placement=pspec,
         )
         to_apply.append(cluster)
-        return self._handler.apply(to_apply).squash(cluster)
+        return self._handler.apply(to_apply, create_only=True).squash(cluster)
 
     @cli.SMBCommand('cluster rm', perm='rw')
     def cluster_rm(self, cluster_id: str) -> handler.Result:
@@ -220,7 +220,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 subvolume=subvolume,
             ),
         )
-        return self._handler.apply([share]).one()
+        return self._handler.apply([share], create_only=True).one()
 
     @cli.SMBCommand('share rm', perm='rw')
     def share_rm(self, cluster_id: str, share_id: str) -> handler.Result:
