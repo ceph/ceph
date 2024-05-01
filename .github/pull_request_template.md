@@ -1,32 +1,37 @@
 
 
+<details>
+<summary>Show contribution guidelines</summary>
 
+  - To sign and title your commits, please refer to
+    [Submitting Patches to Ceph](https://github.com/ceph/ceph/blob/main/SubmittingPatches.rst).
+    - Please give your pull request a title like
 
-<!--
-  - Please give your pull request a title like
+          [component]: [short description]
 
-      [component]: [short description]
+    - Please use this format for each git commit message:
 
-  - Please use this format for each git commit message:
+          [component]: [short description]
 
-      [component]: [short description]
+          [A longer multiline description]
 
-      [A longer multiline description]
-
-      Fixes: [ticket URL on tracker.ceph.com, create one if necessary]
-      Signed-off-by: [Your Name] <[your email]>
+          Fixes: [ticket URL on tracker.ceph.com, create one if necessary]
+          Signed-off-by: [Your Name] <[your email]>
 
     For examples, use "git log".
--->
 
-## Contribution Guidelines
-- To sign and title your commits, please refer to [Submitting Patches to Ceph](https://github.com/ceph/ceph/blob/main/SubmittingPatches.rst).
+  - If you are submitting a fix for a stable branch (e.g. "quincy"), please refer to
+    [Submitting Patches to Ceph - Backports](https://github.com/ceph/ceph/blob/master/SubmittingPatches-backports.rst) for the proper workflow.
 
-- If you are submitting a fix for a stable branch (e.g. "quincy"), please refer to [Submitting Patches to Ceph - Backports](https://github.com/ceph/ceph/blob/master/SubmittingPatches-backports.rst) for the proper workflow.
+  - When filling out the below checklist, you may click boxes directly in the GitHub web UI.
+    When entering or editing the entire PR message in the GitHub web UI editor,
+    you may also select a checklist item by adding an `x` between the brackets: `[x]`.
+    Spaces and capitalization matter when checking off items this way.
+</details>
 
-- When filling out the below checklist, you may click boxes directly in the GitHub web UI.  When entering or editing the entire PR message in the GitHub web UI editor, you may also select a checklist item by adding an `x` between the brackets: `[x]`.  Spaces and capitalization matter when checking off items this way.
+<details>
+<summary>Show checklist</summary>
 
-## Checklist
 - Tracker (select at least one)
   - [ ] References tracker ticket
   - [ ] Very recent bug; references commit where it was introduced
@@ -45,6 +50,7 @@
   - [ ] Includes [integration test(s)](https://docs.ceph.com/en/latest/dev/developer_guide/testing_integration_tests/)
   - [ ] Includes bug reproducer
   - [ ] No tests
+</details>
 
 <details>
 <summary>Show available Jenkins commands</summary>
