@@ -336,10 +336,11 @@ inline bool operator <(const BucketGen& l, const BucketGen& r) {
 }
 
 class RGWDataChangesLog {
-  friend class DataLogTest;
+  friend class DataLogTestBase;
   friend DataLogBackends;
   CephContext *cct;
   neorados::RADOS* rados;
+  std::optional<asio::strand<asio::io_context::executor_type>> cancel_strand;
   neorados::IOContext loc;
   rgw::BucketChangeObserver *observer = nullptr;
   bool log_data = false;
@@ -363,7 +364,7 @@ class RGWDataChangesLog {
   std::shared_mutex modified_lock;
   bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>> modified_shards;
 
-  std::atomic<bool> down_flag = { false };
+  std::atomic<bool> down_flag = { true };
 
   struct ChangeStatus {
     std::shared_ptr<const rgw_sync_policy_info> sync_policy;
