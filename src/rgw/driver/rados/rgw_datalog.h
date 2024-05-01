@@ -337,10 +337,11 @@ inline bool operator <(const BucketGen& l, const BucketGen& r) {
 }
 
 class RGWDataChangesLog {
-  friend class DataLogTest;
+  friend class DataLogTestBase;
   friend DataLogBackends;
   CephContext *cct;
   neorados::RADOS* rados;
+  std::optional<asio::strand<asio::io_context::executor_type>> cancel_strand;
   neorados::IOContext loc;
   rgw::BucketChangeObserver *observer = nullptr;
   bool log_data = false;
@@ -364,7 +365,7 @@ class RGWDataChangesLog {
   std::shared_mutex modified_lock;
   bc::flat_map<int, bc::flat_set<rgw_data_notify_entry>> modified_shards;
 
-  std::atomic<bool> down_flag = { false };
+  std::atomic<bool> down_flag = { true };
 
   struct ChangeStatus {
     std::shared_ptr<const rgw_sync_policy_info> sync_policy;
@@ -489,7 +490,6 @@ public:
   int trim_generations(const DoutPrefixProvider *dpp,
 		       std::optional<uint64_t>& through,
 		       optional_yield y);
-  void shutdown();
   asio::awaitable<void> read_all_sems(int index,
 				      bc::flat_map<std::string, uint64_t>* out);
   asio::awaitable<bool>
@@ -505,6 +505,9 @@ public:
   asio::awaitable<void> recover_shard(const DoutPrefixProvider* dpp, int index);
   asio::awaitable<void> recover(const DoutPrefixProvider* dpp,
 				decltype(recovery_signal));
+  asio::awaitable<void> shutdown();
+  asio::awaitable<void> shutdown_or_timeout();
+  void blocking_shutdown();
 };
 
 class RGWDataChangesBE : public boost::intrusive_ref_counter<RGWDataChangesBE> {
