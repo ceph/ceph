@@ -6,6 +6,8 @@
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
 #include <seastar/core/weak_ptr.hh>
+#include "crimson/common/intrusive_timer.h"
+#include "messages/MOSDPGPCT.h"
 #include "include/buffer_fwd.h"
 #include "osd/osd_types.h"
 
@@ -20,6 +22,12 @@ namespace crimson::osd {
 class ReplicatedBackend : public PGBackend
 {
 public:
+  using interruptor = ::crimson::interruptible::interruptor<
+    ::crimson::osd::IOInterruptCondition>;
+  template <typename T = void>
+  using interruptible_future =
+    ::crimson::interruptible::interruptible_future<
+      ::crimson::osd::IOInterruptCondition, T>;
   ReplicatedBackend(pg_t pgid, pg_shard_t whoami,
 		    crimson::osd::PG& pg,
 		    CollectionRef coll,
@@ -80,4 +88,19 @@ private:
 
   seastar::future<> request_committed(
     const osd_reqid_t& reqid, const eversion_t& at_version) final;
+
+  crimson::common::intrusive_timer_t::callback_t pct_callback;
+
+  /// Invoked by pct_callback to update PCT after a pause in IO
+  interruptible_future<> send_pct_update();
+
+  /// Kick pct timer if repop_queue is empty
+  void maybe_kick_pct_update();
+
+  /// Cancel pct timer if scheduled
+  void cancel_pct_update();
+
+public:
+  /// Handle MOSDPGPCT message
+  void do_pct(const MOSDPGPCT &m);
 };

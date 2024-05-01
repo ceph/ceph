@@ -13,6 +13,7 @@
 #include "osd/osd_types_fmt.h"
 #include "msg/MessageRef.h"
 #include "crimson/common/exception.h"
+#include "crimson/common/intrusive_timer.h"
 #include "crimson/common/shared_lru.h"
 #include "crimson/os/futurized_collection.h"
 #include "osd/PeeringState.h"
@@ -200,6 +201,8 @@ class PerShardState {
   OSDSuperblock per_shard_superblock;
   std::list<OSDPerfMetricQuery> m_perf_queries;
   std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> m_perf_limits;
+
+  crimson::common::intrusive_timer_t pg_timer;
 
 public:
   PerShardState(
@@ -570,6 +573,17 @@ public:
 
   /// Return per-core tid
   ceph_tid_t get_tid() { return local_state.get_tid(); }
+
+  /// Schedule pg timer operation
+  template <typename T>
+  void schedule_pg_callback_after(
+    crimson::common::intrusive_timer_t::callback_t &cb, T &&t) {
+    local_state.pg_timer.schedule_after(cb, std::forward<T>(t));
+  }
+
+  void cancel_pg_callback(crimson::common::intrusive_timer_t::callback_t &cb) {
+    local_state.pg_timer.cancel(cb);
+  }
 
   /// Return core-local pg count * number of cores
   unsigned get_num_local_pgs() const {
