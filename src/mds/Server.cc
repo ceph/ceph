@@ -704,7 +704,9 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	break;
       }
 
-      if (session->auth_caps.root_squash_in_caps() && !client_metadata.features.test(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)) {
+      std::string_view fs_name = mds->mdsmap->get_fs_name();
+      bool client_caps_check = client_metadata.features.test(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK);
+      if (session->auth_caps.root_squash_in_caps(fs_name) && !client_caps_check) {
 	CachedStackStringStream css;
 	*css << "client lacks CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK needed to enforce 'root_squash' MDS auth caps";
 	send_reject_message(css->strv());
@@ -1545,8 +1547,9 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 	*css << "missing required features '" << missing_features << "'";
 	error_str = css->strv();
       }
-      if (session->auth_caps.root_squash_in_caps() &&
-          !session->info.client_metadata.features.test(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)) {
+      std::string_view fs_name = mds->mdsmap->get_fs_name();
+      bool client_caps_check = session->info.client_metadata.features.test(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK);
+      if (session->auth_caps.root_squash_in_caps(fs_name) && !client_caps_check) {
 	CachedStackStringStream css;
 	*css << "client lacks CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK needed to enforce 'root_squash' MDS auth caps";
 	error_str = css->strv();
