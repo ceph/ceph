@@ -336,6 +336,8 @@ def parse_cmdargs(args=None, target='') -> Tuple[argparse.ArgumentParser,
     parser.add_argument('--concise', dest='verbose', action="store_false",
                         help="make less verbose")
 
+    parser.add_argument('--daemon-output-file', dest='daemon_output_file',
+                        help="output file location local to the daemon for JSON produced by tell commands")
     parser.add_argument('-f', '--format', choices=['json', 'json-pretty',
                         'xml', 'xml-pretty', 'plain', 'yaml'],
                         help="Note: yaml is only valid for orch commands", dest='output_format')
@@ -580,6 +582,8 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
     if valid_dict:
         if parsed_args.output_format:
             valid_dict['format'] = parsed_args.output_format
+        if parsed_args.daemon_output_file:
+            valid_dict['output-file'] = parsed_args.daemon_output_file
         if verbose:
             print("Submitting command: ", valid_dict, file=sys.stderr)
     else:
