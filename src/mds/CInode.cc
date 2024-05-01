@@ -2985,7 +2985,7 @@ bool CInode::can_auth_pin(int *err_ret, bool bypassfreezing) const {
     err = ERR_EXPORTING_INODE;
   } else {
     if (parent)
-      return parent->can_auth_pin(err_ret);
+      return parent->can_auth_pin(err_ret, bypassfreezing);
     err = 0;
   }
   if (err && err_ret)
