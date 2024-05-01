@@ -949,6 +949,66 @@ class TestImage(object):
         self.rbd.remove(ioctx, clone_name)
         self.image.remove_snap('snap1')
 
+    @require_features([RBD_FEATURE_LAYERING])
+    def test_deep_copy_clone_v1_flatten(self):
+        self.image.write(b'a' * 256, 0)
+        self.image.create_snap('snap1')
+        self.image.write(b'b' * 256, 0)
+        self.image.protect_snap('snap1')
+        clone_name = get_temp_image_name()
+        dst_name = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name, features,
+                       clone_format=1)
+        with Image(ioctx, clone_name) as child:
+            eq(0, child.op_features())
+            child.create_snap('snap1')
+            child.deep_copy(ioctx, dst_name, features=features,
+                            order=self.image.stat()['order'],
+                            stripe_unit=self.image.stripe_unit(),
+                            stripe_count=self.image.stripe_count(),
+                            flatten=True)
+            child.remove_snap('snap1')
+
+        with Image(ioctx, dst_name) as copy:
+            copy_data = copy.read(0, 256)
+            eq(b'a' * 256, copy_data)
+            assert_raises(ImageNotFound, copy.parent_id)
+            eq(0, copy.op_features())
+            copy.remove_snap('snap1')
+        self.rbd.remove(ioctx, dst_name)
+        self.rbd.remove(ioctx, clone_name)
+        self.image.unprotect_snap('snap1')
+        self.image.remove_snap('snap1')
+
+    @require_features([RBD_FEATURE_LAYERING])
+    def test_deep_copy_clone_v2_flatten(self):
+        self.image.write(b'a' * 256, 0)
+        self.image.create_snap('snap1')
+        self.image.write(b'b' * 256, 0)
+        clone_name = get_temp_image_name()
+        dst_name = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name, features,
+                       clone_format=2)
+        with Image(ioctx, clone_name) as child:
+            eq(RBD_OPERATION_FEATURE_CLONE_CHILD, child.op_features())
+            child.create_snap('snap1')
+            child.deep_copy(ioctx, dst_name, features=features,
+                            order=self.image.stat()['order'],
+                            stripe_unit=self.image.stripe_unit(),
+                            stripe_count=self.image.stripe_count(),
+                            flatten=True)
+            child.remove_snap('snap1')
+
+        with Image(ioctx, dst_name) as copy:
+            copy_data = copy.read(0, 256)
+            eq(b'a' * 256, copy_data)
+            assert_raises(ImageNotFound, copy.parent_id)
+            eq(0, copy.op_features())
+            copy.remove_snap('snap1')
+        self.rbd.remove(ioctx, dst_name)
+        self.rbd.remove(ioctx, clone_name)
+        self.image.remove_snap('snap1')
+
     def test_create_snap(self):
         global ioctx
         self.image.create_snap('snap1')
@@ -2974,6 +3034,9 @@ class TestMigration(object):
         with Image(ioctx, image_name) as image:
             image.remove_snap('snap1')
         remove_image()
+
+    # TODO: add test_migration_clone_v{1,2}_flatten tests once
+    # https://tracker.ceph.com/issues/65743 is addressed
 
     def test_migration_import(self):
         create_image()

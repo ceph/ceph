@@ -175,6 +175,8 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 * RBD: `RBD_IMAGE_OPTION_CLONE_FORMAT` option has been exposed in Python
   bindings via `clone_format` optional parameter to `clone`, `deep_copy` and
   `migration_prepare` methods.
+* RBD: `RBD_IMAGE_OPTION_FLATTEN` option has been exposed in Python bindings via
+  `flatten` optional parameter to `deep_copy` and `migration_prepare` methods.
 
 >=18.0.0
 
