@@ -815,8 +815,7 @@ class TestImage(object):
         self.image.deep_copy(ioctx, dst_name, features=features,
                              order=self.image.stat()['order'],
                              stripe_unit=self.image.stripe_unit(),
-                             stripe_count=self.image.stripe_count(),
-                             data_pool=None)
+                             stripe_count=self.image.stripe_count())
         self.image.remove_snap('snap1')
         with Image(ioctx, dst_name, 'snap1') as copy:
             copy_data = copy.read(0, 256)
@@ -2905,8 +2904,7 @@ class TestMigration(object):
     def test_migration(self):
         create_image()
         RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
-                                order=23, stripe_unit=1<<23, stripe_count=1,
-                                data_pool=None)
+                                order=23, stripe_unit=1<<23, stripe_count=1)
 
         status = RBD().migration_status(ioctx, image_name)
         eq(image_name, status['source_image_name'])
@@ -3054,7 +3052,7 @@ class TestMigration(object):
         dst_image_name = get_temp_image_name()
         RBD().migration_prepare_import(source_spec, ioctx, dst_image_name,
                                        features=63, order=23, stripe_unit=1<<23,
-                                       stripe_count=1, data_pool=None)
+                                       stripe_count=1)
 
         status = RBD().migration_status(ioctx, dst_image_name)
         eq('', status['source_image_name'])
@@ -3084,8 +3082,7 @@ class TestMigration(object):
 
         create_image()
         RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
-                                order=23, stripe_unit=1<<23, stripe_count=1,
-                                data_pool=None)
+                                order=23, stripe_unit=1<<23, stripe_count=1)
         RBD().migration_execute(ioctx, image_name, on_progress=progress_cb)
         eq(True, d['received_callback'])
         d['received_callback'] = False
@@ -3097,8 +3094,7 @@ class TestMigration(object):
     def test_migrate_abort(self):
         create_image()
         RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
-                                order=23, stripe_unit=1<<23, stripe_count=1,
-                                data_pool=None)
+                                order=23, stripe_unit=1<<23, stripe_count=1)
         RBD().migration_abort(ioctx, image_name)
         remove_image()
 
@@ -3110,8 +3106,7 @@ class TestMigration(object):
 
         create_image()
         RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
-                                order=23, stripe_unit=1<<23, stripe_count=1,
-                                data_pool=None)
+                                order=23, stripe_unit=1<<23, stripe_count=1)
         RBD().migration_abort(ioctx, image_name, on_progress=progress_cb)
         eq(True, d['received_callback'])
         remove_image()
