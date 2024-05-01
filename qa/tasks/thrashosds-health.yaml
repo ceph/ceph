@@ -28,3 +28,6 @@ overrides:
       - mons down
       - mon down
       - out of quorum
+      - nodeep-scrub flag\(s\) set
+      - noscrub flag\(s\) set
+      - noscrub,nodeep-scrub flag\(s\) set

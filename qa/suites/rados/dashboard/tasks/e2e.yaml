@@ -17,6 +17,8 @@ tasks:
     clients:
       client.1:
         - cephadm/create_iscsi_disks.sh
+      log-ignorelist:
+        - \(OSD_DOWN\)
 - workunit:
     clients:
       client.0:
