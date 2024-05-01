@@ -1417,8 +1417,8 @@ static PG::interruptible_future<ceph::bufferlist> do_pgls_common(
           }),
         seastar::make_ready_future<hobject_t>(next));
     }).then_interruptible([pg_end](auto&& ret) {
-      auto entries = std::move(std::get<0>(ret).get());
-      auto next = std::move(std::get<1>(ret).get());
+      auto entries = std::get<0>(ret).get();
+      auto next = std::get<1>(std::move(ret)).get();
       pg_ls_response_t response;
       response.handle = next.is_max() ? pg_end : next;
       response.entries = std::move(entries);
