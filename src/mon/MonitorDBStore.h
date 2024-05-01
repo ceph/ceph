@@ -710,6 +710,7 @@ class MonitorDBStore
 
   void close() {
     // there should be no work queued!
+    ceph_assert(io_work.is_empty());
     io_work.stop();
     is_open = false;
     db.reset(NULL);

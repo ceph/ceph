@@ -135,6 +135,8 @@ class Finisher {
    * finishes, but this class should never be used in this way. */
   void wait_for_empty();
 
+  bool is_empty();
+
   /// Construct an anonymous Finisher.
   /// Anonymous finishers do not log their queue length.
   explicit Finisher(CephContext *cct_) :
