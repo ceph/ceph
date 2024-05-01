@@ -52,6 +52,9 @@
   headers only when the `read-stats` querystring is explicitly included in the
   API request.
 
+* RGW: Added support for the `RestrictPublicBuckets` property of the S3 `PublicAccessBlock`
+  configuration.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
