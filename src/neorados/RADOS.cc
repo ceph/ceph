@@ -1409,7 +1409,9 @@ void RADOS::unwatch_(uint64_t cookie, IOContext _ioc,
 			   [objecter = impl->objecter,
 			    linger_op, c = std::move(c)]
 			   (bs::error_code ec) mutable {
-			     objecter->linger_cancel(linger_op);
+			     if (!ec) {
+			       objecter->linger_cancel(linger_op);
+			     }
 			     asio::dispatch(asio::append(std::move(c), ec));
 			   }));
 }
