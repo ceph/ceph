@@ -58,6 +58,7 @@
 #include "common/async/waiter.h"
 #include "error_code.h"
 
+#include "neorados/RADOSImpl.h"
 
 using std::list;
 using std::make_pair;
@@ -2403,6 +2404,23 @@ void Objecter::_send_op_account(Op *op)
   }
 }
 
+struct op_cancellation {
+  ceph_tid_t tid;
+  Objecter* objecter;
+
+  op_cancellation(ceph_tid_t tid, Objecter* objecter)
+    : tid(tid), objecter(objecter) {}
+
+  void operator ()(asio::cancellation_type_t type) {
+    if (type == asio::cancellation_type::total ||
+	type == asio::cancellation_type::terminal) {
+      // Since nobody can cancel until we return (I hope) we shouldn't
+      // need a mutex or anything.
+      objecter->op_cancel(tid, asio::error::operation_aborted);
+    }
+  }
+};
+
 void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid)
 {
   // rwlock is locked
@@ -2485,6 +2503,16 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
 		 << dendl;
 
   _session_op_assign(s, op);
+
+
+  auto compptr = std::get_if<Op::OpComp>(&op->onfinish);
+  if (compptr) {
+    // arrange for per-op cancellation
+    auto slot = boost::asio::get_associated_cancellation_slot(*compptr);
+    if (slot.is_connected()) {
+      slot.template emplace<op_cancellation>(op->tid, this);
+    }
+  }
 
   if (need_send) {
     _send_op(op);
