@@ -3519,7 +3519,7 @@ cdef class Image(object):
         finally:
             rbd_image_options_destroy(opts)
         if ret < 0:
-            raise make_ex(ret, 'error copying image %s to %s' % (self.name, dest_name))
+            raise make_ex(ret, 'error deep copying image %s to %s' % (self.name, dest_name))
 
     @requires_not_closed
     def list_snaps(self):
