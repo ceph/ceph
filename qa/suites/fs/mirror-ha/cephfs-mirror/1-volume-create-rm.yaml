@@ -1,0 +1,14 @@
+meta:
+- desc: create/rm volumes and set configs
+
+tasks:
+  - exec:
+      mon.a:
+        - "ceph fs volume create dc"
+        - "ceph fs volume create dc-backup"
+  - full_sequential_finally:
+    - exec:
+        mon.a:
+          - ceph config set mon mon_allow_pool_delete true
+          - ceph fs volume rm dc --yes-i-really-mean-it
+          - ceph fs volume rm dc-backup --yes-i-really-mean-it
