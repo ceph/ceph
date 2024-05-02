@@ -251,6 +251,14 @@ options:
   default: 0
   services:
   - mds_client
+- name: client_debug_inject_features
+  type: str
+  level: dev
+  services:
+  - mds_client
+  flags:
+  - startup
+  with_legacy: true
 - name: client_max_inline_size
   type: size
   level: dev
