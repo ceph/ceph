@@ -357,6 +357,21 @@ custom_dns
 placement
     Optional. A Ceph Orchestration :ref:`placement specifier
     <orchestrator-cli-placement-spec>`.  Defaults to one host if not provided
+custom_smb_share_options
+    Optional mapping. Specify key-value pairs that will be directly added to
+    the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
+    *not* use this option unless you are prepared to debug the Samba instances
+    yourself.
+
+    This option is meant for developers, feature investigators, and other
+    advanced users to take more direct control of a share's options without
+    needing to make changes to the Ceph codebase. Entries in this map should
+    match parameters in ``smb.conf`` and their values. A special key
+    ``_allow_customization`` must appear somewhere in the mapping with the
+    value of ``i-take-responsibility-for-all-samba-configuration-errors`` as an
+    indicator that the user is aware that using this option can easily break
+    things in ways that the Ceph team can not help with. This special key will
+    automatically be removed from the list of options passed to Samba.
 
 
 .. _join-source-fields:
@@ -465,6 +480,20 @@ cephfs
     provider
         Optional. One of ``samba-vfs`` or ``kcephfs`` (``kcephfs`` is not yet
         supported) . Selects how CephFS storage should be provided to the share
+custom_smb_share_options
+    Optional mapping. Specify key-value pairs that will be directly added to
+    the ``smb.conf`` (or equivalent) of a Samba server.  Do *not* use this
+    option unless you are prepared to debug the Samba instances yourself.
+
+    This option is meant for developers, feature investigators, and other
+    advanced users to take more direct control of a share's options without
+    needing to make changes to the Ceph codebase. Entries in this map should
+    match parameters in ``smb.conf`` and their values. A special key
+    ``_allow_customization`` must appear somewhere in the mapping with the
+    value of ``i-take-responsibility-for-all-samba-configuration-errors`` as an
+    indicator that the user is aware that using this option can easily break
+    things in ways that the Ceph team can not help with. This special key will
+    automatically be removed from the list of options passed to Samba.
 
 The following is an example of a share:
 
