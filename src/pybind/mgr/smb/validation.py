@@ -1,3 +1,5 @@
+from typing import Dict, Optional
+
 import posixpath
 import re
 
@@ -60,3 +62,44 @@ def check_path(value: str) -> None:
     """Raise ValueError if value is not a valid share path."""
     if not valid_path(value):
         raise ValueError(f'{value!r} is not a valid share path')
+
+
+CUSTOM_CAUTION_KEY = '_allow_customization'
+CUSTOM_CAUTION_VALUE = (
+    'i-take-responsibility-for-all-samba-configuration-errors'
+)
+
+
+def check_custom_options(opts: Optional[Dict[str, str]]) -> None:
+    """Raise ValueError if a custom configuration options dict is not valid."""
+    if opts is None:
+        return
+    if opts.get(CUSTOM_CAUTION_KEY) != CUSTOM_CAUTION_VALUE:
+        raise ValueError(
+            'options lack custom override permission key and value'
+            f' (review documentation pertaining to {CUSTOM_CAUTION_KEY})'
+        )
+    for key, value in opts.items():
+        if '[' in key or ']' in key:
+            raise ValueError(
+                f'custom option key may not contain square brackets: {key!r}'
+            )
+        if '\n' in key:
+            raise ValueError(
+                f'custom option key may not contain newlines: {key!r}'
+            )
+        if '\n' in value:
+            raise ValueError(
+                f'custom option value may not contain newlines: {key!r}'
+            )
+
+
+def clean_custom_options(
+    opts: Optional[Dict[str, str]]
+) -> Optional[Dict[str, str]]:
+    """Return a version of the custom options dictionary cleaned of special
+    validation parameters.
+    """
+    if opts is None:
+        return None
+    return {k: v for k, v in opts.items() if k != CUSTOM_CAUTION_KEY}
