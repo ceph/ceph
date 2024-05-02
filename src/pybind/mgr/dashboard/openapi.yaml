@@ -10930,6 +10930,8 @@ paths:
                   type: string
                 key_id:
                   type: string
+                lifecycle:
+                  type: string
                 lock_mode:
                   type: string
                 lock_retention_period_days:
