@@ -2278,7 +2278,7 @@ void Server::early_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *trace
     if (tracedn)
       mdr->cap_releases.erase(tracedn->get_dir()->get_inode()->vino());
 
-    set_trace_dist(reply, tracei, tracedn, mdr);
+    set_trace_dist(reply, tracei, tracedn, mdr, true);
   }
 
   reply->set_extra_bl(mdr->reply_extra_bl);
@@ -2420,7 +2420,7 @@ void Server::reply_client_request(const MDRequestRef& mdr, const ref_t<MClientRe
  */
 void Server::set_trace_dist(const ref_t<MClientReply> &reply,
 			    CInode *in, CDentry *dn,
-			    const MDRequestRef& mdr)
+			    const MDRequestRef& mdr, bool early_reply)
 {
   // skip doing this for debugging purposes?
   if (g_conf()->mds_inject_traceless_reply_probability &&
@@ -2449,8 +2449,9 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
 
     vector<SnapRealm*> related_realms;
     if (in) {
-      dout(20) << "set_trace_dist snaprealms of referent inodes to be sent to client " << std::hex << in->get_projected_inode()->referent_inodes << dendl;
-      for (const auto& ri : in->get_projected_inode()->referent_inodes) {
+      const std::vector<uint64_t>& referent_inodes = early_reply?in->get_projected_inode()->referent_inodes:in->get_inode()->referent_inodes;
+      dout(20) << "set_trace_dist snaprealms of referent inodes to be sent to client " << std::hex << referent_inodes << dendl;
+      for (const auto& ri : referent_inodes) {
         CInode *cur = mdcache->get_inode(ri);
         if (!cur) {
           dout(3) << "set_trace_dist error: referent inode not loaded " << std::hex << ri << dendl;

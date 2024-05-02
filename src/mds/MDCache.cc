@@ -8318,12 +8318,12 @@ void MDCache::dispatch(const cref_t<Message> &m)
 int MDCache::load_referent_inodes(CInode *in, MDSContextFactory& cf)
 {
   ceph_assert(in);
-  if (!in->get_projected_inode()->referent_inodes.empty())
+  if (!in->get_inode()->referent_inodes.empty())
     dout(12) << "traverse: loading referent inodes of primary real inode of hardlink " << *in << dendl;
   else
     return 0;
 
-  for (const auto& ri : in->get_projected_inode()->referent_inodes) {
+  for (const auto& ri : in->get_inode()->referent_inodes) {
     dout(12) << "traverse: loading referent inode " << std::hex << ri << dendl;
     CInode *cur_ref_in = get_inode(ri);
     if (!cur_ref_in) {

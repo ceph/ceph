@@ -175,7 +175,7 @@ public:
   void early_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(const MDRequestRef& mdr, int r = 0);
   void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
-		      const MDRequestRef& mdr);
+		      const MDRequestRef& mdr, bool early_reply=false);
 
   void handle_peer_request(const cref_t<MMDSPeerRequest> &m);
   void handle_peer_request_reply(const cref_t<MMDSPeerRequest> &m);
