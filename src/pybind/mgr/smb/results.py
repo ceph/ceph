@@ -56,6 +56,29 @@ class ErrorResult(Result, Exception):
         super().__init__(src, success=False, msg=msg, status=status)
 
 
+class InvalidResourceResult(Result):
+    def __init__(
+        self,
+        resource_data: Simplified,
+        msg: str = '',
+        status: Optional[Simplified] = None,
+    ) -> None:
+        self.resource_data = resource_data
+        self.success = False
+        self.msg = msg
+        self.status = status
+
+    def to_simplified(self) -> Simplified:
+        ds: Simplified = {}
+        ds['resource'] = self.resource_data
+        ds['success'] = self.success
+        if self.msg:
+            ds['msg'] = self.msg
+        if self.status:
+            ds.update(self.status)
+        return ds
+
+
 class ResultGroup:
     """Result of applying multiple smb resource updates to the system."""
 
