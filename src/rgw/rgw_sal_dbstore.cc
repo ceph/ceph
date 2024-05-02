@@ -1912,6 +1912,20 @@ namespace rgw::sal {
     return -ENOTSUP;
   }
 
+  int DBStore::add_persistent_topic(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    const std::string& topic_queue)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::remove_persistent_topic(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       const std::string& topic_queue)
+  {
+    return -ENOTSUP;
+  }
+
   RGWLC* DBStore::get_rgwlc(void) {
     return lc;
   }
