@@ -331,6 +331,14 @@ class QuiesceTestCase(CephFSTestCase):
         # check request/cap count is stopped
         # count inodes under /usr and count subops!
 
+    def quiesce_and_verify(self, path, timeout=120):
+        J = self.fs.rank_tell("quiesce", "path", path)
+        log.debug(f"{J}")
+        reqid = self._reqid_tostr(J['op']['reqid'])
+        self._wait_for_quiesce_complete(reqid, timeout=timeout)
+        self._verify_quiesce(root=path)
+        return reqid
+
 class TestQuiesce(QuiesceTestCase):
     """
     Single rank functional tests.
@@ -598,21 +606,39 @@ class TestQuiesce(QuiesceTestCase):
         That quiesce completes with fragmentation in the background.
         """
 
-        self.config_set('mds', 'mds_bal_split_size', '10')
-        self.config_set('mds', 'mds_bal_merge_size', '1') # do not merge
-        self.config_set('mds', 'mds_bal_split_bits', '1')
+        # the config should cause continuous merge-split wars
+        self.config_set('mds', 'mds_bal_split_size', '1') # split anything larger than one item ....
+        self.config_set('mds', 'mds_bal_merge_size', '2') # and then merge if only one item ]:-}
+        self.config_set('mds', 'mds_bal_split_bits', '2')
+
         self._configure_subvolume()
-        self._client_background_workload()
 
-        # time for the workload to get busy
-        time.sleep(5)
+        self.mount_a.run_shell_payload("mkdir -p root/sub1")
+        self.mount_a.write_file("root/sub1/file1", "I'm file 1")
+        self.mount_a.run_shell_payload("mkdir -p root/sub2")
+        self.mount_a.write_file("root/sub2/file2", "I'm file 2")
+        
+        sleep_for = 30
+        log.info(f"Sleeping {sleep_for} seconds to warm up the balancer")
+        time.sleep(sleep_for)
 
-        J = self.fs.rank_tell("quiesce", "path", self.subvolume)
-        log.debug(f"{J}")
-        reqid = self._reqid_tostr(J['op']['reqid'])
-        self._wait_for_quiesce_complete(reqid)
-        self._verify_quiesce(root=self.subvolume)
+        for _ in range(30):
+            sub1 = f"{self.subvolume}/root/sub1"
+            log.debug(f"Quiescing {sub1}")
+            # with one of the subdirs quiesced, the freezing
+            # of the parent dir (root) can't complete
+            op1 = self.quiesce_and_verify(sub1, timeout=15)
 
+            sub2 = f"{self.subvolume}/root/sub2"
+            log.debug(f"{sub1} quiesced: {op1}. Quiescing {sub2}")
+            # despite the parent dir freezing, we should be able
+            # to quiesce the other subvolume
+            op2 = self.quiesce_and_verify(sub2, timeout=15)
+
+            log.debug(f"{sub2} quiesced: {op2}. Killing the ops.")
+            self.fs.kill_op(op1)
+            self.fs.kill_op(op2)
+            time.sleep(5)
 
 class TestQuiesceMultiRank(QuiesceTestCase):
     """
