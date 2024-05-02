@@ -1,4 +1,4 @@
-from typing import Iterator, List, Optional
+from typing import Iterable, Iterator, List, Optional
 
 import errno
 
@@ -84,8 +84,10 @@ class ResultGroup:
 
     # Compatible with object formatter, thus suitable for being returned
     # directly to mgr module.
-    def __init__(self) -> None:
-        self._contents: List[Result] = []
+    def __init__(
+        self, initial_results: Optional[Iterable[Result]] = None
+    ) -> None:
+        self._contents: List[Result] = list(initial_results or [])
 
     def append(self, result: Result) -> None:
         self._contents.append(result)
