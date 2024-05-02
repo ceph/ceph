@@ -1518,7 +1518,16 @@ PG::interruptible_future<> PG::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
   assert(ec_backend);
   return ec_backend->handle_rep_read_op(
     std::move(m)
-  ).handle_error_interruptible(crimson::ct_error::assert_all{});
+  ).si_then([then_lcod=peering_state.get_info().last_complete,
+             this](auto&& rep) {
+    auto reply = crimson::make_message<MOSDECSubOpReadReply>();
+    reply->pgid = spg_t(peering_state.get_info().pgid.pgid, get_primary().shard);
+    reply->map_epoch = get_osdmap_epoch();
+    reply->min_epoch = get_interval_start_epoch();
+    reply->op = std::move(rep);
+    return shard_services.send_to_osd(
+      get_primary().osd, std::move(reply), get_osdmap_epoch());
+  }).handle_error_interruptible(crimson::ct_error::assert_all{});
 }
 
 PG::interruptible_future<> PG::do_update_log_missing(

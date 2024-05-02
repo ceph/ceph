@@ -46,14 +46,20 @@ public:
     Ref<MOSDECSubOpWrite>,
     crimson::osd::PG& pg);
   write_iertr::future<> handle_rep_write_reply(ECSubWriteReply&& op);
-  ll_read_ierrorator::future<> handle_rep_read_op(Ref<MOSDECSubOpRead>);
+  ll_read_ierrorator::future<ECSubReadReply> handle_rep_read_op(ECSubRead&);
+  ll_read_ierrorator::future<ECSubReadReply> handle_rep_read_op(Ref<MOSDECSubOpRead>);
+  ll_read_ierrorator::future<> handle_rep_read_reply(ECSubReadReply& mop);
   ll_read_ierrorator::future<> handle_rep_read_reply(Ref<MOSDECSubOpReadReply>);
 
 private:
   friend class ECRecoveryBackend;
 
   ll_read_ierrorator::future<ceph::bufferlist>
-  _read(const hobject_t& hoid, uint64_t off, uint64_t len, uint32_t flags) override;
+  _read(const hobject_t& hoid,
+        uint64_t object_size,
+        uint64_t off,
+        uint64_t len,
+        uint32_t flags) final;
   rep_op_fut_t
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
 		     crimson::osd::ObjectContextRef&& obc,
@@ -78,6 +84,11 @@ private:
     ECSubWrite &op,
     const ZTracer::Trace &trace,
     ECListener& eclistener) override;
+
+  void handle_sub_read_n_reply(
+    pg_shard_t from,
+    ECSubRead &op,
+    const ZTracer::Trace &trace) override;
 
   bool is_single_chunk(const hobject_t& obj, const ECSubRead& op);
 
