@@ -475,30 +475,21 @@ class CephFSMount(object):
                 raise RuntimeError('value of attributes should be either str '
                                    f'or None. {k} - {v}')
 
-    def update_attrs(self, client_id=None, client_keyring_path=None,
-                     client_remote=None, hostfs_mntpt=None, cephfs_name=None,
-                     cephfs_mntpt=None):
-        if not (client_id or client_keyring_path or client_remote or
-                cephfs_name or cephfs_mntpt or hostfs_mntpt):
-            return
+    def update_attrs(self, **kwargs):
+        verify_keys = [
+          'client_id',
+          'client_keyring_path',
+          'hostfs_mntpt',
+          'cephfs_name',
+          'cephfs_mntpt',
+        ]
 
-        self._verify_attrs(client_id=client_id,
-                           client_keyring_path=client_keyring_path,
-                           hostfs_mntpt=hostfs_mntpt, cephfs_name=cephfs_name,
-                           cephfs_mntpt=cephfs_mntpt)
+        self._verify_attrs(**{key: kwargs[key] for key in verify_keys if key in kwargs})
 
-        if client_id:
-            self.client_id = client_id
-        if client_keyring_path:
-            self.client_keyring_path = client_keyring_path
-        if client_remote:
-            self.client_remote = client_remote
-        if hostfs_mntpt:
-            self.hostfs_mntpt = hostfs_mntpt
-        if cephfs_name:
-            self.cephfs_name = cephfs_name
-        if cephfs_mntpt:
-            self.cephfs_mntpt = cephfs_mntpt
+        for k in verify_keys:
+            v = kwargs.get(k)
+            if v is not None:
+                setattr(self, k, v)
 
     def remount(self, **kwargs):
         """
