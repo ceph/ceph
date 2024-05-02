@@ -582,7 +582,7 @@ int SampleDedupWorkerThread::do_chunk_dedup(chunk_t &chunk, snap_t snap)
 
 unique_ptr<SampleDedupWorkerThread::SampleDedupGlobal> state;
 
-int make_crawling_daemon(const po::variables_map &opts)
+int run_crawling_daemon(const po::variables_map &opts)
 {
   string base_pool_name = get_opts_pool_name(opts);
   string chunk_pool_name = get_opts_chunk_pool(opts);
@@ -812,7 +812,7 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_signal);
 
-  int ret = make_crawling_daemon(opts);
+  int ret = run_crawling_daemon(opts);
 
   unregister_async_signal_handler(SIGINT, handle_signal);
   unregister_async_signal_handler(SIGTERM, handle_signal);
