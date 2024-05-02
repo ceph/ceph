@@ -1600,6 +1600,8 @@ private:
   uint64_t nr_metadata_request = 0;
   uint64_t nr_read_request = 0;
   uint64_t nr_write_request = 0;
+
+  feature_bitset_t myfeatures;
 };
 
 /**
