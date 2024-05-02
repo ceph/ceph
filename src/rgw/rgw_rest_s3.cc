@@ -5163,8 +5163,6 @@ void update_attribute_map(const std::string& input, AttributeMap& map) {
 void parse_post_action(const std::string& post_body, req_state* s)
 {
   if (post_body.size() > 0) {
-    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
-
     if (post_body.find("Action") != string::npos) {
       const boost::char_separator<char> sep("&");
       const boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
