@@ -155,29 +155,6 @@ struct connection_t {
   }
 };
 
-// convert int status to string - including RGW specific values
-std::string status_to_string(int s) {
-  switch (s) {
-    case STATUS_OK:
-        return "STATUS_OK";
-    case STATUS_CONNECTION_CLOSED:
-      return "RGW_KAFKA_STATUS_CONNECTION_CLOSED";
-    case STATUS_QUEUE_FULL:
-      return "RGW_KAFKA_STATUS_QUEUE_FULL";
-    case STATUS_MAX_INFLIGHT:
-      return "RGW_KAFKA_STATUS_MAX_INFLIGHT";
-    case STATUS_MANAGER_STOPPED:
-      return "RGW_KAFKA_STATUS_MANAGER_STOPPED";
-    case STATUS_CONF_ALLOC_FAILED:
-      return "RGW_KAFKA_STATUS_CONF_ALLOC_FAILED";
-    case STATUS_CONF_REPLCACE:
-      return "RGW_KAFKA_STATUS_CONF_REPLCACE";
-    case STATUS_CONNECTION_IDLE:
-      return "RGW_KAFKA_STATUS_CONNECTION_IDLE";
-  }
-  return std::string(rd_kafka_err2str((rd_kafka_resp_err_t)s));
-}
-
 void message_callback(rd_kafka_t* rk, const rd_kafka_message_t* rkmessage, void* opaque) {
   ceph_assert(opaque);
 
