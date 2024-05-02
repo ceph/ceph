@@ -63,7 +63,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Create, update, or remove smb configuration resources based on YAML
         or JSON specs
         """
-        return self._handler.apply(resources.load_text(inbuf))
+        try:
+            return self._handler.apply(resources.load_text(inbuf))
+        except resources.InvalidResourceError as err:
+            # convert the exception into a result and return it as the only
+            # item in the result group
+            return results.ResultGroup(
+                [results.InvalidResourceResult(err.resource_data, str(err))]
+            )
 
     @cli.SMBCommand('cluster ls', perm='r')
     def cluster_ls(self) -> List[str]:
