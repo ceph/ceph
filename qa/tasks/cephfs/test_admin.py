@@ -974,6 +974,39 @@ class TestFsAuthorize(CapsHelper):
             cmdargs = ['echo', 'some random data', Raw('|'), 'sudo', 'tee', filepath]
             self.mount_a.negtestcmd(args=cmdargs, retval=1, errmsg='permission denied')
 
+    def test_multifs_rootsquash_nofeature(self):
+        """
+        That having root_squash on one fs doesn't prevent access to others.
+        """
+
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
+        self.fs1 = self.fs
+        self.fs2 = self.mds_cluster.newfs('testcephfs2')
+
+        self.mount_a.umount_wait()
+
+        # Authorize client to fs1
+        FS_AUTH_CAPS = ('/', 'rw')
+        self.fs1.authorize(self.client_id, FS_AUTH_CAPS)
+
+        FS_AUTH_CAPS = ('/', 'rw', 'root_squash')
+        keyring = self.fs2.authorize(self.client_id, FS_AUTH_CAPS)
+
+        CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK = 21
+        # all but CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK
+        features = ",".join([str(i) for i in range(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)])
+        mntargs = [f"--client_debug_inject_features={features}"]
+
+        # should succeed
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id, client_keyring_path=keyring_path, mntargs=mntargs, cephfs_name=self.fs1.name)
+
+        self.conduct_pos_test_for_read_caps()
+        self.conduct_pos_test_for_open_caps()
+
     def test_single_path_rootsquash_issue_56067(self):
         """
         That a FS client using root squash MDS caps allows non-root user to write data
