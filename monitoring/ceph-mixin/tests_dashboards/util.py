@@ -75,6 +75,7 @@ def add_dashboard_variables(data: Dict[str, Any], dashboard_data: Dict[str, Any]
 
 def add_default_dashboards_variables(data: Dict[str, Any]) -> None:
     data['variables']['job'] = 'ceph'
+    data['variables']['cluster'] = 'mycluster'
     data['variables']['job_haproxy'] = 'haproxy'
     data['variables']['__rate_interval'] = '1m'
 
