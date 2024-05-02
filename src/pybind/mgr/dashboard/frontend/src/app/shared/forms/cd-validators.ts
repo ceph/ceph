@@ -626,4 +626,40 @@ export class CdValidators {
       }
     };
   }
+
+  static xml(): ValidatorFn {
+    return (control: AbstractControl): Record<string, boolean> | null => {
+      if (!control.value) return null;
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(control.value, 'application/xml');
+      const errorNode = xml.querySelector('parsererror');
+      if (errorNode) {
+        return { invalidXml: true };
+      }
+      return null;
+    };
+  }
+
+  static jsonOrXml(): ValidatorFn {
+    return (control: AbstractControl): Record<string, boolean> | null => {
+      if (!control.value) return null;
+
+      if (control.value.trim().startsWith('<')) {
+        const parser = new DOMParser();
+        const xml = parser.parseFromString(control.value, 'application/xml');
+        const errorNode = xml.querySelector('parsererror');
+        if (errorNode) {
+          return { invalidXml: true };
+        }
+        return null;
+      } else {
+        try {
+          JSON.parse(control.value);
+          return null;
+        } catch (e) {
+          return { invalidJson: true };
+        }
+      }
+    };
+  }
 }
