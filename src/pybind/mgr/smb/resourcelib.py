@@ -83,6 +83,7 @@ from typing import (
     Callable,
     Dict,
     Hashable,
+    Iterator,
     List,
     Optional,
     Tuple,
@@ -91,6 +92,7 @@ from typing import (
 import dataclasses
 import logging
 import sys
+from contextlib import contextmanager
 from itertools import chain
 
 from .proto import Self, Simplified
@@ -304,6 +306,7 @@ class Resource:
         self.resource_cls = cls
         self.fields: Dict[str, Field] = {}
         self._on_condition: Optional[Callable[..., bool]] = None
+        self._on_construction_error: Optional[Callable[..., Exception]] = None
 
         for fld in dataclasses.fields(self.resource_cls):
             self.fields[fld.name] = Field.create(fld)
@@ -316,6 +319,12 @@ class Resource:
     def on_condition(self, cond: Callable[..., bool]) -> None:
         """Set a condition function."""
         self._on_condition = cond
+
+    def on_construction_error(self, cond: Callable[..., Exception]) -> None:
+        """Set a function to handle/convert exceptions that occur while
+        constructing objects from simplified data.
+        """
+        self._on_construction_error = cond
 
     def type_name(self) -> str:
         """Return the name of the type managed by this resource."""
@@ -330,16 +339,29 @@ class Resource:
         """Given a dict-based unstructured data object return the structured
         object-based equivalent.
         """
-        kw = {}
-        for fld in self.fields.values():
-            value = self._object_field_from_simplified(fld, data)
-            if value is not _unset:
-                kw[fld.name] = value
-        obj = self.resource_cls(**kw)
-        validate = getattr(obj, 'validate', None)
-        if validate:
-            validate()
-        return obj
+        with self._structuring_error_hook(self.resource_cls, data):
+            kw = {}
+            for fld in self.fields.values():
+                value = self._object_field_from_simplified(fld, data)
+                if value is not _unset:
+                    kw[fld.name] = value
+            obj = self.resource_cls(**kw)
+            validate = getattr(obj, 'validate', None)
+            if validate:
+                validate()
+            return obj
+
+    @contextmanager
+    @_xt
+    def _structuring_error_hook(
+        self, resource_cls: Any, data: Simplified
+    ) -> Iterator[None]:
+        try:
+            yield
+        except Exception as err:
+            if self._on_construction_error:
+                raise self._on_construction_error(err, data) from err
+            raise
 
     @_xt
     def _object_field_from_simplified(
