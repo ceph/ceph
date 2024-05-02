@@ -34,16 +34,10 @@ void shutdown();
 
 // create persistent delivery queue for a topic (endpoint)
 // this operation also add a topic queue to the common (to all RGWs) list of all topics
-int add_persistent_topic(const std::string& topic_queue, optional_yield y);
-
-// same as the above, except you need to provide the IoCtx
 int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_queue, optional_yield y);
 
 // remove persistent delivery queue for a topic (endpoint)
 // this operation also remove the topic queue from the common (to all RGWs) list of all topics
-int remove_persistent_topic(const std::string& topic_queue, optional_yield y);
-
-// same as the above, except you need to provide the IoCtx
 int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_queue, optional_yield y);
 
 // struct holding reservation information

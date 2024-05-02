@@ -829,13 +829,6 @@ int add_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_i
   return 0;
 }
 
-int add_persistent_topic(const std::string& topic_queue, optional_yield y) {
-  if (!s_manager) {
-    return -EAGAIN;
-  }
-  return add_persistent_topic(s_manager.get(), s_manager->rados_store.getRados()->get_notif_pool_ctx(), topic_queue, y);
-}
-
 int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_queue, optional_yield y) {
   librados::ObjectWriteOperation op;
   op.remove();
@@ -860,13 +853,6 @@ int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rado
   }
   ldpp_dout(dpp, 20) << "INFO: queue: " << topic_queue << " removed from queue list"  << dendl;
   return 0;
-}
-
-int remove_persistent_topic(const std::string& topic_queue, optional_yield y) {
-  if (!s_manager) {
-    return -EAGAIN;
-  }
-  return remove_persistent_topic(s_manager.get(), s_manager->rados_store.getRados()->get_notif_pool_ctx(), topic_queue, y);
 }
 
 rgw::sal::Object* get_object_with_attributes(
