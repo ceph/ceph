@@ -512,7 +512,7 @@ class CephFSMount(object):
 
         self.update_attrs(**kwargs)
 
-        retval = self.mount(mntopts=mntopts, check_status=check_status)
+        retval = self.mount(mntopts=mntopts, check_status=check_status, **kwargs)
         # avoid this scenario (again): mount command might've failed and
         # check_status might have silenced the exception, yet we attempt to
         # wait which might lead to an error.
