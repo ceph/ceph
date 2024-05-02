@@ -806,7 +806,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           },
         ]).addTargets([
           $.addTargetSchema(
-            expr='ALERTS{alertstate="firing", %(matchers)s}}' % $.matchers(),
+            expr='ALERTS{alertstate="firing", %(matchers)s}' % $.matchers(),
             datasource={ type: 'prometheus', uid: '$datasource' },
             format='table',
             hide=false,
@@ -955,7 +955,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         .addTargets(
           [
             $.addTargetSchema(
-              expr='topk(10, ceph_pool_bytes_used{%(matchers)s}}/ceph_pool_max_avail{%(matchers)s}} * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata{%(matchers)s}})' % $.matchers(),
+              expr='topk(10, ceph_pool_bytes_used{%(matchers)s}/ceph_pool_max_avail{%(matchers)s} * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata{%(matchers)s})' % $.matchers(),
               datasource='$datasource',
               instant=false,
               legendFormat='{{cluster}} - {{name}}',
