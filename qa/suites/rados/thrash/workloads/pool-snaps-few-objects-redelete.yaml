@@ -7,7 +7,7 @@ overrides:
       - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - thrashosds:
-    chance_force_remove_snap: 0.5
+    chance_force_remove_snap: 0.3
 - rados:
     clients: [client.0]
     ops: 4000

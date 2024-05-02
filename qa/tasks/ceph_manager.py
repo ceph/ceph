@@ -824,8 +824,9 @@ class OSDThrasher(Thrasher):
             self.ceph_manager.raw_cluster_cmd('osd', 'pool',
                                               'force-remove-snap',
                                               pool, '--purged-snaps-only')
+            self.chance_force_remove_snap = 0
         except CommandFailedError:
-            self.log('Failed to force reremove snap, ignoring')
+            self.log('Failed to force remove snap, ignoring')
 
     def all_up(self):
         """
