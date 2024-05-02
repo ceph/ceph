@@ -112,8 +112,8 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
           Validators.required
         ]
       }),
-      access_key: new UntypedFormControl(null, Validators.required),
-      secret_key: new UntypedFormControl(null, Validators.required),
+      access_key: new UntypedFormControl('', {}),
+      secret_key: new UntypedFormControl('', {}),
       placementTarget: new UntypedFormControl(null),
       placementDataPool: new UntypedFormControl(''),
       placementIndexPool: new UntypedFormControl(null),
