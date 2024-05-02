@@ -32,6 +32,20 @@ def _present(data: Simplified) -> bool:
     return _get_intent(data) == Intent.PRESENT
 
 
+class InvalidResourceError(ValueError):
+    def __init__(self, msg: str, data: Simplified) -> None:
+        super().__init__(msg)
+        self.resource_data = data
+
+    @classmethod
+    def wrap(cls, err: Exception, data: Simplified) -> Exception:
+        if isinstance(err, ValueError) and not isinstance(
+            err, resourcelib.ResourceTypeError
+        ):
+            return cls(str(err), data)
+        return err
+
+
 class _RBase:
     # mypy doesn't currently (well?) support class decorators adding methods
     # so we use a base class to add this method to all our resource classes.
@@ -104,6 +118,7 @@ class RemovedShare(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_removed)
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
 
@@ -147,6 +162,7 @@ class Share(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_present)
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
 
@@ -226,6 +242,7 @@ class RemovedCluster(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_removed)
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
     def validate(self) -> None:
@@ -308,6 +325,7 @@ class Cluster(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.on_condition(_present)
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
 
@@ -332,6 +350,7 @@ class JoinAuth(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.linked_to_cluster.quiet = True
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
 
@@ -356,6 +375,7 @@ class UsersAndGroups(_RBase):
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
         rc.linked_to_cluster.quiet = True
+        rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
 
