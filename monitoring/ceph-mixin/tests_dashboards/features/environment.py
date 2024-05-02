@@ -113,6 +113,7 @@ def step_impl(context, panel_name, legend):
         legend = ''
     query_id = panel_name + '-' + legend
     if query_id not in global_context.query_map:
+        print(f"QueryMap: {global_context.query_map}")
         raise KeyError((f'Query with legend {legend} in panel "{panel_name}"'
                            'couldn\'t be found'))
 

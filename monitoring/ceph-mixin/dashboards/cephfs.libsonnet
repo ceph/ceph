@@ -36,9 +36,6 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addClusterTemplate()
     )
     .addTemplate(
-      $.addJobTemplate()
-    )
-    .addTemplate(
       $.addTemplateSchema('mds_servers',
                           '$datasource',
                           'label_values(ceph_mds_inodes{%(matchers)s}, ceph_daemon)' % $.matchers(),
@@ -57,7 +54,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         'none',
         'Reads(-) / Writes (+)',
         0,
-        'sum(rate(ceph_objecter_op_r{%(matchers)s, ceph_daemon=~"($mds_servers).*"}[$__rate_interval]))' % $.matchers(),
+        'sum(rate(ceph_objecter_op_r{ceph_daemon=~"($mds_servers).*", %(matchers)s}[$__rate_interval]))' % $.matchers(),
         'Read Ops',
         0,
         1,
@@ -65,7 +62,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         9
       )
       .addTarget($.addTargetSchema(
-        'sum(rate(ceph_objecter_op_w{%(matchers)s, ceph_daemon=~"($mds_servers).*"}[$__rate_interval]))' % $.matchers(),
+        'sum(rate(ceph_objecter_op_w{ceph_daemon=~"($mds_servers).*", %(matchers)s}[$__rate_interval]))' % $.matchers(),
         'Write Ops'
       ))
       .addSeriesOverride(
@@ -78,7 +75,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         'none',
         'Client Requests',
         0,
-        'ceph_mds_server_handle_client_request{%(matchers)s, ceph_daemon=~"($mds_servers).*"}' % $.matchers(),
+        'ceph_mds_server_handle_client_request{ceph_daemon=~"($mds_servers).*", %(matchers)s}' % $.matchers(),
         '{{ceph_daemon}}',
         12,
         1,
