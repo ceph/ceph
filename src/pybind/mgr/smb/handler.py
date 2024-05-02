@@ -978,7 +978,7 @@ def _generate_share(
         share.cephfs.subvolume,
         share.cephfs.path,
     )
-    return {
+    cfg = {
         # smb.conf options
         'options': {
             'path': path,
@@ -992,6 +992,12 @@ def _generate_share(
             'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
         }
     }
+    # extend share with custom options
+    custom_opts = share.cleaned_custom_smb_share_options
+    if custom_opts:
+        cfg['options'].update(custom_opts)
+        cfg['options']['x:ceph:has_custom_options'] = 'yes'
+    return cfg
 
 
 def _generate_config(
@@ -1016,7 +1022,7 @@ def _generate_config(
         for share in shares
     }
 
-    return {
+    cfg: Dict[str, Any] = {
         'samba-container-config': 'v0',
         'configs': {
             cluster.cluster_id: {
@@ -1042,6 +1048,14 @@ def _generate_config(
         },
         'shares': share_configs,
     }
+    # insert global custom options
+    custom_opts = cluster.cleaned_custom_smb_global_options
+    if custom_opts:
+        # isolate custom config opts into a section for cleanliness
+        gname = f'{cluster.cluster_id}_custom'
+        cfg['configs'][cluster.cluster_id]['globals'].append(gname)
+        cfg['globals'][gname] = {'options': dict(custom_opts)}
+    return cfg
 
 
 def _generate_smb_service_spec(
