@@ -336,7 +336,7 @@
   Quota options:
      --max-objects                 specify max objects (negative value to disable)
      --max-size                    specify max size (in B/K/M/G/T, negative value to disable)
-     --quota-scope                 scope of quota (bucket, user)
+     --quota-scope                 scope of quota (bucket, user, account)
   
   Rate limiting options:
      --max-read-ops                specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited

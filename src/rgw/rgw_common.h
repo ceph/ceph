@@ -787,6 +787,7 @@ struct RGWAccountInfo {
   std::string name;
   std::string email;
   RGWQuotaInfo quota;
+  RGWQuotaInfo bucket_quota;
 
   static constexpr int32_t DEFAULT_USER_LIMIT = 1000;
   int32_t max_users = DEFAULT_USER_LIMIT;
@@ -804,7 +805,7 @@ struct RGWAccountInfo {
   int32_t max_access_keys = DEFAULT_ACCESS_KEY_LIMIT;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(id, bl);
     encode(tenant, bl);
     encode(name, bl);
@@ -815,11 +816,12 @@ struct RGWAccountInfo {
     encode(max_groups, bl);
     encode(max_buckets, bl);
     encode(max_access_keys, bl);
+    encode(bucket_quota, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(id, bl);
     decode(tenant, bl);
     decode(name, bl);
@@ -830,6 +832,9 @@ struct RGWAccountInfo {
     decode(max_groups, bl);
     decode(max_buckets, bl);
     decode(max_access_keys, bl);
+    if (struct_v >= 2) {
+      decode(bucket_quota, bl);
+    }
     DECODE_FINISH(bl);
   }
 
