@@ -887,6 +887,13 @@ public:
                           uint32_t max_items,
                           TopicList& listing) override;
 
+      int add_persistent_topic(const DoutPrefixProvider* dpp,
+                               optional_yield y,
+                               const std::string& topic_queue) override;
+      int remove_persistent_topic(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  const std::string& topic_queue) override;
+
       virtual RGWLC* get_rgwlc(void) override;
       virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return NULL; }
       virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) override;
