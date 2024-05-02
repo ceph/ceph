@@ -1,0 +1,79 @@
+add_executable(crimson-osd
+  backfill_state.cc
+  ec_backend.cc
+  heartbeat.cc
+  lsan_suppressions.cc
+  main.cc
+  main_config_bootstrap_helpers.cc
+  osd.cc
+  osd_meta.cc
+  pg.cc
+  pg_backend.cc
+  pg_meta.cc
+  replicated_backend.cc
+  shard_services.cc
+  pg_shard_manager.cc
+  object_context.cc
+  object_context_loader.cc
+  object_metadata_helper.cc
+  ops_executer.cc
+  osd_operation.cc
+  osd_operations/client_request.cc
+  osd_operations/client_request_common.cc
+  osd_operations/internal_client_request.cc
+  osd_operations/peering_event.cc
+  osd_operations/pg_advance_map.cc
+  osd_operations/replicated_request.cc
+  osd_operations/logmissing_request.cc
+  osd_operations/logmissing_request_reply.cc
+  osd_operations/background_recovery.cc
+  osd_operations/recovery_subrequest.cc
+  osd_operations/snaptrim_event.cc
+  osd_operations/scrub_events.cc
+  pg_recovery.cc
+  recovery_backend.cc
+  replicated_recovery_backend.cc
+  scheduler/scheduler.cc
+  scheduler/mclock_scheduler.cc
+  scrub/scrub_machine.cc
+  scrub/scrub_validator.cc
+  scrub/pg_scrubber.cc
+  osdmap_gate.cc
+  pg_activation_blocker.cc
+  pg_map.cc
+  pg_interval_interrupt_condition.cc
+  objclass.cc
+  ${PROJECT_SOURCE_DIR}/src/objclass/class_api.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ClassHandler.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/osd_op_util.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/OSDCap.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/PeeringState.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/PGStateUtils.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/MissingLoc.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/PGLog.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/SnapMapper.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/recovery_types.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/osd_perf_counters.cc
+  watch.cc
+  )
+if(HAS_VTA)
+  set_source_files_properties(main.cc
+    PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
+endif()
+target_link_libraries(crimson-osd
+  legacy-option-headers
+  crimson-admin
+  crimson-common
+  crimson-os
+  crimson
+  ${FMT_LIB}
+  Boost::MPL
+  dmclock::dmclock)
+set_target_properties(crimson-osd PROPERTIES
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+install(TARGETS crimson-osd DESTINATION bin)
+if(WITH_TESTS)
+  add_dependencies(tests crimson-osd)
+endif()

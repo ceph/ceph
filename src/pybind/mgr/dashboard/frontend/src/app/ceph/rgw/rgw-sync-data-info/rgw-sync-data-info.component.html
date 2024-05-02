@@ -1,0 +1,51 @@
+<ng-template #syncPopover>
+  <ul class="text-center">
+    <li><h5><b>Sync Status:</b></h5></li>
+    <li *ngFor="let status of zone.fullSyncStatus">
+      <span *ngIf="!status?.includes(zone.name) && !status?.includes(zone.syncstatus) && !status?.includes('failed') && !status?.includes('error')">
+        <span *ngIf="status?.includes(':')">
+          <b>{{ status.split(': ')[0] | titlecase }}</b>:{{ status.split(': ')[1] | titlecase}}
+        </span>
+        <span *ngIf="!status?.includes(':')">
+          <b>{{ status | titlecase }}</b>
+        </span>
+      </span>
+      <span *ngIf="status?.includes('failed') || status?.includes('error')">
+        {{ status | titlecase }}
+      </span>
+    </li>
+  </ul>
+</ng-template>
+<ul class="me-2">
+  <ng-template #upToDateTpl>
+    <li class="badge badge-success">Up to Date</li>
+  </ng-template>
+  <ng-template #showStatus>
+    <a *ngIf="zone.syncstatus !== 'Not Syncing From Zone'"
+       class="lead text-primary"
+       [ngbPopover]="syncPopover"
+       placement="top"
+       popoverClass="rgw-overview-card-popover"
+       i18n>{{ zone.syncstatus | titlecase }}</a>
+    <a *ngIf="zone.syncstatus === 'Not Syncing From Zone'"
+       class="lead text-primary"
+       [ngbPopover]="syncPopover"
+       placement="top"
+       popoverClass="rgw-overview-card-popover"
+       i18n>Not Syncing</a>
+  </ng-template>
+  <li><b>Status:</b></li>
+  <li *ngIf="zone.syncstatus?.includes('failed') || zone.syncstatus?.includes('error'); else showStatus">
+    <i [ngClass]="[icons.danger]"
+       class="text-danger"></i>
+    <a class="lead text-danger"
+       [ngbPopover]="syncPopover"
+       placement="top"
+       popoverClass="rgw-overview-card-popover"
+       i18n>Error</a></li>
+  <li class="mt-4 fw-bold">
+    Last Synced:
+  </li>
+  <li class="badge badge-info"
+      *ngIf="zone.timestamp; else upToDateTpl">{{ zone.timestamp | relativeDate }}</li>
+</ul>
