@@ -128,6 +128,16 @@ class MultiCluster(RESTController):
 
     def check_cluster_connection(self, url, payload, username, ssl_verify, ssl_certificate):
         try:
+            hub_cluster_version = mgr.version.split('ceph version ')[1]
+            multi_cluster_content = self._proxy('GET', url, 'api/multi-cluster/get_config',
+                                                verify=ssl_verify, cert=ssl_certificate)
+            if 'status' in multi_cluster_content and multi_cluster_content['status'] == '404 Not Found':   # noqa E501 #pylint: disable=line-too-long
+                raise DashboardException(msg=f'The ceph cluster you are attempting to connect \
+                                         to does not support the multi-cluster feature. \
+                                         Please ensure that the cluster you are connecting \
+                                         to is upgraded to { hub_cluster_version } to enable the \
+                                         multi-cluster functionality.',
+                                         code='invalid_version', component='multi-cluster')
             content = self._proxy('POST', url, 'api/auth', payload=payload,
                                   verify=ssl_verify, cert=ssl_certificate)
             if 'token' not in content:

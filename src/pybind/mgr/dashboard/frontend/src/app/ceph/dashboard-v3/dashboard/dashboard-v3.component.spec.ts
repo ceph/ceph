@@ -141,13 +141,7 @@ describe('Dashbord Component', () => {
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
       { provide: SummaryService, useClass: SummaryServiceMock },
-      {
-        provide: PrometheusAlertService,
-        useValue: {
-          activeCriticalAlerts: 2,
-          activeWarningAlerts: 1
-        }
-      },
+      PrometheusAlertService,
       CssHelper,
       PgCategoryService
     ]
@@ -169,11 +163,14 @@ describe('Dashbord Component', () => {
     orchestratorService = TestBed.inject(OrchestratorService);
     getHealthSpy = spyOn(TestBed.inject(HealthService), 'getMinimalHealth');
     getHealthSpy.and.returnValue(of(healthPayload));
-    spyOn(TestBed.inject(PrometheusService), 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
     getAlertsSpy = spyOn(TestBed.inject(PrometheusService), 'getAlerts');
     getAlertsSpy.and.returnValue(of(alertsPayload));
     component.prometheusAlertService.alerts = alertsPayload;
     component.isAlertmanagerConfigured = true;
+    let prometheusAlertService = TestBed.inject(PrometheusAlertService);
+    spyOn(prometheusAlertService, 'getAlerts').and.callFake(() => of([]));
+    prometheusAlertService.activeCriticalAlerts = 2;
+    prometheusAlertService.activeWarningAlerts = 1;
   });
 
   it('should create', () => {

@@ -126,7 +126,13 @@ class PrometheusRESTController(RESTController):
 @APIRouter('/prometheus', Scope.PROMETHEUS)
 @APIDoc("Prometheus Management API", "Prometheus")
 class Prometheus(PrometheusRESTController):
-    def list(self, **params):
+    def list(self, cluster_filter=False, **params):
+        if cluster_filter:
+            try:
+                fsid = mgr.get('config')['fsid']
+            except KeyError:
+                raise DashboardException("Cluster fsid not found", component='prometheus')
+            return self.alert_proxy('GET', f'/alerts?filter=cluster={fsid}', params)
         return self.alert_proxy('GET', '/alerts', params)
 
     @RESTController.Collection(method='GET')
