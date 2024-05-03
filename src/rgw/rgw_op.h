@@ -1871,7 +1871,6 @@ protected:
   std::unique_ptr<rgw::sal::MPSerializer> serializer;
   jspan_ptr multipart_trace;
   ceph::real_time upload_time;
-  std::unique_ptr<rgw::sal::Object> target_obj;
   std::unique_ptr<rgw::sal::Notification> res;
   std::unique_ptr<rgw::sal::Object> meta_obj;
   off_t ofs = 0;
