@@ -470,6 +470,30 @@ void Beacon::notify_health(MDSRank const *mds)
     health.metrics.push_back(m);
   }
 
+  // Report a health warning if clients have broken root_squash
+  if (auto c = mds->sessionmap.num_broken_root_squash_clients(); c > 0) {
+    std::vector<MDSHealthMetric> metrics;
+
+    for (auto&& session : mds->sessionmap.get_broken_root_squash_clients()) {
+      CachedStackStringStream css;
+      *css << "Client " << session->get_human_name() << " has broken root_squash implementation";
+      MDSHealthMetric m(MDS_HEALTH_CLIENTS_BROKEN_ROOTSQUASH, HEALTH_ERR, css->strv());
+      m.metadata["client_id"] = stringify(session->get_client());
+      metrics.emplace_back(std::move(m));
+    }
+
+    if (metrics.size() <= (size_t)g_conf()->mds_health_summarize_threshold) {
+      health.metrics.insert(std::end(health.metrics), std::make_move_iterator(std::begin(metrics)), std::make_move_iterator(std::end(metrics)));
+    } else {
+      CachedStackStringStream css;
+      *css << "There are " << c << " clients with broken root_squash implementations";
+      dout(20) << css->strv() << dendl;
+      MDSHealthMetric m(MDS_HEALTH_CLIENTS_BROKEN_ROOTSQUASH, HEALTH_ERR, css->strv());
+      m.metadata["client_count"] = stringify(c);
+      health.metrics.push_back(std::move(m));
+    }
+  }
+
   // Report if we have significantly exceeded our cache size limit
   if (mds->mdcache->cache_overfull()) {
     CachedStackStringStream css;
