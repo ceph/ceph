@@ -293,6 +293,8 @@ Here are the current CephFS features and first release they came out:
 +----------------------------+--------------+-----------------+
 | has_owner_uidgid           | reef         | 6.6             |
 +----------------------------+--------------+-----------------+
+| client_mds_auth_caps       | squid+bp     | PLANNED         |
++----------------------------+--------------+-----------------+
 
 ..
     Comment: use `git describe --tags --abbrev=0 <commit>` to lookup release
@@ -353,6 +355,15 @@ Clients can send performance metric to MDS if MDS support this feature.
 
 Clients can set and understand "alternate names" for directory entries. This is
 to be used for encrypted file name support.
+
+::
+
+    client_mds_auth_caps
+
+To effectively implement ``root_squash`` in a client's ``mds`` caps, the client
+must understand that it is enforcing ``root_squash`` and other cap metadata.
+Clients without this feature are in danger of dropping updates to files.  It is
+recommend to set this feature bit.
 
 
 Global settings
