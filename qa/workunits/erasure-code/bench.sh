@@ -50,10 +50,24 @@ export PATH=/sbin:$PATH
 : ${CEPH_ERASURE_CODE_BENCHMARK:=ceph_erasure_code_benchmark}
 : ${PLUGIN_DIRECTORY:=/usr/lib/ceph/erasure-code}
 : ${PLUGINS:=isa jerasure}
-: ${TECHNIQUES:=vandermonde cauchy}
+: ${TECHNIQUES:=vandermonde cauchy liberation reed_sol_r6_op blaum_roth liber8tion}
 : ${TOTAL_SIZE:=$((1024 * 1024))}
 : ${SIZE:=4096}
 : ${PARAMETERS:=--parameter jerasure-per-chunk-alignment=true}
+
+declare -rA isa_techniques=(
+    [vandermonde]="reed_sol_van"
+    [cauchy]="cauchy"
+)
+
+declare -rA jerasure_techniques=(
+    [vandermonde]="reed_sol_van"
+    [cauchy]="cauchy_good"
+    [reed_sol_r6_op]="reed_sol_r6_op"
+    [blaum_roth]="blaum_roth"
+    [liberation]="liberation"
+    [liber8tion]="liber8tion"
+)
 
 function bench_header() {
     echo -e "seconds\tKB\tplugin\tk\tm\twork.\titer.\tsize\teras.\tcommand."
@@ -100,6 +114,25 @@ function packetsize() {
     echo $p
 }
 
+function get_technique_name()
+{
+    local plugin=$1
+    local technique=$2
+
+    declare -n techniques="${plugin}_techniques"
+    echo ${techniques["$technique"]}
+}
+
+function technique_is_raid6() {
+    local technique=$1
+    local r6_techniques="liberation reed_sol_r6_op blaum_roth liber8tion"
+
+    if [[ $r6_techniques =~ $technique ]]; then
+        return 0
+    fi
+    return 1
+}
+
 function bench_run() {
     local plugin=jerasure
     local w=8
@@ -111,31 +144,31 @@ function bench_run() {
     k2ms[4]="2 3"
     k2ms[6]="2 3 4"
     k2ms[10]="3 4"
-    local isa2technique_vandermonde='reed_sol_van'
-    local isa2technique_cauchy='cauchy'
-    local jerasure2technique_vandermonde='reed_sol_van'
-    local jerasure2technique_cauchy='cauchy_good'
+
     for technique in ${TECHNIQUES} ; do
         for plugin in ${PLUGINS} ; do
-            eval technique_parameter=\$${plugin}2technique_${technique}
+            technique_parameter=$(get_technique_name $plugin $technique)
+            if [[ -z $technique_parameter ]]; then continue; fi
             echo "serie encode_${technique}_${plugin}"
             for k in $ks ; do
                 for m in ${k2ms[$k]} ; do
+                    if [ $m -ne 2 ] && technique_is_raid6 $technique; then continue; fi
                     bench $plugin $k $m encode $(($TOTAL_SIZE / $SIZE)) $SIZE 0 \
                         --parameter packetsize=$(packetsize $k $w $VECTOR_WORDSIZE $SIZE) \
                         ${PARAMETERS} \
                         --parameter technique=$technique_parameter
-
                 done
             done
         done
     done
     for technique in ${TECHNIQUES} ; do
         for plugin in ${PLUGINS} ; do
-            eval technique_parameter=\$${plugin}2technique_${technique}
+            technique_parameter=$(get_technique_name $plugin $technique)
+            if [[ -z $technique_parameter ]]; then continue; fi
             echo "serie decode_${technique}_${plugin}"
             for k in $ks ; do
                 for m in ${k2ms[$k]} ; do
+                    if [ $m -ne 2 ] && technique_is_raid6 $technique; then continue; fi
                     echo
                     for erasures in $(seq 1 $m) ; do
                         bench $plugin $k $m decode $(($TOTAL_SIZE / $SIZE)) $SIZE $erasures \
@@ -150,27 +183,42 @@ function bench_run() {
 }
 
 function fplot() {
-    local serie
-    bench_run | while read seconds total plugin k m workload iteration size erasures rest ; do 
+    local serie=""
+    local plot=""
+    local encode_table="var encode_table = [\n"
+    local decode_table="var decode_table = [\n"
+    while read seconds total plugin k m workload iteration size erasures rest ; do
         if [ -z $seconds ] ; then
-            echo null,
+            plot="$plot  null,\n"
         elif [ $seconds = serie ] ; then
             if [ "$serie" ] ; then
-                echo '];'
+                echo -e "$plot];\n"
             fi
             local serie=`echo $total | sed 's/cauchy_\([0-9]\)/cauchy_good_\1/g'`
-            echo "var $serie = ["
+            plot="var $serie = [\n"
         else
             local x
+            local row
+            local technique=`echo $rest | grep -Po "(?<=technique=)\w*"`
+            local packetsize=`echo $rest | grep -Po "(?<=packetsize=)\w*"`
             if [ $workload = encode ] ; then
                 x=$k/$m
+                row="[ '$plugin', '$technique', $seconds, $total, $k, $m, $iteration, $packetsize ],"
+                encode_table="$encode_table  $row\n"
+
             else
                 x=$k/$m/$erasures
+                row="[ '$plugin', '$technique', $seconds, $total, $k, $m, $iteration, $packetsize, $erasures ],"
+                decode_table="$decode_table  $row\n"
             fi
-            echo "[ '$x', " $(echo "( $total / 1024 / 1024 ) / $seconds" | bc -ql) " ], "
+            local out_time="$(echo "( $total / 1024 / 1024 ) / $seconds" | bc -ql)"
+            plot="$plot  [ '$x', $out_time ],\n"
         fi
-    done
-    echo '];'
+    done < <(bench_run)
+
+    echo -e "$plot];\n"
+    echo -e "$encode_table];\n"
+    echo -e "$decode_table];\n"
 }
 
 function main() {
