@@ -18,6 +18,8 @@ import random
 log.basicConfig(level=log.DEBUG)
 
 """ Constants """
+USER = 'test3'
+DISPLAY_NAME = 'test3'
 ACCESS_KEY = 'test3'
 SECRET_KEY = 'test3'
 
@@ -92,7 +94,7 @@ def get_body(response):
         got = got.decode()
     return got
 
-def test_remote_cache_api(r, client, s3):
+def test_remote_cache_api(r, client, obj):
     # cause eviction
     test_txt = 'hello world'
 
@@ -146,17 +148,21 @@ def test_remote_cache_api(r, client, s3):
      
 def main():
     """
-    execute the d4n test
+    execute the d4n remote test
     """
 
     # Setup for test
-    log.info("D4NFilterTest setup.")
+    log.info("D4N Remote Test Setup.")
 
     out = exec_cmd('pwd')
     pwd = get_cmd_output(out)
     log.debug("pwd is: %s", pwd)
 
     endpoint, proto = get_radosgw_endpoint()
+
+    # Create user
+    exec_cmd('radosgw-admin user create --uid %s --display-name %s --access-key %s --secret %s'
+            % (USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY))
 
     client = boto3.client(service_name='s3',
                 aws_access_key_id=ACCESS_KEY,
@@ -191,7 +197,7 @@ def main():
     r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
 
     # Run remote cache API test 
-    test_remote_cache_api(r, client, s3)
+    test_remote_cache_api(r, client, obj)
 
     log.info("D4NFilterTest completed.")
 
