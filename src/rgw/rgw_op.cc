@@ -6554,18 +6554,17 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  target_obj = s->bucket->get_object(rgw_obj_key(s->object->get_name()));
   if (s->bucket->versioning_enabled()) {
     if (!version_id.empty()) {
-      target_obj->set_instance(version_id);
+      s->object->set_instance(version_id);
     } else {
-      target_obj->gen_rand_obj_instance_name();
-      version_id = target_obj->get_instance();
+      s->object->gen_rand_obj_instance_name();
+      version_id = s->object->get_instance();
     }
   }
-  target_obj->set_attrs(meta_obj->get_attrs());
+  s->object->set_attrs(meta_obj->get_attrs());
 
-  op_ret = upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch, target_obj.get());
+  op_ret = upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch, s->object.get());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
@@ -6627,12 +6626,11 @@ void RGWCompleteMultipart::complete()
     }
   }
 
-  if (op_ret >= 0 && target_obj.get() != nullptr) {
-    s->object->set_attrs(target_obj->get_attrs());
+  if (op_ret >= 0) {
     etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
     // send request to notification manager
     if (res.get() != nullptr) {
-      int ret = res->publish_commit(this, ofs, upload_time, etag, target_obj->get_instance());
+      int ret = res->publish_commit(this, ofs, upload_time, etag, s->object->get_instance());
       if (ret < 0) {
         ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
         // too late to rollback operation, hence op_ret is not set here
@@ -6640,9 +6638,6 @@ void RGWCompleteMultipart::complete()
     } else {
       ldpp_dout(this, 1) << "ERROR: reservation is null" << dendl;
     }
-  } else {
-    ldpp_dout(this, 1) << "ERROR: either op_ret is negative (execute failed) or target_obj is null, op_ret: "
-                       << op_ret << dendl;
   }
 
   // remove the upload meta object ; the meta object is not versioned
@@ -6662,7 +6657,6 @@ void RGWCompleteMultipart::complete()
 
   res.reset();
   meta_obj.reset();
-  target_obj.reset();
 
   send_response();
 }
