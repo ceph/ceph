@@ -6459,6 +6459,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   RGWMultiCompleteUpload *parts;
   RGWMultiXMLParser parser;
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
+  off_t ofs = 0;
   uint64_t olh_epoch = 0;
 
   op_ret = get_params(y);
@@ -6510,7 +6511,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
 
-  meta_obj = upload->get_meta_obj();
+  std::unique_ptr<rgw::sal::Object> meta_obj = upload->get_meta_obj();
   meta_obj->set_in_extra_data(true);
   meta_obj->set_hash_source(s->object->get_name());
 
@@ -6556,6 +6557,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   s->object->set_attrs(meta_obj->get_attrs());
 
   // make reservation for notification if needed
+  std::unique_ptr<rgw::sal::Notification> res;
   res = driver->get_notification(s->object.get(), nullptr, s, rgw::notify::ObjectCreatedCompleteMultipartUpload, y);
   op_ret = res->publish_reserve(this);
   if (op_ret < 0) {
@@ -6568,11 +6570,26 @@ void RGWCompleteMultipart::execute(optional_yield y)
     return;
   }
 
-  upload_time = upload->get_mtime();
-  int r = serializer->unlock();
-  if (r < 0) {
-    ldpp_dout(this, 0) << "WARNING: failed to unlock " << *serializer.get() << dendl;
+  const ceph::real_time upload_time = upload->get_mtime();
+  etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
+
+  // send request to notification manager
+  int ret = res->publish_commit(this, ofs, upload_time, etag, s->object->get_instance());
+  if (ret < 0) {
+    ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
+    // too late to rollback operation, hence op_ret is not set here
   }
+
+  // remove the upload meta object ; the meta object is not versioned
+  // when the bucket is, as that would add an unneeded delete marker
+  ret = meta_obj->delete_object(this, y, rgw::sal::FLAG_PREVENT_VERSIONING);
+  if (ret >= 0) {
+    /* serializer's exclusive lock is released */
+    serializer->clear_locked();
+  } else {
+    ldpp_dout(this, 4) << "WARNING: failed to remove object " << meta_obj << ", ret: " << ret << dendl;
+  }
+
 } // RGWCompleteMultipart::execute
 
 bool RGWCompleteMultipart::check_previously_completed(const RGWMultiCompleteUpload* parts)
@@ -6623,38 +6640,6 @@ void RGWCompleteMultipart::complete()
       ldpp_dout(this, 0) << "WARNING: failed to unlock " << *serializer.get() << dendl;
     }
   }
-
-  if (op_ret >= 0) {
-    etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
-    // send request to notification manager
-    if (res.get() != nullptr) {
-      int ret = res->publish_commit(this, ofs, upload_time, etag, s->object->get_instance());
-      if (ret < 0) {
-        ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
-        // too late to rollback operation, hence op_ret is not set here
-      }
-    } else {
-      ldpp_dout(this, 1) << "ERROR: reservation is null" << dendl;
-    }
-  }
-
-  // remove the upload meta object ; the meta object is not versioned
-  // when the bucket is, as that would add an unneeded delete marker
-  // moved to complete to prevent segmentation fault in publish commit
-  if (meta_obj.get() != nullptr) {
-    int ret = meta_obj->delete_object(this, null_yield, rgw::sal::FLAG_PREVENT_VERSIONING);
-    if (ret >= 0) {
-      /* serializer's exclusive lock is released */
-      serializer->clear_locked();
-    } else {
-      ldpp_dout(this, 0) << "WARNING: failed to remove object " << meta_obj << ", ret: " << ret << dendl;
-    }
-  } else {
-    ldpp_dout(this, 0) << "WARNING: meta_obj is null" << dendl;
-  }
-
-  res.reset();
-  meta_obj.reset();
 
   send_response();
 }
