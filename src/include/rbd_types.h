@@ -110,6 +110,8 @@
 
 #define RBD_GROUP_DIRECTORY "rbd_group_directory"
 
+#define RBD_GROUP_RESYNC "rbd_group_resync"
+
 #define RBD_TRASH "rbd_trash"
 
 /**
