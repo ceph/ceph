@@ -20,6 +20,7 @@
 
 #include <map>
 #include <set>
+#include <vector>
 
 #include "include/types.h"
 #include "PaxosFSMap.h"
@@ -51,6 +52,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
   bool prepare_update(MonOpRequestRef op) override;
   bool should_propose(double& delay) override;
+  bool has_health_warnings(std::vector<mds_metric_t> warnings);
 
   bool should_print_status() const {
     auto& fs = get_fsmap();

@@ -612,7 +612,12 @@ class FilesystemBase(MDSClusterBase):
         self.run_ceph_cmd("fs", "reset", str(self.name), '--yes-i-really-mean-it')
 
     def fail(self):
-        self.run_ceph_cmd("fs", "fail", str(self.name))
+        cmd = ["fs", "fail", str(self.name)]
+        try:
+            self.run_ceph_cmd(cmd)
+        except CommandFailedError:
+            cmd.append("--yes-i-really-mean-it")
+            self.run_ceph_cmd(cmd)
 
     def set_flag(self, var, *args):
         a = map(lambda x: str(x).lower(), args)
@@ -1181,8 +1186,13 @@ class FilesystemBase(MDSClusterBase):
     def rank_repaired(self, rank):
         self.run_ceph_cmd("mds", "repaired", "{}:{}".format(self.id, rank))
 
-    def rank_fail(self, rank=0):
-        self.run_ceph_cmd("mds", "fail", "{}:{}".format(self.id, rank))
+    def rank_fail(self, rank=0, confirm=True):
+        cmd = f'mds fail {self.id}:{rank}'
+        try:
+            self.run_ceph_cmd(args=cmd)
+        except CommandFailedError:
+            cmd += ' --yes--i-really-mean-it'
+            self.run_ceph_cmd(args=cmd)
 
     def rank_is_running(self, rank=0, status=None):
         name = self.get_rank(rank=rank, status=status)['name']
