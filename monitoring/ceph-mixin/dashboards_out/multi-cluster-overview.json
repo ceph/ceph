@@ -1645,7 +1645,7 @@
                         "uid": "$datasource"
                      },
                      "exemplar": false,
-                     "expr": "ALERTS{alertstate=\"firing\", cluster=~\"$cluster\", }}",
+                     "expr": "ALERTS{alertstate=\"firing\", cluster=~\"$cluster\", }",
                      "format": "table",
                      "hide": false,
                      "instant": true,
@@ -2016,7 +2016,7 @@
                "targets": [
                   {
                      "datasource": "$datasource",
-                     "expr": "topk(10, ceph_pool_bytes_used{cluster=~\"$cluster\", }}/ceph_pool_max_avail{cluster=~\"$cluster\", }} * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", }})",
+                     "expr": "topk(10, ceph_pool_bytes_used{cluster=~\"$cluster\", }/ceph_pool_max_avail{cluster=~\"$cluster\", } * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", })",
                      "format": "time_series",
                      "instant": false,
                      "intervalFactor": 1,
