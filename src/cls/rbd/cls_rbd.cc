@@ -4672,6 +4672,11 @@ std::string group_global_key(const string &global_id) {
   return GROUP_GLOBAL_KEY_PREFIX + global_id;
 }
 
+std::string group_resync_key(const std::string& global_group_id,
+                             const std::string& group_name) {
+  return group_name + "_" + global_group_id;
+}
+
 std::string group_remote_status_global_key(const std::string& global_id,
                                            const std::string& mirror_uuid) {
   return GROUP_REMOTE_STATUS_GLOBAL_KEY_PREFIX + global_id + "_" + mirror_uuid;
@@ -7656,6 +7661,127 @@ int mirror_group_list(cls_method_context_t hctx, bufferlist *in,
 
 /**
  * Input:
+ * @param global_group_id (std::string)
+ * @param global_name (std::string)
+ *
+ * Output:
+ * @param group_id (std::string)
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_resync_get(cls_method_context_t hctx, bufferlist *in,
+                            bufferlist *out) {
+  std::string global_group_id;
+  std::string group_name;
+  try {
+    auto it = in->cbegin();
+    decode(global_group_id, it);
+    decode(group_name, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::string search = mirror::group_resync_key(global_group_id, group_name);
+  std::string last_read = group_name;
+  int max_read = 5;
+  bool more = true;
+  do {
+    std::set<std::string> keys;
+    int r = cls_cxx_map_get_keys(hctx, last_read, max_read, &keys, &more);
+    if (r < 0) {
+      CLS_ERR("error reading group resync keys, global_id '%s': '%s'",
+          global_group_id.c_str(), cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (auto& key : keys) {
+      if (key == search) {
+        r = cls_cxx_map_get_val(hctx, key, out);
+        if (r < 0) {
+          CLS_ERR("error reading group_id for group resync, global_id '%s': '%s'",
+              global_group_id.c_str(), cpp_strerror(r).c_str());
+          return r;
+        }
+        return 0;
+      }
+    }
+
+    if (!keys.empty()) {
+      last_read = *keys.rbegin();
+    }
+  } while (more);
+
+  // shouldn't reach here
+  return -EINVAL;
+}
+
+/**
+ * Input:
+ * @param global_group_id (std::string)
+ * @param global_name (std::string)
+ * @param group_id (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_resync_set(cls_method_context_t hctx, bufferlist *in,
+		            bufferlist *out) {
+  std::string global_group_id;
+  std::string group_name;
+  std::string group_id;
+  try {
+    auto it = in->cbegin();
+    decode(global_group_id, it);
+    decode(group_name, it);
+    decode(group_id, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+  std::string key = mirror::group_resync_key(global_group_id, group_name);
+  bufferlist val_bl;
+  encode(group_id, val_bl);
+  int r = cls_cxx_map_set_val(hctx, key, &val_bl);
+  if (r < 0) {
+    CLS_ERR("error setting key %s on mirror group resync object: %s",
+            key.c_str(), cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Input:
+ * @param global_group_id (std::string)
+ * @param global_name (std::string)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_group_resync_remove(cls_method_context_t hctx, bufferlist *in,
+			       bufferlist *out) {
+  std::string global_group_id;
+  std::string group_name;
+  try {
+    auto it = in->cbegin();
+    decode(global_group_id, it);
+    decode(group_name, it);
+  } catch (const ceph::buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::string key = mirror::group_resync_key(global_group_id, group_name);
+  int r = cls_cxx_map_remove_key(hctx, key);
+  if (r < 0) {
+    CLS_ERR("error removing key %s from mirror group resync object: %s",
+            key.c_str(), cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Input:
  * @param global_id (std::string)
  *
  * Output:
@@ -9571,6 +9697,9 @@ CLS_INIT(rbd)
   cls_method_handle_t h_mirror_image_snapshot_unlink_peer;
   cls_method_handle_t h_mirror_image_snapshot_set_copy_progress;
   cls_method_handle_t h_mirror_group_list;
+  cls_method_handle_t h_mirror_group_resync_get;
+  cls_method_handle_t h_mirror_group_resync_set;
+  cls_method_handle_t h_mirror_group_resync_remove;
   cls_method_handle_t h_mirror_group_get_group_id;
   cls_method_handle_t h_mirror_group_get;
   cls_method_handle_t h_mirror_group_set;
@@ -9947,6 +10076,16 @@ CLS_INIT(rbd)
                           &h_mirror_image_snapshot_set_copy_progress);
   cls_register_cxx_method(h_class, "mirror_group_list", CLS_METHOD_RD,
                           mirror_group_list, &h_mirror_group_list);
+  cls_register_cxx_method(h_class, "mirror_group_resync_get", CLS_METHOD_RD,
+                          mirror_group_resync_get,
+                          &h_mirror_group_resync_get);
+  cls_register_cxx_method(h_class, "mirror_group_resync_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_group_resync_set, &h_mirror_group_resync_set);
+  cls_register_cxx_method(h_class, "mirror_group_resync_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_group_resync_remove,
+                          &h_mirror_group_resync_remove);
   cls_register_cxx_method(h_class, "mirror_group_get_group_id", CLS_METHOD_RD,
                           mirror_group_get_group_id,
                           &h_mirror_group_get_group_id);

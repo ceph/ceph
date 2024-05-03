@@ -312,9 +312,10 @@ void GroupReplayer<I>::set_state_description(int r, const std::string &desc) {
 }
 
 template <typename I>
-void GroupReplayer<I>::start(Context *on_finish, bool manual, bool restart) {
+void GroupReplayer<I>::start(Context *on_finish, bool manual,
+                             bool restart, bool resync) {
   dout(10) << "on_finish=" << on_finish << ", manual=" << manual
-           << ", restart=" << restart << dendl;
+           << ", restart=" << restart << ", resync=" << resync << dendl;
 
   int r = 0;
   {
@@ -338,6 +339,10 @@ void GroupReplayer<I>::start(Context *on_finish, bool manual, bool restart) {
       m_image_replayer_index.clear();
       m_get_remote_group_snap_ret_vals.clear();
       m_manual_stop = false;
+      m_finished = false;
+      if (resync) {
+        m_resync_requested = true;
+      }
       ceph_assert(m_on_start_finish == nullptr);
       std::swap(m_on_start_finish, on_finish);
     }
@@ -453,20 +458,28 @@ void GroupReplayer<I>::stop(Context *on_finish, bool manual, bool restart) {
 }
 
 template <typename I>
-void GroupReplayer<I>::restart(Context *on_finish) {
-  dout(10) << dendl;
+void GroupReplayer<I>::restart(Context *on_finish, bool resync) {
+  dout(10) << "resync=" << resync << dendl;
   {
     std::lock_guard locker{m_lock};
+    if (m_resync_requested) {
+      dout(10) << "resync is already in progress, cancelling restart" << dendl;
+      on_finish->complete(-ECANCELED);
+      return;
+    }
     m_restart_requested = true;
     m_on_start_finish = nullptr;
+    if (resync) {
+      m_resync_requested = true;
+    }
   }
 
   auto ctx = new LambdaContext(
-    [this, on_finish](int r) {
+    [this, on_finish, resync](int r) {
       if (r < 0) {
 	// Try start anyway.
       }
-      start(on_finish, true, true);
+      start(on_finish, true, true, resync);
     });
   stop(ctx, false, true);
 }
@@ -536,9 +549,9 @@ void GroupReplayer<I>::bootstrap_group() {
     m_threads, m_local_io_ctx, m_remote_group_peer.io_ctx, m_global_group_id,
     m_local_mirror_uuid, m_instance_watcher, m_local_status_updater,
     m_remote_group_peer.mirror_status_updater, m_cache_manager_handler,
-    m_pool_meta_cache, &m_local_group_id, &m_remote_group_id,
-    &m_local_group_snaps, &m_local_group_ctx, &m_image_replayers,
-    &m_image_replayer_index, ctx);
+    m_pool_meta_cache, m_resync_requested, &m_local_group_id,
+    &m_remote_group_id, &m_local_group_snaps, &m_local_group_ctx,
+    &m_image_replayers, &m_image_replayer_index, ctx);
 
   request->get();
   m_bootstrap_request = request;
@@ -554,6 +567,7 @@ void GroupReplayer<I>::handle_bootstrap_group(int r) {
   dout(10) << "r=" << r << dendl;
   {
     std::lock_guard locker{m_lock};
+    m_resync_requested = false;
     if (m_state == STATE_STOPPING || m_state == STATE_STOPPED) {
       dout(10) << "stop prevailed" <<dendl;
       return;
@@ -1094,8 +1108,6 @@ void GroupReplayer<I>::create_mirror_snapshot_start(
   auto requests_it = m_create_snap_requests.find(remote_group_snap_id);
 
   if (requests_it == m_create_snap_requests.end()) {
-    ceph_assert(m_local_group_snaps.count(remote_group_snap_id) == 0);
-
     requests_it = m_create_snap_requests.insert(
         {remote_group_snap_id, {}}).first;
 
@@ -1250,7 +1262,6 @@ void GroupReplayer<I>::handle_get_remote_group_snapshot(
   }
 
   m_get_remote_group_snap_ret_vals[remote_group_snap_id] = r;
-
   maybe_create_mirror_snapshot(locker, remote_group_snap_id);
 }
 

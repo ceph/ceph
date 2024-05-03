@@ -78,6 +78,7 @@ BootstrapRequest<I>::BootstrapRequest(
     MirrorStatusUpdater<I> *remote_status_updater,
     journal::CacheManagerHandler *cache_manager_handler,
     PoolMetaCache *pool_meta_cache,
+    bool resync_requested,
     std::string *local_group_id,
     std::string *remote_group_id,
     std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
@@ -98,6 +99,7 @@ BootstrapRequest<I>::BootstrapRequest(
     m_remote_status_updater(remote_status_updater),
     m_cache_manager_handler(cache_manager_handler),
     m_pool_meta_cache(pool_meta_cache),
+    m_resync_requested(resync_requested),
     m_local_group_id(local_group_id),
     m_remote_group_id(remote_group_id),
     m_local_group_snaps(local_group_snaps),
@@ -110,7 +112,11 @@ BootstrapRequest<I>::BootstrapRequest(
 
 template <typename I>
 void BootstrapRequest<I>::send() {
-  get_remote_group_id();
+  if (m_resync_requested) {
+    get_local_group_id();
+  } else {
+    get_remote_group_id();
+  }
 }
 
 template <typename I>
@@ -720,10 +726,11 @@ void BootstrapRequest<I>::handle_list_local_group_snapshots(int r) {
     if (r == -ENOENT) {
       derr << "failed to find local mirror group snapshot" << dendl;
     } else {
-      if (state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
+      if (m_remote_mirror_group_primary &&
+          state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
         // if local snapshot is primary demoted, check if there is demote snapshot
         // in remote, if not then split brain
-        if (!is_demoted_snap_exists(remote_group_snaps)) {
+        if (!is_demoted_snap_exists(remote_group_snaps) && !m_resync_requested) {
           finish(-EEXIST);
           return;
         }
@@ -954,7 +961,8 @@ void BootstrapRequest<I>::move_local_image_to_trash() {
       &BootstrapRequest<I>::handle_move_local_image_to_trash>(this);
 
   auto req = image_deleter::TrashMoveRequest<I>::create(
-      m_image_io_ctx, global_image_id, false, m_threads->work_queue, ctx);
+      m_image_io_ctx, global_image_id, m_resync_requested,
+      m_threads->work_queue, ctx);
   req->send();
 }
 

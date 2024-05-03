@@ -3202,7 +3202,6 @@ int Mirror<I>::group_resync(IoCtx& group_ioctx, const char *group_name) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
 		 << ", group_name=" << group_name << dendl;
-
   std::string group_id;
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
 				 group_name, &group_id);
@@ -3240,12 +3239,37 @@ int Mirror<I>::group_resync(IoCtx& group_ioctx, const char *group_name) {
   }
 
   if (state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
-    lderr(cct) << "group " << group_name
+    lderr(cct) << "group=" << group_name
                << " is primary, cannot resync to itself" << dendl;
     return -EINVAL;
   }
 
-  // TODO: implement the group resync functionality
+  r = cls_client::mirror_group_resync_set(&group_ioctx,
+                                          mirror_group.global_group_id,
+                                          group_name, group_id);
+  if (r < 0) {
+    lderr(cct) << "setting group resync with global_group_id="
+               << mirror_group.global_group_id << " failed: "
+               << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  std::vector<cls::rbd::GroupImageStatus> images;
+  r = Group<I>::group_image_list_by_id(group_ioctx, group_id, &images);
+  if (r < 0) {
+    lderr(cct) << "listing images in group=" << group_name
+               << " failed: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = MirroringWatcher<I>::notify_group_updated(
+        group_ioctx, cls::rbd::MIRROR_GROUP_STATE_DISABLED, group_id,
+        mirror_group.global_group_id, images.size());
+  if (r < 0) {
+    lderr(cct) << "failed to notify mirroring group=" << group_name
+               << " updated: " << cpp_strerror(r) << dendl;
+    // not fatal
+  }
 
   return 0;
 }
