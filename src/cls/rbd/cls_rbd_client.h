@@ -560,6 +560,29 @@ int mirror_group_list_finish(ceph::buffer::list::const_iterator *it,
 int mirror_group_list(librados::IoCtx *ioctx,
                       const std::string &start, uint64_t max_return,
                       std::map<std::string, cls::rbd::MirrorGroup> *groups);
+void mirror_group_resync_get_start(librados::ObjectReadOperation *op,
+                                   const std::string &global_group_id,
+                                   const std::string &group_name);
+int mirror_group_resync_get_finish(bufferlist::const_iterator *it,
+                                   std::string *group_id);
+int mirror_group_resync_get(librados::IoCtx *ioctx,
+                            const std::string &global_group_id,
+                            const std::string &group_name,
+                            std::string *group_id);
+void mirror_group_resync_set(librados::ObjectWriteOperation *op,
+                             const std::string &global_group_id,
+                             const std::string &group_name,
+                             const std::string &group_id);
+int mirror_group_resync_set(librados::IoCtx *ioctx,
+                             const std::string &global_group_id,
+                             const std::string &group_name,
+                             const std::string &group_id);
+void mirror_group_resync_remove(librados::ObjectWriteOperation *op,
+                                const std::string &global_group_id,
+                                const std::string &group_name);
+int mirror_group_resync_remove(librados::IoCtx *ioctx,
+                               const std::string &global_group_id,
+                               const std::string &group_name);
 void mirror_group_get_group_id_start(librados::ObjectReadOperation *op,
                                      const std::string &global_group_id);
 int mirror_group_get_group_id_finish(ceph::buffer::list::const_iterator *it,
