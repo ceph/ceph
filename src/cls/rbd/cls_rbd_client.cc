@@ -2643,6 +2643,93 @@ int mirror_group_list(librados::IoCtx *ioctx,
   return mirror_group_list_finish(&bl_it, groups);
 }
 
+void mirror_group_resync_get_start(librados::ObjectReadOperation *op,
+                                   const std::string &global_group_id,
+                                   const std::string &group_name)
+{
+  bufferlist in_bl;
+  encode(global_group_id, in_bl);
+  encode(group_name, in_bl);
+  op->exec("rbd", "mirror_group_resync_get", in_bl);
+}
+
+int mirror_group_resync_get_finish(bufferlist::const_iterator *it,
+                                   std::string *group_id) {
+  try {
+    decode(*group_id, *it);
+  } catch (const ceph::buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int mirror_group_resync_get(librados::IoCtx *ioctx,
+                            const std::string &global_group_id,
+                            const std::string &group_name,
+                            std::string *group_id)
+{
+  librados::ObjectReadOperation op;
+  mirror_group_resync_get_start(&op, global_group_id, group_name);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_GROUP_RESYNC, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto bl_it = out_bl.cbegin();
+  return mirror_group_resync_get_finish(&bl_it, group_id);
+}
+
+void mirror_group_resync_set(librados::ObjectWriteOperation *op,
+                             const std::string &global_group_id,
+                             const std::string &group_name,
+                             const std::string &group_id) {
+  bufferlist bl;
+  encode(global_group_id, bl);
+  encode(group_name, bl);
+  encode(group_id, bl);
+
+  op->exec("rbd", "mirror_group_resync_set", bl);
+}
+
+int mirror_group_resync_set(librados::IoCtx *ioctx,
+                             const std::string &global_group_id,
+                             const std::string &group_name,
+                             const std::string &group_id) {
+  librados::ObjectWriteOperation op;
+  mirror_group_resync_set(&op, global_group_id, group_name, group_id);
+
+  int r = ioctx->operate(RBD_GROUP_RESYNC, &op);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void mirror_group_resync_remove(librados::ObjectWriteOperation *op,
+                                const std::string &global_group_id,
+                                const std::string &group_name) {
+  bufferlist bl;
+  encode(global_group_id, bl);
+  encode(group_name, bl);
+
+  op->exec("rbd", "mirror_group_resync_remove", bl);
+}
+
+int mirror_group_resync_remove(librados::IoCtx *ioctx,
+                               const std::string &global_group_id,
+                               const std::string &group_name) {
+  librados::ObjectWriteOperation op;
+  mirror_group_resync_remove(&op, global_group_id, group_name);
+
+  int r = ioctx->operate(RBD_GROUP_RESYNC, &op);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
 void mirror_group_get_group_id_start(librados::ObjectReadOperation *op,
                                      const std::string &global_group_id) {
   bufferlist in_bl;
