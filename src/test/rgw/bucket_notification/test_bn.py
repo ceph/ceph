@@ -205,6 +205,7 @@ class HTTPServerWithEvents(ThreadingHTTPServer):
         ThreadingHTTPServer.__init__(self, addr, HTTPPostHandler)
         log.info('http server created on %s', self.addr)
         self.proc = threading.Thread(target=self.run)
+        self.proc.daemon = True
         self.proc.start()
         retries = 0
         while self.proc.is_alive() == False and retries < 5:
