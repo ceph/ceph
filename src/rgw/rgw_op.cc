@@ -6544,15 +6544,6 @@ void RGWCompleteMultipart::execute(optional_yield y)
   jspan_context trace_ctx(false, false);
   extract_span_context(meta_obj->get_attrs(), trace_ctx);
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
-  
-
-  // make reservation for notification if needed
-  res = driver->get_notification(meta_obj.get(), nullptr, s, rgw::notify::ObjectCreatedCompleteMultipartUpload, y,
-                                 &s->object->get_name());
-  op_ret = res->publish_reserve(this);
-  if (op_ret < 0) {
-    return;
-  }
 
   if (s->bucket->versioning_enabled()) {
     if (!version_id.empty()) {
@@ -6563,6 +6554,13 @@ void RGWCompleteMultipart::execute(optional_yield y)
     }
   }
   s->object->set_attrs(meta_obj->get_attrs());
+
+  // make reservation for notification if needed
+  res = driver->get_notification(s->object.get(), nullptr, s, rgw::notify::ObjectCreatedCompleteMultipartUpload, y);
+  op_ret = res->publish_reserve(this);
+  if (op_ret < 0) {
+    return;
+  }
 
   op_ret = upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size, compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch, s->object.get());
   if (op_ret < 0) {
