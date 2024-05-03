@@ -62,7 +62,7 @@ ErasureCodeIsaTableCache::~ErasureCodeIsaTableCache()
       for (table_it = tables_it->second.begin(); table_it != tables_it->second.end(); ++table_it) {
         if (table_it->second) {
           if (*(table_it->second)) {
-            delete *(table_it->second);
+            delete[] *(table_it->second);
           }
           delete table_it->second;
         }
@@ -75,7 +75,7 @@ ErasureCodeIsaTableCache::~ErasureCodeIsaTableCache()
       for (table_it = tables_it->second.begin(); table_it != tables_it->second.end(); ++table_it) {
         if (table_it->second) {
           if (*(table_it->second)) {
-            delete *(table_it->second);
+            delete[] *(table_it->second);
           }
           delete table_it->second;
         }
@@ -211,7 +211,7 @@ ErasureCodeIsaTableCache::setEncodingCoefficient(int matrix, int k, int m, unsig
   if (*ec_out_coeff) {
     // somebody might have deposited these coefficients in the meanwhile, so clean
     // the input coefficients and return the stored ones
-    free (ec_in_coeff);
+    delete[] ec_in_coeff;
     return *ec_out_coeff;
   } else {
     // we store the provided input coefficients and return these
