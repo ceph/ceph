@@ -45,6 +45,7 @@ public:
       MirrorStatusUpdater<ImageCtxT> *remote_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache *pool_meta_cache,
+      bool resync_requested,
       std::string *local_group_id,
       std::string *remote_group_id,
       std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
@@ -55,9 +56,9 @@ public:
     return new BootstrapRequest(
       threads, local_io_ctx, remote_io_ctx, global_group_id, local_mirror_uuid,
       instance_watcher, local_status_updater, remote_status_updater,
-      cache_manager_handler, pool_meta_cache, local_group_id, remote_group_id,
-      local_group_snaps, local_group_ctx, image_replayers, image_replayer_index,
-      on_finish);
+      cache_manager_handler, pool_meta_cache, resync_requested, local_group_id,
+      remote_group_id, local_group_snaps, local_group_ctx, image_replayers,
+      image_replayer_index, on_finish);
   }
 
   BootstrapRequest(
@@ -71,6 +72,7 @@ public:
       MirrorStatusUpdater<ImageCtxT> *remote_status_updater,
       journal::CacheManagerHandler *cache_manager_handler,
       PoolMetaCache *pool_meta_cache,
+      bool resync_requested,
       std::string *local_group_id,
       std::string *remote_group_id,
       std::map<std::string, cls::rbd::GroupSnapshot> *local_group_snaps,
@@ -167,6 +169,7 @@ private:
   MirrorStatusUpdater<ImageCtxT> *m_remote_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
   PoolMetaCache *m_pool_meta_cache;
+  bool m_resync_requested = false;
   std::string *m_local_group_id;
   std::string *m_remote_group_id;
   std::map<std::string, cls::rbd::GroupSnapshot> *m_local_group_snaps;
