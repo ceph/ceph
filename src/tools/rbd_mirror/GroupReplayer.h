@@ -79,7 +79,7 @@ public:
 
   std::string get_name() const {
     std::lock_guard l{m_lock};
-    return m_group_spec;
+    return m_local_group_name;
   }
   void set_state_description(int r, const std::string &desc);
 
@@ -114,12 +114,15 @@ public:
   inline const std::string& get_global_group_id() const {
     return m_global_group_id;
   }
+  inline const std::string& get_local_group_id() const {
+    return m_local_group_id;
+  }
 
   void start(Context *on_finish = nullptr, bool manual = false,
-             bool restart = false);
+             bool restart = false, bool resync = false);
   void stop(Context *on_finish = nullptr, bool manual = false,
             bool restart = false);
-  void restart(Context *on_finish = nullptr);
+  void restart(Context *on_finish = nullptr, bool resync = false);
   void flush();
 
   void print_status(Formatter *f);
@@ -233,6 +236,7 @@ private:
   Context *m_on_start_finish = nullptr;
   Context *m_on_stop_finish = nullptr;
   bool m_stop_requested = false;
+  bool m_resync_requested = false;
   bool m_restart_requested = false;
   bool m_manual_stop = false;
   bool m_finished = false;

@@ -584,7 +584,8 @@ void Replayer<I>::scan_local_mirror_snapshots(
 
     m_prune_snap_id = *prune_snap_ids.begin();
     dout(5) << "pruning unused mirror snapshot " << m_prune_snap_id << dendl;
-    unlink_group_snapshot();
+    prune_mirror_snapshot();
+    //unlink_group_snapshot();  //PK: FIXME
     return;
   }
 

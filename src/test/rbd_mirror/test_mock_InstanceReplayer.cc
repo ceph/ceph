@@ -89,13 +89,16 @@ struct GroupReplayer<librbd::MockTestImageCtx> {
   }
 
   MOCK_METHOD0(destroy, void());
-  MOCK_METHOD2(start, void(Context *, bool));
+  MOCK_METHOD4(start, void(Context *, bool, bool, bool));
   MOCK_METHOD2(stop, void(Context *, bool));
-  MOCK_METHOD1(restart, void(Context*));
+  MOCK_METHOD2(restart, void(Context*, bool));
   MOCK_METHOD0(flush, void());
+  MOCK_METHOD0(sync_group_names, void());
   MOCK_METHOD1(print_status, void(Formatter *));
   MOCK_METHOD1(add_peer, void(const Peer<librbd::MockTestImageCtx>& peer));
+  MOCK_METHOD0(get_name, const std::string &());
   MOCK_METHOD0(get_global_group_id, const std::string &());
+  MOCK_METHOD0(get_local_group_id, const std::string &());
   MOCK_METHOD0(is_running, bool());
   MOCK_METHOD0(is_stopped, bool());
   MOCK_METHOD0(is_blocklisted, bool());
