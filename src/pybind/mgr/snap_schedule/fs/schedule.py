@@ -55,10 +55,7 @@ def parse_timestamp(ts: str) -> datetime:
 def parse_retention(retention: str) -> Dict[str, int]:
     ret = {}
     log.debug(f'parse_retention({retention})')
-    matches = re.findall(r'\d+[a-z]', retention)
-    for m in matches:
-        ret[m[-1]] = int(m[0:-1])
-    matches = re.findall(r'\d+[A-Z]', retention)
+    matches = re.findall(r'\d+[nmhdwMy]', retention)
     for m in matches:
         ret[m[-1]] = int(m[0:-1])
     log.debug(f'parse_retention({retention}) -> {ret}')
@@ -381,6 +378,8 @@ class Schedule(object):
             if row is None:
                 raise ValueError(f'No schedule found for {path}')
             retention = parse_retention(retention_spec)
+            if not retention:
+                raise ValueError(f'Retention spec {retention_spec} is invalid')
             current = row['retention']
             current_retention = json.loads(current)
             for r, v in retention.items():
