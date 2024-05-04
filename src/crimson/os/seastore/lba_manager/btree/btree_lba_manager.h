@@ -250,7 +250,8 @@ public:
     laddr_t hint,
     extent_len_t len,
     laddr_t intermediate_key,
-    laddr_t intermediate_base) final
+    laddr_t intermediate_base,
+    bool inc_ref) final
   {
     assert(intermediate_key != L_ADDR_NULL);
     assert(intermediate_base != L_ADDR_NULL);
@@ -263,27 +264,41 @@ public:
 	nullptr}};
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, intermediate_base, hint](auto &alloc_infos) {
+      [this, &t, intermediate_base, hint, inc_ref](auto &alloc_infos) {
       return _alloc_extents(
 	t,
 	hint,
 	alloc_infos,
 	EXTENT_DEFAULT_REF_COUNT
-      ).si_then([&t, this, intermediate_base](auto mappings) {
+      ).si_then([&t, this, intermediate_base, inc_ref](auto mappings) {
 	assert(mappings.size() == 1);
 	auto indirect_mapping = std::move(mappings.front());
 	assert(indirect_mapping->is_indirect());
-	return update_refcount(t, intermediate_base, 1, false
-	).si_then([imapping=std::move(indirect_mapping)](auto p) mutable {
-	  auto mapping = std::move(p.mapping);
+	auto to_indirect = [](auto &mapping, const auto &imapping) mutable {
 	  ceph_assert(mapping->is_stable());
 	  mapping->make_indirect(
 	    imapping->get_key(),
 	    imapping->get_length(),
 	    imapping->get_intermediate_key());
-	  return seastar::make_ready_future<
-	    LBAMappingRef>(std::move(mapping));
-	});
+	};
+	if (inc_ref) {
+	  return update_refcount(t, intermediate_base, 1, false
+	  ).si_then([imapping=std::move(indirect_mapping),
+		     to_indirect=std::move(to_indirect)](auto p) mutable {
+	    auto mapping = std::move(p.mapping);
+	    to_indirect(mapping, imapping);
+	    return seastar::make_ready_future<
+	      LBAMappingRef>(std::move(mapping));
+	  });
+	} else {
+	  return _get_mapping(t, intermediate_base
+	  ).si_then([imapping=std::move(indirect_mapping),
+		     to_indirect=std::move(to_indirect)](auto mapping) mutable {
+	    to_indirect(mapping, imapping);
+	    return seastar::make_ready_future<
+	      LBAMappingRef>(std::move(mapping));
+	  });
+	}
       }).handle_error_interruptible(
 	crimson::ct_error::input_output_error::pass_further{},
 	crimson::ct_error::assert_all{"unexpect enoent"}
