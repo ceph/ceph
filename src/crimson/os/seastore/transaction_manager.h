@@ -593,7 +593,8 @@ public:
       hint,
       mapping.get_length(),
       intermediate_key,
-      intermediate_base
+      intermediate_base,
+      true
     );
   }
 
@@ -1023,7 +1024,8 @@ private:
 	remap_laddr,
 	remap_length,
 	intermediate_key,
-	intermediate_base);
+	intermediate_base,
+	false);
     }
     return fut.si_then([remap_laddr, remap_length, remap_paddr](auto &&ref) {
       assert(ref->get_key() == remap_laddr);
