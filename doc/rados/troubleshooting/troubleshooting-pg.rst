@@ -583,7 +583,7 @@ any mismatch between the checksum of any replica of an object and the checksum
 of the authoritative copy means that there is an inconsistency. The discovery
 of these inconsistencies cause a PG's state to be set to ``inconsistent``.
 
-The ``pg repair`` command attempts to fix inconsistencies of various kinds. If
+The ``pg repair`` command attempts to fix inconsistencies of various kinds. When 
 ``pg repair`` finds an inconsistent PG, it attempts to overwrite the digest of
 the inconsistent copy with the digest of the authoritative copy. If ``pg
 repair`` finds an inconsistent replicated pool, it marks the inconsistent copy
