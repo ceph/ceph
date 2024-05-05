@@ -1243,19 +1243,29 @@ code of standby dashboards. To do so you need to run the command:
 Resolve IP address to hostname before redirect
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The redirect from a standby to the active dashboard is done via the IP
-address. This is done because resolving IP addresses to hostnames can be error
-prone in containerized environments. It is also the reason why the option is
+Redirection from a standby dashboard to the active dashboard is done via the
+manager's IP address, not via the manager's hostname. In virtualized
+environments, IP-address-based redirection reduces the incidence of error as
+compared to hostname-based resolution.  Because of the increased risk of error
+due to hostname-based resolution, the option for hostname resolution is
 disabled by default.
+
 However, in some situations it might be helpful to redirect via the hostname.
-For example if the configured TLS certificate matches only the hostnames. To
-activate the redirection via the hostname run the following command::
+For example, if the configured TLS certificate matches only the hostnames and
+not the IP addresses of those hosts, hostname redirection would be preferable.
 
-  $ ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr True
+To activate redirection from standby dashboards to active dashboards via the
+manager's hostname, run the following command:
 
-You can disable it again by::
+.. prompt:: bash $
 
-  $ ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr False
+   ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr True
+
+Disable hostname redirection by running the following command:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/dashboard/redirect_resolve_ip_addr False
 
 .. warning::
 
