@@ -414,25 +414,16 @@ void PrimaryLogPG::on_local_recover(
       derr << __func__ << " " << hoid << " had no clone_snaps" << dendl;
     }
   }
+  bool revert = false;
   if (!is_delete && recovery_state.get_pg_log().get_missing().is_missing(recovery_info.soid) &&
       recovery_state.get_pg_log().get_missing().get_items().find(recovery_info.soid)->second.need > recovery_info.version) {
-    ceph_assert(is_primary());
     const pg_log_entry_t *latest = recovery_state.get_pg_log().get_log().objects.find(recovery_info.soid)->second;
     if (latest->op == pg_log_entry_t::LOST_REVERT &&
 	latest->reverting_to == recovery_info.version) {
+      revert = true;
       dout(10) << " got old revert version " << recovery_info.version
 	       << " for " << *latest << dendl;
       recovery_info.version = latest->version;
-      // update the attr to the revert event version
-      recovery_info.oi.prior_version = recovery_info.oi.version;
-      recovery_info.oi.version = latest->version;
-      bufferlist bl;
-      encode(recovery_info.oi, bl,
-	       get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      ceph_assert(!pool.info.is_erasure());
-      t->setattr(coll, ghobject_t(recovery_info.soid), OI_ATTR, bl);
-      if (obc)
-	obc->attr_cache[OI_ATTR] = bl;
     }
   }
 
@@ -446,7 +437,19 @@ void PrimaryLogPG::on_local_recover(
     *t);
 
   if (is_primary()) {
-    if (!is_delete) {
+    if (revert) {
+      // update the attr to the revert event version
+      recovery_info.oi.prior_version = recovery_info.oi.version;
+      recovery_info.oi.version = recovery_info.version;
+      bufferlist bl;
+      encode(recovery_info.oi, bl,
+             get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+      ceph_assert(!pool.info.is_erasure());
+      t->setattr(coll, ghobject_t(recovery_info.soid), OI_ATTR, bl);
+      if (obc) {
+        obc->attr_cache[OI_ATTR] = bl;
+      }
+    } else if (!is_delete) {
       obc->obs.exists = true;
 
       bool got = obc->get_recovery_read();
