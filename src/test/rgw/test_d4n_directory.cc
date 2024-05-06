@@ -301,7 +301,7 @@ TEST_F(ObjectDirectoryFixture, UpdateFieldYield)
 TEST_F(BlockDirectoryFixture, SetYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(block, yield));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
 
     boost::system::error_code ec;
     request req;
@@ -324,7 +324,7 @@ TEST_F(BlockDirectoryFixture, SetYield)
 TEST_F(BlockDirectoryFixture, GetYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(block, yield));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
 
     {
       boost::system::error_code ec;
@@ -338,7 +338,7 @@ TEST_F(BlockDirectoryFixture, GetYield)
       EXPECT_EQ(std::get<0>(resp).value(), 0);
     }
 
-    ASSERT_EQ(0, dir->get(block, yield));
+    ASSERT_EQ(0, dir->get(env->dpp, block, optional_yield{yield}));
     EXPECT_EQ(block->cacheObj.objName, "newoid");
 
     {
@@ -360,8 +360,8 @@ TEST_F(BlockDirectoryFixture, GetYield)
 TEST_F(BlockDirectoryFixture, CopyYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(block, yield));
-    ASSERT_EQ(0, dir->copy(block, "copyTestName", "copyBucketName", yield));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
+    ASSERT_EQ(0, dir->copy(env->dpp, block, "copyTestName", "copyBucketName", optional_yield{yield}));
 
     boost::system::error_code ec;
     request req;
@@ -392,7 +392,7 @@ TEST_F(BlockDirectoryFixture, CopyYield)
 TEST_F(BlockDirectoryFixture, DelYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(block, yield));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
 
     {
       boost::system::error_code ec;
@@ -406,7 +406,7 @@ TEST_F(BlockDirectoryFixture, DelYield)
       EXPECT_EQ(std::get<0>(resp).value(), 1);
     }
 
-    ASSERT_EQ(0, dir->del(block, yield));
+    ASSERT_EQ(0, dir->del(env->dpp, block, optional_yield{yield}));
 
     {
       boost::system::error_code ec;
@@ -430,9 +430,9 @@ TEST_F(BlockDirectoryFixture, DelYield)
 TEST_F(BlockDirectoryFixture, UpdateFieldYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    ASSERT_EQ(0, dir->set(block, yield));
-    ASSERT_EQ(0, dir->update_field(block, "objName", "newTestName", yield));
-    ASSERT_EQ(0, dir->update_field(block, "blockHosts", "127.0.0.1:5000", yield));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
+    ASSERT_EQ(0, dir->update_field(env->dpp, block, "objName", "newTestName", optional_yield{yield}));
+    ASSERT_EQ(0, dir->update_field(env->dpp, block, "blockHosts", "127.0.0.1:5000", optional_yield{yield}));
 
     boost::system::error_code ec;
     request req;
@@ -457,8 +457,8 @@ TEST_F(BlockDirectoryFixture, RemoveHostYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
     block->hostsList.push_back("127.0.0.1:6000");
-    ASSERT_EQ(0, dir->set(block, yield));
-    ASSERT_EQ(0, dir->remove_host(block, "127.0.0.1:6379", yield));
+    ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
+    ASSERT_EQ(0, dir->remove_host(env->dpp, block, "127.0.0.1:6379", optional_yield{yield}));
 
     {
       boost::system::error_code ec;
@@ -474,7 +474,7 @@ TEST_F(BlockDirectoryFixture, RemoveHostYield)
       EXPECT_EQ(std::get<1>(resp).value(), "127.0.0.1:6000");
     }
 
-    ASSERT_EQ(0, dir->remove_host(block, "127.0.0.1:6000", yield));
+    ASSERT_EQ(0, dir->remove_host(env->dpp, block, "127.0.0.1:6000", optional_yield{yield}));
 
     {
       boost::system::error_code ec;
