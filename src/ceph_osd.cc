@@ -278,41 +278,12 @@ int main(int argc, const char **argv)
 
   // the store
   std::string store_type;
-  {
-    char fn[PATH_MAX];
-    snprintf(fn, sizeof(fn), "%s/type", data_path.c_str());
-    int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
-    if (fd >= 0) {
-      bufferlist bl;
-      bl.read_fd(fd, 64);
-      if (bl.length()) {
-	store_type = string(bl.c_str(), bl.length() - 1);  // drop \n
-	dout(5) << "object store type is " << store_type << dendl;
-      }
-      ::close(fd);
-    } else if (mkfs) {
-      store_type = g_conf().get_val<std::string>("osd_objectstore");
-    } else {
-      // hrm, infer the type
-      snprintf(fn, sizeof(fn), "%s/current", data_path.c_str());
-      struct stat st;
-      if (::stat(fn, &st) == 0 &&
-	  S_ISDIR(st.st_mode)) {
-	derr << "missing 'type' file, inferring filestore from current/ dir"
-	     << dendl;
-	store_type = "filestore";
-      } else {
-	snprintf(fn, sizeof(fn), "%s/block", data_path.c_str());
-	if (::stat(fn, &st) == 0 &&
-	    S_ISLNK(st.st_mode)) {
-	  derr << "missing 'type' file, inferring bluestore from block symlink"
-	       << dendl;
-	  store_type = "bluestore";
-	} else {
-	  derr << "missing 'type' file and unable to infer osd type" << dendl;
-	  forker.exit(1);
-	}
-      }
+  if (mkfs) {
+    store_type = g_conf().get_val<std::string>("osd_objectstore");
+  } else {
+    bool detected = ObjectStore::probe_objectstore_type(g_ceph_context, data_path, &store_type);
+    if (!detected) {
+      forker.exit(1);
     }
   }
 

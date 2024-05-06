@@ -103,6 +103,10 @@ public:
     const std::string& path,
     uuid_d *fsid);
 
+  static bool probe_objectstore_type(
+    CephContext *cct,
+    const std::string& path,
+    std::string *store_type);
   /**
    * Fetch Object Store statistics.
    *

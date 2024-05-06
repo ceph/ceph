@@ -84,6 +84,51 @@ int ObjectStore::probe_block_device_fsid(
   return -EINVAL;
 }
 
+bool ObjectStore::probe_objectstore_type(
+  CephContext *cct,
+  const std::string& path,
+  std::string *store_type)
+{
+  int result = false;
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/type", path.c_str());
+  int fd = ::open(fn, O_RDONLY | O_CLOEXEC);
+  if (fd >= 0) {
+    bufferlist bl;
+    bl.read_fd(fd, 64);
+    if (bl.length()) {
+      *store_type = string(bl.c_str(), bl.length() - 1); // drop \n
+      lgeneric_dout(cct, 5) << "object store type is " << *store_type << dendl;
+      result = true;
+    }
+    ::close(fd);
+  } else {
+    // hrm, infer the type
+    snprintf(fn, sizeof(fn), "%s/current", path.c_str());
+    struct stat st;
+    if (::stat(fn, &st) == 0 && S_ISDIR(st.st_mode)) {
+      lgeneric_dout(cct, 5)
+        << "missing 'type' file, inferring filestore from current/ dir"
+        << dendl;
+      *store_type = "filestore";
+      result = true;
+    } else {
+      snprintf(fn, sizeof(fn), "%s/block", path.c_str());
+      if (::stat(fn, &st) == 0) {
+        lgeneric_dout(cct, 5)
+          << "missing 'type' file, inferring bluestore from existence of 'block'"
+          << dendl;
+        *store_type = "bluestore";
+        result = true;
+      } else {
+        lgeneric_derr(cct) << "missing 'type' file and unable to infer osd type"
+                           << dendl;
+      }
+    }
+  }
+  return result;
+}
+
 int ObjectStore::write_meta(const std::string& key,
 			    const std::string& value)
 {
