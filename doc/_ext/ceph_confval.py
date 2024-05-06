@@ -289,12 +289,6 @@ class CephOption(ObjectDescription):
         # make diskprediction_local happy
         mock_imports += ['numpy',
                          'scipy']
-        # make restful happy
-        mock_imports += ['pecan',
-                         'pecan.rest',
-                         'pecan.hooks',
-                         'werkzeug',
-                         'werkzeug.serving']
 
         for m in mock_imports:
             args = {}

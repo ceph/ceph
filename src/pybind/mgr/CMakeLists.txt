@@ -42,7 +42,6 @@ set(mgr_modules
   progress
   prometheus
   rbd_support
-  restful
   rgw
   # rook (optional)
   selftest
