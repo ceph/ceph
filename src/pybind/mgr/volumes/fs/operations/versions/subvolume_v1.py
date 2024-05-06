@@ -152,6 +152,15 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         except MetadataMgrException as me:
             log.error(f"Failed to add clone failure status clone={self.subvol_name} group={self.group_name} "
                       f"reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
+            
+    def add_clone_cancelled(self, track_id, clonename):
+        try:
+            self.metadata_mgr.add_section(MetadataManager.CLONE_CANCELLED_SECTION)
+            self.metadata_mgr.update_section(MetadataManager.CLONE_CANCELLED_SECTION,
+                                             track_id, clonename)
+            self.metadata_mgr.flush()
+        except MetadataMgrException as me:
+            log.error("Failed to add cancelled clone")
 
     def create_clone(self, pool, source_volname, source_subvolume, snapname):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
@@ -810,6 +819,16 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             pending_clones_info["orphan_clones_count"] = orphan_clones_count
 
         return pending_clones_info
+    
+    def get_all_cancelled_clones(self):
+        cancelled_pending_clones = {}
+        try:
+            cancelled_pending_clones = self.metadata_mgr.list_all_options_from_section('CANCELLED_CLONE')
+        except MetadataMgrException as me:
+            if me.errno != -errno.ENOENT:
+                raise VolumeException(-me.args[0], me.args[1])
+
+        return cancelled_pending_clones
 
     def remove_snapshot(self, snapname, force=False):
         if self.has_pending_clones(snapname):

@@ -385,6 +385,7 @@ class Cloner(AsyncJobs):
                                 logging.debug("Cancelling pending job {0}".format(clone_job))
                                 # clone has not started yet -- cancel right away.
                                 self._cancel_pending_clone(fs_handle, clone_subvolume, clonename, groupname, status, track_idx)
+                                clone_subvolume.add_clone_cancelled(track_idx, clonename)
                                 return
             # cancelling an on-going clone would persist "canceled" state in subvolume metadata.
             # to persist the new state, async cloner accesses the volume in exclusive mode.
@@ -396,6 +397,7 @@ class Cloner(AsyncJobs):
                         with open_subvol(self.fs_client.mgr, fs_handle, self.vc.volspec, group, clonename, SubvolumeOpType.CLONE_CANCEL) as clone_subvolume:
                             if not self._cancel_job(volname, (track_idx, clone_subvolume.base_path)):
                                 raise VolumeException(-errno.EINVAL, "cannot cancel -- clone finished (check clone status)")
+                            clone_subvolume.add_clone_cancelled(track_idx, clonename)
         except (IndexException, MetadataMgrException) as e:
             log.error("error cancelling clone {0}: ({1})".format(job, e))
             raise VolumeException(-errno.EINVAL, "error canceling clone")
