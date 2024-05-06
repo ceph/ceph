@@ -74,6 +74,7 @@ promPool          OBJECT IDENTIFIER ::= { prometheus 9 }
 promRados         OBJECT IDENTIFIER ::= { prometheus 10 }
 promCephadm       OBJECT IDENTIFIER ::= { prometheus 11 }
 promPrometheus    OBJECT IDENTIFIER ::= { prometheus 12 }
+promNVMeGateway   OBJECT IDENTIFIER ::= { prometheus 14 }
 
 promGenericNotification NOTIFICATION-TYPE
     STATUS      current
@@ -279,6 +280,11 @@ promPrometheusJobMissing NOTIFICATION-TYPE
     STATUS      current
     DESCRIPTION "The prometheus scrape job is not defined."
 ::= { promPrometheus 1 }
+
+promNVMeGatewayNicDown NOTIFICATION-TYPE
+    STATUS      current
+    DESCRIPTION "A NIC used for NVMe gateway client traffic is down."
+::= { promNVMeGateway 1 }
 -- ---------------------------------------------------------- --
 -- IEEE 802.1D MIB - Conformance Information
 -- ---------------------------------------------------------- --
@@ -336,7 +342,8 @@ cephNotificationGroup NOTIFICATION-GROUP
         promRadosRBDMirrorHighBandwidth,
         promCephadmDaemonDown,
         promCephadmUpgradeFailure,
-        promPrometheusJobMissing
+        promPrometheusJobMissing,
+        promNVMeGatewayNicDown
     }
     STATUS current
     DESCRIPTION
