@@ -33,7 +33,9 @@ void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
   timer.async_wait([&](const boost::system::error_code &e) {
     std::cerr << e << std::endl;
     update_sockets();
-    dump_asok_metrics();
+    std::string dump_response;
+    std::string schema_response;
+    dump_asok_metrics(false, -1, true, dump_response, schema_response, true);
     auto stats_period = g_conf().get_val<int64_t>("exporter_stats_period");
     // time to wait before sending requests again
     timer.expires_from_now(std::chrono::seconds(stats_period));
@@ -82,13 +84,17 @@ std::string boost_string_to_std(boost::json::string js) {
 
 std::string quote(std::string value) { return "\"" + value + "\""; }
 
-void DaemonMetricCollector::dump_asok_metrics() {
+void DaemonMetricCollector::dump_asok_metrics(bool sort_metrics, int64_t counter_prio,
+                                              bool sockClientsPing, std::string &dump_response,
+                                              std::string &schema_response,
+                                              bool config_show_response) {
   BlockTimer timer(__FILE__, __FUNCTION__);
 
   std::vector<std::pair<std::string, int>> daemon_pids;
 
   int failures = 0;
-  bool sort = g_conf().get_val<bool>("exporter_sort_metrics");
+  bool sort;
+  sort = sort_metrics ? true : g_conf().get_val<bool>("exporter_sort_metrics");
   if (sort) {
     builder =
         std::unique_ptr<OrderedMetricsBuilder>(new OrderedMetricsBuilder());
@@ -96,21 +102,23 @@ void DaemonMetricCollector::dump_asok_metrics() {
     builder =
         std::unique_ptr<UnorderedMetricsBuilder>(new UnorderedMetricsBuilder());
   }
-  auto prio_limit = g_conf().get_val<int64_t>("exporter_prio_limit");
+  auto prio_limit = counter_prio >=0 ? counter_prio : g_conf().get_val<int64_t>("exporter_prio_limit");
   for (auto &[daemon_name, sock_client] : clients) {
-    bool ok;
-    sock_client.ping(&ok);
-    if (!ok) {
-      failures++;
-      continue;
+    if (sockClientsPing) {
+      bool ok;
+      sock_client.ping(&ok);
+      if (!ok) {
+        failures++;
+        continue;
+      } 
     }
-    std::string counter_dump_response =
+    std::string counter_dump_response = dump_response.size() > 0 ? dump_response :
       asok_request(sock_client, "counter dump", daemon_name);
     if (counter_dump_response.size() == 0) {
         failures++;
         continue;
     }
-    std::string counter_schema_response =
+    std::string counter_schema_response = schema_response.size() > 0 ? schema_response :
         asok_request(sock_client, "counter schema", daemon_name);
     if (counter_schema_response.size() == 0) {
       failures++;
@@ -166,7 +174,7 @@ void DaemonMetricCollector::dump_asok_metrics() {
         }
       }
     }
-    std::string config_show =
+    std::string config_show = !config_show_response ? "" :
         asok_request(sock_client, "config show", daemon_name);
     if (config_show.size() == 0) {
       failures++;
@@ -335,13 +343,14 @@ DaemonMetricCollector::add_fixed_name_metrics(std::string metric_name) {
   labels_t labels;
   new_metric_name = metric_name;
 
-  std::regex re("^data_sync_from_(.*)\\.");
-    std::smatch match;
-    if (std::regex_search(metric_name, match, re) == true) {
-      new_metric_name = std::regex_replace(metric_name, re, "from_([^.]*)', 'from_zone");
+  std::regex re("data_sync_from_([^_]*)");
+  std::smatch match;
+  if (std::regex_search(metric_name, match, re)) {
+      new_metric_name = std::regex_replace(metric_name, re, "data_sync_from_zone");
       labels["source_zone"] = quote(match.str(1));
       return {labels, new_metric_name};
-    }
+  }
+
   return {};
 }
 
