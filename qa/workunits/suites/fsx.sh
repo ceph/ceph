@@ -4,6 +4,8 @@ set -e
 
 git clone https://git.ceph.com/xfstests-dev.git
 cd xfstests-dev
+# This sha1 is the latest master head and works well for our tests.
+git checkout 0e5c12dfd008efc2848c98108c9237487e91ef35
 make -j4
 cd ..
 cp xfstests-dev/ltp/fsx .
