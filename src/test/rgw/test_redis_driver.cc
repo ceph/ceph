@@ -93,6 +93,7 @@ class RedisDriverFixture: public ::testing::Test {
       ASSERT_NE(cacheDriver, nullptr);
       ASSERT_NE(conn, nullptr);
 
+      env->cct->_conf->rgw_d4n_l1_datacache_address = "127.0.0.1:6379";
       cacheDriver->initialize(env->dpp);
 
       bl.append("test data");
@@ -357,6 +358,34 @@ TEST_F(RedisDriverFixture, DeleteDataYield)
 
       ASSERT_EQ((bool)ec, false);
       EXPECT_EQ(std::get<0>(resp).value(), 0);
+    }
+
+    conn->cancel();
+  }, rethrow);
+
+  io.run();
+}
+
+TEST_F(RedisDriverFixture, RenameYield)
+{
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{yield}));
+    ASSERT_EQ(0, cacheDriver->rename(env->dpp, "testName", "newTestName", optional_yield{yield}));
+    cacheDriver->shutdown();
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXISTS", "RedisCache/testName");
+      req.push("EXISTS", "RedisCache/newTestName");
+      req.push("FLUSHALL");
+      response<int, int, boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 0);
+      EXPECT_EQ(std::get<1>(resp).value(), 1);
     }
 
     conn->cancel();
