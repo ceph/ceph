@@ -110,3 +110,23 @@ def test_clean_custom_options():
     smb.validation.check_custom_options(updated)
     assert smb.validation.clean_custom_options(updated) == orig
     assert smb.validation.clean_custom_options(None) is None
+
+
+@pytest.mark.parametrize(
+    "value,ok,err_match",
+    [
+        ("tim", True, ""),
+        ("britons\\arthur", True, ""),
+        ("lance a lot", False, "spaces, tabs, or newlines"),
+        ("tabs\ta\tlot", False, "spaces, tabs, or newlines"),
+        ("bed\nivere", False, "spaces, tabs, or newlines"),
+        ("runawa" + ("y" * 122), True, ""),
+        ("runawa" + ("y" * 123), False, "128"),
+    ],
+)
+def test_check_access_name(value, ok, err_match):
+    if ok:
+        smb.validation.check_access_name(value)
+    else:
+        with pytest.raises(ValueError, match=err_match):
+            smb.validation.check_access_name(value)
