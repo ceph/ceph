@@ -480,6 +480,21 @@ cephfs
     provider
         Optional. One of ``samba-vfs`` or ``kcephfs`` (``kcephfs`` is not yet
         supported) . Selects how CephFS storage should be provided to the share
+restrict_access
+    Optional boolean, defaulting to false. If true the share will only permit
+    access by users explicitly listed in ``login_control``.
+login_control
+    Optional list of objects. Fields:
+
+    name
+        Required string. Name of the user or group.
+    category
+        Optional. One of ``user`` (default) or ``group``.
+    access
+        One of ``read`` (alias ``r``), ``read-write`` (alias ``rw``), ``none``,
+        or ``admin``. Specific access level to grant to the user or group when
+        logging into this share. The ``none`` value denies access to the share
+        regardless of the ``restrict_access`` value.
 custom_smb_share_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the ``smb.conf`` (or equivalent) of a Samba server.  Do *not* use this
