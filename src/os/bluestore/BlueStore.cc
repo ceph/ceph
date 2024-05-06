@@ -5994,16 +5994,15 @@ int BlueStore::_set_cache_sizes()
 
 int BlueStore::write_meta(const std::string& key, const std::string& value)
 {
+  dout(5) << __func__ << " key=" << key << " value=" << value << dendl;
   bluestore_bdev_label_t label;
   string p = path + "/block";
   int r = _read_bdev_label(cct, p, &label);
-  if (r < 0) {
-    return ObjectStore::write_meta(key, value);
-  }
+  ceph_assert(r == 0);
   label.meta[key] = value;
   r = _write_bdev_label(cct, p, label);
   ceph_assert(r == 0);
-  return ObjectStore::write_meta(key, value);
+  return 0;
 }
 
 int BlueStore::read_meta(const std::string& key, std::string *value)
@@ -6011,12 +6010,12 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
   bluestore_bdev_label_t label;
   string p = path + "/block";
   int r = _read_bdev_label(cct, p, &label);
-  if (r < 0) {
-    return ObjectStore::read_meta(key, value);
+  if (r != 0) {
+    return r;
   }
   auto i = label.meta.find(key);
   if (i == label.meta.end()) {
-    return ObjectStore::read_meta(key, value);
+    return -ENOENT;
   }
   *value = i->second;
   return 0;
