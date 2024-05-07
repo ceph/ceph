@@ -167,7 +167,11 @@ class VolumeTagTracker(object):
             aux_dev.lv_api.set_tags(tags)
 
     def remove_lvs(self, source_devices, target_type):
-        remaining_devices = [self.data_device, self.db_device, self.wal_device]
+        remaining_devices = [self.data_device]
+        if self.db_device:
+            remaining_devices.append(self.db_device)
+        if self.wal_device:
+            remaining_devices.append(self.wal_device)
 
         outdated_tags = []
         for device, type in source_devices:
