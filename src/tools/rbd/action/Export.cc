@@ -335,8 +335,8 @@ int execute_diff(const po::variables_map &vm,
     return r;
   }
 
-  char* fromsnapname = from_snap_name.empty() ? nullptr : from_snap_name.c_str();
-  char* endsnapname = snap_name.empty() ? nullptr : snap_name.c_str();
+  const char* fromsnapname = from_snap_name.empty() ? nullptr : from_snap_name.c_str();
+  const char* endsnapname = snap_name.empty() ? nullptr : snap_name.c_str();
 
   r = do_export_diff(image,
                      fromsnapname,
