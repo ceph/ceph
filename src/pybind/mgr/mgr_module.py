@@ -538,8 +538,12 @@ def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerF
                 # Delete new line separator at EOF (it may have been added by a text editor).
                 kwargs['inbuf'] = kwargs['inbuf'].rstrip('\r\n').rstrip('\n')
             if not kwargs['inbuf'] or not kwargs['inbuf'].strip():
-                return -errno.EINVAL, '', f'{ERROR_MSG_EMPTY_INPUT_FILE}: Please add {desc} to '\
-                                           'the file'
+                return (
+                    -errno.EINVAL,
+                    '',
+                    f'{ERROR_MSG_EMPTY_INPUT_FILE}: Please add {desc} to '
+                    'the file'
+                )
             return func(*args, **kwargs)
         check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
         return check
@@ -560,10 +564,10 @@ def MgrModuleRecoverDB(func: Callable) -> Callable:
                 return func(self, *args, **kwargs)
             except sqlite3.DatabaseError as e:
                 self.log.error(f"Caught fatal database error: {e}")
-                retries = retries+1
+                retries = retries + 1
                 if retries > MAX_DBCLEANUP_RETRIES:
                     raise
-                self.log.debug(f"attempting reopen of database")
+                self.log.debug("attempting reopen of database")
                 self.close_db()
                 self.open_db()
                 # allow retry of func(...)
@@ -758,9 +762,9 @@ class MgrModuleLoggingMixin(object):
         # remove existing handlers:
         rm_handlers = [
             h for h in self._root_logger.handlers
-            if (isinstance(h, CPlusPlusHandler) or
-                isinstance(h, FileHandler) or
-                isinstance(h, ClusterLogHandler))]
+            if (isinstance(h, CPlusPlusHandler)
+                or isinstance(h, FileHandler)
+                or isinstance(h, ClusterLogHandler))]
         for h in rm_handlers:
             self._root_logger.removeHandler(h)
         self.log_to_file = False
@@ -986,7 +990,7 @@ class API:
         class DecoratorClass:
             _ATTR_TOKEN = f'__ATTR_{attr.upper()}__'
 
-            def __init__(self, value: Any=default) -> None:
+            def __init__(self, value: Any = default) -> None:
                 self.value = value
 
             def __call__(self, func: Callable) -> Any:
@@ -1198,15 +1202,15 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     def create_skeleton_schema(self, db: sqlite3.Connection) -> None:
         SQL = [
-        """
-        CREATE TABLE IF NOT EXISTS MgrModuleKV (
-          key TEXT PRIMARY KEY,
-          value NOT NULL
-        ) WITHOUT ROWID;
-        """,
-        """
-        INSERT OR IGNORE INTO MgrModuleKV (key, value) VALUES ('__version', 0);
-        """,
+            """
+            CREATE TABLE IF NOT EXISTS MgrModuleKV (
+              key TEXT PRIMARY KEY,
+              value NOT NULL
+            ) WITHOUT ROWID;
+            """,
+            """
+            INSERT OR IGNORE INTO MgrModuleKV (key, value) VALUES ('__version', 0);
+            """,
         ]
 
         for sql in SQL:
@@ -1453,7 +1457,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             All these structures have their own JSON representations: experiment
             or look at the C++ ``dump()`` methods to learn about them.
         """
-        obj =  self._ceph_get(data_name)
+        obj = self._ceph_get(data_name)
         if isinstance(obj, bytes):
             obj = json.loads(obj)
 
@@ -1775,7 +1779,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return r
 
     def get_quiesce_leader_gid(self, fscid: str) -> Optional[int]:
-        leader_gid : Optional[int] = None
+        leader_gid: Optional[int] = None
         for fs in self.get("fs_map")['filesystems']:
             if fscid != fs["id"]:
                 continue
@@ -2152,10 +2156,19 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     @API.expose
     @profile_method()
-    def get_unlabeled_perf_counters(self, prio_limit: int = PRIO_USEFUL,
-                              services: Sequence[str] = ("mds", "mon", "osd",
-                                                         "rbd-mirror", "cephfs-mirror", "rgw",
-                                                         "tcmu-runner")) -> Dict[str, dict]:
+    def get_unlabeled_perf_counters(
+        self,
+        prio_limit: int = PRIO_USEFUL,
+        services: Sequence[str] = (
+            "mds",
+            "mon",
+            "osd",
+            "rbd-mirror",
+            "cephfs-mirror",
+            "rgw",
+            "tcmu-runner",
+        ),
+    ) -> Dict[str, dict]:
         """
         Return the perf counters currently known to this ceph-mgr
         instance, filtered by priority equal to or greater than `prio_limit`.
@@ -2448,11 +2461,11 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                               stdout_as_json: bool = True) -> Tuple[int, Union[str, dict], str]:
         try:
             cmd = [
-                    'radosgw-admin',
-                    '-c', str(self.get_ceph_conf_path()),
-                    '-k', str(self.get_ceph_option('keyring')),
-                    '-n', f'mgr.{self.get_mgr_id()}',
-                ] + args
+                'radosgw-admin',
+                '-c', str(self.get_ceph_conf_path()),
+                '-k', str(self.get_ceph_option('keyring')),
+                '-n', f'mgr.{self.get_mgr_id()}',
+            ] + args
             self.log.debug('Executing %s', str(cmd))
             result = subprocess.run(  # pylint: disable=subprocess-run-check
                 cmd,
