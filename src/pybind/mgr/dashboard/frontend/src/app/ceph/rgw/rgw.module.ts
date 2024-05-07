@@ -58,6 +58,7 @@ import { RgwMultisiteSyncPolicyComponent } from './rgw-multisite-sync-policy/rgw
 import { RgwMultisiteSyncPolicyFormComponent } from './rgw-multisite-sync-policy-form/rgw-multisite-sync-policy-form.component';
 import { RgwConfigurationPageComponent } from './rgw-configuration-page/rgw-configuration-page.component';
 import { RgwConfigDetailsComponent } from './rgw-config-details/rgw-config-details.component';
+import { RgwMultisiteWizardComponent } from './rgw-multisite-wizard/rgw-multisite-wizard.component';
 
 @NgModule({
   imports: [
@@ -120,7 +121,8 @@ import { RgwConfigDetailsComponent } from './rgw-config-details/rgw-config-detai
     RgwMultisiteSyncPolicyComponent,
     RgwMultisiteSyncPolicyFormComponent,
     RgwConfigDetailsComponent,
-    RgwConfigurationPageComponent
+    RgwConfigurationPageComponent,
+    RgwMultisiteWizardComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -211,6 +213,7 @@ const routes: Routes = [
   },
   {
     path: 'multisite',
+    component: RgwMultisiteDetailsComponent,
     data: { breadcrumbs: 'Multi-site' },
     children: [
       { path: '', component: RgwMultisiteDetailsComponent },
@@ -228,6 +231,11 @@ const routes: Routes = [
         path: `sync-policy/${URLVerbs.EDIT}/:groupName/:bucketName`,
         component: RgwMultisiteSyncPolicyFormComponent,
         data: { breadcrumbs: `${ActionLabels.EDIT} Sync Policy` }
+      },
+      {
+        path: 'setup-multisite-replication',
+        component: RgwMultisiteWizardComponent,
+        outlet: 'modal'
       }
     ]
   },
