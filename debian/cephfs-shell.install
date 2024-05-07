@@ -1,0 +1,3 @@
+usr/bin/cephfs-shell
+usr/lib/python3*/dist-packages/cephfs_shell-*.egg-info
+usr/share/man/man8/cephfs-shell.8
