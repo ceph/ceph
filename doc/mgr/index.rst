@@ -33,7 +33,6 @@ sensible.
     Alerts module <alerts>
     DiskPrediction module <diskprediction>
     Local pool module <localpool>
-    Zabbix module <zabbix>
     Prometheus module <prometheus>
     Influx module <influx>
     Hello module <hello>
