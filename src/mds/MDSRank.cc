@@ -1216,7 +1216,6 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
     return true;
   }
 
-  dout(10) << "invalid message type: " << std::hex << type << std::dec << dendl;
   return false;
 }
 
