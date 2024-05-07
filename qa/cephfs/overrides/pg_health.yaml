@@ -8,3 +8,4 @@ overrides:
       - PG_AVAILABILITY
       - PG_DEGRADED
       - Reduced data availability
+      - Degraded data redundancy
