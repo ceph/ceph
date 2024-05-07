@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
@@ -31,6 +31,9 @@ export class RgwMultisiteRealmFormComponent implements OnInit {
   defaultsInfo: string[];
   defaultRealmDisabled = false;
   docUrl: string;
+
+  @Input()
+  isCalledFromWizard = false;
 
   constructor(
     public activeModal: NgbActiveModal,

@@ -8,6 +8,10 @@
   padding-left: 0;
 }
 
+.no-wrap {
+  white-space: nowrap;
+}
+
 span.circle-step {
   background: vv.$gray-500;
   border-radius: 0.8em;

@@ -3,11 +3,15 @@
 # pylint: disable=too-many-branches
 # pylint: disable=too-many-lines
 
+import ast
 import ipaddress
 import json
 import logging
+import time
 import os
 import re
+import requests
+from urllib.parse import urlparse
 import xml.etree.ElementTree as ET  # noqa: N814
 from subprocess import SubprocessError
 
@@ -18,6 +22,7 @@ from ..awsauth import S3Auth
 from ..exceptions import DashboardException
 from ..rest_client import RequestException, RestClient
 from ..settings import Settings
+from .orchestrator import OrchClient
 from ..tools import dict_contains_path, dict_get, json_str_to_object, str_to_bool
 from .ceph_service import CephService
 
@@ -1060,6 +1065,115 @@ class RgwMultisite:
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
+
+
+    def replace_hostname(self, endpoint, hostname_to_ip):
+        # Replace the hostname in the endpoint URL with its corresponding IP address.
+        parsed_url = urlparse(endpoint)
+        hostname = parsed_url.hostname
+        if hostname in hostname_to_ip:
+            return endpoint.replace(hostname, hostname_to_ip[hostname])
+        return endpoint
+
+    def setup_multisite_replication(self, realm_name: str, zonegroup_name: str, zonegroup_endpoints: str,
+                                    zone_name: str, zone_endpoints: str, username: str, cluster: Optional[str] = None):
+        # Set up multisite replication for Ceph RGW.
+        orch = OrchClient.instance()
+
+        def get_updated_endpoints(endpoints):
+            # Update endpoint URLs by replacing hostnames with IP addresses.
+            hostname_to_ip = {host['hostname']: host['addr'] for host in (h.to_json() for h in orch.hosts.list())}
+            return [self.replace_hostname(endpoint, hostname_to_ip) for endpoint in endpoints.split(',')]
+
+        zonegroup_ip_url = ','.join(get_updated_endpoints(zonegroup_endpoints))
+        zone_ip_url = ','.join(get_updated_endpoints(zone_endpoints))
+
+        # Create the realm and zonegroup
+        self.create_realm(realm_name, True)
+        self.create_zonegroup(realm_name, zonegroup_name, True, True, zonegroup_ip_url)
+
+        # Create the zone and system user, then modify the zone with user credentials
+        if self.create_zone(zone_name, zonegroup_name, True, True, zone_ip_url, None, None):
+            user_details = self.create_system_user(username, zone_name)
+            if user_details:
+                keys = user_details['keys'][0]
+                self.modify_zone(zone_name, zonegroup_name, True, True, zone_ip_url, keys['access_key'], keys['secret_key'])
+
+        # Restart RGW daemons and set credentials
+        self.restart_rgw_daemons_and_set_credentials()
+
+        # Get realm tokens and import to another cluster if specified
+        realm_token_info = CephService.get_realm_tokens()
+        time.sleep(5)
+        if cluster:
+            self.import_realm_token_to_cluster(cluster, realm_name, realm_token_info)
+
+        return realm_token_info
+
+    def import_realm_token_to_cluster(self, cluster, realm_name, realm_token_info):
+        for realm_token in realm_token_info:
+            if realm_token['realm'] == realm_name:
+                realm_export_token = realm_token['token']
+                break
+        multi_cluster_config_str = str(mgr.get_module_option_ex('dashboard', 'MULTICLUSTER_CONFIG'))
+        multi_cluster_config = ast.literal_eval(multi_cluster_config_str)
+        for fsid, clusters in multi_cluster_config['config'].items():
+            if fsid == cluster:
+                for cluster_info in clusters:
+                    cluster_token = cluster_info.get('token')
+                    cluster_url = cluster_info.get('url')
+                    break
+        if cluster_token:
+            headers = {
+                'Accept': 'application/vnd.ceph.api.v1.0+json',
+                'Authorization': 'Bearer ' + cluster_token,
+            }
+        else:
+            headers = {
+                'Accept': 'application/vnd.ceph.api.v1.0+json',
+                'Content-Type': 'application/json',
+            }
+
+        placement_spec = {
+            "placement": {}
+        }
+
+        payload = {
+            'realm_token': realm_export_token,
+            'zone_name': 'new_replicated_zone',
+            'port': 81,
+            'placement_spec': placement_spec
+        }
+
+        if not cluster_url.endswith('/'):
+            cluster_url = cluster_url + '/'
+
+        path = 'api/rgw/realm/import_realm_token'
+
+        try:
+            response = requests.request('POST', cluster_url + path, json=payload, headers=headers, verify=False)
+            response.raise_for_status()
+            if response.status_code == 200:
+                restart_path = 'ui-api/rgw/multisite/restart_rgw_daemons_and_set_credentials'
+                restart_gateways_response = requests.request('GET', cluster_url + restart_path, headers=headers, verify=False)
+                restart_gateways_response.raise_for_status()
+                if restart_gateways_response.status_code == 200:
+                    return True
+            raise DashboardException(f"Error importing realm token to {cluster_url}: {response.text}", http_status_code=404, component='dashboard')
+        except requests.RequestException as e:
+            raise DashboardException(f"Could not reach {cluster_url}: {e}", http_status_code=404, component='dashboard')
+        except json.JSONDecodeError as e:
+            raise DashboardException(f"Error parsing Dashboard API response: {e.msg}", component='dashboard')
+
+    def restart_rgw_daemons_and_set_credentials(self):
+        # Restart RGW daemons and set credentials.
+        orch = OrchClient.instance()
+        daemons = [d.to_dict() for d in orch.services.list_daemons()]
+        daemon_list = [d for d in daemons if d['daemon_type'] == 'rgw']
+        for daemon in daemon_list:
+            orch.daemons.action(daemon['daemon_name'], 'restart', None)
+        time.sleep(5)
+        configure_rgw_credentials
 
     def create_realm(self, realm_name: str, default: bool):
         rgw_realm_create_cmd = ['realm', 'create']

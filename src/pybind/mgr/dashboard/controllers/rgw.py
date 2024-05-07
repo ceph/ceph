@@ -110,6 +110,27 @@ class RgwMultisiteStatus(RESTController):
                                                          zone_endpoints, access_key,
                                                          secret_key)
         return result
+    
+    @RESTController.Collection(method='PUT', path='/setup_multisite_replication')
+    @allow_empty_body
+    # pylint: disable=W0102,W0613
+    def setup_multisite_replication(self, daemon_name=None, realm_name=None, zonegroup_name=None,
+                                    zonegroup_endpoints=None, zone_name=None, zone_endpoints=None,
+                                    username=None, cluster=None):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.setup_multisite_replication(realm_name, zonegroup_name,
+                                                                zonegroup_endpoints, zone_name,
+                                                                zone_endpoints, username,
+                                                                cluster)
+        return result
+
+    @RESTController.Collection(method='GET', path='/restart_rgw_daemons_and_set_credentials')
+    @allow_empty_body
+    # pylint: disable=W0102,W0613
+    def restart_rgw_daemons_and_set_credentials(self):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.restart_rgw_daemons_and_set_credentials()
+        return result
 
 
 @APIRouter('rgw/multisite', Scope.RGW)
@@ -929,7 +950,7 @@ class RgwRealm(RESTController):
     @UpdatePermission
     @allow_empty_body
     # pylint: disable=W0613
-    def import_realm_token(self, realm_token, zone_name, port, placement_spec):
+    def import_realm_token(self, realm_token, zone_name, port, placement_spec=None):
         try:
             multisite_instance = RgwMultisite()
             result = CephService.import_realm_token(realm_token, zone_name, port, placement_spec)

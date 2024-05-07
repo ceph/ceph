@@ -148,6 +148,7 @@ export class ActionLabelsI18n {
   DISCONNECT: string;
   RECONNECT: string;
   AUTHORIZE: string;
+  SETUP_MULTISITE_REPLICATION: string;
 
   constructor() {
     /* Create a new item */
@@ -156,6 +157,8 @@ export class ActionLabelsI18n {
     this.EXPORT = $localize`Export`;
 
     this.IMPORT = $localize`Import`;
+
+    this.SETUP_MULTISITE_REPLICATION = $localize`Setup Multi-site Replication`;
 
     this.MIGRATE = $localize`Migrate`;
 

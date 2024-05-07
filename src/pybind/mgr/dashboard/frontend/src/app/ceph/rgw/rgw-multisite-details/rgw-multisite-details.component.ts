@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import {
   TreeComponent,
   ITreeOptions,
@@ -6,7 +6,7 @@ import {
   TreeNode,
   TREE_ACTIONS
 } from '@circlon/angular-tree-component';
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { NgbActiveModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { forkJoin, Subscription, timer as observableTimer } from 'rxjs';
@@ -37,6 +37,8 @@ import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { Router } from '@angular/router';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { RgwMultisiteWizardComponent } from '../rgw-multisite-wizard/rgw-multisite-wizard.component';
 
 @Component({
   selector: 'cd-rgw-multisite-details',
@@ -65,6 +67,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   migrateTableAction: CdTableAction[];
   importAction: CdTableAction[];
   exportAction: CdTableAction[];
+  setupMultisiteReplication: CdTableAction[];
   loadingIndicator = true;
   nodes: object[] = [];
   treeOptions: ITreeOptions = {
@@ -81,6 +84,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
 
   realms: RgwRealm[] = [];
   zonegroups: RgwZonegroup[] = [];
+  multisiteRealmForm: CdFormGroup;
   zones: RgwZone[] = [];
   metadata: any;
   metadataTitle: string;
@@ -93,14 +97,18 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   multisiteInfo: object[] = [];
   defaultsInfo: string[] = [];
   showMigrateAction: boolean = false;
+  showMultisiteReplicationAction: boolean = false;
   editTitle: string = 'Edit';
   deleteTitle: string = 'Delete';
   disableExport = true;
   rgwModuleStatus: boolean;
   restartGatewayMessage = false;
   rgwModuleData: string | any[] = [];
+  startQuickMultisiteSetup = false;
+  skipConfirmTpl: TemplateRef<any>;
 
   constructor(
+    public activeModal: NgbActiveModal,
     private modalService: ModalService,
     private timerService: TimerService,
     private authStorageService: AuthStorageService,
@@ -140,6 +148,12 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         size: 'lg'
       });
     }
+  }
+
+  openMultisiteSetupWizard() {
+    this.bsModalRef = this.modalService.show(RgwMultisiteWizardComponent, {
+      size: 'lg'
+    });
   }
 
   openMigrateModal() {
@@ -240,10 +254,17 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
       click: () => this.openExportModal(),
       disable: () => this.getDisableExport()
     };
+    const setupMultisiteReplication: CdTableAction = {
+      permission: 'read',
+      icon: Icons.wrench,
+      name: this.actionLabels.SETUP_MULTISITE_REPLICATION,
+      click: () => this.openMultisiteSetupWizard()
+    };
     this.createTableActions = [createRealmAction, createZonegroupAction, createZoneAction];
     this.migrateTableAction = [migrateMultsiteAction];
     this.importAction = [importMultsiteAction];
     this.exportAction = [exportMultsiteAction];
+    this.setupMultisiteReplication = [setupMultisiteReplication];
 
     const observables = [
       this.rgwRealmService.getAllRealmsInfo(),
@@ -462,8 +483,10 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
       this.zones[0].name === 'default'
     ) {
       this.showMigrateAction = true;
+      this.showMultisiteReplicationAction = true;
     } else {
       this.showMigrateAction = false;
+      this.showMultisiteReplicationAction = false;
     }
     return this.showMigrateAction;
   }

@@ -30,4 +30,31 @@ export class RgwMultisiteService {
   getSyncStatus() {
     return this.http.get(`${this.url}/sync_status`);
   }
+
+  setUpMultisiteFromWizard(
+    realmName: string,
+    zonegroupName: string,
+    zonegroupEndpoints: string,
+    zoneName: string,
+    zoneEndpoints: string,
+    username: string,
+    cluster?: string
+  ) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        realm_name: realmName,
+        zonegroup_name: zonegroupName,
+        zonegroup_endpoints: zonegroupEndpoints,
+        zone_name: zoneName,
+        zone_endpoints: zoneEndpoints,
+        username: username
+      });
+
+      if (cluster) {
+        params = params.append('cluster', cluster);
+      }
+
+      return this.http.put(`${this.uiUrl}/setup_multisite_replication`, null, { params: params });
+    });
+  }
 }
