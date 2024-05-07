@@ -306,12 +306,12 @@ int execute_diff(const po::variables_map &vm,
     from_snap_name = vm[at::FROM_SNAPSHOT_NAME].as<std::string>();
   }
 
-  uint64_t read_offset;
+  uint64_t read_offset = 0;
   if (vm.count(at::READ_OFFSET)) {
     read_offset = vm[at::READ_OFFSET].as<uint64_t>();
   }
 
-  uint64_t read_length;
+  uint64_t read_length = 0;
   if (vm.count(at::READ_LENGTH)) {
     read_length = vm[at::READ_LENGTH].as<uint64_t>();
   }
