@@ -13,13 +13,18 @@ class MClientMetrics final : public SafeMessage {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
+  static constexpr int PRIORITY = CEPH_MSG_PRIO_HIGH-1;
+
 public:
   std::vector<ClientMetricMessage> updates;
 
 protected:
-  MClientMetrics() : MClientMetrics(std::vector<ClientMetricMessage>{}) { }
+  MClientMetrics() : MClientMetrics(std::vector<ClientMetricMessage>{}) {
+    set_priority(PRIORITY);
+  }
   MClientMetrics(std::vector<ClientMetricMessage> updates)
     : SafeMessage(CEPH_MSG_CLIENT_METRICS, HEAD_VERSION, COMPAT_VERSION), updates(updates) {
+    set_priority(PRIORITY);
   }
   ~MClientMetrics() final {}
 
