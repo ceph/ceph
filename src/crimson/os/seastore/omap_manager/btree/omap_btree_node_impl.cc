@@ -653,6 +653,7 @@ OMapLeafNode::list(
 
   for (; iter != liter && result.size() < config.max_result_size; iter++) {
     result.emplace(std::make_pair(iter->get_key(), iter->get_val()));
+    DEBUGT("found key {}", oc.t, iter->get_key());
   }
 
   complete = (iter == liter);
