@@ -34,4 +34,31 @@ export class RgwMultisiteService {
   status() {
     return this.http.get(`${this.uiUrl}/status`);
   }
+
+  setUpMultisiteFromWizard(
+    realmName: string,
+    zonegroupName: string,
+    zonegroupEndpoints: string,
+    zoneName: string,
+    zoneEndpoints: string,
+    username: string,
+    cluster?: string
+  ) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        realm_name: realmName,
+        zonegroup_name: zonegroupName,
+        zonegroup_endpoints: zonegroupEndpoints,
+        zone_name: zoneName,
+        zone_endpoints: zoneEndpoints,
+        username: username
+      });
+
+      if (cluster) {
+        params = params.append('cluster_fsid', cluster);
+      }
+
+      return this.http.post(`${this.uiUrl}/multisite-replications`, null, { params: params });
+    });
+  }
 }
