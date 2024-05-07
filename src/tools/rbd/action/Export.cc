@@ -273,7 +273,7 @@ void get_arguments_diff(po::options_description *positional,
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
      "snapshot starting point")
     (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object")
-    (at::READ_OFFSET.c_str(), po::value<uint64_t>, "offset in bytes")
+    (at::READ_OFFSET.c_str(), po::value<uint64_t>(), "offset in bytes")
     (at::READ_LENGTH.c_str(), po::value<uint64_t>(), "length in bytes")
     (at::OUTPUT_FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(), "from snapshot name in output diff")
     (at::OUTPUT_END_SNAPSHOT_NAME.c_str(), po::value<std::string>(), "end snapshot name in output diff");
