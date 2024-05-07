@@ -1420,3 +1420,11 @@ options:
   level: dev
   default: true
   with_legacy: true
+- name: osd_key_from_objectstore
+  type: bool
+  level: advanced
+  desc: Extract CephX authentication key from objectstore osd_key meta variable.
+  see_also:
+  - key
+  default: true
+  with_legacy: false

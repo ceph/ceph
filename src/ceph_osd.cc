@@ -117,6 +117,25 @@ static void usage()
   generic_server_usage();
 }
 
+int key_from_objectstore() {
+  std::string data_path = g_conf().get_val<std::string>("osd_data");
+  std::string store_type;
+  bool detected = ObjectStore::probe_objectstore_type(g_ceph_context, data_path, &store_type);
+  if (!detected) {
+    return -ENOENT;
+  }
+  std::unique_ptr<ObjectStore> store = ObjectStore::create(
+    g_ceph_context, store_type, data_path, std::string(), 0);
+  if (!store) {
+    return -EINVAL;
+  }
+  if (std::string osd_key; 0 == store->read_meta("osd_key", &osd_key)) {
+    g_conf().set_val("key", osd_key, nullptr);
+    ldout(g_ceph_context, 2) << "Retrieved osd_key=" << osd_key << dendl;
+  }
+  return 0;
+};
+
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);
@@ -128,12 +147,9 @@ int main(int argc, const char **argv)
     usage();
     exit(0);
   }
-
-  auto cct = global_init(
-    nullptr,
+  global_pre_init(nullptr,
     args, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_DAEMON, 0);
-  ceph_heap_profiler_init();
 
   Preforker forker;
 
@@ -198,6 +214,15 @@ int main(int argc, const char **argv)
     cerr << "unrecognized arg " << args[0] << std::endl;
     exit(1);
   }
+
+  if (!mkfs && g_conf().get_val<bool>("osd_key_from_objectstore")) {
+    key_from_objectstore();
+  }
+  auto cct = global_init(
+    nullptr,
+    args, CEPH_ENTITY_TYPE_OSD,
+    CODE_ENVIRONMENT_DAEMON, 0, false);
+  ceph_heap_profiler_init();
 
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
