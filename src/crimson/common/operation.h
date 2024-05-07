@@ -478,11 +478,6 @@ public:
   virtual std::optional<seastar::future<>> wait() = 0;
 
   /// Releases pipeline resources, after or without waiting
-  // FIXME: currently, exit() will discard the associated future even if it is
-  // still unresolved, which is discouraged by seastar.
-  virtual void exit() = 0;
-
-  /// Must ensure that resources are released, likely by calling exit()
   virtual ~PipelineExitBarrierI() {}
 };
 
@@ -627,16 +622,10 @@ class OrderedExclusivePhaseT : public PipelineStageIT<T> {
       return std::nullopt;
     }
 
-    void exit() final {
-      if (phase) {
-        assert(phase->core == seastar::this_shard_id());
-        phase->exit(op_id);
-        phase = nullptr;
-      }
-    }
-
     ~ExitBarrier() final {
-      exit();
+      assert(phase);
+      assert(phase->core == seastar::this_shard_id());
+      phase->exit(op_id);
     }
   };
 
@@ -727,25 +716,22 @@ private:
       return trigger.maybe_record_exit_barrier(std::move(ret));
     }
 
-    void exit() final {
+    ~ExitBarrier() final {
+      assert(phase);
+      assert(phase->core == seastar::this_shard_id());
       if (barrier) {
-        assert(phase);
-        assert(phase->core == seastar::this_shard_id());
+        // wait() hasn't been called
+
+        // FIXME: should not discard future,
+        // it's discouraged by seastar and may cause shutdown issues.
         std::ignore = std::move(*barrier
         ).then([phase=this->phase] {
           phase->mutex.unlock();
         });
-        barrier = std::nullopt;
-        phase = nullptr;
-      } else if (phase) {
-        assert(phase->core == seastar::this_shard_id());
+      } else {
+        // wait() has been called
         phase->mutex.unlock();
-        phase = nullptr;
       }
-    }
-
-    ~ExitBarrier() final {
-      exit();
     }
   };
 
@@ -777,8 +763,6 @@ class UnorderedStageT : public PipelineStageIT<T> {
     std::optional<seastar::future<>> wait() final {
       return std::nullopt;
     }
-
-    void exit() final {}
 
     ~ExitBarrier() final {}
   };
