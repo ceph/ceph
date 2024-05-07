@@ -1585,6 +1585,69 @@ SeaStore::Shard::_write(
 }
 
 SeaStore::Shard::tm_ret
+SeaStore::Shard::_clone_omaps(
+  internal_context_t &ctx,
+  OnodeRef &onode,
+  OnodeRef &d_onode,
+  const omap_type_t otype)
+{
+  return trans_intr::repeat([&ctx, onode, d_onode, this, otype] {
+    return seastar::do_with(
+      std::optional<std::string>(std::nullopt),
+      [&ctx, onode, d_onode, this, otype](auto &start) {
+      auto& layout = onode->get_layout();
+      return omap_list(
+	*onode,
+	otype == omap_type_t::XATTR
+	  ? layout.xattr_root
+	  : layout.omap_root,
+	*ctx.transaction,
+	start,
+	OMapManager::omap_list_config_t().with_inclusive(false, false)
+      ).si_then([&ctx, onode, d_onode, this, otype, &start](auto p) mutable {
+	auto complete = std::get<0>(p);
+	auto &attrs = std::get<1>(p);
+	if (attrs.empty()) {
+	  assert(complete);
+	  return tm_iertr::make_ready_future<
+	    seastar::stop_iteration>(
+	      seastar::stop_iteration::yes);
+	}
+	std::string nstart = attrs.rbegin()->first;
+	return _omap_set_kvs(
+	  d_onode,
+	  otype == omap_type_t::XATTR
+	    ? d_onode->get_layout().xattr_root
+	    : d_onode->get_layout().omap_root,
+	  *ctx.transaction,
+	  std::map<std::string, ceph::bufferlist>(attrs.begin(), attrs.end())
+	).si_then([complete, nstart=std::move(nstart),
+		  &start, &ctx, d_onode, otype](auto root) mutable {
+	  if (root.must_update()) {
+	    if (otype == omap_type_t::XATTR) {
+	      d_onode->update_xattr_root(*ctx.transaction, root);
+	    } else {
+	      assert(otype == omap_type_t::OMAP);
+	      d_onode->update_omap_root(*ctx.transaction, root);
+	    }
+	  }
+	  if (complete) {
+	    return seastar::make_ready_future<
+	      seastar::stop_iteration>(
+		seastar::stop_iteration::yes);
+	  } else {
+	    start = std::move(nstart);
+	    return seastar::make_ready_future<
+	      seastar::stop_iteration>(
+		seastar::stop_iteration::no);
+	  }
+	});
+      });
+    });
+  });
+}
+
+SeaStore::Shard::tm_ret
 SeaStore::Shard::_clone(
   internal_context_t &ctx,
   OnodeRef &onode,
@@ -1595,8 +1658,6 @@ SeaStore::Shard::_clone(
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [this, &ctx, &onode, &d_onode](auto &objHandler) {
-    //TODO: currently, we only care about object data, leaving cloning
-    //      of xattr/omap for future work
     auto &object_size = onode->get_layout().size;
     d_onode->update_onode_size(*ctx.transaction, object_size);
     return objHandler.clone(
@@ -1605,6 +1666,10 @@ SeaStore::Shard::_clone(
 	*ctx.transaction,
 	*onode,
 	d_onode.get()});
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return _clone_omaps(ctx, onode, d_onode, omap_type_t::XATTR);
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return _clone_omaps(ctx, onode, d_onode, omap_type_t::OMAP);
   });
 }
 
