@@ -2697,11 +2697,7 @@ private:
 
   int _open_path();
   void _close_path();
-  int _open_fsid(bool create);
-  int _lock_fsid();
   int _read_fsid(uuid_d *f);
-  int _write_fsid();
-  void _close_fsid();
   void _set_alloc_sizes();
   void _set_blob_size();
   void _set_finisher_num();
