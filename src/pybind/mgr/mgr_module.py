@@ -555,7 +555,7 @@ def MgrModuleRecoverDB(func: Callable) -> Callable:
                     raise
                 self.log.debug(f"attempting reopen of database")
                 self.close_db()
-                self.open_db();
+                self.open_db()
                 # allow retry of func(...)
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return check
@@ -1291,7 +1291,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             if not self.have_enough_osds():
                 return None
             self.create_mgr_pool()
-        uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph";
+        uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph"
         self.log.debug(f"using uri {uri}")
         try:
             db = sqlite3.connect(uri, check_same_thread=False, uri=True, autocommit=False) # type: ignore[call-arg]
@@ -1322,10 +1322,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return self._db
         db_allowed = self.get_ceph_option("mgr_pool")
         if not db_allowed:
-            raise MgrDBNotReady();
+            raise MgrDBNotReady()
         self._db = self.open_db()
         if self._db is None:
-            raise MgrDBNotReady();
+            raise MgrDBNotReady()
         return self._db
 
     @property
