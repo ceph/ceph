@@ -118,18 +118,18 @@ class TestNFS(MgrTestCase):
                     return
         self.fail(fail_msg)
 
-    def _check_auth_ls(self, check_in=False):
+    def _check_auth_ls(self, export_id=1, check_in=False):
         '''
         Tests export user id creation or deletion.
         :param export_id: Denotes export number
         :param check_in: Check specified export id
         '''
         output = self._cmd('auth', 'ls')
-        client_id = f'client.nfs.{self.cluster_id}.{self.fs_name}'
+        client_id = f'client.nfs.{self.cluster_id}'
         if check_in:
-            self.assertIn(f'{client_id}', output)
+            self.assertIn(f'{client_id}.{export_id}', output)
         else:
-            self.assertNotIn(f'{client_id}', output)
+            self.assertNotIn(f'{client_id}.{export_id}', output)
 
     def _test_idempotency(self, cmd_func, cmd_args):
         '''
@@ -216,7 +216,7 @@ class TestNFS(MgrTestCase):
         # Runs the nfs export create command
         self._cmd(*export_cmd)
         # Check if user id for export is created
-        self._check_auth_ls(check_in=True)
+        self._check_auth_ls(export_id, check_in=True)
         res = self._sys_cmd(['rados', '-p', NFS_POOL_NAME, '-N', self.cluster_id, 'get',
                              f'export-{export_id}', '-'])
         # Check if export object is created

@@ -76,9 +76,10 @@ EXPORT
 EXPORT {
     FSAL {
         name = "CEPH";
-        user_id = "nfs.foo.1";
+        user_id = "nfs.foo.a.thbqzw";
         filesystem = "a";
         secret_access_key = "AQCjU+hgjyReLBAAddJa0Dza/ZHqjX5+JiePMA==";
+        cmount_path = "/";
     }
     export_id = 1;
     path = "/";
@@ -95,7 +96,7 @@ EXPORT {
 EXPORT {
     FSAL {
         name = "CEPH";
-        user_id = "nfs.foo.1";
+        user_id = "nfs.foo.a.thbqzw";
         filesystem = "a";
         secret_access_key = "AQCjU+hgjyReLBAAddJa0Dza/ZHqjX5+JiePMA==";
         cmount_path = "/";
@@ -125,7 +126,7 @@ EXPORT {
     FSAL {
         Name = CEPH;
         Filesystem = "b";
-        User_Id = "ganesha-2";
+        User_Id = "nfs.foo.b.lgudhr";
         Secret_Access_Key = "YOUR SECRET KEY HERE";
         cmount_path = "/";
     }
@@ -403,7 +404,7 @@ NFS_CORE_PARAM {
         export = Export.from_export_block(blocks[0], self.cluster_id)
         self._validate_export_2(export)
 
-    def _validate_export_5(self, export: Export):
+    def _validate_export_3(self, export: Export):
         assert export.export_id == 3
         assert export.path == "/"
         assert export.pseudo == "/cephfs_b/"
@@ -411,7 +412,7 @@ NFS_CORE_PARAM {
         assert export.squash == "no_root_squash"
         assert export.protocols == [4]
         assert export.fsal.name == "CEPH"
-        assert export.fsal.user_id == "ganesha-2"
+        assert export.fsal.user_id == "nfs.foo.b.lgudhr"
         assert export.fsal.fs_name == "b"
         assert export.fsal.sec_label_xattr == None
         assert export.fsal.cmount_path == "/"
@@ -419,12 +420,12 @@ NFS_CORE_PARAM {
         assert export.attr_expiration_time == 0
         assert export.security_label == True
 
-    def test_export_parser_5(self) -> None:
+    def test_export_parser_3(self) -> None:
         blocks = GaneshaConfParser(self.export_5).parse()
         assert isinstance(blocks, list)
         assert len(blocks) == 1
         export = Export.from_export_block(blocks[0], self.cluster_id)
-        self._validate_export_5(export)
+        self._validate_export_3(export)
 
     def test_daemon_conf_parser(self) -> None:
         blocks = GaneshaConfParser(self.conf_nfs_foo).parse()
@@ -452,7 +453,7 @@ NFS_CORE_PARAM {
 
         self._validate_export_1([e for e in exports if e.export_id == 1][0])
         self._validate_export_2([e for e in exports if e.export_id == 2][0])
-        self._validate_export_5([e for e in exports if e.export_id == 3][0])
+        self._validate_export_3([e for e in exports if e.export_id == 3][0])
 
     def test_config_dict(self) -> None:
         self._do_mock_test(self._do_test_config_dict)
@@ -856,6 +857,9 @@ NFS_CORE_PARAM {
 
     def test_update_export_with_list(self):
         self._do_mock_test(self._do_test_update_export_with_list)
+    
+    def test_update_export_cephfs(self):
+        self._do_mock_test(self._do_test_update_export_cephfs)
 
     def _do_test_update_export_with_list(self):
         nfs_mod = Module('nfs', '', '')
@@ -971,7 +975,7 @@ NFS_CORE_PARAM {
         assert export.transports == ["TCP", "UDP"]
         assert export.fsal.name == "CEPH"
         assert export.fsal.cmount_path == "/"
-        assert export.fsal.user_id == "nfs.foo.c"
+        assert export.fsal.user_id == "nfs.foo.c.lgudhr"
         assert export.cluster_id == self.cluster_id
     
     def test_remove_export(self) -> None:
@@ -1151,7 +1155,7 @@ NFS_CORE_PARAM {
         assert export.protocols == [4]
         assert export.transports == ["TCP"]
         assert export.fsal.name == "CEPH"
-        assert export.fsal.user_id == "nfs.foo.myfs"
+        assert export.fsal.user_id == "nfs.foo.myfs.jabxju"
         assert export.fsal.cephx_key == "thekeyforclientabc"
         assert len(export.clients) == 1
         assert export.clients[0].squash == 'root'
@@ -1189,7 +1193,7 @@ NFS_CORE_PARAM {
         assert export.squash == "root"
         assert export.protocols == [4]
         assert export.fsal.name == "CEPH"
-        assert export.fsal.user_id == "nfs.foo.myfs"
+        assert export.fsal.user_id == "nfs.foo.myfs.jabxju"
         assert export.fsal.cephx_key == "thekeyforclientabc"
         assert export.fsal.cmount_path == "/"
         assert export.cluster_id == self.cluster_id

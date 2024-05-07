@@ -1,6 +1,8 @@
 import errno
 import json
 import logging
+import random
+import string
 from typing import (
     List,
     Any,
@@ -288,51 +290,43 @@ class ExportMgr:
             # do nothing; we're using the bucket owner creds.
             pass
 
-    def _create_export_user(self, export: Export) -> None:
-        if isinstance(export.fsal, CephFSFSAL):
-            fsal = cast(CephFSFSAL, export.fsal)
-            assert fsal.fs_name
-            fsal.user_id = f"nfs.{export.cluster_id}.{export.export_id}"
-            fsal.cephx_key = self._create_user_key(
-                export.cluster_id, fsal.user_id, export.path, fsal.fs_name
+    def _create_rgw_export_user(self, export: Export) -> None:
+        rgwfsal = cast(RGWFSAL, export.fsal)
+        if not rgwfsal.user_id:
+            assert export.path
+            ret, out, err = self.mgr.tool_exec(
+                ['radosgw-admin', 'bucket', 'stats', '--bucket', export.path]
             )
-            log.debug("Successfully created user %s for cephfs path %s", fsal.user_id, export.path)
-
-        elif isinstance(export.fsal, RGWFSAL):
-            rgwfsal = cast(RGWFSAL, export.fsal)
-            if not rgwfsal.user_id:
-                assert export.path
-                ret, out, err = self.mgr.tool_exec(
-                    ['radosgw-admin', 'bucket', 'stats', '--bucket', export.path]
-                )
-                if ret:
-                    raise NFSException(f'Failed to fetch owner for bucket {export.path}')
-                j = json.loads(out)
-                owner = j.get('owner', '')
-                rgwfsal.user_id = owner
-            assert rgwfsal.user_id
-            ret, out, err = self.mgr.tool_exec([
-                'radosgw-admin', 'user', 'info', '--uid', rgwfsal.user_id
-            ])
             if ret:
-                raise NFSException(
-                    f'Failed to fetch key for bucket {export.path} owner {rgwfsal.user_id}'
-                )
+                raise NFSException(f'Failed to fetch owner for bucket {export.path}')
             j = json.loads(out)
+            owner = j.get('owner', '')
+            rgwfsal.user_id = owner
+        assert rgwfsal.user_id
+        ret, out, err = self.mgr.tool_exec([
+            'radosgw-admin', 'user', 'info', '--uid', rgwfsal.user_id
+        ])
+        if ret:
+            raise NFSException(
+                f'Failed to fetch key for bucket {export.path} owner {rgwfsal.user_id}'
+            )
+        j = json.loads(out)
 
-            # FIXME: make this more tolerate of unexpected output?
-            rgwfsal.access_key_id = j['keys'][0]['access_key']
-            rgwfsal.secret_access_key = j['keys'][0]['secret_key']
-            log.debug("Successfully fetched user %s for RGW path %s", rgwfsal.user_id, export.path)
+        # FIXME: make this more tolerate of unexpected output?
+        rgwfsal.access_key_id = j['keys'][0]['access_key']
+        rgwfsal.secret_access_key = j['keys'][0]['secret_key']
+        log.debug("Successfully fetched user %s for RGW path %s", rgwfsal.user_id, export.path)
 
     def _ensure_cephfs_export_user(self, export: Export) -> None:
         assert isinstance(export.fsal, CephFSFSAL)
         fsal = cast(CephFSFSAL, export.fsal)
         assert fsal.fs_name
         assert fsal.cmount_path
-        fsal.user_id = f"nfs.{export.cluster_id}.{export.fsal.fs_name}"
+
+        fsal.user_id = f"nfs.{export.cluster_id}.{fsal.fs_name}." + generate_random_id(
+            fsal.cmount_path)
         fsal.cephx_key = self._create_user_key(
-            export.cluster_id, fsal.user_id, fsal.cmount_path, fsal.fs_name
+            export.cluster_id, fsal.user_id, export.path, fsal.fs_name
         )
         log.debug("Established user %s for cephfs %s", fsal.user_id, fsal.fs_name)
 
@@ -382,10 +376,18 @@ class ExportMgr:
                 export = self._fetch_export(cluster_id, pseudo_path)
 
             if export:
+                exports_count = 0
+                if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
+                    exports_count = self.get_export_count_by_cmount_path(export.fsal.cmount_path,
+                                                                         cluster_id)
+                    if exports_count == 1:
+                        self._delete_export_user(export)
                 if pseudo_path:
                     self._rados(cluster_id).remove_obj(
                         export_obj_name(export.export_id), conf_obj_name(cluster_id))
                 self.exports[cluster_id].remove(export)
+                if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
+                    self._delete_export_user(export)
                 if not self.exports[cluster_id]:
                     del self.exports[cluster_id]
                     log.debug("Deleted all exports for cluster %s", cluster_id)
@@ -695,6 +697,13 @@ class ExportMgr:
                 raise NFSInvalidOperation("export FSAL must specify fs_name")
             if not check_fs(self.mgr, fs_name):
                 raise FSNotFound(fs_name)
+
+            validate_cephfs_path(self.mgr, fs_name, path)
+
+            logger = logging.getLogger(__name__)
+            user_id = f"nfs.{cluster_id}.{fs_name}." + generate_random_id(fsal["cmount_path"])
+            if "user_id" in fsal and fsal["user_id"] != user_id:
+                raise NFSInvalidOperation(f"export FSAL user_id must be '{user_id}'")
         else:
             raise NFSInvalidOperation(f"NFS Ganesha supported FSALs are {NFS_GANESHA_SUPPORTED_FSALS}."
                                       "Export must specify any one of it.")
@@ -787,7 +796,7 @@ class ExportMgr:
                 }
             )
             log.debug("creating rgw export %s", export)
-            self._create_export_user(export)
+            self._create_rgw_export_user(export)
             self._save_export(cluster_id, export)
             result = {
                 "bind": export.pseudo,
@@ -830,24 +839,25 @@ class ExportMgr:
                 log.debug("export %s pseudo %s -> %s",
                           old_export.export_id, old_export.pseudo, new_export_dict['pseudo'])
 
+        fsal_dict = new_export_dict.get('fsal')
+        if fsal_dict['name'] == NFS_GANESHA_SUPPORTED_FSALS[0]:
+            # Ensure cmount_path is present in CephFS FSAL block
+            if not fsal_dict.get('cmount_path'):
+                if old_export:
+                    new_export_dict['fsal']['cmount_path'] = old_export.fsal.cmount_path
+                else:
+                    new_export_dict['fsal']['cmount_path'] = '/'
+
         new_export = self.create_export_from_dict(
             cluster_id,
             new_export_dict.get('export_id', self._gen_export_id(cluster_id)),
             new_export_dict
         )
-
-        if new_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
-            # Ensure cmount_path is present in CephFS FSAL block
-            if not new_export.fsal.cmount_path:
-                if old_export:
-                    new_export.fsal.cmount_path = old_export.fsal.cmount_path
-                else:
-                    new_export.fsal.cmount_path = '/'
-            self._ensure_cephfs_export_user(new_export)
+        self._ensure_cephfs_export_user(new_export)
 
         if not old_export:
             if new_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:  # only for RGW
-                self._create_export_user(new_export)
+                self._create_rgw_export_user(new_export)
             self._save_export(cluster_id, new_export)
             return {"pseudo": new_export.pseudo, "state": "added"}
 
@@ -858,12 +868,51 @@ class ExportMgr:
             log.debug('export %s pseudo %s -> %s',
                       new_export.export_id, old_export.pseudo, new_export.pseudo)
 
+        if old_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
+            old_fsal = cast(CephFSFSAL, old_export.fsal)
+            new_fsal = cast(CephFSFSAL, new_export.fsal)
+            if old_fsal.user_id != new_fsal.user_id:
+                self._delete_export_user(old_export)
+                self._ensure_cephfs_export_user(new_export)
+            elif (
+                old_export.path != new_export.path
+                or old_fsal.fs_name != new_fsal.fs_name
+            ):
+                self._update_user_id(
+                    cluster_id,
+                    new_export.path,
+                    cast(str, new_fsal.fs_name),
+                    cast(str, new_fsal.user_id)
+                )
+                new_fsal.cephx_key = old_fsal.cephx_key
+            else:
+                expected_mds_caps = 'allow rw path={}'.format(new_export.path)
+                entity = new_fsal.user_id
+                ret, out, err = self.mgr.mon_command({
+                    'prefix': 'auth get',
+                    'entity': 'client.{}'.format(entity),
+                    'format': 'json',
+                })
+                if ret:
+                    raise NFSException(f'Failed to fetch caps for {entity}: {err}')
+                actual_mds_caps = json.loads(out)[0]['caps'].get('mds')
+                if actual_mds_caps != expected_mds_caps:
+                    self._update_user_id(
+                        cluster_id,
+                        new_export.path,
+                        cast(str, new_fsal.fs_name),
+                        cast(str, new_fsal.user_id)
+                    )
+                elif old_export.pseudo == new_export.pseudo:
+                    need_nfs_service_restart = False
+                new_fsal.cephx_key = old_fsal.cephx_key
+
         if old_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
             old_rgw_fsal = cast(RGWFSAL, old_export.fsal)
             new_rgw_fsal = cast(RGWFSAL, new_export.fsal)
             if old_rgw_fsal.user_id != new_rgw_fsal.user_id:
                 self._delete_export_user(old_export)
-                self._create_export_user(new_export)
+                self._create_rgw_export_user(new_export)
             elif old_rgw_fsal.access_key_id != new_rgw_fsal.access_key_id:
                 raise NFSInvalidOperation('access_key_id change is not allowed')
             elif old_rgw_fsal.secret_access_key != new_rgw_fsal.secret_access_key:
@@ -878,3 +927,16 @@ class ExportMgr:
     def _rados(self, cluster_id: str) -> NFSRados:
         """Return a new NFSRados object for the given cluster id."""
         return NFSRados(self.mgr.rados, cluster_id)
+
+    def get_export_count_by_cmount_path(self, cmount_path, cluster_id) -> int:
+        exports = self.list_exports(cluster_id, detailed=True)
+        exports_count = 0
+        for export in exports:
+            if export['fsal']['cmount_path'] == cmount_path:
+                exports_count += 1
+        return exports_count
+
+
+def generate_random_id(cmount_path):
+    random.seed(hash(cmount_path))
+    return ''.join(random.choice(string.ascii_lowercase) for _ in range(6))
