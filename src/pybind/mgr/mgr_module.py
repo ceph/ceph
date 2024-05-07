@@ -84,6 +84,7 @@ PG_STATES = [
 NFS_GANESHA_SUPPORTED_FSALS = ['CEPH', 'RGW']
 NFS_POOL_NAME = '.nfs'
 
+
 class CephReleases(IntEnum):
     argonaut = 1
     bobtail = 2
@@ -105,6 +106,7 @@ class CephReleases(IntEnum):
     reef = 18
     squid = 19
     maximum = 20
+
 
 class NotifyType(str, Enum):
     mon_map = 'mon_map'
@@ -165,8 +167,12 @@ class HandleCommandResult(NamedTuple):
     stderr: str = ""            # Typically used for error messages.
 
 
-class MonCommandFailed(RuntimeError): pass
-class MgrDBNotReady(RuntimeError): pass
+class MonCommandFailed(RuntimeError):
+    pass
+
+
+class MgrDBNotReady(RuntimeError):
+    pass
 
 
 class OSDMap(ceph_module.BasePyOSDMap):
@@ -355,6 +361,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 
 HandlerFuncType = Callable[..., Tuple[int, str, str]]
 
+
 def _extract_target_func(
     f: HandlerFuncType
 ) -> Tuple[HandlerFuncType, Dict[str, Any]]:
@@ -538,9 +545,12 @@ def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerF
         return check
     return CheckFileInput
 
+
 # If the mgr loses its lock on the database because e.g. the pgs were
 # transiently down, then close it and allow it to be reopened.
 MAX_DBCLEANUP_RETRIES = 3
+
+
 def MgrModuleRecoverDB(func: Callable) -> Callable:
     @functools.wraps(func)
     def check(self: MgrModule, *args: Any, **kwargs: Any) -> Any:
@@ -560,6 +570,7 @@ def MgrModuleRecoverDB(func: Callable) -> Callable:
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return check
 
+
 def CLIRequiresDB(func: HandlerFuncType) -> HandlerFuncType:
     @functools.wraps(func)
     def check(self: MgrModule, *args: Any, **kwargs: Any) -> Tuple[int, str, str]:
@@ -568,6 +579,7 @@ def CLIRequiresDB(func: HandlerFuncType) -> HandlerFuncType:
         return func(self, *args, **kwargs)
     check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
     return check
+
 
 def _get_localized_key(prefix: str, key: str) -> str:
     return '{}/{}'.format(prefix, key)
@@ -584,11 +596,13 @@ if TYPE_CHECKING:
 # common/options.h: value_t
 OptionValue = Optional[Union[bool, int, float, str]]
 
+
 class OptionLevel(IntEnum):
     BASIC = 0
     ADVANCED = 1
     DEV = 2
     UNKNOWN = 3
+
 
 class Option(Dict):
     """
@@ -997,8 +1011,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
 
     # Database Schema
-    SCHEMA = None # type: Optional[List[str]]
-    SCHEMA_VERSIONED = None # type: Optional[List[List[str]]]
+    SCHEMA = None  # type: Optional[List[str]]
+    SCHEMA_VERSIONED = None  # type: Optional[List[List[str]]]
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -1058,7 +1072,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         # for backwards compatibility
         self._logger = self.getLogger()
 
-        self._db = None # type: Optional[sqlite3.Connection]
+        self._db = None  # type: Optional[sqlite3.Connection]
 
         self._version = self._ceph_get_version()
 
@@ -1294,7 +1308,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph"
         self.log.debug(f"using uri {uri}")
         try:
-            db = sqlite3.connect(uri, check_same_thread=False, uri=True, autocommit=False) # type: ignore[call-arg]
+            db = sqlite3.connect(uri, check_same_thread=False, uri=True, autocommit=False)  # type: ignore[call-arg]
         except TypeError:
             db = sqlite3.connect(uri, check_same_thread=False, uri=True, isolation_level=None)
         # if libcephsqlite reconnects, update the addrv for blocklist
@@ -1765,7 +1779,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         for fs in self.get("fs_map")['filesystems']:
             if fscid != fs["id"]:
                 continue
-            
+
             # quiesce leader is the lowest rank
             # with the highest state
             mdsmap = fs["mdsmap"]
@@ -1802,7 +1816,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             command: str,
             tag: str,
             inbuf: Optional[str] = None,
-            *, # kw-only args go below
+            *,  # kw-only args go below
             one_shot: bool = False) -> None:
         """
         Called by the plugin to send a command to the mon
@@ -2397,7 +2411,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_remove_mds_perf_query(query_id)
 
     @API.expose
-
     def reregister_mds_perf_queries(self) -> None:
         """
         Re-register MDS perf queries.
