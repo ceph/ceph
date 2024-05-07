@@ -1,0 +1,7 @@
+set -e
+# prometheus.ceph-node-0
+! /usr/bin/podman rm -f ceph-8d852aba-0bac-11ef-b9f3-5254000370c4-prometheus.ceph-node-0 2> /dev/null
+! /usr/bin/podman rm -f ceph-8d852aba-0bac-11ef-b9f3-5254000370c4-prometheus-ceph-node-0 2> /dev/null
+! /usr/bin/podman rm -f --storage ceph-8d852aba-0bac-11ef-b9f3-5254000370c4-prometheus-ceph-node-0 2> /dev/null
+! /usr/bin/podman rm -f --storage ceph-8d852aba-0bac-11ef-b9f3-5254000370c4-prometheus.ceph-node-0 2> /dev/null
+/usr/bin/podman run --rm --ipc=host --stop-signal=SIGTERM --net=host --init --name ceph-8d852aba-0bac-11ef-b9f3-5254000370c4-prometheus-ceph-node-0 --user 65534 -d --log-driver journald --conmon-pidfile /run/ceph-8d852aba-0bac-11ef-b9f3-5254000370c4@prometheus.ceph-node-0.service-pid --cidfile /run/ceph-8d852aba-0bac-11ef-b9f3-5254000370c4@prometheus.ceph-node-0.service-cid --cgroups=split -e CONTAINER_IMAGE=quay.io/prometheus/prometheus:v2.43.0 -e NODE_NAME=ceph-node-0 -v /var/lib/ceph/8d852aba-0bac-11ef-b9f3-5254000370c4/prometheus.ceph-node-0/etc/prometheus:/etc/prometheus:Z -v /var/lib/ceph/8d852aba-0bac-11ef-b9f3-5254000370c4/prometheus.ceph-node-0/data:/prometheus:Z -v /etc/hosts:/etc/hosts:ro quay.io/prometheus/prometheus:v2.43.0 --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=15d --storage.tsdb.retention.size=0 --web.external-url=http://192.168.100.100:9095/prometheus --web.listen-address=:9095 --web.route-prefix=/prometheus/

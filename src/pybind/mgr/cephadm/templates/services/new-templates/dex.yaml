@@ -33,7 +33,7 @@ staticClients:
     secret: ZXhhbXBsZS1hcHAtc2VjcmV0
   - id: oauth2-proxy
     redirectURIs:
-      - 'http://192.168.100.100:4180/oauth2/callback'
+      - 'http://192.168.100.100/oauth2/callback'
     name: 'oauth2-proxy'
     secret: proxy
 
