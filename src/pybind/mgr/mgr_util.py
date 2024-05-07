@@ -1,7 +1,7 @@
 import os
 
 if 'UNITTEST' in os.environ:
-    import tests
+    import tests  # noqa
 
 import bcrypt
 import cephfs
@@ -147,7 +147,7 @@ class CephfsConnectionPool(object):
             fs_id = None
             try:
                 fs_id = self.get_fs_id()
-            except:
+            except:  # noqa
                 # the filesystem does not exist now -- connection is not valid.
                 pass
             logger.debug("self.fs_id={0}, fs_id={1}".format(self.fs_id, fs_id))
@@ -605,7 +605,7 @@ def verify_cacrt(cert_fname):
 def get_cert_issuer_info(crt: str) -> Tuple[Optional[str], Optional[str]]:
     """Basic validation of a ca cert"""
 
-    from OpenSSL import crypto, SSL
+    from OpenSSL import crypto, SSL  # noqa
     try:
         crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
         (org_name, cn) = (None, None)
