@@ -2306,6 +2306,11 @@ class TestFSFail(TestAdminCommands):
                               retval=1, errmsgs=errmsg)
         self.run_ceph_cmd(f'fs fail {self.fs.name} --yes-i-really-mean-it')
 
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
     def test_with_health_warn_trim(self):
         '''
         Test that, when health warning MDS_TRIM is present for an MDS, command
@@ -2330,6 +2335,11 @@ class TestFSFail(TestAdminCommands):
                               retval=1, errmsgs=errmsg)
         self.run_ceph_cmd(f'fs fail {self.fs.name} --yes-i-really-mean-it')
 
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
     def test_with_health_warn_with_2_active_MDSs(self):
         '''
         Test that, when a CephFS has 2 active MDSs and one of them have either
@@ -2353,6 +2363,11 @@ class TestFSFail(TestAdminCommands):
         self.negtest_ceph_cmd(args=f'fs fail {self.fs.name}',
                               retval=1, errmsgs=errmsg)
         self.run_ceph_cmd(f'fs fail {self.fs.name} --yes-i-really-mean-it')
+
+        # Bring and wait for MDS to be up since it is needed for unmounting
+        # of CephFS in CephFSTestCase.tearDown() to be successful.
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
 
 
 class TestMDSFail(TestAdminCommands):
