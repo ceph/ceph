@@ -508,6 +508,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'r'
         },
         {
+            'cmd': 'fs clone bulk cancel '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=snap_name,type=cephstring '
+                   'name=group_name,type=CephString,req=false ',
+            'desc': "Cancel all pending clone operation.",
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs cancelled clones rm '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
@@ -948,6 +957,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))
     
+    @mgr_cmd_wrap
+    def _cmd_fs_clone_bulk_cancel(self, inbuf, cmd):
+        return self.vc.pending_clone_bulk_cancel(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],
+                                                 snap_name=cmd['snap_name'], group_name=cmd.get('group_name', None))
+
     @mgr_cmd_wrap
     def _cmd_fs_cancelled_clones_rm(self, inbuf, cmd):
         return self.vc.remove_cancelled_clones(vol_name=cmd['vol_name'], sub_name=cmd['sub_name'],

@@ -1000,6 +1000,19 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         return ret
     
+    def pending_clone_bulk_cancel(self, **kwargs):
+        ret       = 0, "", ""
+        volname   = kwargs['vol_name']
+        subvolname= kwargs['sub_name']
+        snapname  = kwargs['snap_name']
+        groupname = kwargs['group_name']
+
+        try:
+            self.cloner.bulk_cancel_pending_clone(volname, subvolname, snapname, groupname)
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+    
     def remove_cancelled_clones(self, **kwargs):
         ret          = 0, "", ""
         volname      = kwargs['vol_name']

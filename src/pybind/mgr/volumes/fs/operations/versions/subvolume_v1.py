@@ -897,13 +897,15 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                                   f"errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
                         pass
 
-    def _add_snap_clone(self, track_id, snapname):
+    def _add_snap_clone(self, track_id, snapname, tgt_subvolume):
         self.metadata_mgr.add_section("clone snaps")
         self.metadata_mgr.update_section("clone snaps", track_id, snapname)
+        self.metadata_mgr.update_section("clone snaps", snapname, tgt_subvolume)
         self.metadata_mgr.flush()
 
-    def _remove_snap_clone(self, track_id):
+    def _remove_snap_clone(self, track_id, snapname):
         self.metadata_mgr.remove_option("clone snaps", track_id)
+        self.metadata_mgr.remove_option("clone snaps", snapname)
         self.metadata_mgr.flush()
 
     def attach_snapshot(self, snapname, tgt_subvolume):
@@ -913,7 +915,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             create_clone_index(self.fs, self.vol_spec)
             with open_clone_index(self.fs, self.vol_spec) as index:
                 track_idx = index.track(tgt_subvolume.base_path)
-                self._add_snap_clone(track_idx, snapname)
+                self._add_snap_clone(track_idx, snapname, tgt_subvolume)
         except (IndexException, MetadataMgrException) as e:
             log.warning("error creating clone index: {0}".format(e))
             raise VolumeException(-errno.EINVAL, "error cloning subvolume")
@@ -922,7 +924,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             with open_clone_index(self.fs, self.vol_spec) as index:
                 index.untrack(track_id)
-                self._remove_snap_clone(track_id)
+                self._remove_snap_clone(track_id, snapname)
         except (IndexException, MetadataMgrException) as e:
             log.warning("error delining snapshot from clone: {0}".format(e))
             raise VolumeException(-errno.EINVAL, "error delinking snapshot from clone")

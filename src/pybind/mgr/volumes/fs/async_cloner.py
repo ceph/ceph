@@ -12,6 +12,7 @@ from mgr_util import lock_timeout_log
 from .async_job import AsyncJobs
 from .exception import IndexException, MetadataMgrException, OpSmException, VolumeException
 from .fs_util import copy_file
+from .operations.versions.metadata_manager import MetadataManager
 from .operations.versions.op_sm import SubvolumeOpSm
 from .operations.versions.subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeActions
 from .operations.resolver import resolve_group_and_subvolume_name
@@ -402,6 +403,35 @@ class Cloner(AsyncJobs):
             log.error("error cancelling clone {0}: ({1})".format(job, e))
             raise VolumeException(-errno.EINVAL, "error canceling clone")
 
+    def bulk_cancel_pending_clone(self, volname, subvolname, snapname, groupname):
+        try:
+            with open_volume(self.fs_client, volname) as fs_handle:
+                with open_group(fs_handle, self.vc.volspec, groupname) as group:
+                    with open_subvol(self.fs_client.mgr, fs_handle, self.vc.volspec, group, subvolname, SubvolumeOpType.CLONE_CANCEL) as subvolume:
+                        #pending_clones = subvolume.get_pending_clones(snapname)
+                        for clone_subvolume in MetadataManager.list_all_options_from_section('clone snaps')[snapname]:
+                            clonename = clone_subvolume.subvol_name
+                            status = clone_subvolume.status
+                            clone_state = SubvolumeStates.from_value(status['state'])
+                            if not self.is_clone_cancelable(clone_state):
+                                raise VolumeException(-errno.EINVAL, "cannot cancel -- clone finished (check clone status)")
+                            track_idx = self.get_clone_tracking_index(fs_handle, clone_subvolume)
+                            if not track_idx:
+                                log.warning("cannot lookup clone tracking index for {0}".format(clone_subvolume.base_path))
+                                raise VolumeException(-errno.EINVAL, "error canceling clone")
+                            clone_job = (track_idx, clone_subvolume.base_path)
+                            jobs = [j[0] for j in self.jobs[volname]]
+                            with lock_timeout_log(self.lock):
+                                if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE, clone_state) and not clone_job in jobs:
+                                    logging.debug("Cancelling pending job {0}".format(clone_job))
+                                    # clone has not started yet -- cancel right away.
+                                    self._cancel_pending_clone(fs_handle, clone_subvolume, clonename, groupname, status, track_idx)
+                                    clone_subvolume.add_clone_cancelled(track_idx, clonename)
+                                    return
+        except (IndexException, MetadataMgrException) as e:
+            log.error("error cancelling clone {0}: ({1})".format(jobs, e))
+            raise VolumeException(-errno.EINVAL, "error canceling clone")
+    
     def get_next_job(self, volname, running_jobs):
         return get_next_clone_entry(self.fs_client, self.vc.volspec, volname, running_jobs)
 
