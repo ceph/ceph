@@ -308,7 +308,7 @@ class FuseMountBase(CephFSMountBase):
                                       check_status=False,
                                       timeout=300).exitstatus == 0
 
-    def umount(self, cleanup=True):
+    def umount(self, lazy=True, cleanup=True):
         """
         umount() must not run cleanup() when it's called by umount_wait()
         since "run.wait([self.fuse_daemon], timeout)" would hang otherwise.
@@ -323,12 +323,16 @@ class FuseMountBase(CephFSMountBase):
                 self.cleanup()
             return
 
+        umount_cmd = ['sudo', 'fusermount', '-u']
+        if lazy:
+            umount_cmd.append('-z')
+        umount_cmd.append(self.hostfs_mntpt)
+
         try:
             log.info('Running fusermount -u on {name}...'.format(name=self.client_remote.name))
             stderr = StringIO()
-            self.client_remote.run(
-                args=['sudo', 'fusermount', '-u', self.hostfs_mntpt],
-                stderr=stderr, timeout=UMOUNT_TIMEOUT, omit_sudo=False)
+            self.client_remote.run(args=umount_cmd, stderr=stderr,
+                                   timeout=UMOUNT_TIMEOUT, omit_sudo=False)
         except run.CommandFailedError:
             if "mountpoint not found" in stderr.getvalue():
                 # This happens if the mount directory doesn't exist
@@ -364,7 +368,7 @@ class FuseMountBase(CephFSMountBase):
         if cleanup:
             self.cleanup()
 
-    def umount_wait(self, force=False, require_clean=False,
+    def umount_wait(self, force=False, lazy=False, require_clean=False,
                     timeout=UMOUNT_TIMEOUT):
         """
         :param force: Complete cleanly even if the MDS is offline
@@ -396,7 +400,7 @@ class FuseMountBase(CephFSMountBase):
 
         # cleanup is set to to fail since clieanup must happen after umount is
         # complete; otherwise following call to run.wait hangs.
-        self.umount(cleanup=False)
+        self.umount(cleanup=False, lazy=False)
 
         try:
             # Permit a timeout, so that we do not block forever

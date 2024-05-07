@@ -144,7 +144,7 @@ class KernelMountBase(CephFSMount):
                                         '-o', opts]
         return mount_cmd
 
-    def umount(self, force=False):
+    def umount(self, force=False, lazy=False):
         if not self.is_mounted():
             self.cleanup()
             return
@@ -159,7 +159,9 @@ class KernelMountBase(CephFSMount):
         try:
             cmd=['sudo', 'umount', self.hostfs_mntpt]
             if force:
-                cmd.append('-f')
+                cmd.append('--force')
+            if lazy:
+                cmd.append('--lazy')
             self.client_remote.run(args=cmd, timeout=UMOUNT_TIMEOUT, omit_sudo=False)
         except Exception as e:
             log.debug('Killing processes on client.{id}...'.format(id=self.client_id))
@@ -178,7 +180,7 @@ class KernelMountBase(CephFSMount):
 
         self.cleanup()
 
-    def umount_wait(self, force=False, require_clean=False,
+    def umount_wait(self, force=False, lazy=False, require_clean=False,
                     timeout=UMOUNT_TIMEOUT):
         """
         Unlike the fuse client, the kernel client's umount is immediate
@@ -188,7 +190,7 @@ class KernelMountBase(CephFSMount):
             return
 
         try:
-            self.umount(force)
+            self.umount(force, lazy)
         except (CommandFailedError, MaxWhileTries):
             if not force:
                 raise
