@@ -418,6 +418,10 @@ public:
     : core_type(std::move(base))
   {}
 
+  void set_coroutine(seastar::task& coroutine) noexcept {
+    core_type::set_coroutine(coroutine);
+  }
+
   using value_type = typename seastar::future<T>::value_type;
   using tuple_type = typename seastar::future<T>::tuple_type;
 
@@ -688,6 +692,12 @@ struct interruptible_errorator {
 	Errorator::template make_ready_future<ValueT>(
 	  std::forward<A>(value)...));
   }
+
+  template <template <typename> typename FutureType, typename ValueT>
+  static future<ValueT> make_interruptible(FutureType<ValueT> &&fut) {
+    return std::move(fut);
+  }
+
   static interruptible_future_detail<
     InterruptCond,
     typename Errorator::template future<>> now() {
@@ -709,6 +719,7 @@ class [[nodiscard]] interruptible_future_detail<
 {
 public:
   using core_type = ErroratedFuture<crimson::errorated_future_marker<T>>;
+  using core_type::unsafe_get0;
   using errorator_type = typename core_type::errorator_type;
   using interrupt_errorator_type =
     interruptible_errorator<InterruptCond, errorator_type>;
@@ -769,6 +780,10 @@ public:
   [[gnu::always_inline]]
   interruptible_future_detail(exception_future_marker, std::exception_ptr&& ep) noexcept
     : core_type(::seastar::futurize<core_type>::make_exception_future(std::move(ep))) {
+  }
+
+  void set_coroutine(seastar::task& coroutine) noexcept {
+    core_type::set_coroutine(coroutine);
   }
 
   template<bool interruptible = true, typename ValueInterruptCondT, typename ErrorVisitorT,
@@ -1085,6 +1100,9 @@ struct interruptor
 {
 public:
   using condition = InterruptCond;
+
+  template <typename T>
+  using future = interruptible_future<InterruptCond, T>;
 
   static const void *get_interrupt_cond() {
     return (const void*)interrupt_cond<InterruptCond>.interrupt_cond.get();
