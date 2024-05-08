@@ -91,19 +91,6 @@ class TestAdminCommands(CephFSTestCase):
         if overwrites:
             self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
-    def _get_unhealthy_mds_id(self, health_report, health_warn):
-        '''
-        Return MDS ID for which health warning in "health_warn" has been
-        generated.
-        '''
-        # variable "msg" should hold string something like this -
-        # 'mds.b(mds.0): Behind on trimming (865/10) max_segments: 10,
-        # num_segments: 86
-        msg = health_report['checks'][health_warn]['detail'][0]['message']
-        mds_id = msg.split('(')[0]
-        mds_id = mds_id.replace('mds.', '')
-        return mds_id
-
     def gen_health_warn_mds_cache_oversized(self):
         health_warn = 'MDS_CACHE_OVERSIZED'
 
@@ -2242,6 +2229,21 @@ class TestMDSFail(TestAdminCommands):
                               retval=1, errmsgs=health_warn)
         self.run_ceph_cmd(f'mds fail {active_mds_id} --yes-i-really-mean-it')
 
+    def _get_unhealthy_mds_id(self, health_warn):
+        '''
+        Return MDS ID for which health warning in "health_warn" has been
+        generated.
+        '''
+        health_report = json.loads(self.get_ceph_cmd_stdout('health detail '
+                                                            '--format json'))
+        # variable "msg" should hold string something like this -
+        # 'mds.b(mds.0): Behind on trimming (865/10) max_segments: 10,
+        # num_segments: 86
+        msg = health_report['checks'][health_warn]['detail'][0]['message']
+        mds_id = msg.split('(')[0]
+        mds_id = mds_id.replace('mds.', '')
+        return mds_id
+
     def test_with_health_warn_with_2_active_MDSs(self):
         '''
         Test when a CephFS has 2 active MDSs and one of them have either
@@ -2254,10 +2256,8 @@ class TestMDSFail(TestAdminCommands):
         self.gen_health_warn_mds_cache_oversized()
         mds1_id, mds2_id = self.fs.get_active_names()
 
-        health_report = json.loads(self.get_ceph_cmd_stdout('health detail '
-                                                            '--format json'))
         # MDS ID for which health warning has been generated.
-        hw_mds_id = self._get_unhealthy_mds_id(health_report, health_warn)
+        hw_mds_id = self._get_unhealthy_mds_id(health_warn)
         if mds1_id == hw_mds_id:
             non_hw_mds_id = mds2_id
         elif mds2_id == hw_mds_id:
