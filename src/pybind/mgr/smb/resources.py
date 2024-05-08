@@ -1,10 +1,12 @@
-from typing import Dict, List, Optional, Union, cast
+from typing import Dict, List, Optional, Tuple, Union, cast
 
+import errno
 import json
 
 import yaml
 
 from ceph.deployment.service_spec import PlacementSpec
+from object_format import ErrorResponseBase
 
 from . import resourcelib, validation
 from .enums import (
@@ -47,6 +49,26 @@ class InvalidResourceError(ValueError):
         ):
             return cls(str(err), data)
         return err
+
+
+class InvalidInputError(ValueError, ErrorResponseBase):
+    summary_max = 1024
+
+    def __init__(self, msg: str, content: str) -> None:
+        super().__init__(msg)
+        self.content = content
+
+    def to_simplified(self) -> Simplified:
+        return {
+            'input': self.content[: self.summary_max],
+            'truncated_input': len(self.content) > self.summary_max,
+            'msg': str(self),
+            'success': False,
+        }
+
+    def format_response(self) -> Tuple[int, str, str]:
+        data = json.dumps(self.to_simplified())
+        return -errno.EINVAL, data, "Invalid input"
 
 
 class _RBase:
@@ -425,19 +447,27 @@ SMBResource = Union[
 ]
 
 
-def load_text(blob: str) -> List[SMBResource]:
+def load_text(
+    blob: str, *, input_sample_max: int = 1024
+) -> List[SMBResource]:
     """Given JSON or YAML return a list of SMBResource objects deserialized
     from the input.
     """
+    json_err = None
     try:
-        data = yaml.safe_load(blob)
-    except ValueError:
-        pass
-    try:
+        # apparently JSON is not always as strict subset of YAML
+        # therefore trying to parse as JSON first is not a waste:
+        # https://john-millikin.com/json-is-not-a-yaml-subset
         data = json.loads(blob)
-    except ValueError:
-        pass
-    return load(data)
+    except ValueError as err:
+        json_err = err
+    try:
+        data = yaml.safe_load(blob) if json_err else data
+    except (ValueError, yaml.parser.ParserError) as err:
+        raise InvalidInputError(str(err), blob) from err
+    if not isinstance(data, (list, dict)):
+        raise InvalidInputError("input must be an object or list", blob)
+    return load(cast(Simplified, data))
 
 
 def load(data: Simplified) -> List[SMBResource]:

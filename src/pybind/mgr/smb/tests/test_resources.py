@@ -748,3 +748,93 @@ login_control:
     assert share.login_control[3].name == 'delbard'
     assert share.login_control[3].category == enums.LoginCategory.USER
     assert share.login_control[3].access == enums.LoginAccess.NONE
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        # single share json
+        {
+            "txt": """
+{
+    "resource_type": "ceph.smb.share",
+    "cluster_id": "foo",
+    "share_id": "bar",
+    "cephfs": {"volume": "zippy", "path": "/"}
+}
+""",
+            'simplified': [
+                {
+                    'resource_type': 'ceph.smb.share',
+                    'cluster_id': 'foo',
+                    'share_id': 'bar',
+                    'intent': 'present',
+                    'name': 'bar',
+                    'cephfs': {
+                        'volume': 'zippy',
+                        'path': '/',
+                        'provider': 'samba-vfs',
+                    },
+                    'browseable': True,
+                    'readonly': False,
+                }
+            ],
+        },
+        # single share yaml
+        {
+            "txt": """
+resource_type: ceph.smb.share
+cluster_id: foo
+share_id: bar
+cephfs: {volume: zippy, path: /}
+""",
+            'simplified': [
+                {
+                    'resource_type': 'ceph.smb.share',
+                    'cluster_id': 'foo',
+                    'share_id': 'bar',
+                    'intent': 'present',
+                    'name': 'bar',
+                    'cephfs': {
+                        'volume': 'zippy',
+                        'path': '/',
+                        'provider': 'samba-vfs',
+                    },
+                    'browseable': True,
+                    'readonly': False,
+                }
+            ],
+        },
+        # invalid share yaml
+        {
+            "txt": """
+resource_type: ceph.smb.share
+""",
+            'exc_type': ValueError,
+            'error': 'missing',
+        },
+        # invalid input
+        {
+            "txt": """
+:
+""",
+            'exc_type': ValueError,
+            'error': 'parsing',
+        },
+        # invalid json, but useless yaml
+        {
+            "txt": """
+slithy
+""",
+            'exc_type': ValueError,
+            'error': 'input',
+        },
+    ],
+)
+def test_load_text(params):
+    if 'simplified' in params:
+        loaded = smb.resources.load_text(params['txt'])
+        assert params['simplified'] == [r.to_simplified() for r in loaded]
+    else:
+        with pytest.raises(params['exc_type'], match=params['error']):
+            smb.resources.load_text(params['txt'])
