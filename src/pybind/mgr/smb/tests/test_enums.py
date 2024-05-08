@@ -22,3 +22,24 @@ import smb.enums
 )
 def test_stringified(value, strval):
     assert str(value) == strval
+
+
+def test_login_access_expand():
+    assert smb.enums.LoginAccess.ADMIN.expand() == smb.enums.LoginAccess.ADMIN
+    assert (
+        smb.enums.LoginAccess.READ_ONLY.expand()
+        == smb.enums.LoginAccess.READ_ONLY
+    )
+    assert (
+        smb.enums.LoginAccess.READ_ONLY_SHORT.expand()
+        == smb.enums.LoginAccess.READ_ONLY
+    )
+    assert (
+        smb.enums.LoginAccess.READ_WRITE.expand()
+        == smb.enums.LoginAccess.READ_WRITE
+    )
+    assert (
+        smb.enums.LoginAccess.READ_WRITE_SHORT.expand()
+        == smb.enums.LoginAccess.READ_WRITE
+    )
+    assert smb.enums.LoginAccess.NONE.expand() == smb.enums.LoginAccess.NONE
