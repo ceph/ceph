@@ -1319,7 +1319,7 @@ class TestMDSFail(TestAdminCommands):
         errmsg = 'mds_cache_oversized'
         self.negtest_ceph_cmd(args=f'mds fail {active_mds_id}',
                               retval=1, errmsgs=errmsg)
-        self.run_ceph_cmd(f'mds fail {self.fs.name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'mds fail {active_mds_id} --yes-i-really-mean-it')
 
     def test_with_health_warn_trim(self):
         '''
@@ -1343,7 +1343,7 @@ class TestMDSFail(TestAdminCommands):
         errmsg = 'mds_trim'
         self.negtest_ceph_cmd(args=f'mds fail {active_mds_id}',
                               retval=1, errmsgs=errmsg)
-        self.run_ceph_cmd(f'mds fail {self.fs.name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'mds fail {active_mds_id} --yes-i-really-mean-it')
 
     def test_with_health_warn_with_2_active_MDSs(self):
         '''
@@ -1381,5 +1381,5 @@ class TestMDSFail(TestAdminCommands):
                               errmsgs=errmsg)
         self.negtest_ceph_cmd(args=f'mds fail {hw_mds_id}', retval=1,
                               errmsgs=errmsg)
-        self.run_ceph_cmd('mds fail mds1_id --yes-i-really-mean-it')
-        self.run_ceph_cmd('mds fail mds2_id --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'mds fail {mds1_id} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'mds fail {mds2_id} --yes-i-really-mean-it')
