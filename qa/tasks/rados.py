@@ -36,6 +36,8 @@ def task(ctx, config):
 	  write_fadvise_dontneed: write behavior like with LIBRADOS_OP_FLAG_FADVISE_DONTNEED.
 	                          This mean data don't access in the near future.
 				  Let osd backend don't keep data in cache.
+	  pct_update_delay: delay before primary propogates pct on write pause,
+                            defaults to 5s if balance_reads is set
 
     For example::
 
@@ -139,6 +141,7 @@ def task(ctx, config):
     object_size = int(config.get('object_size', 4000000))
     op_weights = config.get('op_weights', {})
     testdir = teuthology.get_testdir(ctx)
+    pct_update_delay = None
     args = [
         'adjust-ulimits',
         'ceph-coverage',
@@ -166,6 +169,7 @@ def task(ctx, config):
         args.extend(['--pool-snaps'])
     if config.get('balance_reads', False):
         args.extend(['--balance-reads'])
+        pct_update_delay = config.get('pct_update_delay', 5);
     if config.get('localize_reads', False):
         args.extend(['--localize-reads'])
     if config.get('max_attr_len', None):
@@ -274,6 +278,10 @@ def task(ctx, config):
                     if config.get('fast_read', False):
                         manager.raw_cluster_cmd(
                             'osd', 'pool', 'set', pool, 'fast_read', 'true')
+                    if pct_update_delay:
+                        manager.raw_cluster_cmd(
+                            'osd', 'pool', 'set', pool,
+                            'pct_update_delay', str(pct_update_delay));
                     min_size = config.get('min_size', None);
                     if min_size is not None:
                         manager.raw_cluster_cmd(
