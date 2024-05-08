@@ -283,7 +283,7 @@ public:
   ref_ret remove(
     Transaction &t,
     laddr_t offset) {
-    return _dec_ref(t, offset, true);
+    return _dec_ref(t, offset);
   }
 
   /// remove refcount for list of offset
@@ -803,8 +803,7 @@ private:
   /// Remove refcount for offset
   ref_ret _dec_ref(
     Transaction &t,
-    laddr_t offset,
-    bool cascade_remove);
+    laddr_t offset);
 
   using update_lba_mappings_ret = LBAManager::update_mappings_ret;
   update_lba_mappings_ret update_lba_mappings(

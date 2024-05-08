@@ -334,9 +334,8 @@ public:
 
   ref_ret decref_extent(
     Transaction &t,
-    laddr_t addr,
-    bool cascade_remove) final {
-    return update_refcount(t, addr, -1, cascade_remove
+    laddr_t addr) final {
+    return update_refcount(t, addr, -1, true
     ).si_then([](auto res) {
       return std::move(res.ref_update_res);
     });
