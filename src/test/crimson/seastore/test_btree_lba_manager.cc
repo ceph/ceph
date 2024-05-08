@@ -567,8 +567,7 @@ struct btree_lba_manager_test : btree_test_base {
       [=, this](auto &t) {
 	return lba_manager->decref_extent(
 	  t,
-	  target->first,
-	  true
+	  target->first
 	).si_then([this, &t, target](auto result) {
 	  EXPECT_EQ(result.refcount, target->second.refcount);
 	  if (result.refcount == 0) {

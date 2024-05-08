@@ -124,8 +124,7 @@ public:
    */
   virtual ref_ret decref_extent(
     Transaction &t,
-    laddr_t addr,
-    bool cascade_remove) = 0;
+    laddr_t addr) = 0;
 
   /**
    * Increments ref count on extent
