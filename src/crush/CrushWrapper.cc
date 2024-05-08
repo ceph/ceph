@@ -2351,6 +2351,7 @@ int CrushWrapper::add_simple_rule_at(
   int ret = crush_add_rule(crush, rule, rno);
   if(ret < 0) {
     *err << "failed to add rule " << rno << " because " << cpp_strerror(ret);
+    free(rule);
     return ret;
   }
   set_rule_name(rno, name);
@@ -2455,6 +2456,7 @@ int CrushWrapper::add_multi_osd_per_failure_domain_rule_at(
   int ret = crush_add_rule(crush, rule, rno);
   if(ret < 0) {
     *err << "failed to add rule " << rno << " because " << cpp_strerror(ret);
+    free(rule);
     return ret;
   }
   set_rule_name(rno, name);
