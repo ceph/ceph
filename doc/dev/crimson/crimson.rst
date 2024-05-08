@@ -44,7 +44,8 @@ use a Crimson build:
 You'll likely need to supply the ``--allow-mismatched-release`` flag to
 use a non-release branch.
 
-Additionally, prior to deploying OSDs, you'll need enable Crimson to
+Additionally, prior to deploying OSDs, you'll need to
+`Configure Crimson with Bluestore`_ and enable Crimson to
 direct the default pools to be created as Crimson pools.  From the cephadm shell run:
 
 .. prompt:: bash #
@@ -63,6 +64,82 @@ not allow ``crimson-osd`` to boot without that flag.
 The last causes pools to be created by default with the ``crimson`` flag.
 Crimson pools are restricted to operations supported by Crimson.
 ``Crimson-osd`` won't instantiate PGs from non-Crimson pools.
+
+Configure Crimson with Bluestore
+================================
+
+As Bluestore is not a Crimson native `object store backend`_,
+deploying Crimson with Bluestore as the back end requires setting
+one of the two following configuration options:
+
+.. note::
+
+   #. These two options, along with ``crimson_alien_op_num_threads``,
+      can't be changed after deployment.
+   #. `vstart.sh`_ sets this options using the ``--crimson-smp`` flag.
+
+
+1) ``crimson_seastar_num_threads``
+
+   In order to allow easier cluster deployments, this option can be used
+   instead of setting the CPU mask manually for each OSD.
+
+   It's recommended to let the **number of OSDs on each host** multiplied by
+   ``crimson_seastar_num_threads`` to be less than the node's number of CPU
+   cores (``nproc``).
+
+   For example, for deploying two nodes with eight CPU cores and two OSDs each:
+
+   .. code-block:: yaml
+
+      conf:
+        # Global to all OSDs
+        osd:
+          crimson seastar num threads: 3
+
+   .. note::
+
+      #. For optimal performance ``crimson_seastar_cpu_cores`` should be set instead.
+
+2) ``crimson_seastar_cpu_cores`` and ``crimson_alien_thread_cpu_cores``.
+
+   Explictily set the CPU core allocation for each ``crimson-osd``
+   and for the BlueStore back end. It's recommended for each set to be mutually exclusive.
+
+   For example, for deploying two nodes with eight CPU cores and two OSDs each:
+
+   .. code-block:: yaml
+
+      conf:
+        # Both nodes
+        osd:
+          crimson alien thread cpu cores: 6-7
+
+        # First node
+        osd.0:
+          crimson seastar cpu cores: 0-2
+        osd.1:
+          crimson seastar cpu cores: 3-5
+
+        # Second node
+        osd.2:
+          crimson seastar cpu cores: 0-2
+        osd.3:
+          crimson seastar cpu cores: 3-5
+
+   For a single node with eight node and three OSDs:
+
+   .. code-block:: yaml
+
+        conf:
+          osd:
+            crimson alien thread cpu cores: 6-7
+          osd.0:
+            crimson seastar cpu cores: 0-1
+          osd.1:
+            crimson seastar cpu cores: 2-3
+          osd.2:
+            crimson seastar cpu cores: 4-5
 
 Running Crimson
 ===============
@@ -174,6 +251,11 @@ The following options can be used with ``vstart.sh``.
 
 ``--bluestore``
     Use the alienized BlueStore as the object store backend. This is the default.
+
+``--crimson-smp``
+    The number of cores to use for each OSD.
+    If BlueStore is used, the balance of available cores
+    (as determined by `nproc`) will be assigned to the object store.
 
 ``--memstore``
     Use the alienized MemStore as the object store backend.
