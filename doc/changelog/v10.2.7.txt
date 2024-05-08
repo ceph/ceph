@@ -1,0 +1,1530 @@
+commit 50e863e0f4bc8f4b9e31156de690d765af245185
+Author: Jenkins Build Slave User <ceph-release-team@redhat.com>
+Date:   Mon Apr 10 11:43:44 2017 +0000
+
+    10.2.7
+
+commit a64d3e4b33e904aa6585464df8ffff6aafdec10c
+Merge: c92640a 6c2a40a
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Fri Mar 31 10:27:07 2017 -0600
+
+    Merge pull request #14230 from linuxbox2/wip-jewel-expand-argv
+    
+    jewel: rgw_file: expand argv
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit c92640a113843a491678c11319d2352f14486f17
+Merge: 7c35658 fcc3ada
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Fri Mar 31 10:17:10 2017 -0600
+
+    Merge pull request #14233 from ktdreyer/wip-19421-jewel
+    
+    jewel: librbd: possible race in ExclusiveLock handle_peer_notification
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 7c3565899af5f1f474d82d8802d15c6c216ea894
+Merge: 12467f6 eedb9f7
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Fri Mar 31 10:16:48 2017 -0600
+
+    Merge pull request #14231 from linuxbox2/wip-jewel-fhcache
+    
+    jewel: rgw_fh: RGWFileHandle dtor must also cond-unlink from FHCache
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 12467f6c3f346072d81c444ed68eb206402d8c33
+Merge: 2d2521c 78c8be7
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Fri Mar 31 10:09:14 2017 -0600
+
+    Merge pull request #14215 from mdw-at-linuxbox/wip-jewel-rgw-openssl-fix1
+    
+    rgw: fix openssl
+    
+    Reviewed-by: Ken Dreyer <kdreyer@redhat.com>
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 2d2521c0300000421740c611a5133c82d2e4d0f6
+Merge: 0840cf8 7e4e290
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Fri Mar 31 10:07:48 2017 -0600
+
+    Merge pull request #14206 from linuxbox2/wip-gui-jewel
+    
+    jewel: rgw_file: various fixes
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 0840cf86214c793794c6f913b63cc67e0ab3fc94
+Merge: 0bf6360 b24a8c2
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Fri Mar 31 10:07:03 2017 -0600
+
+    Merge pull request #14205 from linuxbox2/wip-dir-orphan-jewel
+    
+    jewel:  rgw_file: wip dir orphan
+    
+     Conflicts:
+    	src/rgw/rgw_file.cc (whitespace, trivial resolution)
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 0bf636057ba853d1d1a777147014a740d5149b17
+Merge: 83b5a7f fb85c68
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Fri Mar 31 10:05:40 2017 -0600
+
+    Merge pull request #14169 from linuxbox2/wip-18650-jewel
+    
+    jewel: rgw: rgw_file: FHCache residence check should be exhaustive
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 83b5a7f1c589546645e0f377d5d5f7b1f7363a59
+Merge: 6a175f2 a969c44
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Fri Mar 31 10:02:58 2017 -0600
+
+    Merge pull request #13869 from smithfarm/wip-19161-jewel
+    
+    jewel: rgw: rgw_file: fix marker computation
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit fb85c68dfbfcfb299cac3a7e6723067f216483ef
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Tue Feb 28 15:49:06 2017 -0500
+
+    rgw_file:  use fh_hook::is_linked() to check residence
+    
+    Previously we assumed that !deleted handles were resident--there
+    is an observed case where a !deleted handle is !linked.  Since
+    we currently use safe_link mode, an is_linked() check is
+    available, and exhaustive.
+    
+    Fixes: http://tracker.ceph.com/issues/19111
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit c0aa515f8d8c57ec5ee09e3b60df3cac60453c40)
+
+commit fcc3ada733bac74a642ccd0f1ed6301ad7318a30
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Tue Mar 28 15:55:11 2017 +0200
+
+    jewel: librbd: possible race in ExclusiveLock handle_peer_notification
+    
+    This is a cherry-pick from kraken -- the master diverged after
+    ManagedLock refactoring and is not affected.
+    
+    Fix: http://tracker.ceph.com/issues/19368
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit df59d6d5f7deb586cf14a6ef6984e6847db08852)
+
+commit eedb9f7d2d2a4047b473f23c5a6956c40a3da126
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Tue Feb 28 20:24:12 2017 -0500
+
+    rgw_file: RGWFileHandle dtor must also cond-unlink from FHCache
+    
+    Formerly masked in part by the reclaim() action, direct-delete now
+    substitutes for reclaim() iff its LRU lane is over its high-water
+    mark, and in particular, like reclaim() the destructor is certain
+    to see handles still interned on the FHcache when nfs-ganesha is
+    recycling objects from its own LRU.
+    
+    Fixes: http://tracker.ceph.com/issues/19112
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit d51a3b1224ba62bb53c6c2c7751fcf7853c35a4b)
+
+commit 6c2a40a800277ded302f3183ac6c68b01ca3ed41
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Tue Jan 17 11:23:45 2017 -0500
+
+    rgw_file:  split last argv on ws, if provided
+    
+    This is intended to allow an "extra" unparsed argument string
+    containing various cmdline options to be passed as the last argument
+    in the argv array of librgw_create(), which nfs-ganesha is
+    expecting to happen.
+    
+    While at it, hook env_args() too.
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit fbc19e4effc736c98cc1cc283e5c7b131a0fa766)
+
+commit d2ca03b391340c6944ba453b106f3e1c45b75f1d
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Sun Feb 12 20:18:26 2017 -0500
+
+    rgw_file: fix hiwat behavior
+    
+    Removed logic to skip reclaim processing conditionally on hiwat,
+    this probably meant to be related to a lowat value, which does
+    not exist.
+    
+    Having exercised the hiwat reclaim behavior, noticed that the
+    path which moves unreachable objects to LRU, could and probably
+    should remove them altogether when q.size exceeds hiwat.  Now
+    the max unreachable float is lane hiwat, for all lanes.
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit b8791b2217e9ca87b2d17b51f283fa14bd68b581)
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 166cb7f85c240eeaffc70968abf5352d9cd45bd9
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Sun Feb 12 18:20:43 2017 -0500
+
+    rgw_file: refcnt bugfixes
+    
+    This change includes 3 related changes:
+    
+    1. add required lock flags for FHCache updates--this is a crash
+       bug under concurrent update/lookup
+    
+    2. omit to inc/dec refcnt on root filehandles in 2 places--the
+       root handle current is not on the lru list, so it's not
+       valid to do so
+    
+    3. based on observation of LRU behavior during creates/deletes,
+       update (cohort) LRU unref to move objects to LRU when their
+       refcount falls to SENTINEL_REFCNT--this cheaply primes the
+       current reclaim() mechanism, so very significanty improves
+       space use (e.g., after deletes) in the absence of scans
+       (which is common due to nfs-ganesha caching)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit beaeff059375b44188160dbde8a81dd4f4f8c6eb)
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 31a71be9c9f24e22cf7e6eb390d3b39811ee3577
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Sat Feb 11 16:38:05 2017 -0500
+
+    rgw_file:  add refcount dout traces at debuglevel 17
+    
+    These are helpful for checking RGWFileHandle refcnt invariants.
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 462034e17f919fb783ee33e2c9fa8089f93fd97d)
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 1d6c72fe9a59561fb8f33889895b6708342b2856
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Fri Feb 10 17:14:16 2017 -0500
+
+    rgw_file: add pretty-print for RGWFileHandle
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit ef330f385d3407af5f470b5093145f59cc4dcc79)
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit a969c449272ce88ddcbbd509432134f19520c8c3
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Mon Feb 20 15:05:18 2017 -0500
+
+    rgw_file: fix marker computation
+    
+    Fixes: http://tracker.ceph.com/issues/19018
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 4454765e7dd08535c50d24205858e18dba4b454c)
+
+commit a70e83c90eb42439ba194ca197f507f972a18c3c
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Sun Feb 19 20:34:31 2017 -0500
+
+    rgw_file: rgw_readdir can't list multi-segment dirs
+    
+    This issue has one root cause in librgw, namely that the marker
+    argument to these requests was incorrectly formatted (though the
+    marker cache was working as intended).
+    
+    Secondarily, for nfs-ganesha users, there is a compounding issue
+    that the RGW fsal was required by "temporary" convention to
+    populate the entire dirent cache for a directory on a single
+    readdir() invocation--the cache_inode/mdcache implementations
+    invariantly pass (before future 2.5 changesets, currently in
+    progress) a null pointer for the start cookie offset, intended
+    to convey this.
+    
+    Fixes: http://tracker.ceph.com/issues/18991
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 2cd60ee9712291b906123aca1704288b18a9742b)
+
+commit 209987e1c764cac7574bf0bb969e93fcf55b4361
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Sun Feb 19 18:21:06 2017 -0500
+
+    rgw_file: allow setattr on placeholder directories
+    
+    When a POSIX path <bucket>/foo/ is known only as an implicit path
+    segment from other objects (e.g., <bucket>/foo/bar.txt), a case
+    that would usually arise from S3 upload of such an object, an
+    RGWFileHandle object representing "<bucket>/foo/" will be constructed
+    as needed, with no backing in RGW.
+    
+    This is by design, but subsequently, if a setattr is performed on
+    such a handle, we must be ready to create the object inline with
+    storing the attributes.
+    
+    Fixes: http://tracker.ceph.com/issues/18989
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 55eec1c0a0e136736961423b7b6244d0f3693c1a)
+
+commit 6a175f27961bd4f0fda8f94c200458f17865c9f9
+Merge: d32ae21 f3face6
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:36:35 2017 -0600
+
+    Merge pull request #14140 from smithfarm/wip-19341-jewel
+    
+    jewel: 'period update' does not remove short_zone_ids of deleted zones
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit d32ae21128d664370f7d07ed14427b75e10da7f8
+Merge: 4dfeed9 0be4e89
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:35:16 2017 -0600
+
+    Merge pull request #13886 from cbodley/wip-17786
+    
+    jewel: rgw: clear data_sync_cr if RGWDataSyncControlCR fails
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 4dfeed949655a5b5041f612b868225c234e86bba
+Merge: d69c54a 1985662
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:34:57 2017 -0600
+
+    Merge pull request #13867 from smithfarm/wip-19159-jewel
+    
+    jewel: rgw: multisite: RGWMetaSyncShardControlCR gives up on EIO
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit d69c54aca9dde3d64b56e5ee72f1cd29057a80c6
+Merge: 0830135 dfaaec0
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:34:24 2017 -0600
+
+    Merge pull request #13858 from smithfarm/wip-19152-jewel
+    
+    jewel: rgw_file:  restore (corrected) fix for dir partial match (return of FLAG_EXACT_MATCH)
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 0830135f40ac37ac9027bece65b8aac64c2c7ec9
+Merge: 4dd3a9f 97fed01
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:33:18 2017 -0600
+
+    Merge pull request #13848 from smithfarm/wip-19150-jewel
+    
+    jewel: rgw_file:  avoid interning .. in FHCache table and don't ref for them
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 4dd3a9f628053784cff2aa5849ab3c4cdb2acf4e
+Merge: 5eeba9c d333add
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:29:30 2017 -0600
+
+    Merge pull request #13844 from smithfarm/wip-19148-jewel
+    
+    jewel: rgw: DUMPABLE flag is cleared by setuid preventing coredumps
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 5eeba9cb85e9111ef124acd36dccf77c6f00b3e4
+Merge: ae632b0 f7ce5df
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:26:48 2017 -0600
+
+    Merge pull request #13823 from asheplyakov/19176-bp-jewel
+    
+    jewel: rgw: fix swift cannot disable object versioning with empty X-Versions-Location
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit ae632b0da6cc90a993fcae31b56f97c834d15aa1
+Merge: 874120f e8041f6
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:22:23 2017 -0600
+
+    Merge pull request #13778 from smithfarm/wip-18811-jewel
+    
+    jewel: librgw: RGWLibFS::setattr fails on directories
+    
+    Reviewed-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 874120f627f509c75b28d1be699812fce881f4bb
+Merge: b0108ea e475bfa
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:21:44 2017 -0600
+
+    Merge pull request #13717 from asheplyakov/19115-bp-jewel
+    
+    jewel: rgw_file: ensure valid_s3_object_name for directories, too
+    
+    Reviewed-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit b0108ea3bae1662e90c7fb9a911257f45193798c
+Merge: 6518d70 db928d6
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:19:03 2017 -0600
+
+    Merge pull request #13596 from dillaman/wip-19038-jewel
+    
+    jewel: rbd-mirror: deleting a snapshot during sync can result in read errors
+    
+    Reviewed-by: Mykola Golub <mgolub@mirantis.com>
+
+commit 6518d70b89686b9a4e8854a4c6290381fbcdd8c3
+Merge: db50938 8941881
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:10:43 2017 -0600
+
+    Merge pull request #13583 from asheplyakov/jewel-bp-18901
+    
+    jewel: rgw_file:  interned RGWFileHandle objects need parent refs
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit db50938013f0b1c1fe8a23247c91bbfc38d36a8c
+Merge: 7536871 d44263f
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 16:02:43 2017 -0600
+
+    Merge pull request #13503 from linuxbox2/wip-jewel-10156
+    
+    jewel: rgw: make sending Content-Length in 204 and 304 controllable
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+    Reviewed-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+
+commit 75368712aafc51b062b674b263354cca2dd4b49a
+Merge: 250071e 2f20328
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 15:53:49 2017 -0600
+
+    Merge pull request #13232 from ovh/wip-rework-recovery-priorities-jewel
+    
+    jewel: osd: Increase priority for inactive PGs backfill
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 250071eb8dc744237acfed01df2cf04f2d88bc85
+Merge: 6f57a77 9910eac
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 15:51:46 2017 -0600
+
+    Merge pull request #13219 from linuxbox2/jewel-rgw-multipart-upload-copy-4
+    
+    jewel: rgw: multipart uploads copy part support
+    
+    Reviewed-by: Casey Bodley <cbodley@redhat.com>
+
+commit 6f57a775301edce7a1039a4aa4479bbd8883cbf6
+Merge: 8c02e54 3fce77a
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Mar 28 15:51:24 2017 -0600
+
+    Merge pull request #13108 from vumrao/wip-vumrao-jewel-18657
+    
+    jewel: osd: fix OSD network address in OSD heartbeat_check log message
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit b24a8c2f3890b6fcc60f3b52cba93d573b9d45a2
+Author: Gui Hecheng <guihecheng@cmss.chinamobile.com>
+Date:   Thu Mar 2 17:21:57 2017 +0800
+
+    rgw_file: posix style atime,ctime,mtime
+    
+    As an ganesha FSAL backend, rgw_file should properly maintain
+    the atime,ctime,mtime properly against operations such as:
+    	(read,write) for file
+    	(create,unlink,mkdir,rmdir,rename) for dir
+    	(setattr) for file and dir
+    
+    Signed-off-by: Gui Hecheng <guihecheng@cmss.chinamobile.com>
+    (cherry picked from commit ac25da2479b9be876cbdb820560ac46a6e2b17d7)
+
+commit b6181833be925b7eb11afffff7f03486bdde2d25
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Mon Feb 20 15:05:18 2017 -0500
+
+    rgw_file: fix marker computation
+    
+    Fixes: http://tracker.ceph.com/issues/19018
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 4454765e7dd08535c50d24205858e18dba4b454c)
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit ed9308cba2af227991a50a9535df30cf9bb18a82
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Sun Feb 19 20:34:31 2017 -0500
+
+    rgw_file: rgw_readdir can't list multi-segment dirs
+    
+    This issue has one root cause in librgw, namely that the marker
+    argument to these requests was incorrectly formatted (though the
+    marker cache was working as intended).
+    
+    Secondarily, for nfs-ganesha users, there is a compounding issue
+    that the RGW fsal was required by "temporary" convention to
+    populate the entire dirent cache for a directory on a single
+    readdir() invocation--the cache_inode/mdcache implementations
+    invariantly pass (before future 2.5 changesets, currently in
+    progress) a null pointer for the start cookie offset, intended
+    to convey this.
+    
+    Fixes: http://tracker.ceph.com/issues/18991
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 2cd60ee9712291b906123aca1704288b18a9742b)
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 26a38e2e1525714978feda018c03698d7af65129
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Sun Feb 19 18:21:06 2017 -0500
+
+    rgw_file: allow setattr on placeholder directories
+    
+    When a POSIX path <bucket>/foo/ is known only as an implicit path
+    segment from other objects (e.g., <bucket>/foo/bar.txt), a case
+    that would usually arise from S3 upload of such an object, an
+    RGWFileHandle object representing "<bucket>/foo/" will be constructed
+    as needed, with no backing in RGW.
+    
+    This is by design, but subsequently, if a setattr is performed on
+    such a handle, we must be ready to create the object inline with
+    storing the attributes.
+    
+    Fixes: http://tracker.ceph.com/issues/18989
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 55eec1c0a0e136736961423b7b6244d0f3693c1a)
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 7e4e29038bd820e171d007360cf383c85f67879b
+Author: Gui Hecheng <guihecheng@cmss.chinamobile.com>
+Date:   Wed Mar 8 16:23:11 2017 +0800
+
+    rgw_file: fix reversed return value of getattr
+    
+    When ::getattr returns -ESTALE, rgw_getattr returns ESTALE,
+    which is a not expected postive.
+    
+    Signed-off-by: Gui Hecheng <guihecheng@cmss.chinamobile.com>
+    (cherry picked from commit 39203cf872b8f4af86eb0e4a0f96dffd9cc92b41)
+
+commit 3c02ee4fe9ae70f30328a7b015f5cac4a1804c67
+Author: Gui Hecheng <guihecheng@cmss.chinamobile.com>
+Date:   Mon Mar 20 10:53:46 2017 +0800
+
+    rgw_file: fix non-negative return code for open operation
+    
+    The nfs-ganesha expects a negative retcode for errors.
+    
+    Signed-off-by: Gui Hecheng <guihecheng@cmss.chinamobile.com>
+    (cherry picked from commit b5f70ef7b066f9ff44770cc8a50ccadaa02f4691)
+
+commit e9a4903c6e77caae6f161056e8aaa5ba10ae5ef2
+Author: Gui Hecheng <guihecheng@cmss.chinamobile.com>
+Date:   Wed Mar 15 15:01:05 2017 +0800
+
+    rgw_file: fix double unref on rgw_fh for rename
+    
+    Skip unref after unlink to fix the problem.
+    
+    Signed-off-by: Gui Hecheng <guihecheng@cmss.chinamobile.com>
+    (cherry picked from commit bff228734c73b536d2482e2e2fa4ad38b206ebff)
+
+commit 9910eac98474930369d694b236c06ffd627fee04
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 29 22:20:10 2016 -0700
+
+    rgw: multipart part copy, fix regression
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 66fbe9384703c004c01783eb664f55895d310439)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit a3fdf0e246637ef4145b6b5ba1f4b114ec7ebc62
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 29 17:44:08 2016 -0700
+
+    rgw: minor optimization
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 4919dc9987c6376d3d4e143702c26417449524c5)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 2161376baf413acfbf02df07e404d2918729bfcc
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 29 17:43:00 2016 -0700
+
+    rgw: rgw_obj_key use adjustment in multipart copy part
+    
+    This fixes a case where objects start with double underscore.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 29fece3545cc1df404a25eec46706b16f893a5df)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 135f84d860d10a2961f430708983113a87ddf899
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 29 17:43:35 2016 -0700
+
+    rgw: multipart copy-part handle versionId
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 53521efffb1cb92e5f5ce992d4127bf9498d7c33)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 9ab65f5501fb59aac17cfdde57371b00af03d84b
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 29 14:24:13 2016 -0700
+
+    rgw: multipart copy part minor parsing cleanup
+    
+    no need for range.size()
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 6e9b824d5d4017239d58b4752ebc43bfad8f698d)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 3eb9dc96ff8e655415500a3595a78cab80739826
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 29 14:11:43 2016 -0700
+
+    rgw: multipart copy, check for empty bucket, improve logging
+    
+    also reduce log level for non critical user errors.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 2bcb3d286b230ef917d5ba96c8276a942f544689)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit 2588e95d9d422d3b33fd710de1f5884873465483
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 29 14:07:14 2016 -0700
+
+    rgw: multipart copy part, chunked read
+    
+    Don't read the entire range from source object, read it in parts.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 4049e47a0cfc1eef6efd502590b68ba7234589d3)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit bd118b556562176ce2390a935b3bb8c25a62d0c4
+Author: Javier M. Mellid <jmunhoz@igalia.com>
+Date:   Tue Jul 26 14:56:50 2016 +0200
+
+    rgw: doc: add multipart uploads copy part feature as supported
+    
+    Signed-off-by: Javier M. Mellid <jmunhoz@igalia.com>
+    (cherry picked from commit 8a7ebeee2ff3f10ceb23b7fa43e43c3c450efe22)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit b56b719299becc38ec36d427a36b8c29f2416c08
+Author: Javier M. Mellid <jmunhoz@igalia.com>
+Date:   Tue Jul 26 14:53:44 2016 +0200
+
+    rgw: multipart uploads copy part support
+    
+    Add multipart uploads copy part feature.
+    
+    Fixes: http://tracker.ceph.com/issues/12790
+    
+    Signed-off-by: Javier M. Mellid <jmunhoz@igalia.com>
+    (cherry picked from commit 949480c2e9760855ed6a0501d364d5e766c8207d)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit d44263fc91da12ea0ad4fec0cd2877b36ddb9e9f
+Author: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+Date:   Fri Feb 17 00:56:34 2017 +0100
+
+    rgw: make sending Content-Length in 204 and 304 controllable
+    
+    This commit introduces a new configurable "rgw print prohibited
+    content length" to let operator decide whether RadosGW complies
+    to RFC 7230 (a part of the HTTP specification) or violates it
+    but follows the Swift's behavior.
+    
+    Fixes: http://tracker.ceph.com/issues/16602
+    Signed-off-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+    (cherry picked from commit d8e3e64ec97a3c222a56bb6f510e5e23d7858615)
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+
+commit f3face61351a61f3b71dfb8268a4b645c4d92da2
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Thu Mar 9 15:24:08 2017 -0500
+
+    rgw: clear old zone short ids on period update
+    
+    the short ids of old, removed zones were being kept in the period to
+    guard against hash collisions with new zones
+    
+    but for a hash collision to cause a wrong object to sync, that object
+    would have to be uploaded simultaneously to two different zones that had
+    the same short id
+    
+    to avoid this, we just have to prevent the period from containing two
+    colliding zones at the same time - we don't have to remember old zone
+    short ids forever
+    
+    Fixes: http://tracker.ceph.com/issues/15618
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 9c45633c836c966ab1f75ea2b1ad3fa0a4886600)
+
+commit 8c02e54a747644d24feb98dbc15a15cdd55d1afd
+Merge: 9d222b9 952f34f
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Mar 24 08:13:02 2017 -0700
+
+    Merge pull request #13146 from dzafman/wip-18502-jewel-zafman
+    
+    jewel: osd: Scrub improvements and other fixes
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 9d222b943217a2ec022678e50b34766d231004ce
+Merge: ce2e989 cb9fae5
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Thu Mar 23 16:49:13 2017 +0100
+
+    Merge pull request #14100 from smithfarm/wip-18781
+    
+    Manually merge PR#13143 which was mistakenly merged to jewel-next
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+    Reviewed-by: Ken Dreyer <kdreyer@redhat.com>
+
+commit cb9fae56ebdfda28b0606ee89631deb60e5f7de7
+Merge: ce2e989 ee3c67c
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Mar 23 09:46:53 2017 +0100
+
+    Merge branch 'jewel-next' into jewel
+    
+    Branch "jewel-next" was merged to jewel on Dec 22 (5b402f8a7b), and then PR
+    https://github.com/ceph/ceph/pull/13143 merged to jewel-next much later (Feb
+    1st), and then jewel-next was never merged to jewel again before we tagged
+    v10.2.6.
+    
+    This merge brings in a single commit, i.e. the one from
+    https://github.com/ceph/ceph/pull/13143
+    
+    Reported-by: Ken Dreyer <kdreyer@redhat.com>
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit ce2e9897c08775cfbe318f637d61e07eb5433df5
+Merge: 656b5b6 d0a0d2f
+Author: Zack Cerza <zack@cerza.org>
+Date:   Tue Mar 14 09:19:28 2017 -0600
+
+    Merge pull request #13952 from smithfarm/wip-fix-merge-error
+    
+    tests: fix merge error in rgw/singleton/all/radosgw-admin.yaml
+
+commit 0be4e89419f2083d081ac784891e4653290cd530
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue Oct 11 15:21:42 2016 -0400
+
+    rgw: hold a reference on data_sync_cr over run()
+    
+    run() will drop its reference to data_sync_cr, so we need to hold a
+    reference until we can reacquire the lock
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 4cf0d2a768e7402e71280ca16b47353ca2a68505)
+
+commit 18ffdb7baf4aff1fd7f894af1054081f3ee61d28
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Tue Oct 11 15:19:37 2016 -0400
+
+    rgw: clear data_sync_cr if RGWDataSyncControlCR fails
+    
+    async notifications will still try to call wakeup() on RGWDataSyncControlCR
+    if it fails, leading to segfault
+    
+    Fixes: http://tracker.ceph.com/issues/17569
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 5cc599b9bf2dde31de16a5b2831baf06851d69d5)
+    
+     Conflicts:
+    	src/rgw/rgw_data_sync.cc: declaration of 'int r'
+
+commit d0a0d2f4bf1dacf7c1f38b968be84a5e905554a8
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Tue Mar 14 01:26:23 2017 +0100
+
+    tests: fix merge error in rgw/singleton/all/radosgw-admin.yaml
+    
+    Introduced by 94d5888c
+    
+    Reported-by: Robin H. Johnson <robin.johnson@dreamhost.com>
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit 19856624cd5ea8cb82bc5b46e062beb39674bd34
+Author: Casey Bodley <cbodley@redhat.com>
+Date:   Mon Feb 20 16:00:01 2017 -0500
+
+    rgw: RGWMetaSyncShardControlCR retries with backoff on all error codes
+    
+    RGWBackoffControlCR only treats EBUSY and EAGAIN as 'temporary' error
+    codes, with all other errors being fatal when exit_on_error is set
+    
+    to RGWMetaSyncShardControlCR, a 'fatal' error means that no further sync
+    is possible on that shard until the gateway restarts
+    
+    this changes RGWMetaSyncShardControlCR to set exit_on_error to false, so
+    that it will continue to retry with backoff no matter what error code it
+    gets
+    
+    Fixes: http://tracker.ceph.com/issues/19019
+    
+    Signed-off-by: Casey Bodley <cbodley@redhat.com>
+    (cherry picked from commit 3e4059557fd6cad5d31014327f60832b36d04a6c)
+
+commit dfaaec0446c3db458bffe1d725518ab4f7cc2fa8
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Thu Feb 23 10:21:38 2017 -0500
+
+    rgw_file:  return of RGWFileHandle::FLAG_EXACT_MATCH
+    
+    Allow callers of rgw_lookup() on objects attested in an
+    rgw_readdir() callback the ability to bypass exact match in
+    RGWLibFS::stat_leaf() case 2, but restore exact match enforcement
+    for general lookups.
+    
+    This preserves required common_prefix namespace behavior, but
+    prevents clients from eerily permitting things like "cd sara0" via
+    partial name match on "sara01."
+    
+    Fixes: http://tracker.ceph.com/issues/19059
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 70ef7d45e0abf2661bd4e23161d4e70cf5178079)
+
+commit 9b3784d924112d9ba42b2088d5fb2656ef74fadc
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Sun Feb 19 17:43:17 2017 -0500
+
+    rgw_file: invalid use of RGWFileHandle::FLAG_EXACT_MATCH
+    
+    The change which introduced this flag also caused it to be
+    given as the flags argument to RGWLibFS::stat_leaf() when called
+    from rgw_lookup().
+    
+    This was incorrect:  in particular, when a directory is known only
+    as a common prefix of other objects, the AWS namespace mapping
+    convention requires lookup("foo") to match a non-materialized
+    instance of "foo/" (case 2 in RGWLibFS::stat_leaf's stat loop).
+    
+    Fixes: http://tracker.ceph.com/issues/18992
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit e31e9eb980f958640150e8d7f17de1b9e5478b1e)
+
+commit 7761376c92eb38a2dd3d19f0b3d81895a4b1167c
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Wed Feb 22 14:57:59 2017 -0500
+
+    rgw_file: rgw_lookup: don't ref for "/" or ".."
+    
+    These refs won't be returned by nfs-ganesha, and are sufficiently
+    magical that other consumers should be persuaded to understand
+    their specialness.
+    
+    Fixes: http://tracker.ceph.com/issues/19060
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit dea8d1ee373399a21851690a9753388b659b8ede)
+
+commit 97fed013f66a89c404bac5145080e5d556ff5c42
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Wed Feb 22 10:24:29 2017 -0500
+
+    rgw_file: avoid stranding invalid-name bucket handles in fhcache
+    
+    To avoid a string copy in the common mkdir path, handles for
+    proposed buckets currently are staged in the handle table, before
+    being rejected.  They need to be destaged, not just marked deleted
+    (because deleted objects are now assumed not to be linked, as of
+    beaeff059375b44188160dbde8a81dd4f4f8c6eb).
+    
+    This triggered an unhandled Boost assert when deleting staged
+    handles, as current safe_link mode requires first removing from
+    the FHCache.
+    
+    Fixes: http://tracker.ceph.com/issues/19036
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 6cde812c92e5bba9f85fbf8486ebe69b55952370)
+
+commit d333addb71a0a92fbac5a7b922dbd69fc9e0604e
+Author: Brad Hubbard <bhubbard@redhat.com>
+Date:   Mon Feb 27 13:06:59 2017 +1000
+
+    rgw: set dumpable flag after setuid post ff0e521
+    
+    ff0e521 resolved the issue for the other daemons but not for rgw since
+    it calls setuid (via civetweb) after the new code sets PR_SET_DUMPABLE.
+    Add another prctl call before wait_shutdown.
+    
+    Fixes: http://tracker.ceph.com/issues/19089
+    
+    Signed-off-by: Brad Hubbard <bhubbard@redhat.com>
+    (cherry picked from commit bc458d39630b599e0e1ca9fe25ad7455fcffdd10)
+
+commit f7ce5df4064e5538156cb44f9525d7552a0dd098
+Author: Jing Wenjun <jingwenjun@cmss.chinamobile.com>
+Date:   Wed Feb 8 15:07:43 2017 +0800
+
+    rgw: fix swift cannot disable object versioning with empty X-Versions-Location
+    
+    we should be able to disable object verioning by removing its X-Versions-Location
+    metadata header by sending an empty key value. this description can be found at
+    No.8 in http://docs.openstack.org/user-guide/cli-swift-set-object-versions.html.
+    
+    Fixes: http://tracker.ceph.com/issues/18852
+    Signed-off-by: Jing Wenjun <jingwenjun@cmss.chinamobile.com>
+    (cherry picked from commit 17c5a0edd2227703cec867f0f588d4eae36dfe1c)
+
+commit 2f2032814189a4ecbf8dc01b59bebfae8ab3f524
+Author: Bartłomiej Święcki <bartlomiej.swiecki@corp.ovh.com>
+Date:   Fri Dec 2 16:54:46 2016 +0100
+
+    osd: Increase priority for inactive PGs backfill
+    
+    This change does prioritize backfill of PGs which don't
+    have min_size active copies. Such PGs would cause IO stalls
+    for clients and would increase throttlers usage.
+    
+    This change also fixes few subtlle out-of-bounds bugs.
+    
+    Signed-off-by: Bartłomiej Święcki <bartlomiej.swiecki@corp.ovh.com>
+    (cherry picked from commit 6a76adcdb1f92c136841d960aa7cd4e5b94addec)
+    
+    Conflicts:
+    	PendingReleaseNotes (removed version number, merged conflicts)
+
+commit e8041f627c6a05a59dba29819ed610ea0896f4dd
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Fri Feb 3 13:44:45 2017 -0500
+
+    rgw_file:  fix RGWLibFS::setattr for directory objects
+    
+    Fixes:  http://tracker.ceph.com/issues/18808
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 4ad5a9226852d6d564baf2e63278ed6c4c185ecb)
+
+commit e475bfaf7d3a1b0e54172083a92546560219665a
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Thu Feb 23 16:02:07 2017 -0500
+
+    rgw_file: ensure valid_s3_object_name for directories, too
+    
+    The logic in RGWLibFS::mkdir() validated bucket names, but not
+    object names (though RGWLibFS::create() did so).
+    
+    The negative side effect of this was not creating illegal objects
+    (we won't), but in a) failing with -EIO and b) more importantly,
+    not removing up the proposed object from FHCache, which produced a
+    boost assert when recycled.
+    
+    Fixes: http://tracker.ceph.com/issues/19066
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit eb1cd3b30c0504385f05bf2d2dd5e2251b7efed7)
+
+commit 78c8be7a0df3d1c669f8a2a8fd7a5676d0823209
+Author: Marcus Watts <mdw@linuxbox.com>
+Date:   Thu Feb 23 02:30:52 2017 -0500
+
+    rgw/openssl fix: xenial autoconf logic problem: gcc/ld got too smart...
+    
+    On xenial, cc -o foo -lssl -lcrypto doesn't always
+    record libssl.so libcrypto.so as runtime library dependencies.
+    It is necessary to actually *use* a function from the library before
+    it gets recorded.  The ld(1) options "--as-needed" and "no-as-needed"
+    control this.  Evidently the default has changed in xenial.
+    That caused my smart "soname" detecting logic for openssl to
+    stop working.  To make it work, the test program has to
+    actually reference routines or variables inside the library.
+    
+    This is a quick fix for xenial / autoconf.  There needs to be
+    a better fix for cmake and master.
+    
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+
+commit db928d6b3f983b3a1ccc07440fcd3680700a1188
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Feb 21 15:33:01 2017 -0500
+
+    rbd-mirror: retry object copy after -ENOENT error
+    
+    Fixes: http://tracker.ceph.com/issues/18990
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit b4f36d5dc3f4f3cbb23f61cbb945b222248a50df)
+    
+    Conflicts:
+    	src/test/librados_test_stub/MockTestMemIoCtxImpl.h: sparse reads not supported
+    	src/test/rbd_mirror/image_sync/test_mock_ObjectCopyRequest.cc: sparse reads not supported
+
+commit a643fa80e03b41edcc720ff77b69ebaf24a23f3e
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Feb 21 13:09:39 2017 -0500
+
+    rbd-mirror: object copy should always reference valid snapshots
+    
+    If a remote snapshot is deleted while an image sync is in-progress,
+    associate the read request against the most recent, valid remote
+    snapshot for a given snapshot object clone.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 9a91efc3047963364944f8be91cee8e8f6afc49a)
+
+commit 37bbc95d56f73e4ec9c6e13ddbae199b14b104b4
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Feb 21 11:52:00 2017 -0500
+
+    rbd-mirror: replace complex object op tuple with struct
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 0c181527c0e151784a0f7c466aaa70b0772f91b1)
+    
+    Conflicts:
+    	src/tools/rbd_mirror/image_sync/ObjectCopyRequest.cc: sparse reads not supported
+    	src/tools/rbd_mirror/image_sync/ObjectCopyRequest.h: sparse reads not supported
+
+commit 8941881e8986af0b2871c15d188d94d49e95dc02
+Author: Matt Benjamin <mbenjamin@redhat.com>
+Date:   Fri Dec 30 23:30:16 2016 -0500
+
+    rgw_file:  interned RGWFileHandle objects need parent refs
+    
+    RGW NFS fhcache/RGWFileHandle operators assume existence of the
+    full chain of parents from any object to the its fs_root--this is
+    a consequence of the weakly-connected namespace design goal, and
+    not a defect.
+    
+    This change ensures the invariant by taking a parent ref when
+    objects are interned (when a parent ref is guaranteed).  Parent
+    refs are returned when objects are destroyed--essentially by the
+    invariant, such a ref must exist.
+    
+    The extra ref is omitted when parent->is_root(), as that node is
+    not in the LRU cache.
+    
+    Fixes: http://tracker.ceph.com/issues/18650
+    
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 0e5299f3f43e633a5d8a9360893b4b11f6217d81)
+
+commit 952f34f39cdd0438e4a4fb369ea8ca20b26488a8
+Author: David Zafman <dzafman@redhat.com>
+Date:   Mon Dec 12 15:53:25 2016 -0800
+
+    test: Update for new error message when doing scrub with deep-scrub errors
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 85e0774a7dded4aa6c67f237416041e25a7680bc)
+
+commit b655b98e48989ae954dc150fcb3d8976978cd90d
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Dec 9 12:14:06 2016 -0800
+
+    osd: Add "trigger_scrub" admin socket command
+    
+    This allows testing to fake a schedule scrub (must_scrub not set)
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit c8dc945260ee2ee841aca00fbc802d41036033d6)
+
+commit 94c958d2c9570e55305384ac86185e328746d2ff
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Dec 8 23:00:13 2016 -0800
+
+    test: Add test for keeping deep-scrub information
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 64a7012e986ec88994c073b738fd08e8958395c3)
+
+commit 42eb24f18d5114410bd2a3e84e9219584d9e165e
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Dec 1 16:39:42 2016 -0800
+
+    osd: When deep-scrub errors present upgrade regular scrubs
+    
+    Previously, if a weekly deep-scrub found errors the next daily scrub
+    would cause the deep-scrub information to be removed.
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 532a759dca466181f37a329f86045c34f1a2506f)
+
+commit 76a457aa7c411dc5ed22f171954b8ed3c4661845
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Oct 19 17:10:29 2016 -0700
+
+    tasks/scrub_test.py: Make test deterministic by updating digests
+    
+    ceph_test_rados: Get coverage of digest updates in deep-scrub/repair
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit e000ab2f46b7b98a223176a2a25bb7195e601af6)
+
+commit bd1f1983129d6e1787b8b5eb4884c5e908f7b274
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Oct 19 17:10:07 2016 -0700
+
+    repair_test, scrub_test: Fix whitelists for scrub changes
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 5fe8522df47f56842d227e08b2912623504afe24)
+
+commit 28106f06404407df7d05b35f9f570a80e785e635
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Aug 31 12:02:31 2016 -0700
+
+    scrub_test: Fix for list-inconsistent-obj output changes
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 5ae0f5c75a8236d4a026f9ddcb5ff59964d90579)
+
+commit abcefc1395f76e5b05a988b970457a7f6dac6e8e
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Aug 30 12:11:44 2016 -0700
+
+    doc, test: Add schemas for list-inconsistent-* rados command output
+    
+    If jsonschema cmd is available use it to test output against schema
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit eb73dd473600fbbb45fad00194f7c46b565d6b81)
+
+commit 2fa2b64676555a91883a5aabb4e4237124308629
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Aug 30 12:22:55 2016 -0700
+
+    test: Update testing for new list-inconsistent-obj output
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit b7bacd219b000869b9c93e21edba4f8a3ace60d9)
+    
+    Adapted for difference in Jewel object_info
+
+commit 304f697ff1106695188b572e0da2415437040a6c
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Aug 30 12:22:29 2016 -0700
+
+    rados, osd: Improve attrs output of list-inconsistent-obj
+    
+    Persist the user_version and shard id of scrubbed obj
+    Rados command dump inconsistent obj's version and shard-id
+        so they can be passed to repair command
+    Rados list-inconsistent-obj output of attrs
+        Make attrs an array since there are more than one
+        Use base64 encode for values with non-printable chars
+        Add indication if base64 encoding used
+    Add checking for ss_attr_missing and ss_attr_corrupted
+        Rename attr errors to attr_key_mismatch and attr_value_mismatch
+    Add missing size_mismatch_oi scrub checking
+    For erasure coded pools add ec_size_error and ec_hash_error not just read_error
+    Use oi_attr_missing and oi_attr_corrupted just like list-inconsistent-snap does
+    Pick an object info based on version and use that to find specific shards in error
+        Check for object info inconsistency which should be rare
+    Make all errors based on comparing shards to each other object errors
+        We don't want give the impression that we've picked the correct one
+    
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit df3ff6dafeadb3822b35c424a890db9a14d7f60f)
+
+commit ea52f527e530b111b1bb26d10824c0230d662c4a
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Sep 1 14:45:01 2016 -0700
+
+    osd: Fix logging to help with diagnostics
+    
+    These messages were not outputing the intended information
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit b39001ec6ff0996860bcb5a3578bc2c66355c781)
+
+commit 5e8f8a2288aa1a9f1de86d3f7d0f9c66c795113e
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Jun 21 18:05:25 2016 -0700
+
+    test: Fix use of wait_for_clean()
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit d0503a52d0fe5505bdb38dfd613c03a20500c05d)
+
+commit 2230e6adc66ca3e5dbe81aecccdb4a435e93e256
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Aug 30 10:56:06 2016 -0700
+
+    common: Change cleanbin() to use base64 encoding, update ceph-objectstore-tool
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 92e982c71995b863466d83671468f84761cb1793)
+
+commit 83ea077ee560d31a5c302a62b55451a2571fda8d
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Aug 30 11:05:16 2016 -0700
+
+    common: Move cleanbin() function to common/util.cc
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 5c79074ffaee34b2956d9dfc67b1eff9f39b47f3)
+    
+    Conflicts:
+    	src/tools/CMakeLists.txt (changes goes in src/CMakeLists.txt)
+
+commit ba84ca9fa391d963d1d4e46fbf27ce3dbff397be
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Jun 8 09:48:00 2016 -0700
+
+    test: Add test support for deep-scrub
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 907e79e2b77835d1aca9e8ba2fae5fa2fd437e5a)
+
+commit 6a421d19d0be4d59beed5c69bb0aa4477d65a14e
+Author: David Zafman <dzafman@redhat.com>
+Date:   Sat Jun 18 17:58:36 2016 -0700
+
+    common: Fix indentation
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit a74418a29e4e469117fc0c4edd80f78b62944c98)
+
+commit c7c3e070336dc898460d4338b4d78b8963467c8a
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Aug 12 12:06:31 2016 -0700
+
+    osd: Handle corrupt attributes in get_object_context()
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 30f8b0d6593718dd10bcf6ff459c95b4bb68c05c)
+
+commit 8006ba7e86ebb8201a040c427cc95197901064be
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Fri Nov 11 21:37:50 2016 +0800
+
+    ReplicatedPG::failed_push: release read lock on failure
+    
+    and requeue the blocked ops.
+    
+    Fixes: http://tracker.ceph.com/issues/17857
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit b3224a18f6acc7ed54c2162b140a33b6146a16be)
+
+commit 5ca69d57dbe2ee7acc64d28ca35bb390bf463199
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri Oct 14 16:17:55 2016 -0700
+
+    test.sh: Make check for flags more robust
+    
+    Low space broke test, saw "flags nearfull,pauserd,pausewr...."
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit b4c080b1b4378d659c1ca8a17811cd6f84595166)
+
+commit 1be38e5ebd2d01d5d527b05e64b026df955ffe69
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Jul 21 17:36:34 2016 -0700
+
+    test: Remove extra objectstore_tool call which causes a recovery
+    
+    Caused by: 70e000a9a42c50eda48f5d3b9e432ffc3a70f75b
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 6904529d1b53993304de2927500937ba0d493e9e)
+
+commit 026f181e72f2e09e769a8821dfe2c99f6213e6a3
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Jun 14 20:09:15 2016 -0700
+
+    test: Handle object removals in a non-racey way
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit bfe3ebd94fdc1ef36ebe6e8f9d38acea322eca22)
+
+commit c5ef385c25086dc1582ebe5343481d05283b0cc6
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu May 26 22:09:42 2016 -0700
+
+    osd: Fix hang on unfound object after mark_unfound_lost is done
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 73a27533beba3587f8447b4d41d200427c45042b)
+    
+    Conflicts:
+    	src/osd/ReplicatedPG.cc (trivial)
+
+commit 6284f745157458439699c76e8616455c50d1eb71
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri May 20 15:20:18 2016 -0700
+
+    osd: Handle recovery read errors
+    
+    Fixes: http://tracker.ceph.com/issues/13937
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit c51d70e1e837c972e42ddd5fa66f7ca4477b95cc)
+    
+    Conflicts:
+    	src/osd/ReplicatedPG.h (trivial)
+
+commit 27393a8c05d4656f342ecd32817307e558a2e400
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri May 20 18:19:42 2016 -0700
+
+    osd: Fix log messages
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit b40ec3fe890679b4c73778815e1bedd492cb264b)
+
+commit cbf66f3b16f194dd0c67b46e0fec247e02e84134
+Author: David Zafman <dzafman@redhat.com>
+Date:   Fri May 20 13:58:32 2016 -0700
+
+    osd: CLEANUP: Remove unused pending_read member
+    
+    Remove unused struct
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 36fd68c96653e83f87767feb08530a9fc6e841b0)
+
+commit 228b91d72a15b62adc10591604c4e8a849df53d5
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Oct 11 18:08:12 2016 -0700
+
+    test/osd-scrub-repair.sh: Use test case specific object names to help with diagnostics
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 0bf4da589155ee50969812492cfbc66368efb54c)
+
+commit ee3c67c9cbfdeeb3e628bac34b708cf150b3862e
+Merge: 3dbf0c9 39848e4
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Wed Feb 1 23:28:22 2017 +0100
+
+    Merge pull request #13143 from linuxbox2/jewel-mdw-rgw-lf
+    
+    jewel: rgw: radosgw/swift: clean up flush / newline behavior.
+    
+    Reviewed-by: Nathan Cutler <ncutler@suse.com>
+
+commit 39848e41b7c517cc5faab1ccf77c2804fd7d2628
+Author: Marcus Watts <mwatts@redhat.com>
+Date:   Wed Jan 11 00:06:15 2017 -0500
+
+    radosgw/swift: clean up flush / newline behavior.
+    
+    The current code emits a newline after swift errors, but fails
+    to account for it when it calculates 'content-length'.  This results in
+    some clients (go github.com/ncw/swift) producing complaints about the
+    unsolicited newline such as this,
+    	Unsolicited response received on idle HTTP channel starting with "\n"; err=<nil>
+    
+    This logic eliminates the newline on flush.  This makes the content length
+    calculation correct and eliminates the stray newline.
+    
+    There was already existing separator logic in the rgw plain formatter
+    that can emit a newline at the correct point.  It had been checking
+    "len" to decide if previous data had been emitted, but that's reset to 0
+    by flush().  So, this logic adds a new per-instance variable to separately
+    track state that it emitted a previous item (and should emit a newline).
+    
+    Fixes: http://tracker.ceph.com/issues/18473
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+    Signed-off-by: Matt Benjamin <mbenjamin@redhat.com>
+    (cherry picked from commit 5f229d6a33eae4906f22cdb90941835e47ee9f02)
+
+commit 3fce77ab3662496368e25cbbf6d1b37d3c140db9
+Author: Vikhyat Umrao <vumrao@redhat.com>
+Date:   Wed Jan 25 21:54:27 2017 +0530
+
+    osd: jewel fix OSD network address in OSD heartbeat_check log message
+    
+    Fixes: http://tracker.ceph.com/issues/18657
+    
+    Signed-off-by: Vikhyat Umrao <vumrao@redhat.com>
+
+commit 14a6aabe22f68436ea3297ce0851700f86ee5b12
+Author: Marcus Watts <mwatts@redhat.com>
+Date:   Wed Aug 3 17:36:55 2016 -0400
+
+    rgw: Handle multiple listening addreses w/ optional ssl "correctly" with civetweb.
+    
+    For civetweb: accept a range of port numbers joined with '+'.
+    Port numbers may include an ipaddress: prefix and 's' suffix.
+    Additionally, use "mg_get_local_addr" to correctly deduce host port per
+    incoming connection.
+    
+    civetweb can accept connections on multiple ports, some of which
+    might have SSL turned on and some not.  Both s3 and swift have various
+    authorization protocols in which the port number matters.  In the generic
+    radosgw frontend process, each frontend only has one port number, but
+    we should want to have both ssl and non-ssl connections managed within
+    one rgw frontend, because the thread pool is also per front-end, and
+    that *is* a scarce resource.
+    
+    So, this patch enables the use of multiple ports with a single civetweb
+    frontend.  To indicate https: append an 's' to portno.  To use multiple
+    ports, use +.  So 80+443s indicates use of the usual default http ports.
+    The parsed port is not stored in the frontend structure,
+    
+    So instead, this patch adds logic to use the results of
+    mg_get_local_addr() on a per-connection basis insetad of the generic
+    front-end port number.  This will affect "v4" s3 authorization, and also
+    affect swift pre-signed URLs.
+    
+    mg_get_local_addr() is a new customization to civetweb; that submodule
+    was updated (in a temporary repository) by the previous commit to this.
+    
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+    (cherry picked from commit 8bc6decc0774fae9ac881f91e73da55deebe3360)
+
+commit 698250563ccc4c69e5ca5aebf65dc352d80a8bdd
+Author: Marcus Watts <mwatts@redhat.com>
+Date:   Tue Dec 20 00:22:02 2016 -0500
+
+    rgw: s3: secure_port should override port, also apply ssl default right.
+    
+    Without https, only port is set.  With https, secure_port and port are
+    both set to the same value.  The previous logic looked at port first and
+    had overly simplified conditional logic which was liable to try to apply
+    both non-default cases.  The correct behavior is: look secure_port first,
+    and if secure_port is set, then only check to see if it's a non-default
+    port.
+    
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+    (cherry picked from commit a113cf5ff5a642d2ee4cc83f5c7001b4bfe0a5df)
+
+commit 28f2841c8b9a832e486b9f89c574a4591bf3d448
+Author: Marcus Watts <mwatts@redhat.com>
+Date:   Wed Nov 2 00:18:48 2016 -0400
+
+    rgw: Get civetweb ssl enhancement: wip-listen3 = mg_get_local_addr
+    
+    The logic inside of radosgw that computes aws v4 signatures wants to know
+    what server port the client connected.  The patch to civetweb patch adds a
+    call mg_get_local_addr() which will permit that code to actually find out
+    on what address a connection was received, rather than merely guessing
+    based on configuration as it previously did.
+    
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+    (cherry picked from commit 46ced9ddd2795f00f014e22e5637070b49e7a6d5)
+
+commit 8d83dfb4176ede7490d0cab589e9566bc7d4e387
+Author: Marcus Watts <mwatts@redhat.com>
+Date:   Wed Mar 23 17:32:14 2016 -0400
+
+    rgw: Document that radosgw now supports SSL.
+    
+    This includes information on file format and configuration file syntax.
+    
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+    (cherry picked from commit d4e72dfed30274b3cfbad4ac58c0746a98c0148b)
+
+commit e3f80c9d0ed6762a39fc242561f5ea26f0f26546
+Author: Marcus Watts <mwatts@redhat.com>
+Date:   Fri Jan 13 03:39:57 2017 -0500
+
+    rgw: civetweb/openssl: automagic: load libssl.so and libcrypto.so by soname.
+    
+    If building with radosgw, always look for openssl library (even when
+    building with nss).  Then, use objdump to fetch SONAME from the copies
+    of libssl and libcrypto that were found.  When building civetweb; pass
+    the library soname values in as the libraries to load with "dlopen".
+    
+    The issue reported here against master
+    http://tracker.ceph.com/issues/16535
+    reflects stuff that doesn't seem to have made it into jewel
+    	(which had: -lssl -lcrypto hard-wired into it.)
+    Still, since people were pretty riled about making that change,
+    this puts things in congruence to the final result in master.
+    	(which is: runtime shared object load of ssl crypto by soname.)
+    
+    Fixes: http://tracker.ceph.com/issues/11239
+    
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+    (inspired by commit 7caa0bd002110b62514da83a37a2a3deb841267a)
+
+commit 045551485415309ba9bad77e1aee28a0008881ca
+Author: Marcus Watts <mwatts@redhat.com>
+Date:   Mon Jul 11 17:54:07 2016 -0400
+
+    rgw: civetweb/openssl: Load libssl.so and libcrypto.so by soname.
+    
+    If building with radosgw, always look for openssl library (even when
+    building with nss).  Then, use objdump to fetch SONAME from the copies
+    of libssl and libcrypto that were found.  When building civetweb; pass
+    the library soname values in as the libraries to load with "dlopen".
+    
+    This is a problem that went away for a bit, but came back with some
+    changes for
+    http://tracker.ceph.com/issues/16535
+    
+    Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=1341775
+    Fixes: https://bugzilla.redhat.com/show_bug.cgi?id=1258961
+    
+    Fixes: http://tracker.ceph.com/issues/11239
+    
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+    (cherry picked from commit 7caa0bd002110b62514da83a37a2a3deb841267a)
+
+commit 386640865dee30d38f17e55fc87535e419bc3cb5
+Author: Marcus Watts <mwatts@redhat.com>
+Date:   Thu Nov 3 23:33:44 2016 -0400
+
+    rgw: cmake: remove useless civetweb include path side effect.
+    
+    For 'target_include_directories" for the cmake object library
+    'civetweb_common_objs', change from PUBLIC to PRIVATE.  This doesn't
+    break anything, so it wasn't doing anything useful.  If it has it
+    any effect, it would be to cause everything that linked against this
+    "library" to also use the indictated include path.  Which would be great
+    except everything in ceph wants to include "civetweb/civetweb.h" and
+    not "civetweb.h".  We already make separate arrangements elsewhere for
+    that to work.  Additionally, static object libraries in cmake aren't
+    really libraries, so I'm not entirely sure this even does anything.
+    So: making this public is not useful, and could be harmful.  Making it
+    private makes this only take effect for building civetweb.c itself,
+    exactly the effect we we require, and no more.
+    
+    Signed-off-by: Marcus Watts <mwatts@redhat.com>
+    (cherry picked from commit 8308a13b0257c9460fd2a721c20b0c37cb9e7c57)
