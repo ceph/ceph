@@ -1743,7 +1743,7 @@ class TestFSFail(TestAdminCommands):
     MDSS_REQUIRED = 2
     CLIENTS_REQUIRED = 1
 
-    def test_with_health_warn_oversize_cache(self):
+    def test_with_health_warn_cache_oversized(self):
         '''
         Test that, when health warning MDS_CACHE_OVERSIZE is present for an
         MDS, command "ceph fs fail" fails without confirmation flag and passes
@@ -1808,7 +1808,7 @@ class TestMDSFail(TestAdminCommands):
     MDSS_REQUIRED = 2
     CLIENTS_REQUIRED = 1
 
-    def test_with_health_warn_oversize_cache(self):
+    def test_with_health_warn_cache_oversized(self):
         '''
         Test that, when health warning MDS_CACHE_OVERSIZE is present for an
         MDS, command "ceph mds fail" fails without confirmation flag and
