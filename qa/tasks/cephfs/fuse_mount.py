@@ -308,7 +308,24 @@ class FuseMountBase(CephFSMountBase):
                                       check_status=False,
                                       timeout=300).exitstatus == 0
 
-    def umount(self, lazy=True, cleanup=True):
+    def _force_before_umount(self, force=False, require_clean=False):
+        '''
+        There's no --force option in fusermount command but this method will
+        ensure force-umounting.
+        '''
+        if force:
+            assert not require_clean  # mutually exclusive
+
+            # When we expect to be forcing, kill the ceph-fuse process directly.
+            # This should avoid hitting the more aggressive fallback killing
+            # in umount() which can affect other mounts too.
+            self.fuse_daemon.stdin.close()
+
+            # However, we will still hit the aggressive wait if there is an ongoing
+            # mount -o remount (especially if the remount is stuck because MDSs
+            # are unavailable)
+
+    def umount(self, force=False, lazy=False, cleanup=True):
         """
         umount() must not run cleanup() when it's called by umount_wait()
         since "run.wait([self.fuse_daemon], timeout)" would hang otherwise.
@@ -323,10 +340,10 @@ class FuseMountBase(CephFSMountBase):
                 self.cleanup()
             return
 
-        umount_cmd = ['sudo', 'fusermount', '-u']
+        umount_cmd = 'sudo fusermount -u'
         if lazy:
-            umount_cmd.append('-z')
-        umount_cmd.append(self.hostfs_mntpt)
+            umount_cmd += ' -z'
+        umount_cmd += ' ' + self.hostfs_mntpt
 
         try:
             log.info('Running fusermount -u on {name}...'.format(name=self.client_remote.name))
@@ -381,17 +398,7 @@ class FuseMountBase(CephFSMountBase):
             self.cleanup()
             return
 
-        if force:
-            assert not require_clean  # mutually exclusive
-
-            # When we expect to be forcing, kill the ceph-fuse process directly.
-            # This should avoid hitting the more aggressive fallback killing
-            # in umount() which can affect other mounts too.
-            self.fuse_daemon.stdin.close()
-
-            # However, we will still hit the aggressive wait if there is an ongoing
-            # mount -o remount (especially if the remount is stuck because MDSs
-            # are unavailable)
+        self._force_before_umount(force, require_clean)
 
         if self.is_blocked():
             self._run_umount_lf()
