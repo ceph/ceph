@@ -196,15 +196,6 @@ class TestSnapSchedulesHelper(CephFSTestCase):
             self.assertTrue(retention in json_res['retention'])
 
 class TestSnapSchedules(TestSnapSchedulesHelper):
-    def remove_snapshots(self, dir_path):
-        snap_path = f'{dir_path}/.snap'
-
-        snapshots = self.mount_a.ls(path=snap_path)
-        for snapshot in snapshots:
-            snapshot_path = os.path.join(snap_path, snapshot)
-            log.debug(f'removing snapshot: {snapshot_path}')
-            self.mount_a.run_shell(['rmdir', snapshot_path])
-
     def test_non_existent_snap_schedule_list(self):
         """Test listing snap schedules on a non-existing filesystem path failure"""
         try:
@@ -279,7 +270,7 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
         self.fs_snap_schedule_cmd('remove', path=TestSnapSchedules.TEST_DIRECTORY)
 
         # remove all scheduled snapshots
-        self.remove_snapshots(TestSnapSchedules.TEST_DIRECTORY)
+        self.remove_snapshots(TestSnapSchedules.TEST_DIRECTORY, self.get_snap_dir_name())
 
         self.mount_a.run_shell(['rmdir', TestSnapSchedules.TEST_DIRECTORY])
 
@@ -328,7 +319,7 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
         self.fs_snap_schedule_cmd('remove', path=TestSnapSchedules.TEST_DIRECTORY)
 
         # remove all scheduled snapshots
-        self.remove_snapshots(TestSnapSchedules.TEST_DIRECTORY)
+        self.remove_snapshots(TestSnapSchedules.TEST_DIRECTORY, self.get_snap_dir_name())
 
         self.mount_a.run_shell(['rmdir', TestSnapSchedules.TEST_DIRECTORY])
 
@@ -381,7 +372,7 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
         self.fs_snap_schedule_cmd('remove', path=TestSnapSchedules.TEST_DIRECTORY)
 
         # remove all scheduled snapshots
-        self.remove_snapshots(TestSnapSchedules.TEST_DIRECTORY)
+        self.remove_snapshots(TestSnapSchedules.TEST_DIRECTORY, self.get_snap_dir_name())
 
         self.mount_a.run_shell(['rmdir', TestSnapSchedules.TEST_DIRECTORY])
 
@@ -448,7 +439,7 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
 
         for d in testdirs:
             self.fs_snap_schedule_cmd('remove', path=d, snap_schedule='1m')
-            self.remove_snapshots(d[1:])
+            self.remove_snapshots(d[1:], self.get_snap_dir_name())
             self.mount_a.run_shell(['rmdir', d[1:]])
 
     def test_snap_schedule_with_mgr_restart(self):
@@ -485,7 +476,7 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
 
         # cleanup
         self.fs_snap_schedule_cmd('remove', path=testdir, snap_schedule='1m')
-        self.remove_snapshots(testdir[1:])
+        self.remove_snapshots(testdir[1:], self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', testdir[1:]])
 
     def test_schedule_auto_deactivation_for_non_existent_path(self):
@@ -541,7 +532,7 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
         self.fs_snap_schedule_cmd('remove', path=test_dir)
 
         # remove all scheduled snapshots
-        self.remove_snapshots(test_dir[1:])
+        self.remove_snapshots(test_dir[1:], self.get_snap_dir_name())
 
         self.mount_a.run_shell(['rmdir', test_dir[1:]])
 
@@ -610,18 +601,25 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
             self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='')
 
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/minutes"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/hourly"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/daily"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/weekly"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/monthly"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/yearly"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/bad_period_spec"
+        self.remove_snapshots(test_dir, self.get_snap_dir_name())
         self.mount_a.run_shell(['rmdir', test_dir])
 
 
