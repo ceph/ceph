@@ -60,13 +60,14 @@ private:
     void find_failback_gw       (const NvmeGwId &gw_id, const NvmeGroupKey& group_key,  bool &propose_pending);
     void set_failover_gw_for_ANA_group (const NvmeGwId &failed_gw_id, const NvmeGroupKey& group_key, const NvmeGwId &gw_id,
                                                                                                      NvmeAnaGrpId groupid);
-    int  blocklist_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId ANA_groupid, epoch_t &epoch, bool failover);
+
 
     int  get_timer   (const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid);
     void cancel_timer(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId anagrpid);
     void validate_gw_map(const NvmeGroupKey& group_key);
 
 public:
+    int  blocklist_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key, NvmeAnaGrpId ANA_groupid, epoch_t &epoch, bool failover);
     void encode(ceph::buffer::list &bl) const {
         using ceph::encode;
         ENCODE_START(1, 1, bl);
