@@ -28,9 +28,10 @@ static inline void append_out_escaped(const std::string& in, std::string* out)
 
 template <> struct fmt::formatter<hobject_t> {
 
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  constexpr auto parse(format_parse_context& ctx) const { return ctx.begin(); }
 
-  template <typename FormatContext> auto format(const hobject_t& ho, FormatContext& ctx)
+  template <typename FormatContext> auto
+  format(const hobject_t& ho, FormatContext& ctx) const
   {
     if (ho == hobject_t{}) {
       return fmt::format_to(ctx.out(), "MIN");
