@@ -102,6 +102,7 @@ class D4NFilterObject : public FilterObject {
     D4NFilterDriver* driver;
     std::string version;
     std::string prefix;
+    rgw_obj obj;
   public:
     struct D4NFilterReadOp : FilterReadOp {
       public:
