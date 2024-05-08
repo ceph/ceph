@@ -133,7 +133,7 @@ const char * ceph_osd_op_flag_name(unsigned flag)
       name = "fadvise_sequential";
       break;
     case CEPH_OSD_OP_FLAG_FADVISE_WILLNEED:
-      name = "favise_willneed";
+      name = "fadvise_willneed";
       break;
     case CEPH_OSD_OP_FLAG_FADVISE_DONTNEED:
       name = "fadvise_dontneed";
