@@ -37,10 +37,21 @@ def _present(data: Simplified) -> bool:
     return _get_intent(data) == Intent.PRESENT
 
 
-class InvalidResourceError(ValueError):
+class InvalidResourceError(ValueError, ErrorResponseBase):
     def __init__(self, msg: str, data: Simplified) -> None:
         super().__init__(msg)
         self.resource_data = data
+
+    def to_simplified(self) -> Simplified:
+        return {
+            'resource': self.resource_data,
+            'msg': str(self),
+            'success': False,
+        }
+
+    def format_response(self) -> Tuple[int, str, str]:
+        data = json.dumps(self.to_simplified())
+        return -errno.EINVAL, data, "Invalid resource"
 
     @classmethod
     def wrap(cls, err: Exception, data: Simplified) -> Exception:
