@@ -103,24 +103,6 @@ class TestAdminCommands(CephFSTestCase):
         mds_id = mds_id.replace('mds.', '')
         return mds_id
 
-    def wait_till_health_warn(self, health_warn, active_mds_id, sleep=3,
-                              tries=10):
-        errmsg = (f'Expected health warning "{health_warn}" to eventually '
-                  'show up in output of command "ceph health detail". Tried '
-                  f'{tries} times with interval of {sleep} seconds but the '
-                  'health warning didn\'t turn up.')
-
-        with safe_while(sleep=sleep, tries=tries, action=errmsg) as proceed:
-            while proceed():
-                self.get_ceph_cmd_stdout(
-                    f'tell mds.{active_mds_id} cache status')
-
-                health_report = json.loads(self.get_ceph_cmd_stdout(
-                    'health detail --format json'))
-
-                if health_warn in health_report['checks']:
-                    return
-
     def gen_health_warn_mds_cache_oversized(self):
         health_warn = 'MDS_CACHE_OVERSIZED'
 
@@ -128,7 +110,7 @@ class TestAdminCommands(CephFSTestCase):
         self.config_set('mds', 'mds_health_cache_threshold', '1.00000')
         self.mount_a.open_n_background('.', 400)
 
-        self.wait_till_health_warn(health_warn, active_mds_id)
+        self.wait_for_health(health_warn, 30)
 
     def gen_health_warn_mds_trim(self):
         health_warn = 'MDS_TRIM'
@@ -141,7 +123,7 @@ class TestAdminCommands(CephFSTestCase):
         self.config_set('mds', 'mds_log_trim_threshold', '1')
         self.mount_a.open_n_background('.', 400)
 
-        self.wait_till_health_warn(health_warn, active_mds_id)
+        self.wait_for_health(health_warn, 30)
 
 
 @classhook('_add_valid_tell')
