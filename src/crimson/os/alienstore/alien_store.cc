@@ -136,6 +136,19 @@ seastar::future<> AlienStore::stop()
   });
 }
 
+AlienStore::base_errorator::future<bool>
+AlienStore::exists(
+  CollectionRef ch,
+  const ghobject_t& oid)
+{
+  return seastar::with_gate(op_gate, [=, this] {
+    return tp->submit(ch->get_cid().hash_to_shard(tp->size()), [=, this] {
+      auto c = static_cast<AlienCollection*>(ch.get());
+      return store->exists(c->collection, oid);
+    });
+  });
+}
+
 AlienStore::mount_ertr::future<> AlienStore::mount()
 {
   logger().debug("{}", __func__);
