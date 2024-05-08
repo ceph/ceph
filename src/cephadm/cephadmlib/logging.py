@@ -231,17 +231,34 @@ def cephadm_init_logging(
     logger.debug('%s\ncephadm %s' % ('-' * 80, args))
 
 
-def write_cephadm_logrotate_config(ctx: CephadmContext) -> None:
-    if not os.path.exists(ctx.logrotate_dir + '/cephadm'):
-        with open(ctx.logrotate_dir + '/cephadm', 'w') as f:
+def write_cephadm_logrotate_config(
+    ctx: CephadmContext,
+    custom_template: Optional[str] = None,
+    overwrite: bool = False,
+) -> None:
+    if os.path.exists(ctx.logrotate_dir + '/cephadm') and not overwrite:
+        return
+    with open(ctx.logrotate_dir + '/cephadm', 'w') as f:
+        if custom_template:
+            cephadm_logrotate_config = templating.render_str(
+                ctx, custom_template
+            )
+        else:
             cephadm_logrotate_config = templating.render(
                 ctx, templating.Templates.cephadm_logrotate_config
             )
-            f.write(cephadm_logrotate_config)
+        f.write(cephadm_logrotate_config)
 
 
-def write_cluster_logrotate_config(ctx: CephadmContext, fsid: str) -> None:
+def write_cluster_logrotate_config(
+    ctx: CephadmContext,
+    fsid: str,
+    custom_template: Optional[str] = None,
+    overwrite: bool = False,
+) -> None:
     # logrotate for the cluster
+    if os.path.exists(ctx.logrotate_dir + f'/ceph-{fsid}') and not overwrite:
+        return
     with write_new(ctx.logrotate_dir + f'/ceph-{fsid}', perms=None) as f:
         """
         See cephadm/cephadmlib/templates/cluster.logrotate.config.j2 to
@@ -266,11 +283,19 @@ def write_cluster_logrotate_config(ctx: CephadmContext, fsid: str) -> None:
             'tcmu-runner',
         ]
 
-        logrotate_config = templating.render(
-            ctx,
-            templating.Templates.cluster_logrotate_config,
-            fsid=fsid,
-            targets=targets,
-        )
+        if custom_template:
+            logrotate_config = templating.render_str(
+                ctx,
+                custom_template,
+                fsid=fsid,
+                targets=targets,
+            )
+        else:
+            logrotate_config = templating.render(
+                ctx,
+                templating.Templates.cluster_logrotate_config,
+                fsid=fsid,
+                targets=targets,
+            )
 
         f.write(logrotate_config)
