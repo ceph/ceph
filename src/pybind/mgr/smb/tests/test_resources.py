@@ -499,6 +499,112 @@ login_control:
             "exc_type": ValueError,
             "error": "admins",
         },
+        # bad value in category field in login_control
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: floop
+share_id: ploof
+cephfs:
+  volume: abc
+  path: /share1
+  subvolume: foo
+restrict_access: true
+""",
+            "exc_type": ValueError,
+            "error": "restricted access",
+        },
+        # removed share, no cluster id value
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: ""
+share_id: whammo
+intent: removed
+""",
+            "exc_type": ValueError,
+            "error": "cluster_id",
+        },
+        # removed share, no share id value
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: whammo
+share_id: ""
+intent: removed
+""",
+            "exc_type": ValueError,
+            "error": "share_id",
+        },
+        # share w/o cephfs sub-obj
+        {
+            "yaml": """
+resource_type: ceph.smb.share
+cluster_id: whammo
+share_id: blammo
+""",
+            "exc_type": ValueError,
+            "error": "cephfs",
+        },
+        # ad cluster, invalid join source, no ref
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: whammo
+auth_mode: active-directory
+domain_settings:
+  realm: FOO.EXAMPLE.NET
+  join_sources:
+    - {}
+""",
+            "exc_type": ValueError,
+            "error": "reference value",
+        },
+        # removed cluster, no cluster_id value
+        {
+            "yaml": """
+resource_type: ceph.smb.cluster
+cluster_id: ""
+intent: removed
+""",
+            "exc_type": ValueError,
+            "error": "cluster_id",
+        },
+        # u&g, missing id value
+        {
+            "yaml": """
+resource_type: ceph.smb.usersgroups
+users_groups_id: ""
+""",
+            "exc_type": ValueError,
+            "error": "users_groups_id",
+        },
+        # u&g, bad linked_to_cluster value
+        {
+            "yaml": """
+resource_type: ceph.smb.usersgroups
+users_groups_id: wobble
+linked_to_cluster: ~~~
+values:
+  users:
+    - name: charlie
+      password: 7unaF1sh
+    - name: lucky
+      password: CH4rmz
+  groups: []
+""",
+            "exc_type": ValueError,
+            "error": "not a valid",
+        },
+        # join auth, missing id value
+        {
+            "yaml": """
+resource_type: ceph.smb.join.auth
+auth_id: ""
+""",
+            "exc_type": ValueError,
+            "error": "auth_id",
+        },
     ],
 )
 def test_load_error(params):
