@@ -6,11 +6,10 @@ Before=remote-fs-pre.target ceph-osd.target
 Wants=network-online.target local-fs.target time-sync.target remote-fs-pre.target ceph-osd.target
 
 [Service]
-Environment=CLUSTER=ceph
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
 ExecReload=/bin/kill -HUP $MAINPID
-ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
-ExecStartPre=@CMAKE_INSTALL_FULL_LIBEXECDIR@/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
+ExecStart=/usr/bin/ceph-osd -f --id %i --setuser ceph --setgroup ceph
+ExecStartPre=@CMAKE_INSTALL_FULL_LIBEXECDIR@/ceph/ceph-osd-prestart.sh --id %i
 LimitNOFILE=1048576
 LimitNPROC=1048576
 LockPersonality=true
