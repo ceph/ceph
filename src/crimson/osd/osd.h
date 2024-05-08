@@ -80,7 +80,6 @@ class OSD final : public crimson::net::Dispatcher,
   std::unique_ptr<crimson::mgr::Client> mgrc;
 
   // TODO: use a wrapper for ObjectStore
-  OSDMapService::cached_map_t osdmap;
   crimson::os::FuturizedStore& store;
 
   /// _first_ epoch we were marked up (after this process started)
@@ -121,6 +120,8 @@ class OSD final : public crimson::net::Dispatcher,
   seastar::sharded<OSDSingletonState> osd_singleton_state;
   seastar::sharded<OSDState> osd_states;
   seastar::sharded<ShardServices> shard_services;
+
+  OSDMapService::cached_map_t osdmap;
 
   crimson::osd::PGShardManager pg_shard_manager;
 
