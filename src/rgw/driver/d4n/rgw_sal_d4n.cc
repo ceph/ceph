@@ -169,6 +169,7 @@ bool D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, op
   if (found_in_cache) {
     /* Set metadata locally */
 
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): obj is: " << this->get_obj().key.name << dendl;
     std::string instance;
     for (auto& attr : attrs) {
       if (attr.second.length() > 0) {
@@ -350,6 +351,8 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     }
   
     this->load_obj_state(dpp, y);
+    this->obj = this->get_obj();
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): this->obj is: " << this->obj.key.name << dendl;
     attrs = this->get_attrs();
     this->set_obj_state_attrs(dpp, y, attrs);
 
