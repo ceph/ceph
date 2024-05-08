@@ -1295,8 +1295,11 @@ private:
       CachedExtent &ext,
       const Transaction::src_t* p_src=nullptr)
   {
-    if (p_src && is_background_transaction(*p_src))
+    if (p_src &&
+	is_background_transaction(*p_src) &&
+	is_logical_type(ext.get_type())) {
       return;
+    }
     if (ext.is_stable_clean() && !ext.is_placeholder()) {
       lru.move_to_top(ext);
     }
