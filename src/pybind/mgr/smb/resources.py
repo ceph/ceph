@@ -320,8 +320,7 @@ class WrappedPlacementSpec(PlacementSpec):
         # improperly typed. They are improperly typed because typing.Self
         # didn't exist and the old correct way is a PITA to write (and
         # remember).  Thus a lot of classmethods are return the exact class
-        # which is technically incorrect. This fine class is guilty of the same
-        # sin. :-)
+        # which is technically incorrect.
         return cast(Self, cls.from_json(data))
 
     @classmethod
