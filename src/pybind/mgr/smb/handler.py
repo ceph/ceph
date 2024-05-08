@@ -13,8 +13,6 @@ from typing import (
 )
 
 import logging
-import random
-import string
 import time
 
 from ceph.deployment.service_spec import SMBSpec
@@ -46,10 +44,10 @@ from .proto import (
     OrchSubmitter,
     PathResolver,
     Simplified,
-    checked,
 )
 from .resources import SMBResource
 from .results import ErrorResult, Result, ResultGroup
+from .utils import checked, ynbool
 
 ClusterRef = Union[resources.Cluster, resources.RemovedCluster]
 ShareRef = Union[resources.Share, resources.RemovedShare]
@@ -956,11 +954,6 @@ def _ug_refs(cluster: resources.Cluster) -> Collection[str]:
     }
 
 
-def _ynbool(value: bool) -> str:
-    """Convert a bool to an smb.conf compatible string."""
-    return 'Yes' if value else 'No'
-
-
 def _generate_share(
     share: resources.Share, resolver: PathResolver, cephx_entity: str
 ) -> Dict[str, Dict[str, str]]:
@@ -988,8 +981,8 @@ def _generate_share(
             'ceph:config_file': '/etc/ceph/ceph.conf',
             'ceph:filesystem': share.cephfs.volume,
             'ceph:user_id': cephx_entity,
-            'read only': _ynbool(share.readonly),
-            'browseable': _ynbool(share.browseable),
+            'read only': ynbool(share.readonly),
+            'browseable': ynbool(share.browseable),
             'kernel share modes': 'no',
             'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
         }
@@ -1251,11 +1244,3 @@ def _cephx_data_entity(cluster_id: str) -> str:
     use for data access.
     """
     return f'client.smb.fs.cluster.{cluster_id}'
-
-
-def rand_name(prefix: str, max_len: int = 18, suffix_len: int = 8) -> str:
-    trunc = prefix[: (max_len - suffix_len)]
-    suffix = ''.join(
-        random.choice(string.ascii_lowercase) for _ in range(suffix_len)
-    )
-    return f'{trunc}{suffix}'

@@ -12,10 +12,10 @@ from .proto import (
     EntryKey,
     Self,
     Simplifiable,
-    one,
 )
 from .resources import SMBResource
 from .results import ErrorResult
+from .utils import one
 
 T = TypeVar('T')
 

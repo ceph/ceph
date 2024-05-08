@@ -574,14 +574,6 @@ def test_apply_no_matching_cluster_error(thandler):
     assert not rg.success
 
 
-def test_one():
-    assert smb.proto.one(['a']) == 'a'
-    with pytest.raises(ValueError):
-        smb.proto.one([])
-    with pytest.raises(ValueError):
-        smb.proto.one(['a', 'b'])
-
-
 def test_apply_full_cluster_create(thandler):
     to_apply = [
         smb.resources.JoinAuth(
@@ -1257,23 +1249,6 @@ def test_apply_cluster_bad_linked_auth(thandler):
     assert len(rs['results']) == 2
     assert rs['results'][0]['msg'] == 'linked_to_cluster id not valid'
     assert rs['results'][1]['msg'] == 'join auth linked to different cluster'
-
-
-def test_rand_name():
-    name = smb.handler.rand_name('bob')
-    assert name.startswith('bob')
-    assert len(name) == 11
-    name = smb.handler.rand_name('carla')
-    assert name.startswith('carla')
-    assert len(name) == 13
-    name = smb.handler.rand_name('dangeresque')
-    assert name.startswith('dangeresqu')
-    assert len(name) == 18
-    name = smb.handler.rand_name('fhqwhgadsfhqwhgadsfhqwhgads')
-    assert name.startswith('fhqwhgadsf')
-    assert len(name) == 18
-    name = smb.handler.rand_name('')
-    assert len(name) == 8
 
 
 def test_apply_with_create_only(thandler):

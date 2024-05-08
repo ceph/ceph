@@ -16,7 +16,8 @@ from .enums import (
     LoginCategory,
     UserGroupSourceType,
 )
-from .proto import Self, Simplified, checked
+from .proto import Self, Simplified
+from .utils import checked
 
 
 def _get_intent(data: Simplified) -> Intent:
