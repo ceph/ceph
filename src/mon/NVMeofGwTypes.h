@@ -98,6 +98,7 @@ struct NvmeGwCreated {
     NvmeAnaGrpId       ana_grp_id;                    // ana-group-id allocated for this GW, GW owns this group-id
     GW_AVAILABILITY_E  availability;                  // in absence of  beacon  heartbeat messages it becomes inavailable
     bool               last_gw_map_epoch_valid;       // "true" if the last epoch seen by the gw-client is up-to-date
+    bool               performed_full_startup;        // in order to identify gws that did not exit upon failover
     BeaconSubsystems   subsystems;                    // gateway susbsystem and their state machine states
     NvmeAnaNonceMap    nonce_map;
     SM_STATE           sm_state;                      // state machine states per ANA group
@@ -108,7 +109,8 @@ struct NvmeGwCreated {
 
     NvmeGwCreated(): ana_grp_id(REDUNDANT_GW_ANA_GROUP_ID) {};
 
-    NvmeGwCreated(NvmeAnaGrpId id): ana_grp_id(id), availability(GW_AVAILABILITY_E::GW_CREATED), last_gw_map_epoch_valid(false)
+    NvmeGwCreated(NvmeAnaGrpId id): ana_grp_id(id), availability(GW_AVAILABILITY_E::GW_CREATED), last_gw_map_epoch_valid(false),
+                                    performed_full_startup(false)
     {
         for (int i = 0; i < MAX_SUPPORTED_ANA_GROUPS; i++){
             sm_state[i] = GW_STATES_PER_AGROUP_E::GW_STANDBY_STATE;
@@ -116,7 +118,10 @@ struct NvmeGwCreated {
             blocklist_data[i].is_failover = true;
         }
     };
-
+    void set_unavailable_state(){
+        availability = GW_AVAILABILITY_E::GW_UNAVAILABLE;
+        performed_full_startup = false; // after setting this state the next time monitor sees GW, it expects it performed the full startup
+    }
     void standby_state(NvmeAnaGrpId grpid) {
            sm_state[grpid]       = GW_STATES_PER_AGROUP_E::GW_STANDBY_STATE;
     };

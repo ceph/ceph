@@ -296,6 +296,9 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
   NvmeGwState new_gw_state;
   auto got_new_gw_state = get_gw_state("new map", new_map, group_key, name, new_gw_state); 
 
+  // ensure that the gateway state has not vanished
+  ceph_assert(got_new_gw_state || !got_old_gw_state);
+
   if (!got_old_gw_state) {
     if (!got_new_gw_state) {
       dout(0) << "Can not find new gw state" << dendl;
