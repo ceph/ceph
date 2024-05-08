@@ -26,7 +26,7 @@ def valid_id(value: str) -> bool:
 def check_id(value: str) -> None:
     """Raise ValueError if value is not a valid ID."""
     if not valid_id(value):
-        raise ValueError(f"{value:!r} is not a valid ID")
+        raise ValueError(f"{value!r} is not a valid ID")
 
 
 def valid_share_name(value: str) -> bool:
@@ -37,7 +37,7 @@ def valid_share_name(value: str) -> bool:
 def check_share_name(value: str) -> None:
     """Raise ValueError if value is not a valid share name."""
     if not valid_share_name(value):
-        raise ValueError(f"{value:!r} is not a valid share name")
+        raise ValueError(f"{value!r} is not a valid share name")
 
 
 # alias for normpath so other smb libs can just import validation module
