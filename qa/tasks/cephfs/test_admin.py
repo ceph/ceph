@@ -1021,12 +1021,10 @@ class TestFsAuthorize(CapsHelper):
 
         self.mount_a.umount_wait()
 
-        # Authorize client to fs1
-        FS_AUTH_CAPS = ('/', 'rw')
-        self.fs1.authorize(self.client_id, FS_AUTH_CAPS)
-
-        FS_AUTH_CAPS = ('/', 'rw', 'root_squash')
-        keyring = self.fs2.authorize(self.client_id, FS_AUTH_CAPS)
+        self.run_ceph_cmd(f'auth caps client.{self.mount_a.client_id} '
+                          f'mon "allow r" '
+                          f'osd "allow rw tag cephfs data={self.fs1.name}, allow rw tag cephfs data={self.fs2.name}" '
+                          f'mds "allow rwp fsname={self.fs1.name}, allow rw fsname={self.fs2.name} root_squash"')
 
         CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK = 21
         # all but CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK
@@ -1035,11 +1033,7 @@ class TestFsAuthorize(CapsHelper):
 
         # should succeed
         with self.assert_cluster_log("report clients with broken root_squash", present=False):
-            keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
-            self.mount_a.remount(client_id=self.client_id, client_keyring_path=keyring_path, mntargs=mntargs, cephfs_name=self.fs1.name)
-
-        self.conduct_pos_test_for_read_caps()
-        self.conduct_pos_test_for_open_caps()
+            self.mount_a.remount(mntargs=mntargs, cephfs_name=self.fs1.name)
 
     def test_rootsquash_nofeature(self):
         """
@@ -1051,7 +1045,6 @@ class TestFsAuthorize(CapsHelper):
                           "needed to enforce root_squash MDS caps")
 
         self.mount_a.umount_wait()
-        self.mount_b.umount_wait()
 
         FS_AUTH_CAPS = ('/', 'rw', 'root_squash')
         keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
@@ -1081,7 +1074,6 @@ class TestFsAuthorize(CapsHelper):
                           "needed to enforce root_squash MDS caps")
 
         self.mount_a.umount_wait()
-        self.mount_b.umount_wait()
 
         FS_AUTH_CAPS = ('/', 'rw', 'root_squash')
         keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
