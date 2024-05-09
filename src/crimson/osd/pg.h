@@ -186,6 +186,67 @@ public:
   void clear_temp_obj(const hobject_t &oid) override {
     get_backend().clear_temp_obj(oid);
   }
+
+  void on_local_recover(
+    const hobject_t &oid,
+    const ObjectRecoveryInfo &recovery_info,
+    ObjectContextRef obc,
+    bool is_delete,
+    ceph::os::Transaction *t
+    ) final {
+    std::ignore = get_recovery_handler()->on_local_recover(
+      oid, recovery_info, is_delete, *t);
+  }
+  void on_global_recover(
+    const hobject_t &oid,
+    const object_stat_sum_t &stat_diff,
+    bool is_delete
+    ) final {
+    get_recovery_handler()->on_global_recover(
+      oid, stat_diff, is_delete);
+  }
+  void on_peer_recover(
+    pg_shard_t peer,
+    const hobject_t &oid,
+    const ObjectRecoveryInfo &recovery_info) final {
+    get_recovery_handler()->on_peer_recover(peer, oid, recovery_info);
+  }
+  void on_failed_pull(
+    const std::set<pg_shard_t> &from,
+    const hobject_t &soid,
+    const eversion_t &v
+    ) final {
+    get_recovery_handler()->on_failed_recover(from, soid, v);
+  }
+
+  bool pg_is_repair() const override {
+    return get_peering_state().is_repair();
+  }
+
+  bool check_failsafe_full() final {
+    // not implemented yet
+    return false;
+  }
+
+  epoch_t get_last_peering_reset_epoch() const final {
+    return get_last_peering_reset();
+  }
+
+  pg_shard_t primary_shard() const final {
+    return get_primary();
+  }
+  bool pgb_is_primary() const final {
+    return is_primary();
+  }
+
+  hobject_t get_temp_recovery_object(
+    const hobject_t& target,
+    eversion_t version) final {
+    return get_recovery_handler()->get_temp_recovery_object(target, version);
+  }
+  void inc_osd_stat_repaired() final {
+    std::ignore = shard_services.inc_osd_stat_repaired();
+  }
   // ECListener ends
 
   const pg_shard_t& get_pg_whoami() const final {
@@ -951,6 +1012,9 @@ public:
   PeeringState& get_peering_state() final {
     return peering_state;
   }
+  const PeeringState& get_peering_state() const {
+    return peering_state;
+  }
   bool has_backfill_state() const {
     return (bool)(recovery_handler->backfill_state);
   }
@@ -976,7 +1040,8 @@ public:
   bool is_backfill_target(pg_shard_t osd) const {
     return peering_state.is_backfill_target(osd);
   }
-  void begin_peer_recover(pg_shard_t peer, const hobject_t oid) {
+  // it's also ECListener's method
+  void begin_peer_recover(pg_shard_t peer, const hobject_t oid) final {
     peering_state.begin_peer_recover(peer, oid);
   }
   uint64_t min_peer_features() const {
