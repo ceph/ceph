@@ -29,6 +29,7 @@ Synopsis
 | **ceph-bluestore-tool** free-dump|free-score --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
 | **ceph-bluestore-tool** reshard --path *osd path* --sharding *new sharding* [ --sharding-ctrl *control string* ]
 | **ceph-bluestore-tool** show-sharding --path *osd path*
+| **ceph-bluestore-tool** trim --path *osd path*
 
 
 Description
@@ -130,6 +131,13 @@ Commands
 :command:`show-sharding` --path *osd path*
 
    Show sharding that is currently applied to BlueStore's RocksDB.
+
+:command: `trim` --path *osd path*
+
+   An SSD that has been used heavily may experience performance degradation.
+   This operation uses TRIM / discard to free unused blocks from BlueStore and BlueFS block devices,
+   and allows the drive to perform more efficient internal housekeeping.
+   If BlueStore runs with discard enabled, this option may not be useful.
 
 Options
 =======
