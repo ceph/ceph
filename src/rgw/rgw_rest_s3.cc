@@ -5293,14 +5293,10 @@ bool RGWHandler_REST_S3Website::web_dir() const {
 
   obj->set_atomic();
 
-  RGWObjState* state = nullptr;
-  if (obj->get_obj_state(s, &state, s->yield) < 0) {
+  if (obj->load_obj_state(s, s->yield) < 0) {
     return false;
   }
-  if (! state->exists) {
-    return false;
-  }
-  return state->exists;
+  return obj->exists();
 }
 
 int RGWHandler_REST_S3Website::init(rgw::sal::Driver* driver, req_state *s,

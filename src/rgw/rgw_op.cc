@@ -4254,14 +4254,13 @@ void RGWPutObj::execute(optional_yield y)
     auto obj = bucket->get_object(rgw_obj_key(copy_source_object_name,
                                               copy_source_version_id));
 
-    RGWObjState *astate;
-    op_ret = obj->get_obj_state(this, &astate, s->yield);
+    op_ret = obj->load_obj_state(this, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
       return;
     }
     bufferlist bl;
-    if (astate->get_attr(RGW_ATTR_MANIFEST, bl)) {
+    if (obj->get_attr(RGW_ATTR_MANIFEST, bl)) {
       RGWObjManifest m;
       try{
         decode(m, bl);
@@ -4280,11 +4279,11 @@ void RGWPutObj::execute(optional_yield y)
       }
     }
 
-    if (!astate->exists){
+    if (!obj->exists()){
       op_ret = -ENOENT;
       return;
     }
-    lst = astate->accounted_size - 1;
+    lst = obj->get_accounted_size() - 1;
   } else {
     lst = copy_source_range_lst;
   }
@@ -5119,9 +5118,9 @@ void RGWDeleteObj::execute(optional_yield y)
     uint64_t obj_size = 0;
     std::string etag;
     {
-      RGWObjState* astate = nullptr;
+      int state_loaded = -1;
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
-      op_ret = s->object->get_obj_state(this, &astate, s->yield, true);
+      op_ret = state_loaded = s->object->load_obj_state(this, s->yield, true);
       if (op_ret < 0) {
         if (need_object_expiration() || multipart_delete) {
           return;
@@ -5137,15 +5136,15 @@ void RGWDeleteObj::execute(optional_yield y)
           }
         }
       } else {
-        obj_size = astate->size;
-        etag = astate->attrset[RGW_ATTR_ETAG].to_str();
+        obj_size = s->object->get_obj_size();
+        etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
       }
 
       // ignore return value from get_obj_attrs in all other cases
       op_ret = 0;
       if (check_obj_lock) {
-        ceph_assert(astate);
-        int object_lock_response = verify_object_lock(this, astate->attrset, bypass_perm, bypass_governance_mode);
+        ceph_assert(state_loaded == 0);
+        int object_lock_response = verify_object_lock(this, s->object->get_attrs(), bypass_perm, bypass_governance_mode);
         if (object_lock_response != 0) {
           op_ret = object_lock_response;
           if (op_ret == -EACCES) {
@@ -5156,15 +5155,14 @@ void RGWDeleteObj::execute(optional_yield y)
       }
 
       if (multipart_delete) {
-        if (!astate) {
+        if (state_loaded < 0) {
           op_ret = -ERR_NOT_SLO_MANIFEST;
           return;
         }
 
-        const auto slo_attr = astate->attrset.find(RGW_ATTR_SLO_MANIFEST);
-
-        if (slo_attr != astate->attrset.end()) {
-          op_ret = handle_slo_manifest(slo_attr->second, y);
+	bufferlist slo_attr;
+	if (s->object->get_attr(RGW_ATTR_SLO_MANIFEST, slo_attr)) {
+          op_ret = handle_slo_manifest(slo_attr, y);
           if (op_ret < 0) {
             ldpp_dout(this, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret << dendl;
           }
@@ -5526,15 +5524,14 @@ void RGWCopyObj::execute(optional_yield y)
   uint64_t obj_size = 0;
   {
     // get src object size (cached in obj_ctx from verify_permission())
-    RGWObjState* astate = nullptr;
-    op_ret = s->src_object->get_obj_state(this, &astate, s->yield, true);
+    op_ret = s->src_object->load_obj_state(this, s->yield, true);
     if (op_ret < 0) {
       return;
     }
 
     /* Check if the src object is cloud-tiered */
     bufferlist bl;
-    if (astate->get_attr(RGW_ATTR_MANIFEST, bl)) {
+    if (s->src_object->get_attr(RGW_ATTR_MANIFEST, bl)) {
       RGWObjManifest m;
       try{
         decode(m, bl);
@@ -5553,15 +5550,15 @@ void RGWCopyObj::execute(optional_yield y)
       }
     }
 
-    obj_size = astate->size;
+    obj_size = s->src_object->get_obj_size();
   
     if (!s->system_request) { // no quota enforcement for system requests
-      if (astate->accounted_size > static_cast<size_t>(s->cct->_conf->rgw_max_put_size)) {
+      if (s->src_object->get_accounted_size() > static_cast<size_t>(s->cct->_conf->rgw_max_put_size)) {
         op_ret = -ERR_TOO_LARGE;
         return;
       }
       // enforce quota against the destination bucket owner
-      op_ret = s->bucket->check_quota(this, quota, astate->accounted_size, y);
+      op_ret = s->bucket->check_quota(this, quota, s->src_object->get_accounted_size(), y);
       if (op_ret < 0) {
         return;
       }
@@ -6713,9 +6710,9 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   std::string etag;
 
   if (!rgw::sal::Object::empty(obj.get())) {
-    RGWObjState* astate = nullptr;
+    int state_loaded = -1;
     bool check_obj_lock = obj->have_instance() && bucket->get_info().obj_lock_enabled();
-    const auto ret = obj->get_obj_state(this, &astate, y, true);
+    const auto ret = state_loaded = obj->load_obj_state(this, y, true);
 
     if (ret < 0) {
       if (ret == -ENOENT) {
@@ -6727,13 +6724,13 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
         return;
       }
     } else {
-      obj_size = astate->size;
-      etag = astate->attrset[RGW_ATTR_ETAG].to_str();
+      obj_size = obj->get_obj_size();
+      etag = obj->get_attrs()[RGW_ATTR_ETAG].to_str();
     }
 
     if (check_obj_lock) {
-      ceph_assert(astate);
-      int object_lock_response = verify_object_lock(this, astate->attrset, bypass_perm, bypass_governance_mode);
+      ceph_assert(state_loaded == 0);
+      int object_lock_response = verify_object_lock(this, obj->get_attrs(), bypass_perm, bypass_governance_mode);
       if (object_lock_response != 0) {
         send_partial_response(o, false, "", object_lock_response, formatter_flush_cond);
         return;
