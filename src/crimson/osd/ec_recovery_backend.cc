@@ -90,6 +90,66 @@ void ECRecoveryBackend::commit_txn_send_replies(
   });
 }
 
+void ECRecoveryBackend::maybe_load_obc(
+  const std::map<std::string, ceph::bufferlist, std::less<>>& raw_attrs,
+  RecoveryOp &op)
+{
+  logger().debug("{}", __func__);
+  ceph_assert(op.obc);
+  // attrs only reference the origin bufferlist (decode from
+  // ECSubReadReply message) whose size is much greater than attrs
+  // in recovery. If obc cache it (get_obc maybe cache the attr),
+  // this causes the whole origin bufferlist would not be free
+  // until obc is evicted from obc cache. So rebuild the
+  // bufferlist before cache it.
+  for (std::map<std::string, ceph::bufferlist>::iterator it = op.xattrs.begin();
+       it != op.xattrs.end();
+       ++it) {
+    it->second.rebuild();
+  }
+  // Need to remove ECUtil::get_hinfo_key() since it should not leak out
+  // of the backend (see bug #12983)
+  std::map<std::string, ceph::bufferlist, std::less<>> sanitized_attrs(op.xattrs);
+  sanitized_attrs.erase(ECUtil::get_hinfo_key());
+  if (auto maybe_decoded = backend->decode_metadata2(op.hoid, sanitized_attrs);
+      maybe_decoded.has_value()) {
+    pg.obc_loader.load_obc(op.obc, std::move(*maybe_decoded));
+  } else {
+    ceph_abort_msg("cannot decode obc from attrs");
+  }
+  op.obc->obs.oi.decode(op.xattrs.at(OI_ATTR));
+  ceph_assert(op.obc->obs.oi.soid == op.hoid);
+
+  auto ss_attr_iter = op.xattrs.find(SS_ATTR);
+  if (ss_attr_iter != op.xattrs.end()) {
+    if (!op.obc->ssc) {
+      op.obc->ssc = new crimson::osd::SnapSetContext(
+        op.hoid.get_snapdir());
+    }
+    try {
+      op.obc->ssc->snapset = SnapSet(ss_attr_iter->second);
+      op.obc->ssc->exists = true;
+    } catch (const buffer::error&) {
+      logger().warn("unable to decode SnapSet");
+      ceph_abort_msg("undecodable SnapSet during recovery");
+    }
+  }
+#if 0
+  pull_info.recovery_info.oi = obc->obs.oi;
+  if (pull_info.recovery_info.soid.snap &&
+      pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
+      recalc_subsets(pull_info.recovery_info,
+                     pull_info.obc->ssc);
+  }
+  return crimson::osd::PG::load_obc_ertr::now();
+#endif
+
+  op.recovery_info.size = op.obc->obs.oi.size;
+  op.recovery_info.oi = op.obc->obs.oi;
+  ceph_assert(op.obc->is_valid());
+  logger().debug("{}: filled obc. oi.size={}", __func__, op.obc->obs.oi.size);
+}
+
 RecoveryBackend::interruptible_future<>
 ECRecoveryBackend::handle_push(
   Ref<MOSDPGPush> m)
