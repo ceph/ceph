@@ -457,7 +457,8 @@ public:
   version_t get_last_user_version() const;
 
   ObjectContextRef prepare_clone(
-    const hobject_t& coid);
+    const hobject_t& coid,
+    eversion_t version);
 
   void apply_stats();
 };
