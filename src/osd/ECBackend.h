@@ -185,6 +185,10 @@ private:
       ceph::os::Transaction&& txn,
       std::map<int, MOSDPGPushReply*> replies) override;
 
+    void maybe_load_obc(
+      const std::map<std::string, ceph::bufferlist, std::less<>>& raw_attrs,
+      RecoveryOp &op) final;
+
     Listener *get_parent() const { return parent; }
 
   private:
