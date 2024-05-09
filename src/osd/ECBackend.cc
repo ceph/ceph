@@ -56,7 +56,7 @@ static ostream& _prefix(std::ostream *_dout, ECBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
-static ostream& _prefix(std::ostream *_dout, ECCommon::RecoveryBackend *pgb) {
+static ostream& _prefix(std::ostream *_dout, ECBackend::ECRecoveryBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
