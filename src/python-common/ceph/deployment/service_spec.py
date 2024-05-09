@@ -1355,7 +1355,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_log_directory_backups: Optional[int] = 10,
                  log_directory: Optional[str] = '/var/log/ceph/',
                  monitor_timeout: Optional[float] = 1.0,
-                 enable_monitor_client: bool = False,
+                 enable_monitor_client: bool = True,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
