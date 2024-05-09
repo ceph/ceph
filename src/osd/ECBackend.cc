@@ -353,28 +353,12 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
 
   if (res.attrs) {
     op.xattrs.swap(*(res.attrs));
-
-    if (!op.obc) {
-      // attrs only reference the origin bufferlist (decode from
-      // ECSubReadReply message) whose size is much greater than attrs
-      // in recovery. If obc cache it (get_obc maybe cache the attr),
-      // this causes the whole origin bufferlist would not be free
-      // until obc is evicted from obc cache. So rebuild the
-      // bufferlist before cache it.
-      for (map<string, bufferlist>::iterator it = op.xattrs.begin();
-           it != op.xattrs.end();
-           ++it) {
-        it->second.rebuild();
-      }
-      // Need to remove ECUtil::get_hinfo_key() since it should not leak out
-      // of the backend (see bug #12983)
-      map<string, bufferlist, less<>> sanitized_attrs(op.xattrs);
-      sanitized_attrs.erase(ECUtil::get_hinfo_key());
-      op.obc = get_parent()->get_obc(hoid, sanitized_attrs);
-      ceph_assert(op.obc);
-      op.recovery_info.size = op.obc->obs.oi.size;
-      op.recovery_info.oi = op.obc->obs.oi;
-
+    const auto empty_obc = !op.obc;
+    maybe_load_obc(op.xattrs, op);
+#ifdef WITH_CRIMSON
+    ceph_assert(hoid == op.hoid);
+#endif
+    if (empty_obc) {
       update_object_size_after_read(op.recovery_info.size, res, req);
     }
   }
@@ -402,6 +386,33 @@ void ECCommon::RecoveryBackend::handle_recovery_read_complete(
            << dendl;
 
   continue_recovery_op(op, m);
+}
+
+void ECBackend::ECRecoveryBackend::maybe_load_obc(
+  const std::map<std::string, ceph::bufferlist, std::less<>>& raw_attrs,
+  RecoveryOp &op)
+{
+  if (!op.obc) {
+    // attrs only reference the origin bufferlist (decode from
+    // ECSubReadReply message) whose size is much greater than attrs
+    // in recovery. If obc cache it (get_obc maybe cache the attr),
+    // this causes the whole origin bufferlist would not be free
+    // until obc is evicted from obc cache. So rebuild the
+    // bufferlist before cache it.
+    for (map<string, bufferlist>::iterator it = op.xattrs.begin();
+         it != op.xattrs.end();
+         ++it) {
+      it->second.rebuild();
+    }
+    // Need to remove ECUtil::get_hinfo_key() since it should not leak out
+    // of the backend (see bug #12983)
+    map<string, bufferlist, less<>> sanitized_attrs(op.xattrs);
+    sanitized_attrs.erase(ECUtil::get_hinfo_key());
+    op.obc = get_parent()->get_obc(op.hoid, sanitized_attrs);
+    ceph_assert(op.obc);
+    op.recovery_info.size = op.obc->obs.oi.size;
+    op.recovery_info.oi = op.obc->obs.oi;
+  }
 }
 
 struct SendPushReplies : public Context {
