@@ -6674,6 +6674,17 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
 
 void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_yield y)
 {
+  // add the object key to the dout prefix so we can trace concurrent calls
+  struct ObjectPrefix : public DoutPrefixPipe {
+    const rgw_obj_key& o;
+    ObjectPrefix(const DoutPrefixProvider& dpp, const rgw_obj_key& o)
+        : DoutPrefixPipe(dpp), o(o) {}
+    void add_prefix(std::ostream& out) const override {
+      out << o << ' ';
+    }
+  } prefix{*this, o};
+  const DoutPrefixProvider* dpp = &prefix;
+
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o);
   if (o.empty()) {
     send_partial_response(o, false, "", -EINVAL);
@@ -6684,7 +6695,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   const auto action = o.instance.empty() ?
       rgw::IAM::s3DeleteObject :
       rgw::IAM::s3DeleteObjectVersion;
-  if (!verify_bucket_permission(this, s, ARN(obj->get_obj()), s->user_acl,
+  if (!verify_bucket_permission(dpp, s, ARN(obj->get_obj()), s->user_acl,
                                 s->bucket_acl, s->iam_policy,
                                 s->iam_identity_policies,
                                 s->session_policies, action)) {
@@ -6698,7 +6709,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   if (!rgw::sal::Object::empty(obj.get())) {
     int state_loaded = -1;
     bool check_obj_lock = obj->have_instance() && bucket->get_info().obj_lock_enabled();
-    const auto ret = state_loaded = obj->load_obj_state(this, y, true);
+    const auto ret = state_loaded = obj->load_obj_state(dpp, y, true);
 
     if (ret < 0) {
       if (ret == -ENOENT) {
@@ -6716,7 +6727,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
 
     if (check_obj_lock) {
       ceph_assert(state_loaded == 0);
-      int object_lock_response = verify_object_lock(this, obj->get_attrs(), bypass_perm, bypass_governance_mode);
+      int object_lock_response = verify_object_lock(dpp, obj->get_attrs(), bypass_perm, bypass_governance_mode);
       if (object_lock_response != 0) {
         send_partial_response(o, false, "", object_lock_response);
         return;
@@ -6731,7 +6742,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
                           rgw::notify::ObjectRemovedDelete;
   std::unique_ptr<rgw::sal::Notification> res
           = driver->get_notification(obj.get(), s->src_object.get(), s, event_type, y);
-  op_ret = res->publish_reserve(this);
+  op_ret = res->publish_reserve(dpp);
   if (op_ret < 0) {
     send_partial_response(o, false, "", op_ret);
     return;
@@ -6746,15 +6757,15 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
 
-  op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
+  op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
   if (op_ret == 0) {
     // send request to notification manager
-    int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
+    int ret = res->publish_commit(dpp, obj_size, ceph::real_clock::now(), etag, version_id);
     if (ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
     }
   }
