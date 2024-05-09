@@ -159,6 +159,8 @@ public:
       });
     });
   }
+  void send_message_osd_cluster(
+    int osd, MOSDPGPush* msg, epoch_t from_epoch) override;
   std::ostream& gen_dbg_prefix(std::ostream& out) const override final {
     return gen_prefix(out);
   }
