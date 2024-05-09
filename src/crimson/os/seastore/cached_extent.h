@@ -436,6 +436,10 @@ public:
             is_pending_io());
   }
 
+  bool is_data_stable() const {
+    return is_stable() || is_exist_clean();
+  }
+
   /// Returns true if extent has a pending delta
   bool is_mutation_pending() const {
     return state == extent_state_t::MUTATION_PENDING;
@@ -1087,6 +1091,7 @@ public:
   // For reserved mappings, the return values are
   // undefined although it won't crash
   virtual bool is_stable() const = 0;
+  virtual bool is_data_stable() const = 0;
   virtual bool is_clone() const = 0;
   bool is_zero_reserved() const {
     return !get_val().is_real();
