@@ -2050,6 +2050,7 @@ public:
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
+  void send_response() override;
 
   virtual int get_params(optional_yield y) = 0;
   virtual void send_status() = 0;

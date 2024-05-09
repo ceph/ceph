@@ -6764,43 +6764,38 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
 
 void RGWDeleteMultiObj::execute(optional_yield y)
 {
-  RGWMultiDelDelete *multi_delete;
-  RGWMultiDelXMLParser parser;
-  const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
-  auto group = ceph::async::spawn_throttle{y, max_aio};
-  char* buf;
-
-  buf = data.c_str();
+  const char* buf = data.c_str();
   if (!buf) {
     op_ret = -EINVAL;
-    goto error;
+    return;
   }
 
+  RGWMultiDelXMLParser parser;
   if (!parser.init()) {
     op_ret = -EINVAL;
-    goto error;
+    return;
   }
 
   if (!parser.parse(buf, data.length(), 1)) {
     op_ret = -EINVAL;
-    goto error;
+    return;
   }
 
-  multi_delete = static_cast<RGWMultiDelDelete *>(parser.find_first("Delete"));
+  auto multi_delete = static_cast<RGWMultiDelDelete *>(parser.find_first("Delete"));
   if (!multi_delete) {
     op_ret = -EINVAL;
-    goto error;
-  } else {
+    return;
+  }
+
 #define DELETE_MULTI_OBJ_MAX_NUM      1000
-    int max_num = s->cct->_conf->rgw_delete_multi_obj_max_num;
-    if (max_num < 0) {
-      max_num = DELETE_MULTI_OBJ_MAX_NUM;
-    }
-    int multi_delete_object_num = multi_delete->objects.size();
-    if (multi_delete_object_num > max_num) {
-      op_ret = -ERR_MALFORMED_XML;
-      goto error;
-    }
+  int max_num = s->cct->_conf->rgw_delete_multi_obj_max_num;
+  if (max_num < 0) {
+    max_num = DELETE_MULTI_OBJ_MAX_NUM;
+  }
+  int multi_delete_object_num = multi_delete->objects.size();
+  if (multi_delete_object_num > max_num) {
+    op_ret = -ERR_MALFORMED_XML;
+    return;
   }
 
   if (multi_delete->is_quiet())
@@ -6817,13 +6812,16 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     if (has_versioned && !s->mfa_verified) {
       ldpp_dout(this, 5) << "NOTICE: multi-object delete request with a versioned object, mfa auth not provided" << dendl;
       op_ret = -ERR_MFA_REQUIRED;
-      goto error;
+      return;
     }
   }
 
   begin_response();
 
   // process up to max_aio object deletes in parallel
+  const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
+  auto group = ceph::async::spawn_throttle{y, max_aio};
+
   for (const auto& key : multi_delete->objects) {
     boost::asio::spawn(group.get_executor(),
                        [this, &key] (boost::asio::yield_context yield) {
@@ -6840,12 +6838,12 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
   // will likely segfault if begin_response() has not been called
   end_response();
-  return;
+}
 
-error:
+void RGWDeleteMultiObj::send_response()
+{
+  // if we haven't already written a response, send the error response
   send_status();
-  return;
-
 }
 
 bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
