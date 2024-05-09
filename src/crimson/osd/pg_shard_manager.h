@@ -136,6 +136,9 @@ public:
   FORWARD_TO_OSD_SINGLETON(store_maps)
   FORWARD_TO_OSD_SINGLETON(trim_maps)
 
+  // osd stats
+  FORWARD_TO_OSD_SINGLETON(get_osd_stat)
+
   seastar::future<> set_up_epoch(epoch_t e);
 
   seastar::future<> set_superblock(OSDSuperblock superblock);
