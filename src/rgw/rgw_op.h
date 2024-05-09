@@ -2027,24 +2027,7 @@ class RGWDeleteMultiObj : public RGWOp {
    * Handles the deletion of an individual object and uses
    * set_partial_response to record the outcome.
    */
-  void handle_individual_object(const rgw_obj_key& o,
-				optional_yield y,
-                                boost::asio::deadline_timer *formatter_flush_cond);
-
-  /**
-   * When the request is being executed in a coroutine, performs
-   * the actual formatter flushing and is responsible for the
-   * termination condition (when when all partial object responses
-   * have been sent). Note that the formatter flushing must be handled
-   * on the coroutine that invokes the execute method vs. the
-   * coroutines that are spawned to handle individual objects because
-   * the flush logic uses a yield context that was captured
-   * and saved on the req_state vs. one that is passed on the stack.
-   * This is a no-op in the case where we're not executing as a coroutine.
-   */
-  void wait_flush(optional_yield y,
-                  boost::asio::deadline_timer *formatter_flush_cond,
-                  std::function<bool()> predicate);
+  void handle_individual_object(const rgw_obj_key& o, optional_yield y);
 
 protected:
   std::vector<delete_multi_obj_entry> ops_log_entries;
@@ -2072,8 +2055,8 @@ public:
   virtual void send_status() = 0;
   virtual void begin_response() = 0;
   virtual void send_partial_response(const rgw_obj_key& key, bool delete_marker,
-                                     const std::string& marker_version_id, int ret,
-                                     boost::asio::deadline_timer *formatter_flush_cond) = 0;
+                                     const std::string& marker_version_id,
+                                     int ret) = 0;
   virtual void end_response() = 0;
   const char* name() const override { return "multi_object_delete"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_MULTI_OBJ; }
