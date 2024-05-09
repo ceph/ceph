@@ -490,10 +490,7 @@ void ECCommon::RecoveryBackend::dispatch_recovery_messages(
     msg->pushes.swap(i->second);
     msg->compute_cost(cct);
     msg->is_repair = get_parent()->pg_is_repair();
-    std::vector wrapped_msg{
-      std::make_pair(i->first.osd, static_cast<Message*>(msg))
-    };
-    get_parent()->send_message_osd_cluster(wrapped_msg, msg->map_epoch);
+    get_parent()->send_message_osd_cluster(i->first.osd, msg, msg->map_epoch);
   }
   std::map<int, MOSDPGPushReply*> replies;
   for (map<pg_shard_t, vector<PushReplyOp>>::iterator i =
