@@ -163,11 +163,6 @@ PGBackend::mutate_object(
 {
   logger().trace("mutate_object: num_ops={}", txn.get_num_ops());
   if (obc->obs.exists) {
-#if 0
-    obc->obs.oi.version = ctx->at_version;
-    obc->obs.oi.prior_version = ctx->obs->oi.version;
-#endif
-
     obc->obs.oi.prior_version = obc->obs.oi.version;
     obc->obs.oi.version = osd_op_p.at_version;
     if (osd_op_p.user_at_version > obc->obs.oi.user_version)
