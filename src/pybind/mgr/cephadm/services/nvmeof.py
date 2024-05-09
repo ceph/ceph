@@ -80,20 +80,35 @@ class NvmeofService(CephService):
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         daemon_spec.deps = []
-        # Notify monitor about this gateway creation
-        cmd = {
-            'prefix': 'nvme-gw create',
-            'id': name,
-            'group': spec.group,
-            'pool': spec.pool
-        }
-        _, _, err = self.mgr.mon_command(cmd)
-        # if send command failed, raise assertion exception, failing the daemon creation
-        assert not err, f"Unable to send monitor command {cmd}, error {err}"
         if not hasattr(self, 'gws'):
             self.gws = {} # id -> name map of gateways for this service.
         self.gws[nvmeof_gw_id] = name # add to map of service's gateway names
         return daemon_spec
+
+    def daemon_check_post(self, daemon_descrs: List[DaemonDescription]) -> None:
+        """ Overrides the daemon_check_post to add nvmeof gateways safely
+        """
+        self.mgr.log.info(f"nvmeof daemon_check_post {daemon_descrs}")
+        # Assert configured
+        assert self.pool
+        assert self.group is not None
+        for dd in daemon_descrs:
+            self.mgr.log.info(f"nvmeof daemon_descr {dd}")
+            assert dd.daemon_id in self.gws
+            name = self.gws[dd.daemon_id]
+            self.mgr.log.info(f"nvmeof daemon name={name}")
+            # Notify monitor about this gateway creation
+            cmd = {
+                'prefix': 'nvme-gw create',
+                'id': name,
+                'group': self.group,
+                'pool': self.pool
+            }
+            self.mgr.log.info(f"create gateway: monitor command {cmd}")
+            _, _, err = self.mgr.mon_command(cmd)
+            if err:
+                self.mgr.log.error(f"Unable to send monitor command {cmd}, error {err}")
+        super().daemon_check_post(daemon_descrs)
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         def get_set_cmd_dicts(out: str) -> List[dict]:
@@ -180,12 +195,28 @@ class NvmeofService(CephService):
             'group': self.group,
             'pool': self.pool
         }
+        self.mgr.log.info(f"delete gateway: monitor command {cmd}")
         _, _, err = self.mgr.mon_command(cmd)
         if err:
             self.mgr.log.error(f"Unable to send monitor command {cmd}, error {err}")
 
     def purge(self, service_name: str) -> None:
-        """Removes configuration
+        """Make sure no zombie gateway is left behind
         """
-        #  TODO: what should we purge in this case (if any)?
-        pass
+        # Assert configured
+        assert self.pool
+        assert self.group is not None
+        for daemon_id in self.gws:
+            name = self.gws[daemon_id]
+            self.gws.pop(daemon_id)
+            # Notify monitor about this gateway deletion
+            cmd = {
+                'prefix': 'nvme-gw delete',
+                'id': name,
+                'group': self.group,
+                'pool': self.pool
+            }
+            self.mgr.log.info(f"purge delete gateway: monitor command {cmd}")
+            _, _, err = self.mgr.mon_command(cmd)
+            if err:
+                self.mgr.log.error(f"Unable to send monitor command {cmd}, error {err}")

@@ -471,10 +471,12 @@ void NVMeofGwMap::fsm_handle_to_expired(const NvmeGwId &gw_id, const NvmeGroupKe
             auto& st = gw_state.second;
             if (st.ana_grp_id == grpid){// group owner
                 grp_owner_found = true;
-                if( ! (fbp_gw_state.last_gw_map_epoch_valid  && st.last_gw_map_epoch_valid) ){
-                   //Timer is not cancelled so it would expire over and over as long as both gws are not updated
-                   dout(1) << "gw " << gw_id  <<" or gw " << gw_state.first  << "map epochs are not updated "<< dendl;
-                   return;
+                if(st.availability == GW_AVAILABILITY_E::GW_AVAILABLE) {
+                   if( ! (fbp_gw_state.last_gw_map_epoch_valid  && st.last_gw_map_epoch_valid) ){
+                     //Timer is not cancelled so it would expire over and over as long as both gws are not updated
+                     dout(1) << "gw " << gw_id  <<" or gw " << gw_state.first  << "map epochs are not updated "<< dendl;
+                     return;
+                   }
                 }
                 cancel_timer(gw_id, group_key, grpid);
                 if (st.sm_state[grpid] == GW_STATES_PER_AGROUP_E::GW_OWNER_WAIT_FAILBACK_PREPARED && st.availability == GW_AVAILABILITY_E::GW_AVAILABLE )
