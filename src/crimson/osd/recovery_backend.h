@@ -23,6 +23,8 @@ namespace crimson::osd{
   class PG;
 }
 
+class PGRecovery;
+
 class RecoveryBackend {
 public:
   class WaitForObjectRecovery;
@@ -261,6 +263,8 @@ public:
 protected:
   std::map<hobject_t, WaitForObjectRecoveryRef> recovering;
   std::map<hobject_t, seastar::shared_promise<>> unfound;
+
+  friend PGRecovery;
   hobject_t get_temp_recovery_object(
     const hobject_t& target,
     eversion_t version) const;
