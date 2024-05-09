@@ -1437,7 +1437,11 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
       }
 
       read_request_t read_request(std::move(want),
+#ifdef WITH_CRIMSON
+                                  op.recovery_progress.first && op.xattrs.count(OI_ATTR) == 0,
+#else
                                   op.recovery_progress.first && !op.obc,
+#endif
                                   op.obc
                                     ? op.obc->obs.oi.size
                                     : get_recovery_chunk_size());
