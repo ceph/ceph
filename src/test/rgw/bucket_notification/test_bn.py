@@ -2992,7 +2992,8 @@ def test_ps_s3_persistent_topic_stats():
 
     # create s3 topic
     endpoint_address = 'http://'+host+':'+str(port)
-    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
+            '&retry_sleep_duration=1'
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
@@ -3629,11 +3630,13 @@ def test_ps_s3_persistent_multiple_endpoints():
 
     # create two s3 topics
     endpoint_address = 'http://'+host+':'+str(port)
-    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
+            '&retry_sleep_duration=1'
     topic_conf1 = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
     topic_arn1 = topic_conf1.set_config()
     endpoint_address = 'http://kaboom:9999'
-    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
+            '&retry_sleep_duration=1'
     topic_conf2 = PSTopicS3(conn, topic_name+'_2', zonegroup, endpoint_args=endpoint_args)
     topic_arn2 = topic_conf2.set_config()
 
@@ -4542,7 +4545,8 @@ def test_persistent_ps_s3_reload():
 
     # create s3 topics
     endpoint_address = 'http://'+host+':'+str(http_port)
-    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
+            '&retry_sleep_duration=1'
     topic_conf1 = PSTopicS3(conn, topic_name1, zonegroup, endpoint_args=endpoint_args)
     topic_arn1 = topic_conf1.set_config()
     # 2nd topic is unused
@@ -4649,7 +4653,8 @@ def test_persistent_ps_s3_data_path_v2_migration():
 
     # create s3 topic
     endpoint_address = 'http://'+host+':'+str(http_port)
-    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'+ \
+            '&retry_sleep_duration=1'
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
