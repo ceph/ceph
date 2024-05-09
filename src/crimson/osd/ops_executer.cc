@@ -963,10 +963,10 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     pg_log_entry_t::CLONE,
     coid,
     clone_obc->obs.oi.version,
-    initial_obs.oi.version,
-    initial_obs.oi.user_version,
+    clone_obc->obs.oi.prior_version,
+    clone_obc->obs.oi.user_version,
     osd_reqid_t(),
-    initial_obs.oi.mtime, // will be replaced in `apply_to()`
+    clone_obc->obs.oi.mtime, // will be replaced in `apply_to()`
     0
   };
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
