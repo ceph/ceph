@@ -700,3 +700,12 @@ void PGRecovery::on_backfill_reserved()
   backfill_state->process_event(
     BackfillState::Triggered{}.intrusive_from_this());
 }
+
+hobject_t PGRecovery::get_temp_recovery_object(
+    const hobject_t& target,
+    eversion_t version)
+{
+  return pg->get_recovery_backend()->get_temp_recovery_object(
+    target,
+    version);
+}
