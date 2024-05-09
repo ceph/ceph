@@ -92,62 +92,71 @@ PGBackend::PGBackend(pg_shard_t whoami,
 
 PGBackend::load_metadata_iertr::future
   <PGBackend::loaded_object_md_t::ref>
+PGBackend::decode_metadata(
+  const hobject_t& oid,
+  crimson::os::FuturizedStore::Shard::attrs_t attrs)
+{
+  loaded_object_md_t::ref ret(new loaded_object_md_t());
+  if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
+    bufferlist bl = std::move(oiiter->second);
+    try {
+      ret->os = ObjectState(object_info_t(bl), true);
+      ceph_assert(oid == ret->os.oi.soid);
+    } catch (const buffer::error&) {
+      logger().warn("unable to decode ObjectState");
+      throw crimson::osd::invalid_argument();
+    }
+  } else {
+    logger().error(
+      "load_metadata: object {} present but missing object info",
+      oid);
+    return crimson::ct_error::object_corrupted::make();
+  }
+
+  if (oid.is_head()) {
+    // Returning object_corrupted when the object exsits and the
+    // Snapset is either not found or empty.
+    bool object_corrupted = true;
+    if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
+      object_corrupted = false;
+      bufferlist bl = std::move(ssiter->second);
+      if (bl.length()) {
+        ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
+        try {
+          ret->ssc->snapset = SnapSet(bl);
+          ret->ssc->exists = true;
+          logger().debug(
+            "load_metadata: object {} and snapset {} present",
+             oid, ret->ssc->snapset);
+        } catch (const buffer::error&) {
+          logger().warn("unable to decode SnapSet");
+          throw crimson::osd::invalid_argument();
+        }
+      } else {
+        object_corrupted = true;
+      }
+    }
+    if (object_corrupted) {
+      logger().error(
+        "load_metadata: object {} present but missing snapset",
+        oid);
+      return crimson::ct_error::object_corrupted::make();
+    }
+  }
+  ret->attr_cache = std::move(attrs);
+  return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
+    std::move(ret));
+}
+
+PGBackend::load_metadata_iertr::future
+  <PGBackend::loaded_object_md_t::ref>
 PGBackend::load_metadata(const hobject_t& oid)
 {
   return interruptor::make_interruptible(store->get_attrs(
     coll,
     ghobject_t{oid, ghobject_t::NO_GEN, get_shard()})).safe_then_interruptible(
-      [oid](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
-        loaded_object_md_t::ref ret(new loaded_object_md_t());
-        if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
-          bufferlist bl = std::move(oiiter->second);
-          try {
-            ret->os = ObjectState(object_info_t(bl), true);
-            ceph_assert(oid == ret->os.oi.soid);
-          } catch (const buffer::error&) {
-            logger().warn("unable to decode ObjectState");
-            throw crimson::osd::invalid_argument();
-          }
-        } else {
-          logger().error(
-            "load_metadata: object {} present but missing object info",
-            oid);
-          return crimson::ct_error::object_corrupted::make();
-        }
-
-        if (oid.is_head()) {
-          // Returning object_corrupted when the object exsits and the
-          // Snapset is either not found or empty.
-          bool object_corrupted = true;
-          if (auto ssiter = attrs.find(SS_ATTR); ssiter != attrs.end()) {
-            object_corrupted = false;
-            bufferlist bl = std::move(ssiter->second);
-            if (bl.length()) {
-              ret->ssc = new crimson::osd::SnapSetContext(oid.get_snapdir());
-              try {
-                ret->ssc->snapset = SnapSet(bl);
-                ret->ssc->exists = true;
-                logger().debug(
-                  "load_metadata: object {} and snapset {} present",
-                   oid, ret->ssc->snapset);
-              } catch (const buffer::error&) {
-                logger().warn("unable to decode SnapSet");
-                throw crimson::osd::invalid_argument();
-              }
-            } else {
-              object_corrupted = true;
-            }
-          }
-          if (object_corrupted) {
-            logger().error(
-              "load_metadata: object {} present but missing snapset",
-              oid);
-            return crimson::ct_error::object_corrupted::make();
-          }
-        }
-        ret->attr_cache = std::move(attrs);
-        return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
-          std::move(ret));
+      [oid, this](auto &&attrs) {
+        return decode_metadata(oid, std::move(attrs));
       }, crimson::ct_error::enoent::handle([oid] {
         logger().debug(
           "load_metadata: object {} doesn't exist, returning empty metadata",
