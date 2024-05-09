@@ -1046,10 +1046,9 @@ RGWAccessControlPolicy& FilterObject::get_acl()
   return next->get_acl();
 }
 
-int FilterObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate,
-				optional_yield y, bool follow_olh)
-{
-  return next->get_obj_state(dpp, pstate, y, follow_olh);
+int FilterObject::load_obj_state(const DoutPrefixProvider *dpp,
+                                 optional_yield y, bool follow_olh) {
+  return next->load_obj_state(dpp, y, follow_olh);
 }
 
 int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,

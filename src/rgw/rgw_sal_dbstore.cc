@@ -486,7 +486,7 @@ namespace rgw::sal {
     return std::make_unique<DBLuaManager>(this);
   }
 
-  int DBObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
+  int DBObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
   {
     RGWObjState* astate;
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
@@ -501,7 +501,6 @@ namespace rgw::sal {
     bool prefetch_data = state.prefetch_data;
 
     state = *astate;
-    *pstate = &state;
 
     state.obj = obj;
     state.is_atomic = is_atomic;
