@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        crush location: 'root=default host=host-$id'
+      client:
+        crush location: host=host-0
+        rados replica read policy: localize
+
