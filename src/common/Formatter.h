@@ -193,7 +193,7 @@ namespace ceph {
     int get_len() const override;
     void write_raw_data(const char *data) override;
 
-  protected:
+protected:
     virtual bool handle_value(std::string_view name, std::string_view s, bool quoted) {
       return false; /* is handling done? */
     }
@@ -212,8 +212,9 @@ namespace ceph {
       return m_ss;
     }
 
-  private:
+    void finish_pending_string();
 
+private:
     struct json_formatter_stack_entry_d {
       int size = 0;
       bool is_array = false;
@@ -224,8 +225,6 @@ namespace ceph {
     void print_quoted_string(std::string_view s);
     void print_name(std::string_view name);
     void print_comma(json_formatter_stack_entry_d& entry);
-    void finish_pending_string();
-    void add_value(std::string_view name, double val);
 
     template <class T>
     void add_value(std::string_view name, T val);
@@ -248,6 +247,14 @@ public:
     {
     }
     ~JSONFormatterFile() {
+      flush();
+    }
+
+    void flush(std::ostream& os) override {
+      flush();
+    }
+    void flush() {
+      JSONFormatter::finish_pending_string();
       file.flush();
     }
 
