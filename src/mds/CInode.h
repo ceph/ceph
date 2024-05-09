@@ -663,6 +663,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_symlink() const { return get_inode()->is_symlink(); }
   bool is_dir() const     { return get_inode()->is_dir(); }
   bool is_quiesced() const { return quiescelock.is_xlocked(); }
+  bool will_block_for_quiesce(const MDRequestRef& mdr = MDRequestRef {});
 
   bool is_head() const { return last == CEPH_NOSNAP; }
 
