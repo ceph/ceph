@@ -1658,9 +1658,9 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   }
   else
   {
-    if (part->get_obj_size() != ent.meta.size) {
+    if (part->get_size() != ent.meta.size) {
       // hmm.. something wrong, object not as expected, abort!
-      ldpp_dout(this, 0) << "ERROR: expected obj_size=" << part->get_obj_size()
+      ldpp_dout(this, 0) << "ERROR: expected obj_size=" << part->get_size()
           << ", actual read size=" << ent.meta.size << dendl;
       return -EIO;
 	  }
@@ -2235,7 +2235,7 @@ void RGWGetObj::execute(optional_yield y)
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
-  s->obj_size = s->object->get_obj_size();
+  s->obj_size = s->object->get_size();
   attrs = s->object->get_attrs();
   multipart_parts_count = read_op->params.parts_count;
   if (op_ret < 0)
@@ -3995,7 +3995,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   if (ret < 0)
     return ret;
 
-  obj_size = obj->get_obj_size();
+  obj_size = obj->get_size();
 
   bool need_decompress;
   op_ret = rgw_compression_info_from_attrset(obj->get_attrs(), need_decompress, cs_info);
@@ -5136,7 +5136,7 @@ void RGWDeleteObj::execute(optional_yield y)
           }
         }
       } else {
-        obj_size = s->object->get_obj_size();
+        obj_size = s->object->get_size();
         etag = s->object->get_attrs()[RGW_ATTR_ETAG].to_str();
       }
 
@@ -5550,7 +5550,7 @@ void RGWCopyObj::execute(optional_yield y)
       }
     }
 
-    obj_size = s->src_object->get_obj_size();
+    obj_size = s->src_object->get_size();
   
     if (!s->system_request) { // no quota enforcement for system requests
       if (s->src_object->get_accounted_size() > static_cast<size_t>(s->cct->_conf->rgw_max_put_size)) {
@@ -6724,7 +6724,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
         return;
       }
     } else {
-      obj_size = obj->get_obj_size();
+      obj_size = obj->get_size();
       etag = obj->get_attrs()[RGW_ATTR_ETAG].to_str();
     }
 

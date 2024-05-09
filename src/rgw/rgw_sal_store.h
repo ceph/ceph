@@ -312,7 +312,7 @@ class StoreObject : public Object {
     }
     virtual ceph::real_time get_mtime(void) const override { return state.mtime; }
     virtual void set_mtime(ceph::real_time& mtime) override { state.mtime = mtime; }
-    virtual uint64_t get_obj_size(void) const override { return state.size; }
+    virtual uint64_t get_size(void) const override { return state.size; }
     virtual uint64_t get_accounted_size(void) const override { return state.accounted_size; }
     virtual void set_accounted_size(uint64_t size) override { state.accounted_size = size; }
     virtual uint64_t get_epoch(void) const override { return state.epoch; }

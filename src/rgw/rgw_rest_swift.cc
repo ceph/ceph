@@ -988,7 +988,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
     return r;
   }
 
-  size_bytes = slo_seg->get_obj_size();
+  size_bytes = slo_seg->get_size();
 
   r = rgw_compression_info_from_attrset(slo_seg->get_attrs(), compressed, cs_info);
   if (r < 0) {
@@ -2729,7 +2729,7 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   const std::string subdir_marker = ws_conf.subdir_marker.empty()
                                       ? "application/directory"
                                       : ws_conf.subdir_marker;
-  return subdir_marker == content_type && obj->get_obj_size() <= 1;
+  return subdir_marker == content_type && obj->get_size() <= 1;
 }
 
 bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const

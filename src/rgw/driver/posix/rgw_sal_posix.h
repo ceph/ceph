@@ -511,7 +511,7 @@ public:
   virtual ~POSIXMultipartPart() = default;
 
   virtual uint32_t get_num() { return info.num; }
-  virtual uint64_t get_size() { return shadow->get_obj_size(); }
+  virtual uint64_t get_size() { return shadow->get_size(); }
   virtual const std::string& get_etag() { return info.etag; }
   virtual ceph::real_time& get_mtime() { return info.mtime; }
 
