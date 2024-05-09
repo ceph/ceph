@@ -461,6 +461,10 @@ public:
 
   }
 
+  void send_message_osd_cluster(int osd, MOSDPGPush* msg, epoch_t from_epoch) override {
+
+  }
+
   ostream &gen_dbg_prefix(ostream &out) const override {
     out << dbg_prefix;
     return out;
