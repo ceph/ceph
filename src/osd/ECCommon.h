@@ -761,6 +761,9 @@ struct ECCommon {
     virtual void commit_txn_send_replies(
         ceph::os::Transaction &&txn,
         std::map<int, MOSDPGPushReply*> replies) = 0;
+    virtual void maybe_load_obc(
+      const std::map<std::string, ceph::bufferlist, std::less<>> &raw_attrs,
+      RecoveryOp &op) = 0;
     void dispatch_recovery_messages(RecoveryMessages &m, int priority);
 
     RecoveryBackend::RecoveryOp recover_object(
