@@ -819,7 +819,6 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
   // entry.
   assert(obc->obs.oi.soid.snap >= CEPH_MAXSNAP);
   std::vector<pg_log_entry_t> log_entries;
-  osd_op_params->at_version.version++;
   log_entries.emplace_back(
     obc->obs.exists ?
       pg_log_entry_t::MODIFY : pg_log_entry_t::DELETE,
@@ -931,8 +930,8 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     return std::vector<snapid_t>{std::begin(snapc.snaps), last};
   }();
 
-  osd_op_params->at_version.version++;
   auto clone_obc = prepare_clone(coid, osd_op_params->at_version);
+  osd_op_params->at_version.version++;
 
   // make clone
   backend.clone(clone_obc->obs.oi, initial_obs, clone_obc->obs, txn);
