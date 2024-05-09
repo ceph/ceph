@@ -176,6 +176,20 @@ public:
     Transaction &t,
     LBAMappingRef pin)
   {
+    auto ret = get_extent_if_linked<T>(t, std::move(pin));
+    if (ret.index() == 1) {
+      return std::move(std::get<1>(ret));
+    } else {
+      return this->pin_to_extent<T>(t, std::move(std::get<0>(ret)));
+    }
+  }
+
+  template <typename T>
+  std::variant<LBAMappingRef, base_iertr::future<TCachedExtentRef<T>>>
+  get_extent_if_linked(
+    Transaction &t,
+    LBAMappingRef pin)
+  {
     auto v = pin->get_logical_extent(t);
     if (v.has_child()) {
       return v.get_child_fut().safe_then([pin=std::move(pin)](auto extent) {
@@ -190,7 +204,7 @@ public:
 	return extent->template cast<T>();
       });
     } else {
-      return pin_to_extent<T>(t, std::move(pin));
+      return pin;
     }
   }
 
