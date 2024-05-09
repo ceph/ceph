@@ -184,7 +184,12 @@ ostream &operator<<(ostream &lhs, const ECCommon::RecoveryBackend::RecoveryOp &r
 	     << " missing_on_shards=" << rhs.missing_on_shards
 	     << " recovery_info=" << rhs.recovery_info
 	     << " recovery_progress=" << rhs.recovery_progress
+#ifndef WITH_SEASTAR
 	     << " obc refcount=" << rhs.obc.use_count()
+#else
+	     << " obc refcount=" << rhs.obc->get_use_count()
+#endif
+
 	     << " state=" << ECCommon::RecoveryBackend::RecoveryOp::tostr(rhs.state)
 	     << " waiting_on_pushes=" << rhs.waiting_on_pushes
 	     << " extent_requested=" << rhs.extent_requested
