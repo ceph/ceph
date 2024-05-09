@@ -52,6 +52,9 @@ private:
   void dump_asok_metric(boost::json::object perf_info,
                         boost::json::value perf_values, std::string name,
                         labels_t labels);
+  void parse_asok_metrics(std::string &counter_dump_response,
+                          std::string &counter_schema_response,
+                          int64_t prio_limit, const std::string &daemon_name);
   void get_process_metrics(std::vector<std::pair<std::string, int>> daemon_pids);
   std::string asok_request(AdminSocketClient &asok, std::string command, std::string daemon_name);
 };
