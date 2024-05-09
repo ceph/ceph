@@ -21,6 +21,9 @@
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "ECUtil.h"
+#include "messages/MOSDPGPush.h"
+#include "messages/MOSDPGPushReply.h"
+#include "msg/MessageRef.h"
 #if WITH_SEASTAR
 #include "ExtentCache.h"
 #include "crimson/osd/object_context.h"
@@ -168,6 +171,8 @@ struct ECListener {
   // XXX
   virtual void send_message_osd_cluster(
     std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
+  virtual void send_message_osd_cluster(
+    int osd, MOSDPGPush* msg, epoch_t from_epoch) = 0;
 
   virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
 
