@@ -357,6 +357,10 @@ add_executable(unittest_async_completion test_async_completion.cc)
 add_ceph_unittest(unittest_async_completion)
 target_link_libraries(unittest_async_completion ceph-common Boost::system)
 
+add_executable(unittest_async_max_concurrent_for_each test_async_max_concurrent_for_each.cc)
+add_ceph_unittest(unittest_async_max_concurrent_for_each)
+target_link_libraries(unittest_async_max_concurrent_for_each ceph-common Boost::system Boost::context)
+
 add_executable(unittest_async_shared_mutex test_async_shared_mutex.cc)
 add_ceph_unittest(unittest_async_shared_mutex)
 target_link_libraries(unittest_async_shared_mutex ceph-common Boost::system)
