@@ -555,6 +555,24 @@ def test_cluster_create_user1(tmodule):
     assert len(result.src.user_group_settings) == 1
 
 
+def test_cluster_create_user2(tmodule):
+    _example_cfg_1(tmodule)
+
+    result = tmodule.cluster_create(
+        'dizzle',
+        smb.enums.AuthMode.USER,
+        define_user_pass=['alice%123letmein', 'bob%1n0wh4t1t15'],
+    )
+    assert result.success
+    assert result.status['state'] == 'created'
+    assert result.src.cluster_id == 'dizzle'
+    assert len(result.src.user_group_settings) == 1
+    assert (
+        result.src.user_group_settings[0].source_type
+        == smb.enums.UserGroupSourceType.RESOURCE
+    )
+
+
 def test_cluster_create_badpass(tmodule):
     _example_cfg_1(tmodule)
 
