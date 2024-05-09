@@ -54,9 +54,11 @@ class CephFSPathResolver:
     map to real paths in the cephfs volume and determine if those paths exist.
     """
 
-    def __init__(self, mgr: Module_T) -> None:
+    def __init__(
+        self, mgr: Module_T, *, client: Optional[CephfsClient] = None
+    ) -> None:
         self._mgr = mgr
-        self._cephfs_client = CephfsClient(mgr)
+        self._cephfs_client = client or CephfsClient(mgr)
 
     def resolve(
         self, volume: str, subvolumegroup: str, subvolume: str, path: str
