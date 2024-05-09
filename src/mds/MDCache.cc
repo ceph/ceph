@@ -6923,7 +6923,7 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
 
       // don't trim subtree root if its auth MDS is recovering.
       // This simplify the cache rejoin code.
-      if (dir->is_subtree_root() && rejoin_ack_gather.count(dir->get_dir_auth().first))
+      if (dir->is_rejoining())
         continue;
       trim_dirfrag(dir, 0, expiremap);
       ++trimmed;
