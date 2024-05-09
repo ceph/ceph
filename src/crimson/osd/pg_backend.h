@@ -444,6 +444,11 @@ public:
     using ref = std::unique_ptr<loaded_object_md_t>;
   };
   load_metadata_iertr::future<loaded_object_md_t::ref>
+  decode_metadata(
+    const hobject_t& oid,
+    crimson::os::FuturizedStore::Shard::attrs_t attrs);
+
+  load_metadata_iertr::future<loaded_object_md_t::ref>
   load_metadata(
     const hobject_t &oid);
 
