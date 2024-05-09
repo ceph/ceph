@@ -89,10 +89,6 @@ struct ECListener {
 
   virtual bool pg_is_repair() const = 0;
 
-     virtual ObjectContextRef get_obc(
-       const hobject_t &hoid,
-       const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) = 0;
-
      virtual bool check_failsafe_full() = 0;
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
