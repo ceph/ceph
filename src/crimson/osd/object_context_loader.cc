@@ -29,7 +29,9 @@ ObjectContextLoader::load_and_lock_head(Manager &manager, RWState::State lock_ty
     co_await manager.target_state.lock_to(lock_type);
   } else {
     manager.target_state.lock_excl_sync();
-    co_await load_obc(manager.target_state.obc);
+    co_await load_obc(
+      manager.target_state.obc,
+      backend.load_metadata(manager.target_state.obc->get_oid()));
     manager.target_state.demote_excl_to(lock_type);
   }
   releaser.cancel();
@@ -53,7 +55,9 @@ ObjectContextLoader::load_and_lock_clone(Manager &manager, RWState::State lock_t
       co_await manager.head_state.lock_to(RWState::RWREAD);
     } else {
       manager.head_state.lock_excl_sync();
-      co_await load_obc(manager.head_state.obc);
+      co_await load_obc(
+	manager.head_state.obc,
+        backend.load_metadata(manager.target_state.obc->get_oid()));
       manager.head_state.demote_excl_to(RWState::RWREAD);
     }
   }
@@ -102,7 +106,9 @@ ObjectContextLoader::load_and_lock_clone(Manager &manager, RWState::State lock_t
       co_await manager.target_state.lock_to(RWState::RWREAD);
     } else {
       manager.target_state.lock_excl_sync();
-      co_await load_obc(manager.target_state.obc);
+      co_await load_obc(
+        manager.target_state.obc,
+        backend.load_metadata(manager.target_state.obc->get_oid()));
       manager.target_state.obc->set_clone_ssc(manager.head_state.obc->ssc);
       manager.target_state.demote_excl_to(RWState::RWREAD);
     }
@@ -124,10 +130,12 @@ ObjectContextLoader::load_and_lock(Manager &manager, RWState::State lock_type)
 }
 
 ObjectContextLoader::load_obc_iertr::future<>
-ObjectContextLoader::load_obc(ObjectContextRef obc)
+ObjectContextLoader::load_obc(
+  ObjectContextRef obc,
+  PGBackend::load_metadata_iertr::future<PGBackend::loaded_object_md_t::ref> _md)
 {
   LOG_PREFIX(ObjectContextLoader::load_obc);
-  return backend.load_metadata(obc->get_oid())
+  return std::move(_md)
     .safe_then_interruptible(
       [FNAME, this, obc=std::move(obc)](auto md)
       -> load_obc_ertr::future<> {
