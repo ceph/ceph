@@ -816,6 +816,7 @@ public:
   uint64_t debug_get_dirty_seq(FileWriter *h);
   bool debug_get_is_dev_dirty(FileWriter *h, uint8_t dev);
   debug_point_t<std::function<void()>> unittest_inject_delay;
+  void trim_free_space(const std::string& type, std::ostream& outss);
 
 private:
   // Wrappers for BlockDevice::read(...) and BlockDevice::read_random(...)
