@@ -65,6 +65,9 @@ private:
   std::vector<pg_shard_t> get_replica_recovery_order() const {
     return pg->get_replica_recovery_order();
   }
+  hobject_t get_temp_recovery_object(
+    const hobject_t& target,
+    eversion_t version);
   RecoveryBackend::interruptible_future<> recover_missing(
     RecoveryBackend::RecoveryBlockingEvent::TriggerI&,
     const hobject_t &soid,
