@@ -931,7 +931,9 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     return std::vector<snapid_t>{std::begin(snapc.snaps), last};
   }();
 
-  auto clone_obc = prepare_clone(coid);
+  osd_op_params->at_version.version++;
+  auto clone_obc = prepare_clone(coid, osd_op_params->at_version);
+
   // make clone
   backend.clone(clone_obc->obs.oi, initial_obs, clone_obc->obs, txn);
 
@@ -1039,13 +1041,13 @@ OpsExecuter::flush_clone_metadata(
 }
 
 ObjectContextRef OpsExecuter::prepare_clone(
-  const hobject_t& coid)
+  const hobject_t& coid,
+  eversion_t version)
 {
   ceph_assert(pg->is_primary());
-  osd_op_params->at_version.version++;
   ObjectState clone_obs{coid};
   clone_obs.exists = true;
-  clone_obs.oi.version = osd_op_params->at_version;
+  clone_obs.oi.version = version;
   clone_obs.oi.prior_version = obc->obs.oi.version;
   clone_obs.oi.copy_user_bits(obc->obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
