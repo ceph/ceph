@@ -54,6 +54,10 @@ private:
     ceph::os::Transaction&& txn,
     std::map<int, MOSDPGPushReply*> replies) override;
 
+  void maybe_load_obc(
+    const std::map<std::string, ceph::bufferlist, std::less<>>& raw_attrs,
+    RecoveryOp &op) final;
+
   interruptible_future<> handle_push(
     Ref<MOSDPGPush> m);
   interruptible_future<> handle_push_reply(
