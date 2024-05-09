@@ -113,10 +113,6 @@ struct ECListener {
 
   virtual bool pg_is_repair() const = 0;
 
-     virtual ObjectContextRef get_obc(
-       const hobject_t &hoid,
-       const std::map<std::string, ceph::buffer::list, std::less<>> &attrs) = 0;
-
      virtual bool check_failsafe_full() = 0;
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
@@ -853,6 +849,9 @@ public:
   virtual void commit_txn_send_replies(
     ceph::os::Transaction&& txn,
     std::map<int, MOSDPGPushReply*> replies) = 0;
+  virtual void maybe_load_obc(
+    const std::map<std::string, ceph::bufferlist, std::less<>>& raw_attrs,
+    RecoveryOp &op) = 0;
   void dispatch_recovery_messages(RecoveryMessages &m, int priority);
 
   RecoveryBackend::RecoveryOp recover_object(
