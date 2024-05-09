@@ -613,6 +613,13 @@ public:
     osd->send_message_osd_cluster(peer, m, from_epoch);
   }
   void send_message_osd_cluster(
+    int osd, MOSDPGPush* msg, epoch_t from_epoch) override {
+    std::vector wrapped_msg {
+      std::make_pair(osd, static_cast<Message*>(msg))
+    };
+    send_message_osd_cluster(wrapped_msg, from_epoch);
+  }
+  void send_message_osd_cluster(
     std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) override {
     osd->send_message_osd_cluster(messages, from_epoch);
   }
