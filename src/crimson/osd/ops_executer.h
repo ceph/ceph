@@ -520,9 +520,6 @@ OpsExecuter::flush_changes_n_do_ops_effects(
     ceph_assert(want_mutate);
   }
   if (want_mutate) {
-    if (osd_op_params->user_modify) {
-      osd_op_params->user_at_version = osd_op_params->at_version.version;
-    }
     maybe_mutated = flush_clone_metadata(
       prepare_transaction(ops),
       snap_mapper,
