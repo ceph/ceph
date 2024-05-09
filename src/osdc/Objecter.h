@@ -3092,12 +3092,13 @@ public:
   Op *prepare_read_op(
     const object_t& oid, const object_locator_t& oloc,
     ObjectOperation& op,
-    snapid_t snapid, ceph::buffer::list *pbl, int flags,
+    snapid_t snapid, ceph::buffer::list *pbl,
+    int flags, int flags_mask,
     Context *onack, version_t *objver = NULL,
     int *data_offset = NULL,
     uint64_t features = 0,
     ZTracer::Trace *parent_trace = nullptr) {
-    Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags), onack, objver,
+    Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags) & flags_mask, onack, objver,
 		   data_offset, parent_trace);
     o->priority = op.priority;
     o->snapid = snapid;
@@ -3118,7 +3119,7 @@ public:
     Context *onack, version_t *objver = NULL,
     int *data_offset = NULL,
     uint64_t features = 0) {
-    Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, onack, objver,
+    Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, -1, onack, objver,
 			    data_offset);
     if (features)
       o->features = features;
