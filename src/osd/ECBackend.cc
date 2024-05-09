@@ -497,11 +497,9 @@ void ECCommon::RecoveryBackend::dispatch_recovery_messages(
     replies.insert(std::pair(i->first.osd, msg));
   }
 
-#if 1
   if (!replies.empty()) {
     commit_txn_send_replies(std::move(m.t), std::move(replies));
   }
-#endif
 
   if (m.recovery_reads.empty())
     return;
