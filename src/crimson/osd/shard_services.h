@@ -17,6 +17,7 @@
 #include "crimson/os/futurized_collection.h"
 #include "osd/PeeringState.h"
 #include "crimson/common/log.h"
+#include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_meta.h"
@@ -271,6 +272,19 @@ private:
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 
   crimson::mgr::Client &mgrc;
+
+  osd_stat_t osd_stat;
+  uint32_t osd_stat_seq = 0;
+  osd_stat_t get_osd_stat() {
+    return osd_stat;
+  }
+  void update_osd_stat(
+    epoch_t up_epoch,
+    const Heartbeat::osds_t& peers,
+    const store_statfs_t& st);
+  void inc_osd_stat_repaired() {
+    osd_stat.num_shards_repaired++;
+  }
 
   std::unique_ptr<OSDMeta> meta_coll;
   template <typename... Args>
@@ -626,6 +640,9 @@ public:
   QUEUE_FOR_OSD_SINGLETON(send_pg_created)
   QUEUE_FOR_OSD_SINGLETON(send_alive)
   QUEUE_FOR_OSD_SINGLETON(send_pg_temp)
+  FORWARD_TO_OSD_SINGLETON(get_osd_stat)
+  FORWARD_TO_OSD_SINGLETON(update_osd_stat)
+  FORWARD_TO_OSD_SINGLETON(inc_osd_stat_repaired)
   FORWARD_TO_LOCAL_CONST(get_mnow)
   FORWARD_TO_LOCAL(get_hb_stamps)
   FORWARD_TO_LOCAL(update_shard_superblock)

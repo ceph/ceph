@@ -928,4 +928,17 @@ seastar::future<> OSDSingletonState::send_incremental_map_to_osd(
   }
 }
 
+void OSDSingletonState::update_osd_stat(
+  epoch_t up_epoch,
+  const Heartbeat::osds_t& peers,
+  const store_statfs_t& st)
+{
+  osd_stat_seq++;
+  osd_stat.up_from = up_epoch;
+  osd_stat.hb_peers = peers;
+  osd_stat.statfs = st;
+  osd_stat.seq = (static_cast<uint64_t>(up_epoch) << 32
+  ) | osd_stat_seq;
+}
+
 };

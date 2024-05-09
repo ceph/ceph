@@ -1083,26 +1083,25 @@ void OSD::handle_conf_change(
 
 void OSD::update_stats()
 {
-  osd_stat_seq++;
-  osd_stat.up_from = get_shard_services().get_up_epoch();
-  osd_stat.hb_peers = heartbeat->get_peers();
-  osd_stat.seq = (
-    static_cast<uint64_t>(get_shard_services().get_up_epoch()) << 32
-  ) | osd_stat_seq;
   gate.dispatch_in_background("statfs", *this, [this] {
-    (void) store.stat().then([this](store_statfs_t&& st) {
-      osd_stat.statfs = st;
+    return store.stat().then([this](store_statfs_t&& st) {
+      return get_shard_services().update_osd_stat(
+        get_shard_services().get_up_epoch(),
+        heartbeat->get_peers(),
+        st);
     });
   });
+
 }
 
 seastar::future<MessageURef> OSD::get_stats()
 {
   // MPGStats::had_map_for is not used since PGMonitor was removed
   auto m = crimson::make_message<MPGStats>(monc->get_fsid(), osdmap->get_epoch());
-  m->osd_stat = osd_stat;
-  return pg_shard_manager.get_pg_stats(
-  ).then([this, m=std::move(m)](auto &&stats) mutable {
+  return get_shard_services().get_osd_stat().then([this, m=m.get()](auto&& osd_stat) {
+    m->osd_stat = std::move(osd_stat);
+    return pg_shard_manager.get_pg_stats();
+  }).then([this, m=std::move(m)](auto &&stats) mutable {
     min_last_epoch_clean = osdmap->get_epoch();
     min_last_epoch_clean_pgs.clear();
     std::set<int64_t> pool_set;
@@ -1138,11 +1137,13 @@ seastar::future<MessageURef> OSD::get_stats()
   });
 }
 
-uint64_t OSD::send_pg_stats()
+seastar::future<uint64_t> OSD::send_pg_stats()
 {
-  // mgr client sends the report message in background
-  mgrc->report();
-  return osd_stat.seq;
+  return get_shard_services().get_osd_stat().then([this](auto&& osd_stat) {
+    // mgr client sends the report message in background
+    mgrc->report();
+    return osd_stat.seq;
+  });
 }
 
 seastar::future<> OSD::handle_osd_map(Ref<MOSDMap> m)
