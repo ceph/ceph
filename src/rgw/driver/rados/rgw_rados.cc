@@ -7742,7 +7742,9 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
 
   auto completed = d->aio->get(obj.obj, rgw::Aio::librados_op(obj.ioctx, std::move(op), d->yield), cost, id);
 
-  return d->flush(std::move(completed));
+  auto ret = d->flush(std::move(completed));
+  ldpp_dout(dpp, 0) << "flush returned: " << ret << dendl;
+  return ret;
 }
 
 int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, int64_t end, RGWGetDataCB *cb,
@@ -7768,7 +7770,9 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
     return r;
   }
 
-  return data.drain();
+  auto ret = data.drain();
+  ldpp_dout(dpp, 0) << "drain returned ret: " << ret << dendl;
+  return ret;
 }
 
 int RGWRados::iterate_obj(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,
