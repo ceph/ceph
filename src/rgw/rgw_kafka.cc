@@ -554,7 +554,9 @@ public:
           bool use_ssl,
           bool verify_ssl,
           boost::optional<const std::string&> ca_location,
-          boost::optional<const std::string&> mechanism) {
+          boost::optional<const std::string&> mechanism,
+          boost::optional<const std::string&> topic_user_name,
+          boost::optional<const std::string&> topic_password) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
@@ -566,6 +568,21 @@ public:
       // TODO: increment counter
       ldout(cct, 1) << "Kafka connect: URL parsing failed" << dendl;
       return false;
+    }
+
+    // check if username/password was already supplied via topic attributes
+    // and if also provided as part of the endpoint URL issue a warning
+    if (topic_user_name.has_value()) {
+      if (!user.empty()) {
+        ldout(cct, 5) << "Kafka connect: username provided via both topic attributes and endpoint URL: using topic attributes" << dendl;
+      }
+      user = topic_user_name.get();
+    }
+    if (topic_password.has_value()) {
+      if (!password.empty()) {
+        ldout(cct, 5) << "Kafka connect: password provided via both topic attributes and endpoint URL: using topic attributes" << dendl;
+      }
+      password = topic_password.get();
     }
 
     // this should be validated by the regex in parse_url()
@@ -694,9 +711,11 @@ void shutdown() {
 
 bool connect(std::string& broker, const std::string& url, bool use_ssl, bool verify_ssl,
         boost::optional<const std::string&> ca_location,
-        boost::optional<const std::string&> mechanism) {
+        boost::optional<const std::string&> mechanism,
+        boost::optional<const std::string&> user_name,
+        boost::optional<const std::string&> password) {
   if (!s_manager) return false;
-  return s_manager->connect(broker, url, use_ssl, verify_ssl, ca_location, mechanism);
+  return s_manager->connect(broker, url, use_ssl, verify_ssl, ca_location, mechanism, user_name, password);
 }
 
 int publish(const std::string& conn_name,
