@@ -952,7 +952,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   } else {
     send_sync_notification(
         dpp, store, bucket.get(), obj.get(), obj->get_attrs(),
-        obj->get_obj_size(),
+        obj->get_size(),
         {rgw::notify::ObjectSyncedDelete, rgw::notify::ReplicationDelete});
   }
   return ret;

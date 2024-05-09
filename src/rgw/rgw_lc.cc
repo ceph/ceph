@@ -523,10 +523,10 @@ static bool pass_size_limit_checks(const DoutPrefixProvider *dpp, lc_op_ctx& oc)
     bool lt_p{true};
 
     if (op.size_gt) {
-      gt_p = (obj->get_obj_size() > op.size_gt.get());
+      gt_p = (obj->get_size() > op.size_gt.get());
     }
     if (op.size_lt) {
-      lt_p = (obj->get_obj_size() < op.size_lt.get());
+      lt_p = (obj->get_size() < op.size_lt.get());
     }
 
     return gt_p && lt_p;
@@ -625,7 +625,7 @@ static int remove_expired_obj(const DoutPrefixProvider* dpp,
       fmt::format("ERROR: {} failed, with error: {}", __func__, ret) << dendl;
   } else {
     // send request to notification manager
-    int publish_ret = notify->publish_commit(dpp, obj->get_obj_size(),
+    int publish_ret = notify->publish_commit(dpp, obj->get_size(),
 				 ceph::real_clock::now(),
 				 etag,
 				 version_id);
@@ -922,7 +922,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       ret = mpu->abort(this, cct, null_yield);
       if (ret == 0) {
         int publish_ret = notify->publish_commit(
-            this, sal_obj->get_obj_size(),
+            this, sal_obj->get_size(),
 	    ceph::real_clock::now(),
             etag,
 	    version_id);
@@ -1454,7 +1454,7 @@ public:
       return ret;
     } else {
       // send request to notification manager
-      int publish_ret =  notify->publish_commit(oc.dpp, obj->get_obj_size(),
+      int publish_ret =  notify->publish_commit(oc.dpp, obj->get_size(),
 				    ceph::real_clock::now(),
 				    etag,
 				    version_id);

@@ -355,7 +355,7 @@ struct ObjectMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Id") == 0) {
       pushstring(L, obj->get_oid());
     } else if (strcasecmp(index, "Size") == 0) {
-      lua_pushinteger(L, obj->get_obj_size());
+      lua_pushinteger(L, obj->get_size());
     } else if (strcasecmp(index, "MTime") == 0) {
       pushtime(L, obj->get_mtime());
     } else {

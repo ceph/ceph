@@ -1393,7 +1393,7 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   }
 
   // Skip opening an empty object.
-  if(source->get_obj_size() == 0)
+  if(source->get_size() == 0)
     return 0;
 
   // Open the object here.

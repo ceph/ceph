@@ -944,7 +944,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   baseAttrs.insert({"mtime", bl});
   bl.clear();
 
-  bl.append(std::to_string(obj->get_obj_size()));
+  bl.append(std::to_string(obj->get_size()));
   baseAttrs.insert({"object_size", bl});
   bl.clear();
 

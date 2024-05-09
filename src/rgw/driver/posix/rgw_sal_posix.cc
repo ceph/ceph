@@ -597,7 +597,7 @@ int POSIXObject::fill_bde(const DoutPrefixProvider *dpp, optional_yield y, rgw_b
     bde.ver.epoch = 1;
     bde.exists = true;
     bde.meta.category = RGWObjCategory::Main;
-    bde.meta.size = get_obj_size();
+    bde.meta.size = get_size();
     bde.meta.mtime = get_mtime();
     if (owner) {
       bde.meta.owner = owner->get_id().to_str();
@@ -606,7 +606,7 @@ int POSIXObject::fill_bde(const DoutPrefixProvider *dpp, optional_yield y, rgw_b
       bde.meta.owner = "unknown";
       bde.meta.owner_display_name = "unknown";
     }
-    bde.meta.accounted_size = get_obj_size();
+    bde.meta.accounted_size = get_size();
     bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
     bde.meta.appendable = true;
     bufferlist etag_bl;
@@ -2244,7 +2244,7 @@ int POSIXObject::generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield 
 
 int POSIXObject::generate_etag(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  int64_t left = get_obj_size();
+  int64_t left = get_size();
   int64_t cur_ofs = 0;
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
