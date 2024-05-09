@@ -186,6 +186,7 @@ class ECBackend : public ECCommon {
 
   void kick_reads();
 
+public:
   struct ECRecoveryBackend : RecoveryBackend {
     ECRecoveryBackend(CephContext *cct,
                       const coll_t &coll,
@@ -220,8 +221,8 @@ class ECBackend : public ECCommon {
     PGBackend::Listener *parent;
   };
 
-  friend ostream &operator<<(ostream &lhs,
-                             const RecoveryBackend::RecoveryOp &rhs
+  friend std::ostream &operator<<(std::ostream &lhs,
+                                  const RecoveryBackend::RecoveryOp &rhs
     );
   friend struct RecoveryMessages;
   friend struct OnRecoveryReadComplete;
