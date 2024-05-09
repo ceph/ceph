@@ -464,6 +464,9 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 	marker.message = "failed to authpin, inode is being exported";
       }
       dout(10) << " can't auth_pin (freezing?), waiting to authpin " << *object << dendl;
+      if (CDentry* dn = dynamic_cast<CDentry*>(object)) {
+        dout(10) << " can't auth_pin dir: " << *dn->get_dir() << dendl;
+      }
       object->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 
       if (mdr->is_any_remote_auth_pin())

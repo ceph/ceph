@@ -953,7 +953,7 @@ private:
    */
   int path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 		    const filepath& path, int flags,
-		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr);
+		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr, CDir **pdir = nullptr);
 
   int maybe_request_forward_to_auth(const MDRequestRef& mdr, MDSContextFactory& cf,
 				    MDSCacheObject *p);
@@ -1458,7 +1458,7 @@ private:
   void fragment_unmark_unfreeze_dirs(const std::vector<CDir*>& dirs);
   void fragment_drop_locks(fragment_info_t &info);
   void fragment_maybe_finish(const fragment_info_iterator& it);
-  void dispatch_fragment_dir(const MDRequestRef& mdr);
+  void dispatch_fragment_dir(const MDRequestRef& mdr, bool abort_if_freezing=false);
   void _fragment_logged(const MDRequestRef& mdr);
   void _fragment_stored(const MDRequestRef& mdr);
   void _fragment_committed(dirfrag_t f, const MDRequestRef& mdr);
@@ -1472,6 +1472,7 @@ private:
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 
+  void quiesce_overdrive_fragmenting(CDir* dir, bool async);
   void dispatch_quiesce_path(const MDRequestRef& mdr);
   void dispatch_quiesce_inode(const MDRequestRef& mdr);
 

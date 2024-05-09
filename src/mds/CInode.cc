@@ -5598,4 +5598,11 @@ void CInode::get_subtree_dirfrags(std::vector<CDir*>& v) const
   }
 }
 
+bool CInode::will_block_for_quiesce(const MDRequestRef& mdr) {
+  if (mdr && mdr->is_wrlocked(&quiescelock)) {
+    return false;
+  }
+  return !quiescelock.can_wrlock();
+}
+
 MEMPOOL_DEFINE_OBJECT_FACTORY(CInode, co_inode, mds_co);
