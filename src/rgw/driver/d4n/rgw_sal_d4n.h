@@ -103,6 +103,9 @@ class D4NFilterObject : public FilterObject {
     std::string version;
     std::string prefix;
     rgw_obj obj;
+    rgw::sal::Object* dest_object{nullptr}; //for copy-object
+    rgw::sal::Bucket* dest_bucket{nullptr}; //for copy-object
+    std::string dest_version;
   public:
     struct D4NFilterReadOp : FilterReadOp {
       public:
@@ -179,6 +182,35 @@ class D4NFilterObject : public FilterObject {
 								    driver(_driver) {}
     virtual ~D4NFilterObject() = default;
 
+    virtual int copy_object(const ACLOwner& owner,
+                              const rgw_user& remote_user,
+                              req_info* info,
+                              const rgw_zone_id& source_zone,
+                              rgw::sal::Object* dest_object,
+                              rgw::sal::Bucket* dest_bucket,
+                              rgw::sal::Bucket* src_bucket,
+                              const rgw_placement_rule& dest_placement,
+                              ceph::real_time* src_mtime,
+                              ceph::real_time* mtime,
+                              const ceph::real_time* mod_ptr,
+                              const ceph::real_time* unmod_ptr,
+                              bool high_precision_time,
+                              const char* if_match,
+                              const char* if_nomatch,
+                              AttrsMod attrs_mod,
+                              bool copy_if_newer,
+                              Attrs& attrs,
+                              RGWObjCategory category,
+                              uint64_t olh_epoch,
+                              boost::optional<ceph::real_time> delete_at,
+                              std::string* version_id,
+                              std::string* tag,
+                              std::string* etag,
+                              void (*progress_cb)(off_t, void *),
+                              void* progress_data,
+                              const DoutPrefixProvider* dpp,
+                              optional_yield y) override;
+
     virtual const std::string &get_name() const override { return next->get_name(); }
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags) override;
@@ -203,6 +235,8 @@ class D4NFilterObject : public FilterObject {
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version);
     int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, bool is_latest_version = true, bool dirty = false);
     bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, optional_yield y);
+    rgw::sal::Bucket* get_destination_bucket(const DoutPrefixProvider* dpp) { return dest_bucket;}
+    rgw::sal::Object* get_destination_object(const DoutPrefixProvider* dpp) { return dest_object; }
 };
 
 class D4NFilterWriter : public FilterWriter {
