@@ -1,0 +1,25 @@
+teuthology:
+  premerge: |
+            local branch = yaml.teuthology.branch
+            if tostring(branch) == "nautilus" then
+              yaml_fragment['tasks'][2]['install.upgrade']['client.0']['branch'] = "pacific"
+            elseif tostring(branch) == "pacific" then
+              yaml_fragment['tasks'][2]['install.upgrade']['client.0']['branch'] = "reef"
+            else
+              error("invalid source branch")
+            end
+  postmerge:
+    - if not is_fuse() then reject() end
+tasks:
+- ceph-fuse:
+    client.0:
+      mounted: false
+- print: "**** done unmount client.0"
+- install.upgrade:
+    client.0:
+      branch: []
+- print: "**** done install.upgrade on client.0"
+- ceph.healthy:
+- ceph-fuse:
+    client.0:
+- print: "**** done remount client.0"
