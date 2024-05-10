@@ -48,6 +48,8 @@ class Redis(Task):
     def redis_startup(self):
         try:
             for client in self.all_clients:
+                log.debug('Redis Task: Starting Redis server')
+
                 self.ctx.cluster.only(client).run(
                     args=[
                         'sudo',
