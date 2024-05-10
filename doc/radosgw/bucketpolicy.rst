@@ -36,60 +36,87 @@ For example, one may use s3cmd to set or delete a policy thus::
 Limitations
 ===========
 
-Currently, we support only the following actions:
+.. note:: This list of S3 actions is accurate only for the Squid release of
+   Ceph. If you are using a different release of Ceph, the list of supported S3
+   actions will be different.
 
-- s3:AbortMultipartUpload
-- s3:CreateBucket
-- s3:DeleteBucketPolicy
-- s3:DeleteBucket
-- s3:DeleteBucketWebsite
-- s3:DeleteObject
-- s3:DeleteObjectVersion
-- s3:DeleteReplicationConfiguration
-- s3:GetAccelerateConfiguration
-- s3:GetBucketAcl
-- s3:GetBucketCORS
-- s3:GetBucketLocation
-- s3:GetBucketLogging
-- s3:GetBucketNotification
-- s3:GetBucketPolicy
-- s3:GetBucketRequestPayment
-- s3:GetBucketTagging
-- s3:GetBucketVersioning
-- s3:GetBucketWebsite
-- s3:GetLifecycleConfiguration
-- s3:GetObjectAcl
-- s3:GetObject
-- s3:GetObjectTorrent
-- s3:GetObjectVersionAcl
-- s3:GetObjectVersion
-- s3:GetObjectVersionTorrent
-- s3:GetReplicationConfiguration
-- s3:IPAddress
-- s3:NotIpAddress
-- s3:ListAllMyBuckets
-- s3:ListBucketMultipartUploads
-- s3:ListBucket
-- s3:ListBucketVersions
-- s3:ListMultipartUploadParts
-- s3:PutAccelerateConfiguration
-- s3:PutBucketAcl
-- s3:PutBucketCORS
-- s3:PutBucketLogging
-- s3:PutBucketNotification
-- s3:PutBucketPolicy
-- s3:PutBucketRequestPayment
-- s3:PutBucketTagging
-- s3:PutBucketVersioning
-- s3:PutBucketWebsite
-- s3:PutLifecycleConfiguration
-- s3:PutObjectAcl
-- s3:PutObject
-- s3:PutObjectVersionAcl
-- s3:PutReplicationConfiguration
-- s3:RestoreObject
+In Squid only the following actions are supported:
 
-We do not yet support setting policies on users, groups, or roles.
+- ``s3:GetObject``
+- ``s3:GetObjectVersion``
+- ``s3:PutObject``
+- ``s3:GetObjectAcl``
+- ``s3:GetObjectVersionAcl``
+- ``s3:PutObjectAcl``
+- ``s3:PutObjectVersionAcl``
+- ``s3:DeleteObject``
+- ``s3:DeleteObjectVersion``
+- ``s3:ListMultipartUploadParts``
+- ``s3:AbortMultipartUpload``
+- ``s3:GetObjectTorrent``
+- ``s3:GetObjectVersionTorrent``
+- ``s3:RestoreObject``
+- ``s3:CreateBucket``
+- ``s3:DeleteBucket``
+- ``s3:ListBucket``
+- ``s3:ListBucketVersions``
+- ``s3:ListAllMyBuckets``
+- ``s3:ListBucketMultipartUploads``
+- ``s3:GetAccelerateConfiguration``
+- ``s3:PutAccelerateConfiguration``
+- ``s3:GetBucketAcl``
+- ``s3:PutBucketAcl``
+- ``s3:GetBucketOwnershipControls``
+- ``s3:PutBucketOwnershipControls``
+- ``s3:GetBucketCORS``
+- ``s3:PutBucketCORS``
+- ``s3:GetBucketVersioning``
+- ``s3:PutBucketVersioning``
+- ``s3:GetBucketRequestPayment``
+- ``s3:PutBucketRequestPayment``
+- ``s3:GetBucketLocation``
+- ``s3:GetBucketPolicy``
+- ``s3:DeleteBucketPolicy``
+- ``s3:PutBucketPolicy``
+- ``s3:GetBucketNotification``
+- ``s3:PutBucketNotification``
+- ``s3:GetBucketLogging``
+- ``s3:PutBucketLogging``
+- ``s3:GetBucketTagging``
+- ``s3:PutBucketTagging``
+- ``s3:GetBucketWebsite``
+- ``s3:PutBucketWebsite``
+- ``s3:DeleteBucketWebsite``
+- ``s3:GetLifecycleConfiguration``
+- ``s3:PutLifecycleConfiguration``
+- ``s3:PutReplicationConfiguration``
+- ``s3:GetReplicationConfiguration``
+- ``s3:DeleteReplicationConfiguration``
+- ``s3:GetObjectTagging``
+- ``s3:PutObjectTagging``
+- ``s3:DeleteObjectTagging``
+- ``s3:GetObjectVersionTagging``
+- ``s3:PutObjectVersionTagging``
+- ``s3:DeleteObjectVersionTagging``
+- ``s3:PutBucketObjectLockConfiguration``
+- ``s3:GetBucketObjectLockConfiguration``
+- ``s3:PutObjectRetention``
+- ``s3:GetObjectRetention``
+- ``s3:PutObjectLegalHold``
+- ``s3:GetObjectLegalHold``
+- ``s3:BypassGovernanceRetention``
+- ``s3:GetBucketPolicyStatus``
+- ``s3:PutPublicAccessBlock``
+- ``s3:GetPublicAccessBlock``
+- ``s3:DeletePublicAccessBlock``
+- ``s3:GetBucketPublicAccessBlock``
+- ``s3:PutBucketPublicAccessBlock``
+- ``s3:DeleteBucketPublicAccessBlock``
+- ``s3:GetBucketEncryption``
+- ``s3:PutBucketEncryption``
+- ``s3:DescribeJob``
+- ``s3:objectlambdaGetObject``
+- ``s3:objectlambdaListBucket``
 
 We use the RGW ‘tenant’ identifier in place of the Amazon twelve-digit
 account ID. In the future we may allow you to assign an account ID to
