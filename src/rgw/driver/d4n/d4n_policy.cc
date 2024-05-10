@@ -150,8 +150,11 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
     }
   
     float minAvgWeight = std::stof(std::get<0>(resp).value()[0]) / std::stof(std::get<0>(resp).value()[1]);
+    float localAvgWeight = 0;
+    if (entries_map.size())
+      localAvgWeight = static_cast<float>(weightSum) / static_cast<float>(entries_map.size());
 
-    if ((static_cast<float>(weightSum) / static_cast<float>(entries_map.size())) < minAvgWeight) { /* Set new minimum weight */
+    if (localAvgWeight < minAvgWeight) { /* Set new minimum weight */
       try { 
 	boost::system::error_code ec;
 	response<ignore_t> resp;
