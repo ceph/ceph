@@ -6569,7 +6569,7 @@ int BlueStore::_read_bdev_label(
   bufferlist bl;
   unique_ptr<char> buf(new char[BDEV_LABEL_BLOCK_SIZE]);
   uint64_t dev_size = bdev->get_size();
-  if (dev_size <= disk_position + BDEV_LABEL_BLOCK_SIZE) {
+  if (dev_size < disk_position + BDEV_LABEL_BLOCK_SIZE) {
     dout(10) << __func__ << " position=0x" << std::hex << disk_position
       << " dev size=0x" << dev_size << std::dec << dendl;
     return 1;
@@ -6579,6 +6579,7 @@ int BlueStore::_read_bdev_label(
     derr << __func__ << " failed to read from " << path
          << " at 0x" << std::hex << disk_position << std::dec
          <<": " << cpp_strerror(r) << dendl;
+    return -EIO;
   }
 
   bl.append(buf.get(), BDEV_LABEL_BLOCK_SIZE);
@@ -8422,11 +8423,11 @@ int BlueStore::mkfs()
   if (cct->_conf.get_val<bool>("bluestore_bdev_label_multi")) {
     // take space for other bdev label copies
     for (size_t i = 1; i < bdev_label_positions.size(); i++) {
-    uint64_t location = bdev_label_positions[i];
-    uint64_t size = p2roundup(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
-    if (location + size > bdev->get_size()) continue;
-    ceph_assert(p2align(location, min_alloc_size) == location);
-    alloc->init_rm_free(location, size);
+      uint64_t location = bdev_label_positions[i];
+      uint64_t size = p2roundup(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+      if (location + size > bdev->get_size()) continue;
+      ceph_assert(p2align(location, min_alloc_size) == location);
+      alloc->init_rm_free(location, size);
     }
   }
 
