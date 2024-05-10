@@ -1101,7 +1101,7 @@ void RGWOp_BILog_Status::execute(optional_yield y)
     }
 
     if (status.inc_status.empty()) {
-      status.inc_status = std::move(current_status);
+      std::swap(status.inc_status, current_status);
     } else {
       if (current_status.size() != status.inc_status.size()) {
         op_ret = -EINVAL;
