@@ -252,8 +252,13 @@ def handle_clone_failed(fs_client, volspec, volname, index, groupname, subvolnam
 
 def handle_clone_complete(fs_client, volspec, volname, index, groupname, subvolname, should_cancel):
     try:
-        with open_clone_sv_pair_in_vol(fs_client, volspec, volname,
-                groupname, subvolname) as (subvol0, subvol1, subvol2):
+        # XXX: lockless because when multiple cloning jobs are ongoing, there
+        # will be a race among them to write the subvolume's metadata file.
+        # thereby, resulting in overwrites where updates (to the meta file) by
+        # previous cloner thread gets deleted.
+        with open_clone_sv_pair_in_vol(
+                fs_client, volspec, volname, groupname, subvolname,
+                lockless=False) as (subvol0, subvol1, subvol2):
             subvol1.detach_snapshot(subvol2, index)
             subvol0.remove_clone_source(flush=True)
     except (MetadataMgrException, VolumeException) as e:
