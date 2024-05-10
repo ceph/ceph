@@ -219,6 +219,7 @@ int ObjectDirectory::copy(const DoutPrefixProvider* dpp, CacheObj* object, std::
     if (std::get<0>(std::get<3>(resp).value()).value().value() == 1) {
       return 0;
     } else {
+      ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "(): No values copied." << dendl;
       return -ENOENT;
     }
   } catch (std::exception &e) {
@@ -233,11 +234,16 @@ int ObjectDirectory::del(const DoutPrefixProvider* dpp, CacheObj* object, option
 
   try {
     boost::system::error_code ec;
-    response<ignore_t> resp;
+    response<int> resp;
     request req;
     req.push("DEL", key);
 
     redis_exec(conn, ec, req, resp, y);
+
+    if (!std::get<0>(resp).value()) {
+      ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "(): No values deleted." << dendl;
+      return -ENOENT;
+    }
 
     if (ec) {
       ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -259,7 +265,7 @@ int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* objec
     try {
       if (field == "hosts") {
 	/* Append rather than overwrite */
-	ldpp_dout(dpp, 20) << "ObjectDirectory::" << __func__ << "() Appending to hosts list." << dendl;
+	ldpp_dout(dpp, 20) << "ObjectDirectory::" << __func__ << "(): Appending to hosts list." << dendl;
 
 	boost::system::error_code ec;
 	response<std::string> resp;
@@ -280,7 +286,7 @@ int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* objec
       } else if (field == "dirty") { 
 	int ret = -1;
 	if ((ret = check_bool(value)) != -EINVAL) {
-	  bool val = (ret != 0);
+          bool val = (ret != 0);
 	  value = std::to_string(val);
 	} else {
 	  ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "() ERROR: Invalid bool value" << dendl;
@@ -306,6 +312,7 @@ int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* objec
       return -EINVAL;
     }
   } else {
+    ldpp_dout(dpp, 0) << "ObjectDirectory::" << __func__ << "(): Object does not exist." << dendl;
     return -ENOENT;
   }
 }
@@ -345,7 +352,7 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
      Sets completely overwrite existing values. */
   std::string key = build_index(block);
     
-  std::string endpoint;
+  std::string entries;
   std::list<std::string> redisValues;
     
   /* Creating a redisValues of the entry's properties */
@@ -353,6 +360,29 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
   redisValues.push_back(std::to_string(block->blockID));
   redisValues.push_back("version");
   redisValues.push_back(block->version);
+  redisValues.push_back("deleteMarker");
+  int ret = -1;
+  if ((ret = check_bool(std::to_string(block->deleteMarker))) != -EINVAL) {
+    block->deleteMarker = (ret != 0);
+  } else {
+    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: Invalid bool value for delete marker" << dendl;
+    return -EINVAL;
+  }
+  redisValues.push_back(std::to_string(block->deleteMarker));
+  redisValues.push_back("prevVersion");
+  std::string prevVersion;
+  if (block->prevVersion) {
+    bool deleteMarker;
+    if ((ret = check_bool(std::to_string(block->prevVersion->second))) != -EINVAL) {
+      deleteMarker = (ret != 0);
+    } else {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: Invalid bool value for previous delete marker" << dendl;
+      return -EINVAL;
+    }
+
+    prevVersion = std::to_string(deleteMarker) + ":" + block->prevVersion->first;
+  }
+  redisValues.push_back(prevVersion);
   redisValues.push_back("size");
   redisValues.push_back(std::to_string(block->size));
   redisValues.push_back("globalWeight");
@@ -364,7 +394,6 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
   redisValues.push_back("creationTime");
   redisValues.push_back(block->cacheObj.creationTime); 
   redisValues.push_back("dirty");
-  int ret = -1;
   if ((ret = check_bool(std::to_string(block->cacheObj.dirty))) != -EINVAL) {
     block->cacheObj.dirty = (ret != 0);
   } else {
@@ -374,18 +403,18 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, option
   redisValues.push_back(std::to_string(block->cacheObj.dirty));
   redisValues.push_back("hosts");
   
-  endpoint.clear();
+  entries.clear();
   for (auto const& host : block->cacheObj.hostsList) {
-    if (endpoint.empty())
-      endpoint = host + "_";
+    if (entries.empty())
+      entries = host + "_";
     else
-      endpoint = endpoint + host + "_";
+      entries = entries + host + "_";
   }
 
-  if (!endpoint.empty())
-    endpoint.pop_back();
+  if (!entries.empty())
+    entries.pop_back();
 
-  redisValues.push_back(endpoint);
+  redisValues.push_back(entries);
 
   try {
     boost::system::error_code ec;
@@ -416,6 +445,8 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
 
   fields.push_back("blockID");
   fields.push_back("version");
+  fields.push_back("deleteMarker");
+  fields.push_back("prevVersion");
   fields.push_back("size");
   fields.push_back("globalWeight");
 
@@ -445,13 +476,20 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, option
 
     block->blockID = std::stoull(std::get<0>(resp).value().value()[0]);
     block->version = std::get<0>(resp).value().value()[1];
-    block->size = std::stoull(std::get<0>(resp).value().value()[2]);
-    block->globalWeight = std::stoull(std::get<0>(resp).value().value()[3]);
-    block->cacheObj.objName = std::get<0>(resp).value().value()[4];
-    block->cacheObj.bucketName = std::get<0>(resp).value().value()[5];
-    block->cacheObj.creationTime = std::get<0>(resp).value().value()[6];
-    block->cacheObj.dirty =(std::stoi(std::get<0>(resp).value().value()[7]) != 0);
-    boost::split(block->cacheObj.hostsList, std::get<0>(resp).value().value()[8], boost::is_any_of("_"));
+    block->deleteMarker = (std::stoi(std::get<0>(resp).value().value()[2]) != 0);
+    auto version = std::get<0>(resp).value().value()[3];
+    if (!version.empty()) {
+      std::vector<std::string> versionSet;
+      boost::split(versionSet, version, boost::is_any_of(":"));
+      block->prevVersion = std::pair<std::string, bool>(versionSet[1], std::stoi(versionSet[0]));
+    }
+    block->size = std::stoull(std::get<0>(resp).value().value()[4]);
+    block->globalWeight = std::stoull(std::get<0>(resp).value().value()[5]);
+    block->cacheObj.objName = std::get<0>(resp).value().value()[6];
+    block->cacheObj.bucketName = std::get<0>(resp).value().value()[7];
+    block->cacheObj.creationTime = std::get<0>(resp).value().value()[8];
+    block->cacheObj.dirty = (std::stoi(std::get<0>(resp).value().value()[9]) != 0);
+    boost::split(block->cacheObj.hostsList, std::get<0>(resp).value().value()[10], boost::is_any_of("_"));
   } catch (std::exception &e) {
     ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
     return -EINVAL;
@@ -491,6 +529,7 @@ int BlockDirectory::copy(const DoutPrefixProvider* dpp, CacheBlock* block, std::
     if (std::get<0>(std::get<3>(resp).value()).value().value() == 1) {
       return 0;
     } else {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): No values copied." << dendl;
       return -ENOENT;
     }
   } catch (std::exception &e) {
@@ -505,11 +544,16 @@ int BlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, option
 
   try {
     boost::system::error_code ec;
-    response<ignore_t> resp;
+    response<int> resp;
     request req;
     req.push("DEL", key);
 
     redis_exec(conn, ec, req, resp, y);
+
+    if (!std::get<0>(resp).value()) {
+      ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): No values deleted." << dendl;
+      return -ENOENT;
+    }
 
     if (ec) {
       ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -578,6 +622,7 @@ int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* bloc
       return -EINVAL;
     }
   } else {
+    ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): Block does not exist." << dendl;
     return -ENOENT;
   }
 }
@@ -610,6 +655,7 @@ int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block
       if (it != std::string::npos) { 
 	result.erase(result.begin() + it, result.begin() + it + delValue.size());
       } else {
+	ldpp_dout(dpp, 0) << "BlockDirectory::" << __func__ << "(): Host was not found." << dendl;
 	return -ENOENT;
       }
 
