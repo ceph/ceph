@@ -57,6 +57,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	},
         .blockID = 0,
 	.version = "",
+	.deleteMarker = false,
 	.size = bl.length(),
 	.globalWeight = 0
       };
@@ -210,6 +211,8 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
       },
       .blockID = 0,
       .version = "",
+      .deleteMarker = false,
+      .prevVersion = {},
       .size = bl.length(),
       .globalWeight = 5,
     };

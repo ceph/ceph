@@ -277,7 +277,8 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
 {
   rgw::sal::Attrs attrs;
   std::string head_oid_in_cache;
-  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, y)) {
+  rgw::d4n::CacheBlock block;
+  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
     if (setattrs != nullptr) {
       /* Ensure setattrs and delattrs do not overlap */
       if (delattrs != nullptr) {
@@ -311,6 +312,11 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
       }
     } //if delattrs != nullptr
   } else {
+    if (block.deleteMarker) {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
+      return -ENOENT;
+    }
+
     auto ret = next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): set_obj_attrs method of backend store failed with ret: " << ret << dendl;
@@ -320,13 +326,16 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
   return 0;
 }
 
-bool D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y)
+int D4NFilterObject::get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y)
 {
   std::string head_oid_in_cache;
   rgw::sal::Attrs attrs;
-  bool found_in_cache = check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, y);
+  rgw::d4n::CacheBlock block;
+  bool found_in_cache = check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y);
 
-  if (found_in_cache) {
+  if (block.deleteMarker) {
+    return -ENOENT;
+  } else if (found_in_cache) {
     /* Set metadata locally */
 
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): obj is: " << this->get_obj().key.name << dendl;
@@ -428,7 +437,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optio
 {
   ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object name: " << this->get_name() << " bucket name: " << this->get_bucket()->get_name() << dendl;
   // entry that contains latest version for versioned and non-versioned objects
-  int ret = 0;
+  int ret = -1;
   rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
   if (is_latest_version) {
     rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
@@ -444,9 +453,26 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optio
       .version = this->get_object_version(),
       .size = 0,
       };
-    ret = blockDir->set(dpp, &block, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object with ret: " << ret << dendl;
+
+    ret = blockDir->get(dpp, &block, y);
+    if (ret == -ENOENT) {
+      ret = blockDir->set(dpp, &block, y);
+      if (ret < 0) {
+	ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object with ret: " << ret << dendl;
+      }
+    } else if (ret == 0) { // head object exists; update instead of overwrite
+      block.prevVersion = {block.version, block.deleteMarker};
+      block.version = this->get_object_version();
+      block.deleteMarker = false;
+      block.cacheObj.dirty = dirty;
+      block.cacheObj.hostsList.insert({ dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address });
+
+      ret = blockDir->set(dpp, &block, y);
+      if (ret < 0) {
+	ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object with ret: " << ret << dendl;
+      }
+    } else {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory get method failed for head object with ret: " << ret << dendl;
     }
   }
 
@@ -468,20 +494,36 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optio
       .size = 0,
     };
 
-    auto ret = blockDir->set(dpp, &version_block, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object with ret: " << ret << dendl;
+    ret = blockDir->get(dpp, &version_block, y);
+    if (ret == -ENOENT) {
+      ret = blockDir->set(dpp, &version_block, y);
+      if (ret < 0) {
+	ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object with ret: " << ret << dendl;
+      }
+    } else if (ret == 0) { // head object exists; update instead of overwrite
+      version_block.prevVersion = {version_block.version, version_block.deleteMarker};
+      version_block.version = this->get_object_version();
+      version_block.deleteMarker = false;
+      version_block.cacheObj.dirty = dirty;
+      version_block.cacheObj.hostsList.insert({ dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address });
+
+      ret = blockDir->set(dpp, &version_block, y);
+      if (ret < 0) {
+	ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory set method failed for head object with ret: " << ret << dendl;
+      }
+    } else {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory get method failed for head object with ret: " << ret << dendl;
     }
   }
 
   return ret;
 }
 
-bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, optional_yield y)
+bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y)
 {
   rgw::d4n::BlockDirectory* blockDir = this->driver->get_block_dir();
   rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
-        .objName = this->get_oid(), //version-enabled buckets will not have version for latest version, so this will work even when versio is not provided in input
+        .objName = this->get_oid(), //version-enabled buckets will not have version for latest version, so this will work even when version is not provided in input
         .bucketName = this->get_bucket()->get_name(),
         };
 
@@ -492,9 +534,14 @@ bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvide
           };
 
   bool found_in_cache = true;
-  int ret = -1;
+  int ret;
   //if the block corresponding to head object does not exist in directory, implies it is not cached
-  if ((ret = blockDir->get(dpp, &block, y) == 0)) {
+  if ((ret = blockDir->get(dpp, &block, y)) == 0) {
+    blk = block;
+    if (block.deleteMarker) {
+      return false;
+    }
+
     std::string version;
     version = block.version;
     this->set_object_version(version);
@@ -532,7 +579,12 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
   if (this->have_instance()) {
     is_latest_version = false;
   }
-  if (!get_obj_attrs_from_cache(dpp, y)) {
+  
+  int ret;
+  if ((ret = get_obj_attrs_from_cache(dpp, y)) == -ENOENT) {
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): " << " object " << this->get_name() << " does not exist." << dendl;
+    return -ENOENT;
+  } else if (!ret) {
     if(perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_misses);
     }
@@ -601,12 +653,18 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
   update[(std::string)attr_name] = attr_val;
   std::string head_oid_in_cache;
   rgw::sal::Attrs attrs;
-  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, y)) {
+  rgw::d4n::CacheBlock block;
+  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
     if (auto ret = driver->get_cache_driver()->update_attrs(dpp, head_oid_in_cache, update, y); ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): CacheDriver update_attrs method failed with ret: " << ret << dendl;
       return ret;
     }
   } else {
+    if (block.deleteMarker) {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
+      return -ENOENT;
+    }
+
     auto ret = next->modify_obj_attrs(attr_name, attr_val, y, dpp, flags);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): modify_obj_attrs of backend store failed with ret: " << ret << dendl;
@@ -623,7 +681,8 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
   std::string head_oid_in_cache;
   rgw::sal::Attrs attrs;
   Attrs delattr;
-  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, y)) {
+  rgw::d4n::CacheBlock block;
+  if (check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y)) {
     delattr.insert({attr_name, bl});
     Attrs currentattrs = this->get_attrs();
     rgw::sal::Attrs::iterator attr = delattr.begin();
@@ -638,6 +697,11 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
       }
     }
   } else {
+    if (block.deleteMarker) {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): object " << this->get_name() << " does not exist." << dendl;
+      return -ENOENT;
+    }
+
     if (auto ret = next->delete_obj_attrs(dpp, attr_name, y); ret < 0) {
       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): delete_obj_attrs method of backend store failed with ret: " << ret << dendl;
       return ret;
@@ -686,9 +750,14 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
   //set a flag to show that incoming instance has no version specified
   bool is_latest_version = true;
   if (source->have_instance()) {
-    is_latest_version = false;
+    is_latest_version = false; 
   }
-  if (!source->get_obj_attrs_from_cache(dpp, y)) {
+
+  int ret;
+  if ((ret = source->get_obj_attrs_from_cache(dpp, y)) == -ENOENT) {
+    ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::" << __func__ << "(): object " << source->get_name() << " does not exist." << dendl;
+    return -ENOENT;
+  } else if (!ret) {
     if(perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_misses);
     }
@@ -817,7 +886,7 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
       std::string oid_in_cache = prefix + "_" + std::to_string(ofs) + "_" + std::to_string(len);
 
       if (source->driver->get_block_dir()->get(dpp, &block, y) == 0){
-        if (block.cacheObj.dirty){
+        if (block.cacheObj.dirty){ 
           dirty = true;
         }
       }
@@ -834,7 +903,7 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
         dest_block.size = len;
         dest_block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
         dest_block.version = source->dest_version;
-	dest_block.cacheObj.dirty = true;
+        dest_block.cacheObj.dirty = true;
         std::string key = source->dest_bucket->get_name() + "_" + source->dest_version + "_" + source->dest_object->get_name() +
                                         "_" + std::to_string(ofs) + "_" + std::to_string(len);
         std::string dest_oid_in_cache = "D_" + key;
@@ -937,14 +1006,14 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
     " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
-    int ret = -1;
+    int ret;
     if ((ret = source->driver->get_block_dir()->get(dpp, &block, y)) == 0) { 
       auto it = block.cacheObj.hostsList.find(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
 
       if (it != block.cacheObj.hostsList.end()) { /* Local copy */
 	ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Block found in directory. " << oid_in_cache << dendl;
         std::string key = oid_in_cache;
-	ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: block is dirty = " << block.cacheObj.dirty << dendl;
+        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: block is dirty = " << block.cacheObj.dirty << dendl;
 
         if (block.cacheObj.dirty == true) { 
           key = "D_" + oid_in_cache; // we keep track of dirty data in the cache for the metadata failure case
@@ -1430,47 +1499,218 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
                                                    optional_yield y, uint32_t flags)
 {
-  /*
-  1. Check if object exists in Object Directory
-  2. get dirty flag and version to construct the oid in cache correctly 
-  3. loop and delete all blocks in the cache
-  4. delete the head block
-  5. Update the in memory data structure for all blocks, and update the block directory also
-  6. Update the in memory data structure for head block, and update the block directory also
-  7. If the blocks reside in other caches, send remote request for the same
-  8. Need to figure out a way to get all versions to be deleted in case of versioned objects when a version is not specified.
-  9. If the object is not in object directory call next->delete_obj
-  */
-  rgw::d4n::CacheObj obj = rgw::d4n::CacheObj{ // TODO: Add logic to ObjectDirectory del method to also delete all blocks belonging to that object
-			     .objName = source->get_key().get_oid(),
-			     .bucketName = source->get_bucket()->get_name()
-			   };
+  // TODO: 
+  // 1. Send delete request to cache nodes with remote copies
+  // 2. See if we can derive dirty flag from the head block 
+  // 3. Add lock so cleaning method doesn't remove "D_" prefix
 
-  int ret = -1;
-  if ((ret = source->driver->get_obj_dir()->del(dpp, &obj, y)) < 0) 
-    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): ObjectDirectory del() method failed, ret=" << ret << dendl;
+  rgw::sal::Attrs attrs;
+  std::string head_oid_in_cache;
+  rgw::d4n::CacheBlock block;
+  if (!source->check_head_exists_in_cache_get_oid(dpp, head_oid_in_cache, attrs, block, y) && !block.deleteMarker) {
+    ldpp_dout(dpp, 0) << "D4NFilterObject::D4NFilterDeleteOp::" << __func__ << "(): calling next delete_obj" << dendl;
+    return next->delete_obj(dpp, y, flags);
+  } else {
+    int ret;
+    bool objDirty = false;
+    auto blockDir = source->driver->get_block_dir(); 
+    std::string version, policy_prefix;
 
-  Attrs::iterator attrs;
-  Attrs currentattrs = source->get_attrs();
-  std::vector<std::string> currentFields;
-  
-  /* Extract fields from current attrs */
-  for (attrs = currentattrs.begin(); attrs != currentattrs.end(); ++attrs) {
-    currentFields.push_back(attrs->first);
+    if (!source->get_bucket()->versioned()) {
+      version = source->get_object_version(); 
+    } else if (source->get_bucket()->versioned() && !source->have_instance()) {
+      rgw::d4n::CacheBlock deleteBlock;
+      block.prevVersion = std::pair<std::string, bool>(block.version, block.deleteMarker);
+      block.deleteMarker = true;
+
+      if (source->get_bucket()->versioned() && !source->get_bucket()->versioning_enabled()) { // if versioning is suspended
+        block.version = "null"; 
+      } else {
+	// create a delete marker
+	enum { OBJ_INSTANCE_LEN = 32 };
+	char buf[OBJ_INSTANCE_LEN + 1];
+	gen_rand_alphanumeric_no_underscore(dpp->get_cct(), buf, OBJ_INSTANCE_LEN);
+        block.version = buf; // using gen_rand_alphanumeric_no_underscore for the time being
+      } 
+      
+      deleteBlock = block;
+      deleteBlock.cacheObj.objName = "_:" + deleteBlock.version + "_" + deleteBlock.cacheObj.objName; // since the request has no instance,
+												      // the oid does not contain the version
+
+      if ((ret = blockDir->set(dpp, &deleteBlock, y)) == 0) {
+	if ((ret = blockDir->set(dpp, &block, y)) < 0) {
+	  ldpp_dout(dpp, 0) << "Failed to set head object in block directory for: " << source->get_key().get_oid() << ", ret=" << ret << dendl;
+	  return ret;
+	}
+      } else {
+	ldpp_dout(dpp, 0) << "Failed to set delete marker block in block directory for: " << source->get_key().get_oid() << ", ret=" << ret << dendl;
+	return ret;
+      }
+
+      return 0;
+    } else {
+      version = source->get_instance();
+    }
+
+    policy_prefix = head_oid_in_cache;
+    if (block.cacheObj.dirty) { // head object dirty flag represents object dirty flag
+      objDirty = true;
+      policy_prefix.erase(0, 2); // remove "D_" prefix from policy key
+    }    
+
+    if (block.deleteMarker == false) { // provided version is not a delete marker and contains data
+      if (source->get_bucket()->versioned()) { 
+	if (blockDir->del(dpp, &block, y) == 0) { // delete versioned head object
+	  if ((ret = source->driver->get_cache_driver()->delete_data(dpp, head_oid_in_cache, y)) == 0) { // Sam: do we want del or delete_data here? 
+	    if (!(ret = source->driver->get_policy_driver()->get_cache_policy()->erase(dpp, policy_prefix, y))) {
+	      ldpp_dout(dpp, 0) << "Failed to delete head policy entry for: " << source->get_key().get_oid() << ", ret=" << ret << dendl;
+	      return ret;
+	    }
+	  } else {
+	    ldpp_dout(dpp, 0) << "Failed to delete head object for: " << source->get_key().get_oid() << ", ret=" << ret << dendl;
+	    return ret;
+	  }
+        } else {
+	  ldpp_dout(dpp, 0) << "Failed to delete versioned head object in block directory for: " << source->get_key().get_oid() << ", ret=" << ret << dendl;
+	  return ret;
+	}
+
+	auto headObj = block;
+	headObj.cacheObj.objName = source->get_name();
+	ret = blockDir->get(dpp, &headObj, y); // retrieve head object
+	if (!block.prevVersion && ret == 0 && headObj.version == version) { // if the latest version matches the provided version and there are no 
+									    // previous versions left, this is the last version of the object
+	  ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterDeleteOp::" << __func__ << "(): No previous version found; deleting head object" << dendl;
+
+	  if ((ret = blockDir->del(dpp, &headObj, y)) < 0) { // delete head object
+	    ldpp_dout(dpp, 0) << "Failed to delete head object in block directory for: " << source->get_key().get_oid() << ", ret=" << ret << dendl;
+	    return ret;
+	  }
+	} else if (ret == 0 && headObj.version == version) { // provided version is current version to be deleted; make previous version the current version 
+	  headObj.version = headObj.prevVersion->first;
+	  headObj.deleteMarker = headObj.prevVersion->second;
+          headObj.prevVersion = block.prevVersion;
+	} else if (ret < 0) {
+	  ldpp_dout(dpp, 0) << "Failed to retrieve head object directory entry for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+	  return ret;
+	}
+      } else {
+	if ((ret = blockDir->del(dpp, &block, y)) == 0) { // delete head object
+	  if ((ret = source->driver->get_cache_driver()->delete_data(dpp, head_oid_in_cache, y)) == 0) { // Sam: do we want del or delete_data here? 
+	    if (!(ret = source->driver->get_policy_driver()->get_cache_policy()->erase(dpp, policy_prefix, y))) {
+	      ldpp_dout(dpp, 0) << "Failed to delete head policy entry for: " << source->get_key().get_oid() << ", ret=" << ret << dendl;
+	      return ret;
+	    }
+	  } else {
+	    ldpp_dout(dpp, 0) << "Failed to delete head object for: " << source->get_key().get_oid() << ", ret=" << ret << dendl;
+	    return ret;
+	  }
+	} else {
+	  ldpp_dout(dpp, 0) << "Failed to delete head object in block directory for: " << source->get_key().get_oid() << ", ret=" << ret << dendl;
+	  return ret;
+	}
+      }
+
+      if ((ret = source->driver->get_obj_dir()->del(dpp, &block.cacheObj, y)) < 0) {
+	ldpp_dout(dpp, 0) << "Failed to delete object directory entry for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+	return ret;
+      }
+      
+      std::string size;
+      if (attrs.find("user.rgw.object_size") != attrs.end()) {
+	size = attrs.find("user.rgw.object_size")->second.to_str();
+      } else {
+	ldpp_dout(dpp, 0) << "Failed to retrieve size for for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+        return -EINVAL;
+      }
+      off_t lst = std::stoi(size);
+      off_t fst = 0;
+
+      do {
+	std::string prefix = source->get_bucket()->get_name() + "_" + version + "_" + source->get_name();
+	if (fst >= lst) {
+	  break;
+	}
+
+	off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
+	off_t cur_len = cur_size - fst;
+	block.blockID = static_cast<uint64_t>(fst);
+	block.size = static_cast<uint64_t>(cur_len);
+
+	if ((ret = blockDir->get(dpp, &block, y)) < 0) {
+	  ldpp_dout(dpp, 10) << "Failed to retrieve directory entry for: " << source->get_name() << " blockid: " << fst << " block size: " << cur_len << ", ret=" << ret << dendl;
+	  return ret;
+	}
+
+	if (block.cacheObj.dirty)
+	  prefix = "D_" + prefix;
+
+	std::string oid_in_cache = prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len);
+
+	if ((ret = blockDir->del(dpp, &block, y)) == 0) { 
+	  if ((ret = source->driver->get_cache_driver()->delete_data(dpp, oid_in_cache, y)) == 0) { // Sam: do we want del or delete_data here? 
+	    if (!(ret = source->driver->get_policy_driver()->get_cache_policy()->erase(dpp, policy_prefix + "_" + std::to_string(fst) + "_" + std::to_string(cur_len), y))) {
+	      ldpp_dout(dpp, 0) << "Failed to delete policy entry for: " << source->get_name() << " blockID: " << fst << " block size: " << cur_len << ", ret=" << ret << dendl;
+	      return ret;
+	    }
+	  } else {
+	    ldpp_dout(dpp, 0) << "Failed to delete existing block for: " << source->get_name() << " blockID: " << fst << " block size: " << cur_len << ", ret=" << ret << dendl;
+	    return ret;
+	  }
+	} else if (ret == -ENOENT) {
+	  continue;
+	} else {
+	  ldpp_dout(dpp, 0) << "Failed to delete directory entry for: " << source->get_name() << " blockid: " << fst << " block size: " << cur_len << ", ret=" << ret << dendl;
+	  return ret;
+	}
+
+	fst += cur_len;
+      } while (fst < lst);
+
+      if (!objDirty) { // object written to backend  
+	return next->delete_obj(dpp, y, flags);
+      } else {
+	if (!(ret = source->driver->get_policy_driver()->get_cache_policy()->eraseObj(dpp, policy_prefix, y))) {
+	  ldpp_dout(dpp, 0) << "Failed to delete policy object entry for: " << source->get_name() << ", ret=" << ret << dendl;
+	  return -ENOENT;
+        } else {
+          return 0;
+        }
+      }
+    } else { // provided version is a delete marker; remove delete marker block
+      rgw::d4n::CacheBlock deleteBlock;
+      deleteBlock = block;
+      block.cacheObj.objName = source->get_name();
+
+      if (block.version == "null") 
+	deleteBlock.cacheObj.objName = "_:" + deleteBlock.version + "_" + deleteBlock.cacheObj.objName;
+      
+      if (block.prevVersion) { // move previous version to current version and update for head object
+        block.version = block.prevVersion->first;
+        block.deleteMarker = block.prevVersion->second;
+        block.prevVersion = {};
+      }
+
+      if ((ret = blockDir->del(dpp, &deleteBlock, y)) == 0) {
+	if ((ret = blockDir->set(dpp, &block, y)) < 0) {
+	  ldpp_dout(dpp, 0) << "Failed to set head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+	  return ret;
+        }
+      } else {
+	ldpp_dout(dpp, 0) << "Failed to delete delete marker block in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+	return ret;
+      }
+    }
+
+    return 0;
   }
-
-  if ((ret = source->driver->get_cache_driver()->del(dpp, source->get_key().get_oid(), y)) < 0) 
-    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): CacheDriver del() method failed, ret=" << ret << dendl;
-
-  return next->delete_obj(dpp, y, flags);
 }
-
 
 int D4NFilterWriter::prepare(optional_yield y) 
 {
   startTime = time(NULL);
 
-  int ret = -1;
+  int ret;
   if ((ret = driver->get_cache_driver()->delete_data(dpp, obj->get_key().get_oid(), y)) < 0) 
     ldpp_dout(dpp, 0) << "D4NFilterWriter::" << __func__ << "(): CacheDriver delete_data() method failed, ret=" << ret << dendl;
 
