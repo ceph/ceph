@@ -310,11 +310,11 @@ std::string BlockDirectory::build_index(CacheBlock* block)
   return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
 }
 
-int BlockDirectory::exist_key(CacheBlock* block, optional_yield y) 
+int BlockDirectory::exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y) 
 {
   std::string key = build_index(block);
   response<int> resp;
-
+  ldpp_dout(dpp, 10) << __func__ << "(): index is: " << key << dendl;
   try {
     boost::system::error_code ec;
     request req;
@@ -329,7 +329,7 @@ int BlockDirectory::exist_key(CacheBlock* block, optional_yield y)
   return std::get<0>(resp).value();
 }
 
-int BlockDirectory::set(CacheBlock* block, optional_yield y) 
+int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y) 
 {
   std::string key = build_index(block);
     
@@ -367,6 +367,12 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y)
   redisValues.push_back("creationTime");
   redisValues.push_back(block->cacheObj.creationTime); 
   redisValues.push_back("dirty");
+  if (block->cacheObj.dirty == true || block->cacheObj.dirty == 1) {
+    block->cacheObj.dirty = 1;
+  }
+  if (block->cacheObj.dirty == false || block->cacheObj.dirty == 0) {
+    block->cacheObj.dirty = 0;
+  }
   redisValues.push_back(std::to_string(block->cacheObj.dirty));
   redisValues.push_back("objHosts");
   
@@ -401,11 +407,13 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y)
   return 0;
 }
 
-int BlockDirectory::get(CacheBlock* block, optional_yield y) 
+int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y) 
 {
   std::string key = build_index(block);
 
-  if (exist_key(block, y)) {
+  ldpp_dout(dpp, 10) << __func__ << "(): index is: " << key << dendl;
+
+  if (exist_key(dpp, block, y)) {
     std::vector<std::string> fields;
 
     fields.push_back("blockID");
@@ -438,12 +446,11 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y)
       block->version = std::get<0>(resp).value()[1];
       block->size = boost::lexical_cast<uint64_t>(std::get<0>(resp).value()[2]);
       block->globalWeight = boost::lexical_cast<int>(std::get<0>(resp).value()[3]);
-
       {
         std::stringstream ss(boost::lexical_cast<std::string>(std::get<0>(resp).value()[4]));
 	block->hostsList.clear();
 
-	while (!ss.eof()) {
+	while (!ss.eof()) { // Replace with boost::split? -Sam
           std::string host;
 	  std::getline(ss, host, '_');
 	  block->hostsList.push_back(host);
@@ -454,7 +461,7 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y)
       block->cacheObj.bucketName = std::get<0>(resp).value()[6];
       block->cacheObj.creationTime = std::get<0>(resp).value()[7];
       block->cacheObj.dirty = boost::lexical_cast<bool>(std::get<0>(resp).value()[8]);
-
+      block->dirty = boost::lexical_cast<bool>(std::get<0>(resp).value()[8]);
       {
         std::stringstream ss(boost::lexical_cast<std::string>(std::get<0>(resp).value()[9]));
 	block->cacheObj.hostsList.clear();
@@ -475,13 +482,13 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y)
   return 0;
 }
 
-int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y) 
+int BlockDirectory::copy(const DoutPrefixProvider* dpp, CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y) 
 {
   std::string key = build_index(block);
   auto copyBlock = CacheBlock{ .cacheObj = { .objName = copyName, .bucketName = copyBucketName }, .blockID = 0 };
   std::string copyKey = build_index(&copyBlock);
 
-  if (exist_key(block, y)) {
+  if (exist_key(dpp, block, y)) {
     try {
       response<int> resp;
      
@@ -519,11 +526,11 @@ int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string co
   }
 }
 
-int BlockDirectory::del(CacheBlock* block, optional_yield y) 
+int BlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y) 
 {
   std::string key = build_index(block);
 
-  if (exist_key(block, y)) {
+  if (exist_key(dpp, block, y)) {
     try {
       boost::system::error_code ec;
       request req;
@@ -545,11 +552,11 @@ int BlockDirectory::del(CacheBlock* block, optional_yield y)
   }
 }
 
-int BlockDirectory::update_field(CacheBlock* block, std::string field, std::string value, optional_yield y) 
+int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* block, std::string field, std::string value, optional_yield y) 
 {
   std::string key = build_index(block);
 
-  if (exist_key(block, y)) {
+  if (exist_key(dpp, block, y)) {
     try {
       /* Ensure field exists */
       {
@@ -586,7 +593,14 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 	std::get<0>(resp).value() += value;
 	value = std::get<0>(resp).value();
       }
-
+  if (field == "dirty") { 
+    if (value == "true" || value == "1") {
+      value = "1";
+    }
+    if (value == "false" || value == "0") {
+      value = "0";
+    }
+  }
       {
 	boost::system::error_code ec;
 	request req;
@@ -609,11 +623,11 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
   }
 }
 
-int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optional_yield y) 
+int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block, std::string delValue, optional_yield y) 
 {
   std::string key = build_index(block);
 
-  if (exist_key(block, y)) {
+  if (exist_key(dpp, block, y)) {
     try {
       /* Ensure field exists */
       {
@@ -646,7 +660,7 @@ int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optiona
 	}
 
 	if (std::get<0>(resp).value().find("_") == std::string::npos) /* Last host, delete entirely */
-          return del(block, y);
+          return del(dpp, block, y);
 
         std::string result = std::get<0>(resp).value();
         auto it = result.find(delValue);
