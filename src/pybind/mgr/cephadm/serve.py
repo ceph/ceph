@@ -1010,9 +1010,11 @@ class CephadmServe:
                 hosts_altered.add(d.hostname)
                 self.mgr.spec_store.mark_needs_configuration(spec.service_name())
 
-            self.mgr.remote('progress', 'complete', progress_id)
+            if progress_total:
+                self.mgr.remote('progress', 'complete', progress_id)
         except Exception as e:
-            self.mgr.remote('progress', 'fail', progress_id, str(e))
+            if progress_total:
+                self.mgr.remote('progress', 'fail', progress_id, str(e))
             raise
         finally:
             if self.mgr.spec_store.needs_configuration(spec.service_name()):
