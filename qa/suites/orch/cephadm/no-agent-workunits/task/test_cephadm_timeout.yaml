@@ -6,6 +6,8 @@ roles:
   - client.0
 overrides:
   ceph:
+    log-ignorelist:
+      - CEPHADM_REFRESH_FAILED
     log-only-match:
       - CEPHADM_
 tasks:
