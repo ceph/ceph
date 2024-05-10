@@ -250,6 +250,29 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: tmp_dir
+  type: str
+  level: advanced
+  desc: path for the 'tmp' directory
+  default: /tmp
+  services:
+  - common
+  see_also:
+  - admin_socket
+  flags:
+  - runtime
+- name: tmp_file_template
+  type: str
+  level: advanced
+  desc: Template for temporary files created by daemons for ceph tell commands
+  long_desc: The template file name prefix for temporary files. For example, temporary files may be created by `ceph tell` commands using the --daemon-output-file switch.
+  daemon_default: $tmp_dir/$cluster-$name.XXXXXX
+  services:
+  - osd
+  - mds
+  - mon
+  flags:
+  - runtime
 - name: admin_socket
   type: str
   level: advanced
