@@ -465,6 +465,7 @@ ObjectDataHandler::write_ret do_remappings(
 	  return ObjectDataHandler::write_iertr::now();
 	});
       } else if (region.is_remap2()) {
+	auto pin_key = region.pin->get_key();
         return ctx.tm.remap_pin<ObjectDataBlock, 2>(
           ctx.t,
           std::move(region.pin),
@@ -472,10 +473,10 @@ ObjectDataHandler::write_ret do_remappings(
             region.create_left_remap_entry(),
             region.create_right_remap_entry()
           }
-        ).si_then([&region](auto pins) {
+        ).si_then([&region, pin_key](auto pins) {
           ceph_assert(pins.size() == 2);
-          ceph_assert(region.pin->get_key() == pins[0]->get_key());
-          ceph_assert(region.pin->get_key() + pins[0]->get_length() +
+          ceph_assert(pin_key == pins[0]->get_key());
+          ceph_assert(pin_key + pins[0]->get_length() +
             region.new_len == pins[1]->get_key());
           return ObjectDataHandler::write_iertr::now();
         });
