@@ -10920,7 +10920,6 @@ TEST_P(MultiLabelTest, MultiSelectableOff) {
   int r = read_bdev_label(&label, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(label.meta.end(), label.meta.find("multi"));
-  mount();
 }
 
 TEST_P(MultiLabelTest, MultiSelectableOn) {
@@ -10937,7 +10936,6 @@ TEST_P(MultiLabelTest, MultiSelectableOn) {
   auto it = label.meta.find("multi");
   ASSERT_NE(label.meta.end(), it);
   ASSERT_EQ(it->second, "yes");
-  mount();
 }
 
 TEST_P(MultiLabelTest, DetectCorruptedFirst) {
@@ -10969,7 +10967,7 @@ TEST_P(MultiLabelTest, FixCorruptedFirst) {
   ASSERT_EQ(corrupt, true);
   ASSERT_EQ(store->fsck(false), 1);
   ASSERT_EQ(store->repair(false), 0);
-  mount();
+  ASSERT_EQ(store->fsck(false), 0);
 }
 
 TEST_P(MultiLabelTest, FixCorruptedTwo) {
@@ -10989,7 +10987,7 @@ TEST_P(MultiLabelTest, FixCorruptedTwo) {
   ASSERT_EQ(corrupt, true);
   ASSERT_EQ(store->fsck(false), 2);
   ASSERT_EQ(store->repair(false), 0);
-  mount();
+  ASSERT_EQ(store->fsck(false), 0);
 }
 
 TEST_P(MultiLabelTest, FixCorruptedThree) {
@@ -11011,7 +11009,7 @@ TEST_P(MultiLabelTest, FixCorruptedThree) {
   ASSERT_EQ(corrupt, true);
   ASSERT_EQ(store->fsck(false), 3);
   ASSERT_EQ(store->repair(false), 0);
-  mount();
+  ASSERT_EQ(store->fsck(false), 0);
 }
 
 TEST_P(MultiLabelTest, CantFixCorruptedAll) {
@@ -11035,6 +11033,7 @@ TEST_P(MultiLabelTest, CantFixCorruptedAll) {
   ASSERT_EQ(corrupt, true);
   ASSERT_NE(store->fsck(false), 0);
   ASSERT_NE(store->repair(false), 0);
+  ASSERT_NE(store->fsck(false), 0);
 }
 
 TEST_P(MultiLabelTest, SkipInvalidUUID) {
@@ -11061,6 +11060,7 @@ TEST_P(MultiLabelTest, SkipInvalidUUID) {
 
   ASSERT_EQ(store->fsck(false), 1);
   ASSERT_EQ(store->repair(false), 0);
+  ASSERT_EQ(store->fsck(false), 0);
   mount();
 }
 
