@@ -57,7 +57,31 @@ from orchestrator import DaemonDescription
             ],
             {},
             60 * 1024 * 1024 * 1024,
-        )
+        ),
+        (  # Taken from an actual user case
+            int(32827840 * 1024 * 0.7),
+            [
+                DaemonDescription('crash', 'a', 'host1'),
+                DaemonDescription('grafana', 'a', 'host1'),
+                DaemonDescription('mds', 'a', 'host1'),
+                DaemonDescription('mds', 'b', 'host1'),
+                DaemonDescription('mds', 'c', 'host1'),
+                DaemonDescription('mgr', 'a', 'host1'),
+                DaemonDescription('mon', 'a', 'host1'),
+                DaemonDescription('node-exporter', 'a', 'host1'),
+                DaemonDescription('osd', '1', 'host1'),
+                DaemonDescription('osd', '2', 'host1'),
+                DaemonDescription('osd', '3', 'host1'),
+                DaemonDescription('osd', '4', 'host1'),
+                DaemonDescription('prometheus', 'a', 'host1'),
+            ],
+            {
+                'mds.a': 4 * 1024 * 1024 * 1024,  # 4294967296
+                'mds.b': 4 * 1024 * 1024 * 1024,
+                'mds.c': 4 * 1024 * 1024 * 1024,
+            },
+            480485376,
+        ),
     ])
 def test_autotune(total, daemons, config, result):
     def fake_getter(who, opt):
@@ -69,6 +93,8 @@ def test_autotune(total, daemons, config, result):
         if opt == 'osd_memory_target':
             return config.get(who, 4 * 1024 * 1024 * 1024)
         if opt == 'mds_cache_memory_limit':
+            if who in config:
+                return config.get(who, 16 * 1024 * 1024 * 1024)
             return 16 * 1024 * 1024 * 1024
 
     a = MemoryAutotuner(
