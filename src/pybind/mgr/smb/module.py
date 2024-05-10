@@ -1,10 +1,10 @@
-from typing import Any, Dict, List, Optional, cast
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, cast
 
 import logging
 
 import orchestrator
 from ceph.deployment.service_spec import PlacementSpec, SMBSpec
-from mgr_module import MgrModule, Option
+from mgr_module import MgrModule, Option, OptionLevel
 
 from . import (
     cli,
@@ -14,10 +14,14 @@ from . import (
     rados_store,
     resources,
     results,
+    sqlite_store,
     utils,
 )
 from .enums import AuthMode, JoinSourceType, UserGroupSourceType
-from .proto import AccessAuthorizer, Simplified
+from .proto import AccessAuthorizer, ConfigStore, Simplified
+
+if TYPE_CHECKING:
+    import sqlite3
 
 log = logging.getLogger(__name__)
 
@@ -30,9 +34,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             default=True,
             desc='automatically update orchestration when smb resources are changed',
         ),
+        Option(
+            'internal_store_backend',
+            level=OptionLevel.DEV,
+            type='str',
+            default='',
+            desc='set internal store backend. for develoment and testing only',
+        ),
     ]
-
-    update_orchestration: bool = True
 
     def __init__(self, *args: str, **kwargs: Any) -> None:
         internal_store = kwargs.pop('internal_store', None)
@@ -40,13 +49,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         public_store = kwargs.pop('public_store', None)
         path_resolver = kwargs.pop('path_resolver', None)
         authorizer = kwargs.pop('authorizer', None)
-        update_orchestration = kwargs.pop(
-            'update_orchestration', self.update_orchestration
-        )
+        uo = kwargs.pop('update_orchestration', None)
         super().__init__(*args, **kwargs)
-        self._internal_store = internal_store or mon_store.ModuleConfigStore(
-            self
-        )
+        # the update_orchestration property only works post-init
+        update_orchestration = self.update_orchestration if uo is None else uo
+        if internal_store is not None:
+            self._internal_store = internal_store
+            log.info('Using internal_store passed to class: {internal_store}')
+        else:
+            self._internal_store = self._backend_store(
+                self.internal_store_backend
+            )
         self._priv_store = priv_store or mon_store.MonKeyConfigStore(self)
         # self._public_store = public_store or mon_store.MonKeyConfigStore(self)
         self._public_store = (
@@ -65,6 +78,40 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             path_resolver=path_resolver,
             authorizer=authorizer,
             orch=(self if update_orchestration else None),
+        )
+
+    def _backend_store(self, store_conf: str = '') -> ConfigStore:
+        # Store conf is meant for devs, maybe testers to experiment with
+        # certain backend options at run time. This is not meant to be
+        # a formal or friendly interface.
+        if store_conf:
+            parts = [v.strip() for v in store_conf.split(';')]
+            assert parts
+            name = parts[0]
+            opts = dict(p.split('=', 1) for p in parts[1:])
+        else:
+            name = 'db'
+            opts = {}
+        if name == 'mon':
+            log.info('Using specified backend: module config internal store')
+            return mon_store.ModuleConfigStore(self)
+        if name == 'db':
+            log.info('Using specified backend: mgr pool sqlite3 db')
+            return sqlite_store.mgr_sqlite3_db(self, opts)
+        raise ValueError(f'invalid internal store: {name}')
+
+    @property
+    def update_orchestration(self) -> bool:
+        return cast(
+            bool,
+            self.get_module_option('update_orchestration', True),
+        )
+
+    @property
+    def internal_store_backend(self) -> str:
+        return cast(
+            str,
+            self.get_module_option('internal_store_backend', ''),
         )
 
     @cli.SMBCommand('apply', perm='rw')
@@ -309,3 +356,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def remove_smb_service(self, service_name: str) -> None:
         completion = self.remove_service(service_name)
         orchestrator.raise_if_exception(completion)
+
+    def maybe_upgrade(self, db: 'sqlite3.Connection', version: int) -> None:
+        # Our db tables are self managed by our abstraction layer, via a store
+        # class, not directly by the mgr module. Disable the default behavior
+        # of the mgr module schema loader and use our internal_store class.
+        if not isinstance(self._internal_store, sqlite_store.SqliteStore):
+            return
+        log.debug('Preparing db tables')
+        self._internal_store.prepare(db.cursor())
