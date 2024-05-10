@@ -102,6 +102,24 @@ def _names(node):
         return [f"<JoinedStr: {node.values!r}>"]
     if isinstance(node, ast.Subscript):
         return [f"<Subscript: {node.value}{node.slice}>"]
+    if isinstance(node, ast.BinOp):
+        return [f"<BinaryOp: {_names(node.left)} {_names(node.op)} {_names(node.right)}"]
+    if (
+        isinstance(node, ast.Add)
+        or isinstance(node, ast.Sub)
+        or isinstance(node, ast.Mult)
+        or isinstance(node, ast.Div)
+        or isinstance(node, ast.FloorDiv)
+        or isinstance(node, ast.Mod)
+        or isinstance(node, ast.Pow)
+        or isinstance(node, ast.LShift)
+        or isinstance(node, ast.RShift)
+        or isinstance(node, ast.ButOr)
+        or isinstance(node, ast.BitXor)
+        or isinstance(node, ast.BitAnd)
+        or isinstance(node, ast.MatMult)
+    ):
+        return [repr(node)]
     raise ValueError(f"_names: unexpected type: {node}")
 
 
