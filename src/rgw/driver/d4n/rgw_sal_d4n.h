@@ -151,9 +151,9 @@ class D4NFilterObject : public FilterObject {
 
 	virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
 	virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
-	  RGWGetDataCB* cb, optional_yield y) override;
-  virtual int get_attr(const DoutPrefixProvider* dpp, const char* name,
-			 bufferlist& dest, optional_yield y) override;
+			     RGWGetDataCB* cb, optional_yield y) override;
+	virtual int get_attr(const DoutPrefixProvider* dpp, const char* name,
+			      bufferlist& dest, optional_yield y) override;
 
       private:
 	RGWGetDataCB* client_cb;
@@ -235,11 +235,11 @@ class D4NFilterObject : public FilterObject {
 
     void set_prefix(const std::string& prefix) { this->prefix = prefix; }
     const std::string get_prefix() { return this->prefix; }
-    bool get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
+    int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
     void set_obj_state_attrs(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version);
     int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, bool is_latest_version = true, bool dirty = false);
-    bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, optional_yield y);
+    bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y);
     rgw::sal::Bucket* get_destination_bucket(const DoutPrefixProvider* dpp) { return dest_bucket;}
     rgw::sal::Object* get_destination_object(const DoutPrefixProvider* dpp) { return dest_object; }
 };
