@@ -415,6 +415,72 @@ run on the host.
   profiles with the same name are not overwritten.
 
 
+Custom Logrotate Configs
+========================
+
+Cephadm can write out custom logrotate configs for either the
+cephadm.log or the daemon logs to all hosts in the cluster. We
+recommend taking the existing logrotate file and then add fields
+to it. On a cephadm managed host, the cephadm logrotation file
+can be found at ``/etc/logrotate.d/cephadm`` and the cluster log
+rotation file can be found at ``/etc/logrotate.d/ceph-<cluster-fsid>``.
+The cluster log in particular makes use of certain template
+fields to generate the name of the directory in which to rotate the
+logs and for postrotate actions. Currently this includes a
+``targets`` field that are a list of process names (e.g. "ceph-mgr")
+that will be sent a killall or pkill command in order to force
+rotation, and an ``fsid`` field to specify which directory
+under ``/var/log/ceph/`` this log rotation config should attempt
+to rotate the logs.
+
+In order to have cephadm write the custom logrotate config
+use a command of the following form:
+
+.. prompt:: bash #
+
+   ceph orch write-custom-logrotate <type> -i <logrotate-file>
+
+where <type> should be either ``cephadm`` or ``cluster`` depending on
+whether you are overwriting the logrotate file for the cluster logs
+or the cephadm.log. For example
+
+.. prompt:: bash #
+
+  [ceph: root@vm-00 /]# cat cluster-logrotate-config
+  # created by cephadm
+  /var/log/ceph/{{ fsid }}/*.log {
+      rotate 20
+      size 1G
+      daily
+      compress
+      sharedscripts
+      postrotate
+          killall -q -1 {{ targets|join(' ') }} || pkill -1 -x '{{ targets|join('|') }}' || true
+      endscript
+      missingok
+      notifempty
+      su root root
+  }
+
+  [ceph: root@vm-00 /]# ceph orch write-custom-logrotate cluster -i cluster-logrotate-config
+
+  .. note:: 
+
+    When the command to write the custom logrotate file is run, it only schedules
+    the logrotate configs to be written. If cephadm is busy with other operations
+    such as deploying daemons or an upgrade, there could be a notable delay in the
+    logrotate configs being written out.
+
+  .. note:: 
+
+    Cephadm will only attempt to write the logrotate config to each host once
+    and will not repeatedly check the config in each host to make sure it's "correct".
+    It will not monitor the file on the host for changes or reconcile differences from
+    the centrally configured custom config. If you want to re-trigger the operation
+    to write the logrotate configs either rerun the ``write-custom-logrotate`` command
+    or restart the mgr daemon.
+
+
 Viewing Profiles
 ----------------
 
