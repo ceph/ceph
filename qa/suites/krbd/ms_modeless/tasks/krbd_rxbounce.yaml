@@ -1,4 +1,10 @@
 tasks:
+- install:
+    extra_system_packages:
+      rpm:
+      - gcc-c++
+      deb:
+      - g++
 - workunit:
     clients:
       all:
