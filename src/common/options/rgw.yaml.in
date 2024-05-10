@@ -3649,7 +3649,12 @@ options:
 - name: rgw_d4n_l1_datacache_persistent_path
   type: str
   level: advanced
-  desc: path for the directory for storing the local cache objects data for d4n
+  desc: path used for storing locally cached object data
+  long_desc: One cache backend option for D4N is the local SSD, which uses this path to
+    write and read object data. This is the default cache backend chosen by the D4N filter.
+    Only the SSD cache backend uses this path for object data storage since the RedisDriver
+    uses a Redis server instead and there are no additional cache backend implementations
+    available at the moment. 
   default: /tmp/rgw_d4n_datacache/
   services:
   - rgw
@@ -3657,7 +3662,9 @@ options:
 - name: rgw_d4n_l1_datacache_size
   type: size
   level: advanced
-  desc: datacache maximum size on disk in bytes
+  desc: maximum size on disk for datacache
+  long_desc: The local SSD cache uses this option to configure its size in bytes. This 
+    option is not used by the Redis cache backend. 
   default: 1_G
   services:
   - rgw
@@ -3665,7 +3672,10 @@ options:
 - name: rgw_d4n_l1_evict_cache_on_start
   type: bool
   level: advanced
-  desc: clear the content of the persistent data cache directory on start
+  desc: clear the contents of the persistent datacache on start
+  long_desc: The local SSD cache uses this option to clear the contents of the path supplied
+    by the rgw_d4n_l1_datacache_persistent_path config option on start. If false, the path's 
+    contents will be retained. 
   default: true
   services:
   - rgw
@@ -3674,7 +3684,7 @@ options:
   type: int
   level: advanced
   desc: posix_fadvise() flag for access pattern of cache files
-  long_desc: for example to bypass the page-cache -
+  long_desc: For example, to bypass the page-cache -
     POSIX_FADV_DONTNEED=4
   default: 4
   services:
@@ -3684,6 +3694,8 @@ options:
   type: int
   level: advanced
   desc: specifies the maximum number of worker threads that may be used by libaio
+  long_desc: This option is used by the SSD cache backend during initialization to set the maximum
+    number of worker threads libaio may use. It does not apply to the Redis cache backend. 
   default: 20
   services:
   - rgw
@@ -3694,6 +3706,9 @@ options:
   type: int
   level: advanced
   desc: specifies the maximum number of simultaneous I/O requests that libaio expects to enqueue
+  long_desc: This option is used by the SSD cache backend during initialization to set the maximum
+    number of simultaneous I/O requests that libaio can expect to enqueue. It
+    does not apply to the Redis cache backend. 
   default: 64
   services:
   - rgw
@@ -3704,6 +3719,12 @@ options:
   type: int
   level: advanced
   desc: LFUDA variables' sync frequency in seconds 
+  long_desc: By default, the D4N cache uses the Least Frequently Used with Dynamic Aging (LFUDA) 
+    cache replacement policy. This class globally stores values that are used by the policy's 
+    algorithm. However, strong consistency for these values is not necessary and adds additional
+    overhead to support. As a result, a thread periodically retrieves these global values and posts
+    updates when certain conditions are satisfied. This Redis thread completes this logic in a loop
+    that is called once every interval, with the interval being set by this option.  
   default: 60
   services:
   - rgw
@@ -3957,21 +3978,15 @@ options:
   default: true
   services:
   - rgw
-- name: rgw_d4n_host
+- name: rgw_d4n_address
   type: str
   level: advanced
-  desc: The rgw directory host
-  default: 127.0.0.1
-  services: 
-  - rgw
-  flags:
-  - startup
-  with_legacy: true
-- name: rgw_d4n_port
-  type: int
-  level: advanced
-  desc: The rgw directory port
-  default: 6379
+  desc: address for the D4N Redis connection
+  long_desc: The current D4N implementation supports one Redis node
+    which the D4N directory, policy, and overall filter communicate
+    with. This default value is also the address that a Redis server 
+    with no additional configuration will use.
+  default: 127.0.0.1:6379
   services: 
   - rgw
   flags:
@@ -4114,12 +4129,15 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_local_cache_address
+- name: rgw_d4n_l1_datacache_address
   type: str
   level: advanced
-  desc: Local CacheDriver address 
+  desc: local Redis cache address 
+  long_desc: This is the address used to configure the Redis cache backend connection. The default
+    value is the same address used by Redis without any additional configuration. The SSD cache 
+    does not use this option.
   default: 127.0.0.1:6379
-  services: 
+  services:
   - rgw
   flags:
   - startup
