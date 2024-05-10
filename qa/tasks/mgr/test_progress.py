@@ -174,7 +174,15 @@ class TestProgress(MgrTestCase):
 
         # Remove all other pools
         for pool in self.mgr_cluster.mon_manager.get_osd_dump_json()['pools']:
-            self.mgr_cluster.mon_manager.remove_pool(pool['pool_name'])
+            # There might be some pools that wasn't created with this test.
+            # So we would use a raw cluster command to remove them.
+            pool_name = pool['pool_name']
+            if pool_name in self.mgr_cluster.mon_manager.pools:
+                self.mgr_cluster.mon_manager.remove_pool(pool_name)
+            else:
+                self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    'osd', 'pool', 'rm', pool_name, pool_name,
+                    "--yes-i-really-really-mean-it")
 
         self._load_module("progress")
         self.mgr_cluster.mon_manager.raw_cluster_cmd('progress', 'clear')
