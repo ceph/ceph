@@ -600,3 +600,58 @@ def test_dump_service_spec(tmodule):
     assert cfg['spec']['features'] == ['domain']
     assert cfg['spec']['config_uri'] == 'mem:foo/config.smb'
     assert len(cfg['spec']['join_sources']) == 2
+
+
+def test_cmd_show_resource_json(tmodule):
+    _example_cfg_1(tmodule)
+
+    res, body, status = tmodule.show.command(['ceph.smb.cluster.foo'])
+    assert res == 0
+    assert (
+        body.strip()
+        == """
+{
+  "resource_type": "ceph.smb.cluster",
+  "cluster_id": "foo",
+  "auth_mode": "active-directory",
+  "intent": "present",
+  "domain_settings": {
+    "realm": "dom1.example.com",
+    "join_sources": [
+      {
+        "source_type": "password",
+        "auth": {
+          "username": "testadmin",
+          "password": "Passw0rd"
+        }
+      }
+    ]
+  }
+}
+    """.strip()
+    )
+
+
+def test_cmd_show_resource_yaml(tmodule):
+    _example_cfg_1(tmodule)
+
+    res, body, status = tmodule.show.command(
+        ['ceph.smb.cluster.foo'], format='yaml'
+    )
+    assert res == 0
+    assert (
+        body.strip()
+        == """
+resource_type: ceph.smb.cluster
+cluster_id: foo
+auth_mode: active-directory
+intent: present
+domain_settings:
+  realm: dom1.example.com
+  join_sources:
+  - source_type: password
+    auth:
+      username: testadmin
+      password: Passw0rd
+""".strip()
+    )

@@ -1,6 +1,7 @@
 from typing import Any, Callable, Tuple
 
 import errno
+import functools
 
 import object_format
 from mgr_module import CLICommand
@@ -42,7 +43,16 @@ class SMBCommand:
     def __call__(self, func: Callable) -> Self:
         self._func = func
         cc = CLICommand(f'smb {self._name}', perm=self._perm)
-        rsp = object_format.Responder()
+        # the smb module assumes that it will always be used with python
+        # versions sufficiently new enough to always use ordered dicts
+        # (builtin).  We dont want the json/yaml sorted by keys losing our
+        # ordered k-v pairs.
+        _fmt = functools.partial(
+            object_format.ObjectFormatAdapter,
+            sort_json=False,
+            sort_yaml=False,
+        )
+        rsp = object_format.Responder(_fmt)
         self._command = cc(rsp(func))
         return self
 
