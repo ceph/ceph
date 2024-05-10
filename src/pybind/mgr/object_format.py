@@ -533,9 +533,9 @@ class Responder:
         formatter = self._formatter(obj)
         if format_req is None:
             format_req = self.default_format
-        if format_req not in formatter.valid_formats():
-            raise UnknownFormat(format_req)
         req = str(format_req).replace("-", "_")
+        if req not in formatter.valid_formats():
+            raise UnknownFormat(format_req)
         ffunc = getattr(formatter, f"format_{req}", None)
         if ffunc is None:
             raise UnsupportedFormat(format_req)
