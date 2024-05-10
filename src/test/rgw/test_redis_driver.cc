@@ -74,7 +74,7 @@ class Environment : public ::testing::Environment {
       cct = common_preinit(iparams, CODE_ENVIRONMENT_UTILITY, {});
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
 
-      redisHost = cct->_conf->rgw_d4n_host + ":" + std::to_string(cct->_conf->rgw_d4n_port);
+      redisHost = cct->_conf->rgw_d4n_address; 
     }
 
     std::string redisHost;
@@ -102,8 +102,8 @@ class RedisDriverFixture: public ::testing::Test {
 
       /* Run fixture's connection */
       config cfg;
-      cfg.addr.host = env->cct->_conf->rgw_d4n_host;
-      cfg.addr.port = std::to_string(env->cct->_conf->rgw_d4n_port);
+      cfg.addr.host = env->redisHost.substr(0, env->redisHost.find(":"));
+      cfg.addr.port = env->redisHost.substr(env->redisHost.find(":") + 1, env->redisHost.length()); 
 
       conn->async_run(cfg, {}, net::detached);
     } 

@@ -66,7 +66,7 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   namespace net = boost::asio;
   using boost::redis::config;
 
-  std::string address = cct->_conf->rgw_local_cache_address;
+  std::string address = cct->_conf->rgw_d4n_address;
   config cfg;
   cfg.addr.host = address.substr(0, address.find(":"));
   cfg.addr.port = address.substr(address.find(":") + 1, address.length());
@@ -699,7 +699,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
   if (write_to_cache) {
     rgw::d4n::CacheBlock block, existing_block;
     rgw::d4n::BlockDirectory* blockDir = source->driver->get_block_dir();
-    block.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address); 
+    block.hostsList.push_back(blockDir->cct->_conf->rgw_d4n_l1_datacache_address); 
     block.cacheObj.objName = source->get_key().get_oid();
     block.cacheObj.bucketName = source->get_bucket()->get_name();
     std::stringstream s;
@@ -747,7 +747,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
                   if (blockDir->set(&block, *y) < 0) //new versioned block will have new version, hostsList etc, how about globalWeight?
                     ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory set method failed." << dendl;
                 } else {
-                if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_local_cache_address, *y) < 0)
+                if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_d4n_l1_datacache_address, *y) < 0)
                   ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory update_field method failed for hostsList." << dendl;
                 }
               }
@@ -787,7 +787,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
                   if (blockDir->set(&block, *y) < 0)
                     ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory set method failed." << dendl;
               } else {
-                if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_local_cache_address, *y) < 0)
+                if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_d4n_l1_datacache_address, *y) < 0)
                   ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory update_field method failed for blockHosts." << dendl;
               }
             }
@@ -834,7 +834,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 		    if (blockDir->set(&block, *y) < 0)
 		      ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory set method failed." << dendl;
 		  } else {
-		  if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_local_cache_address, *y) < 0)
+		  if (blockDir->update_field(&block, "blockHosts", blockDir->cct->_conf->rgw_d4n_l1_datacache_address, *y) < 0)
 		    ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory update_field method failed." << dendl;
 		  }
 		}
@@ -926,7 +926,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 				 .bucketName = obj->get_bucket()->get_name(),
 				 .creationTime = to_iso_8601(*mtime), 
 				 .dirty = false,
-				 .hostsList = { /*driver->get_block_dir()->cct->_conf->rgw_local_cache_address*/ } //TODO: Object is not currently being cached 
+				 .hostsList = { /*driver->get_block_dir()->cct->_conf->rgw_d4n_l1_datacache_address*/ } //TODO: Object is not currently being cached 
                                };
 
   if (driver->get_obj_dir()->set(&object, y) < 0) 

@@ -312,8 +312,15 @@ Currently, the architecture can only function on one Redis instance at a time.
 The address is configurable and can be changed by accessing the parameters 
 below.
 
-.. confval:: rgw_d4n_host
-.. confval:: rgw_d4n_port
+.. confval:: rgw_d4n_address
+.. confval:: rgw_d4n_l1_datacache_persistent_path
+.. confval:: rgw_d4n_l1_datacache_size
+.. confval:: rgw_d4n_l1_evict_cache_on_start
+.. confval:: rgw_d4n_l1_fadvise
+.. confval:: rgw_d4n_libaio_aio_threads
+.. confval:: rgw_d4n_libaio_aio_num
+.. confval:: rgw_lfuda_sync_frequency
+.. confval:: rgw_d4n_l1_datacache_address
 
 Topic persistency settings
 ==========================
