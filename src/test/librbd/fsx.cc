@@ -2890,21 +2890,22 @@ check_clone(int clonenum, bool replay_image)
 	}
 
 	good_buf = NULL;
-	ret = posix_memalign((void **)&good_buf,
-			     std::max(writebdy, (int)sizeof(void *)),
-			     file_info.st_size);
-	if (ret > 0) {
-		prterrcode("check_clone: posix_memalign(good_buf)", -ret);
-		exit(96);
-	}
-
 	temp_buf = NULL;
-	ret = posix_memalign((void **)&temp_buf,
-			     std::max(readbdy, (int)sizeof(void *)),
-			     file_info.st_size);
-	if (ret > 0) {
-		prterrcode("check_clone: posix_memalign(temp_buf)", -ret);
-		exit(97);
+	if (file_info.st_size > 0) {
+		ret = posix_memalign((void **)&good_buf,
+				     std::max(writebdy, (int)sizeof(void *)),
+				     file_info.st_size);
+		if (ret > 0) {
+			prterrcode("check_clone: posix_memalign(good_buf)", -ret);
+			exit(96);
+		}
+		ret = posix_memalign((void **)&temp_buf,
+				     std::max(readbdy, (int)sizeof(void *)),
+				     file_info.st_size);
+		if (ret > 0) {
+			prterrcode("check_clone: posix_memalign(temp_buf)", -ret);
+			exit(97);
+		}
 	}
 
 	if (pread(fd, good_buf, file_info.st_size, 0) < 0) {
