@@ -46,6 +46,8 @@
 #include "cls/version/cls_version_client.h"
 #include "osd/osd_types.h"
 
+#include "neorados/cls/version.h"
+
 #include "rgw_tools.h"
 #include "rgw_coroutine.h"
 #include "rgw_compression.h"
@@ -167,6 +169,33 @@ void RGWObjVersionTracker::prepare_op_for_read(ObjectReadOperation* op)
   }
 
   cls_version_read(*op, &read_version);
+}
+
+void RGWObjVersionTracker::prepare_read(neorados::ReadOp& op) {
+  namespace version = neorados::cls::version;
+  auto check_objv = version_for_check();
+
+  if (check_objv) {
+    op.exec(version::check(*check_objv, VER_COND_EQ));
+  }
+
+  op.exec(version::read(&read_version));
+}
+
+void RGWObjVersionTracker::prepare_write(neorados::WriteOp& op) {
+  namespace version = neorados::cls::version;
+  auto check_objv = version_for_check();
+  auto modify_version = version_for_write();
+
+  if (check_objv) {
+    op.exec(version::check(*check_objv, VER_COND_EQ));
+  }
+
+  if (modify_version) {
+    op.exec(version::set(*modify_version));
+  } else {
+    op.exec(version::inc());
+  }
 }
 
 void RGWObjVersionTracker::prepare_op_for_write(ObjectWriteOperation *op)
