@@ -27,6 +27,8 @@
 #include <boost/container/flat_set.hpp>
 
 #include "common/dout_fmt.h"
+#include "include/neorados/RADOS.hpp"
+
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
 #include "common/tracer.h"
@@ -980,6 +982,14 @@ struct RGWObjVersionTracker {
   /// This function is defined in `rgw_rados.cc` rather than `rgw_common.cc`.
   void prepare_op_for_read(librados::ObjectReadOperation* op);
 
+  /// This function is to be called on any read operation. If we have
+  /// a non-empty `read_version`, assert on the OSD that the object
+  /// has the same version. Also reads the version into `read_version`.
+  ///
+  /// This function is defined in `rgw_rados.cc` rather than
+  /// `rgw_common.cc`.
+  void prepare_read(neorados::ReadOp& op);
+
   /// This function is to be called on any write operation. If we have
   /// a non-empty read operation, assert on the OSD that the object
   /// has the same version. If we have a non-empty `write_version`,
@@ -988,6 +998,15 @@ struct RGWObjVersionTracker {
   /// This function is defined in `rgw_rados.cc` rather than
   /// `rgw_common.cc`.
   void prepare_op_for_write(librados::ObjectWriteOperation* op);
+
+  /// This function is to be called on any write operation. If we have
+  /// a non-empty read operation, assert on the OSD that the object
+  /// has the same version. If we have a non-empty `write_version`,
+  /// set the object to it. Otherwise increment the version on the OSD.
+  ///
+  /// This function is defined in `rgw_rados.cc` rather than
+  /// `rgw_common.cc`.
+  void prepare_write(neorados::WriteOp& op);
 
   /// This function is to be called after the completion of any write
   /// operation on which `prepare_op_for_write` was called. If we did
