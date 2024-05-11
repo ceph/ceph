@@ -275,6 +275,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
   pending.get_health_checks(&new_checks);
   for (auto& p : new_checks.checks) {
+    // TODO: handle "client_count" metadata when summarizing
     p.second.summary = std::regex_replace(
       p.second.summary,
       std::regex("%num%"),
