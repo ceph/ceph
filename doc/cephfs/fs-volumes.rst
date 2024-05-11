@@ -790,32 +790,39 @@ pinned to one of the available ranks on the file system.
 Subvolume quiesce
 -----------------
 
-It may be needed to pause IO to a set of subvolumes of a given volume (file system).
-A good example of such case is a consistent snapshot spanning multiple subvolumes.
-The task arises often in an orchestrated environment such as Kubernetes, where a single deployed application
-can work with many mounted subvolumes across several hosts. When a snapshot of such a system is needed,
-the application may not find the result consistent unless the snapshots were taken
-during an active write pause.
+CephFS snapshots do not provide strong-consistency guarantees in cases involving writes
+performed by multiple clients, which makes consistent backups and disaster recovery a serious
+challenge for distributed applications. Even in a case where an application uses
+file system flushes to synchronize checkpoints across its distributed components, there is
+no guarantee that all acknowledged writes will be part of a given snapshot.
 
-The `volumes` plugin provides a tool to initiate and await such a pause across a set of subvolumes:
+The subvolume quiesce feature has been developed to provide enterprise-level consistency guarantees
+for multi-client applications that work with one or more subvolumes. The feature makes it possible to pause IO
+to a set of subvolumes of a given volume (file system). Enforcing such a pause across all clients makes
+it possible to guarantee that any persistent checkpoints reached by the application before the pause
+will be recoverable from the snapshots made during the pause.
+
+The `volumes` plugin provides a CLI to initiate and await the pause for a set of subvolumes.
+This pause is called a `quiesce`, which is also used as the command name:
 
 .. prompt:: bash $ auto
 
   $ ceph fs quiesce <vol_name> --set-id myset1 <[group_name/]sub_name...> --await
   # perform actions while the IO pause is active, like taking snapshots
   $ ceph fs quiesce <vol_name> --set-id myset1 --release --await
-  # if successful, all members of the set were confirmed as still in pause and released from such
+  # if successful, all members of the set were confirmed as still paused and released
 
-The ``quiesce`` functionality is itself based on a lower level QuiesceDb service provided by the MDS
+The ``fs quiesce`` functionality is based on a lower level ``quiesce db`` service provided by the MDS
 daemons, which operates at a file system path granularity. 
 The `volumes` plugin merely maps the subvolume names to their corresponding paths on the given file system
-and then issues the appropriate quiesce command to the MDS. You can learn more about the feature in the developer guides.
+and then issues the corresponding ``quiesce db`` command to the MDS. You can learn more about the low-level service
+in the developer guides.
 
 Operations
 ~~~~~~~~~~
 
-The IO pause (referred to as `quiesce`) is requested for a group of one or more subvolumes (i.e. paths in a filesystem).
-The group is referred to as "quiesce set", and every quiesce set must have a unique string id to interact with.
+The quiesce can be requested for a set of one or more subvolumes (i.e. paths in a filesystem).
+This set is referred to as `quiesce set`. Every quiesce set is identified by a unique `set id`.
 A quiesce set can be manipulated in the following ways:
 
 * **include** one or more subvolumes - quiesce set members
