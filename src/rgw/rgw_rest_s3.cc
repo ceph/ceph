@@ -3735,49 +3735,67 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
     }
 
     if (requested_attributes & as_flag(ReqAttributes::Checksum)) {
-      /*
-	<Checksum>
-	<ChecksumCRC32>string</ChecksumCRC32>
-	<ChecksumCRC32C>string</ChecksumCRC32C>
-	<ChecksumSHA1>string</ChecksumSHA1>
-	<ChecksumSHA256>string</ChecksumSHA256>
-	</Checksum>
-      */
+      auto iter = attrs.find(RGW_ATTR_CKSUM);
+      if (iter != attrs.end()) {
+	try {
+	  rgw::cksum::Cksum cksum;
+	  auto bliter = iter->second.cbegin();
+	  cksum.decode(bliter);
+          if (multipart_parts_count && multipart_parts_count > 0) {
+	    s->formatter->dump_string(cksum.element_name(),
+		fmt::format("{}-{}", cksum.to_armor(), *multipart_parts_count));
+	  } else {
+	    s->formatter->dump_string(cksum.element_name(), cksum.to_armor());
+	  }
+	} catch (buffer::error& err) {
+	  ldpp_dout(this, 0)
+	    << "ERROR: could not decode stored cksum, caught buffer::error" << dendl;
+	}
+      }
     } /* Checksum */
 
     if (requested_attributes & as_flag(ReqAttributes::ObjectParts)) {
-      bool truncated = false;
-      int marker = 0;
+      if (multipart_parts_count && multipart_parts_count > 0) {
 
-      assert(multipart_parts_count);
-      ldpp_dout(this, 16) <<
-	fmt::format("{} attr flags={} parts_count={}", __func__,
-		    requested_attributes, *multipart_parts_count)
-			  << dendl;
-		       
+	ldpp_dout(this, 16) <<
+	  fmt::format("{} attr flags={} parts_count={}", __func__,
+		      requested_attributes, *multipart_parts_count)
+			    << dendl;
 
-      /* TODO: iterate over manifest parts */
+	s->formatter->open_object_section("ObjectParts");
 
-    /*
-   <ObjectParts>
-      <IsTruncated>boolean</IsTruncated>
-      <MaxParts>integer</MaxParts>
-      <NextPartNumberMarker>integer</NextPartNumberMarker>
-      <PartNumberMarker>integer</PartNumberMarker>
-      <Part>
-         <ChecksumCRC32>string</ChecksumCRC32>
-         <ChecksumCRC32C>string</ChecksumCRC32C>
-         <ChecksumSHA1>string</ChecksumSHA1>
-         <ChecksumSHA256>string</ChecksumSHA256>
-         <PartNumber>integer</PartNumber>
-         <Size>long</Size>
-      </Part>
-      ...
-      <PartsCount>integer</PartsCount>
-   </ObjectParts>
-    */
+	bool truncated = false;
+	int marker = 0;
+	int next_marker;
 
+	using namespace rgw::sal;
 
+	int ret =
+	  s->object->list_parts(
+            this, s->cct, max_parts, marker,
+	    &next_marker, &truncated,
+	    [&](const Object::Part& part) -> int {
+	      s->formatter->open_object_section("Part");
+	      s->formatter->dump_int("PartNumber", part.part_number);
+	      s->formatter->dump_unsigned("Size", part.part_size);
+	      s->formatter->dump_string(part.cksum.element_name(), part.cksum.to_armor());
+	      s->formatter->close_section(); /* Part */
+	      return 0;
+	    }, s->yield);
+
+	if (ret < 0) {
+	  ldpp_dout(this, 0)
+	    << fmt::format("ERROR: {} list-parts failed for {}",
+			   __func__, s->object->get_name())
+	    << dendl;
+	}
+	s->formatter->dump_bool("IsTruncated", truncated);
+	s->formatter->dump_int("MaxParts", max_parts);
+	s->formatter->dump_int("NextPartNumberMarker", next_marker);
+	s->formatter->dump_int("PartNumberMarker", marker);
+	s->formatter->dump_unsigned("Size", s->obj_size);
+	s->formatter->close_section();
+      } /* multipart_parts_count positive */
     } /* ObjectParts */
 
     if (requested_attributes & as_flag(ReqAttributes::ObjectSize)) {
@@ -3785,9 +3803,10 @@ void RGWGetObjAttrs_ObjStore_S3::send_response()
     }
 
     if (requested_attributes & as_flag(ReqAttributes::StorageClass)) {
-    /*
-   <StorageClass>string</StorageClass>
-    */
+      auto iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
+      if (iter != attrs.end()) {
+	s->formatter->dump_string("StorageClass", iter->second.to_str());
+      }
     }
     s->formatter->close_section();
   } /* op_ret == 0 */

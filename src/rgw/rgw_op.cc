@@ -5882,25 +5882,14 @@ void RGWGetObjAttrs::pre_exec()
 void RGWGetObjAttrs::execute(optional_yield y)
 {
   RGWGetObj::execute(y);
+
+  RGWObjState* obj_state{nullptr};
   op_ret = s->object->get_obj_state(this, &obj_state, s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 0) <<
       fmt::format("ERROR: {} get_obj_state() failed ret={}", __func__,
 		  op_ret) << dendl;
     return;
-  }
-  /* in the case of multipart objects, we may need to recover data from
-   * the component parts */
-  bufferlist bl;
-  if (obj_state->get_attr(RGW_ATTR_MANIFEST, bl)) {
-    try{
-      decode(manifest, bl);
-    } catch (const buffer::end_of_buffer&) {
-      // ignore empty manifest; it's not cloud-tiered
-    } catch (const std::exception& e) {
-      ldpp_dout(this, 1) << "WARNING: failed to decode object manifest for "
-			 << *s->object << ": " << e.what() << dendl;
-    }
   }
 } /* RGWGetObjAttrs::execute */
 

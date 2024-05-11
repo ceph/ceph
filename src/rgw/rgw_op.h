@@ -1608,8 +1608,6 @@ protected:
   int marker;
   int max_parts;
   uint16_t requested_attributes;
-  RGWObjState* obj_state{nullptr};
-  RGWObjManifest manifest;
 #if 0
   /* used to decrypt attributes for objects stored with SSE-C */
   x-amz-server-side-encryption-customer-algorithm
