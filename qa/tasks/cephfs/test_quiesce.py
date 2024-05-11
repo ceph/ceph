@@ -830,7 +830,7 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         op = self.fs.rank_tell("lock", "path", self.mntpnt+"/dir1/dir2", "policy:r", rank=1)
         p = self.mount_a.setfattr("dir1/dir2", "ceph.quiesce.block", "1", wait=False)
         sleep(2) # for req to block waiting for xlock on policylock
-        reqid = self._reqid_tostr(op['op']['reqid'])
+        reqid = self._reqid_tostr(op['reqid'])
         self.fs.kill_op(reqid, rank=1)
         p.wait()
 

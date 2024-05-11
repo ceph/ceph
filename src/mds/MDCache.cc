@@ -118,7 +118,8 @@ public:
 };
 
 struct LockPathState {
-  std::vector<std::string> locks;
+  const MDCache::LockPathConfig config;
+  CInode* in = nullptr;
 };
 
 struct QuiesceInodeState {
@@ -13990,25 +13991,36 @@ MDRequestRef MDCache::quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *
 
 void MDCache::dispatch_lock_path(const MDRequestRef& mdr)
 {
-  CInode* in = nullptr;
   CF_MDS_RetryRequestFactory cf(this, mdr, true);
-  static const int ptflags = 0
-    | MDS_TRAVERSE_DISCOVER
-    | MDS_TRAVERSE_RDLOCK_PATH
-    | MDS_TRAVERSE_WANT_INODE
-    ;
-  int r = path_traverse(mdr, cf, mdr->get_filepath(), ptflags, nullptr, &in);
-  if (r > 0)
-    return;
-  if (r < 0) {
-    mds->server->respond_to_request(mdr, r);
-    return;
+  auto& lps = *static_cast<LockPathState*>(mdr->internal_op_private);
+  CInode* in = lps.in;
+
+  if (!in) {
+    static const int ptflags = 0
+      | MDS_TRAVERSE_DISCOVER
+      | MDS_TRAVERSE_RDLOCK_PATH
+      | MDS_TRAVERSE_WANT_INODE
+      ;
+    
+    // TODO: honor `lps.dont_block` in the path traverse?
+    int r = path_traverse(mdr, cf, mdr->get_filepath(), ptflags, nullptr, &in);
+    if (r > 0)
+      return;
+    if (r < 0) {
+      mds->server->respond_to_request(mdr, r);
+      return;
+    }
+    lps.in = in;
   }
 
-  auto& lps = *static_cast<LockPathState*>(mdr->internal_op_private);
+  // since we have our inode, let's drop all locks from the traversal,
+  // because ideally, we only want to hold the locks from the command
+  mds->locker->drop_locks(mdr.get());
+
+  mdr->mark_event("acquired target inode");
 
   MutationImpl::LockOpVec lov;
-  for (const auto &lock : lps.locks) {
+  for (const auto &lock : lps.config.locks) {
     auto colonps = lock.find(':');
     if (colonps == std::string::npos) {
       mds->server->respond_to_request(mdr, -CEPHFS_EINVAL);
@@ -14065,19 +14077,36 @@ void MDCache::dispatch_lock_path(const MDRequestRef& mdr)
     }
   }
 
-  if (!mds->locker->acquire_locks(mdr, lov, nullptr, {in}, false, true)) {
+  if (!mds->locker->acquire_locks(mdr, lov, lps.config.ap_freeze ? in : nullptr, {in}, lps.config.ap_dont_block, true)) {
+    if (lps.config.ap_dont_block && mdr->aborted) {
+      mds->server->respond_to_request(mdr, -CEPHFS_EWOULDBLOCK);
+    }
     return;
   }
 
+  if (!lps.config.ap_freeze) {
+    // go stealth
+    mdr->drop_local_auth_pins();
+  }
+
+  mdr->mark_event("object locked");
+  if (auto c = mdr->internal_op_finish) {
+    mdr->internal_op_finish = nullptr;
+    c->complete(0);
+  }
   /* deliberately leak until killed */
 }
 
-MDRequestRef MDCache::lock_path(filepath p, std::vector<std::string> locks)
+MDRequestRef MDCache::lock_path(LockPathConfig config, std::function<void(MDRequestRef const& mdr)> on_locked)
 {
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_LOCK_PATH);
-  mdr->set_filepath(p);
-  mdr->internal_op_finish = new LambdaContext([](int r) {});
-  mdr->internal_op_private = new LockPathState{locks};
+  mdr->set_filepath(config.fpath);
+  if (on_locked) {
+    mdr->internal_op_finish = new LambdaContext([mdr, cb = std::move(on_locked)](int rc) {
+      cb(mdr);
+    });
+  }
+  mdr->internal_op_private = new LockPathState{std::move(config)};
   dispatch_request(mdr);
   return mdr;
 }
