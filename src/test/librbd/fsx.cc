@@ -2853,6 +2853,7 @@ check_clone(int clonenum, bool replay_image)
 	struct rbd_ctx cur_ctx = RBD_CTX_INIT;
 	struct stat file_info;
 	char *good_buf, *temp_buf;
+	uint64_t size;
 
         if (replay_image) {
                 replay_imagename(imagename, sizeof(imagename), clonenum);
@@ -2864,18 +2865,28 @@ check_clone(int clonenum, bool replay_image)
 		prterrcode("check_clone: ops->open", ret);
 		exit(167);
 	}
+	if ((ret = ops->get_size(&cur_ctx, &size)) < 0) {
+		prterrcode("check_clone: ops->get_size", ret);
+		exit(167);
+	}
 
 	clone_filename(filename, sizeof(filename), clonenum + 1);
 	if ((fd = open(filename, O_RDONLY | O_BINARY)) < 0) {
 		prterrcode("check_clone: open", -errno);
 		exit(168);
 	}
-
-	prt("checking clone #%d, image %s against file %s\n",
-	    clonenum, imagename, filename);
 	if (fstat(fd, &file_info) < 0) {
 		prterrcode("check_clone: fstat", -errno);
 		exit(169);
+	}
+
+	prt("checking clone #%d, image %s against file %s\n",
+	    clonenum, imagename, filename);
+	if (size != (uint64_t)file_info.st_size) {
+		prt("check_clone: image size 0x%llx != file size 0x%llx\n",
+		    (unsigned long long)size,
+		    (unsigned long long)file_info.st_size);
+		exit(175);
 	}
 
 	good_buf = NULL;
