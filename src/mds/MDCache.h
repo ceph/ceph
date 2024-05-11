@@ -629,7 +629,14 @@ private:
   }
   void add_quiesce(CInode* parent, CInode* in);
 
-  MDRequestRef lock_path(filepath p, std::vector<std::string> locks);
+  struct LockPathConfig {
+    filepath fpath;
+    std::vector<std::string> locks;
+    bool ap_dont_block = false;
+    bool ap_freeze = false;
+  };
+
+  MDRequestRef lock_path(LockPathConfig config, std::function<void(MDRequestRef const& mdr)> on_locked = {});
 
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
