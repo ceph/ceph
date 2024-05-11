@@ -363,6 +363,9 @@ void MDSDaemon::set_up_admin_socket()
   r = admin_socket->register_command("lock path"
                                      " name=path,type=CephString,req=true"
                                      " name=locks,type=CephString,n=N,req=false"
+                                     " name=ap_dont_block,type=CephBool,req=false"
+                                     " name=ap_freeze,type=CephBool,req=false"
+                                     " name=await,type=CephBool,req=false"
 				     ,asok_hook
 				     ,"lock a path");
   ceph_assert(r == 0);

@@ -58,6 +58,7 @@ using std::set;
 using std::string;
 using std::vector;
 using TOPNSPC::common::cmd_getval;
+using TOPNSPC::common::cmd_getval_or;
 
 class C_Flush_Journal : public MDSInternalContext {
 public:
@@ -3019,7 +3020,8 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "quiesce path") {
     r = command_quiesce_path(f, cmdmap, *css);
   } else if (command == "lock path") {
-    r = command_lock_path(f, cmdmap, *css);
+    command_lock_path(f, cmdmap, std::move(on_finish));
+    return;
   } else if (command == "dump tree") {
     command_dump_tree(cmdmap, *css, f);
   } else if (command == "dump loads") {
@@ -3508,28 +3510,48 @@ int MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::ost
   return 0;
 }
 
-int MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::ostream& ss)
+void MDSRank::command_lock_path(Formatter* f, const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish)
 {
   std::string path;
-  {
-    bool got = cmd_getval(cmdmap, "path", path);
-    if (!got) {
-      ss << "missing path";
-      return -CEPHFS_EINVAL;
-    }
+
+  if (!cmd_getval(cmdmap, "path", path)) {
+    bufferlist bl;
+    on_finish(-EINVAL, "missing path", bl);
+    return;
   }
 
-  std::vector<std::string> locks;
-  cmd_getval(cmdmap, "locks", locks);
+  MDCache::LockPathConfig config;
 
-  f->open_object_section("lock");
+  cmd_getval(cmdmap, "locks", config.locks);
+  config.ap_dont_block = cmd_getval_or<bool>(cmdmap, "ap_dont_block", false);
+  config.ap_freeze = cmd_getval_or<bool>(cmdmap, "ap_freeze", false);
+  config.fpath = filepath(path);
+  bool await = cmd_getval_or<bool>(cmdmap, "await", false);
+
+  auto respond = [f, on_finish=std::move(on_finish)](MDRequestRef const& req) {
+    f->open_object_section("response");
+    req->dump_with_mds_lock(f);
+    f->close_section();
+
+    bufferlist bl;
+    // need to do this manually, because the default asock
+    // on_finish handler doesn't flush the formatter for rc < 0
+    f->flush(bl);
+    auto cephrc = req->result.value_or(0); // SUCCESS makes more sense for this API than EINPROGRESS
+    auto rc = cephrc < 0 ? -ceph_to_hostos_errno(-cephrc) : cephrc;
+    on_finish(rc, "", bl);
+  };
+
   {
     std::lock_guard l(mds_lock);
-    auto mdr = mdcache->lock_path(filepath(path), locks);
-    f->dump_object("op", *mdr);
+    if (await) {
+      mdcache->lock_path(std::move(config), std::move(respond));
+    } else {
+      auto mdr = mdcache->lock_path(std::move(config));
+      // respond at once
+      respond(mdr);
+    }
   }
-  f->close_section();
-  return 0;
 }
 
 void MDSRank::command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss)
