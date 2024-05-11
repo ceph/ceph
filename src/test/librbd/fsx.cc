@@ -2634,14 +2634,14 @@ check_clone(int clonenum, bool replay_image)
 
 	clone_filename(filename, sizeof(filename), clonenum + 1);
 	if ((fd = open(filename, O_RDONLY)) < 0) {
-		simple_err("check_clone: open", -errno);
+		prterrcode("check_clone: open", -errno);
 		exit(168);
 	}
 
 	prt("checking clone #%d, image %s against file %s\n",
 	    clonenum, imagename, filename);
-	if ((ret = fstat(fd, &file_info)) < 0) {
-		simple_err("check_clone: fstat", -errno);
+	if (fstat(fd, &file_info) < 0) {
+		prterrcode("check_clone: fstat", -errno);
 		exit(169);
 	}
 
@@ -2663,8 +2663,8 @@ check_clone(int clonenum, bool replay_image)
 		exit(97);
 	}
 
-	if ((ret = pread(fd, good_buf, file_info.st_size, 0)) < 0) {
-		simple_err("check_clone: pread", -errno);
+	if (pread(fd, good_buf, file_info.st_size, 0) < 0) {
+		prterrcode("check_clone: pread", -errno);
 		exit(170);
 	}
 	if ((ret = ops->read(&cur_ctx, 0, file_info.st_size, temp_buf)) < 0) {
