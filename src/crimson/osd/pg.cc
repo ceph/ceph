@@ -1588,6 +1588,11 @@ void PG::on_change(ceph::os::Transaction &t) {
   }
   scrubber.on_interval_change();
   obc_registry.invalidate_on_interval_change();
+  // snap trim events are all going to be interrupted,
+  // clearing PG_STATE_SNAPTRIM/PG_STATE_SNAPTRIM_ERROR here
+  // is save and in time.
+  peering_state.state_clear(PG_STATE_SNAPTRIM);
+  peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
 }
 
 void PG::context_registry_on_change() {
