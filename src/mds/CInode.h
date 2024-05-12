@@ -930,7 +930,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   mds_authority_t authority() const override;
 
   // -- auth pins --
-  bool can_auth_pin(int *err_ret=nullptr, bool bypassfreezing=false) const override;
+  bool can_auth_pin(int *err_ret=nullptr) const override;
   void auth_pin(void *by) override;
   void auth_unpin(void *by) override;
 
