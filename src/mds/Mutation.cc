@@ -364,9 +364,9 @@ void MDRequestImpl::clear_ambiguous_auth()
   more()->is_ambiguous_auth = false;
 }
 
-bool MDRequestImpl::can_auth_pin(MDSCacheObject *object, bool bypassfreezing)
+bool MDRequestImpl::can_auth_pin(MDSCacheObject *object)
 {
-  return object->can_auth_pin(nullptr, bypassfreezing) ||
+  return object->can_auth_pin(nullptr) ||
          (is_auth_pinned(object) && has_more() &&
 	  more()->is_freeze_authpin &&
 	  more()->rename_inode == object);
