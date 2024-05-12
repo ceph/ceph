@@ -46,9 +46,9 @@ Create a volume by running the following command:
 
    ceph fs volume create <vol_name> [placement]
 
-This creates a CephFS file system and its data and metadata pools. It can also
-deploy MDS daemons for the filesystem using a ceph-mgr orchestrator module (for
-example Rook). See :doc:`/mgr/orchestrator`.
+This creates a CephFS file system and its data and metadata pools. This command
+can also deploy MDS daemons for the filesystem using a Ceph Manager orchestrator
+module (for example Rook). See :doc:`/mgr/orchestrator`.
 
 ``<vol_name>`` is the volume name (an arbitrary string). ``[placement]`` is an
 optional string that specifies the :ref:`orchestrator-cli-placement-spec` for
@@ -62,13 +62,13 @@ To remove a volume, run the following command:
 
     $ ceph fs volume rm <vol_name> [--yes-i-really-mean-it]
 
-This removes a file system and its data and metadata pools. It also tries to
-remove MDS daemons using the enabled ceph-mgr orchestrator module.
+This command removes a file system and its data and metadata pools. It also
+tries to remove MDS daemons using the enabled Ceph Manager orchestrator module.
 
-.. note:: After volume deletion, it is recommended to restart `ceph-mgr`
-   if a new file system is created on the same cluster and subvolume interface
-   is being used. Please see https://tracker.ceph.com/issues/49605#note-5
-   for more details.
+.. note:: After volume deletion, we recommend restarting `ceph-mgr` if a new
+   file system is created on the same cluster and the subvolume interface is
+   being used. See https://tracker.ceph.com/issues/49605#note-5 for more
+   details.
 
 List volumes by running the following command:
 
