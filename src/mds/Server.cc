@@ -10005,14 +10005,14 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
       dout(10) << " freezing srci " << *srcdnl->get_inode() << " with allowance " << allowance << dendl;
       bool frozen_inode = srcdnl->get_inode()->freeze_inode(allowance);
 
+      if (!frozen_inode) {
+        srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
+        return;
+      }
+
       // unfreeze auth pin after freezing the inode to avoid queueing waiters
       if (srcdnl->get_inode()->is_frozen_auth_pin())
-	mdr->unfreeze_auth_pin();
-
-      if (!frozen_inode) {
-	srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
-	return;
-      }
+        mdr->unfreeze_auth_pin();
 
       /*
        * set ambiguous auth for srci
