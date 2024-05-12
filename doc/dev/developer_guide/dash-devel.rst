@@ -2423,8 +2423,10 @@ also manually invoked: ``tox -e openapi-check``.
 If that checker failed, it means that the current Pull Request is modifying the
 Ceph API and therefore:
 
-#. The versioned OpenAPI specification should be updated explicitly: ``tox -e openapi-fix``.
-#. The team @ceph/api will be requested for reviews (this is automated via GitHub CODEOWNERS), in order to asses the impact of changes.
+#. The versioned OpenAPI specification should be updated explicitly: ``tox -e
+   openapi-fix``.
+#. The team @ceph/api will be requested for reviews (this is automated via
+   GitHub CODEOWNERS), in order to assess the impact of changes.
 
 Additionally, Sphinx documentation can be generated from the OpenAPI
 specification with ``tox -e openapi-doc``.
