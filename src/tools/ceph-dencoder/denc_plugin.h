@@ -23,6 +23,7 @@ public:
     other.dencoders.clear();
   }
   ~DencoderPlugin() {
+    unregister_dencoders();
 #if !defined(__FreeBSD__)
     if (mod) {
       dlclose(mod);
