@@ -271,8 +271,9 @@ class Monitoring(ContainerDaemonForm):
                     # use the first ipv4 (if any) otherwise use the first ipv6
                     addr = next(iter(ipv4_addrs or ipv6_addrs), None)
                     host = wrap_ipv6(addr) if addr else host
-                r += [f'--web.external-url={scheme}://{host}:{port}']
+                r += [f'--web.external-url={scheme}://{host}:{port}/prometheus']
             r += [f'--web.listen-address={ip}:{port}']
+            r += [f'--web.route-prefix=/prometheus/']
         if daemon_type == 'alertmanager':
             config = fetch_configs(ctx)
             peers = config.get('peers', list())  # type: ignore
@@ -284,6 +285,9 @@ class Monitoring(ContainerDaemonForm):
                 pass
             # some alertmanager, by default, look elsewhere for a config
             r += ['--config.file=/etc/alertmanager/alertmanager.yml']
+            r += [f'--web.external-url={scheme}://{host}:{port}/alertmanager']
+            r += ['--web.route-prefix=/alertmanager']
+
         if daemon_type == 'promtail':
             r += ['--config.expand-env']
         if daemon_type == 'prometheus':
