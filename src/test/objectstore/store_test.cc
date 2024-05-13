@@ -21,6 +21,7 @@
 #include <iostream>
 #include <memory>
 #include <time.h>
+#include <random>
 #include <sys/mount.h>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
@@ -108,7 +109,13 @@ static bool bl_eq(bufferlist& expected, bufferlist& actual)
   }
   return false;
 }
-
+std::unique_ptr<char[]> gen_buffer(uint64_t size)
+{
+  std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size);
+  std::independent_bits_engine<std::default_random_engine, CHAR_BIT, unsigned char> e;
+  std::generate(buffer.get(), buffer.get() + size, std::ref(e));
+  return buffer;
+}
 void dump_bluefs_stats()
 {
   AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
