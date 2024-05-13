@@ -58,6 +58,7 @@ Cache::~Cache()
   ceph_assert(extents.empty());
 }
 
+// TODO: this method can probably be removed in the future
 Cache::retire_extent_ret Cache::retire_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
