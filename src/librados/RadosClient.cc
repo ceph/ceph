@@ -865,13 +865,19 @@ int librados::RadosClient::mgr_command(const vector<string>& cmd,
   std::lock_guard l(lock);
 
   C_SaferCond cond;
-  int r = mgrclient.start_command(cmd, inbl, outbl, outs, &cond);
+  uint64_t tid = 0;
+  int r = mgrclient.start_command(cmd, inbl, outbl, outs, &cond, &tid);
   if (r < 0)
     return r;
 
   lock.unlock();
   if (rados_mon_op_timeout.count() > 0) {
     r = cond.wait_for(rados_mon_op_timeout);
+    if (r < 0) {
+      lock.lock();
+      mgrclient.discard_command(tid);
+      lock.unlock();
+    }
   } else {
     r = cond.wait();
   }
@@ -889,13 +895,19 @@ int librados::RadosClient::mgr_command(
   std::lock_guard l(lock);
 
   C_SaferCond cond;
-  int r = mgrclient.start_tell_command(name, cmd, inbl, outbl, outs, &cond);
+  uint64_t tid = 0;
+  int r = mgrclient.start_tell_command(name, cmd, inbl, outbl, outs, &cond, &tid);
   if (r < 0)
     return r;
 
   lock.unlock();
   if (rados_mon_op_timeout.count() > 0) {
     r = cond.wait_for(rados_mon_op_timeout);
+    if (r < 0) {
+      lock.lock();
+      mgrclient.discard_command(tid);
+      lock.unlock();
+    }
   } else {
     r = cond.wait();
   }

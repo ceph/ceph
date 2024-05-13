@@ -492,7 +492,7 @@ bool MgrClient::handle_mgr_close(ref_t<MMgrClose> m)
 
 int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 			     bufferlist *outbl, string *outs,
-			     Context *onfinish)
+			     Context *onfinish, uint64_t *tid)
 {
   std::lock_guard l(lock);
 
@@ -520,6 +520,9 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
   } else {
     ldout(cct, 5) << "no mgr session (no running mgr daemon?), waiting" << dendl;
   }
+  if (tid) {
+    *tid = op.tid;
+  }
   return 0;
 }
 
@@ -527,7 +530,7 @@ int MgrClient::start_tell_command(
   const string& name,
   const vector<string>& cmd, const bufferlist& inbl,
   bufferlist *outbl, string *outs,
-  Context *onfinish)
+  Context *onfinish, uint64_t *tid)
 {
   std::lock_guard l(lock);
 
@@ -556,7 +559,19 @@ int MgrClient::start_tell_command(
     ldout(cct, 5) << "no mgr session (no running mgr daemon?), or "
 		  << name << " not active mgr, waiting" << dendl;
   }
+  if (tid) {
+    *tid = op.tid;
+  }
   return 0;
+}
+
+// when caller doesn't want to wait for the reply and trying to release buffer ptr,
+// it must call this func first to avoid later segment fault in `handle_command_reply`.
+void MgrClient::discard_command(uint64_t tid)
+{
+  std::lock_guard l(lock);
+  ldout(cct, 4) << "discard_command tid " << tid << dendl;
+  command_table.erase(tid);
 }
 
 bool MgrClient::handle_command_reply(
