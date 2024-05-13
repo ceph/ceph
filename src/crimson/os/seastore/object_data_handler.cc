@@ -640,8 +640,8 @@ struct overwrite_plan_t {
 
   // helper member
   extent_len_t block_size;
-  bool is_left_stable;
-  bool is_right_stable;
+  bool is_left_fresh;
+  bool is_right_fresh;
 
 public:
   extent_len_t get_left_size() const {
@@ -691,8 +691,8 @@ public:
 	       << ", left_operation=" << overwrite_plan.left_operation
 	       << ", right_operation=" << overwrite_plan.right_operation
 	       << ", block_size=" << overwrite_plan.block_size
-	       << ", is_left_stable=" << overwrite_plan.is_left_stable
-	       << ", is_right_stable=" << overwrite_plan.is_right_stable
+	       << ", is_left_fresh=" << overwrite_plan.is_left_fresh
+	       << ", is_right_fresh=" << overwrite_plan.is_right_fresh
 	       << ")";
   }
 
@@ -711,8 +711,8 @@ public:
       left_operation(overwrite_operation_t::UNKNOWN),
       right_operation(overwrite_operation_t::UNKNOWN),
       block_size(block_size),
-      is_left_stable(pins.front()->is_stable()),
-      is_right_stable(pins.back()->is_stable()) {
+      is_left_fresh(!pins.front()->is_stable()),
+      is_right_fresh(!pins.back()->is_stable()) {
     validate();
     evaluate_operations();
     assert(left_operation != overwrite_operation_t::UNKNOWN);
@@ -752,7 +752,7 @@ private:
       actual_write_size -= left_ext_size;
       left_ext_size = 0;
       left_operation = overwrite_operation_t::OVERWRITE_ZERO;
-    } else if (!is_left_stable) {
+    } else if (is_left_fresh) {
       aligned_data_size += left_ext_size;
       left_ext_size = 0;
       left_operation = overwrite_operation_t::MERGE_EXISTING;
@@ -762,7 +762,7 @@ private:
       actual_write_size -= right_ext_size;
       right_ext_size = 0;
       right_operation = overwrite_operation_t::OVERWRITE_ZERO;
-    } else if (!is_right_stable) {
+    } else if (is_right_fresh) {
       aligned_data_size += right_ext_size;
       right_ext_size = 0;
       right_operation = overwrite_operation_t::MERGE_EXISTING;
