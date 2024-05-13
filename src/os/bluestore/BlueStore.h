@@ -273,6 +273,7 @@ public:
   struct Onode;
   class Scanner;
   class Estimator;
+  Estimator* create_estimator();
 
   typedef boost::intrusive_ptr<Collection> CollectionRef;
   typedef boost::intrusive_ptr<Onode> OnodeRef;
@@ -1692,6 +1693,7 @@ public:
     std::optional<double> compression_req_ratio;
 
     ContextQueue *commit_queue;
+    Estimator* estimator;
 
     OnodeCacheShard* get_onode_cache() const {
       return onode_space.cache;
