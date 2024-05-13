@@ -193,6 +193,7 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   cluster, MDS_CLIENTS_BROKEN_ROOTSQUASH. See the documentation on this warning
   and the new feature bit for more information.
 
+* cls_cxx_gather is marked as deprecated.
 
 >=18.0.0
 
