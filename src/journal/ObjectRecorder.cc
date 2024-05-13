@@ -42,7 +42,13 @@ ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, std::string_view oid,
   }
   m_compat_mode = require_osd_release < CEPH_RELEASE_OCTOPUS;
 
-  ldout(m_cct, 20) << dendl;
+  r = m_ioctx.stat(m_oid, &m_object_bytes, nullptr);
+  if (r < 0 && r != -ENOENT) {
+    ldout(m_cct, 0) << "failed to retrieve the size of object: "
+                    << cpp_strerror(r) << dendl;
+  }
+
+  ldout(m_cct, 20) << "m_object_bytes " << m_object_bytes << dendl;
 }
 
 ObjectRecorder::~ObjectRecorder() {
