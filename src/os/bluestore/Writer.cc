@@ -804,7 +804,7 @@ inline bufferlist BlueStore::Writer::_read_self(
   if (test_read_divertor == nullptr) {
     bufferlist result;
     int r;
-    r = bstore->_do_read(onode->c, onode, position, length, result);
+    r = bstore->_do_basic_read(onode->c, onode, position, length, result);
     ceph_assert(r >= 0 && r <= (int)length);
     size_t zlen = length - r;
     if (zlen) {
