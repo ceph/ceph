@@ -12078,7 +12078,6 @@ TEST_P(StoreTestSpecificAUSize, BlueFSReservedTest) {
             g_conf()->bluefs_alloc_size + wal_extra);
 }
 
-
 TEST_P(StoreTest, BlueFS_truncate_remove_race) {
   if (string(GetParam()) != "bluestore")
     GTEST_SKIP();
@@ -12123,6 +12122,177 @@ TEST_P(StoreTest, BlueFS_truncate_remove_race) {
   fs.unittest_inject_delay = nullptr;
   EXPECT_EQ(store->umount(), 0);
   EXPECT_EQ(store->mount(), 0);
+}
+
+TEST_P(StoreTest, BasicReformattingTest) {
+  int r;
+  coll_t cid;
+  ghobject_t obj(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  const PerfCounters* logger = store->get_perf_counters();
+
+  pool_opts_t popts;
+  popts.set(pool_opts_t::DATA_LAYOUT_REFORMATTING, "defragment");
+  store->set_collection_opts(ch, popts);
+
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  uint64_t len = 512 * 1024;
+  bl.append(std::string(len, 'a'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+    ceph_assert(r == (int)len);
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_issued));
+  }
+  {
+    C_SaferCond c;
+    bufferlist bl1;
+    uint64_t pos = 0;
+    uint64_t len1 = 4096;
+    bl1.append(std::string(len1, 'c'));
+    ObjectStore::Transaction t;
+    while (pos < len) {
+      t.write(cid, obj, pos, len1, bl1, 0);
+      pos += 2 * len1;
+    }
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+    ceph_assert(r == (int)len);
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  sleep(1);
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+    ceph_assert(r == (int)len);
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_defragment_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_defragment_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, obj);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTest, CompressedReformattingTest) {
+  int r;
+  coll_t cid;
+
+  SetVal(g_conf(), "bluestore_compression_algorithm", "lz4");
+  SetVal(g_conf(), "bluestore_compression_mode", "force");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  ghobject_t obj(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  const PerfCounters* logger = store->get_perf_counters();
+
+  pool_opts_t popts;
+  popts.set(pool_opts_t::DATA_LAYOUT_REFORMATTING, "decompress");
+  store->set_collection_opts(ch, popts);
+
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  uint64_t len = 512 * 1024;
+  bl.append(std::string(len, 'a'));
+  {
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.write(cid, obj, 0, len, bl, 0);
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+    ceph_assert(r == (int)len);
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_issued));
+  }
+  {
+    C_SaferCond c;
+    bufferlist bl1;
+    uint64_t pos = 0;
+    uint64_t len1 = 4096;
+    bl1.append(std::string(len1, 'b'));
+    ObjectStore::Transaction t;
+    while (pos < len) {
+      t.write(cid, obj, pos, len1, bl1, 0);
+      pos += 2 * len1;
+    }
+    t.register_on_commit(&c);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+    ceph_assert(r == (int)len);
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  sleep(1);
+  {
+    bufferlist bl;
+    int r = store->read(ch, obj, 0, len, bl,
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED | CEPH_OSD_OP_FLAG_ALLOW_DATA_REFORMATTING);
+    ceph_assert(r == (int)len);
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_compress_attempted));
+    ASSERT_EQ(0, logger->get(l_bluestore_reformat_compress_omitted));
+    ASSERT_EQ(1, logger->get(l_bluestore_reformat_issued));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, obj);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
 }
 
 #endif  // WITH_BLUESTORE
