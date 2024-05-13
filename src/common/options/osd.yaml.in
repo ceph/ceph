@@ -528,7 +528,7 @@ options:
     either success or failure (the pre-Squid version behaviour). This configuration
     option is introduced to support mixed-version clusters and debugging, and will
     be removed in the next release.
-  default: true
+  default: false
   with_legacy: false
 # where rados plugins are stored
 - name: osd_class_dir
