@@ -1473,48 +1473,78 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 		  pins,
 		  [FNAME, ctx, l_start, l_end, &l_current, &ret](auto &pin)
 		  -> read_iertr::future<> {
+		    auto pin_key = pin->get_key();
                     if (l_current == l_start) {
-                      ceph_assert(l_current >= pin->get_key());
+                      ceph_assert(l_current >= pin_key);
                     } else {
                       assert(l_current > l_start);
-                      ceph_assert(l_current == pin->get_key());
+                      ceph_assert(l_current == pin_key);
                     }
 		    ceph_assert(l_current < l_end);
-		    laddr_t l_pin_end = std::min(
-		      pin->get_key() + pin->get_length(), l_end);
+                    auto pin_len = pin->get_length();
+                    assert(pin_len > 0);
+                    laddr_t l_pin_end = pin_key + pin_len;
 		    ceph_assert(l_current < l_pin_end);
+		    laddr_t l_current_end = std::min(l_pin_end, l_end);
 		    if (pin->get_val().is_zero()) {
-		      ret.append_zero(l_pin_end - l_current);
-		      l_current = l_pin_end;
+		      DEBUGT("got {}~{} from zero-pin {}~{}",
+			ctx.t,
+			l_current,
+			l_current_end - l_current,
+			pin_key,
+			pin_len);
+		      ret.append_zero(l_current_end - l_current);
+		      l_current = l_current_end;
 		      return seastar::now();
 		    } else {
-		      auto key = pin->get_key();
 		      bool is_indirect = pin->is_indirect();
-                      extent_len_t off = pin->get_intermediate_offset();
-		      DEBUGT("reading {}~{}, indirect: {}, "
-			"intermediate offset: {}, l_current: {}, l_pin_end: {}",
-			ctx.t,
-			key,
-			pin->get_length(),
-			is_indirect,
-			off,
-			l_current,
-			l_pin_end);
+                      laddr_t e_key;
+                      extent_len_t e_len;
+                      extent_len_t e_off;
+                      if (is_indirect) {
+                        e_key = pin->get_intermediate_base();
+                        e_len = pin->get_intermediate_length();
+                        e_off = pin->get_intermediate_offset();
+                        DEBUGT("reading {}~{} from indirect-pin {}~{}, direct-pin {}~{}(off={})",
+                          ctx.t,
+                          l_current,
+                          l_current_end - l_current,
+                          pin_key,
+                          pin_len,
+                          e_key,
+                          e_len,
+                          e_off);
+                        assert(e_key <= pin->get_intermediate_key());
+                        assert(e_off + pin_len <= e_len);
+                      } else {
+                        DEBUGT("reading {}~{} from pin {}~{}",
+                          ctx.t,
+                          l_current,
+                          l_current_end - l_current,
+                          pin_key,
+                          pin_len);
+                        e_key = pin_key;
+                        e_len = pin_len;
+                        e_off = 0;
+                      }
+                      extent_len_t e_current_off = e_off + l_current - pin_key;
 		      return ctx.tm.read_pin<ObjectDataBlock>(
 			ctx.t,
 			std::move(pin)
-		      ).si_then([&ret, &l_current, l_pin_end, key, off,
-				is_indirect](auto extent) {
-			ceph_assert(
-			  is_indirect
-			    ? (key - off + extent->get_length()) >= l_pin_end
-			    : (extent->get_laddr() + extent->get_length()) >= l_pin_end);
+		      ).si_then([&ret, &l_current, l_current_end,
+#ifndef NDEBUG
+                                 e_key, e_len, e_current_off](auto extent) {
+#else
+                                 e_current_off](auto extent) {
+#endif
+                        assert(e_key == extent->get_laddr());
+                        assert(e_len == extent->get_length());
 			ret.append(
 			  bufferptr(
 			    extent->get_bptr(),
-			    off + l_current - (is_indirect ? key : extent->get_laddr()),
-			    l_pin_end - l_current));
-			l_current = l_pin_end;
+			    e_current_off,
+			    l_current_end - l_current));
+			l_current = l_current_end;
 			return seastar::now();
 		      }).handle_error_interruptible(
 			read_iertr::pass_further{},
