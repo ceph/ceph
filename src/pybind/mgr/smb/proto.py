@@ -48,6 +48,7 @@ class Simplifiable(Protocol):
 
 
 EntryKey = Tuple[str, str]
+FindParams = Dict[str, Any]
 
 
 class ConfigEntry(Protocol):
@@ -99,6 +100,21 @@ class ConfigStore(ConfigStoreListing, Protocol):
         ...  # pragma: no cover
 
     def remove(self, ns: EntryKey) -> bool:
+        ...  # pragma: no cover
+
+
+class FindingConfigStore(ConfigStore, Protocol):
+    """A protocol for a config store that can more efficiently find
+    items within the the store.
+    """
+
+    def find_entries(
+        self, ns: str, params: FindParams
+    ) -> Collection[ConfigEntry]:
+        """Find entries in the store matching the given params.
+        Params is a dict that will be compared to the same keys/attributes of
+        the objects being searched. Only exact matches will be returned.
+        """
         ...  # pragma: no cover
 
 
