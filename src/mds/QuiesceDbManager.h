@@ -227,6 +227,7 @@ class QuiesceDbManager {
     // the database.
     struct Db {
       QuiesceTimePoint time_zero;
+      epoch_t epoch;
       QuiesceSetVersion set_version = 0;
       using Sets = std::unordered_map<QuiesceSetId, QuiesceSet>;
       Sets sets;
@@ -235,22 +236,23 @@ class QuiesceDbManager {
         return QuiesceClock::now() - time_zero;
       }
       void clear() { 
-        set_version = 0; 
+        set_version = 0;
+        epoch = 0;
         sets.clear();
         time_zero = QuiesceClock::now();
       }
-    } db;
 
-    QuiesceDbVersion db_version() const { return {membership.epoch, db.set_version}; }
+      QuiesceDbVersion version() const { return {epoch, set_version}; }
+    } db;
 
     QuiesceClusterMembership membership;
 
     struct PeerInfo {
         QuiesceMap diff_map;
-        QuiesceTimePoint last_seen;
-        PeerInfo(QuiesceMap&& diff_map, QuiesceTimePoint last_seen)
+        QuiesceTimePoint last_activity;
+        PeerInfo(QuiesceMap&& diff_map, QuiesceTimePoint last_activity)
             : diff_map(diff_map)
-            , last_seen(last_seen)
+            , last_activity(last_activity)
         {
         }
         PeerInfo() { }
@@ -278,7 +280,8 @@ class QuiesceDbManager {
     std::pair<IsMemberBool, ShouldExitBool> membership_upkeep();
 
     QuiesceTimeInterval replica_upkeep(decltype(pending_db_updates)&& db_updates);
-    bool leader_bootstrap(decltype(pending_db_updates)&& db_updates, QuiesceTimeInterval &next_event_at_age);
+    // returns zero interval if bootstrapped, otherwise the time to sleep while we wait for peer responses
+    QuiesceTimeInterval leader_bootstrap(decltype(pending_db_updates)&& db_updates);
     QuiesceTimeInterval leader_upkeep(decltype(pending_acks)&& acks, decltype(pending_requests)&& requests);
     
 
