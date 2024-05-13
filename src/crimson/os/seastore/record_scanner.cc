@@ -120,7 +120,7 @@ RecordScanner::read_validate_record_metadata(
   }
   TRACE("reading record group header block {}~4096", start);
   return read(start, block_size
-  ).safe_then([=](bufferptr bptr) mutable
+  ).safe_then([this, FNAME, nonce, block_size, &cursor](bufferptr bptr)
               -> read_validate_record_metadata_ret {
     bufferlist bl;
     bl.append(bptr);
