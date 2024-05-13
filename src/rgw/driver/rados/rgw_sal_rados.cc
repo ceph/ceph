@@ -2583,6 +2583,7 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   RGWRados::Object op_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
   RGWRados::Object::Write obj_op(&op_target);
 
+  set_atomic();
   obj_op.meta.modify_tail = true;
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.category = RGWObjCategory::CloudTiered;
