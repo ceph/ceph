@@ -1,4 +1,4 @@
-from typing import Collection, Dict, Iterator
+from typing import Collection, Dict, Iterator, Optional
 
 from .proto import ConfigEntry, EntryKey, Simplified
 
@@ -97,3 +97,46 @@ class EntryCache:
 
     def __iter__(self) -> Iterator[EntryKey]:
         return iter(self._entries.keys())
+
+
+class ObjectCachingEntry:
+    """A config entry that wraps a different ConfigEntry and caches the
+    simplified object. If the object is set the cache will be updated. If the
+    object is removed the cached object will be forgotten. The cached object
+    can be manually reset with the `clear_cached_obj` method.
+    """
+
+    def __init__(
+        self, base_entry: ConfigEntry, *, obj: Optional[Simplified] = None
+    ) -> None:
+        self._base = base_entry
+        self._obj = obj
+
+    def clear_cached_obj(self) -> None:
+        self._obj = None
+
+    def set(self, obj: Simplified) -> None:
+        self._obj = None  # if base.set fails, obj will be left unset
+        self._base.set(obj)
+        self._obj = obj
+
+    def get(self) -> Simplified:
+        if self._obj is not None:
+            return self._obj
+        self._obj = self._base.get()
+        return self._obj
+
+    def remove(self) -> bool:
+        self._obj = None
+        return self._base.remove()
+
+    def exists(self) -> bool:
+        return self._base.exists()
+
+    @property
+    def uri(self) -> str:
+        return self._base.uri
+
+    @property
+    def full_key(self) -> EntryKey:
+        return self._base.full_key
