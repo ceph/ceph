@@ -114,7 +114,6 @@ public:
   void init_opslog();
   int init_frontends2(RGWLib* rgwlib = nullptr);
   void init_tracepoints();
-  void init_notification_endpoints();
   void init_lua();
 
   bool have_http() {
