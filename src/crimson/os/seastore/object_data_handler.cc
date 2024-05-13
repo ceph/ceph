@@ -1468,17 +1468,22 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 	    return seastar::do_with(
 	      std::move(_pins),
 	      l_start,
-	      [FNAME, ctx, l_end, &ret](auto &pins, auto &l_current) {
+	      [FNAME, ctx, l_start, l_end, &ret](auto &pins, auto &l_current) {
 		return trans_intr::do_for_each(
 		  pins,
-		  [FNAME, ctx, l_end, &l_current, &ret](auto &pin)
+		  [FNAME, ctx, l_start, l_end, &l_current, &ret](auto &pin)
 		  -> read_iertr::future<> {
-		    ceph_assert(l_current <= l_end);
-		    ceph_assert(l_end > pin->get_key());
+                    if (l_current == l_start) {
+                      ceph_assert(l_current >= pin->get_key());
+                    } else {
+                      assert(l_current > l_start);
+                      ceph_assert(l_current == pin->get_key());
+                    }
+		    ceph_assert(l_current < l_end);
 		    laddr_t l_pin_end = std::min(
 		      pin->get_key() + pin->get_length(), l_end);
+		    ceph_assert(l_current < l_pin_end);
 		    if (pin->get_val().is_zero()) {
-		      ceph_assert(l_pin_end > l_current); // See LBAManager::get_mappings
 		      ret.append_zero(l_pin_end - l_current);
 		      l_current = l_pin_end;
 		      return seastar::now();
@@ -1504,7 +1509,6 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 			  is_indirect
 			    ? (key - off + extent->get_length()) >= l_pin_end
 			    : (extent->get_laddr() + extent->get_length()) >= l_pin_end);
-			ceph_assert(l_pin_end > l_current);
 			ret.append(
 			  bufferptr(
 			    extent->get_bptr(),
