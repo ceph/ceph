@@ -16,7 +16,7 @@
 #define CEPH_LAZY_OMAP_STATS_TEST_H
 
 #include <map>
-#include <regex>
+#include <boost/regex.hpp>
 #include <string>
 
 #include "include/compat.h"
@@ -58,15 +58,15 @@ class LazyOmapStatsTest
   void create_payload();
   void write_many(const unsigned how_many);
   void scrub();
-  const int find_matches(std::string& output, std::regex& reg) const;
+  const int find_matches(std::string& output, boost::regex& reg) const;
   void check_one();
-  const int find_index(std::string& haystack, std::regex& needle,
+  const int find_index(std::string& haystack, boost::regex& needle,
                        std::string label) const;
   const unsigned tally_column(const unsigned omap_bytes_index,
                           const std::string& table, bool header) const;
   void check_column(const int index, const std::string& table,
                     const std::string& type, bool header = true) const;
-  index_t get_indexes(std::regex& reg, std::string& output) const;
+  index_t get_indexes(boost::regex& reg, std::string& output) const;
   void check_pg_dump();
   void check_pg_dump_summary();
   void check_pg_dump_pgs();

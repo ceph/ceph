@@ -220,11 +220,11 @@ void LazyOmapStatsTest::scrub()
   cout << "Scrubbing complete" << endl;
 }
 
-const int LazyOmapStatsTest::find_matches(string& output, regex& reg) const
+const int LazyOmapStatsTest::find_matches(string& output, boost::regex& reg) const
 {
-  sregex_iterator cur(output.begin(), output.end(), reg);
+  boost::sregex_iterator cur(output.begin(), output.end(), reg, boost::match_not_dot_newline);
   uint x = 0;
-  for (auto end = std::sregex_iterator(); cur != end; ++cur) {
+  for (auto end = boost::sregex_iterator(); cur != end; ++cur) {
     cout << (*cur)[1].str() << endl;
     x++;
   }
@@ -299,20 +299,22 @@ void LazyOmapStatsTest::check_one()
 {
   string full_output = get_output();
   cout << full_output << endl;
-  regex reg(
+  boost::regex reg(
       "\n"
       R"((PG_STAT[\s\S]*)"
       "\n)OSD_STAT"); // Strip OSD_STAT table so we don't find matches there
-  smatch match;
-  regex_search(full_output, match, reg);
+  boost::smatch match;
+  boost::regex_search(full_output, match, reg, boost::match_not_dot_newline);
   auto truncated_output = match[1].str();
   cout << truncated_output << endl;
-  reg = regex(
+  reg = boost::regex(
       "\n"
       R"(([0-9,s].*\s)" +
       to_string(conf.keys) +
       R"(\s.*))"
       "\n");
+//  reg = boost::regex( R"(([0-9,s].*\s)" +
+//      to_string(conf.keys) + R"(\s.*))");
 
   cout << "Checking number of keys " << conf.keys << endl;
   cout << "Found the following lines" << endl;
@@ -322,7 +324,7 @@ void LazyOmapStatsTest::check_one()
   cout << "Found " << result << " matching line(s)" << endl;
   uint total = result;
 
-  reg = regex(
+  reg = boost::regex(
       "\n"
       R"(([0-9,s].*\s)" +
       to_string(conf.payload_size * conf.keys) +
@@ -346,11 +348,11 @@ void LazyOmapStatsTest::check_one()
        << endl;
 }
 
-const int LazyOmapStatsTest::find_index(string& haystack, regex& needle,
+const int LazyOmapStatsTest::find_index(string& haystack, boost::regex& needle,
                                         string label) const
 {
-  smatch match;
-  regex_search(haystack, match, needle);
+  boost::smatch match;
+  boost::regex_search(haystack, match, needle, boost::match_not_dot_newline);
   auto line = match[1].str();
   boost::algorithm::trim(line);
   boost::char_separator<char> sep{" "};
@@ -407,7 +409,7 @@ void LazyOmapStatsTest::check_column(const int index, const string& table,
   }
 }
 
-index_t LazyOmapStatsTest::get_indexes(regex& reg, string& output) const
+index_t LazyOmapStatsTest::get_indexes(boost::regex& reg, string& output) const
 {
   index_t indexes;
   indexes.byte_index = find_index(output, reg, "OMAP_BYTES*");
@@ -423,7 +425,7 @@ void LazyOmapStatsTest::check_pg_dump()
   string dump_output = get_output();
   cout << dump_output << endl;
 
-  regex reg(
+  boost::regex reg(
       "\n"
       R"((PG_STAT\s.*))"
       "\n");
@@ -433,8 +435,8 @@ void LazyOmapStatsTest::check_pg_dump()
       "\n"
       R"((PG_STAT[\s\S]*))"
       "\n +\n[0-9]";
-  smatch match;
-  regex_search(dump_output, match, reg);
+  boost::smatch match;
+  boost::regex_search(dump_output, match, reg, boost::match_not_dot_newline);
   auto table = match[1].str();
 
   cout << "Checking bytes" << endl;
@@ -454,7 +456,7 @@ void LazyOmapStatsTest::check_pg_dump_summary()
   string dump_output = get_output(command);
   cout << dump_output << endl;
 
-  regex reg(
+  boost::regex reg(
       "\n"
       R"((PG_STAT\s.*))"
       "\n");
@@ -464,8 +466,8 @@ void LazyOmapStatsTest::check_pg_dump_summary()
       "\n"
       R"((sum\s.*))"
       "\n";
-  smatch match;
-  regex_search(dump_output, match, reg);
+  boost::smatch match;
+  boost::regex_search(dump_output, match, reg, boost::match_not_dot_newline);
   auto table = match[1].str();
 
   cout << "Checking bytes" << endl;
@@ -484,14 +486,14 @@ void LazyOmapStatsTest::check_pg_dump_pgs()
   string dump_output = get_output(command);
   cout << dump_output << endl;
 
-  regex reg(R"(^(PG_STAT\s.*))"
+  boost::regex reg(R"(^(PG_STAT\s.*))"
             "\n");
   index_t indexes = get_indexes(reg, dump_output);
 
   reg = R"(^(PG_STAT[\s\S]*))"
         "\n\n";
-  smatch match;
-  regex_search(dump_output, match, reg);
+  boost::smatch match;
+  boost::regex_search(dump_output, match, reg, boost::match_not_dot_newline);
   auto table = match[1].str();
 
   cout << "Checking bytes" << endl;
@@ -510,7 +512,7 @@ void LazyOmapStatsTest::check_pg_dump_pools()
   string dump_output = get_output(command);
   cout << dump_output << endl;
 
-  regex reg(R"(^(POOLID\s.*))"
+  boost::regex reg(R"(^(POOLID\s.*))"
             "\n");
   index_t indexes = get_indexes(reg, dump_output);
 
@@ -520,8 +522,8 @@ void LazyOmapStatsTest::check_pg_dump_pools()
       conf.pool_id +
       R"(\s.*))"
       "\n";
-  smatch match;
-  regex_search(dump_output, match, reg);
+  boost::smatch match;
+  boost::regex_search(dump_output, match, reg, boost::match_not_dot_newline);
   auto line = match[1].str();
 
   cout << "Checking bytes" << endl;
@@ -540,14 +542,14 @@ void LazyOmapStatsTest::check_pg_ls()
   string dump_output = get_output(command);
   cout << dump_output << endl;
 
-  regex reg(R"(^(PG\s.*))"
+  boost::regex reg(R"(^(PG\s.*))"
             "\n");
   index_t indexes = get_indexes(reg, dump_output);
 
   reg = R"(^(PG[\s\S]*))"
         "\n\n";
-  smatch match;
-  regex_search(dump_output, match, reg);
+  boost::smatch match;
+  boost::regex_search(dump_output, match, reg, boost::match_not_dot_newline);
   auto table = match[1].str();
 
   cout << "Checking bytes" << endl;
@@ -563,7 +565,7 @@ void LazyOmapStatsTest::wait_for_active_clean()
   cout << "Waiting for active+clean" << endl;
 
   int index = -1;
-  regex reg(
+  boost::regex reg(
       "\n"
       R"((PG_STAT[\s\S]*))"
       "\n +\n[0-9]");
@@ -572,14 +574,14 @@ void LazyOmapStatsTest::wait_for_active_clean()
   do {
     string dump_output = get_output(command, true);
     if (index == -1) {
-      regex ireg(
+      boost::regex ireg(
           "\n"
           R"((PG_STAT\s.*))"
           "\n");
       index = find_index(dump_output, ireg, "STATE");
     }
-    smatch match;
-    regex_search(dump_output, match, reg);
+    boost::smatch match;
+    boost::regex_search(dump_output, match, reg, boost::match_not_dot_newline);
     istringstream buffer(match[1].str());
     string line;
     num_not_clean = 0;
