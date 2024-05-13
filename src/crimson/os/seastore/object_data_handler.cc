@@ -1441,125 +1441,126 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
   return seastar::do_with(
     bufferlist(),
     [ctx, obj_offset, len](auto &ret) {
-      return with_object_data(
-	ctx,
-	[ctx, obj_offset, len, &ret](const auto &object_data) {
-	  LOG_PREFIX(ObjectDataHandler::read);
-	  DEBUGT("reading {}~{}",
-		 ctx.t,
-		 object_data.get_reserved_data_base(),
-		 object_data.get_reserved_data_len());
-	  /* Assumption: callers ensure that onode size is <= reserved
-	   * size and that len is adjusted here prior to call */
-	  ceph_assert(!object_data.is_null());
-	  ceph_assert((obj_offset + len) <= object_data.get_reserved_data_len());
-	  ceph_assert(len > 0);
-	  laddr_t l_start =
-	    object_data.get_reserved_data_base() + obj_offset;
-	  return ctx.tm.get_pins(
-	    ctx.t,
-	    l_start,
-	    len
-	  ).si_then([FNAME, ctx, l_start, len, &ret](auto _pins) {
-	    // offset~len falls within reserved region and len > 0
-	    ceph_assert(_pins.size() >= 1);
-	    ceph_assert((*_pins.begin())->get_key() <= l_start);
-            auto l_end = l_start + len;
-	    return seastar::do_with(
-	      std::move(_pins),
-	      l_start,
-	      [FNAME, ctx, l_start, l_end, &ret](auto &pins, auto &l_current) {
-		return trans_intr::do_for_each(
-		  pins,
-		  [FNAME, ctx, l_start, l_end, &l_current, &ret](auto &pin)
-		  -> read_iertr::future<> {
-		    auto pin_key = pin->get_key();
-                    if (l_current == l_start) {
-                      ceph_assert(l_current >= pin_key);
-                    } else {
-                      assert(l_current > l_start);
-                      ceph_assert(l_current == pin_key);
-                    }
-		    ceph_assert(l_current < l_end);
-                    auto pin_len = pin->get_length();
-                    assert(pin_len > 0);
-                    laddr_t l_pin_end = pin_key + pin_len;
-		    ceph_assert(l_current < l_pin_end);
-		    laddr_t l_current_end = std::min(l_pin_end, l_end);
-		    if (pin->get_val().is_zero()) {
-		      DEBUGT("got {}~{} from zero-pin {}~{}",
-			ctx.t,
-			l_current,
-			l_current_end - l_current,
-			pin_key,
-			pin_len);
-		      ret.append_zero(l_current_end - l_current);
-		      l_current = l_current_end;
-		      return seastar::now();
-		    } else {
-		      bool is_indirect = pin->is_indirect();
-                      laddr_t e_key;
-                      extent_len_t e_len;
-                      extent_len_t e_off;
-                      if (is_indirect) {
-                        e_key = pin->get_intermediate_base();
-                        e_len = pin->get_intermediate_length();
-                        e_off = pin->get_intermediate_offset();
-                        DEBUGT("reading {}~{} from indirect-pin {}~{}, direct-pin {}~{}(off={})",
-                          ctx.t,
-                          l_current,
-                          l_current_end - l_current,
-                          pin_key,
-                          pin_len,
-                          e_key,
-                          e_len,
-                          e_off);
-                        assert(e_key <= pin->get_intermediate_key());
-                        assert(e_off + pin_len <= e_len);
-                      } else {
-                        DEBUGT("reading {}~{} from pin {}~{}",
-                          ctx.t,
-                          l_current,
-                          l_current_end - l_current,
-                          pin_key,
-                          pin_len);
-                        e_key = pin_key;
-                        e_len = pin_len;
-                        e_off = 0;
-                      }
-                      extent_len_t e_current_off = e_off + l_current - pin_key;
-		      return ctx.tm.read_pin<ObjectDataBlock>(
-			ctx.t,
-			std::move(pin)
-		      ).si_then([&ret, &l_current, l_current_end,
+    return with_object_data(
+      ctx,
+      [ctx, obj_offset, len, &ret](const auto &object_data) {
+      LOG_PREFIX(ObjectDataHandler::read);
+      DEBUGT("reading {}~{}",
+             ctx.t,
+             object_data.get_reserved_data_base(),
+             object_data.get_reserved_data_len());
+      /* Assumption: callers ensure that onode size is <= reserved
+       * size and that len is adjusted here prior to call */
+      ceph_assert(!object_data.is_null());
+      ceph_assert((obj_offset + len) <= object_data.get_reserved_data_len());
+      ceph_assert(len > 0);
+      laddr_t l_start =
+        object_data.get_reserved_data_base() + obj_offset;
+      return ctx.tm.get_pins(
+        ctx.t,
+        l_start,
+        len
+      ).si_then([FNAME, ctx, l_start, len, &ret](auto _pins) {
+        // offset~len falls within reserved region and len > 0
+        ceph_assert(_pins.size() >= 1);
+        ceph_assert((*_pins.begin())->get_key() <= l_start);
+        auto l_end = l_start + len;
+        return seastar::do_with(
+          std::move(_pins),
+          l_start,
+          [FNAME, ctx, l_start, l_end, &ret](auto &pins, auto &l_current) {
+          return trans_intr::do_for_each(
+            pins,
+            [FNAME, ctx, l_start, l_end,
+             &l_current, &ret](auto &pin) -> read_iertr::future<> {
+            auto pin_key = pin->get_key();
+            if (l_current == l_start) {
+              ceph_assert(l_current >= pin_key);
+            } else {
+              assert(l_current > l_start);
+              ceph_assert(l_current == pin_key);
+            }
+            ceph_assert(l_current < l_end);
+            auto pin_len = pin->get_length();
+            assert(pin_len > 0);
+            laddr_t l_pin_end = pin_key + pin_len;
+            ceph_assert(l_current < l_pin_end);
+            laddr_t l_current_end = std::min(l_pin_end, l_end);
+            if (pin->get_val().is_zero()) {
+              DEBUGT("got {}~{} from zero-pin {}~{}",
+                ctx.t,
+                l_current,
+                l_current_end - l_current,
+                pin_key,
+                pin_len);
+              ret.append_zero(l_current_end - l_current);
+              l_current = l_current_end;
+              return seastar::now();
+            }
+
+            // non-zero pin
+            bool is_indirect = pin->is_indirect();
+            laddr_t e_key;
+            extent_len_t e_len;
+            extent_len_t e_off;
+            if (is_indirect) {
+              e_key = pin->get_intermediate_base();
+              e_len = pin->get_intermediate_length();
+              e_off = pin->get_intermediate_offset();
+              DEBUGT("reading {}~{} from indirect-pin {}~{}, direct-pin {}~{}(off={})",
+                ctx.t,
+                l_current,
+                l_current_end - l_current,
+                pin_key,
+                pin_len,
+                e_key,
+                e_len,
+                e_off);
+              assert(e_key <= pin->get_intermediate_key());
+              assert(e_off + pin_len <= e_len);
+            } else {
+              DEBUGT("reading {}~{} from pin {}~{}",
+                ctx.t,
+                l_current,
+                l_current_end - l_current,
+                pin_key,
+                pin_len);
+              e_key = pin_key;
+              e_len = pin_len;
+              e_off = 0;
+            }
+            extent_len_t e_current_off = e_off + l_current - pin_key;
+            return ctx.tm.read_pin<ObjectDataBlock>(
+              ctx.t,
+              std::move(pin)
+            ).si_then([&ret, &l_current, l_current_end,
 #ifndef NDEBUG
-                                 e_key, e_len, e_current_off](auto extent) {
+                       e_key, e_len, e_current_off](auto extent) {
 #else
-                                 e_current_off](auto extent) {
+                       e_current_off](auto extent) {
 #endif
-                        assert(e_key == extent->get_laddr());
-                        assert(e_len == extent->get_length());
-			ret.append(
-			  bufferptr(
-			    extent->get_bptr(),
-			    e_current_off,
-			    l_current_end - l_current));
-			l_current = l_current_end;
-			return seastar::now();
-		      }).handle_error_interruptible(
-			read_iertr::pass_further{},
-			crimson::ct_error::assert_all{
-			  "ObjectDataHandler::read hit invalid error"
-			}
-		      );
-		    }
-		  });
-	      });
-	  });
-	}).si_then([&ret] {
-	  return std::move(ret);
-	});
+              assert(e_key == extent->get_laddr());
+              assert(e_len == extent->get_length());
+              ret.append(
+                bufferptr(
+                  extent->get_bptr(),
+                  e_current_off,
+                  l_current_end - l_current));
+              l_current = l_current_end;
+              return seastar::now();
+            }).handle_error_interruptible(
+              read_iertr::pass_further{},
+              crimson::ct_error::assert_all{
+                "ObjectDataHandler::read hit invalid error"
+              }
+            );
+          }); // trans_intr::do_for_each()
+        }); // do_with()
+      });
+    }).si_then([&ret] { // with_object_data()
+      return std::move(ret);
     });
+  }); // do_with()
 }
 
 ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
