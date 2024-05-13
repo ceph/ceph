@@ -436,6 +436,7 @@ void QuiesceDbManager::leader_record_ack(QuiesceInterface::PeerId from, QuiesceM
   auto it = peers.find(from);
 
   if (it == peers.end()) {
+    dout(5) << "unknown peer " << from << dendl;
     // ignore updates from unknown peers
     return;
   }
@@ -443,10 +444,15 @@ void QuiesceDbManager::leader_record_ack(QuiesceInterface::PeerId from, QuiesceM
   auto & info = it->second;
 
   if (diff_map.db_version > db_version()) {
-    dout(3) << "ignoring unknown version ack by rank " << from << " (" << diff_map.db_version << " > " << db_version() << ")" << dendl;
-    dout(5) << "will send the peer a full DB" << dendl;
-    info.diff_map.clear();
+    dout(15) << "future version ack by peer " << from << " (" << diff_map.db_version << " > " << db_version() << ")" << dendl;
+    if (diff_map.db_version.epoch > db_version().epoch && diff_map.db_version.set_version <= db_version().set_version) {
+      dout(15) << "my epoch is behind, ignoring this until my membership is updated" << dendl;
+    } else {
+      dout(5) << "will send the peer a full DB" << dendl;
+      info.diff_map.clear();
+    }
   } else {
+    dout(20) << "ack " << diff_map << " from peer " << from << dendl;
     info.diff_map = std::move(diff_map);
     info.last_seen = QuiesceClock::now();
   }
@@ -874,6 +880,7 @@ size_t QuiesceDbManager::check_peer_reports(const QuiesceSetId& set_id, const Qu
   max_reported_state = QS__INVALID;
 
   size_t up_to_date_peers = 0;
+  std::multimap<QuiesceState, std::pair<QuiesceInterface::PeerId, QuiesceDbVersion>> reporting_peers;
 
   for (auto& [peer, info] : peers) {
     // we consider the last bit of information we had from a given peer
@@ -892,6 +899,7 @@ size_t QuiesceDbManager::check_peer_reports(const QuiesceSetId& set_id, const Qu
         continue;
       }
       reported_state = pr_state.state;
+      reporting_peers.insert({pr_state.state, {peer, info.diff_map.db_version}});
     }
 
     // but we only consider the peer up to date given the version
@@ -904,9 +912,17 @@ size_t QuiesceDbManager::check_peer_reports(const QuiesceSetId& set_id, const Qu
   }
 
   if (min_reported_state == QS__MAX) {
+    // this means that we had 0 eligible peer reports
     min_reported_state = set.get_requested_member_state();
     max_reported_state = set.get_requested_member_state();
   }
+
+  dout(20) << dsetroot("")
+           << "up_to_date_peers: " << up_to_date_peers
+           << " min_reported_state: " << min_reported_state
+           << " max_reported_state: " << max_reported_state
+           << " peer_acks: " << reporting_peers
+           << dendl;
 
   return up_to_date_peers;
 }

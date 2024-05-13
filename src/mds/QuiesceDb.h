@@ -54,23 +54,23 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const QuiesceState& qs)
 {
   switch (qs) {
   case QS__INVALID:
-    return os << "QS__INVALID (" << (int)qs << ")";
+    return os << "QS__INVALID";
   case QS_QUIESCING:
-    return os << "QS_QUIESCING (" << (int)qs << ")";
+    return os << "QS_QUIESCING";
   case QS_QUIESCED:
-    return os << "QS_QUIESCED (" << (int)qs << ")";
+    return os << "QS_QUIESCED";
   case QS_RELEASING:
-    return os << "QS_RELEASING (" << (int)qs << ")";
+    return os << "QS_RELEASING";
   case QS_RELEASED:
-    return os << "QS_RELEASED (" << (int)qs << ")";
+    return os << "QS_RELEASED";
   case QS_FAILED:
-    return os << "QS_FAILED (" << (int)qs << ")";
+    return os << "QS_FAILED";
   case QS_CANCELED:
-    return os << "QS_CANCELED (" << (int)qs << ")";
+    return os << "QS_CANCELED";
   case QS_TIMEDOUT:
-    return os << "QS_TIMEDOUT (" << (int)qs << ")";
+    return os << "QS_TIMEDOUT";
   case QS_EXPIRED:
-    return os << "QS_EXPIRED (" << (int)qs << ")";
+    return os << "QS_EXPIRED";
   default:
     return os << "!Unknown quiesce state! (" << (int)qs << ")";
   }
