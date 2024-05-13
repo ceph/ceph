@@ -34,9 +34,11 @@ namespace io {
 int AioCompletion::wait_for_complete() {
   tracepoint(librbd, aio_wait_for_complete_enter, this);
   {
+    waiting_for_complete.store(true, std::memory_order_release);
     std::unique_lock<std::mutex> locker(lock);
-    while (state != AIO_STATE_COMPLETE) {
-      cond.wait(locker);
+    cond = std::make_unique<std::condition_variable>();
+    while (state.load(std::memory_order_acquire) != AIO_STATE_COMPLETE) {
+      cond->wait(locker);
     }
   }
   tracepoint(librbd, aio_wait_for_complete_exit, 0);
@@ -97,7 +99,7 @@ void AioCompletion::complete() {
     }
   }
 
-  state = AIO_STATE_CALLBACK;
+  state.store(AIO_STATE_CALLBACK, std::memory_order_release);
   if (complete_cb) {
     if (external_callback) {
       complete_external_callback();
@@ -240,7 +242,7 @@ void AioCompletion::complete_request(ssize_t r)
 
 bool AioCompletion::is_complete() {
   tracepoint(librbd, aio_is_complete_enter, this);
-  bool done = (this->state != AIO_STATE_PENDING);
+  bool done = (this->state.load(std::memory_order_acquire) != AIO_STATE_PENDING);
   tracepoint(librbd, aio_is_complete_exit, done);
   return done;
 }
@@ -273,11 +275,11 @@ void AioCompletion::complete_event_socket() {
 }
 
 void AioCompletion::notify_callbacks_complete() {
-  state = AIO_STATE_COMPLETE;
+  state.store(AIO_STATE_COMPLETE, std::memory_order_release);
 
-  {
+  if (cond != nullptr && waiting_for_complete.load(std::memory_order_acquire)) {
     std::unique_lock<std::mutex> locker(lock);
-    cond.notify_all();
+    cond->notify_all();
   }
 
   if (image_dispatcher_ctx != nullptr) {
