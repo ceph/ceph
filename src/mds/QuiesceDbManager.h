@@ -250,12 +250,20 @@ class QuiesceDbManager {
     struct PeerInfo {
         QuiesceMap diff_map;
         QuiesceTimePoint last_activity;
+        QuiesceDbVersion last_sent_version;
         PeerInfo(QuiesceMap&& diff_map, QuiesceTimePoint last_activity)
             : diff_map(diff_map)
             , last_activity(last_activity)
         {
         }
-        PeerInfo() { }
+        PeerInfo() {
+          last_activity = QuiesceTimePoint::min();
+        }
+        void clear() {
+          diff_map.clear();
+          last_activity = QuiesceTimePoint::min();
+          last_sent_version = {};
+        }
     };
     std::unordered_map<QuiesceInterface::PeerId, PeerInfo> peers;
 
