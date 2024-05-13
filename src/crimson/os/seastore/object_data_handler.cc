@@ -1454,65 +1454,63 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 	  ceph_assert(!object_data.is_null());
 	  ceph_assert((obj_offset + len) <= object_data.get_reserved_data_len());
 	  ceph_assert(len > 0);
-	  laddr_t loffset =
+	  laddr_t l_start =
 	    object_data.get_reserved_data_base() + obj_offset;
 	  return ctx.tm.get_pins(
 	    ctx.t,
-	    loffset,
+	    l_start,
 	    len
-	  ).si_then([ctx, loffset, len, &ret](auto _pins) {
+	  ).si_then([FNAME, ctx, l_start, len, &ret](auto _pins) {
 	    // offset~len falls within reserved region and len > 0
 	    ceph_assert(_pins.size() >= 1);
-	    ceph_assert((*_pins.begin())->get_key() <= loffset);
+	    ceph_assert((*_pins.begin())->get_key() <= l_start);
+            auto l_end = l_start + len;
 	    return seastar::do_with(
 	      std::move(_pins),
-	      loffset,
-	      [ctx, loffset, len, &ret](auto &pins, auto &current) {
+	      l_start,
+	      [FNAME, ctx, l_end, &ret](auto &pins, auto &l_current) {
 		return trans_intr::do_for_each(
 		  pins,
-		  [ctx, loffset, len, &current, &ret](auto &pin)
+		  [FNAME, ctx, l_end, &l_current, &ret](auto &pin)
 		  -> read_iertr::future<> {
-		    ceph_assert(current <= (loffset + len));
-		    ceph_assert(
-		      (loffset + len) > pin->get_key());
-		    laddr_t end = std::min(
-		      pin->get_key() + pin->get_length(),
-		      loffset + len);
+		    ceph_assert(l_current <= l_end);
+		    ceph_assert(l_end > pin->get_key());
+		    laddr_t l_pin_end = std::min(
+		      pin->get_key() + pin->get_length(), l_end);
 		    if (pin->get_val().is_zero()) {
-		      ceph_assert(end > current); // See LBAManager::get_mappings
-		      ret.append_zero(end - current);
-		      current = end;
+		      ceph_assert(l_pin_end > l_current); // See LBAManager::get_mappings
+		      ret.append_zero(l_pin_end - l_current);
+		      l_current = l_pin_end;
 		      return seastar::now();
 		    } else {
-		      LOG_PREFIX(ObjectDataHandler::read);
 		      auto key = pin->get_key();
 		      bool is_indirect = pin->is_indirect();
                       extent_len_t off = pin->get_intermediate_offset();
 		      DEBUGT("reading {}~{}, indirect: {}, "
-			"intermediate offset: {}, current: {}, end: {}",
+			"intermediate offset: {}, l_current: {}, l_pin_end: {}",
 			ctx.t,
 			key,
 			pin->get_length(),
 			is_indirect,
 			off,
-			current,
-			end);
+			l_current,
+			l_pin_end);
 		      return ctx.tm.read_pin<ObjectDataBlock>(
 			ctx.t,
 			std::move(pin)
-		      ).si_then([&ret, &current, end, key, off,
+		      ).si_then([&ret, &l_current, l_pin_end, key, off,
 				is_indirect](auto extent) {
 			ceph_assert(
 			  is_indirect
-			    ? (key - off + extent->get_length()) >= end
-			    : (extent->get_laddr() + extent->get_length()) >= end);
-			ceph_assert(end > current);
+			    ? (key - off + extent->get_length()) >= l_pin_end
+			    : (extent->get_laddr() + extent->get_length()) >= l_pin_end);
+			ceph_assert(l_pin_end > l_current);
 			ret.append(
 			  bufferptr(
 			    extent->get_bptr(),
-			    off + current - (is_indirect ? key : extent->get_laddr()),
-			    end - current));
-			current = end;
+			    off + l_current - (is_indirect ? key : extent->get_laddr()),
+			    l_pin_end - l_current));
+			l_current = l_pin_end;
 			return seastar::now();
 		      }).handle_error_interruptible(
 			read_iertr::pass_further{},
@@ -1554,21 +1552,21 @@ ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
       ceph_assert(!object_data.is_null());
       ceph_assert((obj_offset + len) <= object_data.get_reserved_data_len());
       ceph_assert(len > 0);
-      laddr_t loffset =
+      laddr_t l_start =
         object_data.get_reserved_data_base() + obj_offset;
       return ctx.tm.get_pins(
         ctx.t,
-        loffset,
+        l_start,
         len
-      ).si_then([loffset, len, &object_data, &ret](auto &&pins) {
+      ).si_then([l_start, len, &object_data, &ret](auto &&pins) {
 	ceph_assert(pins.size() >= 1);
-        ceph_assert((*pins.begin())->get_key() <= loffset);
+        ceph_assert((*pins.begin())->get_key() <= l_start);
 	for (auto &&i: pins) {
 	  if (!(i->get_val().is_zero())) {
-	    auto ret_left = std::max(i->get_key(), loffset);
+	    auto ret_left = std::max(i->get_key(), l_start);
 	    auto ret_right = std::min(
 	      i->get_key() + i->get_length(),
-	      loffset + len);
+	      l_start + len);
 	    assert(ret_right > ret_left);
 	    ret.emplace(
 	      std::make_pair(
