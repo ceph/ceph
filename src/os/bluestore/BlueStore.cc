@@ -5038,6 +5038,7 @@ BlueStore::Collection::Collection(BlueStore *store_, OnodeCacheShard *oc, Buffer
     segment_size(0),
     commit_queue(nullptr)
 {
+  estimator = store->create_estimator();
 }
 
 bool BlueStore::Collection::flush_commit(Context *c)
@@ -17084,11 +17085,12 @@ int BlueStore::_do_write_v2_compressed(
   dout(20) << __func__ << " on: " << o->print(P::NICK + P::SDISK + P::SUSE) << dendl;
   uint32_t max_blob_size = c->pool_opts.value_or(
     pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, (int64_t)comp_max_blob_size.load());
-  Estimator estimator(this, min_alloc_size, max_blob_size);
+  Estimator* estimator = c->estimator;
+  estimator->reset();
   scanner.write_lookaround(&o->extent_map, offset, length, scan_left,
-                           scan_right, &estimator);
+                           scan_right, estimator);
   std::vector<Estimator::region_t> regions;
-  estimator.get_regions(regions);
+  estimator->get_regions(regions);
   dout(15) << __func__ << " " << std::hex << offset << "~" << length << " -> ";
   for (auto i : regions) {
     *_dout << i.offset << "~" << i.length << " ";

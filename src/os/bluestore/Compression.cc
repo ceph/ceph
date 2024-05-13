@@ -215,6 +215,11 @@ void Estimator::finish()
            << " exp_pad_exp=" << expected_pad_expansion << dendl;
 }
 
+Estimator* BlueStore::create_estimator()
+{
+  return new Estimator(this);
+}
+
 class BlueStore::Scanner::Scan {
 public:
   BlueStore* bluestore;
