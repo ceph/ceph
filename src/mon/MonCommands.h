@@ -1225,6 +1225,7 @@ COMMAND("osd pool get "
           "|dedup_cdc_chunk_size"
           "|dedup_chunk_algorithm"
           "|dedup_tier"
+          "|deep_scrub_reformat"
           "|ec_coding_shard_count"
           "|ec_data_shard_count"
           "|eio"
@@ -1292,6 +1293,7 @@ COMMAND("osd pool set "
           "|dedup_cdc_chunk_size"
           "|dedup_chunk_algorithm"
           "|dedup_tier"
+          "|deep_scrub_reformat"
           "|eio"
           "|fast_read"
           "|fingerprint_algorithm"
@@ -1333,9 +1335,9 @@ COMMAND("osd pool set "
           "|unset_pool_flags"
           "|use_gmt_hitset"
           "|write_fadvise_dontneed "
-	"name=val,type=CephString "
-	"name=yes_i_really_mean_it,type=CephBool,req=false",
-	"set pool parameter <var> to <val>", "osd", "rw")
+    "name=val,type=CephString "
+    "name=yes_i_really_mean_it,type=CephBool,req=false",
+    "set pool parameter <var> to <val>", "osd", "rw")
 // 'val' is a CephString because it can include a unit.  Perhaps
 // there should be a Python type for validation/conversion of strings
 // with units.
