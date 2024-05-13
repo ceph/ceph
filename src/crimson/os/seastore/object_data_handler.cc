@@ -711,6 +711,8 @@ public:
       left_operation(overwrite_operation_t::UNKNOWN),
       right_operation(overwrite_operation_t::UNKNOWN),
       block_size(block_size),
+      // TODO: introduce PhysicalNodeMapping::is_fresh()
+      // Note: fresh write can be merged with overwrite if they overlap.
       is_left_fresh(!pins.front()->is_stable()),
       is_right_fresh(!pins.back()->is_stable()) {
     validate();
@@ -741,6 +743,9 @@ private:
    * seastore_obj_data_write_amplification; otherwise, split the
    * original extent into at most three parts: origin-left, part-to-be-modified
    * and origin-right.
+   *
+   * TODO: seastore_obj_data_write_amplification needs to be reconsidered because
+   * delta-based overwrite is introduced
    */
   void evaluate_operations() {
     auto actual_write_size = get_pins_size();
