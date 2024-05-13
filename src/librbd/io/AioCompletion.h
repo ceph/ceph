@@ -38,20 +38,13 @@ namespace io {
  * context or via a thread pool context for cache read hits).
  */
 struct AioCompletion {
-  typedef enum {
-    AIO_STATE_PENDING = 0,
-    AIO_STATE_COMPLETE,
-  } aio_state_t;
-
   mutable std::mutex lock;
-  std::condition_variable cond;
 
   callback_t complete_cb = nullptr;
   void *complete_arg = nullptr;
   rbd_completion_t rbd_comp = nullptr;
 
-  /// note: only using atomic for built-in memory barrier
-  std::atomic<aio_state_t> state{AIO_STATE_PENDING};
+  std::atomic<bool> completed{false};
 
   std::atomic<ssize_t> rval{0};
   std::atomic<int> error_rval{0};
