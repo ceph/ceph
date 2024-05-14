@@ -120,8 +120,8 @@ def test_remote_cache_api(r, client, obj):
     # Allow cleaning cycle to pass
     time.sleep(6)
 
-    os.path.exists('/tmp/rgw_d4n_datacache/bkt_test.txt_0_11')
-    os.path.exists('/tmp/rgw_d4n_datacache/RD_bkt_test.txt_0_11')
+    assert(os.path.exists('/tmp/rgw_d4n_datacache/bkt_test.txt_0_11') == 'true')
+    assert(os.path.exists('/tmp/rgw_d4n_datacache/RD_bkt_test.txt_0_11') == 'true')
 
     # Check contents of both files
     out = subprocess.check_output(['cat', '/tmp/rgw_d4n_datacache/bkt_test.txt_0_11']).decode('latin-1')
