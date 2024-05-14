@@ -70,7 +70,6 @@ ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
       encode(log_entries, m->logbl);
       m->pg_trim_to = osd_op_p.pg_trim_to;
       m->min_last_complete_ondisk = osd_op_p.min_last_complete_ondisk;
-      m->set_rollback_to(osd_op_p.at_version);
       // TODO: set more stuff. e.g., pg_states
       sends->emplace_back(
 	shard_services.send_to_osd(
