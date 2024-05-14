@@ -24,6 +24,8 @@
 
 
 class RGWReshard;
+
+
 namespace rgw { namespace sal {
   class RadosStore;
 } }
@@ -114,6 +116,10 @@ public:
     return *std::crbegin(reshard_primes);
   }
 
+  static uint32_t get_min_prime_shards() {
+    return *std::cbegin(reshard_primes);
+  }
+
   // returns the prime in our list less than or equal to the
   // parameter; the lowest value that can be returned is 1
   static uint32_t get_prime_shards_less_or_equal(uint32_t requested_shards) {
@@ -142,37 +148,28 @@ public:
 
   // returns a preferred number of shards given a calculated number of
   // shards based on max_dynamic_shards and the list of prime values
-  static uint32_t get_preferred_shards(uint32_t suggested_shards,
-				       uint32_t max_dynamic_shards) {
+  static uint32_t get_prime_shard_count(uint32_t suggested_shards,
+					uint32_t max_dynamic_shards,
+					uint32_t min_dynamic_shards);
 
-    // use a prime if max is within our prime range, otherwise use
-    // specified max
-    const uint32_t absolute_max =
-      max_dynamic_shards >= get_max_prime_shards() ?
-      max_dynamic_shards :
-      get_prime_shards_less_or_equal(max_dynamic_shards);
-
-    // if we can use a prime number, use it, otherwise use suggested;
-    // note get_prime_shards_greater_or_equal will return 0 if no prime in
-    // prime range
-    const uint32_t prime_ish_num_shards =
-      std::max(get_prime_shards_greater_or_equal(suggested_shards),
-	       suggested_shards);
-
-    // dynamic sharding cannot reshard more than defined maximum
-    const uint32_t final_num_shards =
-      std::min(prime_ish_num_shards, absolute_max);
-
-    return final_num_shards;
-  }
+  static void calculate_preferred_shards(const DoutPrefixProvider* dpp,
+					 const uint32_t max_dynamic_shards,
+					 const uint64_t max_objs_per_shard,
+					 const bool is_multisite,
+					 const uint64_t num_objs,
+					 const uint32_t current_shard_count,
+					 bool& need_resharding,
+					 uint32_t* suggested_shard_count,
+					 bool prefer_prime = true);
 
   const std::map<std::string, bufferlist>& get_bucket_attrs() const {
     return bucket_attrs;
   }
 
-  // for multisite, the RGWBucketInfo keeps a history of old log generations
-  // until all peers are done with them. prevent this log history from growing
-  // too large by refusing to reshard the bucket until the old logs get trimmed
+  // for multisite, the RGWBucketInfo keeps a history of old log
+  // generations until all peers are done with them. prevent this log
+  // history from growing too large by refusing to reshard the bucket
+  // until the old logs get trimmed
   static constexpr size_t max_bilog_history = 4;
 
   static bool should_zone_reshard_now(const RGWBucketInfo& bucket,
