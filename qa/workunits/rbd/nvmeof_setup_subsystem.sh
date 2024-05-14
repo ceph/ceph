@@ -29,7 +29,7 @@ do
     ip="${gateway_ips[i]}"
     name="${gateway_names[i]}"
     echo "Adding gateway listener $index with IP ${ip} and name ${name}"
-    sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $ip --server-port $NVMEOF_SRPORT listener add --subsystem $NVMEOF_NQN --gateway-name client.$name --traddr $ip --trsvcid $NVMEOF_PORT
+    sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $ip --server-port $NVMEOF_SRPORT listener add --subsystem $NVMEOF_NQN --host-name $name --traddr $ip --trsvcid $NVMEOF_PORT
     sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $ip --server-port $NVMEOF_SRPORT --format json subsystem list
 done
 

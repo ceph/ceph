@@ -138,7 +138,7 @@ class Nvmeof(Task):
         gateway_ips = []
         nvmeof_daemons = self.ctx.daemons.iter_daemons_of_role('nvmeof', cluster=self.cluster_name)
         for daemon in nvmeof_daemons:
-            gateway_names += [daemon.name()]
+            gateway_names += [daemon.remote.shortname]
             gateway_ips += [daemon.remote.ip_address]
         conf_data = dedent(f"""
             NVMEOF_GATEWAY_IP_ADDRESSES={",".join(gateway_ips)}
