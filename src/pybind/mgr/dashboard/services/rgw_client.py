@@ -10,6 +10,7 @@ import os
 import re
 import xml.etree.ElementTree as ET  # noqa: N814
 from subprocess import SubprocessError
+from enum import Enum
 
 from mgr_util import build_url, name_to_config_section
 
@@ -983,6 +984,11 @@ class RgwClient(RestClient):
             raise DashboardException(msg=msg, component='rgw')
         return retention_period_days, retention_period_years
 
+class SyncStatus(Enum):
+    enabled = 'enabled'
+    allowed = 'allowed'
+    forbidden = 'forbidden'
+
 
 class RgwMultisite:
     def migrate_to_multisite(self, realm_name: str, zonegroup_name: str, zone_name: str,
@@ -1744,3 +1750,67 @@ class RgwMultisite:
             return match.group(1)
 
         return ''
+
+    def get_sync_policy(self, bucket_name: str = ''):
+        rgw_sync_policy_cmd = ['sync', 'policy', 'get']
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get sync policy',
+                                         http_status_code=500, component='rgw')
+            return out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def get_sync_policy_group(self, group_id: str, bucket_name: str = ''):
+        rgw_sync_policy_cmd = ['sync', 'group', 'get', '--group-id', group_id]
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get sync policy',
+                                         http_status_code=500, component='rgw')
+            return out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def create_sync_policy_group(self, group_id: str, status: SyncStatus, bucket_name: str = ''):
+        rgw_sync_policy_cmd = ['sync', 'group', 'create', '--group-id', group_id,
+                               '--status', SyncStatus[status].value]
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        try:
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to create sync policy',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def update_sync_policy_group(self, group_id: str, status: SyncStatus, bucket_name: str = ''):
+        rgw_sync_policy_cmd = ['sync', 'group', 'modify', '--group-id', group_id,
+                               '--status', SyncStatus[status].value]
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        try:
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to update sync policy',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def remove_sync_policy_group(self, group_id: str, bucket_name=''):
+        rgw_sync_policy_cmd = ['sync', 'group', 'remove', '--group-id', group_id]
+        if bucket_name:
+            rgw_sync_policy_cmd += ['--bucket', bucket_name]
+        try:
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_sync_policy_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to remove sync policy',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
