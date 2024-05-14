@@ -201,7 +201,7 @@ class D4NFilterObject : public FilterObject {
     bool get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
     void set_obj_state_attrs(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version);
-    int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, bool dirty = false);
+    int set_head_obj_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, bool is_latest_version = true, bool dirty = false);
     bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, optional_yield y);
 };
 
