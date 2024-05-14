@@ -606,11 +606,21 @@ class PgAutoscaler(MgrModule):
 
             adjust = False
             if (final_pg_target > p['pg_num_target'] * threshold or
-                    final_pg_target < p['pg_num_target'] / threshold) and \
-                    final_ratio >= 0.0 and \
-                    final_ratio <= 1.0 and \
-                    p['pg_autoscale_mode'] == 'on':
-                adjust = True
+                    final_pg_target < p['pg_num_target'] / threshold):
+                if final_ratio >= 0.0 and \
+                   final_ratio <= 1.0 and \
+                   p['pg_autoscale_mode'] == 'on':
+                    adjust = True
+            else:
+                if final_pg_target != p['pg_num_target']:
+                    self.log.warning("pool %s won't scale because recommended PG_NUM target"
+                                     " value varies from current PG_NUM value by"
+                                     " more than '%d' scaling threshold",
+                                     pool_name,
+                                     threshold)
+                    self.log.warning("To scale pool %s, please adjust threshold to a lower"
+                                     " multiple",
+                                     pool_name)
 
             assert pool_pg_target is not None
             ret.append({
