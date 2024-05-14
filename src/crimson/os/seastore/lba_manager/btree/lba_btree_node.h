@@ -65,15 +65,15 @@ using lba_node_meta_le_t = fixed_kv_node_meta_le_t<laddr_le_t>;
  * Layout (4k):
  *   checksum   :                            4b
  *   size       : uint32_t[1]                4b
- *   meta       : lba_node_meta_le_t[3]      (1*24)b
- *   keys       : laddr_t[255]               (254*8)b
- *   values     : paddr_t[255]               (254*8)b
- *                                           = 4096
+ *   meta       : lba_node_meta_le_t[3]      (1*40)b
+ *   keys       : laddr_t[168]               (168*16)b
+ *   values     : paddr_t[168]               (168*8)b
+ *                                           = 4080
 
  * TODO: make the above capacity calculation part of FixedKVNodeLayout
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t INTERNAL_NODE_CAPACITY = 254;
+constexpr size_t INTERNAL_NODE_CAPACITY = 168;
 struct LBAInternalNode
   : FixedKVInternalNode<
       INTERNAL_NODE_CAPACITY,
@@ -103,15 +103,15 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  * Layout (4k):
  *   checksum   :                            4b
  *   size       : uint32_t[1]                4b
- *   meta       : lba_node_meta_le_t[3]      (1*24)b
- *   keys       : laddr_t[170]               (140*8)b
- *   values     : lba_map_val_t[170]         (140*21)b
- *                                           = 4092
+ *   meta       : lba_node_meta_le_t[3]      (1*40)b
+ *   keys       : laddr_t[109]               (109*16)b
+ *   values     : lba_map_val_t[109]         (109*21)b
+ *                                           = 4081
  *
  * TODO: update FixedKVNodeLayout to handle the above calculation
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 140;
+constexpr size_t LEAF_NODE_CAPACITY = 109;
 
 /**
  * lba_map_val_le_t

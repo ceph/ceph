@@ -18,6 +18,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/cache/memory_cache.h"
 
 namespace crimson::os::seastore::backref {
 class BtreeBackrefManager;
@@ -505,6 +506,10 @@ public:
     return epm.get_block_size();
   }
 
+  MemoryCache *get_memory_cache() {
+    return memory_cache.get();
+  }
+
 // Interfaces only for tests.
 public:
   CachedExtentRef test_query_cache(paddr_t offset) {
@@ -832,18 +837,19 @@ public:
     placement_hint_t hint,  ///< [in] user hint
 #ifdef UNIT_TESTS_BUILT
     rewrite_gen_t gen,      ///< [in] rewrite generation
-    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
+    std::optional<paddr_t> epaddr = std::nullopt,///< [in] paddr fed by callers
 #else
-    rewrite_gen_t gen
+    rewrite_gen_t gen,
 #endif
+    bool is_tracked = false
   ) {
     LOG_PREFIX(Cache::alloc_new_non_data_extent);
     SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
               t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
 #ifdef UNIT_TESTS_BUILT
-    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen, epaddr);
+    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen, epaddr, is_tracked);
 #else
-    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen);
+    auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen, is_tracked);
 #endif
     if (!result) {
       return nullptr;
@@ -874,18 +880,19 @@ public:
     placement_hint_t hint,  ///< [in] user hint
 #ifdef UNIT_TESTS_BUILT
     rewrite_gen_t gen,      ///< [in] rewrite generation
-    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
+    std::optional<paddr_t> epaddr = std::nullopt,///< [in] paddr fed by callers
 #else
-    rewrite_gen_t gen
+    rewrite_gen_t gen,
 #endif
+    bool is_tracked = false
   ) {
     LOG_PREFIX(Cache::alloc_new_data_extents);
     SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
               t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
 #ifdef UNIT_TESTS_BUILT
-    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen, epaddr);
+    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen, epaddr, is_tracked);
 #else
-    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen);
+    auto results = epm.alloc_new_data_extents(t, T::TYPE, length, hint, gen, is_tracked);
 #endif
     std::vector<TCachedExtentRef<T>> extents;
     for (auto &result : results) {
@@ -947,6 +954,15 @@ public:
     return ext;
   }
 
+  CachedExtentRef alloc_remapped_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    laddr_t remap_laddr,
+    paddr_t remap_paddr,
+    extent_len_t remap_length,
+    laddr_t original_laddr,
+    std::optional<ceph::bufferptr> &&original_bptr);
+
   /**
    * alloc_new_extent
    *
@@ -957,7 +973,8 @@ public:
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
     placement_hint_t hint, ///< [in] user hint
-    rewrite_gen_t gen      ///< [in] rewrite generation
+    rewrite_gen_t gen,     ///< [in] rewrite generation
+    bool is_tracked
     );
 
   /**
@@ -970,7 +987,8 @@ public:
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
     placement_hint_t hint, ///< [in] user hint
-    rewrite_gen_t gen      ///< [in] rewrite generation
+    rewrite_gen_t gen,     ///< [in] rewrite generation
+    bool is_tracked
     );
 
   /**
@@ -1310,7 +1328,7 @@ private:
       return;
     }
     if (ext.is_stable_clean() && !ext.is_placeholder()) {
-      lru.move_to_top(ext);
+      memory_cache->move_to_top(ext);
     }
   }
 
@@ -1366,88 +1384,8 @@ private:
 
   friend class crimson::os::seastore::backref::BtreeBackrefManager;
   friend class crimson::os::seastore::BackrefManager;
-  /**
-   * lru
-   *
-   * holds references to recently used extents
-   */
-  class LRU {
-    // max size (bytes)
-    const size_t capacity = 0;
 
-    // current size (bytes)
-    size_t contents = 0;
-
-    CachedExtent::list lru;
-
-    void trim_to_capacity() {
-      while (contents > capacity) {
-	assert(lru.size() > 0);
-	remove_from_lru(lru.front());
-      }
-    }
-
-    void add_to_lru(CachedExtent &extent) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
-      
-      if (!extent.primary_ref_list_hook.is_linked()) {
-	contents += extent.get_length();
-	intrusive_ptr_add_ref(&extent);
-	lru.push_back(extent);
-      }
-      trim_to_capacity();
-    }
-
-  public:
-    LRU(size_t capacity) : capacity(capacity) {}
-
-    size_t get_capacity() const {
-      return capacity;
-    }
-
-    size_t get_current_contents_bytes() const {
-      return contents;
-    }
-
-    size_t get_current_contents_extents() const {
-      return lru.size();
-    }
-
-    void remove_from_lru(CachedExtent &extent) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
-
-      if (extent.primary_ref_list_hook.is_linked()) {
-	lru.erase(lru.s_iterator_to(extent));
-	assert(contents >= extent.get_length());
-	contents -= extent.get_length();
-	intrusive_ptr_release(&extent);
-      }
-    }
-
-    void move_to_top(CachedExtent &extent) {
-      assert(extent.is_stable_clean() && !extent.is_placeholder());
-
-      if (extent.primary_ref_list_hook.is_linked()) {
-	lru.erase(lru.s_iterator_to(extent));
-	intrusive_ptr_release(&extent);
-	assert(contents >= extent.get_length());
-	contents -= extent.get_length();
-      }
-      add_to_lru(extent);
-    }
-
-    void clear() {
-      LOG_PREFIX(Cache::LRU::clear);
-      for (auto iter = lru.begin(); iter != lru.end();) {
-	SUBDEBUG(seastore_cache, "clearing {}", *iter);
-	remove_from_lru(*(iter++));
-      }
-    }
-
-    ~LRU() {
-      clear();
-    }
-  } lru;
+  MemoryCacheRef memory_cache;
 
   struct query_counters_t {
     uint64_t access = 0;
@@ -1541,6 +1479,7 @@ private:
 
     version_stat_t committed_dirty_version;
     version_stat_t committed_reclaim_version;
+    version_stat_t committed_promote_version;
   } stats;
 
   template <typename CounterT>
@@ -1576,6 +1515,10 @@ private:
 	     src2 == Transaction::src_t::CLEANER_MAIN));
     assert(!(src1 == Transaction::src_t::CLEANER_COLD &&
 	     src2 == Transaction::src_t::CLEANER_COLD));
+    assert(!(src1 == Transaction::src_t::PROMOTE &&
+	     src2 == Transaction::src_t::PROMOTE));
+    assert(!(src1 == Transaction::src_t::DEMOTE &&
+	     src2 == Transaction::src_t::DEMOTE));
     assert(!(src1 == Transaction::src_t::TRIM_ALLOC &&
              src2 == Transaction::src_t::TRIM_ALLOC));
 

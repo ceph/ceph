@@ -628,6 +628,14 @@ public:
     return is_pending() && pending_for_transaction == id;
   }
 
+  uint8_t get_cache_state() const {
+    return cache_state;
+  }
+
+  void set_cache_state(uint8_t state) {
+    cache_state = state;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -717,6 +725,9 @@ private:
   // or the rewrite generation for the fresh write
   rewrite_gen_t rewrite_generation = NULL_GENERATION;
 
+  // opaque state of CachedExtent, used by MemoryCache
+  uint8_t cache_state = 0;
+
 protected:
   trans_view_set_t mutation_pendings;
 
@@ -770,6 +781,7 @@ protected:
   }
 
   friend class Cache;
+  friend class LRUMemoryCache;
   template <typename T, typename... Args>
   static TCachedExtentRef<T> make_cached_extent_ref(
     Args&&... args) {
@@ -1074,6 +1086,10 @@ public:
   // The start offset of the pin, must be 0 if the pin is not indirect
   virtual extent_len_t get_intermediate_offset() const {
     return std::numeric_limits<extent_len_t>::max();
+  }
+
+  virtual bool has_shadow_mapping() const {
+    ceph_abort("not supported");
   }
 
   virtual get_child_ret_t<LogicalCachedExtent>

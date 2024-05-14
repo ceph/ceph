@@ -7,6 +7,8 @@
 
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cached_extent.h"
+#include "crimson/os/seastore/cache/memory_cache.h"
+#include "crimson/os/seastore/cache/non_volatile_cache.h"
 #include "crimson/os/seastore/journal/segment_allocator.h"
 #include "crimson/os/seastore/journal/record_submitter.h"
 #include "crimson/os/seastore/transaction.h"
@@ -230,7 +232,8 @@ public:
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
 
-  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&);
+  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&,
+            MemoryCache *);
 
   SegmentSeqAllocator &get_ool_segment_seq_allocator() const {
     return *ool_segment_seq_allocator;
@@ -269,6 +272,10 @@ public:
     return background_process.get_stat();
   }
 
+  NonVolatileCache *get_non_volatile_cache() {
+    return background_process.get_non_volatile_cache();
+  }
+
   using mount_ertr = crimson::errorator<
       crimson::ct_error::input_output_error>;
   using mount_ret = mount_ertr::future<>;
@@ -299,17 +306,18 @@ public:
     placement_hint_t hint,
 #ifdef UNIT_TESTS_BUILT
     rewrite_gen_t gen,
-    std::optional<paddr_t> external_paddr = std::nullopt
+    std::optional<paddr_t> external_paddr = std::nullopt,
 #else
-    rewrite_gen_t gen
+    rewrite_gen_t gen,
 #endif
+    bool is_tracked = false
   ) {
     assert(hint < placement_hint_t::NUM_HINTS);
     assert(is_target_rewrite_generation(gen));
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
-    gen = adjust_generation(category, type, hint, gen);
+    gen = adjust_generation(category, type, hint, gen, is_tracked);
 
     paddr_t addr;
 #ifdef UNIT_TESTS_BUILT
@@ -349,10 +357,11 @@ public:
     placement_hint_t hint,
 #ifdef UNIT_TESTS_BUILT
     rewrite_gen_t gen,
-    std::optional<paddr_t> external_paddr = std::nullopt
+    std::optional<paddr_t> external_paddr = std::nullopt,
 #else
-    rewrite_gen_t gen
+    rewrite_gen_t gen,
 #endif
+    bool is_tracked = false
   ) {
     LOG_PREFIX(ExtentPlacementManager::alloc_new_data_extents);
     assert(hint < placement_hint_t::NUM_HINTS);
@@ -360,7 +369,7 @@ public:
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
-    gen = adjust_generation(category, type, hint, gen);
+    gen = adjust_generation(category, type, hint, gen, is_tracked);
     assert(gen != INLINE_GENERATION);
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
@@ -418,6 +427,18 @@ public:
     return max_data_allocation_size;
   }
 #endif
+
+
+  bool is_going_to_evict(const LogicalCachedExtent &extent) {
+    auto type = extent.get_type();
+    auto gen = adjust_generation(
+      get_extent_category(type),
+      type,
+      extent.get_user_hint(),
+      extent.get_rewrite_generation(),
+      false);
+    return gen >= MIN_COLD_GENERATION;
+  }
 
   /**
    * dispatch_result_t
@@ -508,6 +529,14 @@ public:
     return primary_device->get_backend_type();
   }
 
+  bool has_cold_tier() const {
+    return background_process.has_cold_tier();
+  }
+
+  bool is_cold_device(device_id_t id) const {
+    return background_process.is_cold_device(id);
+  }
+
   // Testing interfaces
 
   void test_init_no_background(Device *test_device) {
@@ -529,7 +558,8 @@ private:
       data_category_t category,
       extent_types_t type,
       placement_hint_t hint,
-      rewrite_gen_t gen) {
+      rewrite_gen_t gen,
+      bool is_tracked) {
     if (type == extent_types_t::ROOT) {
       gen = INLINE_GENERATION;
     } else if (get_main_backend_type() == backend_type_t::SEGMENTED &&
@@ -565,6 +595,10 @@ private:
 
     if (gen > dynamic_max_rewrite_generation) {
       gen = dynamic_max_rewrite_generation;
+    }
+
+    if (is_tracked && gen >= MIN_COLD_GENERATION) {
+      gen = MIN_COLD_GENERATION - 1;
     }
 
     return gen;
@@ -617,7 +651,8 @@ private:
 
     void init(JournalTrimmerImplRef &&_trimmer,
               AsyncCleanerRef &&_cleaner,
-              AsyncCleanerRef &&_cold_cleaner) {
+              AsyncCleanerRef &&_cold_cleaner,
+              MemoryCache *_memory_cache) {
       trimmer = std::move(_trimmer);
       trimmer->set_background_callback(this);
       main_cleaner = std::move(_cleaner);
@@ -641,6 +676,19 @@ private:
             "seastore_multiple_tiers_default_evict_ratio"),
           crimson::common::get_conf<double>(
             "seastore_multiple_tiers_fast_evict_ratio"));
+
+        ceph_assert(_memory_cache != nullptr);
+        memory_cache = _memory_cache;
+        memory_cache->set_background_callback(this);
+
+        nv_cache = create_non_volatile_cache(
+          crimson::common::get_conf<Option::size_t>(
+            "seastore_non_volatile_cache_capacity"),
+          crimson::common::get_conf<Option::size_t>(
+            "seastore_non_volatile_cache_demote_size"));
+        nv_cache->set_background_callback(this);
+      } else {
+        memory_cache = nullptr;
       }
     }
 
@@ -648,8 +696,20 @@ private:
       return trimmer->get_journal_type();
     }
 
+    NonVolatileCache *get_non_volatile_cache() {
+      return nv_cache.get();
+    }
+
     bool has_cold_tier() const {
       return cold_cleaner.get() != nullptr;
+    }
+
+    bool is_cold_device(device_id_t id) const {
+      if (!has_cold_tier()) {
+        return false;
+      }
+      assert(cleaners_by_device_id[id]);
+      return cleaners_by_device_id[id] != main_cleaner.get();
     }
 
     void set_extent_callback(ExtentCallbackInterface *cb) {
@@ -657,6 +717,8 @@ private:
       main_cleaner->set_extent_callback(cb);
       if (has_cold_tier()) {
         cold_cleaner->set_extent_callback(cb);
+        memory_cache->set_extent_callback(cb);
+        nv_cache->set_extent_callback(cb);
       }
     }
 
@@ -999,6 +1061,8 @@ private:
 
     JournalTrimmerImplRef trimmer;
     AsyncCleanerRef main_cleaner;
+    MemoryCache *memory_cache;
+    NonVolatileCacheRef nv_cache;
 
     /*
      * cold tier (optional, see has_cold_tier())

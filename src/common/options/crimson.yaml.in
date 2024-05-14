@@ -103,6 +103,11 @@ options:
   level: advanced
   desc: Size in bytes of extents to keep in cache.
   default: 64_M
+- name: seastore_cache_promotion_size
+  type: size
+  level: advanced
+  desc: Size in bytes of extents to be promoted from cold devices
+  default: 2_M
 - name: seastore_obj_data_write_amplification
   type: float
   level: advanced
@@ -143,3 +148,13 @@ options:
   level: dev
   desc: overwrite the existing data block based on delta if the overwrite size is equal to or less than the value, otherwise do overwrite based on remapping, set to 0 to enforce the remap-based overwrite.
   default: 0
+- name: seastore_non_volatile_cache_capacity
+  type: size
+  level: advanced
+  desc: Size in bytes of memory used by non volatile cache
+  default: 200_M
+- name: seastore_non_volatile_cache_demote_size
+  type: size
+  level: advanced
+  desc: Size in bytes of extents to be demoted by non volatile cache
+  default: 2_M

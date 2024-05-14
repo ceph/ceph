@@ -10,6 +10,7 @@
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
+#include "crimson/os/seastore/object_data_handler.h"
 
 /*
  * TransactionManager logs
@@ -35,12 +36,18 @@ TransactionManager::TransactionManager(
     journal(std::move(_journal)),
     epm(std::move(_epm)),
     backref_manager(std::move(_backref_manager)),
+    nv_cache(nullptr),
     full_extent_integrity_check(
       crimson::common::get_conf<bool>(
         "seastore_full_integrity_check"))
 {
   epm->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
+
+  if (epm->has_cold_tier()) {
+    nv_cache = epm->get_non_volatile_cache();
+    ceph_assert(support_non_volatile_cache());
+  }
 }
 
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
@@ -152,8 +159,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     });
   }).safe_then([this] {
     return epm->open_for_write();
-  }).safe_then([FNAME, this] {
-    epm->start_background();
+  }).safe_then([FNAME] {
     INFO("completed");
   }).handle_error(
     mount_ertr::pass_further{},
@@ -227,12 +233,19 @@ TransactionManager::ref_ret TransactionManager::remove(
            t, result.refcount, *ref);
     if (result.refcount == 0) {
       cache->retire_extent(t, ref);
+      if (result.shadow_paddr != P_ADDR_NULL) {
+	return cache->retire_extent_addr(
+	  t, result.shadow_paddr, result.length
+	).si_then([result] {
+	  return ref_iertr::make_ready_future<unsigned>(result.refcount);
+	});
+      }
     }
-    return result.refcount;
+    return ref_iertr::make_ready_future<unsigned>(result.refcount);
   });
 }
 
-TransactionManager::ref_ret TransactionManager::_dec_ref(
+TransactionManager::dec_ref_ret TransactionManager::_dec_ref(
   Transaction &t,
   laddr_t offset,
   bool cascade_remove)
@@ -240,7 +253,7 @@ TransactionManager::ref_ret TransactionManager::_dec_ref(
   LOG_PREFIX(TransactionManager::_dec_ref);
   TRACET("{}", t, offset);
   return lba_manager->decref_extent(t, offset, cascade_remove
-  ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
+  ).si_then([this, FNAME, offset, &t](auto result) -> dec_ref_ret {
     DEBUGT("extent refcount is decremented to {} -- {}~{}, {}",
            t, result.refcount, offset, result.length, result.addr);
     auto fut = ref_iertr::now();
@@ -248,12 +261,21 @@ TransactionManager::ref_ret TransactionManager::_dec_ref(
       if (result.addr.is_paddr() &&
           !result.addr.get_paddr().is_zero()) {
         fut = cache->retire_extent_addr(
-          t, result.addr.get_paddr(), result.length);
+          t, result.addr.get_paddr(), result.length
+	).si_then([this, result, &t] {
+	  if (result.shadow_paddr != P_ADDR_NULL) {
+	    return cache->retire_extent_addr(
+	      t, result.shadow_paddr, result.length);
+	  } else {
+	    return Cache::retire_extent_iertr::now();
+	  }
+	});
       }
     }
 
     return fut.si_then([result=std::move(result)] {
-      return result.refcount;
+      return ref_iertr::make_ready_future<
+	dec_ref_res_t>(result.refcount, result.shadow_paddr);
     });
   });
 }
@@ -437,6 +459,16 @@ TransactionManager::do_submit_transaction(
           submit_result.record_block_base,
           start_seq);
 
+      if (nv_cache) {
+	for (auto &p : tref.get_obj_info()) {
+	  if (p.second.op == Transaction::obj_op_t::ADD) {
+	    nv_cache->move_to_top(p.first, p.second.type, /*create_if_absent=*/true);
+	  } else {
+	    nv_cache->remove(p.first, p.second.type);
+	  }
+	}
+      }
+
       std::vector<CachedExtentRef> lba_to_clear;
       std::vector<CachedExtentRef> backref_to_clear;
       lba_to_clear.reserve(tref.get_retired_set().size());
@@ -505,6 +537,17 @@ TransactionManager::rewrite_logical_extent(
   TRACET("rewriting extent -- {}", t, *extent);
 
   auto lextent = extent->cast<LogicalCachedExtent>();
+  bool is_tracked =
+    support_non_volatile_cache() &&
+    // lextent is from hot tier
+    !epm->is_cold_device(lextent->get_paddr().get_device_id()) &&
+    // lextent will be evicted to the cold tier
+    epm->is_going_to_evict(*lextent) &&
+    // lextent is cached by non volatile cache
+    nv_cache->is_cached(
+      lextent->get_laddr().get_object_prefix(),
+      lextent->get_type());
+
   cache->retire_extent(t, extent);
   if (get_extent_category(lextent->get_type()) == data_category_t::METADATA) {
     auto nlextent = cache->alloc_new_extent_by_type(
@@ -513,7 +556,8 @@ TransactionManager::rewrite_logical_extent(
       lextent->get_length(),
       lextent->get_user_hint(),
       // get target rewrite generation
-      lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
+      lextent->get_rewrite_generation(),
+      is_tracked)->cast<LogicalCachedExtent>();
     lextent->get_bptr().copy_out(
       0,
       lextent->get_length(),
@@ -546,7 +590,8 @@ TransactionManager::rewrite_logical_extent(
       lextent->get_length(),
       lextent->get_user_hint(),
       // get target rewrite generation
-      lextent->get_rewrite_generation());
+      lextent->get_rewrite_generation(),
+      is_tracked);
     return seastar::do_with(
       std::move(extents),
       0,
@@ -593,7 +638,8 @@ TransactionManager::rewrite_logical_extent(
             t,
             lextent->get_laddr() + off,
             *nlextent,
-	    refcount
+	    refcount,
+	    {.determinsitic=true}
           ).si_then([lextent, nlextent, off](auto mapping) {
             ceph_assert(mapping->get_key() == lextent->get_laddr() + off);
             ceph_assert(mapping->get_val() == nlextent->get_paddr());
@@ -608,6 +654,22 @@ TransactionManager::rewrite_logical_extent(
       });
     });
   }
+}
+
+TransactionManager::maybe_load_onode_ret
+TransactionManager::maybe_load_onode(
+  Transaction &t,
+  laddr_t laddr,
+  extent_types_t type)
+{
+  assert(!laddr.is_shadow());
+  return lba_manager->prefix_contains_shadow_mapping(t, laddr
+  ).si_then([this, laddr, type](auto res) {
+    if (res) {
+      nv_cache->move_to_top(laddr, type, true);
+    }
+    return seastar::now();
+  });
 }
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
@@ -664,6 +726,172 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   }
 }
 
+TransactionManager::promote_extent_ret
+TransactionManager::promote_extent(
+  Transaction &t,
+  CachedExtentRef extent)
+{
+  LOG_PREFIX(TransactionManager::promote_extent);
+  assert(epm->get_main_backend_type() == backend_type_t::SEGMENTED);
+  assert(epm->is_cold_device(extent->get_paddr().get_device_id()));
+
+  DEBUGT("promote extent: {}", t, *extent);
+
+  if (!support_shadow_extent(extent->get_type())) {
+    auto mtime = extent->get_modify_time();
+    if (mtime == NULL_TIME) {
+      // XXX: is it appropriate?
+      mtime = seastar::lowres_system_clock::now();
+    }
+    return rewrite_extent(
+      t,
+      extent,
+      INIT_GENERATION,
+      mtime);
+  }
+  assert(extent->is_logical());
+
+  t.get_rewrite_version_stats().increment(extent->get_version());
+  cache->retire_extent(t, extent);
+
+  auto retired_lextent = extent->cast<LogicalCachedExtent>();
+  t.update_obj_info(
+    retired_lextent->get_laddr().get_object_prefix(),
+    retired_lextent->get_type());
+
+  auto promoted_extents = cache->alloc_new_data_extents_by_type(
+    t,
+    retired_lextent->get_type(),
+    retired_lextent->get_length(),
+    placement_hint_t::HOT,
+    INIT_GENERATION,
+    true);
+
+  return seastar::do_with(
+    std::move(promoted_extents),
+    retired_lextent,
+    extent_len_t(0),
+    extent_ref_count_t(0),
+    [&t, this, FNAME](std::vector<CachedExtentRef> &promoted_extents,
+		      LogicalCachedExtentRef &retired_lextent,
+		      extent_len_t &offset,
+		      extent_ref_count_t &refcount) {
+      return trans_intr::do_for_each(promoted_extents, [&t, &retired_lextent, &offset, &refcount, this, FNAME](CachedExtentRef &extent) {
+	auto lextent = extent->cast<LogicalCachedExtent>();
+	lextent->set_modify_time(retired_lextent->get_modify_time());
+	retired_lextent->get_bptr().copy_out(offset, lextent->get_length(), lextent->get_bptr().c_str());
+	lextent->set_laddr(retired_lextent->get_laddr() + offset);
+
+	auto cold_extent = cache->alloc_remapped_extent_by_type(
+	  t,
+	  lextent->get_type(),
+	  lextent->get_laddr(),
+	  retired_lextent->get_paddr().add_offset(offset),
+	  lextent->get_length(),
+	  lextent->get_laddr(),
+	  std::nullopt)->cast<LogicalCachedExtent>();
+	cold_extent->set_modify_time(retired_lextent->get_modify_time());
+	cold_extent->set_laddr(lextent->get_laddr().with_shadow());
+
+	DEBUGT("remap cold extent: {}", t, *cold_extent);
+	return lba_manager->alloc_extent(
+	  t,
+	  cold_extent->get_laddr(),
+	  *cold_extent,
+	  EXTENT_DEFAULT_REF_COUNT,
+	  {.determinsitic=true}
+	).si_then([&t, &retired_lextent, &offset, &refcount, lextent, cold_extent, this, FNAME](auto mapping) {
+	  assert(cold_extent->get_laddr() == mapping->get_key());
+	  assert(mapping->get_key().is_shadow());
+	  assert(mapping->get_key().without_shadow() == lextent->get_laddr());
+	  auto fut = promote_extent_iertr::now();
+	  if (offset == 0) {
+	    DEBUGT("update first extent: {}", t, *lextent);
+	    fut = lba_manager->update_mapping(
+	      t,
+	      retired_lextent->get_laddr(),
+	      retired_lextent->get_length(),
+	      retired_lextent->get_paddr(),
+	      lextent->get_length(),
+	      lextent->get_paddr(),
+	      lextent->get_last_committed_crc(),
+	      lextent.get(),
+	      /*has_shadow=*/true
+	    ).si_then([&refcount](auto c) {
+	      refcount = c;
+	    });
+	  } else {
+	    DEBUGT("alloc promoted extent: {}", t, *lextent);
+	    ceph_assert(refcount != 0);
+	    fut = lba_manager->alloc_extent(
+	      t,
+	      lextent->get_laddr(),
+	      *lextent,
+	      refcount,
+	      {.determinsitic=true, .has_shadow=true}
+	    ).discard_result();
+	  }
+	  return fut.si_then([&offset, lextent] {
+	    offset += lextent->get_length();
+	  });
+	});
+      });
+    });
+}
+
+TransactionManager::demote_region_ret
+TransactionManager::demote_region(
+  Transaction &t,
+  laddr_t prefix,
+  extent_len_t max_demote_size)
+{
+  return lba_manager->demote_region(
+    t,
+    prefix,
+    max_demote_size,
+    [this, &t](paddr_t paddr, extent_len_t length) {
+      assert(!epm->is_cold_device(paddr.get_device_id()));
+      return cache->retire_extent_addr(t, paddr, length);
+    },
+    [this, &t](LogicalCachedExtent *extent,
+	       paddr_t paddr,
+	       extent_len_t length)
+    -> base_iertr::future<LogicalCachedExtent*> {
+      assert(epm->is_cold_device(paddr.get_device_id()));
+      if (!extent) {
+	return cache->retire_extent_addr(t, paddr, length
+	).si_then([&t, paddr, length, this] {
+	  auto nextent = cache->alloc_remapped_extent<ObjectDataBlock>(
+	    t,
+	    L_ADDR_NULL,
+	    paddr,
+	    length,
+	    L_ADDR_NULL,
+	    std::nullopt)->cast<LogicalCachedExtent>();
+	  return base_iertr::make_ready_future<
+	    LogicalCachedExtent*>(nextent.get());
+	});
+      }
+      cache->retire_extent(t, extent);
+      auto nextent = cache->alloc_remapped_extent_by_type(
+	  t,
+	  extent->get_type(),
+	  extent->get_laddr(),
+	  extent->get_paddr(),
+	  extent->get_length(),
+	  extent->get_laddr(),
+	  extent->get_bptr())->cast<LogicalCachedExtent>();
+      return base_iertr::make_ready_future<
+	LogicalCachedExtent*>(nextent.get());
+    }
+  ).si_then([](auto &&res) {
+    return demote_region_res_t{
+      res.demoted_size,
+      res.completed
+    };
+  });
+}
+
 TransactionManager::get_extents_if_live_ret
 TransactionManager::get_extents_if_live(
   Transaction &t,
@@ -710,20 +938,44 @@ TransactionManager::get_extents_if_live(
               LBAMappingRef &pin) -> Cache::get_extent_iertr::future<>
           {
             auto pin_paddr = pin->get_val();
-            auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
-            auto pin_paddr_seg_id = pin_seg_paddr.get_segment_id();
-            auto pin_len = pin->get_length();
-            if (pin_paddr_seg_id != paddr_seg_id) {
-              return seastar::now();
-            }
-            // Only extent split can happen during the lookup
-            ceph_assert(pin_seg_paddr >= paddr &&
-                        pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
-            return read_pin_by_type(t, std::move(pin), type
-            ).si_then([&list](auto ret) {
-              list.emplace_back(std::move(ret));
-              return seastar::now();
-            });
+	    auto fut = [this, pin_paddr, paddr_seg_id, paddr, len, type, &list, &t]
+	      (LBAMappingRef &pin) -> get_extents_if_live_iertr::future<> {
+	      ceph_assert(pin->get_val().get_device_id() == paddr.get_device_id());
+	      auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
+	      auto pin_paddr_seg_id = pin_seg_paddr.get_segment_id();
+	      auto pin_len = pin->get_length();
+	      if (pin_paddr_seg_id != paddr_seg_id) {
+		return get_extents_if_live_iertr::make_ready_future();
+	      }
+	      // Only extent split can happen during the lookup
+	      ceph_assert(pin_seg_paddr >= paddr &&
+			  pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
+	      return read_pin_by_type(t, std::move(pin), type
+              ).si_then([&list](auto ret) {
+		list.emplace_back(std::move(ret));
+		return get_extents_if_live_iertr::make_ready_future();
+	      });
+	    };
+	    if (pin_paddr.get_device_id() != paddr.get_device_id()) {
+	      if (pin->has_shadow_mapping()) {
+		auto shadow_laddr = pin->get_key().with_shadow();
+		return lba_manager->get_mapping(t, shadow_laddr
+	        ).handle_error_interruptible(
+                  get_extents_if_live_iertr::pass_further{},
+		  crimson::ct_error::assert_all{
+		    "shadow mapping must exist"
+		  }
+	        ).si_then([fut=std::move(fut)](auto pin) {
+		  return seastar::do_with(std::move(pin), [fut=std::move(fut)](auto &pin) {
+		    return fut(pin);
+		  });
+		});
+	      } else {
+		return get_extents_if_live_iertr::make_ready_future();
+	      }
+	    } else {
+	      return fut(pin);
+	    }
           }).si_then([&list] {
             return get_extents_if_live_ret(
               interruptible::ready_future_marker{},
@@ -896,7 +1148,8 @@ TransactionManagerRef make_transaction_manager(
 
   epm->init(std::move(journal_trimmer),
 	    std::move(cleaner),
-	    std::move(cold_segment_cleaner));
+	    std::move(cold_segment_cleaner),
+	    cache->get_memory_cache());
   epm->set_primary_device(primary_device);
 
   return std::make_unique<TransactionManager>(

@@ -175,7 +175,16 @@ public:
     Transaction &t;
     Onode &onode;
     Onode *d_onode = nullptr; // The desination node in case of clone
+    // used in reserve region without invoking get_data_hint() directly
+    laddr_t hint = L_ADDR_NULL;
+    laddr_t d_hint = L_ADDR_NULL;
+    // indicates whether conflict would occur during resering region
+    bool determinsitic = true;
   };
+
+  using touch_iertr = base_iertr;
+  using touch_ret = touch_iertr::future<>;
+  touch_ret touch(context_t ctx);
 
   /// Writes bl to [offset, offset + bl.length())
   using write_iertr = base_iertr;
@@ -229,7 +238,8 @@ private:
   /// Updates region [_offset, _offset + bl.length) to bl
   write_ret overwrite(
     context_t ctx,        ///< [in] ctx
-    laddr_t offset,       ///< [in] write offset
+    laddr_t base,         ///< [in] onode base laddr
+    objaddr_t offset,     ///< [in] write offset
     extent_len_t len,     ///< [in] len to write, len == bl->length() if bl
     std::optional<bufferlist> &&bl, ///< [in] buffer to write, empty for zeros
     lba_pin_list_t &&pins ///< [in] set of pins overlapping above region
@@ -239,6 +249,7 @@ private:
   write_ret prepare_data_reservation(
     context_t ctx,
     object_data_t &object_data,
+    laddr_t hint,
     extent_len_t size);
 
   /// Trims data past size

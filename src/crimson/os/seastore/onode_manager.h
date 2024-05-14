@@ -34,6 +34,11 @@ public:
     Transaction &trans,
     const ghobject_t &hoid) = 0;
 
+  virtual contains_onode_ret contains_onode(
+    Transaction &trans,
+    const ghobject_t &start,
+    const ghobject_t &end) = 0;
+
   using get_onode_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
   using get_onode_ret = get_onode_iertr::future<
@@ -72,6 +77,24 @@ public:
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) = 0;
+
+  using get_latest_snap_iertr = base_iertr;
+  using get_latest_snap_ret = get_latest_snap_iertr::future<
+    OnodeRef>;
+  virtual get_latest_snap_ret get_latest_snap(
+    Transaction &trans,
+    const ghobject_t &head) = 0;
+
+  using scan_onodes_iertr = base_iertr;
+  using scan_onodes_ret = scan_onodes_iertr::future<
+    std::optional<ghobject_t>>;
+  using scan_onodes_func_t = std::function<
+    scan_onodes_iertr::future<>(laddr_t)>;
+  virtual scan_onodes_ret scan_onodes(
+    Transaction &trans,
+    const ghobject_t &marker,
+    int limit,
+    scan_onodes_func_t &&func) = 0;
 
   virtual ~OnodeManager() {}
 };

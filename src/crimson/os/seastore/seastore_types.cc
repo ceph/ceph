@@ -89,13 +89,28 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   }
 }
 
+std::ostream &operator<<(std::ostream &out, const laddr_t &l)
+{
+  auto str = fmt::format("{}", l);
+  return out << str;
+}
+
+std::ostream &operator<<(std::ostream &out, const loffset_t &loffset)
+{
+  return out << "loffset(base=" << loffset.get_base()
+	     << ", offset=" << loffset.get_offset() << ")";
+}
+
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
 {
+  out << "pladdr(";
   if (pladdr.is_laddr()) {
-    return out << pladdr.get_laddr();
+    out << "local_snap_id=" << pladdr.get_local_snap_id();
   } else {
-    return out << pladdr.get_paddr();
+    out << "paddr=" << pladdr.get_paddr()
+	<< ", has_shadow_mapping=" << pladdr.has_shadow_mapping();
   }
+  return out << ")";
 }
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
@@ -127,6 +142,71 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     out << "INVALID!";
   }
   return out << ">";
+}
+
+laddr_t laddr_t::get_data_hint(uint8_t pool, uint8_t shard, uint32_t crush)
+{
+  static thread_local random_generator_t gen;
+  auto ret = L_ADDR_MIN;
+  ret.set_pool(pool);
+  ret.set_shard(shard);
+  ret.set_crush(crush);
+  do {
+    ret.set_random(gen());
+  } while (!ret.has_valid_prefix());
+
+  assert(ret.get_pool() == pool);
+  assert(ret.get_shard() == shard);
+  assert(ret.get_crush() == crush);
+  assert(ret.get_local_snap_id() == 0);
+  assert(!ret.is_snap());
+  assert(!ret.is_metadata());
+  return ret;
+}
+
+laddr_t laddr_t::get_next_hint(laddr_t laddr)
+{
+  ceph_assert(!laddr.is_snap());
+  ceph_assert(laddr.get_local_snap_id() == 0);
+  auto l = laddr;
+
+  if (laddr.has_valid_prefix()) {
+    // data: when random is full, loop back to 0
+    l.set_random(laddr.get_random() + 1);
+  } else {
+    // metadata
+    if ((laddr.value & OFFSET_MASK) == OFFSET_MASK) {
+      // offset field is full, overflow to random field
+      l.set_random(laddr.get_random() + 1);
+      l.value &= ~OFFSET_MASK;
+    } else {
+      l.value++;
+    }
+  }
+  assert(l.is_metadata() == laddr.is_metadata());
+  return l;
+}
+
+std::pair<laddr_t, extent_len_t> laddr_t::get_aligned_range(
+  laddr_t base, extent_len_t offset, extent_len_t length)
+{
+  auto loff = base + offset;
+  auto begin = loff.get_base();
+  loff += length;
+  return std::make_pair(begin, loff.get_roundup_laddr() - begin);
+}
+
+laddr_t laddr_t::get_hint_from_offset(uint64_t offset) {
+  ceph_assert(p2align(offset, UNIT_SIZE) == offset);
+  internal128_t value = offset >> UNIT_SHIFT;
+  value |= internal128_t{offset >> 24} << 47;
+  return laddr_t{value};
+}
+
+uint64_t laddr_t::get_original_offset() const {
+  uint64_t offset = get_offset();
+  offset |= static_cast<uint64_t>(value >> 47) << 24;
+  return offset;
 }
 
 journal_seq_t journal_seq_t::add_offset(
@@ -418,6 +498,10 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "CLEANER_MAIN";
   case transaction_type_t::CLEANER_COLD:
     return os << "CLEANER_COLD";
+  case transaction_type_t::PROMOTE:
+    return os << "PROMOTE";
+  case transaction_type_t::DEMOTE:
+    return os << "DEMOTE";
   case transaction_type_t::MAX:
     return os << "TRANS_TYPE_NULL";
   default:

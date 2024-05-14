@@ -73,6 +73,10 @@ public:
     Transaction &t,
     laddr_t offset) = 0;
 
+  virtual base_iertr::future<bool> prefix_contains_shadow_mapping(
+    Transaction &t,
+    laddr_t prefix) = 0;
+
   /**
    * Allocates a new mapping referenced by LBARef
    *
@@ -80,13 +84,18 @@ public:
    * This mapping will block from transaction submission until set_paddr
    * is called on the LBAMapping.
    */
+  struct alloc_opt_t {
+    bool determinsitic = false;
+    bool has_shadow = false;
+  };
   using alloc_extent_iertr = base_iertr;
   using alloc_extent_ret = alloc_extent_iertr::future<LBAMappingRef>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
     LogicalCachedExtent &nextent,
-    extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) = 0;
+    extent_ref_count_t refcount,
+    alloc_opt_t alloc_opt) = 0;
 
   using alloc_extents_ret = alloc_extent_iertr::future<
     std::vector<LBAMappingRef>>;
@@ -94,7 +103,8 @@ public:
     Transaction &t,
     laddr_t hint,
     std::vector<LogicalCachedExtentRef> extents,
-    extent_ref_count_t refcount) = 0;
+    extent_ref_count_t refcount,
+    alloc_opt_t alloc_opt) = 0;
 
   virtual alloc_extent_ret clone_mapping(
     Transaction &t,
@@ -106,11 +116,35 @@ public:
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len) = 0;
+    extent_len_t len,
+    alloc_opt_t alloc_opt) = 0;
+
+  struct demote_region_result_t {
+    extent_len_t demoted_size = 0;
+    extent_len_t proceed_size = 0;
+    bool completed = false;
+  };
+
+  using demote_region_iertr = base_iertr;
+  using demote_region_ret = demote_region_iertr::future<
+    demote_region_result_t>;
+  using retire_promotion_func_t = std::function<
+    base_iertr::future<>(paddr_t, extent_len_t)>;
+  using update_nextent_func_t = std::function<
+    base_iertr::future<LogicalCachedExtent*>(
+      LogicalCachedExtent*, paddr_t, extent_len_t)>;
+
+  virtual demote_region_ret demote_region(
+    Transaction &t,
+    laddr_t prefix,
+    extent_len_t max_demote_size,
+    retire_promotion_func_t retire_func,
+    update_nextent_func_t update_func) = 0;
 
   struct ref_update_result_t {
     extent_ref_count_t refcount = 0;
     pladdr_t addr;
+    paddr_t shadow_paddr = P_ADDR_NULL;
     extent_len_t length = 0;
   };
   using ref_iertr = base_iertr::extend<
@@ -202,7 +236,8 @@ public:
     extent_len_t len,
     paddr_t paddr,
     uint32_t checksum,
-    LogicalCachedExtent *nextent) = 0;
+    LogicalCachedExtent *nextent,
+    std::optional<bool> has_shadow = std::nullopt) = 0;
 
   /**
    * update_mappings

@@ -23,6 +23,7 @@
 #include "crimson/os/seastore/logging.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/cache.h"
+#include "crimson/os/seastore/cache/non_volatile_cache.h"
 #include "crimson/os/seastore/lba_manager.h"
 #include "crimson/os/seastore/backref_manager.h"
 #include "crimson/os/seastore/journal.h"
@@ -84,6 +85,18 @@ public:
     return cache->reset_transaction_preserve_handle(t);
   }
 
+  void start_background() {
+    epm->start_background();
+  }
+
+  bool is_cold_device(device_id_t id) const {
+    return epm->is_cold_device(id);
+  }
+
+  bool hash_multiple_tiers() const {
+    return epm->has_cold_tier();
+  }
+
   /**
    * get_pin
    *
@@ -112,6 +125,7 @@ public:
     extent_len_t length) {
     LOG_PREFIX(TransactionManager::get_pins);
     SUBDEBUGT(seastore_tm, "{}~{}", t, offset, length);
+    assert(length % laddr_t::UNIT_SIZE == 0);
     return lba_manager->get_mappings(
       t, offset, length);
   }
@@ -269,7 +283,10 @@ public:
   ref_ret remove(
     Transaction &t,
     laddr_t offset) {
-    return _dec_ref(t, offset, true);
+    return _dec_ref(t, offset, true
+    ).si_then([](auto res) {
+      return res.refcount;
+    });
   }
 
   /// remove refcount for list of offset
@@ -297,7 +314,6 @@ public:
     LOG_PREFIX(TransactionManager::alloc_non_data_extent);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
-    ceph_assert(is_aligned(laddr_hint, epm->get_block_size()));
     auto ext = cache->alloc_new_non_data_extent<T>(
       t,
       len,
@@ -309,7 +325,12 @@ public:
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
-      *ext
+      *ext,
+      EXTENT_DEFAULT_REF_COUNT,
+      // NOTE: setting determinsitic to false is safe here, based on the fact that
+      // all of determinsitic operations are issued from ObjectDataHandler, which
+      // always invoking reserve region before doing alloc_extent.
+      {.determinsitic=false}
     ).si_then([ext=std::move(ext), laddr_hint, &t](auto &&) mutable {
       LOG_PREFIX(TransactionManager::alloc_non_data_extent);
       SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
@@ -333,11 +354,11 @@ public:
     Transaction &t,
     laddr_t laddr_hint,
     extent_len_t len,
-    placement_hint_t placement_hint = placement_hint_t::HOT) {
+    placement_hint_t placement_hint = placement_hint_t::HOT,
+    bool determinsitic = false) {
     LOG_PREFIX(TransactionManager::alloc_data_extents);
     SUBTRACET(seastore_tm, "{} len={}, placement_hint={}, laddr_hint={}",
               t, T::TYPE, len, placement_hint, laddr_hint);
-    ceph_assert(is_aligned(laddr_hint, epm->get_block_size()));
     auto exts = cache->alloc_new_data_extents<T>(
       t,
       len,
@@ -351,7 +372,8 @@ public:
       laddr_hint,
       std::vector<LogicalCachedExtentRef>(
 	exts.begin(), exts.end()),
-      EXTENT_DEFAULT_REF_COUNT
+      EXTENT_DEFAULT_REF_COUNT,
+      {.determinsitic=determinsitic}
     ).si_then([exts=std::move(exts), &t, FNAME](auto &&) mutable {
       for (auto &ext : exts) {
 	SUBDEBUGT(seastore_tm, "new extent: {}", t, *ext);
@@ -477,17 +499,18 @@ public:
         std::vector<remap_entry>(remaps.begin(), remaps.end()),
         [this, &t, original_laddr, original_paddr,
 	original_len, intermediate_base, intermediate_key]
-        (auto &ret, auto &count, auto &original_bptr, auto &remaps) {
+        (auto &ret, auto &count, auto &original_bptr, auto &remaps) mutable {
         return _dec_ref(t, original_laddr, false
         ).si_then([this, &t, &original_bptr, &ret, &count,
 		   &remaps, intermediate_base, intermediate_key,
-                   original_laddr, original_paddr, original_len](auto) {
+                   original_laddr, original_paddr, original_len](auto dec_res) mutable {
           return trans_intr::do_for_each(
             remaps.begin(),
             remaps.end(),
             [this, &t, &original_bptr, &ret,
 	    &count, intermediate_base, intermediate_key,
-	    original_laddr, original_paddr, original_len](auto &remap) {
+	    original_laddr, original_paddr, original_len,
+	    dec_res](auto &remap) {
             LOG_PREFIX(TransactionManager::remap_pin);
             auto remap_offset = remap.offset;
             auto remap_len = remap.len;
@@ -509,6 +532,10 @@ public:
 	      assert(intermediate_base != L_ADDR_NULL);
 	      remapped_intermediate_key += remap_offset;
 	    }
+	    auto shadow_paddr = dec_res.shadow_paddr;
+	    if (shadow_paddr != P_ADDR_NULL) {
+	      shadow_paddr = shadow_paddr.add_offset(remap_offset);
+	    }
             return alloc_remapped_extent<T>(
               t,
               remap_laddr,
@@ -517,7 +544,8 @@ public:
               original_laddr,
 	      intermediate_base,
 	      remapped_intermediate_key,
-              std::move(original_bptr)
+              std::move(original_bptr),
+	      shadow_paddr
             ).si_then([&ret, &count, remap_laddr](auto &&npin) {
               ceph_assert(npin->get_key() == remap_laddr);
               ret[count++] = std::move(npin);
@@ -551,14 +579,15 @@ public:
   reserve_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len) {
+    extent_len_t len,
+    bool determinsitic) {
     LOG_PREFIX(TransactionManager::reserve_region);
-    SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}", t, len, hint);
-    ceph_assert(is_aligned(hint, epm->get_block_size()));
+    SUBDEBUGT(seastore_tm, "len={}, laddr_hint={:d}", t, len, hint);
     return lba_manager->reserve_region(
       t,
       hint,
-      len);
+      len,
+      {.determinsitic=determinsitic});
   }
 
   /*
@@ -585,9 +614,8 @@ public:
         : mapping.get_key();
 
     LOG_PREFIX(TransactionManager::clone_pin);
-    SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}, clone_offset {}",
+    SUBDEBUGT(seastore_tm, "len={}, laddr_hint={:d}, clone_offset {:d}",
       t, mapping.get_length(), hint, intermediate_key);
-    ceph_assert(is_aligned(hint, epm->get_block_size()));
     return lba_manager->clone_mapping(
       t,
       hint,
@@ -674,6 +702,18 @@ public:
     CachedExtentRef extent,
     rewrite_gen_t target_generation,
     sea_time_point modify_time) final;
+
+  using ExtentCallbackInterface::promote_extent_ret;
+  promote_extent_ret promote_extent(
+    Transaction &t,
+    CachedExtentRef extent);
+
+  using ExtentCallbackInterface::demote_region_res_t;
+  using ExtentCallbackInterface::demote_region_ret;
+  demote_region_ret demote_region(
+    Transaction &t,
+    laddr_t prefix,
+    extent_len_t max_demote_size) final;
 
   using ExtentCallbackInterface::get_extents_if_live_ret;
   get_extents_if_live_ret get_extents_if_live(
@@ -798,12 +838,40 @@ public:
     croot->get_root().collection_root.update(cmroot);
   }
 
+  void update_non_volatile_cache(
+    laddr_t laddr,
+    extent_types_t type,
+    bool check_cached) {
+    ceph_assert(nv_cache);
+    nv_cache->move_to_top(laddr, type, !check_cached);
+  }
+
+  void remove_non_volatile_cache(
+    laddr_t laddr,
+    extent_types_t type) {
+    if (!nv_cache) {
+      return;
+    }
+    nv_cache->remove(laddr, type);
+  }
+
+  using maybe_load_onode_iertr = base_iertr;
+  using maybe_load_onode_ret = maybe_load_onode_iertr::future<>;
+  maybe_load_onode_ret maybe_load_onode(
+    Transaction&,
+    laddr_t,
+    extent_types_t);
+
   extent_len_t get_block_size() const {
     return epm->get_block_size();
   }
 
   store_statfs_t store_stat() const {
     return epm->get_stat();
+  }
+
+  bool support_non_volatile_cache() const {
+    return nv_cache != nullptr;
   }
 
   ~TransactionManager();
@@ -818,6 +886,7 @@ private:
   BackrefManagerRef backref_manager;
 
   WritePipeline write_pipeline;
+  NonVolatileCache *nv_cache;
 
   bool full_extent_integrity_check = true;
 
@@ -830,8 +899,15 @@ private:
     ExtentPlacementManager::dispatch_result_t dispatch_result,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt);
 
+  struct dec_ref_res_t {
+    unsigned refcount = 0;
+    paddr_t shadow_paddr = P_ADDR_NULL;
+    dec_ref_res_t(unsigned r, paddr_t p)
+      : refcount(r), shadow_paddr(p) {}
+  };
+  using dec_ref_ret = ref_iertr::future<dec_ref_res_t>;
   /// Remove refcount for offset
-  ref_ret _dec_ref(
+  dec_ref_ret _dec_ref(
     Transaction &t,
     laddr_t offset,
     bool cascade_remove);
@@ -996,13 +1072,15 @@ private:
     laddr_t original_laddr,
     laddr_t intermediate_base,
     laddr_t intermediate_key,
-    std::optional<ceph::bufferptr> &&original_bptr) {
+    std::optional<ceph::bufferptr> &&original_bptr,
+    paddr_t shadow_paddr) {
     LOG_PREFIX(TransactionManager::alloc_remapped_extent);
     SUBDEBUG(seastore_tm, "alloc remapped extent: remap_laddr: {}, "
       "remap_paddr: {}, remap_length: {}, has data in cache: {} ",
       remap_laddr, remap_paddr, remap_length,
       original_bptr.has_value() ? "true":"false");
     TCachedExtentRef<T> ext;
+    TCachedExtentRef<T> cold_ext;
     auto fut = LBAManager::alloc_extent_iertr::make_ready_future<
       LBAMappingRef>();
     assert((intermediate_key == L_ADDR_NULL)
@@ -1016,7 +1094,21 @@ private:
 	remap_length,
 	original_laddr,
 	std::move(original_bptr));
-      fut = lba_manager->alloc_extent(t, remap_laddr, *ext);
+      if (shadow_paddr != P_ADDR_NULL) {
+	cold_ext = cache->alloc_remapped_extent<T>(
+	  t,
+	  remap_laddr,
+	  shadow_paddr,
+	  remap_length,
+	  original_laddr,
+	  std::nullopt);
+      }
+      // NOTE: remapped extents are always split from an existing extent,
+      // it's safe to set determinsitic to true
+      fut = lba_manager->alloc_extent(
+        t, remap_laddr, *ext,
+	EXTENT_DEFAULT_REF_COUNT,
+	{.determinsitic=true, .has_shadow=(shadow_paddr != P_ADDR_NULL)});
     } else {
       fut = lba_manager->clone_mapping(
 	t,
@@ -1025,10 +1117,27 @@ private:
 	intermediate_key,
 	intermediate_base);
     }
-    return fut.si_then([remap_laddr, remap_length, remap_paddr](auto &&ref) {
+    return fut.si_then([remap_laddr, remap_length, remap_paddr,
+			this, cold_ext, shadow_paddr, &t](auto &&ref) mutable {
       assert(ref->get_key() == remap_laddr);
       assert(ref->get_val() == remap_paddr);
       assert(ref->get_length() == remap_length);
+      if (cold_ext) {
+	assert(shadow_paddr == cold_ext->get_paddr());
+	return lba_manager->alloc_extent(
+	  t,
+	  remap_laddr.with_shadow(),
+	  *cold_ext,
+	  EXTENT_DEFAULT_REF_COUNT,
+	  {.determinsitic=true, .has_shadow=false}
+	).si_then([ref=std::move(ref), remap_laddr, cold_ext](auto sref) mutable {
+	  auto key = sref->get_key();
+	  ceph_assert(key.without_shadow() == remap_laddr);
+	  cold_ext->set_laddr(key);
+	  return alloc_remapped_extent_iertr::make_ready_future
+	    <LBAMappingRef>(std::move(ref));
+	});
+      }
       return alloc_remapped_extent_iertr::make_ready_future
         <LBAMappingRef>(std::move(ref));
     });

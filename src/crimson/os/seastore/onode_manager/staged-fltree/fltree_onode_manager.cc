@@ -12,7 +12,8 @@ namespace crimson::os::seastore::onode {
 void FLTreeOnode::Recorder::apply_value_delta(
   ceph::bufferlist::const_iterator &bliter,
   NodeExtentMutable &value,
-  laddr_t value_addr)
+  laddr_t value_addr,
+  node_offset_t offset)
 {
   LOG_PREFIX(FLTreeOnode::Recorder::apply_value_delta);
   delta_op_t op;
@@ -23,6 +24,10 @@ void FLTreeOnode::Recorder::apply_value_delta(
     case delta_op_t::UPDATE_ONODE_SIZE:
       DEBUG("update onode size");
       bliter.copy(sizeof(mlayout.size), (char *)&mlayout.size);
+      break;
+    case delta_op_t::UPDATE_LOCAL_SNAP_ID:
+      DEBUG("update local snap id");
+      bliter.copy(sizeof(mlayout.local_snap_id), (char *)&mlayout.local_snap_id);
       break;
     case delta_op_t::UPDATE_OMAP_ROOT:
       DEBUG("update omap root");
@@ -82,6 +87,12 @@ void FLTreeOnode::Recorder::encode_update(
       (const char *)&layout.size,
       sizeof(layout.size));
     break;
+  case delta_op_t::UPDATE_LOCAL_SNAP_ID:
+    DEBUG("update onode local snap id");
+    encoded.append(
+      (const char *)&layout.local_snap_id,
+      sizeof(layout.local_snap_id));
+    break;
   case delta_op_t::UPDATE_OMAP_ROOT:
     DEBUG("update omap root");
     encoded.append(
@@ -135,6 +146,21 @@ FLTreeOnodeManager::contains_onode_ret FLTreeOnodeManager::contains_onode(
   return tree.contains(trans, hoid);
 }
 
+FLTreeOnodeManager::contains_onode_ret FLTreeOnodeManager::contains_onode(
+  Transaction &trans,
+  const ghobject_t &start,
+  const ghobject_t &end)
+{
+  return tree.lower_bound(trans, start
+  ).si_then([&start, &end](auto cursor) {
+    if (cursor.is_end()) {
+      return false;
+    }
+    const auto &hobj = cursor.get_ghobj();
+    return hobj >= start && hobj <= end;
+  });
+}
+
 FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
   Transaction &trans,
   const ghobject_t &hoid)
@@ -149,7 +175,6 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
       return crimson::ct_error::enoent::make();
     }
     auto val = OnodeRef(new FLTreeOnode(
-	default_data_reservation,
 	default_metadata_range,
 	cursor.value()));
     return get_onode_iertr::make_ready_future<OnodeRef>(
@@ -171,7 +196,6 @@ FLTreeOnodeManager::get_or_create_onode(
               -> get_or_create_onode_ret {
     auto [cursor, created] = std::move(p);
     auto onode = new FLTreeOnode(
-	default_data_reservation,
 	default_metadata_range,
 	cursor.value());
     if (created) {
@@ -270,6 +294,103 @@ FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
        //  return ret;
       });
     });
+  });
+}
+
+FLTreeOnodeManager::get_latest_snap_ret FLTreeOnodeManager::get_latest_snap(
+  Transaction &trans,
+  const ghobject_t& head)
+{
+  LOG_PREFIX(FLTreeOnodeManager::get_latest_snap);
+  DEBUGT("head {}", trans, head);
+  ceph_assert(head.hobj.is_head());
+  return seastar::do_with(
+    head,
+    OnodeRef(nullptr),
+    [this, &trans, &head, FNAME](ghobject_t &start, OnodeRef &ret) {
+      start.hobj.snap = 0;
+      // FIXME: implement get_prev to avoid linear scanning
+      return tree.lower_bound(trans, start
+      ).si_then([this, &trans, &head, &ret, FNAME](auto &&cursor) {
+        return seastar::do_with(
+          std::move(cursor),
+          [this, &trans, &head, &ret, FNAME](auto &cursor) {
+            return trans_intr::repeat([this, &trans, &head, &ret, &cursor, FNAME] {
+              ceph_assert(!cursor.is_end());
+              if (cursor.get_ghobj() >= head) {
+                TRACET("reached head, return", trans);
+                return get_latest_snap_iertr::make_ready_future<
+                  seastar::stop_iteration>(seastar::stop_iteration::yes);
+              }
+              DEBUGT("found onode {}", trans, cursor.get_ghobj());
+              ret.reset(new FLTreeOnode(default_metadata_range, cursor.value()));
+              return tree.get_next(trans, cursor
+              ).si_then([&cursor](auto &&next) {
+                cursor = next;
+                return get_latest_snap_iertr::make_ready_future<
+                  seastar::stop_iteration>(seastar::stop_iteration::no);
+              });
+            });
+          });
+      }).si_then([&ret] {
+        return get_latest_snap_iertr::make_ready_future<
+          OnodeRef>(std::move(ret));
+      });
+    });
+}
+
+FLTreeOnodeManager::scan_onodes_ret FLTreeOnodeManager::scan_onodes(
+  Transaction &trans,
+  const ghobject_t &marker,
+  int limit,
+  scan_onodes_func_t &&func)
+{
+  return tree.lower_bound(trans, marker
+  ).si_then([this, limit, &trans, func=std::move(func)](auto &&cursor) mutable {
+    return seastar::do_with(
+      std::move(cursor),
+      std::vector<laddr_t>(),
+      std::move(func),
+      std::optional<ghobject_t>(std::nullopt),
+      [this, limit, &trans](auto &cursor,
+                            auto &laddrs,
+                            auto &func,
+                            auto &res) {
+        return trans_intr::repeat([this, limit, &trans, &cursor, &laddrs, &res] {
+          if (cursor.is_end()) {
+            res.reset();
+            return scan_onodes_iertr::make_ready_future<
+              seastar::stop_iteration>(seastar::stop_iteration::yes);
+          } else if (laddrs.size() >= limit) {
+            res.emplace(cursor.get_ghobj());
+            return scan_onodes_iertr::make_ready_future<
+              seastar::stop_iteration>(seastar::stop_iteration::yes);
+          }
+          auto onode = FLTreeOnode(default_data_reservation, cursor.value());
+          const auto &obj_data = onode.get_layout().object_data.get();
+          if (obj_data.is_null()) {
+            return scan_onodes_iertr::make_ready_future<
+              seastar::stop_iteration>(seastar::stop_iteration::no);
+          }
+          auto laddr = obj_data.get_reserved_data_base();
+          if (laddrs.empty() || laddrs.back() != laddr) {
+            laddrs.push_back(laddr);
+          }
+          return tree.get_next(trans, cursor
+          ).si_then([&cursor](auto &&next) {
+            cursor = next;
+            return scan_onodes_iertr::make_ready_future<
+              seastar::stop_iteration>(seastar::stop_iteration::no);
+          });
+        }).si_then([&laddrs, &func] {
+          return trans_intr::parallel_for_each(laddrs, [&func](auto &laddr) {
+            return func(laddr);
+          });
+        }).si_then([&res] {
+          return scan_onodes_iertr::make_ready_future<
+            std::optional<ghobject_t>>(std::move(res));
+        });
+      });
   });
 }
 

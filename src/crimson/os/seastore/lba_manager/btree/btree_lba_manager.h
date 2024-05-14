@@ -75,7 +75,7 @@ public:
 	meta),
       key(meta.begin),
       indirect(val.pladdr.is_laddr()),
-      intermediate_key(indirect ? val.pladdr.get_laddr() : L_ADDR_NULL),
+      intermediate_key(indirect ? val.pladdr.get_non_snap_laddr(key) : L_ADDR_NULL),
       intermediate_length(indirect ? val.len : 0),
       raw_val(val.pladdr),
       map_val(val)
@@ -95,7 +95,7 @@ public:
     laddr_t interkey = L_ADDR_NULL)
   {
     assert(!indirect);
-    assert(value.is_paddr());
+    assert(value.index() == 1);
     intermediate_base = key;
     intermediate_key = (interkey == L_ADDR_NULL ? key : interkey);
     indirect = true;
@@ -128,7 +128,11 @@ public:
     assert(intermediate_key >= intermediate_base);
     assert((intermediate_key == L_ADDR_NULL)
       == (intermediate_base == L_ADDR_NULL));
-    return intermediate_key - intermediate_base;
+    if (intermediate_key == L_ADDR_NULL) {
+      return 0;
+    } else {
+      return intermediate_key - intermediate_base;
+    }
   }
 
   extent_len_t get_intermediate_length() const final {
@@ -143,6 +147,10 @@ public:
 
   uint32_t get_checksum() const final {
     return get_map_val().checksum;
+  }
+
+  bool has_shadow_mapping() const final {
+    return raw_val.has_shadow_mapping();
   }
 
 protected:
@@ -222,21 +230,27 @@ public:
     LogicalCachedExtent* extent = nullptr;
   };
 
+  base_iertr::future<bool> prefix_contains_shadow_mapping(
+    Transaction &t,
+    laddr_t prefix) final;
+
   alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
-    extent_len_t len) final
+    extent_len_t len,
+    alloc_opt_t alloc_opt) final
   {
     std::vector<alloc_mapping_info_t> alloc_infos = {
-      alloc_mapping_info_t{len, P_ADDR_ZERO, 0, nullptr}};
+      alloc_mapping_info_t{len, pladdr_t{P_ADDR_ZERO, alloc_opt.has_shadow}, 0, nullptr}};
     return seastar::do_with(
       std::move(alloc_infos),
-      [&t, hint, this](auto &alloc_infos) {
+      [&t, hint, this, alloc_opt](auto &alloc_infos) {
       return _alloc_extents(
 	t,
 	hint,
 	alloc_infos,
-	EXTENT_DEFAULT_REF_COUNT
+	EXTENT_DEFAULT_REF_COUNT,
+	alloc_opt.determinsitic
       ).si_then([](auto mappings) {
 	assert(mappings.size() == 1);
 	auto mapping = std::move(mappings.front());
@@ -257,7 +271,7 @@ public:
     std::vector<alloc_mapping_info_t> alloc_infos = {
       alloc_mapping_info_t{
 	len,
-	intermediate_key,
+	pladdr_t(intermediate_key),
 	0,	// crc will only be used and checked with LBA direct mappings
 		// also see pin_to_extent(_by_type)
 	nullptr}};
@@ -268,7 +282,8 @@ public:
 	t,
 	hint,
 	alloc_infos,
-	EXTENT_DEFAULT_REF_COUNT
+	EXTENT_DEFAULT_REF_COUNT,
+	true
       ).si_then([&t, this, intermediate_base](auto mappings) {
 	assert(mappings.size() == 1);
 	auto indirect_mapping = std::move(mappings.front());
@@ -295,20 +310,22 @@ public:
     Transaction &t,
     laddr_t hint,
     LogicalCachedExtent &ext,
-    extent_ref_count_t refcount = EXTENT_DEFAULT_REF_COUNT) final
+    extent_ref_count_t refcount,
+    alloc_opt_t alloc_opt) final
   {
     // The real checksum will be updated upon transaction commit
     assert(ext.get_last_committed_crc() == 0);
     std::vector<alloc_mapping_info_t> alloc_infos = {{
-      ext.get_length(), ext.get_paddr(), ext.get_last_committed_crc(), &ext}};
+      ext.get_length(), pladdr_t{ext.get_paddr(), alloc_opt.has_shadow}, ext.get_last_committed_crc(), &ext}};
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, hint, refcount](auto &alloc_infos) {
+      [this, &t, hint, refcount, alloc_opt](auto &alloc_infos) {
       return _alloc_extents(
 	t,
 	hint,
 	alloc_infos,
-	refcount
+	refcount,
+	alloc_opt.determinsitic
       ).si_then([](auto mappings) {
 	assert(mappings.size() == 1);
 	auto mapping = std::move(mappings.front());
@@ -321,20 +338,21 @@ public:
     Transaction &t,
     laddr_t hint,
     std::vector<LogicalCachedExtentRef> extents,
-    extent_ref_count_t refcount) final
+    extent_ref_count_t refcount,
+    alloc_opt_t alloc_opt) final
   {
     std::vector<alloc_mapping_info_t> alloc_infos;
     for (auto &extent : extents) {
       alloc_infos.emplace_back(alloc_mapping_info_t{
 	extent->get_length(),
-	pladdr_t(extent->get_paddr()),
+	pladdr_t(extent->get_paddr(), alloc_opt.has_shadow),
 	extent->get_last_committed_crc(),
 	extent.get()});
     }
     return seastar::do_with(
       std::move(alloc_infos),
-      [this, &t, hint, refcount](auto &alloc_infos) {
-      return _alloc_extents(t, hint, alloc_infos, refcount);
+      [this, &t, hint, refcount, alloc_opt](auto &alloc_infos) {
+      return _alloc_extents(t, hint, alloc_infos, refcount, alloc_opt.determinsitic);
     });
   }
 
@@ -400,7 +418,8 @@ public:
     extent_len_t len,
     paddr_t paddr,
     uint32_t checksum,
-    LogicalCachedExtent*) final;
+    LogicalCachedExtent*,
+    std::optional<bool> has_shadow = std::nullopt) final;
 
   get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
@@ -411,6 +430,12 @@ public:
 private:
   Cache &cache;
 
+  demote_region_ret demote_region(
+    Transaction &t,
+    laddr_t prefix,
+    extent_len_t max_discard_size,
+    retire_promotion_func_t retire_func,
+    update_nextent_func_t update_func) final;
 
   struct {
     uint64_t num_alloc_extents = 0;
@@ -467,7 +492,8 @@ private:
     Transaction &t,
     laddr_t hint,
     std::vector<alloc_mapping_info_t> &alloc_infos,
-    extent_ref_count_t refcount);
+    extent_ref_count_t refcount,
+    bool determinsitic);
 
   using _get_mapping_ret = get_mapping_iertr::future<BtreeLBAMappingRef>;
   _get_mapping_ret _get_mapping(
@@ -485,6 +511,20 @@ private:
     Transaction &t,
     laddr_t addr,
     extent_len_t len);
+
+  struct insert_pos_t {
+    insert_pos_t(LBABtree::iterator iter, laddr_t laddr)
+      : iter(iter), laddr(laddr) {}
+    LBABtree::iterator iter;
+    laddr_t laddr;
+  };
+  using search_insert_pos_ret = alloc_extent_iertr::future<insert_pos_t>;
+  search_insert_pos_ret search_insert_pos(
+    Transaction &t,
+    LBABtree &btree,
+    laddr_t laddr,
+    extent_len_t length,
+    bool determinsitic);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

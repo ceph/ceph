@@ -36,18 +36,19 @@ struct FLTreeOnode final : Onode, Value {
   FLTreeOnode& operator=(const FLTreeOnode&) = delete;
 
   template <typename... T>
-  FLTreeOnode(uint32_t ddr, uint32_t dmr, T&&... args)
-    : Onode(ddr, dmr),
+  FLTreeOnode(uint32_t dmr, T&&... args)
+    : Onode(dmr),
       Value(std::forward<T>(args)...) {}
 
   template <typename... T>
   FLTreeOnode(T&&... args)
-    : Onode(0, 0),
+    : Onode(0),
       Value(std::forward<T>(args)...) {}
 
   struct Recorder : public ValueDeltaRecorder {
     enum class delta_op_t : uint8_t {
       UPDATE_ONODE_SIZE,
+      UPDATE_LOCAL_SNAP_ID,
       UPDATE_OMAP_ROOT,
       UPDATE_XATTR_ROOT,
       UPDATE_OBJECT_DATA,
@@ -66,7 +67,8 @@ struct FLTreeOnode final : Onode, Value {
     void apply_value_delta(
       ceph::bufferlist::const_iterator &bliter,
       NodeExtentMutable &value,
-      laddr_t value_addr) final;
+      laddr_t value_addr,
+      node_offset_t offset) final;
 
     void encode_update(NodeExtentMutable &payload_mut, delta_op_t op);
   };
@@ -115,6 +117,20 @@ struct FLTreeOnode final : Onode, Value {
 	  recorder->encode_update(
 	    payload_mut, Recorder::delta_op_t::UPDATE_ONODE_SIZE);
 	}
+    });
+  }
+
+  void update_local_snap_id(Transaction &t, uint32_t id) final {
+    with_mutable_layout(
+      t,
+      [id](NodeExtentMutable &payload_mut, Recorder *recorder) {
+        auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+        mlayout.local_snap_id = id;
+        if (recorder) {
+          recorder->encode_update(
+            payload_mut, Recorder::delta_op_t::UPDATE_LOCAL_SNAP_ID);
+        }
     });
   }
 
@@ -232,8 +248,8 @@ struct FLTreeOnode final : Onode, Value {
     status = status_t::DELETED;
   }
 
-  laddr_t get_hint() const final {
-    return Value::get_hint();
+  laddr_t get_data_hint_impl() const final {
+    return Value::get_data_hint();
   }
   ~FLTreeOnode() final {}
 };
@@ -246,14 +262,12 @@ class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
   OnodeTree tree;
 
   uint32_t default_data_reservation = 0;
-  uint32_t default_metadata_offset = 0;
   uint32_t default_metadata_range = 0;
 public:
   FLTreeOnodeManager(TransactionManager &tm) :
     tree(NodeExtentManager::create_seastore(tm)),
     default_data_reservation(
       get_conf<uint64_t>("seastore_default_max_object_size")),
-    default_metadata_offset(default_data_reservation),
     default_metadata_range(
       get_conf<uint64_t>("seastore_default_object_metadata_reservation"))
   {}
@@ -265,6 +279,11 @@ public:
   contains_onode_ret contains_onode(
     Transaction &trans,
     const ghobject_t &hoid) final;
+
+  contains_onode_ret contains_onode(
+    Transaction &trans,
+    const ghobject_t &start,
+    const ghobject_t &end) final;
 
   get_onode_ret get_onode(
     Transaction &trans,
@@ -287,6 +306,16 @@ public:
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) final;
+
+  get_latest_snap_ret get_latest_snap(
+    Transaction &trans,
+    const ghobject_t &head) final;
+
+  scan_onodes_ret scan_onodes(
+    Transaction &trans,
+    const ghobject_t &marker,
+    int limit,
+    scan_onodes_func_t &&func) final;
 
   ~FLTreeOnodeManager();
 };
