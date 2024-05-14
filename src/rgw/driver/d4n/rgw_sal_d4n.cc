@@ -880,6 +880,9 @@ int D4NFilterWriter::prepare(optional_yield y)
   if (driver->get_cache_driver()->delete_data(save_dpp, obj->get_key().get_oid(), y) < 0) 
     ldpp_dout(save_dpp, 10) << "D4NFilterWriter::" << __func__ << "(): CacheDriver delete_data method failed." << dendl;
   d4n_writecache = g_conf()->d4n_writecache_enabled;
+
+  ldpp_dout(save_dpp, 10) << "Writecache enabled value: " << g_conf()->d4n_writecache_enabled << dendl;
+
   if (d4n_writecache == false){
     ldpp_dout(save_dpp, 10) << "D4NFilterObject::D4NFilterWriteOp::" << __func__ << "(): calling next iterate" << dendl;
     return next->prepare(y);
@@ -960,6 +963,7 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
       block.blockID = ofs;
       block.dirty = true;
       block.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address);
+      ldpp_dout(save_dpp, 10) << "Local cache address: " << blockDir->cct->_conf->rgw_local_cache_address << dendl;
       dirty = true;
       ret = driver->get_policy_driver()->get_cache_policy()->eviction(save_dpp, block.size, y);
       if (ret == 0) {
