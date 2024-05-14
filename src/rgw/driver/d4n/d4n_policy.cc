@@ -491,6 +491,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
       }
 
       std::unique_ptr<rgw::sal::Object> c_obj = c_bucket->get_object(e->obj_key);
+      ldpp_dout(dpp, 20) << __func__ << "(): c_obj oid =" << c_obj->get_oid() << dendl;
 
       ACLOwner owner{c_user->get_id(), c_user->get_display_name()};
 
@@ -606,12 +607,35 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
       block.cacheObj.objName = c_obj->get_name();
       block.size = 0;
       block.blockID = 0;
-      op_ret = dir->update_field(dpp, &block, "dirty", "false", null_yield);
-      if (op_ret < 0) {
-          ldpp_dout(dpp, 20) << __func__ << "updating dirty flag in block directory for head failed!" << dendl;
-          return;
+      if (c_obj->have_instance()) {
+        dir->get(dpp, &block, null_yield);
+        if (block.version == c_obj->get_instance()) { //versioned case - update head block entry that has latest version
+          op_ret = dir->update_field(dpp, &block, "dirty", "false", null_yield);
+          if (op_ret < 0) {
+              ldpp_dout(dpp, 20) << __func__ << "updating dirty flag in block directory for head failed!" << dendl;
+              //return;
+          }
+        }
+      } else { //non-versioned case
+        op_ret = dir->update_field(dpp, &block, "dirty", "false", null_yield);
+        if (op_ret < 0) {
+            ldpp_dout(dpp, 20) << __func__ << "updating dirty flag in block directory for head failed!" << dendl;
+            //return;
+        }
       }
-
+      //In case of distributed cache, we may have to update this for every instance
+      if (c_obj->have_instance()) {
+        rgw::d4n::CacheBlock instance_block;
+        instance_block.cacheObj.bucketName = c_obj->get_bucket()->get_name();
+        instance_block.cacheObj.objName = c_obj->get_oid();
+        instance_block.size = 0;
+        instance_block.blockID = 0;
+        op_ret = dir->update_field(dpp, &instance_block, "dirty", "false", null_yield);
+        if (op_ret < 0) {
+            ldpp_dout(dpp, 20) << __func__ << "updating dirty flag in block directory for instance block failed!" << dendl;
+            //return;
+        }
+      }
       //remove entry from map and queue, eraseObj locks correctly
       eraseObj(dpp, e->key, null_yield);
     } else { //end-if std::difftime(time(NULL), e->creationTime) > interval
