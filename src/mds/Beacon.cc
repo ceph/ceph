@@ -92,17 +92,6 @@ void Beacon::init(const MDSMap &mdsmap)
   });
 }
 
-bool Beacon::ms_can_fast_dispatch2(const cref_t<Message>& m) const
-{
-  return m->get_type() == MSG_MDS_BEACON;
-}
-
-void Beacon::ms_fast_dispatch2(const ref_t<Message>& m)
-{
-  bool handled = ms_dispatch2(m);
-  ceph_assert(handled);
-}
-
 bool Beacon::ms_dispatch2(const ref_t<Message>& m)
 {
   dout(25) << __func__ << ": processing " << m << dendl;
