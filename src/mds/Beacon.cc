@@ -105,6 +105,7 @@ void Beacon::ms_fast_dispatch2(const ref_t<Message>& m)
 
 bool Beacon::ms_dispatch2(const ref_t<Message>& m)
 {
+  dout(25) << __func__ << ": processing " << m << dendl;
   if (m->get_type() == MSG_MDS_BEACON) {
     if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
       handle_mds_beacon(ref_cast<MMDSBeacon>(m));
