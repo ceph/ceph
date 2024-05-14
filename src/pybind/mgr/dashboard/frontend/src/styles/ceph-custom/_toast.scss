@@ -1,0 +1,30 @@
+@use './src/styles/vendor/variables' as vv;
+
+#toast-container {
+  margin-top: 2vw;
+
+  @media (max-width: 1600px) {
+    margin-top: 2.5vw;
+  }
+
+  @media (max-width: vv.$screen-md-max) {
+    margin-top: 9vw;
+  }
+
+  @media (max-width: 900px) {
+    margin-top: 10vw;
+  }
+
+  @media (max-width: 319px) {
+    margin-top: 11vw;
+  }
+
+  @media (max-width: 260px) {
+    margin-top: 14vw;
+  }
+}
+
+.toast-message > ul {
+  margin: 0;
+  padding-left: 1rem;
+}
