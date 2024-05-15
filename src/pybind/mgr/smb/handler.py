@@ -12,6 +12,7 @@ from typing import (
     cast,
 )
 
+import contextlib
 import logging
 import operator
 import time
@@ -357,10 +358,13 @@ class ClusterConfigHandler:
             incoming = order_resources(inputs)
             for resource in incoming:
                 staging.stage(resource)
-            for resource in incoming:
-                results.append(
-                    self._check(resource, staging, create_only=create_only)
-                )
+            with _store_transaction(staging.destination_store):
+                for resource in incoming:
+                    results.append(
+                        self._check(
+                            resource, staging, create_only=create_only
+                        )
+                    )
         except ErrorResult as err:
             results.append(err)
         except Exception as err:
@@ -372,9 +376,11 @@ class ClusterConfigHandler:
                 'successfully updated %s resources. syncing changes to public stores',
                 len(list(results)),
             )
-            results = staging.save()
-            _prune_linked_entries(staging)
-            self._sync_modified(results)
+            with _store_transaction(staging.destination_store):
+                results = staging.save()
+                _prune_linked_entries(staging)
+            with _store_transaction(staging.destination_store):
+                self._sync_modified(results)
         return results
 
     def cluster_ids(self) -> List[str]:
@@ -1298,3 +1304,15 @@ def _cephx_data_entity(cluster_id: str) -> str:
     use for data access.
     """
     return f'client.smb.fs.cluster.{cluster_id}'
+
+
+@contextlib.contextmanager
+def _store_transaction(store: ConfigStore) -> Iterator[None]:
+    transaction = getattr(store, 'transaction', None)
+    if not transaction:
+        log.debug("No transaction support for store")
+        yield None
+        return
+    log.debug("Using store transaction")
+    with transaction():
+        yield None
