@@ -451,8 +451,11 @@ future<> test_unexpected_down(bool is_fixed_cpu) {
       return Connection::dispatch_rw_bounded(cs, 128, true
         ).handle_exception_type([](const std::system_error& e) {
         logger().error("test_unexpected_down(): client get error {}", e);
+        // union of errors from both read and write
+        // also see dispatch_write_unbounded() and dispatch_read_unbounded()
         ceph_assert(e.code() == error::read_eof ||
-		    e.code() == std::errc::connection_reset);
+		    e.code() == std::errc::connection_reset ||
+                    e.code() == std::errc::broken_pipe);
       });
     },
     [](auto ss) { return Connection::dispatch_rw_unbounded(ss); }
