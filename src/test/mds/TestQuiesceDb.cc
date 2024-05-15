@@ -1010,13 +1010,12 @@ TEST_F(QuiesceDbTest, InterruptedQuiesceAwait)
   EXPECT_EQ(ERR(ECANCELED), await3.wait_result());
   EXPECT_EQ(ERR(ECANCELED), await4.wait_result());
 
-  // awaiting a set in a terminal state should immediately
-  // complete with the corresponding error
-  ASSERT_EQ(ERR(ECANCELED), run_request([](auto& r) {
+  // awaiting a set in a terminal state should be illegal
+  EXPECT_EQ(ERR(EPERM), run_request([](auto& r) {
     r.set_id = "set1";
     r.await = sec(100);
   }));
-  ASSERT_EQ(ERR(ETIMEDOUT), run_request([](auto& r) {
+  EXPECT_EQ(ERR(EPERM), run_request([](auto& r) {
     r.set_id = "set2";
     r.await = sec(100);
   }));
@@ -1082,7 +1081,7 @@ TEST_F(QuiesceDbTest, RepeatedQuiesceAwait) {
 
   EXPECT_EQ(QS_EXPIRED, last_request->response.sets.at("set1").rstate.state);
 
-  EXPECT_EQ(ERR(ETIMEDOUT), run_request([](auto& r) {
+  EXPECT_EQ(ERR(EPERM), run_request([](auto& r) {
     r.set_id = "set1";
     r.await = sec(0.1);
   }));
