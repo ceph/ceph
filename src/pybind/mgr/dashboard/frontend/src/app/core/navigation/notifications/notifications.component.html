@@ -2,7 +2,9 @@
    title="Tasks and Notifications"
    [ngClass]="{ 'running': hasRunningTasks }"
    (click)="toggleSidebar()">
-  <i [ngClass]="[icons.bell]"></i>
+  <svg cdsIcon="notification"
+       size="20"
+       title="notification"></svg>
   <span class="dot"
         *ngIf="hasNotifications">
   </span>
