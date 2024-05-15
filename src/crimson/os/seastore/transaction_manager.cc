@@ -561,7 +561,7 @@ TransactionManager::rewrite_logical_extent(
         ceph_assert(left >= nextent->get_length());
         auto nlextent = nextent->template cast<LogicalCachedExtent>();
         lextent->get_bptr().copy_out(
-          0,
+          off,
           nlextent->get_length(),
           nlextent->get_bptr().c_str());
         nlextent->set_laddr(lextent->get_laddr() + off);
