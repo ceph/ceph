@@ -401,10 +401,8 @@ public:
 
   /**
    * get ideal max value for collection_list()
-   *
-   * default to some arbitrary values; the implementation will override.
    */
-  virtual int get_ideal_list_max() { return 64; }
+  int get_ideal_list_max();
 
 
   /**
