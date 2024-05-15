@@ -1454,7 +1454,7 @@ static PG::interruptible_future<> do_pgls_filtered(
 PgOpsExecuter::interruptible_future<>
 PgOpsExecuter::execute_op(OSDOp& osd_op)
 {
-  logger().warn("handling op {}", ceph_osd_op_name(osd_op.op.op));
+  logger().debug("handling op {}", ceph_osd_op_name(osd_op.op.op));
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
   case CEPH_OSD_OP_PGLS:
     return do_pgls(pg, nspace, osd_op);
