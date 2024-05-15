@@ -1,10 +1,10 @@
-<div ngbDropdown
+<!-- <div ngbDropdown
      placement="bottom-right">
   <a ngbDropdownToggle
      i18n-title
      title="Logged in user"
      role="button">
-    <i [ngClass]="[icons.user]"></i>
+     <svg cdsIcon="user--filled" size="20" title="user"></svg>
     <span i18n
           class="d-md-none">Logged in user</span>
   </a>
@@ -25,4 +25,16 @@
       <span i18n>Sign out</span>
     </button>
   </div>
-</div>
+</div> -->
+<cds-overflow-menu [customTrigger]="customTrigger" [offset]="{y:0, x:-80}">
+  <cds-overflow-menu-option i18n>Logged in user</cds-overflow-menu-option>
+  <cds-overflow-menu-option i18n>Signed in as<strong>{{ username }}</strong></cds-overflow-menu-option>
+  <cds-overflow-menu-option *ngIf="!sso"
+  routerLink="/user-profile/edit" i18n>Change password</cds-overflow-menu-option>
+  <cds-overflow-menu-option (click)="logout()" i18n>Sign out</cds-overflow-menu-option>
+</cds-overflow-menu>
+<ng-template #customTrigger>
+  <svg cdsIcon="user--filled" size="20" title="user"></svg>
+  <span i18n
+        class="d-md-none">Logged in user</span>
+</ng-template>

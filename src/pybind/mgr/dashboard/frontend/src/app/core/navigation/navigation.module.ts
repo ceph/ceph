@@ -4,6 +4,13 @@ import { RouterModule } from '@angular/router';
 
 import { NgbCollapseModule, NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import { SimplebarAngularModule } from 'simplebar-angular';
+import {
+  UIShellModule,
+  IconService,
+  IconModule,
+  ThemeModule,
+  DialogModule
+} from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -17,6 +24,14 @@ import { IdentityComponent } from './identity/identity.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
 
+// Icons
+import UserFilledIcon from '@carbon/icons/es/user--filled/20';
+import SettingsIcon from '@carbon/icons/es/settings/20';
+import HelpIcon from '@carbon/icons/es/help/20';
+import NotificationIcon from '@carbon/icons/es/notification/20';
+import LaunchIcon from '@carbon/icons/es/launch/16';
+import DashboardIcon from '@carbon/icons/es/template/16';
+
 @NgModule({
   imports: [
     CommonModule,
@@ -26,7 +41,11 @@ import { NotificationsComponent } from './notifications/notifications.component'
     AppRoutingModule,
     SharedModule,
     SimplebarAngularModule,
-    RouterModule
+    RouterModule,
+    UIShellModule,
+    IconModule,
+    ThemeModule,
+    DialogModule
   ],
   declarations: [
     AboutComponent,
@@ -40,4 +59,15 @@ import { NotificationsComponent } from './notifications/notifications.component'
   ],
   exports: [NavigationComponent, BreadcrumbsComponent]
 })
-export class NavigationModule {}
+export class NavigationModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([
+      UserFilledIcon,
+      SettingsIcon,
+      HelpIcon,
+      NotificationIcon,
+      LaunchIcon,
+      DashboardIcon
+    ]);
+  }
+}

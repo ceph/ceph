@@ -1,10 +1,10 @@
-<div ngbDropdown
+<!-- <div ngbDropdown
      placement="bottom-right">
   <a ngbDropdownToggle
      i18n-title
      title="Help"
      role="button">
-    <i [ngClass]="[icons.questionCircle]"></i>
+     <svg cdsIcon="help" size="20" title="help"></svg>
     <span i18n
           class="d-md-none">Help</span>
   </a>
@@ -29,4 +29,27 @@
             (click)="openFeedbackModal()"
             i18n>Report an issue...</button>
   </div>
-</div>
+</div> -->
+
+<cds-overflow-menu [customTrigger]="customTrigger" [offset]="{y:0, x:-80}">
+  <cds-overflow-menu-option [ngClass]="{'disabled': !docsUrl}"
+  href="{{ docsUrl }}"
+  target="_blank"
+  i18n>Documentation<svg cdsIcon="launch" size="16"></svg></cds-overflow-menu-option>
+  <cds-overflow-menu-option routerLink="/api-docs"
+  target="_blank"
+  i18n>API
+  <svg cdsIcon="launch" size="16"></svg></cds-overflow-menu-option>
+  <cds-overflow-menu-option (click)="openAboutModal()"
+  i18n>About</cds-overflow-menu-option>
+  <cds-overflow-menu-option (click)="openFeedbackModal()"
+  i18n>Report an issue...</cds-overflow-menu-option>
+</cds-overflow-menu>
+
+<ng-template #customTrigger>
+  <svg cdsIcon="help" size="20" i18n-title
+     title="Help"
+     role="button"></svg>
+     <span i18n
+     class="d-md-none">Help</span>
+</ng-template>
