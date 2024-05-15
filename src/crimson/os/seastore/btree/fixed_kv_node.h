@@ -59,7 +59,7 @@ struct FixedKVNode : ChildableCachedExtent {
    * 	b. prior_instance is empty
    * 	c. child pointers point at stable children. Child resolution is done
    * 	   directly via this array.
-   * 	c. copy_sources is empty
+   * 	d. copy_sources is empty
    * 2. if nodes are mutation_pending:
    * 	a. parent is empty and needs to be fixed upon commit
    * 	b. prior_instance points to its stable version
@@ -67,7 +67,7 @@ struct FixedKVNode : ChildableCachedExtent {
    * 	   this transaction. Child resolution is done by first checking this
    * 	   array, and then recursively resolving via the parent. We copy child
    * 	   pointers from parent on commit.
-   * 	c. copy_sources is empty
+   * 	d. copy_sources is empty
    * 3. if nodes are initial_pending
    * 	a. parent points at its pending parent on this transaction (must exist)
    * 	b. prior_instance is empty or, if it's the result of rewrite, points to
@@ -80,6 +80,8 @@ struct FixedKVNode : ChildableCachedExtent {
    * 	d. copy_sources contains the set of stable nodes at the same tree-level(only
    * 	   its "prior_instance" if the node is the result of a rewrite), with which
    * 	   the lba range of this node overlaps.
+   * 4. EXIST_CLEAN and EXIST_MUTATION_PENDING belong to 3 above (except that they
+   * 	cannot be rewritten) because their parents must be mutated upon remapping.
    */
   std::vector<ChildableCachedExtent*> children;
   std::set<FixedKVNodeRef, copy_source_cmp_t> copy_sources;
