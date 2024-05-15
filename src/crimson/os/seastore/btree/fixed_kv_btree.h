@@ -505,6 +505,7 @@ public:
       Transaction::get_extent_ret ret;
 
       if constexpr (std::is_base_of_v<typename internal_node_t::base_t, child_node_t>) {
+        assert(i->get_val() != P_ADDR_ZERO);
         ret = c.trans.get_extent(
           i->get_val().maybe_relative_to(node->get_paddr()),
           &child_node);
@@ -515,6 +516,9 @@ public:
         ret = c.trans.get_extent(
           i->get_val().pladdr.get_paddr().maybe_relative_to(node->get_paddr()),
           &child_node);
+        if (i->get_val().pladdr.get_paddr() == P_ADDR_ZERO) {
+          assert(ret == Transaction::get_extent_ret::ABSENT);
+        }
       }
       if (ret == Transaction::get_extent_ret::PRESENT) {
         if (child_node->is_stable_written()) {
@@ -565,18 +569,8 @@ public:
           auto pos = n.lower_bound_offset(i->get_key());
           assert(pos < n.get_node_size());
           child = n.children[pos];
-          if (is_valid_child_ptr(child)) {
-            auto c = (child_node_t*)child;
-            assert(c->has_parent_tracker());
-            assert(c->get_parent_node().get() == &n);
-          }
         } else {
           child = node->children[i->get_offset()];
-          if (is_valid_child_ptr(child)) {
-            auto c = (child_node_t*)child;
-            assert(c->has_parent_tracker());
-            assert(c->get_parent_node().get() == node.get());
-          }
         }
 
         if (!is_valid_child_ptr(child)) {
@@ -592,15 +586,23 @@ public:
                 : true);
             }
           }
-        } else if (child == get_reserved_ptr()) {
-          if constexpr(
-            !std::is_base_of_v<typename internal_node_t::base_t,
-                               child_node_t>) {
-            assert(i->get_val().pladdr.is_paddr());
-            assert(i->get_val().pladdr.get_paddr() == P_ADDR_ZERO);
-          } else {
-            ceph_abort();
+          if (child == get_reserved_ptr()) {
+            if constexpr(
+              !std::is_base_of_v<typename internal_node_t::base_t,
+                                 child_node_t>) {
+              assert(i->get_val().pladdr.is_paddr());
+              assert(i->get_val().pladdr.get_paddr() == P_ADDR_ZERO);
+            } else {
+              ceph_abort();
+            }
           }
+        } else {
+          auto c = (child_node_t*)child;
+          assert(c->has_parent_tracker());
+          assert(c->get_parent_node().get() == node.get()
+            || (node->is_pending() && c->is_stable()
+                && c->get_parent_node().get() == &node->get_stable_for_key(
+                  i->get_key())));
         }
       } else {
         ceph_abort("impossible");
