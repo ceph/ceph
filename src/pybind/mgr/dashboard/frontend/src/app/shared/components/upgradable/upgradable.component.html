@@ -1,0 +1,26 @@
+<div *ngIf="upgradeStatus$ | async as status; else isUpgradable">
+  <ng-container *ngIf="status.is_paused || status.in_progress; else isUpgradable">
+    <h5 *ngIf="status.is_paused; else inProgress"
+        i18n>
+      Upgrade is paused
+    </h5>
+    <ng-template #inProgress>
+      <a href="#/upgrade/progress"
+         i18n>
+        <i [ngClass]="[icons.spin, icons.spinner]"></i>
+          Upgrading {{executingTask?.progress}}%
+      </a>
+    </ng-template>
+  </ng-container>
+</div>
+
+<ng-template #isUpgradable>
+  <div *ngIf="upgradeInfo$ | async as info"
+       i18n>
+    <h5 *ngIf="info.versions.length > 0"
+        (click)="upgradeModal()">
+      <i [ngClass]="icons.up"></i>
+      Upgrade available
+    </h5>
+  </div>
+</ng-template>

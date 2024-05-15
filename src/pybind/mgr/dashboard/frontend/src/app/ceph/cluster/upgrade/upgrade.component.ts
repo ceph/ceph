@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Observable, ReplaySubject, Subscription, of } from 'rxjs';
-import { catchError, publishReplay, refCount, shareReplay, switchMap, tap } from 'rxjs/operators';
+import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 import { DaemonService } from '~/app/shared/api/daemon.service';
 import { HealthService } from '~/app/shared/api/health.service';
 import { UpgradeService } from '~/app/shared/api/upgrade.service';
@@ -13,8 +13,6 @@ import { UpgradeInfoInterface } from '~/app/shared/models/upgrade.interface';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
-import { ModalService } from '~/app/shared/services/modal.service';
-import { UpgradeStartModalComponent } from './upgrade-form/upgrade-start-modal.component';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { Router } from '@angular/router';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
@@ -43,9 +41,9 @@ export class UpgradeComponent implements OnInit, OnDestroy {
 
   upgradeStatus$: Observable<any>;
   subject = new ReplaySubject<any>();
+  private subs = new Subscription();
 
   constructor(
-    private modalService: ModalService,
     private summaryService: SummaryService,
     private upgradeService: UpgradeService,
     private healthService: HealthService,
@@ -76,22 +74,21 @@ export class UpgradeComponent implements OnInit, OnDestroy {
       }
     ];
 
-    this.summaryService.subscribe((summary) => {
-      const version = summary.version.replace('ceph version ', '').split('-');
-      this.version = version[0];
-      this.executingTasks = summary.executing_tasks.filter((tasks) =>
-        tasks.name.includes('progress/Upgrade')
-      )[0];
-    });
+    this.subs.add(
+      this.summaryService.subscribe((summary) => {
+        const version = summary.version.replace('ceph version ', '').split('-');
+        this.version = version[0];
+        this.executingTasks = summary.executing_tasks.filter((tasks) =>
+          tasks.name.includes('progress/Upgrade')
+        )[0];
+      })
+    );
 
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.fetchStatus();
     });
 
-    this.info$ = this.upgradeService.list().pipe(
-      tap((upgradeInfo: UpgradeInfoInterface) => (this.upgradableVersions = upgradeInfo.versions)),
-      publishReplay(1),
-      refCount(),
+    this.info$ = this.upgradeService.listCached().pipe(
       catchError((err) => {
         err.preventDefault();
         this.errorMessage = $localize`Not retrieving upgrades`;
@@ -110,9 +107,7 @@ export class UpgradeComponent implements OnInit, OnDestroy {
   }
 
   startUpgradeModal() {
-    this.modalRef = this.modalService.show(UpgradeStartModalComponent, {
-      versions: this.upgradableVersions
-    });
+    this.modalRef = this.upgradeService.startUpgradeModal();
   }
 
   fetchStatus() {
@@ -141,5 +136,6 @@ export class UpgradeComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.interval?.unsubscribe();
+    this.subs?.unsubscribe();
   }
 }
