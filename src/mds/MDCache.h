@@ -426,9 +426,6 @@ class MDCache {
   void request_finish(const MDRequestRef& mdr);
   void request_forward(const MDRequestRef& mdr, mds_rank_t mds, int port=0);
   void dispatch_request(const MDRequestRef& mdr);
-  void request_drop_foreign_locks(const MDRequestRef& mdr);
-  void request_drop_non_rdlocks(const MDRequestRef& r);
-  void request_drop_locks(const MDRequestRef& r);
   void request_cleanup(const MDRequestRef& r);
   
   void request_kill(const MDRequestRef& r);  // called when session closes
