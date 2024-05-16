@@ -475,3 +475,10 @@ addresses in the backtrace::
   [root@3deb50a8ad51 ~]# dnf install -q -y file
   [root@3deb50a8ad51 ~]# python3 seastar-addr2line -e /usr/bin/crimson-osd
   # paste the backtrace here
+
+Code Walkthroughs
+=================
+
+* `Ceph Code Walkthroughs: Crimson <https://www.youtube.com/watch?v=rtkrHk6grsg>`_
+
+* `Ceph Code Walkthroughs: SeaStore <https://www.youtube.com/watch?v=0rr5oWDE2Ck>`_
