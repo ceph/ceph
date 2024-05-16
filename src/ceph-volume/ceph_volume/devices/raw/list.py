@@ -5,7 +5,7 @@ import logging
 from textwrap import dedent
 from ceph_volume import decorators, process
 from ceph_volume.util import disk
-from typing import Any, Dict, List
+from typing import Any, Dict, List as _List
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,8 @@ def direct_report(devices):
     _list = List([])
     return _list.generate(devices)
 
-def _get_bluestore_info(dev):
+def _get_bluestore_info(dev: str) -> Dict[str, Any]:
+    result: Dict[str, Any] = {}
     out, err, rc = process.call([
         'ceph-bluestore-tool', 'show-label',
         '--dev', dev], verbose_on_failure=False)
@@ -28,42 +29,26 @@ def _get_bluestore_info(dev):
         # ceph-bluestore-tool returns an error (below) if device is not bluestore OSD
         #   > unable to read label for <device>: (2) No such file or directory
         # but it's possible the error could be for a different reason (like if the disk fails)
-        logger.debug('assuming device {} is not BlueStore; ceph-bluestore-tool failed to get info from device: {}\n{}'.format(dev, out, err))
-        return None
-    oj = json.loads(''.join(out))
-    if dev not in oj:
-        # should be impossible, so warn
-        logger.warning('skipping device {} because it is not reported in ceph-bluestore-tool output: {}'.format(dev, out))
-        return None
-    try:
-        r = {
-            'osd_uuid': oj[dev]['osd_uuid'],
-        }
-        if oj[dev]['description'] == 'main':
-            whoami = oj[dev]['whoami']
-            r.update({
-                'type': 'bluestore',
-                'osd_id': int(whoami),
-                'ceph_fsid': oj[dev]['ceph_fsid'],
-                'device': dev,
-            })
-        elif oj[dev]['description'] == 'bluefs db':
-            r['device_db'] = dev
-        elif oj[dev]['description'] == 'bluefs wal':
-            r['device_wal'] = dev
-        return r
-    except KeyError as e:
-        # this will appear for devices that have a bluestore header but aren't valid OSDs
-        # for example, due to incomplete rollback of OSDs: https://tracker.ceph.com/issues/51869
-        logger.error('device {} does not have all BlueStore data needed to be a valid OSD: {}\n{}'.format(dev, out, e))
-        return None
+        logger.debug(f'assuming device {dev} is not BlueStore; ceph-bluestore-tool failed to get info from device: {out}\n{err}')
+    else:
+        oj = json.loads(''.join(out))
+        if dev not in oj:
+            # should be impossible, so warn
+            logger.warning(f'skipping device {dev} because it is not reported in ceph-bluestore-tool output: {out}')
+        try:
+            result = disk.bluestore_info(dev, oj)
+        except KeyError as e:
+            # this will appear for devices that have a bluestore header but aren't valid OSDs
+            # for example, due to incomplete rollback of OSDs: https://tracker.ceph.com/issues/51869
+            logger.error(f'device {dev} does not have all BlueStore data needed to be a valid OSD: {out}\n{e}')
+    return result
 
 
 class List(object):
 
     help = 'list BlueStore OSDs on raw devices'
 
-    def __init__(self, argv):
+    def __init__(self, argv: _List[str]) -> None:
         self.argv = argv
 
     def is_atari_partitions(self, _lsblk: Dict[str, Any]) -> bool:
@@ -81,7 +66,7 @@ class List(object):
                 return True
         return False
 
-    def exclude_atari_partitions(self, _lsblk_all: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def exclude_atari_partitions(self, _lsblk_all: Dict[str, Any]) -> _List[Dict[str, Any]]:
         return [_lsblk for _lsblk in _lsblk_all if not self.is_atari_partitions(_lsblk)]
 
     def generate(self, devs=None):
@@ -113,7 +98,7 @@ class List(object):
         logger.debug('inspecting devices: {}'.format(devs))
         for info_device in info_devices:
             bs_info = _get_bluestore_info(info_device['NAME'])
-            if bs_info is None:
+            if not bs_info:
                 # None is also returned in the rare event that there is an issue reading info from
                 # a BlueStore disk, so be sure to log our assumption that it isn't bluestore
                 logger.info('device {} does not have BlueStore information'.format(info_device['NAME']))

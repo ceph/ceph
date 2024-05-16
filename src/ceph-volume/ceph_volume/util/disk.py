@@ -3,7 +3,8 @@ import os
 import re
 import stat
 import time
-from ceph_volume import process
+import json
+from ceph_volume import process, allow_loop_devices
 from ceph_volume.api import lvm
 from ceph_volume.util.system import get_file_contents
 from typing import Dict, List, Any
@@ -727,31 +728,6 @@ def is_mapper_device(device_name):
     return device_name.startswith(('/dev/mapper', '/dev/dm-'))
 
 
-class AllowLoopDevices(object):
-    allow = False
-    warned = False
-
-    @classmethod
-    def __call__(cls):
-        val = os.environ.get("CEPH_VOLUME_ALLOW_LOOP_DEVICES", "false").lower()
-        if val not in ("false", 'no', '0'):
-            cls.allow = True
-            if not cls.warned:
-                logger.warning(
-                    "CEPH_VOLUME_ALLOW_LOOP_DEVICES is set in your "
-                    "environment, so we will allow the use of unattached loop"
-                    " devices as disks. This feature is intended for "
-                    "development purposes only and will never be supported in"
-                    " production. Issues filed based on this behavior will "
-                    "likely be ignored."
-                )
-                cls.warned = True
-        return cls.allow
-
-
-allow_loop_devices = AllowLoopDevices()
-
-
 def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_path: str = '/sys/dev/block', device: str = '') -> List[List[str]]:
     def holder_inner_loop() -> bool:
         for holder in holders:
@@ -962,4 +938,169 @@ def get_lvm_mappers(sys_block_path: str = '/sys/block') -> List[str]:
                     name: str = f.read()
                     result.append(f'/dev/mapper/{name.strip()}')
                     result.append(f'/dev/{device}')
+    return result
+
+def _dd_read(device: str, count: int, skip: int = 0) -> str:
+    """Read bytes from a device
+
+    Args:
+        device (str): The device to read bytes from.
+        count (int): The number of bytes to read.
+        skip (int, optional): The number of bytes to skip at the beginning. Defaults to 0.
+
+    Returns:
+        str: A string containing the read bytes.
+    """
+    result: str = ''
+    try:
+        with open(device, 'rb') as b:
+            b.seek(skip)
+            data: bytes = b.read(count)
+            result = data.decode('utf-8').replace('\x00', '')
+    except OSError:
+        logger.warning(f"Can't read from {device}")
+        pass
+    except UnicodeDecodeError:
+        pass
+    except Exception as e:
+        logger.error(f"An error occurred while reading from {device}: {e}")
+        raise
+
+    return result
+
+def _dd_write(device: str, data: str, skip: int = 0) -> None:
+    """Write bytes to a device
+
+    Args:
+        device (str): The device to write bytes to.
+        data (str): The data to write to the device.
+        skip (int, optional): The number of bytes to skip at the beginning. Defaults to 0.
+
+    Raises:
+        OSError: If there is an error opening or writing to the device.
+        Exception: If any other error occurs during the write operation.
+    """
+    try:
+        with open(device, 'r+b') as b:
+            b.seek(skip)
+            b.write(data.encode('utf-8'))
+    except OSError:
+        logger.warning(f"Can't write to {device}")
+        raise
+    except Exception as e:
+        logger.error(f"An error occurred while writing to {device}: {e}")
+        raise
+
+def get_bluestore_header(device: str) -> Dict[str, Any]:
+    """Retrieve BlueStore header information from a given device.
+
+    This function retrieves BlueStore header information from the specified 'device'.
+    It first checks if the device exists. If the device does not exist, a RuntimeError
+    is raised. Then, it calls the 'ceph-bluestore-tool' command to show the label
+    information of the device. If the command execution is successful, it parses the
+    JSON output containing the BlueStore header information and returns it as a dictionary.
+
+    Args:
+        device (str): The path to the device.
+
+    Returns:
+        Dict[str, Any]: A dictionary containing BlueStore header information.
+    """
+    data: Dict[str, Any] = {}
+
+    if os.path.exists(device):
+        out, err, rc = process.call([
+            'ceph-bluestore-tool', 'show-label',
+            '--dev', device], verbose_on_failure=False)
+        if rc:
+            logger.debug(f'device {device} is not BlueStore; ceph-bluestore-tool failed to get info from device: {out}\n{err}')
+        else:
+            data = json.loads(''.join(out))
+    else:
+        logger.warning(f'device {device} not found.')
+    return data
+
+def bluestore_info(device: str, bluestore_labels: Dict[str, Any]) -> Dict[str, Any]:
+    """Build a dict representation of a BlueStore header
+
+    Args:
+        device (str): The path of the BlueStore device.
+        bluestore_labels (Dict[str, Any]): Plain text output from `ceph-bluestore-tool show-label`
+
+    Returns:
+        Dict[str, Any]: Generated dict representation of the BlueStore header
+    """
+    result: Dict[str, Any] = {}
+    result['osd_uuid'] = bluestore_labels[device]['osd_uuid']
+    if bluestore_labels[device]['description'] == 'main':
+        whoami = bluestore_labels[device]['whoami']
+        result.update({
+            'type': bluestore_labels[device].get('type', 'bluestore'),
+            'osd_id': int(whoami),
+            'ceph_fsid': bluestore_labels[device]['ceph_fsid'],
+            'device': device,
+        })
+        if bluestore_labels[device].get('db_device_uuid', ''):
+            result['db_device_uuid'] = bluestore_labels[device].get('db_device_uuid')
+        if bluestore_labels[device].get('wal_device_uuid', ''):
+            result['wal_device_uuid'] = bluestore_labels[device].get('wal_device_uuid')
+    elif bluestore_labels[device]['description'] == 'bluefs db':
+        result['device_db'] = device
+    elif bluestore_labels[device]['description'] == 'bluefs wal':
+        result['device_wal'] = device
+    return result
+
+def get_block_device_holders(sys_block: str = '/sys/block') -> Dict[str, Any]:
+    """Get a dictionary of device mappers with their corresponding parent devices.
+
+    This function retrieves information about device mappers and their parent devices
+    from the '/sys/block' directory. It iterates through each directory within 'sys_block',
+    and for each directory, it checks if a 'holders' directory exists. If so, it lists
+    the contents of the 'holders' directory and constructs a dictionary where the keys
+    are the device mappers and the values are their corresponding parent devices.
+
+    Args:
+        sys_block (str, optional): The path to the '/sys/block' directory. Defaults to '/sys/block'.
+
+    Returns:
+        Dict[str, Any]: A dictionary where keys are device mappers (e.g., '/dev/mapper/...') and
+        values are their corresponding parent devices (e.g., '/dev/sdX').
+    """
+    result: Dict[str, Any] = {}
+    for b in os.listdir(sys_block):
+        path: str = os.path.join(sys_block, b, 'holders')
+        if os.path.exists(path):
+            for h in os.listdir(path):
+                result[f'/dev/{h}'] = f'/dev/{b}'
+
+    return result
+
+def get_parent_device_from_mapper(mapper: str, abspath: bool = True) -> str:
+    """Get the parent device corresponding to a given device mapper.
+
+    This function retrieves the parent device corresponding to a given device mapper
+    from the dictionary returned by the 'get_block_device_holders' function. It first
+    checks if the specified 'mapper' exists. If it does, it resolves the real path of
+    the mapper using 'os.path.realpath'. Then, it attempts to retrieve the parent device
+    from the dictionary. If the mapper is not found in the dictionary, an empty string
+    is returned.
+
+    Args:
+        mapper (str): The path to the device mapper.
+        abspath (bool, optional): If True (default), returns the absolute path of the parent device.
+                                  If False, returns only the basename of the parent device.
+
+    Returns:
+        str: The parent device corresponding to the given device mapper, or an empty string
+        if the mapper is not found in the dictionary of device mappers.
+    """
+    result: str = ''
+    if os.path.exists(mapper):
+        _mapper: str = os.path.realpath(mapper)
+        try:
+            result = get_block_device_holders()[_mapper]
+            if not abspath:
+                result = os.path.basename(result)
+        except KeyError:
+            pass
     return result
