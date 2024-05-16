@@ -45,6 +45,7 @@ ReplicatedRecoveryBackend::recover_object(
       // TODO: may need eio handling?
       logger().error("recover_object saw error code {}, ignoring object {}",
                      code, soid);
+      return seastar::now();
     }));
   });
 }

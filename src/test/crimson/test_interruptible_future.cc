@@ -64,6 +64,7 @@ TEST_F(seastar_test_suite_t, basic)
 	  return seastar::now();
 	}, errorator<ct_error::enoent>::all_same_way([] {
 	  ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
+	  return seastar::now();
 	  })
 	);
       }, [](std::exception_ptr) {}, false).get0();
@@ -146,6 +147,7 @@ TEST_F(seastar_test_suite_t, loops)
 		return seastar::now();
 	      }, errorator<ct_error::enoent>::all_same_way([] {
 		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
+		return seastar::now();
 	      }));
 	    });
 	  });
@@ -167,6 +169,7 @@ TEST_F(seastar_test_suite_t, loops)
 		return seastar::now();
 	      }, errorator<ct_error::enoent>::all_same_way([] {
 		ceph_assert(interruptible::interrupt_cond<TestInterruptCondition>.interrupt_cond);
+		return seastar::now();
 	      }));
 	    });
 	  });

@@ -299,9 +299,7 @@ public:
     return do_with_transaction_intr<Func, true>(
         Transaction::src_t::READ, name, std::forward<Func>(f)
     ).handle_error(
-      crimson::ct_error::eagain::handle([] {
-        ceph_assert(0 == "eagain impossible");
-      }),
+      crimson::ct_error::eagain::assert_failure{"unexpected eagain"},
       crimson::ct_error::pass_further_all{}
     );
   }

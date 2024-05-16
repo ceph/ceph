@@ -523,12 +523,11 @@ class NodeExtentAccessorT {
     return c.nm.alloc_extent(c.t, hint, alloc_size
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::input_output_error::handle(
+      crimson::ct_error::input_output_error::assert_failure(
           [FNAME, c, alloc_size, l_to_discard = extent->get_laddr()] {
         SUBERRORT(seastore_onode,
             "EIO during allocate -- node_size={}, to_discard={:x}",
             c.t, alloc_size, l_to_discard);
-        ceph_abort("fatal error");
       })
     ).si_then([this, c, FNAME] (auto fresh_extent) {
       SUBDEBUGT(seastore_onode,
@@ -552,21 +551,19 @@ class NodeExtentAccessorT {
       return c.nm.retire_extent(c.t, to_discard
       ).handle_error_interruptible(
         eagain_iertr::pass_further{},
-        crimson::ct_error::input_output_error::handle(
+        crimson::ct_error::input_output_error::assert_failure(
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
           SUBERRORT(seastore_onode,
               "EIO during retire -- to_disgard={:x}, fresh={:x}",
               c.t, l_to_discard, l_fresh);
-          ceph_abort("fatal error");
         }),
-        crimson::ct_error::enoent::handle(
+        crimson::ct_error::enoent::assert_failure(
             [FNAME, c, l_to_discard = to_discard->get_laddr(),
              l_fresh = fresh_extent->get_laddr()] {
           SUBERRORT(seastore_onode,
               "ENOENT during retire -- to_disgard={:x}, fresh={:x}",
               c.t, l_to_discard, l_fresh);
-          ceph_abort("fatal error");
         })
       );
     }).si_then([this, c] {
@@ -583,15 +580,13 @@ class NodeExtentAccessorT {
     return c.nm.retire_extent(c.t, std::move(extent)
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::input_output_error::handle(
+      crimson::ct_error::input_output_error::assert_failure(
           [FNAME, c, addr] {
         SUBERRORT(seastore_onode, "EIO -- addr={:x}", c.t, addr);
-        ceph_abort("fatal error");
       }),
-      crimson::ct_error::enoent::handle(
+      crimson::ct_error::enoent::assert_failure(
           [FNAME, c, addr] {
         SUBERRORT(seastore_onode, "ENOENT -- addr={:x}", c.t, addr);
-        ceph_abort("fatal error");
       })
 #ifndef NDEBUG
     ).si_then([c] {

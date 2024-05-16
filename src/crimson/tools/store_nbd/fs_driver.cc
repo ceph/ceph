@@ -185,12 +185,11 @@ seastar::future<> FSDriver::mkfs()
     uuid_d uuid;
     uuid.generate_random();
     return fs->mkfs(uuid).handle_error(
-      crimson::stateful_ec::handle([] (const auto& ec) {
+      crimson::stateful_ec::assert_failure([] (const auto& ec) {
         crimson::get_logger(ceph_subsys_test)
           .error("error creating empty object store in {}: ({}) {}",
           crimson::common::local_conf().get_val<std::string>("osd_data"),
           ec.value(), ec.message());
-        std::exit(EXIT_FAILURE);
       }));
   }).then([this] {
     return fs->stop();
@@ -199,7 +198,7 @@ seastar::future<> FSDriver::mkfs()
   }).then([this] {
     return fs->mount(
     ).handle_error(
-      crimson::stateful_ec::handle([] (const auto& ec) {
+      crimson::stateful_ec::assert_failure([] (const auto& ec) {
         crimson::get_logger(
 	  ceph_subsys_test
 	).error(
@@ -207,7 +206,6 @@ seastar::future<> FSDriver::mkfs()
 	  crimson::common::local_conf().get_val<std::string>("osd_data"),
 	  ec.value(),
 	  ec.message());
-	std::exit(EXIT_FAILURE);
       }));
   }).then([this] {
     return seastar::do_for_each(
@@ -241,7 +239,7 @@ seastar::future<> FSDriver::mount()
   }).then([this] {
     return fs->mount(
     ).handle_error(
-      crimson::stateful_ec::handle([] (const auto& ec) {
+      crimson::stateful_ec::assert_failure([] (const auto& ec) {
         crimson::get_logger(
 	  ceph_subsys_test
 	).error(
@@ -249,7 +247,6 @@ seastar::future<> FSDriver::mount()
 	  crimson::common::local_conf().get_val<std::string>("osd_data"),
 	  ec.value(),
 	  ec.message());
-        std::exit(EXIT_FAILURE);
       }));
   }).then([this] {
     return seastar::do_for_each(
