@@ -281,7 +281,7 @@ struct FixedKVNode : ChildableCachedExtent {
       return c.cache.template get_extent_viewable_by_trans<T>(c.trans, (T*)child);
     } else if (is_pending()) {
       auto &sparent = get_stable_for_key(key);
-      auto spos = sparent.child_pos_for_key(key);
+      auto spos = sparent.lower_bound_offset(key);
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
 	return c.cache.template get_extent_viewable_by_trans<T>(c.trans, (T*)child);
@@ -454,7 +454,6 @@ struct FixedKVNode : ChildableCachedExtent {
 
   virtual uint16_t lower_bound_offset(node_key_t) const = 0;
   virtual uint16_t upper_bound_offset(node_key_t) const = 0;
-  virtual uint16_t child_pos_for_key(node_key_t) const = 0;
 
   virtual bool validate_stable_children() = 0;
 
@@ -685,13 +684,6 @@ struct FixedKVInternalNode
 
   uint16_t upper_bound_offset(NODE_KEY key) const final {
     return this->upper_bound(key).get_offset();
-  }
-
-  uint16_t child_pos_for_key(NODE_KEY key) const final {
-    auto it = this->upper_bound(key);
-    assert(it != this->begin());
-    --it;
-    return it.get_offset();
   }
 
   NODE_KEY get_key_from_idx(uint16_t idx) const final {
@@ -1057,7 +1049,7 @@ struct FixedKVLeafNode
     } else if (this->is_pending()) {
       auto key = this->iter_idx(pos).get_key();
       auto &sparent = this->get_stable_for_key(key);
-      auto spos = sparent.child_pos_for_key(key);
+      auto spos = sparent.lower_bound_offset(key);
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
 	ceph_assert(child->is_logical());
@@ -1145,10 +1137,6 @@ struct FixedKVLeafNode
 
   uint16_t upper_bound_offset(NODE_KEY key) const final {
     return this->upper_bound(key).get_offset();
-  }
-
-  uint16_t child_pos_for_key(NODE_KEY key) const final {
-    return lower_bound_offset(key);
   }
 
   NODE_KEY get_key_from_idx(uint16_t idx) const final {
