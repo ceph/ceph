@@ -29,7 +29,7 @@ bool BtreeNodeMapping<key_t, val_t>::is_stable() const
   assert(parent->is_valid());
   assert(pos != std::numeric_limits<uint16_t>::max());
   auto &p = (FixedKVNode<key_t>&)*parent;
-  return p.is_child_stable(pos);
+  return p.is_child_stable(ctx, pos);
 }
 
 template class BtreeNodeMapping<laddr_t, paddr_t>;
