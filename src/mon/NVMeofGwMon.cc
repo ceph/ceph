@@ -422,15 +422,21 @@ bool NVMeofGwMon::prepare_beacon(MonOpRequestRef op){
         if (gw == group_gws.end()) {
            gw_created = false;
            dout(10) << "Warning: GW " << gw_id << " group_key " << group_key << " was not found in the  map.Created_gws "<< map.Created_gws <<dendl;
+           goto set_propose;
         }
         else {
-            dout(4) << "GW  prepares the full startup " << gw_id << dendl;
-            if(pending_map.Created_gws[group_key][gw_id].performed_full_startup == false){
+            dout(4) << "GW  prepares the full startup " << gw_id << " GW availability: " << pending_map.Created_gws[group_key][gw_id].availability << dendl;
+            if(pending_map.Created_gws[group_key][gw_id].availability == GW_AVAILABILITY_E::GW_AVAILABLE){
+                dout(4) << "GW marked as Available in the NVmeofGwMon database, performed full startup - Force gw to exit!" << gw_id <<dendl;
+                avail = GW_AVAILABILITY_E::GW_UNAVAILABLE;
+                // Monitor performs Force Failover for this GW in process_gw_map_gw_down
+            }
+            else if(pending_map.Created_gws[group_key][gw_id].performed_full_startup == false){
                 pending_map.Created_gws[group_key][gw_id].performed_full_startup = true;
                 propose = true;
+                goto set_propose;
             }
         }
-        goto set_propose;
     }
     else { // gw already created
         if (gw != group_gws.end()) // if GW reports Available but in monitor's database it is Unavailable
