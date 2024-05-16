@@ -176,6 +176,8 @@ public:
     Transaction &t,
     LBAMappingRef pin)
   {
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
     auto ret = get_extent_if_linked<T>(t, std::move(pin));
     if (ret.index() == 1) {
       return std::move(std::get<1>(ret));
@@ -214,6 +216,8 @@ public:
     extent_types_t type)
   {
     auto v = pin->get_logical_extent(t);
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
     if (v.has_child()) {
       return std::move(v.get_child_fut());
     } else {
