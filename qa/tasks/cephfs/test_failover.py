@@ -586,6 +586,9 @@ class TestStandbyReplay(CephFSTestCase):
         That a standby-replay daemon can cause the rank to go damaged correctly.
         """
 
+        for mount in self.mounts:
+            mount.umount_wait()
+
         self._confirm_no_replay()
         self.config_set("mds", "mds_standby_replay_damaged", True)
         self.fs.set_allow_standby_replay(True)
