@@ -17,6 +17,7 @@
 #include "common/Checksummer.h"
 #include "common/Clock.h"
 
+#include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
 #include "crimson/common/tmap_helpers.h"
 #include "crimson/os/futurized_collection.h"
@@ -1080,33 +1081,33 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
 }
 
 PGBackend::interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>>
-PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
+PGBackend::list_objects(
+  const hobject_t& start, const hobject_t &end, uint64_t limit) const
 {
   auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
-  return interruptor::make_interruptible(store->list_objects(coll,
-					 gstart,
-					 ghobject_t::get_max(),
-					 limit))
-    .then_interruptible([](auto ret) {
-      auto& [gobjects, next] = ret;
-      std::vector<hobject_t> objects;
-      boost::copy(gobjects |
-        boost::adaptors::filtered([](const ghobject_t& o) {
-          if (o.is_pgmeta()) {
-            return false;
-          } else if (o.hobj.is_temp()) {
-            return false;
-          } else {
-            return o.is_no_gen();
-          }
-        }) |
-        boost::adaptors::transformed([](const ghobject_t& o) {
-          return o.hobj;
-        }),
-        std::back_inserter(objects));
-      return seastar::make_ready_future<std::tuple<std::vector<hobject_t>, hobject_t>>(
-        std::make_tuple(objects, next.hobj));
-    });
+  auto gend = end.is_max() ? ghobject_t::get_max() : ghobject_t{end, 0, shard};
+  auto [gobjects, next] = co_await interruptor::make_interruptible(
+    store->list_objects(coll, gstart, gend, limit));
+
+  std::vector<hobject_t> objects;
+  boost::copy(
+    gobjects |
+    boost::adaptors::filtered([](const ghobject_t& o) {
+      if (o.is_pgmeta()) {
+	return false;
+      } else if (o.hobj.is_temp()) {
+	return false;
+      } else if (o.is_internal_pg_local()) {
+	return false;
+      } else {
+	return o.is_no_gen();
+      }
+    }) |
+    boost::adaptors::transformed([](const ghobject_t& o) {
+      return o.hobj;
+    }),
+    std::back_inserter(objects));
+  co_return std::make_tuple(objects, next.hobj);
 }
 
 PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
