@@ -719,7 +719,7 @@ class HostFacts:
                     else:
                         summary = {}  # type: Dict[str, int]
                         for line in profiles.split('\n'):
-                            item, mode = line.split(' ')
+                            item, mode = line.rsplit(' ', 1)
                             mode = mode.strip('()')
                             if mode in summary:
                                 summary[mode] += 1
