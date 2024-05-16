@@ -5,6 +5,8 @@ overrides:
         lockdep: true
     log-ignorelist:
       - missing required features
+      - \(MDS_CLIENTS_BROKEN_ROOTSQUASH\)
+      - report clients with broken root_squash implementation
 tasks:
   - cephfs_test_runner:
       fail_on_skip: false
