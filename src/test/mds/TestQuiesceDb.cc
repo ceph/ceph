@@ -77,9 +77,6 @@ class QuiesceDbTest: public testing::Test {
       Db& internal_db() {
         return db;
       }
-      QuiesceClusterMembership& internal_membership() {
-        return membership;
-      }
       decltype(pending_requests)& internal_pending_requests() {
         return pending_requests;
       }
@@ -88,6 +85,11 @@ class QuiesceDbTest: public testing::Test {
       }
       decltype(peers)& internal_peers() {
         return peers;
+      }
+      epoch_t bump_epoch() {
+        std::lock_guard l(submit_mutex);
+        submit_condition.notify_all();
+        return ++cluster_membership->epoch;
       }
     };
 
@@ -1617,4 +1619,44 @@ TEST_F(QuiesceDbTest, MultiRankRecovery)
   ASSERT_EQ(2, last_request->response.sets.size());
   EXPECT_EQ(QS_QUIESCING, last_request->response.sets.at("set1").rstate.state);
   EXPECT_EQ(QS_QUIESCING, last_request->response.sets.at("set2").rstate.state);
+}
+
+/* ========================================= */
+TEST_F(QuiesceDbTest, AckDuringEpochMismatch)
+{
+  ASSERT_NO_FATAL_FAILURE(configure_cluster({ mds_gid_t(1), mds_gid_t(2) }));
+  managers.at(mds_gid_t(1))->reset_agent_callback(QUIESCING_AGENT_CB);
+
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.timeout = sec(60);
+    r.expiration = sec(60);
+    r.include_roots({ "root1" });
+  }));
+
+  // we are quiescing because manager 2 hasn't yet acknowledged the new state
+  EXPECT_EQ(QS_QUIESCING, last_request->response.sets.at("set1").rstate.state);
+
+  // imagine that a new epoch has started on the peer before it did for the leader
+  managers.at(mds_gid_t(2))->bump_epoch();
+
+  // do the acking while our epoch is higher
+  {
+    // wait for the agent to ack root1 as failed
+    auto did_ack = add_ack_hook([](auto gid, auto const& ack) {
+      return gid == mds_gid_t(2) && ack.roots.contains("file:/root1") && ack.roots.at("file:/root1").state == QS_QUIESCED;
+    });
+
+    // allow acks
+    managers.at(mds_gid_t(2))->reset_agent_callback(QUIESCING_AGENT_CB);
+
+    EXPECT_EQ(std::future_status::ready, did_ack.wait_for(std::chrono::milliseconds(100)));
+  }
+
+  // now, bump the epoch on the leader and make sure it quiesces the set
+  managers.at(mds_gid_t(1))->bump_epoch();
+  EXPECT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.await = sec(10);
+  }));
 }
