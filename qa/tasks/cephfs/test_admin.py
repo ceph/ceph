@@ -839,6 +839,9 @@ class TestRenameCommand(TestAdminCommands):
         """
         That renaming a non-existent file system fails.
         """
+        self.skipTest('This test is broken ATM; see '
+                      'https://tracker.ceph.com/issues/66088')
+
         self.run_ceph_cmd(f'fs fail {self.fs.name}')
         self.run_ceph_cmd(f'fs set {self.fs.name} refuse_client_session true')
         sleep(5)
@@ -1444,6 +1447,9 @@ class TestFsAuthorize(CephFSTestCase):
         """
         Test root_squash with multi fs
         """
+        self.skipTest('this test is broken ATM, see: '
+                      'https://tracker.ceph.com/issues/66076.')
+
         self.fs1 = self.fs
         self.fs2 = self.mds_cluster.newfs('testcephfs2')
         self.mount_b.remount(cephfs_name=self.fs2.name)
@@ -1604,6 +1610,9 @@ class TestFsAuthorize(CephFSTestCase):
         That fs authorize command works on filesystems with names having [_.-]
         characters
         """
+        self.skipTest('this test is broken ATM, see: '
+                      'https://tracker.ceph.com/issues/66077')
+
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         fs_name = "cephfs-_."
@@ -1948,6 +1957,9 @@ class TestFsAuthorizeUpdate(CephFSTestCase):
                 caps mon = "allow r fsname=a"
                 caps osd = "allow rw tag cephfs data=a"
         """
+        self.skipTest('this test is broken ATM, see '
+                      'https://tracker.ceph.com/issues/65808')
+
         PERM, PATH = 'rw', 'dir1'
         self.mount_a.run_shell(f'mkdir {PATH}')
         self.captester = CapTester(self.mount_a, PATH)
