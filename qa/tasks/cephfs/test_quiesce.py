@@ -687,6 +687,50 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         op = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'], rank=0)['op']
         self.assertEqual(op['result'], -1) # EPERM
 
+    @unittest.skip("https://tracker.ceph.com/issues/66152")
+    def test_quiesce_drops_remote_authpins_on_failure(self):
+        """
+        That remote authpins are dropped when the request fails to acquire the quiesce lock
+
+        When the remote authpin is freezing, not dropping it is likely to deadlock a distributed quiesce
+        """
+        self._configure_subvolume()
+
+        # create two dirs for pinning
+        self.mount_a.run_shell_payload("mkdir -p pin0 pin1")
+        # enable export by populating the directories
+        self.mount_a.run_shell_payload("touch pin0/export_dummy pin1/export_dummy")
+        # pin the files to different ranks
+        self.mount_a.setfattr("pin0", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("pin1", "ceph.dir.pin", "1")
+
+        # prepare the patient at rank 0
+        self.mount_a.write_file("pin0/thefile", "I'm ready, doc")
+
+        # wait for the export to settle
+        self._wait_subtrees([(f"{self.mntpnt}/pin0", 0), (f"{self.mntpnt}/pin1", 1)])
+
+        # Take the quiesce lock on the replica of the src file.
+        # This is needed to cause the next command to block
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:1 lock path {self.mntpnt}/pin0/thefile quiesce:x --await")
+        self.assertEqual(cmd.exitstatus, 0)
+
+        # Simulate a rename by remote-auth-pin-freezing the file.
+        # Also try to take the quiesce lock to cause the MDR
+        # to block on quiesce with the remote authpin granted
+        # Don't --await this time because we expect this to block
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:1 lock path {self.mntpnt}/pin0/thefile quiesce:w --ap-freeze")
+        self.assertEqual(cmd.exitstatus, 0)
+
+        # At this point, if everything works well, we should be able to
+        # autpin and quiesce the file on the auth side.
+        # If the op above fails to release remote authpins, then the inode
+        # will still be authpin frozen, and that will disallow auth pinning the file
+        # We are using a combination of --ap-dont-block and --await
+        # to detect whether the file is authpinnable
+        cmd = self.fs.run_ceph_cmd(f"tell mds.{self.fs.name}:0 lock path {self.mntpnt}/pin0/thefile quiesce:x --ap-dont-block --await")
+        self.assertEqual(cmd.exitstatus, 0)
+
     def test_quiesce_authpin_wait(self):
         """
         That a quiesce_inode op with outstanding remote authpin requests can be killed.
