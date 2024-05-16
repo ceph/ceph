@@ -9893,74 +9893,6 @@ void MDCache::dispatch_request(const MDRequestRef& mdr)
   }
 }
 
-
-void MDCache::request_drop_foreign_locks(const MDRequestRef& mdr)
-{
-  if (!mdr->has_more())
-    return;
-
-  // clean up peers
-  //  (will implicitly drop remote dn pins)
-  for (set<mds_rank_t>::iterator p = mdr->more()->peers.begin();
-       p != mdr->more()->peers.end();
-       ++p) {
-    auto r = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt,
-					    MMDSPeerRequest::OP_FINISH);
-
-    if (mdr->killed && !mdr->committing) {
-      r->mark_abort();
-    } else if (mdr->more()->srcdn_auth_mds == *p &&
-	       mdr->more()->inode_import.length() > 0) {
-      // information about rename imported caps
-      r->inode_export = std::move(mdr->more()->inode_import);
-    }
-
-    mds->send_message_mds(r, *p);
-  }
-
-  /* strip foreign xlocks out of lock lists, since the OP_FINISH drops them
-   * implicitly. Note that we don't call the finishers -- there shouldn't
-   * be any on a remote lock and the request finish wakes up all
-   * the waiters anyway! */
-
-  for (auto it = mdr->locks.begin(); it != mdr->locks.end(); ) {
-    SimpleLock *lock = it->lock;
-    if (!lock->is_locallock() && it->is_xlock() && !lock->get_parent()->is_auth()) {
-      dout(10) << "request_drop_foreign_locks forgetting lock " << *lock
-	       << " on " << lock->get_parent() << dendl;
-      lock->put_xlock();
-      mdr->locks.erase(it++);
-    } else if (it->is_remote_wrlock()) {
-      dout(10) << "request_drop_foreign_locks forgetting remote_wrlock " << *lock
-	       << " on mds." << it->wrlock_target << " on " << *lock->get_parent() << dendl;
-      if (it->is_wrlock()) {
-	it->clear_remote_wrlock();
-	++it;
-      } else {
-	mdr->locks.erase(it++);
-      }
-    } else {
-      ++it;
-    }
-  }
-
-  mdr->more()->peers.clear(); /* we no longer have requests out to them, and
-                                * leaving them in can cause double-notifies as
-                                * this function can get called more than once */
-}
-
-void MDCache::request_drop_non_rdlocks(const MDRequestRef& mdr)
-{
-  request_drop_foreign_locks(mdr);
-  mds->locker->drop_non_rdlocks(mdr.get());
-}
-
-void MDCache::request_drop_locks(const MDRequestRef& mdr)
-{
-  request_drop_foreign_locks(mdr);
-  mds->locker->drop_locks(mdr.get());
-}
-
 void MDCache::request_cleanup(const MDRequestRef& mdr)
 {
   dout(15) << "request_cleanup " << *mdr << dendl;
@@ -10002,7 +9934,7 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
       break;
   }
 
-  request_drop_locks(mdr);
+  mds->locker->request_drop_locks(mdr);
 
   // drop (local) auth pins
   mdr->drop_local_auth_pins();
