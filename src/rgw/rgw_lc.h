@@ -656,9 +656,7 @@ public:
   int set_bucket_config(rgw::sal::Bucket* bucket,
                         const rgw::sal::Attrs& bucket_attrs,
                         RGWLifecycleConfiguration *config);
-  int remove_bucket_config(rgw::sal::Bucket* bucket,
-                           const rgw::sal::Attrs& bucket_attrs,
-			   bool merge_attrs = true);
+  int remove_bucket_config(rgw::sal::Bucket* bucket);
 
   CephContext *get_cct() const override { return cct; }
   rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }
