@@ -23,7 +23,7 @@ class Quiescer(ThrasherGreenlet):
     """
     The Quiescer does periodic quiescing of the configured paths, by default - the root '/'.
 
-    quiesce_timeout: [1..)                      default: 60
+    quiesce_timeout: [1..)                      default: 90
      :: maximum time in seconds to wait for the quiesce to succeed
     quiesce_factor: [0.005..0.5]                default: 0.35
      :: the fraction of the total runtime we want the system quiesced
@@ -42,7 +42,7 @@ class Quiescer(ThrasherGreenlet):
     split_if_longer: int                        default: mean(min_quiesce, max_quiesce)
      :: if the duration is longer than this,
         it will be split into two back-to-back half durations
-    ops_dump_interval: [1..quiesce_timeout)     default: 0.7*quiesce_timeout
+    ops_dump_interval: [1..quiesce_timeout)     default: 0.5*quiesce_timeout
      :: during the quiesce phase, the quiescer will dump current ops from all
         ranks until the quiesce terminates. values outside the allowed
         range (1 <= x < quiesce_timeout) disable the dump
@@ -54,7 +54,7 @@ class Quiescer(ThrasherGreenlet):
 
     def __init__(self, ctx, fscid,
                  cluster_name='ceph',
-                 quiesce_timeout=60,
+                 quiesce_timeout=90,
                  quiesce_factor=0.35,
                  min_quiesce=10,
                  max_quiesce=60,
@@ -104,7 +104,7 @@ class Quiescer(ThrasherGreenlet):
         self.cancelations_cap = cancelations_cap
 
         if ops_dump_interval is None:
-            ops_dump_interval = 0.7 * self.quiesce_timeout
+            ops_dump_interval = 0.5 * self.quiesce_timeout
 
         if ops_dump_interval < 1 or ops_dump_interval >= self.quiesce_timeout:
             self.logger.warn(f"ops_dump_interval ({ops_dump_interval}) is outside the valid range [1..{self.quiesce_timeout}), disabling the dump")
@@ -275,7 +275,7 @@ class Quiescer(ThrasherGreenlet):
                 rc, stdout = self.tell_quiesce_leader(
                     *self.roots,
                     "--timeout", str(self.quiesce_timeout),
-                    "--expiration", str(duration + 60), # give us a minute to run the release command
+                    "--expiration", str(duration + 120), # give us 2 minutes (!) to run the release command
                     *await_args
                 )
             else:
@@ -310,8 +310,8 @@ class Quiescer(ThrasherGreenlet):
             raise RuntimeError(f"Error quiescing set '{set_id}': {rcinfo(rc)}")
 
         elapsed = round(time.time() - start_time, 1)
-        self.logger.info(f"Successfully quiesced set '{set_id}', quiesce took {elapsed} seconds. Will release after: {duration}")
-        self.sleep_unless_stopped(duration)
+        self.logger.info(f"Successfully quiesced set '{set_id}', quiesce took {elapsed} seconds. Will release after: {duration - elapsed}")
+        self.sleep_unless_stopped(duration - elapsed)
 
         # release the root
         rc, stdout = self.tell_quiesce_leader(
@@ -330,7 +330,7 @@ class Quiescer(ThrasherGreenlet):
             raise RuntimeError(f"Error releasing set '{set_id}': {rcinfo(rc)}")
         else:
             elapsed = round(time.time() - start_time, 1)
-            self.logger.info(f"Successfully released set '{set_id}', seconds elapsed: {elapsed}")
+            self.logger.info(f"Successfully released set '{set_id}', total seconds elapsed: {elapsed}")
 
 
     def _run(self):
