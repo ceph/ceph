@@ -71,8 +71,8 @@ class TestPrepare(object):
                     osd_fsid='123',
                     secrets=dict(dmcrypt_key='foo'))
         self.p.objectstore.prepare_dmcrypt()
-        m_luks_open.assert_called_with('foo', '/dev/foo', 'ceph-123-foo-block-dmcrypt')
-        m_luks_format.assert_called_with('foo', '/dev/foo')
+        m_luks_open.assert_called_with(self.p.objectstore.dmcrypt_key, '/dev/foo', 'ceph-123-foo-block-dmcrypt', 0)
+        m_luks_format.assert_called_with(self.p.objectstore.dmcrypt_key, '/dev/foo')
         assert self.p.objectstore.__dict__['block_device_path'] == '/dev/mapper/ceph-123-foo-block-dmcrypt'
 
     @patch('ceph_volume.util.encryption.luks_open')
@@ -86,8 +86,8 @@ class TestPrepare(object):
                     osd_fsid='456',
                     secrets=dict(dmcrypt_key='foo'))
         self.p.objectstore.prepare_dmcrypt()
-        m_luks_open.assert_called_with('foo', '/dev/db-foo', 'ceph-456-foo-db-dmcrypt')
-        m_luks_format.assert_called_with('foo', '/dev/db-foo')
+        m_luks_open.assert_called_with(self.p.objectstore.dmcrypt_key, '/dev/db-foo', 'ceph-456-foo-db-dmcrypt', 0)
+        m_luks_format.assert_called_with(self.p.objectstore.dmcrypt_key, '/dev/db-foo')
         assert self.p.objectstore.__dict__['db_device_path'] == '/dev/mapper/ceph-456-foo-db-dmcrypt'
 
     @patch('ceph_volume.util.encryption.luks_open')
@@ -101,8 +101,8 @@ class TestPrepare(object):
                     osd_fsid='789',
                     secrets=dict(dmcrypt_key='foo'))
         self.p.objectstore.prepare_dmcrypt()
-        m_luks_open.assert_called_with('foo', '/dev/wal-foo', 'ceph-789-foo-wal-dmcrypt')
-        m_luks_format.assert_called_with('foo', '/dev/wal-foo')
+        m_luks_open.assert_called_with(self.p.objectstore.dmcrypt_key, '/dev/wal-foo', 'ceph-789-foo-wal-dmcrypt', 0)
+        m_luks_format.assert_called_with(self.p.objectstore.dmcrypt_key, '/dev/wal-foo')
         assert self.p.objectstore.__dict__['wal_device_path'] == '/dev/mapper/ceph-789-foo-wal-dmcrypt'
 
     @patch('ceph_volume.objectstore.rawbluestore.rollback_osd')
