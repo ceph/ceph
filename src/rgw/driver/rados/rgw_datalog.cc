@@ -163,14 +163,13 @@ public:
       asio::use_awaitable);
     co_return;
   }
-  asio::awaitable<void> push(const DoutPrefixProvider *dpp, int index,
-			     ceph::real_time now, const std::string& key,
-			     buffer::list&& bl) override {
-    co_await r.execute(
-      oids[index], loc,
-      neorados::WriteOp{}.exec(nlog::add(now, {}, key, std::move(bl))),
-      asio::use_awaitable);
-    co_return;
+  void push(const DoutPrefixProvider *dpp, int index,
+	    ceph::real_time now, const std::string& key,
+	    buffer::list&& bl, asio::yield_context y) override {
+    r.execute(oids[index], loc,
+	      neorados::WriteOp{}.exec(nlog::add(now, {}, key, std::move(bl))),
+	      y);
+    return;
   }
 
   asio::awaitable<std::tuple<std::span<rgw_data_change_log_entry>,
@@ -270,7 +269,7 @@ public:
 };
 
 class RGWDataChangesFIFO final : public RGWDataChangesBE {
-  using centries = std::vector<buffer::list>;
+  using centries = std::deque<buffer::list>;
   tiny_vector<LazyFIFO> fifos;
 
 public:
@@ -296,10 +295,10 @@ public:
 			     entries&& items) override {
     co_return co_await fifos[index].push(dpp, std::get<centries>(items));
   }
-  asio::awaitable<void> push(const DoutPrefixProvider* dpp, int index,
-			     ceph::real_time, const std::string&,
-			     buffer::list&& bl) override {
-    co_return co_await fifos[index].push(dpp, std::move(bl));
+  void push(const DoutPrefixProvider* dpp, int index,
+	    ceph::real_time, const std::string&,
+	    buffer::list&& bl, asio::yield_context y) override {
+    fifos[index].push(dpp, std::move(bl), y);
   }
   asio::awaitable<std::tuple<std::span<rgw_data_change_log_entry>,
 			     std::string>>
@@ -854,20 +853,15 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
   return choose_oid(bs);
 }
 
-asio::awaitable<bool>
-RGWDataChangesLog::filter_bucket(const DoutPrefixProvider *dpp,
-				 const rgw_bucket& bucket) const
+bool RGWDataChangesLog::filter_bucket(const DoutPrefixProvider *dpp,
+				      const rgw_bucket& bucket,
+				      asio::yield_context y) const
 {
   if (!bucket_filter) {
-    co_return true;
+    return true;
   }
 
-  co_return co_await asio::spawn(
-    co_await asio::this_coro::executor,
-    [this, dpp, &bucket](asio::yield_context yc) {
-      optional_yield y(yc);
-      return bucket_filter(bucket, y, dpp);
-    }, asio::use_awaitable);
+  return bucket_filter(bucket, y, dpp);
 }
 
 std::string RGWDataChangesLog::get_oid(uint64_t gen_id, int i) const {
@@ -886,14 +880,28 @@ RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
 			     const rgw::bucket_log_layout_generation& gen,
 			     int shard_id)
 {
+  co_await asio::spawn(
+    co_await asio::this_coro::executor,
+    [this, dpp, &bucket_info, &gen, shard_id](asio::yield_context y) {
+      return add_entry(dpp, bucket_info, gen, shard_id, y);
+    }, asio::use_awaitable);
+  co_return;
+}
+
+
+void RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
+				  const RGWBucketInfo& bucket_info,
+				  const rgw::bucket_log_layout_generation& gen,
+				  int shard_id, asio::yield_context y)
+{
   if (!log_data) {
-    co_return;
+    return;
   }
 
   auto& bucket = bucket_info.bucket;
 
-  if (!co_await filter_bucket(dpp, bucket)) {
-    co_return;
+  if (!filter_bucket(dpp, bucket, y)) {
+    return;
   }
 
   if (observer) {
@@ -921,8 +929,8 @@ RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
 
     auto be = bes->head();
     // Failure on push is fatal if we're bypassing semaphores.
-    co_await be->push(dpp, index, now, change.key, std::move(bl));
-    co_return;
+    be->push(dpp, index, now, change.key, std::move(bl), y);
+    return;
   }
 
   mark_modified(index, bs, gen.gen);
@@ -950,17 +958,16 @@ RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
     if (need_sem_set) {
       using neorados::WriteOp;
       using neorados::cls::sem_set::increment;
-      co_await rados->execute(get_sem_set_oid(index), loc,
-			      WriteOp{}.exec(increment(std::move(key))),
-			      asio::use_awaitable);
+      rados->execute(get_sem_set_oid(index), loc,
+		     WriteOp{}.exec(increment(std::move(key))), y);
     }
-    co_return;
+    return;
   }
 
   if (status->pending) {
-    co_await status->cond.async_wait(sl, asio::use_awaitable);
+    status->cond.async_wait(sl, y);
     sl.unlock();
-    co_return;
+    return;
   }
 
   status->cond.notify(sl);
@@ -987,7 +994,7 @@ RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
   auto be = bes->head();
   // Failure on push isn't fatal.
   try {
-    co_await be->push(dpp, index, now, change.key, std::move(bl));
+    be->push(dpp, index, now, change.key, std::move(bl), y);
   } catch (const std::exception& e) {
     ldpp_dout(dpp, 5) << "RGWDataChangesLog::add_entry(): Backend push failed "
 		      << "with exception: " << e.what() << dendl;
@@ -1005,7 +1012,7 @@ RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
   status->cond.notify(sl);
   sl.unlock();
 
-  co_return;
+  return;
 }
 
 int RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
@@ -1015,19 +1022,19 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider* dpp,
 {
   std::exception_ptr eptr;
   if (y) {
-    auto& yield = y.get_yield_context();
     try {
-      asio::co_spawn(yield.get_executor(),
-		     add_entry(dpp, bucket_info, gen, shard_id),
-		     yield);
+      add_entry(dpp, bucket_info, gen, shard_id, y.get_yield_context());
     } catch (const std::exception&) {
       eptr = std::current_exception();
     }
   } else {
     maybe_warn_about_blocking(dpp);
-    eptr = asio::co_spawn(rados->get_executor(),
-			  add_entry(dpp, bucket_info, gen, shard_id),
-			  async::use_blocked);
+    eptr = asio::spawn(rados->get_executor(),
+		       [this, dpp, &bucket_info, &gen,
+			&shard_id](asio::yield_context y) {
+			 add_entry(dpp, bucket_info, gen, shard_id, y);
+		       },
+		       async::use_blocked);
   }
   return ceph::from_exception(eptr);
 }

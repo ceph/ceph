@@ -415,8 +415,9 @@ class RGWDataChangesLog {
   std::function<bool(const rgw_bucket& bucket, optional_yield y,
                      const DoutPrefixProvider *dpp)> bucket_filter;
   bool going_down() const;
-  asio::awaitable<bool> filter_bucket(const DoutPrefixProvider* dpp,
-				      const rgw_bucket& bucket) const;
+  bool filter_bucket(const DoutPrefixProvider* dpp,
+		     const rgw_bucket& bucket,
+		     asio::yield_context y) const;
   asio::awaitable<void> renew_entries(const DoutPrefixProvider *dpp);
 
   uint64_t watchcookie = 0;
@@ -451,6 +452,10 @@ public:
 				  const RGWBucketInfo& bucket_info,
 				  const rgw::bucket_log_layout_generation& gen,
 				  int shard_id);
+  void add_entry(const DoutPrefixProvider *dpp,
+		 const RGWBucketInfo& bucket_info,
+		 const rgw::bucket_log_layout_generation& gen,
+		 int shard_id, asio::yield_context y);
   int add_entry(const DoutPrefixProvider *dpp,
 		const RGWBucketInfo& bucket_info,
 		const rgw::bucket_log_layout_generation& gen,
@@ -540,7 +545,7 @@ protected:
   }
 public:
   using entries = std::variant<std::vector<cls::log::entry>,
-			       std::vector<ceph::buffer::list>>;
+			       std::deque<ceph::buffer::list>>;
 
   const uint64_t gen_id;
 
@@ -555,10 +560,11 @@ public:
 		       ceph::buffer::list&& entry, entries& out) = 0;
   virtual asio::awaitable<void> push(const DoutPrefixProvider *dpp, int index,
 				     entries&& items) = 0;
-  virtual asio::awaitable<void> push(const DoutPrefixProvider *dpp, int index,
-				     ceph::real_time now,
-				     const std::string& key,
-				     ceph::buffer::list&& bl) = 0;
+  virtual void push(const DoutPrefixProvider *dpp, int index,
+		    ceph::real_time now,
+		    const std::string& key,
+		    ceph::buffer::list&& bl,
+		    asio::yield_context y) = 0;
   virtual asio::awaitable<std::tuple<std::span<rgw_data_change_log_entry>,
 			  std::string>>
   list(const DoutPrefixProvider* dpp, int shard,
