@@ -1670,7 +1670,8 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
   context_t ctx,
   object_data_t &object_data,
   lba_pin_list_t &pins,
-  laddr_t data_base)
+  laddr_t data_base,
+  bool inc_ref)
 {
   LOG_PREFIX(ObjectDataHandler::clone_extents);
   TRACET(" object_data: {}~{}, data_base: {}",
@@ -1681,47 +1682,16 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
   return ctx.tm.remove(
     ctx.t,
     object_data.get_reserved_data_base()
-  ).si_then(
-    [&pins, &object_data, ctx, data_base](auto) mutable {
-      return seastar::do_with(
-	(extent_len_t)0,
-	[&object_data, ctx, data_base, &pins](auto &last_pos) {
-	return trans_intr::do_for_each(
-	  pins,
-	  [&last_pos, &object_data, ctx, data_base](auto &pin) {
-	  auto offset = pin->get_key() - data_base;
-	  ceph_assert(offset == last_pos);
-	  auto fut = TransactionManager::alloc_extent_iertr
-	    ::make_ready_future<LBAMappingRef>();
-	  auto addr = object_data.get_reserved_data_base() + offset;
-	  if (pin->get_val().is_zero()) {
-	    fut = ctx.tm.reserve_region(ctx.t, addr, pin->get_length());
-	  } else {
-	    fut = ctx.tm.clone_pin(ctx.t, addr, *pin);
-	  }
-	  return fut.si_then(
-	    [&pin, &last_pos, offset](auto) {
-	    last_pos = offset + pin->get_length();
-	    return seastar::now();
-	  }).handle_error_interruptible(
-	    crimson::ct_error::input_output_error::pass_further(),
-	    crimson::ct_error::assert_all("not possible")
-	  );
-	}).si_then([&last_pos, &object_data, ctx] {
-	  if (last_pos != object_data.get_reserved_data_len()) {
-	    return ctx.tm.reserve_region(
-	      ctx.t,
-	      object_data.get_reserved_data_base() + last_pos,
-	      object_data.get_reserved_data_len() - last_pos
-	    ).si_then([](auto) {
-	      return seastar::now();
-	    });
-	  }
-	  return TransactionManager::reserve_extent_iertr::now();
-	});
-      });
-    }
-  ).handle_error_interruptible(
+  ).si_then([&pins, &object_data, ctx, inc_ref](auto) mutable {
+    return ctx.tm.clone_pins(
+      ctx.t,
+      object_data.get_reserved_data_base(),
+      pins,
+      inc_ref
+    ).si_then([](auto) {
+      return clone_iertr::now();
+    });
+  }).handle_error_interruptible(
     ObjectDataHandler::write_iertr::pass_further{},
     crimson::ct_error::assert_all{
       "object_data_handler::clone invalid error"
@@ -1775,11 +1745,9 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone(
 	  return seastar::do_with(
 	    std::move(pins),
 	    [ctx, &object_data, &d_object_data, base, this](auto &pins) {
-	    return clone_extents(ctx, object_data, pins, base
+	    return clone_extents(ctx, object_data, pins, base, true
 	    ).si_then([ctx, &d_object_data, base, &pins, this] {
-	      return clone_extents(ctx, d_object_data, pins, base);
-	    }).si_then([&pins, ctx] {
-	      return do_removals(ctx, pins);
+	      return clone_extents(ctx, d_object_data, pins, base, false);
 	    });
 	  });
 	});
