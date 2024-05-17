@@ -10,13 +10,30 @@
 #include "common/BackTrace.h"
 #include "common/version.h"
 
+#ifndef __has_feature
+#define __has_feature(x) 0
+#endif
+
 // a dummy function, so we can check "foo" in the backtrace.
 // do not mark this function as static or put it into an anonymous namespace,
 // otherwise it's function name will be removed in the backtrace.
 std::string foo()
 {
   std::ostringstream oss;
+  // but if ASan is enabled, backtrace() returns one more frame, and the
+  // backtrace would look like:
+  //
+  // ceph version Development (no_version)
+  // 1: (ceph::ClibBackTrace::ClibBackTrace(int)+0xf5) [0x555555722bf5]
+  // 2: (foo[abi:cxx11]()+0x1fc) [0x555555721b5c]
+  // 3: (BackTrace_Basic_Test::TestBody()+0x2db) [0x55555572208b]
+  //
+  // so we need to skip one more frame
+#if __has_feature(address_sanitizer) || defined(__SANITIZE_ADDRESS__)
+  oss << ceph::ClibBackTrace(2);
+#else
   oss << ceph::ClibBackTrace(1);
+#endif
   return oss.str();
 }
 
