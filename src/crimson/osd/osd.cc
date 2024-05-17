@@ -389,17 +389,19 @@ seastar::future<> OSD::start()
     if (stats_seconds > 0) {
       shard_stats.resize(seastar::smp::count);
       stats_timer.set_callback([this, FNAME] {
-        std::ignore = shard_services.invoke_on_all(
-          [this](auto &local_service) {
-          auto stats = local_service.report_stats();
-          shard_stats[seastar::this_shard_id()] = stats;
-        }).then([this, FNAME] {
-          std::ostringstream oss;
-          for (const auto &stats : shard_stats) {
-            oss << int(stats.reactor_utilization);
-            oss << ",";
-          }
-          INFO("reactor_utilizations: {}", oss.str());
+        gate.dispatch_in_background("stats_osd", *this, [this, FNAME] {
+          return shard_services.invoke_on_all(
+            [this](auto &local_service) {
+            auto stats = local_service.report_stats();
+            shard_stats[seastar::this_shard_id()] = stats;
+          }).then([this, FNAME] {
+            std::ostringstream oss;
+            for (const auto &stats : shard_stats) {
+              oss << int(stats.reactor_utilization);
+              oss << ",";
+            }
+            INFO("reactor_utilizations: {}", oss.str());
+          });
         });
       });
       stats_timer.arm_periodic(std::chrono::seconds(stats_seconds));
