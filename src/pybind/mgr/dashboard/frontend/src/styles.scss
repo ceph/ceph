@@ -1,8 +1,11 @@
 /* You can add global styles to this file, and also import other style files */
 /*** CARBON START ****/
 
-@use "@carbon/styles/scss/config" with ($font-path: "~@ibm/plex",
-  $flex-grid-columns: 16);
+@use "@carbon/styles/scss/config" with (
+  $font-path: "~@ibm/plex",
+  $flex-grid-columns: 16,
+  $use-flexbox-grid: true,
+);
 @use '@carbon/themes/scss/themes' as t;
 @use "@carbon/styles";
 @use '@carbon/themes';

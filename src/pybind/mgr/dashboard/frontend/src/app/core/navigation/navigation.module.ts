@@ -9,7 +9,8 @@ import {
   IconService,
   IconModule,
   ThemeModule,
-  DialogModule
+  DialogModule,
+  GridModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -45,7 +46,8 @@ import DashboardIcon from '@carbon/icons/es/template/16';
     UIShellModule,
     IconModule,
     ThemeModule,
-    DialogModule
+    DialogModule,
+    GridModule
   ],
   declarations: [
     AboutComponent,
