@@ -26,10 +26,9 @@ struct CacheBlock {
   CacheObj cacheObj;
   uint64_t blockID;
   std::string version;
-  bool dirty{false};
   uint64_t size; /* Block size in bytes */
   int globalWeight = 0; /* LFUDA policy variable */
-  std::unordered_set<std::string> hostsList; /* List of hostnames <ip:port> of block locations */
+  /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
 };
 
 class Directory {
