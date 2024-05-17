@@ -103,6 +103,12 @@ public:
     laddr_t intermediate_key,
     laddr_t intermediate_base) = 0;
 
+  virtual alloc_extents_ret clone_mappings(
+    Transaction &t,
+    laddr_t hint,
+    const lba_pin_list_t &pins,
+    bool inc_ref) = 0;
+
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
