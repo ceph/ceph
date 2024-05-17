@@ -293,6 +293,8 @@ RecordSubmitter::submit(
     auto block_size = journal_allocator.get_block_size();
     auto rg = record_group_t(std::move(record), block_size);
     account_submission(rg);
+    assert(stats.record_batch_stats.num_io ==
+           stats.io_depth_stats.num_io);
     record_group_size_t sizes = rg.size;
     auto to_write = p_current_batch->submit_pending_fast(
       std::move(rg),
@@ -370,14 +372,8 @@ RecordSubmitter::open(bool is_mkfs)
       {
         sm::make_counter(
           "record_num",
-          stats.record_batch_stats.num_io,
-          sm::description("total number of records submitted"),
-          label_instances
-        ),
-        sm::make_counter(
-          "record_batch_num",
           stats.record_batch_stats.num_io_grouped,
-          sm::description("total number of records batched"),
+          sm::description("total number of records submitted"),
           label_instances
         ),
         sm::make_counter(
@@ -512,6 +508,8 @@ void RecordSubmitter::flush_current_batch()
   assert(rg.get_size() == num);
   record_group_size_t sizes = rg.size;
   account_submission(rg);
+  assert(stats.record_batch_stats.num_io ==
+         stats.io_depth_stats.num_io);
   auto to_write = p_batch->encode_batch(
     get_committed_to(), journal_allocator.get_nonce());
   // Note: rg is cleared
