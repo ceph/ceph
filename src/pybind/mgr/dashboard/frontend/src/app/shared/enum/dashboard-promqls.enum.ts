@@ -34,8 +34,8 @@ export enum MultiClusterPromqls {
   CRITICAL_ALERTS_COUNT = 'count(ALERTS{alertstate="firing",severity="critical"}) or vector(0)',
   WARNING_ALERTS_COUNT = 'count(ALERTS{alertstate="firing",severity="warning"}) or vector(0)',
   ALERTS = 'ALERTS{alertstate="firing"}',
-  HOSTS = 'sum by (hostname, cluster) (group by (hostname, cluster) (ceph_osd_metadata)) or vector(0)',
-  TOTAL_HOSTS = 'count by (cluster) (ceph_osd_metadata) or vector(0)',
+  HOSTS = 'count_values("hostname", ceph_mon_metadata) by (cluster) or vector (0)',
+  TOTAL_HOSTS = 'count(sum by (hostname) (ceph_osd_metadata)) or vector(0)',
   CLUSTER_ALERTS = 'count by (cluster) (ALERTS{alertstate="firing"}) or vector(0)'
 }
 

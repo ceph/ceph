@@ -113,6 +113,7 @@
                      i18n-title
                      class="col-sm-6 m-0 p-0 ps-2 pe-2"
                      aria-label="Alerts"
+                     [fullHeight]="true"
                      *ngIf="queriesResults['ALERTS_COUNT'] && queriesResults['ALERTS_COUNT'][0]">
               <span class="text-center">
                 <h3 *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0][1] === '0' && queriesResults['WARNING_ALERTS_COUNT'][0][1] === '0'">
