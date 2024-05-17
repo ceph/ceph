@@ -83,7 +83,7 @@ class ObjectDirectoryFixture: public ::testing::Test {
     std::shared_ptr<connection> conn;
 
     std::vector<std::string> vals{"testName", "testBucket", "", "0", env->redisHost};
-    std::vector<std::string> fields{"objName", "bucketName", "creationTime", "dirty", "objHosts"};
+    std::vector<std::string> fields{"objName", "bucketName", "creationTime", "dirty", "hosts"};
 };
 
 class BlockDirectoryFixture: public ::testing::Test {
@@ -101,8 +101,7 @@ class BlockDirectoryFixture: public ::testing::Test {
 	},
         .blockID = 0,
 	.version = "",
-	.size = 0,
-	.hostsList = { env->redisHost }
+	.size = 0
       };
 
       ASSERT_NE(block, nullptr);
@@ -128,10 +127,10 @@ class BlockDirectoryFixture: public ::testing::Test {
     net::io_context io;
     std::shared_ptr<connection> conn;
 
-    std::vector<std::string> vals{"0", "", "0", "0", "0", env->redisHost, 
+    std::vector<std::string> vals{"0", "", "0", "0", 
                                    "testName", "testBucket", "", "0", env->redisHost};
-    std::vector<std::string> fields{"blockID", "version", "dirtyBlock", "size", "globalWeight", "blockHosts", 
-				     "objName", "bucketName", "creationTime", "dirtyObj", "objHosts"};
+    std::vector<std::string> fields{"blockID", "version", "size", "globalWeight", 
+				     "objName", "bucketName", "creationTime", "dirty", "hosts"};
 };
 
 void rethrow(std::exception_ptr eptr) {
@@ -272,11 +271,11 @@ TEST_F(ObjectDirectoryFixture, UpdateFieldYield)
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
     ASSERT_EQ(0, dir->set(env->dpp, obj, yield));
     ASSERT_EQ(0, dir->update_field(env->dpp, obj, "objName", "newTestName", yield));
-    ASSERT_EQ(0, dir->update_field(env->dpp, obj, "objHosts", "127.0.0.1:5000", yield));
+    ASSERT_EQ(0, dir->update_field(env->dpp, obj, "hosts", "127.0.0.1:5000", yield));
 
     boost::system::error_code ec;
     request req;
-    req.push("HMGET", "testBucket_testName", "objName", "objHosts");
+    req.push("HMGET", "testBucket_testName", "objName", "hosts");
     req.push("FLUSHALL");
     response< std::vector<std::string>, 
 	      boost::redis::ignore_t> resp;
@@ -374,8 +373,8 @@ TEST_F(BlockDirectoryFixture, CopyYield)
     EXPECT_EQ(std::get<0>(resp).value(), 1);
 
     auto copyVals = vals;
-    copyVals[6] = "copyTestName";
-    copyVals[7] = "copyBucketName";
+    copyVals[4] = "copyTestName";
+    copyVals[5] = "copyBucketName";
     EXPECT_EQ(std::get<1>(resp).value(), copyVals);
 
     conn->cancel();
@@ -428,11 +427,11 @@ TEST_F(BlockDirectoryFixture, UpdateFieldYield)
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
     ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
     ASSERT_EQ(0, dir->update_field(env->dpp, block, "objName", "newTestName", optional_yield{yield}));
-    ASSERT_EQ(0, dir->update_field(env->dpp, block, "blockHosts", "127.0.0.1:5000", optional_yield{yield}));
+    ASSERT_EQ(0, dir->update_field(env->dpp, block, "hosts", "127.0.0.1:5000", optional_yield{yield}));
 
     boost::system::error_code ec;
     request req;
-    req.push("HMGET", "testBucket_testName_0_0", "objName", "blockHosts");
+    req.push("HMGET", "testBucket_testName_0_0", "objName", "hosts");
     req.push("FLUSHALL");
     response< std::vector<std::string>, 
 	      boost::redis::ignore_t> resp;
@@ -452,15 +451,15 @@ TEST_F(BlockDirectoryFixture, UpdateFieldYield)
 TEST_F(BlockDirectoryFixture, RemoveHostYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    block->hostsList.insert("127.0.0.1:6000");
+    block->cacheObj.hostsList.insert("127.0.0.1:6000");
     ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
     ASSERT_EQ(0, dir->remove_host(env->dpp, block, "127.0.0.1:6379", optional_yield{yield}));
 
     {
       boost::system::error_code ec;
       request req;
-      req.push("HEXISTS", "testBucket_testName_0_0", "blockHosts");
-      req.push("HGET", "testBucket_testName_0_0", "blockHosts");
+      req.push("HEXISTS", "testBucket_testName_0_0", "hosts");
+      req.push("HGET", "testBucket_testName_0_0", "hosts");
       response<int, std::string> resp;
 
       conn->async_exec(req, resp, yield[ec]);
