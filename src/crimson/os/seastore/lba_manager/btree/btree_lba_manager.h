@@ -548,6 +548,13 @@ private:
     update_func_t &&f,
     LogicalCachedExtent*);
 
+  using _update_mappings_iertr = _update_mapping_iertr;
+  using _update_mappings_ret = _update_mapping_iertr::future<>;
+  _update_mappings_ret _update_mappings(
+    Transaction &t,
+    std::pair<laddr_t, extent_len_t> range,
+    update_func_t &&f);
+
   alloc_extents_ret _alloc_extents(
     Transaction &t,
     laddr_t hint,
