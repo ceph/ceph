@@ -5,15 +5,15 @@
 <cds-header name="Ceph Dashboard">
   <cds-hamburger (click)="showMenuSidebar = !showMenuSidebar"></cds-hamburger>
   <cds-header-navigation>
-    <cd-language-selector class="cd-navbar"></cd-language-selector>
+    <cd-language-selector></cd-language-selector>
   </cds-header-navigation>
   <cds-header-global>
     <cds-header-action>
-      <cd-notifications class="cd-navbar" (click)="toggleRightSidebar()"></cd-notifications>
+      <cd-notifications (click)="toggleRightSidebar()"></cd-notifications>
     </cds-header-action>
-      <cds-header-action><cd-dashboard-help class="cd-navbar"></cd-dashboard-help></cds-header-action>
-    <cds-header-action><cd-administration class="cd-navbar"></cd-administration></cds-header-action>
-    <cds-header-action><cd-identity class="cd-navbar"></cd-identity></cds-header-action>
+      <cds-header-action><cd-dashboard-help></cd-dashboard-help></cds-header-action>
+    <cds-header-action><cd-administration></cd-administration></cds-header-action>
+    <cds-header-action><cd-identity></cd-identity></cds-header-action>
   </cds-header-global>
 </cds-header>
 </ng-template>
