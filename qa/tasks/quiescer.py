@@ -186,17 +186,19 @@ class Quiescer(ThrasherGreenlet):
 
             self.logger.debug(f"Dumping ops on rank {rank} ({name}) to a remote file {remote_path}")
             try:
-                _ = self.fs.rank_tell(['ops', '--flags=locks', f'--path={daemon_path}'], rank=rank)
-                remote_dumps.append((info, remote_path))
+                args = ['tell', f'mds.{self.fs.id}:{rank}', 'ops', '--flags=locks', f'--path={daemon_path}']
+                p = self.fs.run_ceph_cmd(args=args, wait=False, stdout=StringIO())
+                remote_dumps.append((info, remote_path, p))
             except Exception as e:
                 self.logger.error(f"Couldn't execute ops dump on rank {rank}, error: {e}")
 
         # now get the ops from the files
-        for info, remote_path in remote_dumps:
+        for info, remote_path, p in remote_dumps:
+            name = info['name']
+            rank = info['rank']
+            mds_remote = self.fs.mon_manager.find_remote('mds', name)
             try:
-                name = info['name']
-                rank = info['rank']
-                mds_remote = self.fs.mon_manager.find_remote('mds', name)
+                p.wait()
                 blob = misc.get_file(mds_remote, remote_path, sudo=True).decode('utf-8')
                 self.logger.debug(f"read {len(blob)}B of ops from '{remote_path}' on mds.{rank} ({name})")
                 ops_dump = json.loads(blob)
@@ -218,7 +220,8 @@ class Quiescer(ThrasherGreenlet):
                 self.logger.info(f"Pulled {len(ops_dump['ops'])} ops from rank {rank} ({name}) into {out_name}")
             except Exception as e:
                 self.logger.error(f"Couldn't pull ops dump at '{remote_path}' on rank {info['rank']} ({info['name']}), error: {e}")
-            misc.delete_file(mds_remote, remote_path, sudo=True, check=False)
+            finally:
+                misc.delete_file(mds_remote, remote_path, sudo=True, check=False)
 
     def get_set_state_name(self, response, set_id = None):
         if isinstance(response, (str, bytes, bytearray)):
