@@ -20,11 +20,11 @@ abstractions:
   subvolumes. Used to effect policies (e.g., :doc:`/cephfs/file-layouts`)
   across a set of subvolumes
 
-Some possible use-cases for the export abstractions:
+Possible use-cases for the export abstractions:
 
 * FS subvolumes used as Manila shares or CSI volumes
 
-* FS subvolume groups used as Manila share groups
+* FS-subvolume groups used as Manila share groups
 
 Requirements
 ------------
@@ -80,23 +80,24 @@ Rename a volume by running the following command:
 
 Renaming a volume can be an expensive operation that requires the following:
 
-- Renaming the orchestrator-managed MDS service to match the <new_vol_name>.
-  This involves launching a MDS service with ``<new_vol_name>`` and bringing
-  down the MDS service with ``<vol_name>``.
-- Renaming the file system matching ``<vol_name>`` to ``<new_vol_name>``.
-- Changing the application tags on the data and metadata pools of the file system
-  to ``<new_vol_name>``.
+- Renaming the orchestrator-managed MDS service to match the
+  ``<new_vol_name>``.  This involves launching a MDS service with
+  ``<new_vol_name>`` and bringing down the MDS service with ``<vol_name>``.
+- Renaming the file system from ``<vol_name>`` to ``<new_vol_name>``.
+- Changing the application tags on the data and metadata pools of the file
+  system to ``<new_vol_name>``.
 - Renaming the metadata and data pools of the file system.
 
 The CephX IDs that are authorized for ``<vol_name>`` must be reauthorized for
-``<new_vol_name>``. Any ongoing operations of the clients using these IDs may
-be disrupted. Ensure that mirroring is disabled on the volume.
+``<new_vol_name>``. Any ongoing operations of the clients that are using these
+IDs may be disrupted. Ensure that mirroring is disabled on the volume.
 
 To fetch the information of a CephFS volume, run the following command:
 
     $ ceph fs volume info vol_name [--human_readable]
 
-The ``--human_readable`` flag shows used and available pool capacities in KB/MB/GB.
+The ``--human_readable`` flag shows used and available pool capacities in
+KB/MB/GB.
 
 The output format is JSON and contains fields as follows:
 
@@ -144,7 +145,7 @@ Create a subvolume group by running the following command:
 
 The command succeeds even if the subvolume group already exists.
 
-When creating a subvolume group you can specify its data pool layout (see
+When you create a subvolume group, you can specify its data pool layout (see
 :doc:`/cephfs/file-layouts`), uid, gid, file mode in octal numerals, and
 size in bytes. The size of the subvolume group is specified by setting
 a quota on it (see :doc:`/cephfs/quota`). By default, the subvolume group
@@ -156,11 +157,11 @@ Remove a subvolume group by running a command of the following form:
     $ ceph fs subvolumegroup rm <vol_name> <group_name> [--force]
 
 The removal of a subvolume group fails if the subvolume group is not empty or
-is non-existent. The ``--force`` flag allows the non-existent "subvolume group remove
-command" to succeed.
+is non-existent. The ``--force`` flag allows the command to succeed when its
+argument is a non-existent subvolume group.
 
-
-Fetch the absolute path of a subvolume group by running a command of the following form:
+Fetch the absolute path of a subvolume group by running a command of the
+following form:
 
     $ ceph fs subvolumegroup getpath <vol_name> <group_name>
 
@@ -171,15 +172,19 @@ List subvolume groups by running a command of the following form:
 .. note:: Subvolume group snapshot feature is no longer supported in mainline CephFS (existing group
           snapshots can still be listed and deleted)
 
-Fetch the metadata of a subvolume group by running a command of the following form:
+Fetch the metadata of a subvolume group by running a command of the following
+form:
 
     $ ceph fs subvolumegroup info <vol_name> <group_name>
 
 The output format is JSON and contains fields as follows:
 
-* ``atime``: access time of the subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
-* ``mtime``: modification time of the subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
-* ``ctime``: change time of the subvolume group path in the format "YYYY-MM-DD HH:MM:SS"
+* ``atime``: access time of the subvolume group path in the format ``YYYY-MM-DD
+  HH:MM:SS``
+* ``mtime``: modification time of the subvolume group path in the format
+  ``YYYY-MM-DD HH:MM:SS``
+* ``ctime``: change time of the subvolume group path in the format ``YYYY-MM-DD
+  HH:MM:SS``
 * ``uid``: uid of the subvolume group path
 * ``gid``: gid of the subvolume group path
 * ``mode``: mode of the subvolume group path
@@ -190,7 +195,8 @@ The output format is JSON and contains fields as follows:
 * ``created_at``: creation time of the subvolume group in the format "YYYY-MM-DD HH:MM:SS"
 * ``data_pool``: data pool to which the subvolume group belongs
 
-Check the presence of any subvolume group by running a command of the following form:
+Check for the presence of a given subvolume group by running a command of the
+following form:
 
     $ ceph fs subvolumegroup exist <vol_name>
 
@@ -200,27 +206,28 @@ The ``exist`` command outputs:
 * "no subvolumegroup exists": if no subvolumegroup is present
 
 .. note:: This command checks for the presence of custom groups and not
-   presence of the default one. To validate the emptiness of the volume, a
-   subvolumegroup existence check alone is not sufficient. Subvolume existence
-   also needs to be checked as there might be subvolumes in the default group.
+   presence of the default one. A subvolumegroup-existence check alone is not
+   sufficient to validate the emptiness of the volume. Subvolume existence must
+   also be checked, as there might be subvolumes in the default group.
 
 Resize a subvolume group by running a command of the following form:
 
     $ ceph fs subvolumegroup resize <vol_name> <group_name> <new_size> [--no_shrink]
 
-The command resizes the subvolume group quota, using the size specified by
+This command resizes the subvolume group quota, using the size specified by
 ``new_size``.  The ``--no_shrink`` flag prevents the subvolume group from
 shrinking below the current used size.
 
 The subvolume group may be resized to an infinite size by passing ``inf`` or
 ``infinite`` as the ``new_size``.
 
-Remove a snapshot of a subvolume group by running a command of the following form:
+Remove a snapshot of a subvolume group by running a command of the following
+form:
 
     $ ceph fs subvolumegroup snapshot rm <vol_name> <group_name> <snap_name> [--force]
 
-Supplying the ``--force`` flag allows the command to succeed when it would otherwise
-fail due to the nonexistence of the snapshot.
+Supplying the ``--force`` flag allows the command to succeed when it would
+otherwise fail due to the nonexistence of the snapshot.
 
 List snapshots of a subvolume group by running a command of the following form:
 
