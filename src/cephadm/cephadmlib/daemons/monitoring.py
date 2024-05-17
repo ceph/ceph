@@ -260,6 +260,7 @@ class Monitoring(ContainerDaemonForm):
                 retention_size = config.get(
                     'retention_size', '0'
                 )  # default to disabled
+                use_url_prefix = config.get('use_url_prefix', False)
                 r += [f'--storage.tsdb.retention.time={retention_time}']
                 r += [f'--storage.tsdb.retention.size={retention_size}']
                 scheme = 'http'
@@ -271,10 +272,17 @@ class Monitoring(ContainerDaemonForm):
                     # use the first ipv4 (if any) otherwise use the first ipv6
                     addr = next(iter(ipv4_addrs or ipv6_addrs), None)
                     host = wrap_ipv6(addr) if addr else host
-                r += [f'--web.external-url={scheme}://{host}:{port}']
+                if use_url_prefix:
+                    r += [
+                        f'--web.external-url={scheme}://{host}:{port}/prometheus'
+                    ]
+                    r += ['--web.route-prefix=/prometheus/']
+                else:
+                    r += [f'--web.external-url={scheme}://{host}:{port}']
             r += [f'--web.listen-address={ip}:{port}']
         if daemon_type == 'alertmanager':
             config = fetch_configs(ctx)
+            use_url_prefix = config.get('use_url_prefix', False)
             peers = config.get('peers', list())  # type: ignore
             for peer in peers:
                 r += ['--cluster.peer={}'.format(peer)]
@@ -284,6 +292,8 @@ class Monitoring(ContainerDaemonForm):
                 pass
             # some alertmanager, by default, look elsewhere for a config
             r += ['--config.file=/etc/alertmanager/alertmanager.yml']
+            if use_url_prefix:
+                r += ['--web.route-prefix=/alertmanager']
         if daemon_type == 'promtail':
             r += ['--config.expand-env']
         if daemon_type == 'prometheus':
