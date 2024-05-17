@@ -84,7 +84,7 @@ SegmentedOolWriter::do_write(
       return do_write(t, extents);
     });
   }
-  record_t record(TRANSACTION_TYPE_NULL);
+  record_t record(t.get_src());
   std::list<LogicalCachedExtentRef> pending_extents;
   auto commit_time = seastar::lowres_system_clock::now();
 
