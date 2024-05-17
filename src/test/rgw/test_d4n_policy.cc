@@ -58,7 +58,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
         .blockID = 0,
 	.version = "",
 	.size = bl.length(),
-	.hostsList = { env->redisHost }
+	.globalWeight = 0
       };
 
       conn = std::make_shared<connection>(net::make_strand(io));
@@ -117,7 +117,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	  if (dir->get(env->dpp, block, y) < 0) {
 	    return -1;
 	  } else {
-	    if (!block->hostsList.empty()) { 
+	    if (!block->cacheObj.hostsList.empty()) { 
 	      block->globalWeight += age;
 	      auto globalWeight = std::to_string(block->globalWeight);
 	      if (dir->update_field(env->dpp, block, "globalWeight", globalWeight, y) < 0) {
@@ -130,7 +130,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	    }
 	  }
 	} else if (!exists) { /* No remote copy */
-	  block->hostsList.insert(env->dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
+	  block->cacheObj.hostsList.insert(env->dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
 	  if (dir->set(env->dpp, block, y) < 0)
 	    return -1;
 
@@ -212,7 +212,6 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
       .version = "",
       .size = bl.length(),
       .globalWeight = 5,
-      .hostsList = { env->redisHost }
     };
 
     bufferlist attrVal;
@@ -227,15 +226,15 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     policyDriver->get_cache_policy()->init(env->cct, env->dpp, io, driver);
 
     ASSERT_EQ(0, dir->set(env->dpp, &victim, optional_yield{yield}));
-    std::string victimKey = victim.cacheObj.bucketName + "_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(victim.size);
+    std::string victimKey = victim.cacheObj.bucketName + "_version_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(victim.size);
     ASSERT_EQ(0, cacheDriver->put(env->dpp, victimKey, bl, bl.length(), attrs, optional_yield{yield}));
     policyDriver->get_cache_policy()->update(env->dpp, victimKey, 0, bl.length(), "", false, optional_yield{yield});
 
     /* Remote block */
     block->size = cacheDriver->get_free_space(env->dpp) + 1; /* To trigger eviction */
-    block->hostsList.clear();  
+    block->cacheObj.hostsList.clear();  
     block->cacheObj.hostsList.clear();
-    block->hostsList.insert("127.0.0.1:6000");
+    block->cacheObj.hostsList.insert("127.0.0.1:6000");
     block->cacheObj.hostsList.insert("127.0.0.1:6000");
 
     ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));

@@ -236,6 +236,8 @@ CacheBlock* LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, optiona
 
   victim->cacheObj.bucketName = key.substr(0, key.find('_')); 
   key.erase(0, key.find('_') + 1);
+  victim->version = key.substr(0, key.find('_'));
+  key.erase(0, key.find('_') + 1);
   victim->cacheObj.objName = key.substr(0, key.find('_'));
   victim->blockID = entries_heap.top()->offset;
   victim->size = entries_heap.top()->len;
@@ -257,6 +259,9 @@ int LFUDAPolicy::exist_key(std::string key) {
 }
 
 int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) {
+  if (entries_heap.empty())
+    return 0;
+
   uint64_t freeSpace = cacheDriver->get_free_space(dpp);
 
   while (freeSpace < size) { // TODO: Think about parallel reads and writes; can this turn into an infinite loop? 
@@ -265,7 +270,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     if (victim == nullptr) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Could not retrieve victim block." << dendl;
       delete victim;
-      return -ENOENT;
+      return 0; // not necessarily an error? -Sam
     }
 
     const std::lock_guard l(lfuda_lock);
@@ -278,15 +283,15 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     // check dirty flag of entry to be evicted, if the flag is dirty, all entries on the local node are dirty
     if (it->second->dirty) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Top entry in min heap is dirty, no entry is available for eviction!" << dendl;
-      return -ENOENT;
+      return 0;
     }
     int avgWeight = weightSum / entries_map.size();
 
-    if (victim->hostsList.size() == 1 && *(victim->hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address) { /* Last copy */
+    if (victim->cacheObj.hostsList.size() == 1 && *(victim->cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address) { /* Last copy */
       if (victim->globalWeight) {
 	it->second->localWeight += victim->globalWeight;
         (*it->second->handle)->localWeight = it->second->localWeight;
-	entries_heap.increase(it->second->handle);
+	entries_heap.decrease(it->second->handle); // larger value means node must be decreased to maintain min heap 
 
 	if (int ret = cacheDriver->set_attr(dpp, key, "user.rgw.localWeight", std::to_string(it->second->localWeight), y) < 0) { 
 	  delete victim;
@@ -626,7 +631,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
         }
       }
 
-      op_ret = blockDir->update_field(dpp, &block, "dirtyBlock", "false", null_yield);
+      op_ret = blockDir->update_field(dpp, &block, "dirty", "false", null_yield);
       if (op_ret < 0) {
 	  ldpp_dout(dpp, 0) << __func__ << "updating dirty flag in block directory for head failed, ret=" << op_ret << dendl;
 	  return;
@@ -642,7 +647,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	return;
       }
 
-      op_ret = blockDir->update_field(dpp, &block, "dirtyObj", "false", null_yield);
+      op_ret = blockDir->update_field(dpp, &block, "dirty", "false", null_yield);
       if (op_ret < 0) {
 	ldpp_dout(dpp, 0) << __func__ << "updating dirty flag in block directory failed, ret=" << op_ret << dendl;
 	return;
