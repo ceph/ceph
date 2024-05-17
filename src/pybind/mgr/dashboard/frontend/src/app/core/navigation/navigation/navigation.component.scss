@@ -160,15 +160,15 @@
     SIDEBAR STYLE
 --------------------------------------------------- */
 
-$sidebar-width: 200px;
+$sidebar-width: 192px;
 
-.cd-navbar-primary .active > a,
-.cd-navbar-primary > .active > a:focus,
-.cd-navbar-primary > .active > a:hover {
-  background-color: vv.$primary !important;
-  border: 0 !important;
-  color: vv.$white !important;
-}
+// .cd-navbar-primary .active > a,
+// .cd-navbar-primary > .active > a:focus,
+// .cd-navbar-primary > .active > a:hover {
+//   background-color: vv.$primary !important;
+//   border: 0 !important;
+//   color: vv.$white !important;
+// }
 
 .wrapper {
   display: flex;
@@ -176,107 +176,107 @@ $sidebar-width: 200px;
   width: 100%;
 
   #sidebar {
-    background: vv.$secondary;
+    // background: vv.$secondary;
+    // color: vv.$white;
     bottom: 0;
-    color: vv.$white;
     height: auto;
     left: 0;
     overflow-y: auto;
     position: relative;
+    z-index: 999;
     transition: all 0.3s;
     width: $sidebar-width;
-    z-index: 999;
 
     &.active {
       margin-left: -$sidebar-width;
     }
 
-    ul {
-      &.component {
-        margin: 0;
-        padding: 20px 0;
-      }
+    // ul {
+    //   &.component {
+    //     margin: 0;
+    //     padding: 20px 0;
+    //   }
 
-      p {
-        color: vv.$white;
-        padding: 10px;
-      }
+    //   p {
+    //     color: vv.$white;
+    //     padding: 10px;
+    //   }
 
-      li a {
-        color: vv.$white;
-        display: block;
-        font-size: 1.3em;
-        padding: 10px 23px 10px 10px;
-        text-decoration: none;
+    //   li a {
+    //     color: vv.$white;
+    //     display: block;
+    //     font-size: 1.3em;
+    //     padding: 10px 23px 10px 10px;
+    //     text-decoration: none;
 
-        &:hover {
-          background: vv.$primary;
-          color: vv.$white;
-        }
+    //     &:hover {
+    //       background: vv.$primary;
+    //       color: vv.$white;
+    //     }
 
-        > .badge {
-          margin-left: 5px;
-        }
+    //     > .badge {
+    //       margin-left: 5px;
+    //     }
 
-        i.fa.fa-circle {
-          animation: blink 2s ease-in infinite;
-          font-size: 0.875em;
-          margin-top: 4px;
-          position: absolute;
-          right: 35px;
-        }
+    //     i.fa.fa-circle {
+    //       animation: blink 2s ease-in infinite;
+    //       font-size: 0.875em;
+    //       margin-top: 4px;
+    //       position: absolute;
+    //       right: 35px;
+    //     }
 
-        @keyframes blink {
-          from,
-          to {
-            opacity: 1;
-          }
+    //     @keyframes blink {
+    //       from,
+    //       to {
+    //         opacity: 1;
+    //       }
 
-          50% {
-            opacity: 0;
-          }
-        }
-      }
+    //       50% {
+    //         opacity: 0;
+    //       }
+    //     }
+    //   }
 
-      li.active > a,
-      li > a a[aria-expanded='true'] {
-        color: vv.$white;
-      }
-    }
+    //   li.active > a,
+    //   li > a a[aria-expanded='true'] {
+    //     color: vv.$white;
+    //   }
+    // }
   }
 
-  a.dropdown-toggle {
-    position: relative;
+  // a.dropdown-toggle {
+  //   position: relative;
 
-    &::after {
-      border: 0;
-      content: '\f054';
-      font-family: 'ForkAwesome';
-      font-size: 1rem;
-      margin-top: 2px;
-      position: absolute;
-      right: 20px;
-      transition: transform 0.3s ease-in-out;
-    }
+  //   &::after {
+  //     border: 0;
+  //     content: '\f054';
+  //     font-family: 'ForkAwesome';
+  //     font-size: 1rem;
+  //     margin-top: 2px;
+  //     position: absolute;
+  //     right: 20px;
+  //     transition: transform 0.3s ease-in-out;
+  //   }
 
-    &[aria-expanded='true']::after {
-      transform: rotate(90deg);
-    }
-  }
+  //   &[aria-expanded='true']::after {
+  //     transform: rotate(90deg);
+  //   }
+  // }
 
-  ul ul a {
-    background: lighten(vv.$secondary, 10);
-    font-size: 1.1em !important;
-    padding-left: 35px !important;
-  }
+  // ul ul a {
+  //   background: lighten(vv.$secondary, 10);
+  //   font-size: 1.1em !important;
+  //   padding-left: 35px !important;
+  // }
 
-  .cd-navbar-primary a:focus {
-    outline: none;
-  }
+  // .cd-navbar-primary a:focus {
+  //   outline: none;
+  // }
 
-  ngx-simplebar {
-    height: 100%;
-  }
+  // ngx-simplebar {
+  //   height: 100%;
+  // }
 }
 
 /* ---------------------------------------------------
