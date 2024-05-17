@@ -19,6 +19,8 @@ DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
 DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
 DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
 DEFAULT_SMB_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
+# TODO(redo): check what's the latest version
+DEFAULT_NGINX_IMAGE = 'docker.io/nginx:1.26.0'
 DEFAULT_REGISTRY = 'docker.io'  # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 

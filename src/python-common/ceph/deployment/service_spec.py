@@ -765,6 +765,7 @@ class ServiceSpec(object):
         'elasticsearch',
         'grafana',
         'ingress',
+        'admin-gateway',
         'iscsi',
         'jaeger-agent',
         'jaeger-collector',
@@ -793,6 +794,7 @@ class ServiceSpec(object):
     REQUIRES_SERVICE_ID = [
         'container',
         'ingress',
+        'admin-gateway',
         'iscsi',
         'mds',
         'nfs',
@@ -819,6 +821,7 @@ class ServiceSpec(object):
             'nvmeof': NvmeofServiceSpec,
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
+            'admin-gateway': AdminGatewaySpec,
             'container': CustomContainerSpec,
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
@@ -1753,6 +1756,55 @@ class IngressSpec(ServiceSpec):
 
 
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
+
+
+class AdminGatewaySpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'admin-gateway',
+                 service_id: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 frontend_port: Optional[int] = 80,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
+                 ssl_dh_param: Optional[str] = None,
+                 ssl_ciphers: Optional[List[str]] = None,
+                 ssl_options: Optional[List[str]] = None,
+                 unmanaged: bool = False,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
+                 ):
+        assert service_type == 'admin-gateway'
+
+        super(AdminGatewaySpec, self).__init__(
+            'admin-gateway', service_id=service_id,
+            placement=placement, config=config,
+            networks=networks,
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args,
+            custom_configs=custom_configs
+        )
+        self.frontend_port = frontend_port
+        self.ssl_cert = ssl_cert
+        self.ssl_key = ssl_key
+        self.ssl_dh_param = ssl_dh_param
+        self.ssl_ciphers = ssl_ciphers
+        self.ssl_options = ssl_options
+        self.unmanaged = unmanaged
+
+    def get_port_start(self) -> List[int]:
+        ports = []
+        if self.frontend_port is not None:
+            ports.append(cast(int, self.frontend_port))
+        return ports
+
+    def validate(self) -> None:
+        super(AdminGatewaySpec, self).validate()
+
+
+yaml.add_representer(AdminGatewaySpec, ServiceSpec.yaml_representer)
 
 
 class InitContainerSpec(object):

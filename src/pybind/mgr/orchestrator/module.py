@@ -1746,6 +1746,27 @@ Usage:
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
+    @_cli_write_command('orch apply admin-gateway')
+    def _apply_admin_gateway(self,
+                            placement: Optional[str] = None,
+                            unmanaged: bool = False,
+                            dry_run: bool = False,
+                            format: Format = Format.plain,
+                            no_overwrite: bool = False,
+                            inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Add a cluster gateway service (cephadm only)"""
+
+        spec = ClusterGatewaySpec(
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
+            preview_only=dry_run
+        )
+
+        spec.validate()  # force any validation exceptions to be caught correctly
+
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
+
+
     @_cli_write_command('orch apply nvmeof')
     def _apply_nvmeof(self,
                       pool: str,

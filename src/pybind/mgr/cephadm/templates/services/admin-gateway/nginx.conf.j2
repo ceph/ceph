@@ -1,0 +1,38 @@
+worker_rlimit_nofile 8192;
+
+events {
+    worker_connections 4096;  ## Default: 1024
+}
+
+http {
+
+    server {
+        listen 80;
+
+{% if mgr_addr %}
+        location / {
+            proxy_pass {{ mgr_addr }};
+        }
+{% endif %}
+
+{% if grafana_url %}
+        location /grafana {
+            rewrite ^/grafana/(.*) /$1 break;
+            proxy_pass {{ grafana_url }};
+        }
+{% endif %}
+
+{% if prometheus_url %}
+        location /prometheus {
+            proxy_pass {{ prometheus_url }};
+        }
+{% endif %}
+
+{% if alertmanager_url %}
+        location /alertmanager {
+            proxy_pass {{ alertmanager_url }};
+        }
+{% endif %}
+
+    }
+}
