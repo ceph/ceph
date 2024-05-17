@@ -1041,11 +1041,25 @@ int RGWReshard::add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry,
   get_bucket_logshard_oid(entry.tenant, entry.bucket_name, &logshard_oid);
 
   librados::ObjectWriteOperation op;
-  cls_rgw_reshard_add(op, entry);
+
+  // if we're reducing, we don't want to overwrite an existing entry
+  // in order to not interfere with the reshard reduction wait period
+  const bool create_only = entry.new_num_shards < entry.old_num_shards;
+
+  cls_rgw_reshard_add(op, entry, create_only);
 
   int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx, logshard_oid, &op, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to add entry to reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
+  if (create_only && ret == -EEXIST) {
+    ldpp_dout(dpp, 20) << "INFO: did not write reshard queue entry for oid=" <<
+      logshard_oid << " tenant=" << entry.tenant << " bucket=" <<
+      entry.bucket_name <<
+      ", because it's a reshard reduction and an entry for that bucket already exists" <<
+      dendl;
+    // this is not an error so just fall through
+  } else if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to add entry to reshard log, oid=" <<
+      logshard_oid << " tenant=" << entry.tenant << " bucket=" <<
+      entry.bucket_name << dendl;
     return ret;
   }
   return 0;
