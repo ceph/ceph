@@ -8748,8 +8748,12 @@ TEST_F(TestLibRBD, ZeroLengthWrite)
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
 
-  char read_data[1];
+  const char data[] = "blah";
+  ASSERT_EQ(0, rbd_write(image, 0, 0, data));
+  ASSERT_EQ(0, rbd_write(image, 0, 0, (char*)0x123));
   ASSERT_EQ(0, rbd_write(image, 0, 0, NULL));
+
+  char read_data[1];
   ASSERT_EQ(1, rbd_read(image, 0, 1, read_data));
   ASSERT_EQ('\0', read_data[0]);
 
@@ -8801,6 +8805,8 @@ TEST_F(TestLibRBD, ZeroLengthRead)
 
   char read_data[1];
   ASSERT_EQ(0, rbd_read(image, 0, 0, read_data));
+  ASSERT_EQ(0, rbd_read(image, 0, 0, (char*)0x123));
+  ASSERT_EQ(0, rbd_read(image, 0, 0, NULL));
 
   ASSERT_EQ(0, rbd_close(image));
 
