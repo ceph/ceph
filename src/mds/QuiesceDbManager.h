@@ -100,7 +100,7 @@ class QuiesceDbManager {
         return -ESTALE;
       }
 
-      pending_acks.push(std::move(ack));
+      pending_acks.emplace_back(std::move(ack));
       submit_condition.notify_all();
       return 0;
     }
@@ -138,7 +138,7 @@ class QuiesceDbManager {
 
       if (cluster_membership->leader == cluster_membership->me) {
         // local delivery
-        pending_acks.push({ cluster_membership->me, std::move(diff_map) });
+        pending_acks.emplace_back(cluster_membership->me, std::move(diff_map));
         submit_condition.notify_all();
       } else {
         // send to the leader outside of the lock
@@ -201,7 +201,7 @@ class QuiesceDbManager {
     std::optional<AgentCallback> agent_callback;
     std::optional<QuiesceClusterMembership> cluster_membership;
     std::queue<QuiesceDbPeerListing> pending_db_updates;
-    std::queue<QuiesceDbPeerAck> pending_acks;
+    std::deque<QuiesceDbPeerAck> pending_acks;
     std::deque<RequestContext*> pending_requests;
     bool db_thread_should_exit = false;
     bool db_thread_should_clear_db = true;

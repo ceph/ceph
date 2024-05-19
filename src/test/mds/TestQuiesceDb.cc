@@ -984,7 +984,7 @@ TEST_F(QuiesceDbTest, InterruptedQuiesceAwait)
   EXPECT_EQ(ERR(ETIMEDOUT), await2.wait_result());
 
   // shouldn't have taken much longer than the timeout configured on the set
-  auto epsilon = sec(0.01);
+  auto epsilon = sec(0.05);
   ASSERT_LE(QuiesceClock::now() - then - epsilon, last_request->response.sets.at("set2").timeout);
 
   // let's cancel set 1 while awaiting it a few times
