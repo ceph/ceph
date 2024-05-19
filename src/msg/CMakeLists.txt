@@ -48,6 +48,9 @@ add_library(common-msg-objs OBJECT ${msg_srcs})
 target_compile_definitions(common-msg-objs PRIVATE
   $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
 target_include_directories(common-msg-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
+target_link_libraries(common-msg-objs
+  PUBLIC
+    legacy-option-headers)
 
 if(WITH_DPDK)
   set(async_dpdk_srcs

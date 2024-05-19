@@ -12,6 +12,7 @@ add_library(ceph_immutable_object_cache_lib STATIC ${ceph_immutable_object_cache
 add_executable(ceph-immutable-object-cache
   main.cc)
 target_link_libraries(ceph-immutable-object-cache
+  legacy-option-headers
   ceph_immutable_object_cache_lib
   librados
   StdFilesystem::filesystem

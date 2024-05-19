@@ -38,6 +38,7 @@ endif()
 add_library(mon STATIC
   ${lib_mon_srcs})
 target_link_libraries(mon
+  legacy-option-headers
   kv
   heap_profiler
   ${FMT_LIB})
