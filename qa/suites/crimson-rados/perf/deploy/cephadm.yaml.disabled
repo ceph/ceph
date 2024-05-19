@@ -1,0 +1,16 @@
+# no need to verify os + flavor + sha1
+verify_ceph_hash: false
+tasks:
+- cephadm:
+    conf:
+      mgr:
+        debug ms: 1
+        debug mgr: 20
+        debug osd: 10
+- cephadm.shell:
+    mon.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
