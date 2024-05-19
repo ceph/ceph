@@ -841,6 +841,9 @@ pinned to one of the available ranks on the file system.
 Subvolume quiesce
 -----------------
 
+.. note:: The information in this section applies only to Squid and later
+   releases of Ceph.
+
 CephFS snapshots do not provide strong-consistency guarantees in cases involving writes
 performed by multiple clients, which makes consistent backups and disaster recovery a serious
 challenge for distributed applications. Even in a case where an application uses
