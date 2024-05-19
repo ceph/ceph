@@ -221,9 +221,9 @@ protected:
       return -ENOENT;
     }
 
-    if (token_st.st_mode & (S_IRWXG | S_IRWXO)) {
+    if (token_st.st_mode & (S_IWGRP | S_IXGRP | S_IRWXO)) {
       ldpp_dout(dpp, 0) << "ERROR: Vault token file '" << token_file << "' permissions are "
-                    << "too open, it must not be accessible by other users" << dendl;
+                    << "too open, the maximum allowed is 0740" << dendl;
       return -EACCES;
     }
 
@@ -257,7 +257,7 @@ protected:
     int res;
     string vault_token = "";
     if (RGW_SSE_KMS_VAULT_AUTH_TOKEN == kctx.auth()){
-      ldpp_dout(dpp, 0) << "Loading Vault Token from filesystem" << dendl;
+      ldpp_dout(dpp, 20) << "Loading Vault Token from filesystem" << dendl;
       res = load_token_from_file(dpp, &vault_token);
       if (res < 0){
         return res;
