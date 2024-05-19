@@ -466,8 +466,8 @@ void PrimaryLogPG::on_local_recover(
       if (unreadable_object_entry != waiting_for_unreadable_object.end()) {
 	dout(20) << " kicking unreadable waiters on " << hoid << dendl;
 	requeue_ops(unreadable_object_entry->second);
-	waiting_for_unreadable_object.erase(unreadable_object_entry);
 	finish_unreadable_object(unreadable_object_entry->first);
+	waiting_for_unreadable_object.erase(unreadable_object_entry);
       }
     }
   } else {
