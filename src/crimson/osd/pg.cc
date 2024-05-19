@@ -811,7 +811,6 @@ PG::submit_transaction(
   }
 
   epoch_t map_epoch = get_osdmap_epoch();
-  ceph_assert(!has_reset_since(osd_op_p.at_version.epoch));
 
   peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, osd_op_p.at_version);
   peering_state.update_trim_to();
