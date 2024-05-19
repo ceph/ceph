@@ -1456,6 +1456,49 @@ public:
       return 0;
     }
 
+    /* notifications */
+    auto& bucket = oc.bucket;
+    auto& obj = oc.obj;
+
+    string etag;
+    r = obj->load_obj_state(oc.dpp, null_yield, true);
+    if (r < 0) {
+      ldpp_dout(oc.dpp, 0) <<
+	fmt::format("ERROR: get_obj_state() failed on transition of object k={} error r={}",
+		    oc.o.key.to_string(), r) << dendl;
+      return r;
+    }
+
+    auto attrset = obj->get_attrs();
+    auto iter = attrset.find(RGW_ATTR_ETAG);
+    if (iter != attrset.end()) {
+      etag = rgw_bl_str(iter->second);
+    }
+
+    rgw::notify::EventTypeList event_types;
+    event_types.insert(event_types.end(), {rgw::notify::LifecycleTransition});
+    if ((!bucket->versioned()) ||
+	(bucket->versioned() && oc.o.is_current() && !oc.o.is_delete_marker())) {
+      event_types.push_back(rgw::notify::ObjectTransitionCurrent);
+    } else {
+      event_types.push_back(rgw::notify::ObjectTransitionNoncurrent);
+    }
+
+    std::unique_ptr<rgw::sal::Notification> notify =
+        oc.driver->get_notification(
+            oc.dpp, obj.get(), nullptr, event_types, bucket, lc_id,
+            const_cast<std::string&>(oc.bucket->get_tenant()), lc_req_id,
+            null_yield);
+    auto version_id = oc.o.key.instance;
+
+    r = notify->publish_reserve(oc.dpp, nullptr);
+    if (r < 0) {
+      ldpp_dout(oc.dpp, 1)
+	<< "WARNING: notify reservation failed for transition of object k="
+	<< oc.o.key
+	<< dendl;
+    }
+
     std::string tier_type = ""; 
     rgw::sal::ZoneGroup& zonegroup = oc.driver->get_zone()->get_zonegroup();
 
@@ -1503,6 +1546,16 @@ public:
         return r;
       }
     }
+
+    // send request to notification manager
+    int publish_ret =
+      notify->publish_commit(oc.dpp, obj->get_size(), ceph::real_clock::now(),
+			     etag, version_id);
+    if (publish_ret < 0) {
+      ldpp_dout(oc.dpp, 5) <<
+	"WARNING: notify publish_commit failed, with error: " << publish_ret << dendl;
+    }
+
     ldpp_dout(oc.dpp, 2) << "TRANSITIONED:" << oc.bucket
 			 << ":" << o.key << " -> "
 			 << transition.storage_class
