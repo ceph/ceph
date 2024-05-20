@@ -54,7 +54,7 @@ seastar::future<bufferlist> OSDMeta::load_map(epoch_t e)
 read_errorator::future<ceph::bufferlist> OSDMeta::load_inc_map(epoch_t e)
 {
   return store.read(coll,
-                    osdmap_oid(e), 0, 0,
+                    inc_osdmap_oid(e), 0, 0,
                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
 }
 
