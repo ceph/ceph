@@ -12090,7 +12090,7 @@ void MDCache::dispatch_fragment_dir(const MDRequestRef& mdr, bool abort_if_freez
       // prevent a racing gather on any other scatterlocks too
       lov.lock_scatter_gather(&diri->nestlock);
       lov.lock_scatter_gather(&diri->filelock);
-      if (mds->locker->acquire_locks(mdr, lov, NULL, {}, true)) {
+      if (mds->locker->acquire_locks(mdr, lov, NULL, true)) {
         mdr->locking_state |= MutationImpl::ALL_LOCKED;
       } else {
         if (!mdr->aborted) {
@@ -13697,7 +13697,7 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
       // as a result of the auth taking the above locks.
     }
 
-    if (!mds->locker->acquire_locks(mdr, lov, nullptr, {in}, false, true)) {
+    if (!mds->locker->acquire_locks(mdr, lov, nullptr, false, true)) {
       return;
     }
     mdr->locking_state |= MutationImpl::ALL_LOCKED;
@@ -14030,7 +14030,7 @@ void MDCache::dispatch_lock_path(const MDRequestRef& mdr)
     }
   }
 
-  if (!mds->locker->acquire_locks(mdr, lov, lps.config.ap_freeze ? in : nullptr, {in}, lps.config.ap_dont_block, true)) {
+  if (!mds->locker->acquire_locks(mdr, lov, lps.config.ap_freeze ? in : nullptr, lps.config.ap_dont_block, true)) {
     if (lps.config.ap_dont_block && mdr->aborted) {
       mds->server->respond_to_request(mdr, -CEPHFS_EWOULDBLOCK);
     }

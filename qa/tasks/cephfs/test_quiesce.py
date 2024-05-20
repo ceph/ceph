@@ -687,7 +687,6 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         op = self.fs.rank_tell(["quiesce", "path", self.subvolume, '--wait'], rank=0)['op']
         self.assertEqual(op['result'], -1) # EPERM
 
-    @unittest.skip("https://tracker.ceph.com/issues/66152")
     def test_quiesce_drops_remote_authpins_on_failure(self):
         """
         That remote authpins are dropped when the request fails to acquire the quiesce lock
