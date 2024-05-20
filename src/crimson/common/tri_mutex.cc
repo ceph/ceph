@@ -3,6 +3,8 @@
 
 #include "tri_mutex.h"
 
+#include <seastar/util/later.hh>
+
 seastar::future<> read_lock::lock()
 {
   return static_cast<tri_mutex*>(this)->lock_for_read();
@@ -15,7 +17,7 @@ void read_lock::unlock()
 
 seastar::future<> write_lock::lock()
 {
-  return static_cast<tri_mutex*>(this)->lock_for_write(false);
+  return static_cast<tri_mutex*>(this)->lock_for_write();
 }
 
 void write_lock::unlock()
@@ -33,10 +35,9 @@ void excl_lock::unlock()
   static_cast<tri_mutex*>(this)->unlock_for_excl();
 }
 
-seastar::future<> excl_lock_from_read::lock()
+void excl_lock_from_read::lock()
 {
   static_cast<tri_mutex*>(this)->promote_from_read();
-  return seastar::make_ready_future<>();
 }
 
 void excl_lock_from_read::unlock()
@@ -44,24 +45,14 @@ void excl_lock_from_read::unlock()
   static_cast<tri_mutex*>(this)->demote_to_read();
 }
 
-seastar::future<> excl_lock_from_write::lock()
+void excl_lock_from_write::lock()
 {
   static_cast<tri_mutex*>(this)->promote_from_write();
-  return seastar::make_ready_future<>();
 }
 
 void excl_lock_from_write::unlock()
 {
   static_cast<tri_mutex*>(this)->demote_to_write();
-}
-
-seastar::future<> excl_lock_from_excl::lock()
-{
-  return seastar::make_ready_future<>();
-}
-
-void excl_lock_from_excl::unlock()
-{
 }
 
 tri_mutex::~tri_mutex()
@@ -72,7 +63,7 @@ tri_mutex::~tri_mutex()
 seastar::future<> tri_mutex::lock_for_read()
 {
   if (try_lock_for_read()) {
-    return seastar::make_ready_future<>();
+    return seastar::now();
   }
   waiters.emplace_back(seastar::promise<>(), type_t::read);
   return waiters.back().pr.get_future();
@@ -110,19 +101,19 @@ void tri_mutex::demote_to_read()
   ++readers;
 }
 
-seastar::future<> tri_mutex::lock_for_write(bool greedy)
+seastar::future<> tri_mutex::lock_for_write()
 {
-  if (try_lock_for_write(greedy)) {
-    return seastar::make_ready_future<>();
+  if (try_lock_for_write()) {
+    return seastar::now();
   }
   waiters.emplace_back(seastar::promise<>(), type_t::write);
   return waiters.back().pr.get_future();
 }
 
-bool tri_mutex::try_lock_for_write(bool greedy) noexcept
+bool tri_mutex::try_lock_for_write() noexcept
 {
   if (!readers && !exclusively_used) {
-    if (greedy || waiters.empty()) {
+    if (waiters.empty()) {
       ++writers;
       return true;
     }
@@ -156,7 +147,7 @@ void tri_mutex::demote_to_write()
 seastar::future<> tri_mutex::lock_for_excl()
 {
   if (try_lock_for_excl()) {
-    return seastar::make_ready_future<>();
+    return seastar::now();
   }
   waiters.emplace_back(seastar::promise<>(), type_t::exclusive);
   return waiters.back().pr.get_future();
