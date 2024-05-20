@@ -621,6 +621,8 @@ add_subdirectory(osdc)
 add_subdirectory(perfglue)
 
 add_library(rados_snap_set_diff_obj OBJECT librados/snap_set_diff.cc)
+target_link_libraries(rados_snap_set_diff_obj
+  PRIVATE legacy-option-headers)
 
 option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
@@ -877,7 +879,9 @@ if(WITH_RBD)
   if(WITH_KRBD)
     add_library(krbd STATIC krbd.cc
       $<TARGET_OBJECTS:parse_secret_objs>)
-    target_link_libraries(krbd keyutils::keyutils)
+    target_link_libraries(krbd
+      keyutils::keyutils
+      legacy-option-headers)
   endif()
   add_subdirectory(librbd)
   if(WITH_FUSE)
