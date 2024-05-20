@@ -88,6 +88,10 @@ public:
 
     seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
 
+    seastar::future<> set_collection_opts(
+      CollectionRef c,
+      const pool_opts_t& opts) final;
+
     seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
       ceph::os::Transaction&& txn) final;
@@ -201,6 +205,8 @@ public:
   mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
 
   seastar::future<store_statfs_t> stat() const final;
+
+  seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const final;
 
   uuid_d get_fsid() const final;
 
