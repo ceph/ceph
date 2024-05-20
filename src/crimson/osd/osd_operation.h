@@ -256,7 +256,10 @@ class OperationThrottler : public BlockerT<OperationThrottler>,
     crimson::osd::scheduler::params_t params,
     F &&f) {
     return with_throttle(op, params, f).then([this, params, op, f](bool cont) {
-      return cont ? with_throttle_while(op, params, f) : seastar::now();
+      return cont
+	? seastar::yield().then([params, op, f, this] {
+	  return with_throttle_while(op, params, f); })
+	: seastar::now();
     });
   }
 
