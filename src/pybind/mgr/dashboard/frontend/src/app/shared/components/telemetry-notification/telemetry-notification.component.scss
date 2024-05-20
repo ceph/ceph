@@ -21,3 +21,10 @@ a {
   color: darken(vv.$primary, 10);
   font-weight: bold;
 }
+
+.telemetry-notification {
+  z-index: 99999;
+  position: absolute;
+  bottom: 25px;
+  right: 25px;
+}

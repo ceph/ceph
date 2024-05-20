@@ -1,12 +1,22 @@
-<cd-alert-panel *ngIf="displayNotification"
-                class="no-margin-bottom"
-                [showTitle]="false"
-                size="slim"
-                [type]="notificationSeverity"
-                [dismissible]="notificationSeverity !== 'danger'"
-                (dismissed)="onDismissed()">
-  <div i18n>The Ceph community needs your help to continue improving: please
-    <a routerLink="/telemetry"
-       class="btn activate-button alert-link activate-text">Activate</a> the
-  <a href="https://docs.ceph.com/en/latest/mgr/telemetry/">Telemetry</a> module.</div>
-</cd-alert-panel>
+<cds-actionable-notification
+class="telemetry-notification"
+  [notificationObj]="{
+            type: notificationSeverity,
+            template: customActionableContent,
+            actionsTemplate: customActionableTrigger,
+            showClose: notificationSeverity !== 'danger'
+        }"
+></cds-actionable-notification>
+
+<ng-template #customActionableContent let-data>
+  <p cdsActionableTitle i18n>Telemetry</p>
+  <p cdsActionableSubtitle i18n>The Ceph community needs your help to continue improving</p>
+  <p cdsToastCaption i18n>Please activate the
+    <a href="https://docs.ceph.com/en/latest/mgr/telemetry/">Telemetry</a> module.</p>
+</ng-template>
+
+<ng-template #customActionableTrigger>
+  <a routerLink="/telemetry">
+    <button cdsActionableButton cdsButton="ghost" size="sm" i18n>Activate</button>
+  </a>
+</ng-template>
