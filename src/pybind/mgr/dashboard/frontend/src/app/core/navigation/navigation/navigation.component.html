@@ -4,10 +4,11 @@
 <ng-template #header>
 <cds-header name="Ceph Dashboard">
   <cds-hamburger [active]="showMenuSidebar" (selected)="showMenuSidebar = !showMenuSidebar"></cds-hamburger>
-  <cds-header-navigation>
-    <cd-language-selector></cd-language-selector>
-  </cds-header-navigation>
+  
   <cds-header-global>
+    <cds-header-navigation>
+      <cd-language-selector class="d-flex"></cd-language-selector>
+    </cds-header-navigation>
     <cds-header-action>
       <cd-notifications (click)="toggleRightSidebar()"></cd-notifications>
     </cds-header-action>
