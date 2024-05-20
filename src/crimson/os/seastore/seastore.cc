@@ -1653,8 +1653,8 @@ SeaStore::Shard::_write(
 {
   LOG_PREFIX(SeaStore::_write);
   DEBUGT("onode={} {}~{}", *ctx.transaction, *onode, offset, len);
-  {
-    const auto &object_size = onode->get_layout().size;
+  const auto &object_size = onode->get_layout().size;
+  if (offset + len > object_size) {
     onode->update_onode_size(
       *ctx.transaction,
       std::max<uint64_t>(offset + len, object_size));
