@@ -3473,62 +3473,65 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     // doing multiple allocations - one per each dirty shard
     encoded_shards.reserve(shards.size());
 
-    auto p = shards.begin();
-    auto prev_p = p;
-    while (p != shards.end()) {
-      ceph_assert(p->shard_info->offset >= prev_p->shard_info->offset);
-      auto n = p;
-      ++n;
-      if (p->dirty) {
-	uint32_t endoff;
-	if (n == shards.end()) {
-	  endoff = OBJECT_MAX_SIZE;
-	} else {
-	  endoff = n->shard_info->offset;
-	}
-	encoded_shards.emplace_back(dirty_shard_t(&(*p)));
-        bufferlist& bl = encoded_shards.back().bl;
-	if (encode_some(p->shard_info->offset, endoff - p->shard_info->offset,
-			bl, &p->extents)) {
-	  if (force) {
-	    _dump_extent_map<-1>(cct, *this);
-	    derr << __func__ << "  encode_some needs reshard" << dendl;
-	    ceph_assert(!force);
-	  }
-	}
-        size_t len = bl.length();
+    auto shard = shards.begin();
+    auto previous_shard = shard;
+    while (shard != shards.end()) {
+      ceph_assert(shard->shard_info->offset >= previous_shard->shard_info->offset);
+      auto next_shard = shard + 1;
+      if (!shard->dirty) {
+        previous_shard = shard;
+        shard = next_shard;
+        continue;
+      }
 
-	dout(20) << __func__ << "  shard 0x" << std::hex
-		 << p->shard_info->offset << std::dec << " is " << len
-		 << " bytes (was " << p->shard_info->bytes << ") from "
-		 << p->extents << " extents" << dendl;
-
-        if (!force) {
-	  if (len > cct->_conf->bluestore_extent_map_shard_max_size) {
-	    // we are big; reshard ourselves
-	    request_reshard(p->shard_info->offset, endoff);
-	  }
-	  // avoid resharding the trailing shard, even if it is small
-	  else if (n != shards.end() &&
-		   len < g_conf()->bluestore_extent_map_shard_min_size) {
-            ceph_assert(endoff != OBJECT_MAX_SIZE);
-	    if (p == shards.begin()) {
-	      // we are the first shard, combine with next shard
-	      request_reshard(p->shard_info->offset, endoff + 1);
-	    } else {
-	      // combine either with the previous shard or the next,
-	      // whichever is smaller
-	      if (prev_p->shard_info->bytes > n->shard_info->bytes) {
-		request_reshard(p->shard_info->offset, endoff + 1);
-	      } else {
-		request_reshard(prev_p->shard_info->offset, endoff);
-	      }
-	    }
-	  }
+      uint32_t endoff;
+      if (next_shard == shards.end()) {
+        endoff = OBJECT_MAX_SIZE;
+      } else {
+        endoff = next_shard->shard_info->offset;
+      }
+      encoded_shards.emplace_back(dirty_shard_t(&(*shard)));
+      bufferlist& bl = encoded_shards.back().bl;
+      if (encode_some(shard->shard_info->offset, endoff - shard->shard_info->offset,
+      		bl, &shard->extents)) {
+        if (force) {
+          _dump_extent_map<-1>(cct, *this);
+          derr << __func__ << "  encode_some needs reshard" << dendl;
+          ceph_assert(!force);
         }
       }
-      prev_p = p;
-      p = n;
+      size_t len = bl.length();
+
+      dout(20) << __func__ << "  shard 0x" << std::hex
+      	 << shard->shard_info->offset << std::dec << " is " << len
+      	 << " bytes (was " << shard->shard_info->bytes << ") from "
+      	 << shard->extents << " extents" << dendl;
+
+      if (!force) {
+        if (len > cct->_conf->bluestore_extent_map_shard_max_size) {
+          // we are big; reshard ourselves
+          request_reshard(shard->shard_info->offset, endoff);
+        }
+        // avoid resharding the trailing shard, even if it is small
+        else if (next_shard != shards.end() &&
+      	   len < g_conf()->bluestore_extent_map_shard_min_size) {
+          ceph_assert(endoff != OBJECT_MAX_SIZE);
+          if (shard == shards.begin()) {
+            // we are the first shard, combine with next shard
+            request_reshard(shard->shard_info->offset, endoff + 1);
+          } else {
+            // combine either with the previous shard or the next,
+            // whichever is smaller
+            if (previous_shard->shard_info->bytes > next_shard->shard_info->bytes) {
+           	request_reshard(shard->shard_info->offset, endoff + 1);
+            } else {
+            	request_reshard(previous_shard->shard_info->offset, endoff);
+            }
+          }
+        }
+      }
+      previous_shard = shard;
+      shard = next_shard;
     }
     if (needs_reshard()) {
       return;
