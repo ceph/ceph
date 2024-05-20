@@ -107,6 +107,7 @@ public:
     virtual uint64_t get_features() const = 0;
     virtual bool has_flag(uint32_t flag) const = 0;
     virtual entity_name_t get_source() const = 0;
+    virtual snapid_t get_snapid() const = 0;
   };
 
   template <class ImplT>
@@ -143,6 +144,9 @@ public:
     }
     uint64_t get_features() const final {
       return pimpl->get_features();
+    }
+    snapid_t get_snapid() const final {
+      return pimpl->get_snapid();
     }
   };
 
