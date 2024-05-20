@@ -145,7 +145,7 @@ After dev freeze
 ================
 
 - [x] add release name to redmine (using https://tracker.ceph.com/custom_fields/16/edit)
-- [ ] add release name to .github/milestone.yml for github actions to automatically add milestone to backports (this commit must be backported to the release branch)
+- [x] add release name to .github/milestone.yml for github actions to automatically add milestone to backports (this commit must be backported to the release branch)
 
 First release candidate
 =======================
