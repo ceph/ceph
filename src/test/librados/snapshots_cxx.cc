@@ -238,8 +238,6 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, RollbackPP) {
 }
 
 TEST_F(LibRadosSnapshotsSelfManagedPP, SnapOverlapPP) {
-  // WIP https://tracker.ceph.com/issues/58263
-  SKIP_IF_CRIMSON();
   std::vector<uint64_t> my_snaps;
   IoCtx readioctx;
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), readioctx));
