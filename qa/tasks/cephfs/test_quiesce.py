@@ -804,65 +804,71 @@ class TestQuiesceMultiRank(QuiesceTestCase):
         That a quiesce_inode op with outstanding remote authpin requests can be killed.
         """
 
-        self.config_set('mds', 'mds_heartbeat_grace', '120')
-        self.fs.set_session_timeout(240) # avoid spurious session warnings
-        self._configure_subvolume()
-        self.mount_a.setfattr(".", "ceph.dir.pin.distributed", "1")
-        self._client_background_workload()
-        self._wait_distributed_subtrees(2*2, rank="all", path=self.mntpnt)
-        status = self.fs.status()
+        # create two dirs for pinning
+        self.mount_a.run_shell_payload("mkdir -p pin0 pin1")
+        # enable export by populating the directories
+        self.mount_a.run_shell_payload("touch pin0/export_dummy pin1/export_dummy")
+        # pin the files to different ranks
+        self.mount_a.setfattr("pin0", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("pin1", "ceph.dir.pin", "1")
 
-        p = self.mount_a.run_shell_payload("ls", stdout=StringIO())
-        dirs = p.stdout.getvalue().strip().split()
+        # prepare the patient at rank 0
+        self.mount_a.write_file("pin0/thefile", "I'm ready, doc")
 
-        # make rank 1 unresponsive to auth pin requests
-        p = self.run_ceph_cmd("tell", f"mds.{self.fs.id}:1", "lockup", "90000", wait=False)
+        # wait for the export to settle
+        self._wait_subtrees([("/pin0", 0), ("/pin1", 1)])
 
-        qops = []
-        for d in dirs:
-            path = os.path.join(self.mntpnt, d)
-            op = self.fs.rank_tell("quiesce", "path", path, rank=0)['op']
-            reqid = self._reqid_tostr(op['reqid'])
-            log.info(f"created {reqid}")
-            qops.append(reqid)
+        path = "/pin0/thefile"
 
-        def find_quiesce(blocked_on_remote_auth_pin):
-            # verify no quiesce ops
-            ops = self.fs.get_ops(locks=False, rank=0, path="/tmp/mds.0-ops", status=status)['ops']
+        # take the policy lock on the file to cause remote authpin from the replica
+        # when we get to quiescing the path
+        op = self.fs.rank_tell("lock", "path", path, "policy:x", "--await", rank=0)
+        policy_reqid = self._reqid_tostr(op['reqid'])
+
+        # We need to simulate a freezing inode to have quiesce block on the authpin.
+        # This can be done with authpin freeze feature, but it only works when sent from the replica.
+        # We'll rdlock the policy lock, but it doesn't really matter as the quiesce won't get that far
+        op = self.fs.rank_tell("lock", "path", path, "policy:r", "--ap-freeze", rank=1)
+        freeze_reqid = self._reqid_tostr(op['reqid'])
+
+        # we should quiesce the same path from the replica side to cause the remote authpin (due to file xlock)
+        op = self.fs.rank_tell("quiesce", "path", path, rank=1)['op']
+        quiesce_reqid = self._reqid_tostr(op['reqid'])
+
+        def has_quiesce(*, blocked_on_remote_auth_pin):
+            ops = self.fs.get_ops(locks=False, rank=1, path="/tmp/mds.1-ops")['ops']
+            log.debug(ops)
             for op in ops:
                 type_data = op['type_data']
                 flag_point = type_data['flag_point']
-                op_type = type_data['op_type']
-                if op_type == 'client_request' or op_type == 'peer_request':
-                    continue
                 if type_data['op_name'] == "quiesce_inode":
                     if blocked_on_remote_auth_pin:
-                        if flag_point == "requesting remote authpins":
-                            return True
-                    else:
-                        return True
+                        self.assertEqual("requesting remote authpins", flag_point)
+                    return True
             return False
 
-        with safe_while(sleep=1, tries=30, action='wait for quiesce op with outstanding remote authpin requests') as proceed:
-            while proceed():
-                if find_quiesce(True):
-                    break
+        # The quiesce should be pending
+        self.assertTrue(has_quiesce(blocked_on_remote_auth_pin=True))
 
-        # okay, now kill all quiesce ops
-        for reqid in qops:
-            self.fs.kill_op(reqid, rank=0)
+        # even after killing the quiesce op, it should still stay pending
+        self.fs.kill_op(quiesce_reqid, rank=1)
+        self.assertTrue(has_quiesce(blocked_on_remote_auth_pin=True))
 
-        # verify some quiesce_inode ops still exist because authpin acks have not been received
-        if not find_quiesce(True):
-            self.fail("did not find quiesce_inode op blocked on remote authpins! (did the lockup on rank 1 complete?)")
+        # first, kill the policy xlock to release the freezing request
+        self.fs.kill_op(policy_reqid, rank=0)
+        time.sleep(1)
 
-        # wait for sleep to complete
-        p.wait()
+        # this should have let the freezing request to progress
+        op = self.fs.rank_tell("op", "get", freeze_reqid, rank=1)
+        log.debug(op)
+        self.assertEqual(0, op['type_data']['result'])
 
-        with safe_while(sleep=1, tries=30, action='wait for quiesce kill') as proceed:
-            while proceed():
-                if not find_quiesce(False):
-                    break
+        # now unfreeze the inode
+        self.fs.kill_op(freeze_reqid, rank=1)
+        time.sleep(1)
+
+        # the quiesce op should be gone
+        self.assertFalse(has_quiesce(blocked_on_remote_auth_pin=False))
 
     def test_quiesce_block_file_replicated(self):
         """

@@ -230,7 +230,6 @@ struct MarkEventOnDestruct {
 bool Locker::acquire_locks(const MDRequestRef& mdr,
 			   MutationImpl::LockOpVec& lov,
 			   CInode* auth_pin_freeze,
-                           std::set<MDSCacheObject*> mustpin,
 			   bool auth_pin_nonblocking,
                            bool skip_quiesce)
 {
@@ -245,6 +244,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 
   client_t client = mdr->get_client();
 
+  std::set<MDSCacheObject*> mustpin;
   if (auth_pin_freeze)
     mustpin.insert(auth_pin_freeze);
 
@@ -294,7 +294,10 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 
       dout(20) << " must xlock " << *lock << " " << *object << dendl;
 
-      mustpin.insert(object);
+      // only take the authpin for the quiesce lock on the auth
+      if (lock->get_type() != CEPH_LOCK_IQUIESCE || object->is_auth()) {
+        mustpin.insert(object);
+      }
 
       // augment xlock with a versionlock?
       if (lock->get_type() == CEPH_LOCK_DN) {
