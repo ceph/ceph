@@ -350,17 +350,6 @@ public:
     });
   }
 
-  ref_ret incref_extent(
-    Transaction &t,
-    laddr_t addr,
-    int delta) final {
-    ceph_assert(delta > 0);
-    return update_refcount(t, addr, delta, false
-    ).si_then([](auto res) {
-      return std::move(res.ref_update_res);
-    });
-  }
-
   remap_ret remap_mappings(
     Transaction &t,
     LBAMappingRef orig_mapping,
@@ -451,7 +440,7 @@ public:
       }).si_then([&remaps, &t, &orig_mapping, this] {
 	if (remaps.size() > 1 && orig_mapping->is_indirect()) {
 	  auto intermediate_base = orig_mapping->get_intermediate_base();
-	  return incref_extent(t, intermediate_base, remaps.size() - 1
+	  return _incref_extent(t, intermediate_base, remaps.size() - 1
 	  ).si_then([](auto) {
 	    return seastar::now();
 	  });
@@ -564,6 +553,17 @@ private:
     laddr_t hint,
     std::vector<alloc_mapping_info_t> &alloc_infos,
     extent_ref_count_t refcount);
+
+  ref_ret _incref_extent(
+    Transaction &t,
+    laddr_t addr,
+    int delta) {
+    ceph_assert(delta > 0);
+    return update_refcount(t, addr, delta, false
+    ).si_then([](auto res) {
+      return std::move(res.ref_update_res);
+    });
+  }
 
   alloc_extent_iertr::future<BtreeLBAMappingRef> alloc_cloned_mapping(
     Transaction &t,
