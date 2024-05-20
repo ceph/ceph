@@ -188,7 +188,8 @@ $sidebar-width: 192px;
     width: $sidebar-width;
 
     &.active {
-      margin-left: -$sidebar-width;
+      // margin-left: -$sidebar-width;
+      margin-left: -155px;
     }
 
     // ul {

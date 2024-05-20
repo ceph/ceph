@@ -3,7 +3,7 @@
 <!-- ************************ -->
 <ng-template #header>
 <cds-header name="Ceph Dashboard">
-  <cds-hamburger (click)="showMenuSidebar = !showMenuSidebar"></cds-hamburger>
+  <cds-hamburger [active]="showMenuSidebar" (selected)="showMenuSidebar = !showMenuSidebar"></cds-hamburger>
   <cds-header-navigation>
     <cd-language-selector></cd-language-selector>
   </cds-header-navigation>
@@ -132,7 +132,7 @@
 <ng-template #cd_menu>
   <ng-container *ngIf="enabledFeature$ | async as enabledFeature">
   <div cdsTheme="theme">
-    <cds-sidenav class="mt-5">
+    <cds-sidenav [expanded]="showMenuSidebar" class="mt-5">
       <!-- Dashboard -->
       <cds-sidenav-item routerLinkActive="active" routerLink="/dashboard" [useRouter]="true">
         <svg cdsIcon="template" icon size="16"></svg>
