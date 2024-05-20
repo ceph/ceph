@@ -489,6 +489,11 @@ OpsExecuter::list_snaps_iertr::future<> OpsExecuter::do_list_snaps(
   const ObjectState& os,
   const SnapSet& ss)
 {
+  if (msg->get_snapid() != CEPH_SNAPDIR) {
+    logger().debug("LIST_SNAPS with incorrect context");
+    return crimson::ct_error::invarg::make();
+  }
+
   obj_list_snap_response_t resp;
   resp.clones.reserve(ss.clones.size() + 1);
   for (auto &clone: ss.clones) {
