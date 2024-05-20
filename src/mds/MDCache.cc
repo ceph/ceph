@@ -8257,14 +8257,18 @@ int MDCache::load_referent_inodes(CInode *in, MDSContextFactory& cf)
     return 0;
 
   for (const auto& ri : in->get_inode()->referent_inodes) {
-    dout(12) << "traverse: loading referent inode " << std::hex << ri << dendl;
-    CInode *cur_ref_in = get_inode(ri);
+    dout(12) << "traverse: loading referent inode " << std::hex << ri.first << dendl;
+    if (!ri.second) {
+      dout(10) << "traverse: referent inode is not commited yet, ignored " << std::hex << ri.first << dendl;
+      break;
+    }
+    CInode *cur_ref_in = get_inode(ri.first);
     if (!cur_ref_in) {
-      dout(7) << "traverse: referent inode is not loaded, open referent inode " << std::hex << ri << dendl;
-      open_remote_referent(ri, cf.build());
+      dout(7) << "traverse: referent inode is not loaded, open referent inode " << std::hex << ri.first << dendl;
+      open_remote_referent(ri.first, cf.build());
       return 1;
     }
-    dout(12) << "traverse: referent inode found in memory " << std::hex << ri << dendl;
+    dout(12) << "traverse: referent inode found in memory " << std::hex << ri.first << dendl;
   }
   return 0;
 }

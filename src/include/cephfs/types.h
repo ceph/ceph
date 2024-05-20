@@ -463,10 +463,10 @@ struct inode_t {
     old_pools.insert(l);
   }
 
-  const std::vector<uint64_t>& get_referent_inodes() { return referent_inodes; }
-  void add_referent_ino(inodeno_t ref_ino) { referent_inodes.push_back(ref_ino); }
+  const std::map<uint64_t, uint64_t>& get_referent_inodes() { return referent_inodes; }
+  void add_referent_ino(inodeno_t ref_ino, uint64_t v) { referent_inodes[ref_ino] = v; }
   void remove_referent_ino(inodeno_t ref_ino) {
-    referent_inodes.erase(remove(referent_inodes.begin(), referent_inodes.end(), ref_ino), referent_inodes.end());
+    referent_inodes.erase(ref_ino);
   }
 
   void encode(ceph::buffer::list &bl, uint64_t features) const;
@@ -557,7 +557,7 @@ struct inode_t {
   bufferlist fscrypt_last_block;
 
   inodeno_t remote_ino = 0; // referent inode - remote inode link
-  std::vector<uint64_t> referent_inodes;
+  std::map<uint64_t, uint64_t> referent_inodes;
 private:
   bool older_is_consistent(const inode_t &other) const;
 };
@@ -826,7 +826,8 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
   f->dump_unsigned("remote_ino", remote_ino);
   f->open_array_section("referent_inodes");
   for (const auto &ri : referent_inodes) {
-    f->dump_unsigned("referent_inode", ri);
+    f->dump_unsigned("referent_inode", ri.first);
+    f->dump_unsigned(":", ri.second);
   }
   f->close_section();
 }
