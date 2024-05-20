@@ -249,6 +249,9 @@ List snapshots of a subvolume group by running a command of the following form:
 FS Subvolumes
 -------------
 
+Creating a subvolume
+~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to create a subvolume:
 
 .. prompt:: bash #
@@ -265,6 +268,9 @@ The subvolume can be created in a separate RADOS namespace by specifying the
 default subvolume group with an octal file mode of ``755``, a uid of its
 subvolume group, a gid of its subvolume group, a data pool layout of its parent
 directory, and no size limit.
+
+Removing a subvolume
+~~~~~~~~~~~~~~~~~~~~
 
 Use a command of the following form to remove a subvolume:
 
@@ -290,6 +296,9 @@ involve the retained snapshots.
 .. note:: Retained snapshots can be used as clone sources for recreating the
    subvolume or for cloning to a newer subvolume.
 
+Resizing a subvolume
+~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to resize a subvolume:
 
 .. prompt:: bash #
@@ -303,6 +312,9 @@ below the current "used size" of the subvolume.
 The subvolume can be resized to an unlimited (but sparse) logical size by
 passing ``inf`` or ``infinite`` as ``<new_size>``.
 
+Authorizing CephX auth IDs
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to authorize CephX auth IDs. This provides
 the read/read-write access to file system subvolumes:
 
@@ -312,12 +324,18 @@ the read/read-write access to file system subvolumes:
 
 The ``<access_level>`` option takes either ``r`` or ``rw`` as a value.
 
+De-authorizing CephX auth IDs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to deauthorize CephX auth IDs. This removes
 the read/read-write access to file system subvolumes:
 
 .. prompt:: bash #
 
    ceph fs subvolume deauthorize <vol_name> <sub_name> <auth_id> [--group_name=<group_name>]
+
+Listing CephX auth IDs
+~~~~~~~~~~~~~~~~~~~~~~
 
 Use a command of the following form to list CephX auth IDs authorized to access
 the file system subvolume:
@@ -326,6 +344,8 @@ the file system subvolume:
 
    ceph fs subvolume authorized_list <vol_name> <sub_name> [--group_name=<group_name>]
 
+Evicting File System Clients (Auth ID)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use a command of the following form to evict file system clients based on the
 auth ID and the subvolume mounted:
@@ -334,11 +354,17 @@ auth ID and the subvolume mounted:
 
    ceph fs subvolume evict <vol_name> <sub_name> <auth_id> [--group_name=<group_name>]
 
+Fetching the Absolute Path of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to fetch the absolute path of a subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume getpath <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+Fetching a Subvolume's Information
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use a command of the following form to fetch a subvolume's information:
 
@@ -395,6 +421,9 @@ contains one of the following values.
 * ``complete``: subvolume is ready for all operations
 * ``snapshot-retained``: subvolume is removed but its snapshots are retained
 
+Listing Subvolumes
+~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to list subvolumes:
 
 .. prompt:: bash #
@@ -403,6 +432,9 @@ Use a command of the following form to list subvolumes:
 
 .. note:: Subvolumes that have been removed but have snapshots retained, are
    also listed.
+
+Checking for the Presence of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use a command of the following form to check for the presence of a given
 subvolume:
@@ -415,6 +447,9 @@ These are the possible results of the ``exist`` command:
 
 * ``subvolume exists``: if any subvolume of given ``group_name`` is present
 * ``no subvolume exists``: if no subvolume of given ``group_name`` is present
+
+Setting Custom Metadata On a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use a command of the following form to set custom metadata on the subvolume as
 a key-value pair:
@@ -434,6 +469,9 @@ a key-value pair:
    subvolume, and is therefore also not preserved when cloning the subvolume
    snapshot.
 
+Getting The Custom Metadata Set of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to get the custom metadata set on the
 subvolume using the metadata key:
 
@@ -441,12 +479,18 @@ subvolume using the metadata key:
 
    ceph fs subvolume metadata get <vol_name> <subvol_name> <key_name> [--group_name <subvol_group_name>]
 
+Listing The Custom Metadata Set of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to list custom metadata (key-value pairs)
 set on the subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume metadata ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+Removing a Custom Metadata Set from a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use a command of the following form to remove custom metadata set on the
 subvolume using the metadata key:
@@ -458,11 +502,18 @@ subvolume using the metadata key:
 Using the ``--force`` flag allows the command to succeed when it would
 otherwise fail (if the metadata key did not exist).
 
+Creating a Snapshot of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to create a snapshot of a subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot create <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+
+
+Removing a Snapshot of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use a command of the following form to remove a snapshot of a subvolume:
 
@@ -475,11 +526,17 @@ otherwise fail (if the snapshot did not exist).
 
 .. note:: if the last snapshot within a snapshot retained subvolume is removed, the subvolume is also removed
 
+Listing the Snapshots of a Subvolume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following from to list the snapshots of a subvolume:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot ls <vol_name> <subvol_name> [--group_name <subvol_group_name>]
+
+Fetching a Snapshot's Information
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use a command of the following form to fetch a snapshot's information:
 
@@ -530,6 +587,9 @@ Sample output when no snapshot clone is in progress or pending::
       "has_pending_clones": "no"
   }
 
+Setting Custom Key-Value Pair Metadata on a Snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to set custom key-value metadata on the
 snapshot:
 
@@ -548,6 +608,9 @@ snapshot:
    subvolume, and is therefore not preserved when cloning the subvolume
    snapshot.
 
+Getting Custom Metadata That Has Been Set on a Snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following form to get custom metadata that has been set on
 the snapshot using the metadata key:
 
@@ -555,12 +618,18 @@ the snapshot using the metadata key:
 
    ceph fs subvolume snapshot metadata get <vol_name> <subvol_name> <snap_name> <key_name> [--group_name <subvol_group_name>]
 
+Listing Custom Metadata that has been Set on a Snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 Use a command of the following from to list custom metadata (key-value pairs)
 set on the snapshot:
 
 .. prompt:: bash #
 
    ceph fs subvolume snapshot metadata ls <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+
+Removing Custom Metadata from a Snapshot
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Use a command of the following form to remove custom metadata set on the
 snapshot using the metadata key:
