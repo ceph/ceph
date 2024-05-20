@@ -61,7 +61,7 @@ const char** NVMeofGwMonitorClient::get_tracked_conf_keys() const
 
 int NVMeofGwMonitorClient::init()
 {
-  dout(0) << dendl;
+  dout(10) << dendl;
   std::string val;
   auto args = argv_to_vec(orig_argc, orig_argv);
 
@@ -89,7 +89,7 @@ int NVMeofGwMonitorClient::init()
     }
   }
 
-  dout(0) << "gateway name: " << name <<
+  dout(10) << "gateway name: " << name <<
     " pool:" << pool <<
     " group:" << group <<
     " address: " << gateway_address << dendl;
@@ -143,7 +143,7 @@ int NVMeofGwMonitorClient::init()
     client_messenger->wait();
     return r;
   }
-  dout(0) << "nvmeof Registered monc callback" << dendl;
+  dout(10) << "nvmeof Registered monc callback" << dendl;
 
   r = monc.authenticate();
   if (r < 0) {
@@ -153,7 +153,7 @@ int NVMeofGwMonitorClient::init()
     client_messenger->wait();
     return r;
   }
-  dout(0) << "monc.authentication done" << dendl;
+  dout(10) << "monc.authentication done" << dendl;
   monc.set_passthrough_monmap();
 
   client_t whoami = monc.get_global_id();
@@ -167,7 +167,7 @@ int NVMeofGwMonitorClient::init()
 
   tick();
 
-  dout(0) << "Complete." << dendl;
+  dout(10) << "Complete." << dendl;
   return 0;
 }
 
@@ -175,12 +175,12 @@ static bool get_gw_state(const char* desc, const std::map<NvmeGroupKey, NvmeGwMa
 {
   auto gw_group = m.find(group_key);
   if (gw_group == m.end()) {
-    dout(0) << "can not find group (" << group_key.first << "," << group_key.second << ") "  << desc << " map: " << m << dendl;
+    dout(10) << "can not find group (" << group_key.first << "," << group_key.second << ") "  << desc << " map: " << m << dendl;
     return false;
   }
   auto gw_state = gw_group->second.find(gw_id);
   if (gw_state == gw_group->second.end()) {
-    dout(0) << "can not find gw id: " << gw_id << " in " << desc << "group: " << gw_group->second  << dendl;
+    dout(10) << "can not find gw id: " << gw_id << " in " << desc << "group: " << gw_group->second  << dendl;
     return false;
   }
   out = gw_state->second;
@@ -220,7 +220,7 @@ void NVMeofGwMonitorClient::send_beacon()
   // if already got gateway state in the map
   if (get_gw_state("old map", map, group_key, name, old_gw_state))
     gw_availability = ok ? GW_AVAILABILITY_E::GW_AVAILABLE : GW_AVAILABILITY_E::GW_UNAVAILABLE;
-  dout(0) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
+  dout(10) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
     " osdmap_epoch " << osdmap_epoch << " gwmap_epoch " << gwmap_epoch << dendl;
   auto m = ceph::make_message<MNVMeofGwBeacon>(
       name,
@@ -246,7 +246,7 @@ void NVMeofGwMonitorClient::disconnect_panic()
 
 void NVMeofGwMonitorClient::tick()
 {
-  dout(0) << dendl;
+  dout(10) << dendl;
 
   disconnect_panic();
   send_beacon();
@@ -289,7 +289,7 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
   auto &new_map = nmap->get_map();
   gwmap_epoch = nmap->get_gwmap_epoch();
   auto group_key = std::make_pair(pool, group);
-  dout(0) << "handle nvmeof gw map: " << new_map << dendl;
+  dout(10) << "handle nvmeof gw map: " << new_map << dendl;
 
   NvmeGwState old_gw_state;
   auto got_old_gw_state = get_gw_state("old map", map, group_key, name, old_gw_state); 
@@ -301,24 +301,24 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
 
   if (!got_old_gw_state) {
     if (!got_new_gw_state) {
-      dout(0) << "Can not find new gw state" << dendl;
+      dout(10) << "Can not find new gw state" << dendl;
       return;
     }
     bool set_group_id = false;
     while (!set_group_id) {
       NVMeofGwMonitorGroupClient monitor_group_client(
           grpc::CreateChannel(monitor_address, grpc::InsecureChannelCredentials()));
-      dout(0) << "GRPC set_group_id: " <<  new_gw_state.group_id << dendl;
+      dout(10) << "GRPC set_group_id: " <<  new_gw_state.group_id << dendl;
       set_group_id = monitor_group_client.set_group_id( new_gw_state.group_id);
       if (!set_group_id) {
-	      dout(0) << "GRPC set_group_id failed" << dendl;
+	      dout(10) << "GRPC set_group_id failed" << dendl;
 	      usleep(1000); // TODO: conf options
       }
     }
   }
 
   if (got_old_gw_state && got_new_gw_state) {
-    dout(0) << "got_old_gw_state: " << old_gw_state << "got_new_gw_state: " << new_gw_state << dendl;
+    dout(10) << "got_old_gw_state: " << old_gw_state << "got_new_gw_state: " << new_gw_state << dendl;
     // Make sure we do not get out of order state changes from the monitor
     ceph_assert(new_gw_state.gw_map_epoch >= old_gw_state.gw_map_epoch);
 
@@ -361,7 +361,7 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
       }
       gs.set_state(new_agroup_state == GW_EXPORTED_STATES_PER_AGROUP_E::GW_EXPORTED_OPTIMIZED_STATE ? OPTIMIZED : INACCESSIBLE); // Set the ANA state
       nas.mutable_states()->Add(std::move(gs));
-      dout(0) << " grpid " << (ana_grp_index + 1) << " state: " << new_gw_state << dendl;
+      dout(10) << " grpid " << (ana_grp_index + 1) << " state: " << new_gw_state << dendl;
     }
     if (nas.states_size()) ai.mutable_states()->Add(std::move(nas));
   }
@@ -374,14 +374,14 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
           grpc::CreateChannel(gateway_address, grpc::InsecureChannelCredentials()));
       set_ana_state = gw_client.set_ana_state(ai);
       if (!set_ana_state) {
-	dout(0) << "GRPC set_ana_state failed" << dendl;
+	dout(10) << "GRPC set_ana_state failed" << dendl;
 	usleep(1000); // TODO conf option
       }
     }
     // Update latest accepted osdmap epoch, for beacons
     if (max_blocklist_epoch > osdmap_epoch) {
       osdmap_epoch = max_blocklist_epoch;
-      dout(0) << "Ready for blocklist osd map epoch: " << osdmap_epoch << dendl;
+      dout(10) << "Ready for blocklist osd map epoch: " << osdmap_epoch << dendl;
     }
   }
   map = new_map;
@@ -390,7 +390,7 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
 bool NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
-  dout(0) << "got map type " << m->get_type() << dendl;
+  dout(10) << "got map type " << m->get_type() << dendl;
 
   if (m->get_type() == MSG_MNVMEOF_GW_MAP) {
     handle_nvmeof_gw_map(ref_cast<MNVMeofGwMap>(m));
