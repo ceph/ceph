@@ -18,11 +18,10 @@ target_link_libraries(unittest_mds_sessionfilter mds osdc ceph-common global ${B
 add_executable(unittest_mds_quiesce_db
   TestQuiesceDb.cc
   ../../../src/mds/QuiesceDbManager.cc
-  ../../../src/mds/BoostUrlImpl.cc
   $<TARGET_OBJECTS:unit-main>
 )
 add_ceph_unittest(unittest_mds_quiesce_db)
-target_link_libraries(unittest_mds_quiesce_db ceph-common global)
+target_link_libraries(unittest_mds_quiesce_db ceph-common global Boost::url)
 
 # unittest_mds_quiesce_agent
 add_executable(unittest_mds_quiesce_agent
