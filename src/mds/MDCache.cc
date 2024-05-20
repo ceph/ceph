@@ -13758,6 +13758,7 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
       dout(25) << " iterating " << *dir << dendl;
       // overdrive syncrhonously since we aren't yet on the waiting list
       quiesce_overdrive_fragmenting(dir, false);
+      migrator->quiesce_overdrive_export(dir);
       for (auto& [dnk, dn] : *dir) {
         dout(25) << " evaluating (" << dnk << ", " << *dn << ")" << dendl;
         auto* in = dn->get_projected_inode();
@@ -13795,6 +13796,7 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
       }
     }
     if (gather.has_subs()) {
+      mdr->mark_event("quiescing children");
       dout(20) << __func__ << ": waiting for sub-ops to gather" << dendl;
       gather.activate();
       return;
