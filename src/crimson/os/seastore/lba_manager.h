@@ -135,16 +135,6 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
-  /**
-   * Increments ref count on extent
-   *
-   * @return returns resulting refcount
-   */
-  virtual ref_ret incref_extent(
-    Transaction &t,
-    laddr_t addr,
-    int delta) = 0;
-
   struct remap_entry {
     extent_len_t offset;
     extent_len_t len;
