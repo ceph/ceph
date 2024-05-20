@@ -141,14 +141,14 @@
       </cds-sidenav-item>
       <!-- Multi-cluster Dashboard -->
       <cds-sidenav-menu title="Multi-Cluster">
-        <svg cdsIcon="fade" icon size="16"></svg>
+        <svg cdsIcon="edge-cluster" icon size="16"></svg>
         <cds-sidenav-item routerLinkActive="active" routerLink="/multi-cluster/overview" [useRouter]="true"><span i18n >Overview</span></cds-sidenav-item>
         <cds-sidenav-item routerLinkActive="active" routerLink="/multi-cluster/manage-clusters" [useRouter]="true"><span i18n >Manager Cluster</span></cds-sidenav-item>
       </cds-sidenav-menu>
       <!-- Cluster -->
       <cds-sidenav-menu title="Cluster" *ngIf="permissions.hosts.read || permissions.monitor.read ||
       permissions.osd.read || permissions.pool.read">
-        <svg cdsIcon="fade" icon size="16"></svg>
+        <svg cdsIcon="web-services--cluster" icon size="16"></svg>
         <cds-sidenav-item routerLinkActive="active" routerLink="/pool" [useRouter]="true" *ngIf="permissions.pool.read"><span i18n >Pools</span></cds-sidenav-item>
         <cds-sidenav-item routerLinkActive="active" routerLink="/hosts" [useRouter]="true" *ngIf="permissions.hosts.read"><span i18n >Hosts</span></cds-sidenav-item>
         <cds-sidenav-item routerLinkActive="active" routerLink="/osd" [useRouter]="true" *ngIf="permissions.osd.read"><span i18n >OSDs</span></cds-sidenav-item>
@@ -158,7 +158,7 @@
       </cds-sidenav-menu>
       <!-- Block Storage -->
       <cds-sidenav-menu title="Block" *ngIf="(permissions.rbdImage.read || permissions.rbdMirroring.read|| permissions.iscsi.read) && (enabledFeature.rbd || enabledFeature.mirroring || enabledFeature.iscsi)">
-        <svg cdsIcon="fade" icon size="16"></svg>
+        <svg cdsIcon="datastore" icon size="16"></svg>
         <cds-sidenav-item routerLinkActive="active" routerLink="/block/rbd" [useRouter]="true" *ngIf="permissions.rbdImage.read && enabledFeature.rbd"><span i18n>Images</span></cds-sidenav-item>
         <cds-sidenav-item routerLinkActive="active" routerLink="/block/mirroring" [useRouter]="true" *ngIf="permissions.rbdMirroring.read && enabledFeature.mirroring"><span i18n>Mirroring
           <small *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
@@ -170,7 +170,7 @@
       </cds-sidenav-menu>
       <!-- Object Storage -->
       <cds-sidenav-menu title="Object" *ngIf="permissions.rgw.read && enabledFeature.rgw">
-        <svg cdsIcon="fade" icon size="16"></svg>
+        <svg cdsIcon="object-storage" icon size="16"></svg>
         <cds-sidenav-item routerLinkActive="active" routerLink="/rgw/overview" [userouter]="true"><span i18n>Overview</span></cds-sidenav-item>
         <cds-sidenav-item routerLinkActive="active" routerLink="/rgw/bucket" [userouter]="true"><span i18n>Buckets</span></cds-sidenav-item>
         <cds-sidenav-item routerLinkActive="active" routerLink="/rgw/user" [userouter]="true"><span i18n>Users</span></cds-sidenav-item>
@@ -180,13 +180,13 @@
       </cds-sidenav-menu>
       <!-- Filesystem -->
       <cds-sidenav-menu title="File" *ngIf="permissions.nfs.read && enabledFeature.nfs || permissions.cephfs.read && enabledFeature.cephfs">
-        <svg cdsIcon="fade" icon size="16"></svg>
+        <svg cdsIcon="file-storage" icon size="16"></svg>
         <cds-sidenav-item routerLinkActive="active" routerLink="/cephfs" [useRouter]="true" *ngIf="permissions.cephfs.read && enabledFeature.cephfs"><span i18n>File Systems</span></cds-sidenav-item>
         <cds-sidenav-item routerLinkActive="active" routerLink="/nfs" [useRouter]="true" *ngIf="permissions.nfs.read && enabledFeature.nfs"><span i18n>NFS</span></cds-sidenav-item>
       </cds-sidenav-menu>
       <!-- Observability -->
       <cds-sidenav-menu title="Observability" *ngIf="permissions.log.read || permissions.prometheus.read">
-        <svg cdsIcon="fade" icon size="16"></svg>
+        <svg cdsIcon="observed--hail" icon size="16"></svg>
         <cds-sidenav-item routerLinkActive="active" routerLink="/logs" [useRouter]="true" *ngIf="permissions.log.read"><span i18n>Logs</span></cds-sidenav-item>
         <cds-sidenav-item routerLinkActive="active" routerLink="/monitoring" [useRouter]="true" *ngIf="permissions.log.read"><span i18n>
           <ng-container>Alerts</ng-container>
@@ -198,7 +198,7 @@
       </cds-sidenav-menu>
       <!-- Administration -->
       <cds-sidenav-menu title="Administration" *ngIf="permissions.configOpt.read || permissions.hosts.read">
-        <svg cdsIcon="fade" icon size="16"></svg>
+        <svg cdsIcon="network--admin-control" icon size="16"></svg>
         <cds-sidenav-item routerLinkActive="active" routerLink="/services/" [useRouter]="true" *ngIf="permissions.hosts.read"><span i18n>Services</span></cds-sidenav-item>
         <cds-sidenav-item routerLinkActive="active" routerLink="/upgrade" [useRouter]="true" *ngIf="permissions.configOpt.read"><span i18n>Upgrade</span></cds-sidenav-item>
         <cds-sidenav-item routerLinkActive="active" routerLink="/ceph-users" [useRouter]="true" *ngIf="permissions.configOpt.read"><span i18n>Ceph Users</span></cds-sidenav-item>

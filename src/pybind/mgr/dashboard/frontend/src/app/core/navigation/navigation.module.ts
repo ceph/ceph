@@ -32,6 +32,13 @@ import HelpIcon from '@carbon/icons/es/help/20';
 import NotificationIcon from '@carbon/icons/es/notification/20';
 import LaunchIcon from '@carbon/icons/es/launch/16';
 import DashboardIcon from '@carbon/icons/es/template/16';
+import ClusterIcon from '@carbon/icons/es/web-services--cluster/16';
+import MultiClusterIcon from '@carbon/icons/es/edge-cluster/16';
+import BlockIcon from '@carbon/icons/es/datastore/16';
+import ObjectIcon from '@carbon/icons/es/object-storage/16';
+import FileIcon from '@carbon/icons/es/file-storage/16';
+import ObservabilityIcon from '@carbon/icons/es/observed--hail/16';
+import AdminIcon from '@carbon/icons/es/network--admin-control/16';
 
 @NgModule({
   imports: [
@@ -69,7 +76,14 @@ export class NavigationModule {
       HelpIcon,
       NotificationIcon,
       LaunchIcon,
-      DashboardIcon
+      DashboardIcon,
+      ClusterIcon,
+      MultiClusterIcon,
+      BlockIcon,
+      ObjectIcon,
+      FileIcon,
+      ObservabilityIcon,
+      AdminIcon
     ]);
   }
 }
