@@ -361,18 +361,13 @@ class CephTestCase(unittest.TestCase, RunCephCmd):
                     else:
                         break
                 if success_time_elapsed == success_hold_time:
-<<<<<<< HEAD
                     log.debug("wait_until_true_and_hold: success for {0}s".format(success_hold_time))
-=======
-                    log.debug("wait_until_true: success for {0}s".format(success_hold_time))
->>>>>>> b8b8b268706 (qa/suites/rados/singleton/all: init mon-stretch-pool.yaml)
                     return
             else:
                 if elapsed >= timeout:
                     if check_fn and check_fn() and retry_count < 5:
                         elapsed = 0
                         retry_count += 1
-<<<<<<< HEAD
                         log.debug("wait_until_true_and_hold: making progress, waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
                     else:
                         raise TestTimeoutError("Timed out after {0}s and {1} retries".format(elapsed, retry_count))
@@ -380,12 +375,3 @@ class CephTestCase(unittest.TestCase, RunCephCmd):
                     log.debug("wait_until_true_and_hold waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
                 time.sleep(period)
                 elapsed += period
-=======
-                        log.debug("wait_until_true: making progress, waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
-                    else:
-                        raise TestTimeoutError("Timed out after {0}s and {1} retries".format(elapsed, retry_count))
-                else:
-                    log.debug("wait_until_true: waiting (timeout={0} retry_count={1})...".format(timeout, retry_count))
-                time.sleep(period)
-                elapsed += period
->>>>>>> b8b8b268706 (qa/suites/rados/singleton/all: init mon-stretch-pool.yaml)
