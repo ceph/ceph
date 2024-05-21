@@ -11563,10 +11563,10 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
       if (r < 0) {
         ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
       }
+      bl->claim_append(*pbl);
     }
 
     read = pbl->length();
-    bl->claim_append(*pbl);
   }
   return read;
 }
