@@ -58,6 +58,7 @@ Cache::~Cache()
   ceph_assert(extents.empty());
 }
 
+// TODO: this method can probably be removed in the future
 Cache::retire_extent_ret Cache::retire_extent_addr(
   Transaction &t, paddr_t addr, extent_len_t length)
 {
@@ -102,6 +103,33 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   t.add_to_read_set(ext);
   t.add_to_retired_set(ext);
   return retire_extent_iertr::now();
+}
+
+void Cache::retire_absent_extent_addr(
+  Transaction &t, paddr_t addr, extent_len_t length)
+{
+#ifndef NDEBUG
+  CachedExtentRef ext;
+  auto result = t.get_extent(addr, &ext);
+  assert(result != Transaction::get_extent_ret::PRESENT
+    && result != Transaction::get_extent_ret::RETIRED);
+  assert(!query_cache(addr, nullptr));
+#endif
+  LOG_PREFIX(Cache::retire_absent_extent_addr);
+  // add a new placeholder to Cache
+  ext = CachedExtent::make_cached_extent_ref<
+    RetiredExtentPlaceholder>(length);
+  ext->init(CachedExtent::extent_state_t::CLEAN,
+	    addr,
+	    PLACEMENT_HINT_NULL,
+	    NULL_GENERATION,
+	    TRANS_ID_NULL);
+  DEBUGT("retire {}~{} as placeholder, add extent -- {}",
+	 t, addr, length, *ext);
+  const auto t_src = t.get_src();
+  add_extent(ext, &t_src);
+  t.add_to_read_set(ext);
+  t.add_to_retired_set(ext);
 }
 
 void Cache::dump_contents()

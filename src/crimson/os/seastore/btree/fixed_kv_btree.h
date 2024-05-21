@@ -1516,6 +1516,8 @@ private:
     };
 
     auto v = parent->template get_child<internal_node_t>(c, node_iter);
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
     if (v.has_child()) {
       return v.get_child_fut().safe_then(
         [on_found=std::move(on_found), node_iter, c,
@@ -1584,6 +1586,8 @@ private:
     };
 
     auto v = parent->template get_child<leaf_node_t>(c, node_iter);
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
     if (v.has_child()) {
       return v.get_child_fut().safe_then(
         [on_found=std::move(on_found), node_iter, c,
@@ -2137,6 +2141,8 @@ private:
     };
 
     auto v = parent_pos.node->template get_child<NodeType>(c, donor_iter);
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
     if (v.has_child()) {
       return v.get_child_fut().safe_then(
         [do_merge=std::move(do_merge), &pos,
