@@ -385,6 +385,16 @@ seastar::future<> OSD::start()
         std::ref(osd_states));
     });
   }).then([this, FNAME] {
+    heartbeat.reset(new Heartbeat{
+	whoami, get_shard_services(),
+	*monc, *hb_front_msgr, *hb_back_msgr});
+    return store.mount().handle_error(
+      crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
+        ERROR("error mounting object store in {}: ({}) {}",
+	      local_conf().get_val<std::string>("osd_data"),
+	      ec.value(), ec.message());
+      }));
+  }).then([this, FNAME] {
     auto stats_seconds = local_conf().get_val<int64_t>("crimson_osd_stat_interval");
     if (stats_seconds > 0) {
       shard_stats.resize(seastar::smp::count);
@@ -407,16 +417,6 @@ seastar::future<> OSD::start()
       stats_timer.arm_periodic(std::chrono::seconds(stats_seconds));
     }
 
-    heartbeat.reset(new Heartbeat{
-	whoami, get_shard_services(),
-	*monc, *hb_front_msgr, *hb_back_msgr});
-    return store.mount().handle_error(
-      crimson::stateful_ec::assert_failure([FNAME] (const auto& ec) {
-        ERROR("error mounting object store in {}: ({}) {}",
-	      local_conf().get_val<std::string>("osd_data"),
-	      ec.value(), ec.message());
-      }));
-  }).then([this] {
     return open_meta_coll();
   }).then([this] {
     return pg_shard_manager.get_meta_coll().load_superblock(
