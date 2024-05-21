@@ -70,12 +70,12 @@ private:
     }
   };
 
-  template <typename ExecutionContext, typename CompletionToken>
-    auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+  template <typename Executor, typename CompletionToken>
+    auto get_async(const DoutPrefixProvider *dpp, const Executor& ex, const std::string& key,
 		    off_t read_ofs, off_t read_len, CompletionToken&& token);
   
-  template <typename ExecutionContext, typename CompletionToken>
-  void put_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+  template <typename Executor, typename CompletionToken>
+  void put_async(const DoutPrefixProvider *dpp, const Executor& ex, const std::string& key,
                   const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, CompletionToken&& token);
   
   rgw::Aio::OpFunc ssd_cache_read_op(const DoutPrefixProvider *dpp, optional_yield y, rgw::cache::CacheDriver* cache_driver,

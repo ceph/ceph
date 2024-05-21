@@ -263,10 +263,8 @@ int migrate_topics(const DoutPrefixProvider* dpp, optional_yield y,
 int migrate(const DoutPrefixProvider* dpp,
             rgw::sal::RadosStore* driver,
             boost::asio::io_context& context,
-            spawn::yield_context yield)
+            boost::asio::yield_context y)
 {
-  auto y = optional_yield{context, yield};
-
   ldpp_dout(dpp, 1) << "starting v1 topic migration.." << dendl;
 
   librados::Rados* rados = driver->getRados()->get_rados_handle();

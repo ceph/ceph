@@ -16,7 +16,7 @@
 #pragma once
 
 #include <boost/asio/io_context.hpp>
-#include <spawn/spawn.hpp>
+#include <boost/asio/spawn.hpp>
 
 class DoutPrefixProvider;
 namespace rgw::sal { class RadosStore; }
@@ -29,6 +29,6 @@ namespace rgwrados::topic_migration {
 int migrate(const DoutPrefixProvider* dpp,
             rgw::sal::RadosStore* driver,
             boost::asio::io_context& context,
-            spawn::yield_context yield);
+            boost::asio::yield_context yield);
 
 } // rgwrados::topic_migration

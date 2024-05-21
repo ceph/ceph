@@ -20,9 +20,9 @@
 #include <boost/asio/error.hpp>
 #include <boost/asio/executor_work_guard.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/spawn.hpp>
 #include "include/scope_guard.h"
 
-#include <spawn/spawn.hpp>
 #include <gtest/gtest.h>
 
 static rgw_raw_obj make_obj(const std::string& oid)
@@ -143,13 +143,15 @@ TEST(Aio_Throttle, YieldCostOverWindow)
   auto obj = make_obj(__PRETTY_FUNCTION__);
 
   boost::asio::io_context context;
-  spawn::spawn(context,
-    [&] (spawn::yield_context yield) {
-      YieldingAioThrottle throttle(4, context, yield);
+  boost::asio::spawn(context,
+    [&] (boost::asio::yield_context yield) {
+      YieldingAioThrottle throttle(4, yield);
       scoped_completion op;
       auto c = throttle.get(obj, wait_on(op), 8, 0);
       ASSERT_EQ(1u, c.size());
       EXPECT_EQ(-EDEADLK, c.front().result);
+    }, [] (std::exception_ptr eptr) {
+      if (eptr) std::rethrow_exception(eptr);
     });
   context.run();
 }
@@ -166,9 +168,9 @@ TEST(Aio_Throttle, YieldingThrottleOverMax)
   uint64_t outstanding = 0;
 
   boost::asio::io_context context;
-  spawn::spawn(context,
-    [&] (spawn::yield_context yield) {
-      YieldingAioThrottle throttle(window, context, yield);
+  boost::asio::spawn(context,
+    [&] (boost::asio::yield_context yield) {
+      YieldingAioThrottle throttle(window, yield);
       for (uint64_t i = 0; i < total; i++) {
         using namespace std::chrono_literals;
         auto c = throttle.get(obj, wait_for(context, 10ms), 1, 0);
@@ -180,6 +182,8 @@ TEST(Aio_Throttle, YieldingThrottleOverMax)
       }
       auto c = throttle.drain();
       outstanding -= c.size();
+    }, [] (std::exception_ptr eptr) {
+      if (eptr) std::rethrow_exception(eptr);
     });
   context.poll(); // run until we block
   EXPECT_EQ(window, outstanding);

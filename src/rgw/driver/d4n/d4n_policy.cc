@@ -17,9 +17,10 @@ struct initiate_exec {
   void operator()(Handler handler, const boost::redis::request& req, Response& resp)
   {
     auto h = asio::consign(std::move(handler), conn);
-    return asio::dispatch(get_executor(), [c=conn, &req, &resp, h=std::move(h)] {
-      c->async_exec(req, resp, std::move(h));
-    });
+    return asio::dispatch(get_executor(),
+        [c=conn, &req, &resp, h=std::move(h)] () mutable {
+          c->async_exec(req, resp, std::move(h));
+        });
   }
 };
 

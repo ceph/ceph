@@ -111,12 +111,12 @@ AioResultList BlockingAioThrottle::drain()
 template <typename CompletionToken>
 auto YieldingAioThrottle::async_wait(CompletionToken&& token)
 {
-  using boost::asio::async_completion;
   using Signature = void(boost::system::error_code);
-  async_completion<CompletionToken, Signature> init(token);
-  completion = Completion::create(context.get_executor(),
-                                  std::move(init.completion_handler));
-  return init.result.get();
+  return boost::asio::async_initiate<CompletionToken, Signature>(
+      [this] (auto handler) {
+        completion = Completion::create(yield.get_executor(),
+                                        std::move(handler));
+      }, token);
 }
 
 AioResultList YieldingAioThrottle::get(rgw_raw_obj obj,
