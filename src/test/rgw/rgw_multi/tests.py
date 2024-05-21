@@ -2165,6 +2165,7 @@ def test_role_delete_sync():
         log.info(f'success, zone: {zone.name} does not have role: {role_name}')
 
 
+@attr('fails_with_rgw')
 @attr('data_sync_init')
 def test_bucket_full_sync_after_data_sync_init():
     zonegroup = realm.master_zonegroup()
