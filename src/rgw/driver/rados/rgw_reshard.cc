@@ -1398,21 +1398,38 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
     ceph::real_time when_queued = entry.time;
     ceph::real_time now = real_clock::now();
 
-    // convert hours to seconds
-    const uint32_t reshard_reduction_wait_period_hours =
+    // use double so we can handle fractions
+    double reshard_reduction_wait_hours =
       uint32_t(store->ctx()->_conf.get_val<uint64_t>("rgw_dynamic_resharding_reduction_wait"));
 
-    auto timespan =
-      ceph::make_timespan(reshard_reduction_wait_period_hours * 60 * 60);
-    // if (now < when_queued + reshard_reduction_wait_period) {
+    // see if we have to reduce the waiting interval due to debug
+    // config
+    int debug_interval = store->ctx()->_conf.get_val<int64_t>("rgw_reshard_debug_interval");
+    if (debug_interval >= 1) {
+      constexpr int secs_per_day = 60 * 60 * 24;
+      reshard_reduction_wait_hours = reshard_reduction_wait_hours * debug_interval / secs_per_day;
+    }
+
+    auto timespan = std::chrono::seconds(int(60 * 60 * reshard_reduction_wait_hours));
     if (now < when_queued + timespan) {
-      // skip for now
+      // too early to reshard; log and skip
       ldpp_dout(dpp, 20) <<  __func__ <<
 	": INFO: reshard reduction for bucket \"" <<
 	entry.bucket_name << "\" will not proceed until " <<
 	(when_queued + timespan) << dendl;
 
       return 0;
+    }
+
+    // only if we allow the resharding logic to continue should we log
+    // the fact that the reduction_wait_time was shortened due to
+    // debugging mode
+    if (debug_interval >= 1) {
+      ldpp_dout(dpp, 0) << "DEBUG: since the rgw_reshard_debug_interval is set at " <<
+	debug_interval << " the rgw_dynamic_resharding_reduction_wait is now " <<
+	reshard_reduction_wait_hours << " hours (" <<
+	int(reshard_reduction_wait_hours * 60 * 60) << " seconds) and bucket \"" <<
+	entry.bucket_name << "\" has reached the reduction wait period" << dendl;
     }
 
     // all checks passed; we can drop through and proceed
@@ -1544,6 +1561,17 @@ void RGWReshard::stop_processor()
 }
 
 void *RGWReshard::ReshardWorker::entry() {
+  const auto debug_interval = cct->_conf.get_val<int64_t>("rgw_reshard_debug_interval");
+  double interval_factor = 1.0;
+  if (debug_interval >= 1) {
+    constexpr double secs_per_day = 60 * 60 * 24;
+    interval_factor = debug_interval / secs_per_day;
+
+    ldpp_dout(this, 0) << "DEBUG: since the rgw_reshard_debug_interval is set at " <<
+      debug_interval << " the rgw_reshard_thread_interval will be "
+      "multiplied by a factor of " << interval_factor << dendl;
+  }
+
   do {
     utime_t start = ceph_clock_now();
     reshard->process_all_logshards(this, null_yield);
@@ -1552,14 +1580,19 @@ void *RGWReshard::ReshardWorker::entry() {
       break;
 
     utime_t end = ceph_clock_now();
-    end -= start;
+    utime_t elapsed = end - start;
+
     int secs = cct->_conf.get_val<uint64_t>("rgw_reshard_thread_interval");
+    secs = std::max(1, int(secs * interval_factor));
 
-    if (secs <= end.sec())
+    if (secs <= elapsed.sec()) {
       continue; // next round
+    }
 
-    secs -= end.sec();
+    secs -= elapsed.sec();
 
+    // note: this will likely wait for the intended period of
+    // time, but could wait for less
     std::unique_lock locker{lock};
     cond.wait_for(locker, std::chrono::seconds(secs));
   } while (!reshard->going_down());
