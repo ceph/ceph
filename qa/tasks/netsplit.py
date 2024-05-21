@@ -12,7 +12,11 @@ import re
 
 log = logging.getLogger(__name__)
 
+
 def get_ip_and_ports(ctx, daemon):
+    """
+    Get the IP and port list for the <daemon>.
+    """
     assert daemon.startswith('mon.')
     addr = ctx.ceph['ceph'].mons['{a}'.format(a=daemon)]
     ips = re.findall("[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[:[0-9]*]*", addr)
@@ -27,11 +31,16 @@ def get_ip_and_ports(ctx, daemon):
             port_list.append(port_str)
     return (plain_ip, port_list)
 
+
 def disconnect(ctx, config):
-    assert len(config) == 2 # we can only disconnect pairs right now
+    """
+    Disconnect the mons in the <config> list.
+    """
+    assert len(config) == 2  # we can only disconnect pairs right now
     # and we can only disconnect mons right now
     assert config[0].startswith('mon.')
     assert config[1].startswith('mon.')
+    log.info("Disconnecting {a} and {b}".format(a=config[0], b=config[1]))
     (ip1, _) = get_ip_and_ports(ctx, config[0])
     (ip2, _) = get_ip_and_ports(ctx, config[1])
 
@@ -40,21 +49,26 @@ def disconnect(ctx, config):
     assert host1 is not None
     assert host2 is not None
 
-    host1.run(
-        args = ["sudo", "iptables", "-A", "INPUT", "-p", "tcp", "-s",
-                ip2, "-j", "DROP"]
-    )
-    host2.run(
-        args = ["sudo", "iptables", "-A", "INPUT", "-p", "tcp", "-s",
-                ip1, "-j", "DROP"]
-    )
+    host1.run(args=["sudo", "iptables", "-A", "INPUT",
+                    "-s", ip2, "-j", "DROP"])
+    host1.run(args=["sudo", "iptables", "-A", "OUTPUT",
+                    "-d", ip2, "-j", "DROP"])
+
+    host2.run(args=["sudo", "iptables", "-A", "INPUT",
+                    "-s", ip1, "-j", "DROP"])
+    host2.run(args=["sudo", "iptables", "-A", "OUTPUT",
+                    "-d", ip1, "-j", "DROP"])
+
 
 def reconnect(ctx, config):
-    assert len(config) == 2 # we can only disconnect pairs right now
+    """
+    Reconnect the mons in the <config> list.
+    """
+    assert len(config) == 2  # we can only disconnect pairs right now
     # and we can only disconnect mons right now
     assert config[0].startswith('mon.')
     assert config[1].startswith('mon.')
-
+    log.info("Reconnecting {a} and {b}".format(a=config[0], b=config[1]))
     (ip1, _) = get_ip_and_ports(ctx, config[0])
     (ip2, _) = get_ip_and_ports(ctx, config[1])
 
@@ -63,11 +77,12 @@ def reconnect(ctx, config):
     assert host1 is not None
     assert host2 is not None
 
-    host1.run(
-        args = ["sudo", "iptables", "-D", "INPUT", "-p", "tcp", "-s",
-                ip2, "-j", "DROP"]
-    )
-    host2.run(
-        args = ["sudo", "iptables", "-D", "INPUT", "-p", "tcp", "-s",
-                ip1, "-j", "DROP"]
-    )
+    host1.run(args=["sudo", "iptables", "-D", "INPUT",
+                    "-s", ip2, "-j", "DROP"])
+    host1.run(args=["sudo", "iptables", "-D", "OUTPUT",
+                    "-d", ip2, "-j", "DROP"])
+
+    host2.run(args=["sudo", "iptables", "-D", "INPUT",
+                    "-s", ip1, "-j", "DROP"])
+    host2.run(args=["sudo", "iptables", "-D", "OUTPUT",
+                    "-d", ip1, "-j", "DROP"])
