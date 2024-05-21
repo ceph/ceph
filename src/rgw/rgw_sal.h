@@ -542,6 +542,16 @@ class Driver {
                                     std::string_view marker,
                                     uint32_t max_items,
                                     TopicList& listing) = 0;
+
+    // TODO: backends should manage persistent topic queues internally on
+    // write_topic_v2()/remove_topic_v2()
+    virtual int add_persistent_topic(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     const std::string& topic_queue) = 0;
+    virtual int remove_persistent_topic(const DoutPrefixProvider* dpp,
+                                        optional_yield y,
+                                        const std::string& topic_queue) = 0;
+
     /** Update the bucket-topic mapping in the store, if |add_mapping|=true then
      * adding the |bucket_key| |topic| mapping to store, else delete the
      * |bucket_key| |topic| mapping from the store.  The |bucket_key| is
