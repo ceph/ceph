@@ -681,6 +681,17 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const QuiesceMap& map)
 struct QuiesceDbPeerAck {
   QuiesceInterface::PeerId origin;
   QuiesceMap diff_map;
+
+  QuiesceDbPeerAck() = default;
+  QuiesceDbPeerAck(QuiesceDbPeerAck const&) = default;
+  QuiesceDbPeerAck(QuiesceDbPeerAck &&) = default;
+  QuiesceDbPeerAck(QuiesceInterface::PeerId origin, std::convertible_to<QuiesceMap> auto&& diff_map)
+      : origin(origin)
+      , diff_map(std::forward<QuiesceMap>(diff_map))
+  {}
+
+  QuiesceDbPeerAck& operator=(QuiesceDbPeerAck const&) = default;
+  QuiesceDbPeerAck& operator=(QuiesceDbPeerAck&&) = default;
 };
 
 template <class CharT, class Traits>
