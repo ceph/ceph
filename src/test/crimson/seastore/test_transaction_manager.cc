@@ -1111,7 +1111,8 @@ struct transaction_manager_test_t :
       return nullptr;
     }
     auto o_laddr = opin->get_key();
-    auto data_laddr = opin->is_indirect()
+    bool indirect_opin = opin->is_indirect();
+    auto data_laddr = indirect_opin
       ? opin->get_intermediate_base()
       : o_laddr;
     auto pin = with_trans_intr(*(t.t), [&](auto& trans) {
@@ -1128,7 +1129,7 @@ struct transaction_manager_test_t :
     if (t.t->is_conflicted()) {
       return nullptr;
     }
-    if (opin->is_indirect()) {
+    if (indirect_opin) {
       test_mappings.inc_ref(data_laddr, t.mapping_delta);
     } else {
       test_mappings.dec_ref(data_laddr, t.mapping_delta);

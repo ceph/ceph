@@ -216,7 +216,7 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   TRACET("{}", t, *ref);
-  return lba_manager->decref_extent(t, ref->get_laddr(), true
+  return lba_manager->decref_extent(t, ref->get_laddr()
   ).si_then([this, FNAME, &t, ref](auto result) {
     DEBUGT("extent refcount is decremented to {} -- {}",
            t, result.refcount, *ref);
@@ -229,12 +229,11 @@ TransactionManager::ref_ret TransactionManager::remove(
 
 TransactionManager::ref_ret TransactionManager::_dec_ref(
   Transaction &t,
-  laddr_t offset,
-  bool cascade_remove)
+  laddr_t offset)
 {
   LOG_PREFIX(TransactionManager::_dec_ref);
   TRACET("{}", t, offset);
-  return lba_manager->decref_extent(t, offset, cascade_remove
+  return lba_manager->decref_extent(t, offset
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
     DEBUGT("extent refcount is decremented to {} -- {}~{}, {}",
            t, result.refcount, offset, result.length, result.addr);

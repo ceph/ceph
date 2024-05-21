@@ -246,6 +246,9 @@ public:
   retire_extent_ret retire_extent_addr(
     Transaction &t, paddr_t addr, extent_len_t length);
 
+  void retire_absent_extent_addr(
+    Transaction &t, paddr_t addr, extent_len_t length);
+
   /**
    * get_root
    *
@@ -927,7 +930,7 @@ public:
     paddr_t remap_paddr,
     extent_len_t remap_length,
     laddr_t original_laddr,
-    std::optional<ceph::bufferptr> &&original_bptr) {
+    std::optional<ceph::bufferptr> &original_bptr) {
     LOG_PREFIX(Cache::alloc_remapped_extent);
     assert(remap_laddr >= original_laddr);
     TCachedExtentRef<T> ext;
