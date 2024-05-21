@@ -12,6 +12,8 @@
 #include <future>
 #include <chrono>
 
+#include <boost/asio/append.hpp>
+#include <boost/asio/async_result.hpp>
 #include "boost/container/static_vector.hpp"
 
 // -----------------------------------------------------------------------------
@@ -49,36 +51,31 @@ static std::condition_variable poll_inst_cv;
 
 template <typename CompletionToken>
 auto QccCrypto::async_get_instance(CompletionToken&& token) {
-  using boost::asio::async_completion;
   using Signature = void(int);
-  async_completion<CompletionToken, Signature> init(token);
-
-  auto ex = boost::asio::get_associated_executor(init.completion_handler);
-
-  boost::asio::post(my_pool, [this, ex, handler = std::move(init.completion_handler)]()mutable{
-    auto handler1 = std::move(handler);
-    if (!open_instances.empty()) {
-      int avail_inst = open_instances.front();
-      open_instances.pop_front();
-      boost::asio::post(ex, std::bind(handler1, avail_inst));
-    } else if (!instance_completions.full()) {
-      // keep a few objects to wait QAT instance to make sure qat full utilization as much as possible,
-      // that is, QAT don't need to wait for new objects to ensure
-      // that QAT will not be in a free state as much as possible
-      instance_completions.push_back([ex, handler2 = std::move(handler1)](int inst)mutable{
-        boost::asio::post(ex, std::bind(handler2, inst));
-      });
-    } else {
-      boost::asio::post(ex, std::bind(handler1, NON_INSTANCE));
-    }
-  });
-  return init.result.get();
+  return boost::asio::async_initiate<CompletionToken, Signature>(
+      [this] (auto handler) {
+        boost::asio::post(my_pool, [this, handler = std::move(handler)]()mutable{
+          if (!open_instances.empty()) {
+            int avail_inst = open_instances.front();
+            open_instances.pop_front();
+            boost::asio::post(boost::asio::append(std::move(handler), avail_inst));
+          } else if (!instance_completions.full()) {
+            // keep a few objects to wait QAT instance to make sure qat full utilization as much as possible,
+            // that is, QAT don't need to wait for new objects to ensure
+            // that QAT will not be in a free state as much as possible
+            instance_completions.push_back(std::move(handler));
+          } else {
+            boost::asio::post(boost::asio::append(std::move(handler), NON_INSTANCE));
+          }
+        });
+      }, token);
 }
 
 void QccCrypto::QccFreeInstance(int entry) {
   boost::asio::post(my_pool, [this, entry]()mutable{
     if (!instance_completions.empty()) {
-      instance_completions.front()(entry);
+      boost::asio::dispatch(boost::asio::append(
+          std::move(instance_completions.front()), entry));
       instance_completions.pop_front();
     } else {
       open_instances.push_back(entry);
@@ -334,7 +331,7 @@ bool QccCrypto::perform_op_batch(unsigned char* out, const unsigned char* in, si
   int avail_inst = NON_INSTANCE;
 
   if (y) {
-    spawn::yield_context yield = y.get_yield_context();
+    boost::asio::yield_context yield = y.get_yield_context();
     avail_inst = async_get_instance(yield);
   } else {
     auto result = async_get_instance(boost::asio::use_future);
@@ -477,24 +474,29 @@ CpaStatus QccCrypto::initSession(CpaInstanceHandle cyInstHandle,
 }
 
 template <typename CompletionToken>
-auto QatCrypto::async_perform_op(int avail_inst, std::span<CpaCySymDpOpData*> pOpDataVec, CompletionToken&& token) {
-  CpaStatus status = CPA_STATUS_SUCCESS;
-  using boost::asio::async_completion;
+auto QatCrypto::async_perform_op(std::span<CpaCySymDpOpData*> pOpDataVec, CompletionToken&& token) {
   using Signature = void(CpaStatus);
-  async_completion<CompletionToken, Signature> init(token);
-  auto ex = boost::asio::get_associated_executor(init.completion_handler);
-  completion_handler = [ex, handler = init.completion_handler](CpaStatus stat) {
-    boost::asio::post(ex, std::bind(handler, stat));
-  };
+  return boost::asio::async_initiate<CompletionToken, Signature>(
+      [this] (auto handler, std::span<CpaCySymDpOpData*> pOpDataVec) {
+        completion_handler = std::move(handler);
 
-  count = pOpDataVec.size();
-  poll_inst_cv.notify_one();
-  status = cpaCySymDpEnqueueOpBatch(pOpDataVec.size(), pOpDataVec.data(), CPA_TRUE);
+        count = pOpDataVec.size();
+        poll_inst_cv.notify_one();
+        CpaStatus status = cpaCySymDpEnqueueOpBatch(pOpDataVec.size(), pOpDataVec.data(), CPA_TRUE);
 
-  if (status != CPA_STATUS_SUCCESS) {
-    completion_handler(status);
+        if (status != CPA_STATUS_SUCCESS) {
+          boost::asio::post(bind_executor(ex,
+              boost::asio::append(std::move(completion_handler), status)));
+        }
+      }, token, pOpDataVec);
+}
+
+void QatCrypto::complete() {
+  if (--count == 0) {
+    boost::asio::post(bind_executor(ex,
+        boost::asio::append(std::move(completion_handler), CPA_STATUS_SUCCESS)));
   }
-  return init.result.get();
+  return;
 }
 
 bool QccCrypto::symPerformOp(int avail_inst,
@@ -510,7 +512,7 @@ bool QccCrypto::symPerformOp(int avail_inst,
   Cpa32U iv_index = 0;
   size_t perform_retry_num = 0;
   for (Cpa32U off = 0; off < size; off += one_batch_size) {
-    QatCrypto helper;
+    QatCrypto helper{my_pool.get_executor()};
     boost::container::static_vector<CpaCySymDpOpData*, MAX_NUM_SYM_REQ_BATCH> pOpDataVec;
     for (Cpa32U offset = off, i = 0; offset < size && i < MAX_NUM_SYM_REQ_BATCH; offset += chunk_size, i++) {
       CpaCySymDpOpData *pOpData = qcc_op_mem[avail_inst].sym_op_data[i];
@@ -544,10 +546,10 @@ bool QccCrypto::symPerformOp(int avail_inst,
     do {
       poll_retry_num = RETRY_MAX_NUM;
       if (y) {
-        spawn::yield_context yield = y.get_yield_context();
-        status = helper.async_perform_op(avail_inst, std::span<CpaCySymDpOpData*>(pOpDataVec), yield);
+        boost::asio::yield_context yield = y.get_yield_context();
+        status = helper.async_perform_op(std::span<CpaCySymDpOpData*>(pOpDataVec), yield);
       } else {
-        auto result = helper.async_perform_op(avail_inst, std::span<CpaCySymDpOpData*>(pOpDataVec), boost::asio::use_future);
+        auto result = helper.async_perform_op(std::span<CpaCySymDpOpData*>(pOpDataVec), boost::asio::use_future);
         status = result.get();
       }
       if (status == CPA_STATUS_RETRY) {

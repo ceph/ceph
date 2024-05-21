@@ -30,7 +30,7 @@ endif(HAVE_NASM_X64)
 add_library(ceph_crypto_isal SHARED ${isal_crypto_plugin_srcs})
 target_include_directories(ceph_crypto_isal PRIVATE ${isal_dir}/include)
 
-target_link_libraries(ceph_crypto_isal PRIVATE spawn)
+target_link_libraries(ceph_crypto_isal PRIVATE Boost::context)
 
 set_target_properties(ceph_crypto_isal PROPERTIES
   VERSION 1.0.0

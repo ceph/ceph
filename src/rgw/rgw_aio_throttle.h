@@ -80,8 +80,7 @@ class BlockingAioThrottle final : public Aio, private Throttle {
 // a throttle that yields the coroutine instead of blocking. all public
 // functions must be called within the coroutine strand
 class YieldingAioThrottle final : public Aio, private Throttle {
-  boost::asio::io_context& context;
-  spawn::yield_context yield;
+  boost::asio::yield_context yield;
   struct Handler;
 
   // completion callback associated with the waiter
@@ -94,9 +93,8 @@ class YieldingAioThrottle final : public Aio, private Throttle {
   struct Pending : AioResultEntry { uint64_t cost = 0; };
 
  public:
-  YieldingAioThrottle(uint64_t window, boost::asio::io_context& context,
-                      spawn::yield_context yield)
-    : Throttle(window), context(context), yield(yield)
+  YieldingAioThrottle(uint64_t window, boost::asio::yield_context yield)
+    : Throttle(window), yield(yield)
   {}
 
   virtual ~YieldingAioThrottle() override {};
@@ -119,7 +117,6 @@ inline auto make_throttle(uint64_t window_size, optional_yield y)
   std::unique_ptr<Aio> aio;
   if (y) {
     aio = std::make_unique<YieldingAioThrottle>(window_size,
-                                                y.get_io_context(),
                                                 y.get_yield_context());
   } else {
     aio = std::make_unique<BlockingAioThrottle>(window_size);

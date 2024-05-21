@@ -156,14 +156,18 @@ class LFUDAPolicyFixture : public ::testing::Test {
     rgw::sal::Attrs attrs;
 };
 
+void rethrow(std::exception_ptr eptr) {
+  if (eptr) std::rethrow_exception(eptr);
+}
+
 TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
     std::string key = block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, key, bl, bl.length(), attrs, optional_yield{io, yield}));
-    policyDriver->get_cache_policy()->update(env->dpp, key, 0, bl.length(), "", optional_yield{io, yield});
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, key, bl, bl.length(), attrs, yield));
+    policyDriver->get_cache_policy()->update(env->dpp, key, 0, bl.length(), "", yield);
 
-    ASSERT_EQ(lfuda(env->dpp, block, cacheDriver, optional_yield{io, yield}), 0);
+    ASSERT_EQ(lfuda(env->dpp, block, cacheDriver, yield), 0);
 
     cacheDriver->shutdown();
 
@@ -179,14 +183,14 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
     ASSERT_EQ((bool)ec, false);
     EXPECT_EQ(std::get<0>(resp).value(), "2");
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
     /* Set victim block for eviction */
     rgw::d4n::CacheBlock victim = rgw::d4n::CacheBlock{
       .cacheObj = {
@@ -210,10 +214,10 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     attrVal.append("testBucket");
     attrs.insert({"bucket_name", attrVal});
 
-    ASSERT_EQ(0, dir->set(&victim, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(&victim, yield));
     std::string victimKey = victim.cacheObj.bucketName + "_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(victim.size);
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, victimKey, bl, bl.length(), attrs, optional_yield{io, yield}));
-    policyDriver->get_cache_policy()->update(env->dpp, victimKey, 0, bl.length(), "", optional_yield{io, yield});
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, victimKey, bl, bl.length(), attrs, yield));
+    policyDriver->get_cache_policy()->update(env->dpp, victimKey, 0, bl.length(), "", yield);
 
     /* Remote block */
     block->size = cacheDriver->get_free_space(env->dpp) + 1; /* To trigger eviction */
@@ -222,9 +226,9 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     block->hostsList.push_back("127.0.0.1:6000");
     block->cacheObj.hostsList.push_back("127.0.0.1:6000");
 
-    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(block, yield));
 
-    ASSERT_GE(lfuda(env->dpp, block, cacheDriver, optional_yield{io, yield}), 0);
+    ASSERT_GE(lfuda(env->dpp, block, cacheDriver, yield), 0);
 
     cacheDriver->shutdown();
 
@@ -246,15 +250,15 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     EXPECT_EQ(std::get<1>(resp).value(), 0);
     EXPECT_EQ(std::get<2>(resp).value(), "1");
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(LFUDAPolicyFixture, BackendGetBlockYield)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
-    ASSERT_GE(lfuda(env->dpp, block, cacheDriver, optional_yield{io, yield}), 0);
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    ASSERT_GE(lfuda(env->dpp, block, cacheDriver, yield), 0);
 
     cacheDriver->shutdown();
 
@@ -267,16 +271,16 @@ TEST_F(LFUDAPolicyFixture, BackendGetBlockYield)
     conn->async_exec(req, resp, yield[ec]);
 
     conn->cancel();
-  });
+  }, rethrow);
 
   io.run();
 }
 
 TEST_F(LFUDAPolicyFixture, RedisSyncTest)
 {
-  spawn::spawn(io, [this] (spawn::yield_context yield) {
+  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
     env->cct->_conf->rgw_lfuda_sync_frequency = 1;
-    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->save_y(optional_yield{io, yield});
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->save_y(yield);
     policyDriver->get_cache_policy()->init(env->cct, env->dpp, io);
   
     cacheDriver->shutdown();
@@ -308,7 +312,7 @@ TEST_F(LFUDAPolicyFixture, RedisSyncTest)
     
     delete policyDriver; 
     policyDriver = nullptr;
-  });
+  }, rethrow);
 
   io.run();
 }

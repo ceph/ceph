@@ -89,7 +89,7 @@ using part_info = fifo::part_header;
 ///
 /// This library uses optional_yield. Please see
 /// /src/common/async/yield_context.h. In summary, optional_yield
-/// contains either a spawn::yield_context (in which case the current
+/// contains either a boost::asio::yield_context (in which case the current
 /// coroutine is suspended until completion) or null_yield (in which
 /// case the current thread is blocked until completion.)
 ///

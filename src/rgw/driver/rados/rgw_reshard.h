@@ -252,11 +252,11 @@ class RGWReshardWait {
   ceph::condition_variable cond;
 
   struct Waiter : boost::intrusive::list_base_hook<> {
-    using Executor = boost::asio::io_context::executor_type;
+    using Executor = boost::asio::any_io_executor;
     using Timer = boost::asio::basic_waitable_timer<Clock,
           boost::asio::wait_traits<Clock>, Executor>;
     Timer timer;
-    explicit Waiter(boost::asio::io_context& ioc) : timer(ioc) {}
+    explicit Waiter(boost::asio::any_io_executor ex) : timer(ex) {}
   };
   boost::intrusive::list<Waiter> waiters;
 
