@@ -1818,8 +1818,13 @@ inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
 			  __u8 *struct_compat,				\
 			  char **start_pos,				\
 			  uint32_t *struct_len) {			\
+    __u8 code_v = *struct_v;						\
     denc(*struct_v, p);							\
     denc(*struct_compat, p);						\
+    if (code_v < *struct_compat)					\
+      throw ::ceph::buffer::malformed_input(fmt::format(		\
+      "Decoder at '{}' v={} cannot decode v={} minimal_decoder={}",	\
+      __PRETTY_FUNCTION__, code_v, *struct_v, *struct_compat));		\
     denc(*struct_len, p);						\
     *start_pos = const_cast<char*>(p.get_pos());			\
   }									\
