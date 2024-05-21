@@ -829,7 +829,7 @@ void Cache::commit_replace_extent(
     add_to_dirty(next);
   }
 
-  next->on_replace_prior(t);
+  next->on_replace_prior();
   invalidate_extent(t, *prev);
 }
 
@@ -1566,6 +1566,7 @@ void Cache::complete_commit(
     i->on_initial_write();
 
     i->state = CachedExtent::extent_state_t::CLEAN;
+    i->prior_instance.reset();
     DEBUGT("add extent as fresh, inline={} -- {}",
 	   t, is_inline, *i);
     const auto t_src = t.get_src();
