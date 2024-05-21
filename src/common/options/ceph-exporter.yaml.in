@@ -1,0 +1,54 @@
+# -*- mode: YAML -*-
+---
+
+options:
+- name: exporter_sock_dir
+  type: str
+  level: advanced
+  desc: The path to ceph daemons socket files dir
+  default: /var/run/ceph/
+  services:
+  - ceph-exporter
+  flags:
+  - runtime
+- name: exporter_addr
+  type: str
+  level: advanced
+  desc: Host ip address where exporter is deployed
+  default: 0.0.0.0
+  services:
+  - ceph-exporter
+- name: exporter_http_port
+  type: int
+  level: advanced
+  desc: Port to deploy exporter on. Default is 9926
+  default: 9926
+  services:
+  - ceph-exporter
+- name: exporter_prio_limit
+  type: int
+  level: advanced
+  desc: Only perf counters greater than or equal to exporter_prio_limit are fetched
+  default: 5
+  services:
+  - ceph-exporter
+  flags:
+  - runtime
+- name: exporter_stats_period
+  type: int
+  level: advanced
+  desc: Time to wait before sending requests again to exporter server (seconds)
+  default: 5
+  services:
+  - ceph-exporter
+  flags:
+  - runtime
+- name: exporter_sort_metrics
+  type: bool
+  level: advanced
+  desc: If true it will sort the metrics and group them.
+  default: true
+  services:
+  - ceph-exporter
+  flags:
+  - runtime

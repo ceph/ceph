@@ -1,0 +1,5 @@
+tasks:
+- exec:
+    all:
+      - echo America/Los_Angeles | sudo tee /etc/timezone
+      - [ $RANDOM -gt 32000 ] && echo America/New_York | sudo tee /etc/timezone

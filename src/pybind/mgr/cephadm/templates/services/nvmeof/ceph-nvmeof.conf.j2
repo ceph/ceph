@@ -1,0 +1,67 @@
+# {{ cephadm_managed }}
+[gateway]
+name = {{ name }}
+group = {{ spec.group if spec.group is not none else '' }}
+addr = {{ addr }}
+port = {{ spec.port }}
+enable_auth = {{ spec.enable_auth }}
+state_update_notify = {{ spec.state_update_notify }}
+state_update_interval_sec = {{ spec.state_update_interval_sec }}
+enable_spdk_discovery_controller = {{ spec.enable_spdk_discovery_controller }}
+enable_prometheus_exporter = {{ spec.enable_prometheus_exporter }}
+prometheus_exporter_ssl = False
+prometheus_port = 10008
+verify_nqns = {{ spec.verify_nqns }}
+omap_file_lock_duration = {{ spec.omap_file_lock_duration }}
+omap_file_lock_retries = {{ spec.omap_file_lock_retries }}
+omap_file_lock_retry_sleep_interval = {{ spec.omap_file_lock_retry_sleep_interval }}
+omap_file_update_reloads = {{ spec.omap_file_update_reloads }}
+allowed_consecutive_spdk_ping_failures = {{ spec.allowed_consecutive_spdk_ping_failures }}
+spdk_ping_interval_in_seconds = {{ spec.spdk_ping_interval_in_seconds }}
+ping_spdk_under_lock = {{ spec.ping_spdk_under_lock }}
+enable_monitor_client = {{ spec.enable_monitor_client }}
+
+[gateway-logs]
+log_level = {{ spec.log_level }}
+log_files_enabled = {{ spec.log_files_enabled }}
+log_files_rotation_enabled = {{ spec.log_files_rotation_enabled }}
+verbose_log_messages = {{ spec.verbose_log_messages }}
+max_log_file_size_in_mb = {{ spec.max_log_file_size_in_mb }}
+max_log_files_count = {{ spec.max_log_files_count }}
+max_log_directory_backups = {{ spec.max_log_directory_backups }}
+log_directory = {{ spec.log_directory }}
+
+[discovery]
+addr = {{ addr }}
+port = {{ spec.discovery_port }}
+
+[ceph]
+pool = {{ spec.pool }}
+config_file = /etc/ceph/ceph.conf
+id = {{ rados_id }}
+
+[mtls]
+server_key = {{ spec.server_key }}
+client_key = {{ spec.client_key }}
+server_cert = {{ spec.server_cert }}
+client_cert = {{ spec.client_cert }}
+
+[spdk]
+tgt_path = {{ spec.tgt_path }}
+rpc_socket_dir = {{ spec.rpc_socket_dir }}
+rpc_socket_name = {{ spec.rpc_socket_name }}
+timeout = {{ spec.spdk_timeout }}
+bdevs_per_cluster = {{ spec.bdevs_per_cluster }}
+log_level = {{ spec.spdk_log_level }}
+conn_retries = {{ spec.conn_retries }}
+transports = {{ spec.transports }}
+{% if transport_tcp_options %}
+transport_tcp_options = {{ transport_tcp_options }}
+{% endif %}
+{% if spec.tgt_cmd_extra_args %}
+tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
+{% endif %}
+
+[monitor]
+timeout = {{ spec.monitor_timeout }}
+
