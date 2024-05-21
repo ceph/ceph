@@ -302,6 +302,8 @@ class TestVolumesHelper(CephFSTestCase):
             filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
             self.mount_a.write_n_mb(os.path.join(io_path, filename), file_size)
 
+        return number_of_files * file_size * 1024 * 1024
+
     def _do_subvolume_io_mixed(self, subvolume, subvolume_group=None):
         subvolpath = self._get_subvolume_path(self.volname, subvolume, group_name=subvolume_group)
 
