@@ -3301,6 +3301,23 @@ options:
   services:
   - rgw
   min: 10
+- name: rgw_reshard_debug_interval
+  type: int
+  level: dev
+  desc: The number of seconds that simulate one "day" in order to debug RGW dynamic resharding.
+    Do *not* modify for a production cluster.
+  long_desc: For debugging RGW dynamic resharding, the number of seconds that are equivalent to
+    one simulated "day". Values less than 1 are ignored and do not change dynamic resharding behavior.
+    For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
+    then this would be set to 600, the number of seconds in 10 minutes.
+  default: -1
+  services:
+  - rgw
+  with_legacy: true
+  see_also:
+  - rgw_dynamic_resharding
+  - rgw_reshard_thread_interval
+  - rgw_dynamic_resharding_reduction_wait
 - name: rgw_cache_expiry_interval
   type: uint
   level: advanced

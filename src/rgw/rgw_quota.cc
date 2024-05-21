@@ -358,6 +358,21 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
 
     void *entry() override {
       ldout(cct, 20) << "BucketsSyncThread: start" << dendl;
+
+      // rgw_reshard_debug_interval is a DEV level configuration
+      // option, so we can assume it won't change while the RGW server
+      // is running, so we'll handle it once before we loop
+      double sync_interval_factor = 1.0;
+      const uint64_t debug_interval = cct->_conf->rgw_reshard_debug_interval;
+      if (debug_interval >= 1) {
+	  constexpr double secs_per_day = 60 * 60 * 24;
+	  sync_interval_factor = debug_interval / secs_per_day;
+
+	  ldout(cct, 0) << "DEBUG: since the rgw_reshard_debug_interval is set at " <<
+	    debug_interval << " the rgw_user_quota_bucket_sync_interval will be "
+	    "multiplied by a factor of " << sync_interval_factor << dendl;
+      }
+
       do {
         map<rgw_bucket, rgw_owner> buckets;
 
@@ -372,14 +387,20 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
           }
         }
 
-        if (stats->going_down())
+        if (stats->going_down()) {
           break;
+	}
 
+	uint64_t wait_secs = cct->_conf->rgw_user_quota_bucket_sync_interval;
+	wait_secs = std::max(uint64_t(1),
+			     uint64_t(wait_secs * sync_interval_factor));
+
+	// note: this will likely wait for the intended period of
+	// time, but could wait for less
 	std::unique_lock locker{lock};
-	cond.wait_for(
-          locker,
-          std::chrono::seconds(cct->_conf->rgw_user_quota_bucket_sync_interval));
+	cond.wait_for(locker, std::chrono::seconds(wait_secs));
       } while (!stats->going_down());
+
       ldout(cct, 20) << "BucketsSyncThread: done" << dendl;
 
       return NULL;
