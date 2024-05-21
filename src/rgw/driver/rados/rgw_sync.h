@@ -343,10 +343,9 @@ class RGWSyncShardMarkerTrack {
   struct marker_entry {
     uint64_t pos;
     real_time timestamp;
-    real_time last_update;
 
     marker_entry() : pos(0) {}
-    marker_entry(uint64_t _p, const real_time& _ts, const real_time& _lu = {}) : pos(_p), timestamp(_ts), last_update(_lu) {}
+    marker_entry(uint64_t _p, const real_time& _ts) : pos(_p), timestamp(_ts) {}
   };
   typename std::map<T, marker_entry> pending;
 
@@ -360,7 +359,7 @@ class RGWSyncShardMarkerTrack {
 protected:
   typename std::set<K> need_retry_set;
 
-  virtual RGWCoroutine *store_marker(const T& new_marker, uint64_t index_pos, const real_time& timestamp, const real_time& last_update) = 0;
+  virtual RGWCoroutine *store_marker(const T& new_marker, uint64_t index_pos, const real_time& timestamp) = 0;
   virtual RGWOrderCallCR *allocate_order_control_cr() = 0;
   virtual void handle_finish(const T& marker) { }
 
@@ -372,16 +371,16 @@ public:
     }
   }
 
-  bool start(const T& pos, int index_pos, const real_time& timestamp, const real_time& last_update = {}) {
+  bool start(const T& pos, int index_pos, const real_time& timestamp) {
     if (pending.find(pos) != pending.end()) {
       return false;
     }
-    pending[pos] = marker_entry(index_pos, timestamp, last_update);
+    pending[pos] = marker_entry(index_pos, timestamp);
     return true;
   }
 
-  void try_update_high_marker(const T& pos, int index_pos, const real_time& timestamp, const real_time& last_update = {}) {
-    finish_markers[pos] = marker_entry(index_pos, timestamp, last_update);
+  void try_update_high_marker(const T& pos, int index_pos, const real_time& timestamp) {
+    finish_markers[pos] = marker_entry(index_pos, timestamp);
   }
 
   RGWCoroutine *finish(const T& pos) {
@@ -437,7 +436,7 @@ public:
     --i;
     const T& high_marker = i->first;
     marker_entry& high_entry = i->second;
-    RGWCoroutine *cr = order(store_marker(high_marker, high_entry.pos, high_entry.timestamp, high_entry.last_update));
+    RGWCoroutine *cr = order(store_marker(high_marker, high_entry.pos, high_entry.timestamp));
     finish_markers.erase(finish_markers.begin(), last);
     return cr;
   }

@@ -1116,6 +1116,9 @@ class RGWDataSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, strin
   RGWObjVersionTracker& objv;
   sync_deltas::SyncDeltaCountersManager sync_delta_counters_manager;
 
+  // timestamp of remote's most recent log entry. initialized only for data sync
+  ceph::real_time last_updated;
+
 public:
   RGWDataSyncShardMarkerTrack(RGWDataSyncCtx *_sc,
                          const string& _marker_oid,
@@ -1138,7 +1141,14 @@ public:
         {"shard_id", std::to_string(shard_id)}});
   }
 
-  RGWCoroutine* store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp, const real_time& last_update) override {
+  bool start(const std::string& pos, int index_pos, const real_time& timestamp, const real_time& last_update = {}) {
+    if (last_updated < last_update) {
+      last_updated = last_update;
+    }
+    return RGWSyncShardMarkerTrack::start(pos, index_pos, timestamp);
+  }
+
+  RGWCoroutine* store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.marker = new_marker;
     sync_marker.pos = index_pos;
     sync_marker.timestamp = timestamp;
@@ -1147,8 +1157,8 @@ public:
     // last_update is only modified during incremental sync we only want to
     // report deltas for incremental sync
     real_time zero_time;
-    if (last_update != zero_time) {
-      auto delta = last_update - timestamp;
+    if (last_updated != zero_time) {
+      auto delta = last_updated - timestamp;
       sync_delta_counters_manager.tset(sync_deltas::l_rgw_datalog_sync_delta, delta);
     }
 
@@ -2128,7 +2138,7 @@ public:
             tn->log(1, SSTR("failed to parse bucket shard: "
 			    << log_iter->entry.key));
             marker_tracker->try_update_high_marker(log_iter->log_id, 0,
-						   log_iter->log_timestamp, last_update);
+						   log_iter->log_timestamp);
             continue;
           }
           if (!marker_tracker->start(log_iter->log_id, 0,
@@ -4252,7 +4262,7 @@ public:
   {}
 
 
-  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, uint64_t index_pos, const real_time& timestamp, const real_time& last_update) override {
+  RGWCoroutine *store_marker(const rgw_obj_key& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_status.full.position = new_marker;
     sync_status.full.count = index_pos;
 
@@ -4353,7 +4363,7 @@ public:
 
   const rgw_raw_obj& get_obj() const { return obj; }
 
-  RGWCoroutine* store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp, const real_time& last_update) override {
+  RGWCoroutine* store_marker(const string& new_marker, uint64_t index_pos, const real_time& timestamp) override {
     sync_marker.position = new_marker;
     sync_marker.timestamp = timestamp;
 
