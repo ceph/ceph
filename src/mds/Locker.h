@@ -70,6 +70,10 @@ public:
   void drop_lock(MutationImpl* mut, SimpleLock* what);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 
+  void request_drop_remote_locks(const MDRequestRef& mdr);
+  void request_drop_non_rdlocks(const MDRequestRef& r);
+  void request_drop_locks(const MDRequestRef& r);
+
   int get_cap_bit_for_lock_cache(int op);
   void create_lock_cache(const MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout=nullptr);
   bool find_and_attach_lock_cache(const MDRequestRef& mdr, CInode *diri);
