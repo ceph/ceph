@@ -263,15 +263,18 @@ if(LINUX OR APPLE)
   list(APPEND EXTRALIBS ${LIB_RESOLV})
 endif()
 
+option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 if(${ENABLE_COVERAGE})
   find_program(HAVE_GCOV gcov)
   if(NOT HAVE_GCOV)
     message(FATAL_ERROR "Coverage Enabled but gcov Not Found")
   endif()
   add_compile_options(
-    -fprofile-arcs
-    -ftest-coverage
+    --coverage
     -O0)
+  add_link_options(
+    --coverage
+  )
   list(APPEND EXTRALIBS gcov)
 endif(${ENABLE_COVERAGE})
 
