@@ -2,6 +2,9 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crimson/os/seastore/seastore_types.h"
+
+#include <utility>
+
 #include "crimson/common/log.h"
 
 namespace {
@@ -160,7 +163,7 @@ journal_seq_t journal_seq_t::add_offset(
       ++new_jseq;
       joff -= roll_size;
     }
-    assert(new_jseq < MAX_SEG_SEQ);
+    assert(std::cmp_less(new_jseq, MAX_SEG_SEQ));
     jseq = static_cast<segment_seq_t>(new_jseq);
   } else {
     device_off_t mod = (-off) / roll_size;
@@ -169,7 +172,7 @@ journal_seq_t journal_seq_t::add_offset(
       ++mod;
       joff += roll_size;
     }
-    if (jseq >= mod) {
+    if (std::cmp_greater_equal(jseq, mod)) {
       jseq -= mod;
     } else {
       return JOURNAL_SEQ_MIN;
