@@ -244,16 +244,29 @@ public:
       std::shared_lock l{glock};
       return all_stop;
     }
-    void set_all_stop() {
+    static void set_all_stop() {
       std::unique_lock l{glock};
       all_stop = true;
+    }
+    static void handle_signal(int signum) 
+    {
+      switch (signum) {
+	case SIGINT:
+	case SIGTERM:
+	  set_all_stop();
+	  dout(0) << "got a signal(" << signum << "), daemon wil be terminiated" << dendl;
+	  break;
+
+	default:
+	  ceph_abort_msgf("unexpected signal %d", signum);
+      }
     }
     friend class SampleDedupWorkerThread;
   private:
     FpStore fp_store;
     const double sampling_ratio = -1;
-    ceph::shared_mutex glock = ceph::make_shared_mutex("glock");
-    bool all_stop = false; // Accessed in the main thread and in other worker threads under glock
+    inline static ceph::shared_mutex glock = ceph::make_shared_mutex("glock");
+    inline static bool all_stop = false; // Accessed in the main thread and in other worker threads under glock
   };
 
   SampleDedupWorkerThread(
@@ -580,8 +593,6 @@ int SampleDedupWorkerThread::do_chunk_dedup(chunk_t &chunk, snap_t snap)
   return ret;
 }
 
-unique_ptr<SampleDedupWorkerThread::SampleDedupGlobal> state;
-
 int run_crawling_daemon(const po::variables_map &opts)
 {
   string base_pool_name = get_opts_pool_name(opts);
@@ -668,11 +679,11 @@ int run_crawling_daemon(const po::variables_map &opts)
     << ")" 
     << dendl;
 
-  state = std::make_unique<SampleDedupWorkerThread::SampleDedupGlobal>(
+  SampleDedupWorkerThread::SampleDedupGlobal state(
     chunk_dedup_threshold, sampling_ratio, report_period, fp_threshold);
   ret = 0;
 
-  while (!state->is_all_stop()) {
+  while (!state.is_all_stop()) {
     ObjectCursor begin = io_ctx.object_list_begin();
     ObjectCursor end = io_ctx.object_list_end();
 
@@ -699,7 +710,7 @@ int run_crawling_daemon(const po::variables_map &opts)
 	chunk_size,
 	fp_algo,
 	chunk_algo,
-	*state,
+	state,
 	snap);
       threads.back().create("sample_dedup");
     }
@@ -729,30 +740,13 @@ int run_crawling_daemon(const po::variables_map &opts)
     }
 
     if (run_once) {
-      assert(state);
-      state->set_all_stop();
+      state.set_all_stop();
       break;
     }
   }
 
   dout(0) << "done" << dendl;
   return ret;
-}
-
-static void handle_signal(int signum) 
-{
-  switch (signum) {
-    case SIGINT:
-    case SIGTERM:
-      if (state) {
-	state->set_all_stop();
-      }
-      dout(0) << "got a signal(" << signum << "), daemon wil be terminiated" << dendl;
-      break;
-
-    default:
-      ceph_abort_msgf("unexpected signal %d", signum);
-  }
 }
 
 int main(int argc, const char **argv)
@@ -809,13 +803,17 @@ int main(int argc, const char **argv)
   }
 
   init_async_signal_handler();
-  register_async_signal_handler_oneshot(SIGINT, handle_signal);
-  register_async_signal_handler_oneshot(SIGTERM, handle_signal);
+  register_async_signal_handler_oneshot(SIGINT,
+    SampleDedupWorkerThread::SampleDedupGlobal::handle_signal);
+  register_async_signal_handler_oneshot(SIGTERM,
+    SampleDedupWorkerThread::SampleDedupGlobal::handle_signal);
 
   int ret = run_crawling_daemon(opts);
 
-  unregister_async_signal_handler(SIGINT, handle_signal);
-  unregister_async_signal_handler(SIGTERM, handle_signal);
+  unregister_async_signal_handler(SIGINT,
+    SampleDedupWorkerThread::SampleDedupGlobal::handle_signal);
+  unregister_async_signal_handler(SIGTERM,
+    SampleDedupWorkerThread::SampleDedupGlobal::handle_signal);
   shutdown_async_signal_handler();
   
   return forker.signal_exit(ret);
