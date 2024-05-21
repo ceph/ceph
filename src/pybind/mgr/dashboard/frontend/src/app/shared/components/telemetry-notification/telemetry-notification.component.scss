@@ -26,5 +26,6 @@ a {
   z-index: 99999;
   position: absolute;
   bottom: 25px;
-  right: 25px;
+  right: 50%;
+  transform: translateX(50%);
 }
