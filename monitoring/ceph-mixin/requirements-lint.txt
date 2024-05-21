@@ -2,7 +2,7 @@ attrs==21.2.0
 behave==1.2.6
 py==1.10.0
 pyparsing==2.4.7
-PyYAML==6.0
+PyYAML==6.0.1
 types-PyYAML==6.0.0
 typing-extensions==3.10.0.2
 termcolor==1.1.0
