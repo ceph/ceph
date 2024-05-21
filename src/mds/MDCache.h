@@ -426,9 +426,6 @@ class MDCache {
   void request_finish(const MDRequestRef& mdr);
   void request_forward(const MDRequestRef& mdr, mds_rank_t mds, int port=0);
   void dispatch_request(const MDRequestRef& mdr);
-  void request_drop_foreign_locks(const MDRequestRef& mdr);
-  void request_drop_non_rdlocks(const MDRequestRef& r);
-  void request_drop_locks(const MDRequestRef& r);
   void request_cleanup(const MDRequestRef& r);
   
   void request_kill(const MDRequestRef& r);  // called when session closes
@@ -629,7 +626,14 @@ private:
   }
   void add_quiesce(CInode* parent, CInode* in);
 
-  MDRequestRef lock_path(filepath p, std::vector<std::string> locks);
+  struct LockPathConfig {
+    filepath fpath;
+    std::vector<std::string> locks;
+    bool ap_dont_block = false;
+    bool ap_freeze = false;
+  };
+
+  MDRequestRef lock_path(LockPathConfig config, std::function<void(MDRequestRef const& mdr)> on_locked = {});
 
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
@@ -953,7 +957,7 @@ private:
    */
   int path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 		    const filepath& path, int flags,
-		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr);
+		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr, CDir **pdir = nullptr);
 
   int maybe_request_forward_to_auth(const MDRequestRef& mdr, MDSContextFactory& cf,
 				    MDSCacheObject *p);
@@ -1458,7 +1462,7 @@ private:
   void fragment_unmark_unfreeze_dirs(const std::vector<CDir*>& dirs);
   void fragment_drop_locks(fragment_info_t &info);
   void fragment_maybe_finish(const fragment_info_iterator& it);
-  void dispatch_fragment_dir(const MDRequestRef& mdr);
+  void dispatch_fragment_dir(const MDRequestRef& mdr, bool abort_if_freezing=false);
   void _fragment_logged(const MDRequestRef& mdr);
   void _fragment_stored(const MDRequestRef& mdr);
   void _fragment_committed(dirfrag_t f, const MDRequestRef& mdr);
@@ -1472,6 +1476,7 @@ private:
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 
+  void quiesce_overdrive_fragmenting(CDir* dir, bool async);
   void dispatch_quiesce_path(const MDRequestRef& mdr);
   void dispatch_quiesce_inode(const MDRequestRef& mdr);
 

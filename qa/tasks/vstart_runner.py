@@ -1375,7 +1375,7 @@ def exec_test():
         elif f == '--run-all-tests':
             opt_exit_on_test_failure = False
         elif f == '--debug':
-            log.setLevel(logging.DEBUG)
+            logging.root.setLevel(logging.DEBUG)
         elif f == '--config-mode':
             mode = Mode.config
         else:

@@ -2337,7 +2337,7 @@ void Server::reply_client_request(const MDRequestRef& mdr, const ref_t<MClientRe
   }
 
   // drop non-rdlocks before replying, so that we can issue leases
-  mdcache->request_drop_non_rdlocks(mdr);
+  mds->locker->request_drop_non_rdlocks(mdr);
 
   // reply at all?
   if (session && !client_inst.name.is_mds()) {
@@ -3098,7 +3098,13 @@ void Server::dispatch_peer_request(const MDRequestRef& mdr)
 	  break;
 	}
 
-        // don't add quiescelock, let the peer acquire that lock themselves
+        // avoid taking the quiesce lock, as we can't communicate a failure to lock it
+        // Without communicating the failure which would make the peer request drop all locks,
+        // blocking on quiesce here will create an opportunity for a deadlock
+        // The current quiesce design shouldn't suffer from this though. The reason quiesce
+        // will want to take other locks is to prevent issuing unwanted client capabilities,
+        // but since replicas can't issue capabilities, it should be fine allowing remote locks
+        // without taking the quiesce lock.
 	if (!mds->locker->acquire_locks(mdr, lov, nullptr, {}, false, true))
 	  return;
 	
@@ -3171,12 +3177,8 @@ void Server::handle_peer_auth_pin(const MDRequestRef& mdr)
   list<MDSCacheObject*> objects;
   CInode *auth_pin_freeze = NULL;
   bool nonblocking = mdr->peer_request->is_nonblocking();
-  bool bypassfreezing = mdr->peer_request->is_bypassfreezing();
   bool fail = false, wouldblock = false, readonly = false;
   ref_t<MMDSPeerRequest> reply;
-
-  dout(15) << " nonblocking=" << nonblocking
-           << " bypassfreezing=" << bypassfreezing << dendl;
 
   if (mdcache->is_readonly()) {
     dout(10) << " read-only FS" << dendl;
@@ -3209,7 +3211,7 @@ void Server::handle_peer_auth_pin(const MDRequestRef& mdr)
       }
       if (mdr->is_auth_pinned(obj))
 	continue;
-      if (!mdr->can_auth_pin(obj, bypassfreezing)) {
+      if (!mdr->can_auth_pin(obj)) {
 	if (nonblocking) {
 	  dout(10) << " can't auth_pin (freezing?) " << *obj << " nonblocking" << dendl;
 	  fail = true;
@@ -10009,14 +10011,14 @@ void Server::handle_peer_rename_prep(const MDRequestRef& mdr)
       dout(10) << " freezing srci " << *srcdnl->get_inode() << " with allowance " << allowance << dendl;
       bool frozen_inode = srcdnl->get_inode()->freeze_inode(allowance);
 
+      if (!frozen_inode) {
+        srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
+        return;
+      }
+
       // unfreeze auth pin after freezing the inode to avoid queueing waiters
       if (srcdnl->get_inode()->is_frozen_auth_pin())
-	mdr->unfreeze_auth_pin();
-
-      if (!frozen_inode) {
-	srcdnl->get_inode()->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
-	return;
-      }
+        mdr->unfreeze_auth_pin();
 
       /*
        * set ambiguous auth for srci

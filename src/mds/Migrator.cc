@@ -1055,13 +1055,14 @@ void Migrator::dispatch_export_dir(const MDRequestRef& mdr, int count)
 
   // locks?
   if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
-    /* If quiescelock cannot be wrlocked, we cannot block with tree frozen.
+    /* We cannot afford blocking for quiesce with tree frozen.
      * Otherwise, this can create deadlock where some quiesce_inode requests
      * (on inodes in the dirfrag) are blocked on a frozen tree and the
-     * fragment_dir request is blocked on the queiscelock for the directory
+     * export_dir request is blocked on the queiscelock for the directory
      * inode's quiescelock.
      */
-    if (!mdr->is_wrlocked(&diri->quiescelock) && !diri->quiescelock.can_wrlock()) {
+    if (diri->will_block_for_quiesce(mdr)) {
+      dout(10) << __func__ << ": aborting to avoid a deadlock with quiesce" << dendl;
       mdr->aborted = true;
       export_try_cancel(dir);
       return;
